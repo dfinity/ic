@@ -553,7 +553,11 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    with pytest.raises(SystemExit) as e:
+        scanner_job.do_release_scan("ic")
+
+    assert e.type == SystemExit
+    assert e.value.code == 1
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -655,7 +659,11 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    with pytest.raises(SystemExit) as e:
+        scanner_job.do_release_scan("ic")
+
+    assert e.type == SystemExit
+    assert e.value.code == 1
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -753,7 +761,11 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    with pytest.raises(SystemExit) as e:
+        scanner_job.do_release_scan("ic")
+
+    assert e.type == SystemExit
+    assert e.value.code == 1
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
@@ -841,7 +853,11 @@ def test_on_release_scan_new_findings(jira_lib_mock):
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    scanner_job.do_release_scan("ic")
+    with pytest.raises(SystemExit) as e:
+        scanner_job.do_release_scan("ic")
+
+    assert e.type == SystemExit
+    assert e.value.code == 1
     fake_bazel.get_findings.assert_called_once()
     jira_lib_mock.get_open_finding.assert_called_once()
     jira_lib_mock.commit_has_block_exception.assert_called_once()
