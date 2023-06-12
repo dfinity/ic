@@ -255,6 +255,12 @@ fn get_blocks(
     }
 }
 
+#[query]
+#[candid_method(query)]
+fn ledger_id() -> Principal {
+    with_state(|state| state.ledger_id)
+}
+
 fn get_block_range_from_stable_memory(start: u64, length: u64) -> Vec<EncodedBlock> {
     let length = length.min(DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64);
     with_blocks(|blocks| {
