@@ -3,7 +3,7 @@ rosetta-api-docker-image:
     - .bazel-build-k8s
   stage: guest-os-build
   rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true"
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
       when: manual
       allow_failure: true
   needs:
