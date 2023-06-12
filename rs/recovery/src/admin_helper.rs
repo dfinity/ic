@@ -36,7 +36,7 @@ impl AdminHelper {
         }
     }
 
-    fn get_ic_admin_cmd_base(&self, neuron_args: &Option<NeuronArgs>) -> IcAdmin {
+    pub fn get_ic_admin_cmd_base(&self, neuron_args: &Option<NeuronArgs>) -> IcAdmin {
         let mut ica = self.binary.clone();
         ica.push("ic-admin");
         let mut ic_admin = vec![ica.display().to_string()];
@@ -55,7 +55,7 @@ impl AdminHelper {
         ic_admin
     }
 
-    fn add_propose_to_update_subnet_base(
+    pub fn add_propose_to_update_subnet_base(
         ic_admin: &mut IcAdmin,
         neuron_args: &Option<NeuronArgs>,
         subnet_id: SubnetId,
@@ -68,7 +68,7 @@ impl AdminHelper {
 
     // Existence of [NeuronArgs] implies no testing mode. Add proposer neuron id,
     // else add test neuron proposer.
-    fn add_proposer_args(ic_admin: &mut IcAdmin, neuron_args: &Option<NeuronArgs>) {
+    pub fn add_proposer_args(ic_admin: &mut IcAdmin, neuron_args: &Option<NeuronArgs>) {
         if let Some(args) = neuron_args {
             ic_admin.push("--proposer".to_string());
             ic_admin.push(args.neuron_id.clone());

@@ -1,11 +1,18 @@
+use crate::admin_helper::{
+    get_halt_subnet_at_cup_height_command, get_propose_to_complete_canister_migration_command,
+    get_propose_to_prepare_canister_migration_command,
+    get_propose_to_reroute_canister_ranges_command,
+};
+
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_recovery::{
+    cli::read_optional,
     error::RecoveryResult,
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
-    steps::Step,
-    NeuronArgs, RecoveryArgs,
+    steps::{AdminStep, Step},
+    NeuronArgs, Recovery, RecoveryArgs,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use serde::{Deserialize, Serialize};
@@ -92,6 +99,7 @@ pub(crate) struct SubnetSplitting {
     params: SubnetSplittingArgs,
     recovery_args: RecoveryArgs,
     neuron_args: Option<NeuronArgs>,
+    recovery: Recovery,
     logger: Logger,
 }
 
@@ -102,11 +110,15 @@ impl SubnetSplitting {
         neuron_args: Option<NeuronArgs>,
         subnet_args: SubnetSplittingArgs,
     ) -> Self {
+        let recovery = Recovery::new(logger.clone(), recovery_args.clone(), neuron_args.clone())
+            .expect("Failed to init recovery");
+        recovery.init_registry_local_store();
         Self {
             step_iterator: StepType::iter().peekable(),
             params: subnet_args,
             recovery_args,
             neuron_args,
+            recovery,
             logger,
         }
     }
@@ -131,9 +143,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
 
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
-            StepType::PrepareCanisterMigration => todo!(),
-            StepType::HaltSourceSubnetAtCupHeight => todo!(),
-            StepType::RerouteCanisterRanges => todo!(),
+            StepType::HaltSourceSubnetAtCupHeight => {
+                if self.params.pub_key.is_none() {
+                    self.params.pub_key = read_optional(
+                        &self.logger,
+                        "Enter public key to add readonly SSH access to subnet: ",
+                    )
+                }
+            }
+
             StepType::DownloadStateFromSourceSubnet => todo!(),
             StepType::CopyDir => todo!(),
             StepType::SplitOutSourceState => todo!(),
@@ -146,16 +164,45 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             StepType::WaitForCUPOnDestinationSubnet => todo!(),
             StepType::UnhaltSourceSubnet => todo!(),
             StepType::UnhaltDestinationSubnet => todo!(),
-            StepType::CompleteCanisterMigration => todo!(),
             StepType::Cleanup => todo!(),
+            _ => (),
         }
     }
 
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
-        match step_type {
-            StepType::PrepareCanisterMigration => todo!(),
-            StepType::HaltSourceSubnetAtCupHeight => todo!(),
-            StepType::RerouteCanisterRanges => todo!(),
+        let step: Box<dyn Step> = match step_type {
+            StepType::PrepareCanisterMigration => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_prepare_canister_migration_command(
+                    &self.recovery.admin_helper,
+                    &self.params.canister_id_ranges_to_move,
+                    self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
+                ),
+            }
+            .into(),
+
+            StepType::HaltSourceSubnetAtCupHeight => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_halt_subnet_at_cup_height_command(
+                    &self.recovery.admin_helper,
+                    self.params.source_subnet_id,
+                    &self.params.pub_key,
+                ),
+            }
+            .into(),
+
+            StepType::RerouteCanisterRanges => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_reroute_canister_ranges_command(
+                    &self.recovery.admin_helper,
+                    &self.params.canister_id_ranges_to_move,
+                    self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
+                ),
+            }
+            .into(),
+
             StepType::DownloadStateFromSourceSubnet => todo!(),
             StepType::CopyDir => todo!(),
             StepType::SplitOutSourceState => todo!(),
@@ -168,9 +215,22 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             StepType::WaitForCUPOnDestinationSubnet => todo!(),
             StepType::UnhaltSourceSubnet => todo!(),
             StepType::UnhaltDestinationSubnet => todo!(),
-            StepType::CompleteCanisterMigration => todo!(),
+
+            StepType::CompleteCanisterMigration => AdminStep {
+                logger: self.recovery.logger.clone(),
+                ic_admin_cmd: get_propose_to_complete_canister_migration_command(
+                    &self.recovery.admin_helper,
+                    &self.params.canister_id_ranges_to_move,
+                    self.params.source_subnet_id,
+                    self.params.destination_subnet_id,
+                ),
+            }
+            .into(),
+
             StepType::Cleanup => todo!(),
-        }
+        };
+
+        Ok(step)
     }
 }
 

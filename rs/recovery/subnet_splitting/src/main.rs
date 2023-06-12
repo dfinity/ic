@@ -8,6 +8,7 @@ use url::Url;
 
 use std::path::PathBuf;
 
+mod admin_helper;
 mod subnet_splitting;
 
 #[derive(Parser)]
