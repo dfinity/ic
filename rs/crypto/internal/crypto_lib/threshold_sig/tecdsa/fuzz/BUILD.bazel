@@ -39,16 +39,3 @@ rust_fuzz_test_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
-
-sh_test(
-    name = "fuzz_test",
-    srcs = ["fuzz_test.sh"],
-    data = [
-        ":fe",
-        ":scalar",
-        ":sqrt_ratio",
-    ],
-    tags = [
-        "fuzz_test",
-    ],
-)

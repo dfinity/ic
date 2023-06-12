@@ -14,8 +14,8 @@ EOF
         ;;
     --bin | --zip)
         if [ -z "${2-}" ]; then
-            echo "No directory provided. Using fuzzer_build/"
-            BUILD_DIR="fuzzer_build/"
+            echo "No directory provided. Using fuzzer_build"
+            BUILD_DIR="fuzzer_build"
         else
             echo "Using $2 for building"
             BUILD_DIR=$2
@@ -26,16 +26,26 @@ EOF
         WORKSPACE=$(bazel info workspace --ui_event_filters=-WARNING,-INFO 2>/dev/null)
         mkdir -p $BUILD_DIR
         cd $BUILD_DIR
+        CURRENT_TIME=$(date '+%Y%m%d%H%M')
         for FUZZER in $LIST_OF_FUZZERS; do
             bazel build --config=fuzzing $FUZZER
             SOURCE_BINARY="$WORKSPACE/$(bazel cquery --config=fuzzing --output=files $FUZZER)"
-            if [ $1 == "--bin" ]; then
-                cp -p $SOURCE_BINARY .
-            else # zip branch
+            if [ $1 == "--zip" ]; then # zip branch
                 SOURCE_BASENAME=$(basename $SOURCE_BINARY)
-                # gzip -c $SOURCE_BINARY > "${CLUSTERFUZZ_ZIP_PREFIX}_${SOURCE_BASENAME}.gz"
-                zip -j "${CLUSTERFUZZ_ZIP_PREFIX}_${SOURCE_BASENAME}.zip" $SOURCE_BINARY
-                echo $(sha256sum "${CLUSTERFUZZ_ZIP_PREFIX}_${SOURCE_BASENAME}.zip") >>version.txt
+                zip -j "${CLUSTERFUZZ_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" $SOURCE_BINARY
+                # check if we have a corpus generator
+                CORPUS_TARGET=$(bazel query 'filter(".*'${SOURCE_BASENAME}'_seed_corpus_generation", kind("rust_binary", //rs/...))' | head -n 1)
+                if [ ! -z $CORPUS_TARGET ]; then
+                    # build new corpus and append to the zip
+                    CORPUS_DIR="${SOURCE_BASENAME}_seed_corpus"
+                    mkdir $CORPUS_DIR
+                    bazel run $CORPUS_TARGET -- "$(pwd)"/$CORPUS_DIR
+                    zip -rj "${CORPUS_DIR}.zip" $CORPUS_DIR
+                    zip -ru "${CLUSTERFUZZ_ZIP_PREFIX}_${SOURCE_BASENAME}-${CURRENT_TIME}.zip" "${CORPUS_DIR}.zip"
+                    rm -r $CORPUS_DIR
+                fi
+            else # bin branch
+                cp -p $SOURCE_BINARY .
             fi
         done
         ;;
