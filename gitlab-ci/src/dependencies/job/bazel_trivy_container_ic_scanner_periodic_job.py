@@ -1,5 +1,7 @@
 from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
 from data_source.jira_finding_data_source import JiraFindingDataSource
+from integration.slack.slack_default_notification_handler import SlackDefaultNotificationHandler
+from integration.slack.slack_trivy_finding_notification_handler import SlackTrivyFindingNotificationHandler
 from model.repository import Project, Repository
 from model.team import Team
 from notification.notification_config import NotificationConfig
@@ -49,10 +51,9 @@ if __name__ == "__main__":
         notify_on_scan_job_succeeded[job_type] = job_type == scanner_job
         notify_on_scan_job_failed[job_type] = job_type == scanner_job
 
-    # temporary disable finding notifications TODO: restore after finding ownership was transferred to node teams
-    notify_on_finding_risk_assessment_needed: bool = False
-    notify_on_finding_patch_version_available: bool = False
-    notify_on_finding_deleted: bool = False
+    notify_on_finding_risk_assessment_needed: bool = True
+    notify_on_finding_patch_version_available: bool = True
+    notify_on_finding_deleted: bool = True
 
     config = NotificationConfig(
         notify_on_finding_risk_assessment_needed=notify_on_finding_risk_assessment_needed,
@@ -60,6 +61,7 @@ if __name__ == "__main__":
         notify_on_finding_deleted=notify_on_finding_deleted,
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
+        notification_handlers=[SlackTrivyFindingNotificationHandler(), SlackDefaultNotificationHandler()]
     )
     notifier = NotificationCreator(config)
     finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), notifier]

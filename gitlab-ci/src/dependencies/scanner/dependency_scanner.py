@@ -266,6 +266,7 @@ class DependencyScanner:
                 subscriber.on_release_build_blocked(self.dependency_manager.get_scanner_id(), self.job_id)
             logging.error(f"Release job failed with failures : {failures}")
 
+            sys.exit(1)
         except Exception as err:
             should_fail_job = True
             logging.error(
@@ -276,12 +277,8 @@ class DependencyScanner:
                     self.dependency_manager.get_scanner_id(), ScannerJobType.RELEASE_SCAN, self.job_id, str(err)
                 )
         finally:
-            # TODO : for now, the job would log the new findings in the console
-            # Once tested enough, we can start failing the jobs
             if not should_fail_job:
                 for subscriber in self.subscribers:
                     subscriber.on_scan_job_succeeded(
                         self.dependency_manager.get_scanner_id(), ScannerJobType.RELEASE_SCAN, self.job_id
                     )
-            # else :
-            #     sys.exit(1)
