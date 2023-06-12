@@ -206,6 +206,29 @@ rust_test(
 )
 ```
 
+## Python tests
+Python bazel targets are built very similarly and also include `py_test`, `py_library`, `py_binary`. Note that `py_library` is a python module which tests can import and test against. Test deps can either be a `py_library` or a `requirement`, see example below:
+
+```
+py_library(
+    name = "my_module",
+    srcs = ["my_module.py"],
+    deps = requirement("numpy"),
+)
+
+py_test(
+    name = "test_my_module",
+    srcs = ["tests/test_my_module.py"],
+    deps = [":my_module"], requirement("pytest"),
+)
+```
+
+Note that if a module is defined with a package dependency, then the test does not need to specify this dependency again, but can import the entire module. Similarly if packages depend on other packages, only the top-level package needs to be imported.
+
+Some good examples for writing bazel tests can be found in `scalability/BUILD.bazel`.
+
+To add new packages required for a test run in bazel, follow [these instructions](/../ic/gitlab-ci/src/docs/HowTo-Developer.adoc).
+
 ## Target Labels
 
 In Bazel, target labels specify the absolute paths from the root of the
