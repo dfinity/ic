@@ -185,7 +185,11 @@ impl EntryValue {
     }
 
     fn elapsed_seconds(&self, now: Time) -> f64 {
-        (now - self.env.batch_time).as_secs_f64()
+        if now > self.env.batch_time {
+            (now - self.env.batch_time).as_secs_f64()
+        } else {
+            0.0
+        }
     }
 }
 
@@ -272,5 +276,32 @@ impl QueryCache {
         self.metrics.len.set(cache.len() as i64);
 
         evicted_entries
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use ic_state_machine_tests::WasmResult;
+    use ic_types::{time, Cycles};
+
+    use super::{EntryEnv, EntryValue};
+
+    #[test]
+    fn query_cache_entry_value_elapsed_seconds() {
+        let current_time = time::GENESIS;
+        let entry_env = EntryEnv {
+            batch_time: current_time,
+            canister_version: 1,
+            canister_balance: Cycles::new(0),
+        };
+        let entry_value = EntryValue::new(entry_env, Result::Ok(WasmResult::Reply(vec![])));
+        let forward_time = current_time + Duration::from_secs(2);
+        assert_eq!(2.0, entry_value.elapsed_seconds(forward_time));
+
+        // Negative time differences should give just 0.
+        let backward_time = current_time - Duration::from_secs(2);
+        assert_eq!(0.0, entry_value.elapsed_seconds(backward_time));
     }
 }
