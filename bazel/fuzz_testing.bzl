@@ -16,23 +16,30 @@ RUSTC_FLAGS_DEFAULTS_FOR_FUZZING = [
     "-Cinstrument-coverage",
     "-Cdebug-assertions",
     "-Ccodegen-units=1",
+]
+
+DEFAULT_SANITIZERS = [
     "-Zsanitizer=address",
 ]
 
-def rust_fuzz_test_binary(name, srcs, rustc_flags = [], crate_features = [], proc_macro_deps = [], deps = [], **kwargs):
+def rust_fuzz_test_binary(name, srcs, rustc_flags = [], sanitizers = [], crate_features = [], proc_macro_deps = [], deps = [], **kwargs):
     """Wrapper for the rust_binary to compile a fuzzing rust_binary
 
     Args:
       name: name of the fuzzer target.
       srcs: source files for the fuzzer.
-      rustc_flags: Additional rustc_flags for rust_binary rule. This facilitates using additional sanitizers to the fuzzer target.
-            Address sanitizer is added by default.
+      rustc_flags: Additional rustc_flags for rust_binary rule.
+      sanitizers: Sanitizers for the fuzzer target. If nothing is provided, address sanitizer is added by default.
       crate_features: Additional crate_features to be used for compilation.
             fuzzing is added by default.
       deps: Fuzzer dependencies.
       proc_macro_deps: Fuzzer proc_macro dependencies.
       **kwargs: additional arguments to pass a rust_binary rule.
     """
+
+    if not sanitizers:
+        sanitizers = DEFAULT_SANITIZERS
+
     rust_binary(
         name = name,
         srcs = srcs,
@@ -40,7 +47,7 @@ def rust_fuzz_test_binary(name, srcs, rustc_flags = [], crate_features = [], pro
         crate_features = crate_features + ["fuzzing"],
         proc_macro_deps = proc_macro_deps,
         deps = deps,
-        rustc_flags = rustc_flags + RUSTC_FLAGS_DEFAULTS_FOR_FUZZING,
+        rustc_flags = rustc_flags + RUSTC_FLAGS_DEFAULTS_FOR_FUZZING + sanitizers,
         tags = [
             # Makes sure this target is not run in normal CI builds. It would fail due to non-nightly Rust toolchain.
             "fuzz_test",

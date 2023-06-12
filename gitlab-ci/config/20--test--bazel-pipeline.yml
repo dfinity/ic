@@ -193,11 +193,3 @@ bazel-cache-perf-test-macos:
   needs:
     - job: bazel-build-macos
       artifacts: false
-
-bazel-build-fuzzers:
-  extends:
-    - .bazel-test-all
-  variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing"
-    BAZEL_COMMAND: "build"
-    BAZEL_TARGETS: "//rs/..."
