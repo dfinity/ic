@@ -8,7 +8,7 @@ benchmarks:
   artifacts:
     paths:
       - report
-  timeout: 10h
+  timeout: 12h
   variables:
     BAZEL_COMMAND: "run"
     RUST_BACKTRACE: "full"
