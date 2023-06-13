@@ -1,5 +1,5 @@
 {
-  "checksum": "61084229349803ee10346b2d8730eac4db991f8d296a2536139d4bcee514f337",
+  "checksum": "a695cdfb3b684bde344f9c97d35cf4e755a6c9496d49cf3eefcb6898748c406e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -52111,6 +52111,18 @@
         },
         {
           "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -52125,18 +52137,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
