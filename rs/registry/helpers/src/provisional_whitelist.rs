@@ -3,7 +3,7 @@ use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_protobuf::registry::provisional_whitelist::v1 as pb;
 use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
-use ic_types::RegistryVersion;
+use ic_types::{registry::RegistryClientError::DecodeError, RegistryVersion};
 use std::convert::TryFrom;
 
 /// A trait that allows access to `ProvisionalWhitelist`.
@@ -22,10 +22,16 @@ impl<T: RegistryClient + ?Sized> ProvisionalWhitelistRegistry for T {
         let bytes = self.get_value(&make_provisional_whitelist_record_key(), version);
         deserialize_registry_value::<pb::ProvisionalWhitelist>(bytes).map(
             |option_pb_provisional_whitelist| {
-                option_pb_provisional_whitelist.map(|pb_provisional_whitelist| {
-                    ProvisionalWhitelist::try_from(pb_provisional_whitelist).unwrap()
-                })
+                option_pb_provisional_whitelist
+                    .map(|pb_provisional_whitelist| {
+                        ProvisionalWhitelist::try_from(pb_provisional_whitelist).map_err(|err| {
+                            DecodeError {
+                                error: format!("get_provisional_whitelist() failed with {}", err),
+                            }
+                        })
+                    })
+                    .transpose()
             },
-        )
+        )?
     }
 }
