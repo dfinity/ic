@@ -15,6 +15,7 @@ BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
     "//rs/nns/constants",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nervous_system/root",

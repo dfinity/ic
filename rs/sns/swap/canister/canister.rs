@@ -7,16 +7,17 @@ use dfn_core::{
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_ic00_types::CanisterStatusResultV2;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResultV2,
+    management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
+};
 use ic_nervous_system_common::{
     serve_logs, serve_logs_v2, serve_metrics, stable_mem_utils::BufferedStableMemReader,
 };
 use ic_sns_governance::ledger::LedgerCanister;
 use ic_sns_swap::{
-    clients::{
-        ManagementCanister, ProdManagementCanister, RealNnsGovernanceClient,
-        RealSnsGovernanceClient, RealSnsRootClient,
-    },
+    clients::{RealNnsGovernanceClient, RealSnsGovernanceClient, RealSnsRootClient},
     logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
     pb::v1::{
@@ -231,14 +232,23 @@ fn get_canister_status() {
 
 #[candid_method(update, rename = "get_canister_status")]
 async fn get_canister_status_(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
-    do_get_canister_status(&id(), &ProdManagementCanister::default()).await
+    do_get_canister_status(id(), &ManagementCanisterClientImpl::new()).await
 }
 
 async fn do_get_canister_status(
-    canister_id: &CanisterId,
-    management_canister: &impl ManagementCanister,
+    canister_id: CanisterId,
+    management_canister: &impl ManagementCanisterClient,
 ) -> CanisterStatusResultV2 {
-    management_canister.canister_status(canister_id).await
+    management_canister
+        .canister_status(CanisterIdRecord::from(canister_id))
+        .await
+        .map(CanisterStatusResultV2::from)
+        .unwrap_or_else(|err| {
+            panic!(
+                "Couldn't get canister_status of {}. Err: {:#?}",
+                canister_id, err
+            )
+        })
 }
 
 /// Returns the total amount of ICP deposited by participants in the swap.
@@ -646,8 +656,17 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
-    use ic_ic00_types::CanisterStatusType;
+    use ic_nervous_system_clients::canister_status::{
+        DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
+    };
+    use ic_nervous_system_clients::{
+        canister_status::{
+            CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
+        },
+        management_canister_client::{
+            MockManagementCanisterClient, MockManagementCanisterClientReply,
+        },
+    };
 
     /// A test that fails if the API was updated but the candid definition was not.
     #[test]
@@ -672,34 +691,45 @@ mod tests {
         }
     }
 
-    fn basic_canister_status() -> CanisterStatusResultV2 {
-        CanisterStatusResultV2::new(
-            CanisterStatusType::Running,
-            None,
-            Default::default(),
-            vec![],
-            Default::default(),
-            0,
-            0,
-            None,
-            0,
-            0,
-        )
-    }
-
-    struct StubManagementCanister {}
-
-    #[async_trait]
-    impl ManagementCanister for StubManagementCanister {
-        async fn canister_status(&self, _canister_id: &CanisterId) -> CanisterStatusResultV2 {
-            basic_canister_status()
-        }
-    }
-
     #[tokio::test]
     async fn test_get_canister_status() {
-        let response =
-            do_get_canister_status(&CanisterId::from_u64(1), &StubManagementCanister {}).await;
-        assert_eq!(response, basic_canister_status(),);
+        let expected_canister_status_result = CanisterStatusResultV2 {
+            status: CanisterStatusType::Running,
+            module_hash: Some(vec![0_u8]),
+            settings: DefiniteCanisterSettingsArgs {
+                controllers: vec![PrincipalId::new_user_test_id(0)],
+                compute_allocation: candid::Nat::from(0),
+                memory_allocation: candid::Nat::from(0),
+                freezing_threshold: candid::Nat::from(0),
+            },
+            memory_size: candid::Nat::from(0),
+            cycles: candid::Nat::from(0),
+            idle_cycles_burned_per_day: candid::Nat::from(0),
+        };
+
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister {
+                    status: CanisterStatusType::Running,
+                    module_hash: Some(vec![0_u8]),
+                    memory_size: candid::Nat::from(0),
+                    settings: DefiniteCanisterSettingsFromManagementCanister {
+                        controllers: vec![PrincipalId::new_user_test_id(0)],
+                        compute_allocation: candid::Nat::from(0),
+                        memory_allocation: candid::Nat::from(0),
+                        freezing_threshold: candid::Nat::from(0),
+                    },
+                    cycles: candid::Nat::from(0),
+                    idle_cycles_burned_per_day: candid::Nat::from(0),
+                },
+            )),
+        ]);
+
+        let actual_canister_status_result =
+            do_get_canister_status(CanisterId::from_u64(1), &management_canister_client).await;
+        assert_eq!(
+            actual_canister_status_result,
+            expected_canister_status_result
+        );
     }
 }

@@ -1,3 +1,4 @@
+use crate::pb::v1::Ticket;
 use ic_base_types::PrincipalId;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -5,8 +6,6 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap, Vec as StableVec,
 };
 use std::cell::RefCell;
-
-use crate::pb::v1::Ticket;
 
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const OPEN_TICKETS_MEMORY_ID: MemoryId = MemoryId::new(1);

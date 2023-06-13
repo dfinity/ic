@@ -7,11 +7,15 @@ use dfn_core::{
 };
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode::Install, CanisterSettingsArgsBuilder,
-    CreateCanisterArgs, InstallCodeArgs, Method, UpdateSettingsArgs,
+    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
+    Method, UpdateSettingsArgs,
 };
-use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
+use ic_nervous_system_clients::canister_status::{
+    canister_status, CanisterStatusResultV2, CanisterStatusType,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
     canister_api::CanisterApi,
     canister_stable_memory::CanisterStableMemory,
@@ -32,7 +36,6 @@ use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 
@@ -244,24 +247,20 @@ impl CanisterApiImpl {
         let mut count = 0;
         // Wait until canister is in the stopped state.
         loop {
-            let status: CanisterStatusResultV2 = dfn_core::call(
-                CanisterId::ic_00(),
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(canister),
-            )
-            .await
-            .map_err(|(code, msg)| {
-                format!(
-                    "{}{}",
-                    code.map(|c| format!(
-                        "Unable to get target canister status: error code {}: ",
-                        c
-                    ))
-                    .unwrap_or_default(),
-                    msg
-                )
-            })?;
+            let status: CanisterStatusResultV2 = canister_status(CanisterIdRecord::from(canister))
+                .await
+                .map(CanisterStatusResultV2::from)
+                .map_err(|(code, msg)| {
+                    format!(
+                        "{}{}",
+                        code.map(|c| format!(
+                            "Unable to get target canister status: error code {}: ",
+                            c
+                        ))
+                        .unwrap_or_default(),
+                        msg
+                    )
+                })?;
 
             if status.status() == CanisterStatusType::Stopped {
                 return Ok(());

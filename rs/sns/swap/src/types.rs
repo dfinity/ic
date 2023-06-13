@@ -1,19 +1,21 @@
-use crate::logs::{ERROR, INFO};
-use crate::pb::v1::{
-    error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
-    set_mode_call_result::SetModeResult, settle_community_fund_participation_result,
-    sns_neuron_recipe::ClaimedStatus, sns_neuron_recipe::Investor, BuyerState, CfInvestment,
-    CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpResponse, FinalizeSwapResponse, Init,
-    Lifecycle, NeuronId as SaleNeuronId, OpenRequest, Params, SetDappControllersCallResult,
-    SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult,
-    TransferableAmount,
+use crate::{
+    logs::{ERROR, INFO},
+    pb::v1::{
+        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
+        settle_community_fund_participation_result,
+        sns_neuron_recipe::{ClaimedStatus, Investor},
+        BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
+        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
+        OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
+        SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
+    },
+    swap::is_valid_principal,
 };
-use crate::swap::is_valid_principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::ledger::ICRC1Ledger;
-use ic_nervous_system_common::SECONDS_PER_DAY;
+use ic_nervous_system_common::{ledger::ICRC1Ledger, SECONDS_PER_DAY};
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -782,11 +784,13 @@ impl TryInto<NeuronId> for SaleNeuronId {
 
 #[cfg(test)]
 mod tests {
-    use crate::pb::v1::{
-        params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Init,
-        ListDirectParticipantsResponse, OpenRequest, Params, Participant,
+    use crate::{
+        pb::v1::{
+            params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Init,
+            ListDirectParticipantsResponse, OpenRequest, Params, Participant,
+        },
+        swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
-    use crate::swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT;
     use ic_base_types::PrincipalId;
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,

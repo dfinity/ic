@@ -15,8 +15,10 @@ use ic_sns_swap::{
     },
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
 
 /// Expect that no SNS root calls will be made. Explode otherwise.
 #[derive(Default, Debug)]

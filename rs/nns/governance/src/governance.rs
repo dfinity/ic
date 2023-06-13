@@ -7769,10 +7769,10 @@ impl From<&ic_sns_root::CanisterSummary> for swap_background_information::Canist
     }
 }
 
-impl From<&ic_nervous_system_root::canister_status::CanisterStatusResultV2>
+impl From<&ic_nervous_system_clients::canister_status::CanisterStatusResultV2>
     for swap_background_information::CanisterStatusResultV2
 {
-    fn from(src: &ic_nervous_system_root::canister_status::CanisterStatusResultV2) -> Self {
+    fn from(src: &ic_nervous_system_clients::canister_status::CanisterStatusResultV2) -> Self {
         // Extract from src.
         let status = src.status();
         let module_hash = src.module_hash();
@@ -7814,11 +7814,11 @@ impl From<&ic_nervous_system_root::canister_status::CanisterStatusResultV2>
     }
 }
 
-impl From<ic_nervous_system_root::canister_status::CanisterStatusType>
+impl From<ic_nervous_system_clients::canister_status::CanisterStatusType>
     for swap_background_information::CanisterStatusType
 {
-    fn from(src: ic_nervous_system_root::canister_status::CanisterStatusType) -> Self {
-        use ic_nervous_system_root::canister_status::CanisterStatusType as Src;
+    fn from(src: ic_nervous_system_clients::canister_status::CanisterStatusType) -> Self {
+        use ic_nervous_system_clients::canister_status::CanisterStatusType as Src;
 
         match src {
             Src::Running => Self::Running,

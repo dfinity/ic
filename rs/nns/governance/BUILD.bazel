@@ -17,6 +17,7 @@ filegroup(
 BASE_DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nns/cmc",
