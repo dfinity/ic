@@ -449,7 +449,7 @@ pub fn test(env: TestEnv) {
                     },
                     cycles: 500_000_000_000,
                 },
-                |response| matches!(response, Ok(r) if r.body.contains("Redirecting")),
+                |response| matches!(response, Ok(r) if r.status == 303),
             )
             .await,
         );
