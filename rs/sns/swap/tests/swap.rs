@@ -1,14 +1,14 @@
-use crate::common::doubles::{
-    ExplodingSnsRootClient, LedgerExpect, NnsGovernanceClientCall, NnsGovernanceClientReply,
-    SnsGovernanceClientCall, SnsGovernanceClientReply, SnsRootClientCall, SnsRootClientReply,
-    SpyNnsGovernanceClient, SpySnsGovernanceClient, SpySnsRootClient,
-};
 use crate::common::{
     buy_token, compute_multiple_successful_claim_swap_neurons_response,
     compute_single_successful_claim_swap_neurons_response, create_generic_cf_participants,
-    create_generic_sns_neuron_recipes, create_single_neuron_recipe, extract_canister_call_error,
-    extract_set_dapp_controller_response, get_account_balance_mock_ledger,
-    get_snapshot_of_buyers_index_list, get_sns_balance,
+    create_generic_sns_neuron_recipes, create_single_neuron_recipe,
+    doubles::{
+        ExplodingSnsRootClient, LedgerExpect, NnsGovernanceClientCall, NnsGovernanceClientReply,
+        SnsGovernanceClientCall, SnsGovernanceClientReply, SnsRootClientCall, SnsRootClientReply,
+        SpyNnsGovernanceClient, SpySnsGovernanceClient, SpySnsRootClient,
+    },
+    extract_canister_call_error, extract_set_dapp_controller_response,
+    get_account_balance_mock_ledger, get_snapshot_of_buyers_index_list, get_sns_balance,
     get_transfer_and_account_balance_mock_ledger, get_transfer_mock_ledger, i2principal_id_string,
     mock_stub, open_swap, paginate_participants, successful_set_dapp_controllers_call_result,
     successful_set_mode_call_result, successful_settle_community_fund_participation_result, sweep,
@@ -39,9 +39,6 @@ use ic_sns_governance::{
     },
     types::ONE_MONTH_SECONDS,
 };
-use ic_sns_swap::swap::{
-    CLAIM_SWAP_NEURONS_BATCH_SIZE, FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START,
-};
 use ic_sns_swap::{
     memory,
     pb::v1::{
@@ -50,7 +47,10 @@ use ic_sns_swap::{
         Lifecycle::{Aborted, Adopted, Committed, Open, Pending, Unspecified},
         SetDappControllersRequest, SetDappControllersResponse, *,
     },
-    swap::{apportion_approximately_equally, principal_to_subaccount},
+    swap::{
+        apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
+        FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START,
+    },
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;

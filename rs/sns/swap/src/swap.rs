@@ -1,28 +1,29 @@
-use crate::clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient};
-use crate::logs::{ERROR, INFO};
-use crate::memory;
-use crate::pb::v1::{
-    get_open_ticket_response, new_sale_ticket_response,
-    params::NeuronBasketConstructionParameters,
-    restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
-    set_mode_call_result::SetModeResult,
-    settle_community_fund_participation_result,
-    sns_neuron_recipe::Investor,
-    sns_neuron_recipe::{ClaimedStatus, NeuronAttributes},
-    BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
-    ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
-    GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
-    GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse, GetSaleParametersRequest,
-    GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
-    ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
-    ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
-    ListSnsNeuronRecipesResponse, NeuronId as SaleNeuronId, NewSaleTicketRequest,
-    NewSaleTicketResponse, OpenRequest, OpenResponse, Participant, RefreshBuyerTokensResponse,
-    RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
-    SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
-    TransferableAmount,
+use crate::{
+    clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
+    logs::{ERROR, INFO},
+    memory,
+    pb::v1::{
+        get_open_ticket_response, new_sale_ticket_response,
+        params::NeuronBasketConstructionParameters,
+        restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
+        settle_community_fund_participation_result,
+        sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
+        BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
+        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
+        GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
+        GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
+        GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
+        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
+        ListSnsNeuronRecipesResponse, NeuronId as SaleNeuronId, NewSaleTicketRequest,
+        NewSaleTicketResponse, OpenRequest, OpenResponse, Participant, RefreshBuyerTokensResponse,
+        RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
+        SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
+        TransferableAmount,
+    },
+    types::{ScheduledVestingEvent, TransferResult},
 };
-use crate::types::{ScheduledVestingEvent, TransferResult};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use dfn_core::CanisterId;
@@ -34,25 +35,26 @@ use ic_sns_governance::{
     ledger::ICRC1Ledger,
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
-        claim_swap_neurons_response::ClaimSwapNeuronsResult,
-        claim_swap_neurons_response::SwapNeuron, governance, ClaimSwapNeuronsError,
-        ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, SetMode, SetModeResponse,
+        claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
+        governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus,
+        NeuronId, SetMode, SetModeResponse,
     },
 };
-use ic_stable_structures::storable::Blob;
-use ic_stable_structures::{BoundedStorable, GrowFailed, Storable};
+use ic_stable_structures::{storable::Blob, BoundedStorable, GrowFailed, Storable};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use itertools::{Either, Itertools};
 use maplit::btreemap;
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::borrow::Cow;
-use std::collections::BTreeMap;
-use std::ops::Bound::{Included, Unbounded};
 use std::{
+    borrow::Cow,
+    collections::BTreeMap,
     num::{NonZeroU128, NonZeroU64},
-    ops::Div,
+    ops::{
+        Bound::{Included, Unbounded},
+        Div,
+    },
     str::FromStr,
 };
 
@@ -628,7 +630,8 @@ impl Swap {
     ) -> Result<RefreshBuyerTokensResponse, String> {
         if self.lifecycle() != Lifecycle::Open {
             return Err(
-                format!("The token amount can only be refreshed when the canister is in the OPEN state. Current state is {:?}", self.lifecycle()),
+                "The token amount can only be refreshed when the canister is in the OPEN state"
+                    .to_string(),
             );
         }
         if self.icp_target_reached() {

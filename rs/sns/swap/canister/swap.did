@@ -1,10 +1,7 @@
 type BuyerState = record { icp : opt TransferableAmount };
 type CanisterCallError = record { code : opt int32; description : text };
 type CanisterStatusResultV2 = record {
-  controller : principal;
   status : CanisterStatusType;
-  freezing_threshold : nat;
-  balance : vec record { vec nat8; nat };
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
@@ -20,7 +17,6 @@ type CfParticipant = record {
 };
 type Countries = record { iso_codes : vec text };
 type DefiniteCanisterSettingsArgs = record {
-  controller : principal;
   freezing_threshold : nat;
   controllers : vec principal;
   memory_allocation : nat;

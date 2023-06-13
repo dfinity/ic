@@ -14,9 +14,9 @@ filegroup(
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
-    "//rs/nervous_system/root",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icrc1",
@@ -31,7 +31,6 @@ DEPENDENCIES = [
     "//rs/rust_canisters/on_wire",
     "//rs/sns/governance",
     "//rs/types/base_types",
-    "//rs/types/ic00_types",
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",

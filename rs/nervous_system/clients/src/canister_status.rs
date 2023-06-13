@@ -107,6 +107,24 @@ impl CanisterStatusResultFromManagementCanister {
     pub fn controllers(&self) -> &[PrincipalId] {
         self.settings.controllers.as_slice()
     }
+
+    pub fn dummy_with_controllers(
+        controllers: Vec<PrincipalId>,
+    ) -> CanisterStatusResultFromManagementCanister {
+        CanisterStatusResultFromManagementCanister {
+            status: CanisterStatusType::Running,
+            module_hash: None,
+            memory_size: candid::Nat::from(42),
+            settings: DefiniteCanisterSettingsFromManagementCanister {
+                controllers,
+                compute_allocation: candid::Nat::from(44),
+                memory_allocation: candid::Nat::from(45),
+                freezing_threshold: candid::Nat::from(46),
+            },
+            cycles: candid::Nat::from(47),
+            idle_cycles_burned_per_day: candid::Nat::from(48),
+        }
+    }
 }
 
 pub async fn canister_status(

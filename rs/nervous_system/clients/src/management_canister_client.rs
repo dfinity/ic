@@ -75,6 +75,14 @@ impl MockManagementCanisterClient {
     pub fn get_calls_snapshot(&self) -> Vec<MockManagementCanisterClientCall> {
         self.calls.lock().unwrap().clone().into()
     }
+
+    pub fn assert_all_replies_consumed(&self) {
+        assert!(self.replies.lock().unwrap().is_empty())
+    }
+
+    pub fn push_reply(&mut self, reply: MockManagementCanisterClientReply) {
+        self.replies.lock().unwrap().push_back(reply)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -144,5 +152,11 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
 
     fn canister_version(&self) -> Option<u64> {
         None
+    }
+}
+
+impl Drop for MockManagementCanisterClient {
+    fn drop(&mut self) {
+        self.assert_all_replies_consumed()
     }
 }

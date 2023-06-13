@@ -6,11 +6,10 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
 use ic_interfaces_registry::RegistryClient;
+use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
+use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;
 use ic_nervous_system_common::ONE_TRILLION;
 use ic_nervous_system_proto::pb::v1::Canister as NervousSystemProtoCanister;
-use ic_nervous_system_root::canister_status::{
-    CanisterStatusResultV2, CanisterStatusType::Running,
-};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
     SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,

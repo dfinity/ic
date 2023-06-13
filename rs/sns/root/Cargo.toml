@@ -24,6 +24,7 @@ ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-metrics-encoder = "1"
+ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }

@@ -8,15 +8,14 @@ use dfn_core::{
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_ic00_types::IC_00;
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
+use ic_nervous_system_clients::canister_status::CanisterStatusResult;
+use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
 use ic_nervous_system_common::{
     serve_logs, serve_logs_v2, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
-use ic_nervous_system_root::{
-    canister_status::{CanisterStatusResult, CanisterStatusResultV2},
-    change_canister::ChangeCanisterProposal,
-};
+use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -26,24 +25,13 @@ use ic_sns_root::{
         SnsRootCanister,
     },
     types::Environment,
-    CanisterIdRecord, EmptyBlob, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
-    LedgerCanisterClient, ManagementCanisterClient, UpdateSettingsArgs,
+    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, LedgerCanisterClient,
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
 use std::{cell::RefCell, time::SystemTime};
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
-
-/// An implementation of the ManagementCanisterClient trait that is suitable for
-/// production use.
-struct RealManagementCanisterClient {}
-
-impl RealManagementCanisterClient {
-    fn new() -> Self {
-        Self {}
-    }
-}
 
 struct CanisterEnvironment {}
 
@@ -67,31 +55,6 @@ impl Environment for CanisterEnvironment {
 
     fn canister_id(&self) -> CanisterId {
         dfn_core::api::id()
-    }
-}
-
-#[async_trait]
-impl ManagementCanisterClient for RealManagementCanisterClient {
-    async fn canister_status(
-        &self,
-        canister_id_record: &CanisterIdRecord,
-    ) -> Result<CanisterStatusResultV2, CanisterCallError> {
-        call(IC_00, "canister_status", candid_one, canister_id_record)
-            .await
-            .map_err(CanisterCallError::from)
-    }
-
-    async fn update_settings(
-        &self,
-        request: &UpdateSettingsArgs,
-    ) -> Result<EmptyBlob, CanisterCallError> {
-        call(IC_00, "update_settings", candid_one, request)
-            .await
-            .map_err(CanisterCallError::from)
-    }
-
-    fn canister_version(&self) -> Option<u64> {
-        Some(dfn_core::api::canister_version())
     }
 }
 
@@ -192,8 +155,8 @@ fn canister_status() {
 }
 
 #[candid_method(update, rename = "canister_status")]
-async fn canister_status_(id: ic_nervous_system_root::CanisterIdRecord) -> CanisterStatusResult {
-    ic_nervous_system_root::canister_status::canister_status(id)
+async fn canister_status_(id: CanisterIdRecord) -> CanisterStatusResult {
+    ic_nervous_system_clients::canister_status::canister_status(id)
         .await
         .map(CanisterStatusResult::from)
         .unwrap()
@@ -221,7 +184,7 @@ async fn get_sns_canisters_summary_(
     let canister_env = CanisterEnvironment {};
     SnsRootCanister::get_sns_canisters_summary(
         &STATE,
-        &RealManagementCanisterClient::new(),
+        &ManagementCanisterClientImpl::new(),
         &create_ledger_client(),
         &canister_env,
         update_canister_list,
@@ -307,7 +270,7 @@ async fn register_dapp_canister_(
     };
     let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
         &STATE,
-        &RealManagementCanisterClient::new(),
+        &ManagementCanisterClientImpl::new(),
         dfn_core::api::id(),
         request,
     )
@@ -338,7 +301,7 @@ async fn register_dapp_canisters_(
 ) -> RegisterDappCanistersResponse {
     SnsRootCanister::register_dapp_canisters(
         &STATE,
-        &RealManagementCanisterClient::new(),
+        &ManagementCanisterClientImpl::new(),
         dfn_core::api::id(),
         request,
     )
@@ -371,7 +334,7 @@ fn set_dapp_controllers() {
 async fn set_dapp_controllers_(request: SetDappControllersRequest) -> SetDappControllersResponse {
     SnsRootCanister::set_dapp_controllers(
         &STATE,
-        &RealManagementCanisterClient::new(),
+        &ManagementCanisterClientImpl::new(),
         dfn_core::api::id(),
         dfn_core::api::caller(),
         &request,

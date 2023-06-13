@@ -4,8 +4,8 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::CanisterInstallMode;
 use ic_icrc1_ledger::LedgerArgument;
+use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
-use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

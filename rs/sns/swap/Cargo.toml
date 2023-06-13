@@ -30,13 +30,12 @@ hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-crypto-sha = { path = "../../crypto/sha/" }
-ic-ic00-types = { path = "../../types/ic00_types" }
+ic-crypto-sha = { path = "../../crypto/sha" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
+ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
-ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-protobuf = { path = "../../protobuf" }
 ic-stable-structures = "0.5.0"

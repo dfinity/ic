@@ -37,6 +37,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha = { path = "../../crypto/sha/" }
 ic-metrics-encoder = "1"
+ic-nervous-system-clients= { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
