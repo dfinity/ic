@@ -219,7 +219,7 @@ py_library(
 py_test(
     name = "test_my_module",
     srcs = ["tests/test_my_module.py"],
-    deps = [":my_module"], requirement("pytest"),
+    deps = [":my_module", requirement("pytest")],
 )
 ```
 
