@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::Ipv6Addr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::str;
 use std::time::Duration;
@@ -21,7 +21,7 @@ use ic_tests::driver::test_env_api::{retry, FarmBaseUrl, HasDependencies, SshSes
 use ic_tests::driver::test_setup::GroupSetup;
 use ic_tests::driver::universal_vm::{UniversalVm, UniversalVms};
 use serde::Deserialize;
-use slog::{error, info, warn};
+use slog::{debug, error, info, warn};
 use ssh2::Session;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpSocket;
@@ -79,11 +79,6 @@ fn setup(env: TestEnv) {
         .unwrap_or_else(|e| panic!("Failed to setup Universal VM {UVM_NAME} because: {e}"));
     info!(log, "Universal VM {UVM_NAME} installed!");
 
-    let ic_version_file = PathBuf::from(std::env::var("IC_VERSION_FILE").unwrap());
-    let dev_disk_img_tar_zst_sha256 = std::env::var("DEV_DISK_IMG_TAR_ZST_SHA256").unwrap();
-    let dev_disk_img_tar_zst_cas_url = std::env::var("DEV_DISK_IMG_TAR_ZST_CAS_URL").unwrap();
-    let dev_update_img_tar_zst_sha256 = std::env::var("DEV_UPDATE_IMG_TAR_ZST_SHA256").unwrap();
-
     let env_tar_path = env.get_path(ENV_TAR_ZST);
     info!(log, "Creating {env_tar_path:?} ...");
     let output = Command::new("tar")
@@ -137,6 +132,18 @@ fn setup(env: TestEnv) {
         )
     });
 
+    let docker_env_vars = {
+        let mut env_vars = String::from("");
+        for (key, value) in env::vars() {
+            // NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
+            if key.starts_with("ENV_DEPS__") {
+                env_vars.push_str(format!(r#"--env {key}={value:?} \"#).as_str());
+            }
+        }
+        env_vars
+    };
+    debug!(log, "Docker env vars: {docker_env_vars}");
+
     info!(log, "Creating final docker image ...");
     let prepare_docker_script = &format!(
         r#"
@@ -159,10 +166,7 @@ docker build --tag final .
 cat <<EOF > /home/admin/run
 #!/bin/sh
 docker run --name system_test --network host \
-  --env IC_VERSION_FILE={ic_version_file:?} \
-  --env DEV_DISK_IMG_TAR_ZST_SHA256={dev_disk_img_tar_zst_sha256:?} \
-  --env DEV_DISK_IMG_TAR_ZST_CAS_URL={dev_disk_img_tar_zst_cas_url:?} \
-  --env DEV_UPDATE_IMG_TAR_ZST_SHA256={dev_update_img_tar_zst_sha256:?} \
+  {docker_env_vars}
   final \
   /home/root/root_env/dependencies/{colocated_test_bin} \
   --working-dir /home/root --no-delete-farm-group --no-farm-keepalive --group-base-name {colocated_test} run

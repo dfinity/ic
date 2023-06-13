@@ -138,15 +138,16 @@ def system_test(
     _guestos = "//ic-os/guestos/envs/dev-fixed-version:" if ic_os_fixed_version else "//ic-os/guestos/envs/dev:"
 
     # Always add version.txt for now as all test use it even that they don't declary they use dev image.
-    _env_deps[_guestos + "version.txt"] = "IC_VERSION_FILE"
+    # NOTE: we use "ENV_DEPS__" as prefix for env variables, which are passed to system-tests via Bazel.
+    _env_deps[_guestos + "version.txt"] = "ENV_DEPS__IC_VERSION_FILE"
 
     if uses_guestos_dev:
-        _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "DEV_DISK_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "DEV_DISK_IMG_TAR_ZST_SHA256"
-        _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "update-img.tar.zst.sha256"] = "DEV_UPDATE_IMG_TAR_ZST_SHA256"
+        _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256"
+        _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
+        _env_deps[_guestos + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256"
 
-        _env_deps["//ic-os:scripts/build-bootstrap-config-image.sh"] = "BUILD_BOOTSTRAP_CONFIG_IMAGE"
+        _env_deps["//ic-os:scripts/build-bootstrap-config-image.sh"] = "ENV_DEPS__BUILD_BOOTSTRAP_CONFIG_IMAGE"
 
     run_system_test(
         name = name,
