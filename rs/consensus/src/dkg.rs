@@ -1256,11 +1256,17 @@ fn get_dkg_summary_from_cup_contents(
     let mut transcripts = DkgTranscripts {
         low_threshold: cup_contents
             .initial_ni_dkg_transcript_low_threshold
-            .map(initial_ni_dkg_transcript_from_registry_record)
+            .map(|dkg_transcript_record| {
+                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record)
+                    .expect("Decoding initial low-threshold DKG transcript failed.")
+            })
             .expect("Missing initial low-threshold DKG transcript"),
         high_threshold: cup_contents
             .initial_ni_dkg_transcript_high_threshold
-            .map(initial_ni_dkg_transcript_from_registry_record)
+            .map(|dkg_transcript_record| {
+                initial_ni_dkg_transcript_from_registry_record(dkg_transcript_record)
+                    .expect("Decoding initial high-threshold DKG transcript failed.")
+            })
             .expect("Missing initial high-threshold DKG transcript"),
     };
 

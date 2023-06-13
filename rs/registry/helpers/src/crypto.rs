@@ -19,7 +19,11 @@ use ic_types::crypto::threshold_sig::{
     },
     ThresholdSigPublicKey,
 };
-use ic_types::{crypto::KeyPurpose, NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId};
+use ic_types::{
+    crypto::KeyPurpose,
+    registry::{RegistryClientError, RegistryClientError::DecodeError},
+    NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId,
+};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 
@@ -114,19 +118,26 @@ impl<T: RegistryClient + ?Sized> CryptoRegistry for T {
             self.get_versioned_value(&make_catch_up_package_contents_key(subnet_id), version)?;
         let bytes = Ok(record.value);
         let version = record.version;
-        let value =
-            deserialize_registry_value::<CatchUpPackageContents>(bytes).map(|maybe_value| {
-                maybe_value.map(|value| DkgTranscripts {
-                    low_threshold: value
-                        .initial_ni_dkg_transcript_low_threshold
-                        .map(initial_ni_dkg_transcript_from_registry_record)
-                        .expect("Missing initial low-threshold DKG transcript"),
-                    high_threshold: value
-                        .initial_ni_dkg_transcript_high_threshold
-                        .map(initial_ni_dkg_transcript_from_registry_record)
-                        .expect("Missing initial high-threshold DKG transcript"),
+        let value = deserialize_registry_value::<CatchUpPackageContents>(bytes)
+            .map(|maybe_value| {
+                maybe_value.map(|value| {
+                    Ok::<DkgTranscripts, RegistryClientError>(DkgTranscripts {
+                        low_threshold: value
+                            .initial_ni_dkg_transcript_low_threshold
+                            .ok_or(DecodeError {
+                                error: "Missing initial low-threshold DKG transcript".to_string(),
+                            })
+                            .and_then(initial_ni_dkg_transcript_from_registry_record)?,
+                        high_threshold: value
+                            .initial_ni_dkg_transcript_high_threshold
+                            .ok_or(DecodeError {
+                                error: "Missing initial high-threshold DKG transcript".to_string(),
+                            })
+                            .and_then(initial_ni_dkg_transcript_from_registry_record)?,
+                    })
                 })
-            })?;
+            })?
+            .transpose()?;
         Ok(RegistryVersionedRecord {
             key: record.key,
             version,
@@ -137,23 +148,43 @@ impl<T: RegistryClient + ?Sized> CryptoRegistry for T {
 
 pub fn initial_ni_dkg_transcript_from_registry_record(
     dkg_transcript_record: InitialNiDkgTranscriptRecord,
-) -> NiDkgTranscript {
-    let dkg_id_record = dkg_transcript_record.id.expect("missing NI-DKG ID");
-    let dkg_id = NiDkgId::try_from(dkg_id_record).expect("invalid dkg id");
+) -> Result<NiDkgTranscript, RegistryClientError> {
+    let dkg_id_record = dkg_transcript_record.id.ok_or(DecodeError {
+        error: "missing NI-DKG ID".to_string(),
+    })?;
+    let dkg_id = NiDkgId::try_from(dkg_id_record).map_err(|_| DecodeError {
+        error: "invalid dkg id".to_string(),
+    })?;
     let committee: BTreeSet<NodeId> = dkg_transcript_record
         .committee
         .iter()
-        .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).expect("invalid principal ID")))
-        .collect();
-    NiDkgTranscript {
+        .map(|n| {
+            PrincipalId::try_from(&n[..])
+                .map(|principal_id| NodeId::from(principal_id))
+                .map_err(|err| DecodeError {
+                    error: format!("invalid principal ID: {}", err),
+                })
+        })
+        .collect::<Result<BTreeSet<_>, RegistryClientError>>()?;
+
+    Ok(NiDkgTranscript {
         dkg_id,
         threshold: NiDkgThreshold::new(NumberOfNodes::new(dkg_transcript_record.threshold))
-            .expect("invalid threshold"),
-        committee: NiDkgReceivers::new(committee).expect("invalid committee"),
+            .map_err(|err| DecodeError {
+                error: format!("invalid threshold: {:?}", err),
+            })?,
+        committee: NiDkgReceivers::new(committee).map_err(|err| DecodeError {
+            error: format!("invalid committee: {}", err),
+        })?,
         registry_version: RegistryVersion::new(dkg_transcript_record.registry_version),
         internal_csp_transcript: serde_cbor::from_slice(
             dkg_transcript_record.internal_csp_transcript.as_slice(),
         )
-        .expect("failed to deserialize CSP NI-DKG transcript from CBOR"),
-    }
+        .map_err(|err| DecodeError {
+            error: format!(
+                "failed to deserialize CSP NI-DKG transcript from CBOR: {}",
+                err
+            ),
+        })?,
+    })
 }
