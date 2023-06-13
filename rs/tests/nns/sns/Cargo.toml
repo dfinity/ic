@@ -101,7 +101,7 @@ itertools = "0.10.0"
 json5 = "0.4.1"
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
-lifeline = { path = "../../../nns/handlers/lifeline" }
+lifeline = { path = "../../../nns/handlers/lifeline/impl" }
 maplit = "1.0.2"
 nix = "0.23.0"
 on_wire = { path = "../../../rust_canisters/on_wire"}

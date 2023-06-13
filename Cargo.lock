@@ -8124,6 +8124,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nns-handler-lifeline-interface"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "serde",
+]
+
+[[package]]
 name = "ic-nns-handler-root"
 version = "0.8.0"
 dependencies = [
@@ -8333,6 +8341,7 @@ dependencies = [
  "ic-nns-governance",
  "ic-nns-gtc",
  "ic-nns-gtc-accounts",
+ "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-protobuf",
  "ic-registry-keys",
