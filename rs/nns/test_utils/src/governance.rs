@@ -31,6 +31,9 @@ use ic_nns_governance::{
         ProposalStatus,
     },
 };
+pub use ic_nns_handler_lifeline_interface::{
+    HardResetNnsRootToVersionPayload, UpgradeRootProposal,
+};
 use std::time::Duration;
 
 /// Thin-wrapper around submit_proposal to handle
@@ -335,20 +338,6 @@ pub fn append_inert(wasm: Option<&Wasm>) -> Wasm {
     // times.
     wasm.append(&mut vec![0, 2, 1, 97]);
     Wasm::from_bytes(wasm)
-}
-
-/// Payload to upgrade the root canister.
-#[derive(CandidType)]
-pub struct UpgradeRootProposal {
-    pub wasm_module: Vec<u8>,
-    pub module_arg: Vec<u8>,
-    pub stop_upgrade_start: bool,
-}
-
-#[derive(CandidType)]
-pub struct HardResetNnsRootToVersionPayload {
-    pub wasm_module: Vec<u8>,
-    pub init_arg: Vec<u8>,
 }
 
 /// Submits a proposal to upgrade the root canister.

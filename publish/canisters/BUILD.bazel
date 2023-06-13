@@ -24,7 +24,7 @@ CANISTERS = {
     "json.wasm": "//rs/rust_canisters/tests:json",
     "ledger-canister.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
     "ledger-canister_notify-method.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
-    "lifeline_canister.wasm": "//rs/nns/handlers/lifeline:lifeline_canister",
+    "lifeline_canister.wasm": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
     "mem-utils-test-canister.wasm": "//rs/nns/integration_tests:mem-utils-test-canister",
     "memory-test-canister.wasm": "//rs/rust_canisters/memory_test:memory_test_canister",
     "nan_canonicalized.wasm": "//rs/rust_canisters/tests:nan_canonicalized",

@@ -34,7 +34,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/governance",
     "//rs/nns/gtc",
-    "//rs/nns/handlers/lifeline",
+    "//rs/nns/handlers/lifeline/impl:lifeline",
     "//rs/nns/handlers/root/impl:root",
     "//rs/nns/init",
     "//rs/nns/sns-wasm",
@@ -182,7 +182,7 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "mainnet": "@mainnet_nns_cycles-minting-canister//file",
     },
     "lifeline_canister": {
-        "tip-of-branch": "//rs/nns/handlers/lifeline:lifeline_canister",
+        "tip-of-branch": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
         "mainnet": "@mainnet_nns_lifeline_canister//file",
     },
     "genesis-token-canister": {

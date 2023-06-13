@@ -194,7 +194,7 @@ symlink_dir(
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method": "ledger-canister_notify-method.wasm",
         "//rs/nns/handlers/root/impl:root-canister": "root-canister.wasm",
         "//rs/nns/cmc:cycles-minting-canister": "cycles-minting-canister.wasm",
-        "//rs/nns/handlers/lifeline:lifeline_canister": "lifeline_canister.wasm",
+        "//rs/nns/handlers/lifeline/impl:lifeline_canister": "lifeline_canister.wasm",
         "//rs/nns/gtc:genesis-token-canister": "genesis-token-canister.wasm",
         "//rs/nns/sns-wasm:sns-wasm-canister": "sns-wasm-canister.wasm",
         "//rs/nns/nns-ui:nns-ui-canister": "nns-ui-canister.wasm",
@@ -235,11 +235,11 @@ py_binary(
     name = "e2e-scalability-tests",
     srcs = ["common/tests/e2e-scalability-tests.py"],
     data = [
+        "common/flamegraph.gz",
+        "workloads/tiny.toml",
         ":artifacts",
         "//ic-os:scripts/build-bootstrap-config-image.sh",
         "//rs/tests:create-universal-vm-config-image.sh",
-        "common/flamegraph.gz",
-        "workloads/tiny.toml",
     ] + glob([
         "ii/*",
     ]),

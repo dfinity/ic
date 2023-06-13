@@ -1,12 +1,12 @@
 use ic_base_types::CanisterId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use std::env;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
-use std::result::Result;
-use std::str::FromStr;
+use std::{
+    env, fs, io,
+    path::{Path, PathBuf},
+    process::{Command, Output},
+    result::Result,
+    str::FromStr,
+};
 
 enum BuildError {
     /// IO error happened
@@ -96,8 +96,8 @@ fn remove_governance_service_args(did: &mut String) {
     *did = did.replace("service : (Governance) ->", "service :");
 }
 
-const GOVERNANCE_DID: &str = "../../governance/canister/governance.did";
-const ROOT_DID: &str = "../root/impl/canister/root.did";
+const GOVERNANCE_DID: &str = "../../../governance/canister/governance.did";
+const ROOT_DID: &str = "../../root/impl/canister/root.did";
 
 fn compile_lifeline(out: &Path) -> Result<PathBuf, BuildError> {
     // Add symlinks to the .did files for foreign canisters
