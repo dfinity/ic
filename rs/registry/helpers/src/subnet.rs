@@ -15,7 +15,10 @@ use ic_registry_keys::{
     make_subnet_list_record_key, make_subnet_record_key, ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
-use ic_types::{Height, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
+use ic_types::{
+    registry::RegistryClientError::DecodeError, Height, NodeId, PrincipalId, RegistryVersion,
+    ReplicaVersion, SubnetId,
+};
 use std::{
     convert::{TryFrom, TryInto},
     time::Duration,
@@ -460,15 +463,21 @@ pub trait SubnetListRegistry {
 impl<T: RegistryClient + ?Sized> SubnetListRegistry for T {
     fn get_subnet_ids(&self, version: RegistryVersion) -> RegistryClientResult<Vec<SubnetId>> {
         let bytes = self.get_value(make_subnet_list_record_key().as_str(), version);
-        Ok(
-            deserialize_registry_value::<SubnetListRecord>(bytes)?.map(|subnet| {
+        deserialize_registry_value::<SubnetListRecord>(bytes)?
+            .map(|subnet| {
                 subnet
                     .subnets
-                    .iter()
-                    .map(|s| SubnetId::from(PrincipalId::try_from(s.clone().as_slice()).unwrap()))
-                    .collect()
-            }),
-        )
+                    .into_iter()
+                    .map(|s| {
+                        Ok(SubnetId::from(
+                            PrincipalId::try_from(s.as_slice()).map_err(|err| DecodeError {
+                                error: format!("get_subnet_ids() failed with {}", err),
+                            })?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .transpose()
     }
 }
 
