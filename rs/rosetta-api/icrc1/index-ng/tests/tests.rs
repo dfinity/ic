@@ -1,11 +1,14 @@
 use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
-    GetAccountTransactionsArgs, GetAccountTransactionsResponse, GetAccountTransactionsResult,
-    GetBlocksResponse, IndexArg, InitArg as IndexInitArg, ListSubaccountsArgs, Status,
-    TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
+    GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
+    ListSubaccountsArgs, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
-use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_ledger::{
+    ChangeFeeCollector, InitArgs as LedgerInitArgs, LedgerArgument,
+    UpgradeArgs as LedgerUpgradeArgs,
+};
 use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_state_machine_tests::StateMachine;
@@ -99,6 +102,25 @@ fn install_ledger(
         .unwrap()
 }
 
+fn upgrade_ledger(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    fee_collector_account: Option<Account>,
+) {
+    let change_fee_collector =
+        Some(fee_collector_account.map_or(ChangeFeeCollector::Unset, ChangeFeeCollector::SetTo));
+    let args = LedgerArgument::Upgrade(Some(LedgerUpgradeArgs {
+        metadata: None,
+        token_name: None,
+        token_symbol: None,
+        transfer_fee: None,
+        change_fee_collector,
+        max_memo_length: None,
+    }));
+    env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
+        .unwrap()
+}
+
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
     let args = IndexArg::Init(IndexInitArg {
         ledger_id: ledger_id.into(),
@@ -168,7 +190,7 @@ fn icrc1_get_blocks(
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
     let res = env
-        .execute_ingress(ledger_id, "get_blocks", req)
+        .query(ledger_id, "get_blocks", req)
         .expect("Failed to send get_blocks request")
         .bytes();
     let res = Decode!(&res, icrc_ledger_types::icrc3::blocks::GetBlocksResponse)
@@ -182,7 +204,7 @@ fn icrc1_get_blocks(
         let req = Encode!(&req).expect("Failed to encode GetBlocksRequest for archive node");
         let canister_id = archived.callback.canister_id.as_ref().try_into().unwrap();
         let res = env
-            .execute_ingress(canister_id, archived.callback.method.clone(), req)
+            .query(canister_id, archived.callback.method.clone(), req)
             .expect("Failed to send get_blocks request to archive")
             .bytes();
         let res = Decode!(&res, BlockRange)
@@ -286,6 +308,16 @@ fn list_subaccounts(
         Vec<Subaccount>
     )
     .expect("failed to decode list_subaccounts response")
+}
+
+fn get_fee_collectors_ranges(env: &StateMachine, index: CanisterId) -> FeeCollectorRanges {
+    Decode!(
+        &env.execute_ingress(index, "get_fee_collectors_ranges", Encode!(&()).unwrap())
+            .expect("failed to get_fee_collectors_ranges")
+            .bytes(),
+        FeeCollectorRanges
+    )
+    .expect("failed to decode get_fee_collectors_ranges response")
 }
 
 // Assert that the index canister contains the same blocks as the ledger
@@ -850,6 +882,9 @@ fn test_oldest_tx_id() {
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(Some(3.into()), oldest_tx_id);
+
+    // there should be no fee collector
+    assert_eq!(get_fee_collectors_ranges(env, index_id).ranges, vec![]);
 }
 
 #[test]
@@ -858,7 +893,7 @@ fn test_fee_collector() {
     let fee_collector = account(42, 0);
     let ledger_id = install_ledger(
         env,
-        vec![(account(1, 0), 10_000_000)],
+        vec![(account(1, 0), 10_000_000)], // txid: 0
         default_archive_options(),
         Some(fee_collector),
     );
@@ -869,9 +904,9 @@ fn test_fee_collector() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000);
-    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000);
-    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000);
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000); // txid: 1
+    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000); // txid: 2
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000); // txid: 3
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
 
@@ -880,51 +915,75 @@ fn test_fee_collector() {
         icrc1_balance_of(env, index_id, fee_collector)
     );
 
-    let expected_txs = vec![
-        TransactionWithId {
-            id: 3.into(),
-            transaction: Transaction::transfer(
-                Transfer {
-                    from: account(1, 0),
-                    to: account(2, 0),
-                    amount: 300_000.into(),
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                },
-                0,
+    assert_eq!(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![(fee_collector, vec![(0.into(), 4.into())])]
+    );
+
+    // remove the fee collector to burn some transactions fees
+    upgrade_ledger(env, ledger_id, None);
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 4
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 500_000); // txid: 5
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, fee_collector),
+        icrc1_balance_of(env, index_id, fee_collector)
+    );
+
+    assert_eq!(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![(fee_collector, vec![(0.into(), 4.into())])]
+    );
+
+    // add a new fee collector different from the first one
+    let new_fee_collector = account(42, 42);
+    upgrade_ledger(env, ledger_id, Some(new_fee_collector));
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 6
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    for fee_collector in &[fee_collector, new_fee_collector] {
+        assert_eq!(
+            icrc1_balance_of(env, ledger_id, *fee_collector),
+            icrc1_balance_of(env, index_id, *fee_collector)
+        );
+    }
+
+    assert_eq!(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![
+            (fee_collector, vec![(0.into(), 4.into())]),
+            (new_fee_collector, vec![(6.into(), 7.into())])
+        ]
+    );
+
+    // add back the original fee_collector and make a couple of transactions again
+    upgrade_ledger(env, ledger_id, Some(fee_collector));
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 7
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 400_000); // txid: 8
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    for fee_collector in &[fee_collector, new_fee_collector] {
+        assert_eq!(
+            icrc1_balance_of(env, ledger_id, *fee_collector),
+            icrc1_balance_of(env, index_id, *fee_collector)
+        );
+    }
+
+    assert_eq!(
+        get_fee_collectors_ranges(env, index_id).ranges,
+        vec![
+            (
+                fee_collector,
+                vec![(0.into(), 4.into()), (7.into(), 9.into())]
             ),
-        },
-        TransactionWithId {
-            id: 2.into(),
-            transaction: Transaction::transfer(
-                Transfer {
-                    from: account(1, 0),
-                    to: account(3, 0),
-                    amount: 200_000.into(),
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                },
-                0,
-            ),
-        },
-        TransactionWithId {
-            id: 1.into(),
-            transaction: Transaction::transfer(
-                Transfer {
-                    from: account(1, 0),
-                    to: account(2, 0),
-                    amount: 100_000.into(),
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                },
-                0,
-            ),
-        },
-    ];
-    let actual_txs =
-        get_account_transactions(env, index_id, fee_collector, None, u64::MAX).transactions;
-    assert_txs_with_id_eq(expected_txs, actual_txs);
+            (new_fee_collector, vec![(6.into(), 7.into())])
+        ]
+    );
 }

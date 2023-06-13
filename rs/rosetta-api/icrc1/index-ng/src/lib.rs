@@ -74,3 +74,8 @@ pub struct ListSubaccountsArgs {
 pub struct Status {
     pub num_blocks_synced: BlockIndex,
 }
+
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+pub struct FeeCollectorRanges {
+    pub ranges: Vec<(Account, Vec<(BlockIndex, BlockIndex)>)>,
+}
