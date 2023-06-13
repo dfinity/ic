@@ -1436,6 +1436,7 @@ pub struct ExecutionTestBuilder {
     cost_to_compile_wasm_instruction: u64,
     max_query_call_graph_instructions: NumInstructions,
     stable_memory_dirty_page_limit: NumPages,
+    time: Time,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1491,6 +1492,7 @@ impl Default for ExecutionTestBuilder {
             max_query_call_graph_instructions: max_instructions_per_composite_query_call,
             stable_memory_dirty_page_limit: ic_config::execution_environment::Config::default()
                 .stable_memory_dirty_page_limit,
+            time: mock_time(),
         }
     }
 }
@@ -1740,6 +1742,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_time(mut self, time: Time) -> Self {
+        self.time = time;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -1925,7 +1932,7 @@ impl ExecutionTestBuilder {
                 self.subnet_message_memory,
                 self.subnet_wasm_custom_sections_memory,
             ),
-            time: mock_time(),
+            time: self.time,
             instruction_limits: InstructionLimits::new(
                 deterministic_time_slicing,
                 self.instruction_limit,

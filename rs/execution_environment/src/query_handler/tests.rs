@@ -10,7 +10,9 @@ use ic_test_utilities::{
     universal_canister::{call_args, wasm},
 };
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, NumInstructions};
+use ic_types::{
+    ingress::WasmResult, messages::UserQuery, time, CountBytes, Cycles, NumInstructions,
+};
 use std::{sync::Arc, time::Duration};
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -290,6 +292,75 @@ fn query_cache_metrics_evicted_entries_count_bytes_work() {
 }
 
 #[test]
+fn query_cache_metrics_evicted_entries_negative_duration_works() {
+    const REPLY_SIZE: usize = 10_000;
+    const QUERY_CACHE_SIZE: usize = 1;
+    // Plus some room for the keys, headers etc.
+    const QUERY_CACHE_CAPACITY: usize = REPLY_SIZE * QUERY_CACHE_SIZE + REPLY_SIZE;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_capacity(QUERY_CACHE_CAPACITY as u64)
+        .build();
+
+    // As there are no updates, the default system time is unix epoch, so we explicitly set it here.
+    test.state_mut().metadata.batch_time = time::GENESIS;
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    // Run the first query.
+    let output = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            // The bytes are stored twice: as a payload in key and as a reply in value.
+            method_payload: wasm().reply_data(&[1; REPLY_SIZE / 2]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(output, Ok(WasmResult::Reply([1; REPLY_SIZE / 2].into())));
+
+    // Move the time backward.
+    test.state_mut().metadata.batch_time =
+        test.state_mut().metadata.batch_time - Duration::from_secs(2);
+
+    // The second query should evict the first one, as there is no room in the cache for two queries.
+    let output = test.query(
+        UserQuery {
+            // The query should be different, so we evict, not invalidate.
+            source: user_test_id(2),
+            receiver: canister_id,
+            method_name: "query".into(),
+            // The bytes are stored twice: as a payload in key and as a reply in value.
+            method_payload: wasm().reply_data(&[2; REPLY_SIZE / 2]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(output, Ok(WasmResult::Reply([2; REPLY_SIZE / 2].into())));
+
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    // Negative durations should give just 0.
+    assert_eq!(
+        0,
+        metrics.evicted_entries_duration.get_sample_sum() as usize
+    );
+    // One entry should be evicted.
+    assert_eq!(
+        1,
+        metrics.evicted_entries_duration.get_sample_count() as usize
+    );
+}
+
+#[test]
 fn query_cache_metrics_invalidated_entries_work() {
     const ITERATIONS: usize = 5;
 
@@ -560,6 +631,59 @@ fn query_cache_env_different_batch_time_returns_different_results() {
         assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
         assert_eq!(
             1,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
+    }
+}
+
+#[test]
+fn query_cache_env_invalidated_entries_negative_duration_works() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+
+    // As there are no updates, the default system time is unix epoch, so we explicitly set it here.
+    test.state_mut().metadata.batch_time = time::GENESIS;
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    // Move the time backward.
+    test.state_mut().metadata.batch_time =
+        test.state_mut().metadata.batch_time - Duration::from_secs(1);
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        // Negative durations should give just 0.
+        assert_eq!(
+            0,
             metrics.invalidated_entries_duration.get_sample_sum() as usize
         );
         assert_eq!(
