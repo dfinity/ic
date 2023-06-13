@@ -58,10 +58,16 @@ impl<T: RegistryClient + ?Sized> RoutingTableRegistry for T {
         let bytes = self.get_value(&make_canister_migrations_record_key(), version);
         deserialize_registry_value::<pb::CanisterMigrations>(bytes).map(
             |option_pb_canister_migrations| {
-                option_pb_canister_migrations.map(|pb_canister_migrations| {
-                    CanisterMigrations::try_from(pb_canister_migrations).unwrap()
-                })
+                option_pb_canister_migrations
+                    .map(|pb_canister_migrations| {
+                        CanisterMigrations::try_from(pb_canister_migrations).map_err(|err| {
+                            DecodeError {
+                                error: format!("get_canister_migrations() failed with {}", err),
+                            }
+                        })
+                    })
+                    .transpose()
             },
-        )
+        )?
     }
 }
