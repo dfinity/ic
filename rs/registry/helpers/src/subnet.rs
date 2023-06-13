@@ -202,7 +202,12 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         let bytes = self.get_value(ROOT_SUBNET_ID_KEY, version);
         Ok(deserialize_registry_value::<SubnetIdProto>(bytes)?
             .and_then(|subnet_id_proto| subnet_id_proto.principal_id)
-            .map(|pr_id| PrincipalId::try_from(pr_id.raw).expect("Could not parse principal id!"))
+            .map(|pr_id| {
+                PrincipalId::try_from(pr_id.raw).map_err(|err| DecodeError {
+                    error: format!("get_root_subnet_id() failed with {}", err),
+                })
+            })
+            .transpose()?
             .map(SubnetId::from))
     }
 
