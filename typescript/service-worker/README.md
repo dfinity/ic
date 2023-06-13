@@ -162,8 +162,22 @@ export type Token = { type: <T>() => IDL.Type<T> };
 
 ## e2e Tests
 
+Start e2e testing env:
+
 ```shell
-docker build -f ./e2e/Dockerfile -t sw-e2e . && docker run --rm sw-e2e
+./e2e/start-e2e-env.sh
+```
+
+Run e2e tests:
+
+```shell
+./e2e/run-e2e-tests.sh
+```
+
+Stop e2e testing env:
+
+```shell
+./e2e/stop-e2e-env.sh
 ```
 
 ## Release

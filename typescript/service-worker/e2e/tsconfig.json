@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "@wdio/globals/types", "jasmine"]
+  },
+  "include": ["pages/**/*.ts", "specs/**/*.ts"]
+}
