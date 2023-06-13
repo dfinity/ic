@@ -233,6 +233,10 @@ struct Opts {
         requires = "verify-nns-responses"
     )]
     nns_public_key_pem_file: Option<PathBuf>,
+
+    /// Return the output in JSON format.
+    #[clap(long = "json", global = true)]
+    json: bool,
 }
 
 impl ProposeToCreateSubnetCmd {
@@ -4313,6 +4317,7 @@ async fn main() {
                     .as_bytes()
                     .to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4321,6 +4326,7 @@ async fn main() {
             print_and_get_last_value::<X509PublicKeyCert>(
                 make_crypto_tls_cert_key(node_id).as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4344,6 +4350,7 @@ async fn main() {
             print_and_get_last_value::<NodeRecord>(
                 make_node_record_key(node_id).as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4373,6 +4380,7 @@ async fn main() {
                 let record = print_and_get_last_value::<SubnetRecordProto>(
                     make_subnet_record_key(*subnet_id).as_bytes().to_vec(),
                     &registry_canister,
+                    true,
                 )
                 .await;
                 if i + 1 != subnet_count {
@@ -4415,6 +4423,7 @@ async fn main() {
             print_and_get_last_value::<SubnetRecordProto>(
                 make_subnet_record_key(subnet_id).as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4434,8 +4443,12 @@ async fn main() {
             let key = make_replica_version_key(&get_replica_version_cmd.replica_version_id)
                 .as_bytes()
                 .to_vec();
-            let version =
-                print_and_get_last_value::<ReplicaVersionRecord>(key, &registry_canister).await;
+            let version = print_and_get_last_value::<ReplicaVersionRecord>(
+                key,
+                &registry_canister,
+                opts.json,
+            )
+            .await;
 
             let mut success = true;
 
@@ -4524,6 +4537,7 @@ async fn main() {
             print_and_get_last_value::<BlessedReplicaVersions>(
                 make_blessed_replica_versions_key().as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4531,6 +4545,7 @@ async fn main() {
             print_and_get_last_value::<RoutingTable>(
                 make_routing_table_record_key().as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4881,6 +4896,7 @@ async fn main() {
             print_and_get_last_value::<ProvisionalWhitelistProto>(
                 make_provisional_whitelist_record_key().as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4922,7 +4938,8 @@ async fn main() {
                 .as_bytes()
                 .to_vec();
 
-            print_and_get_last_value::<NodeOperatorRecord>(key, &registry_canister).await;
+            print_and_get_last_value::<NodeOperatorRecord>(key, &registry_canister, opts.json)
+                .await;
         }
         SubCommand::GetNodeOperatorList => {
             let registry_client = RegistryClientImpl::new(
@@ -4945,11 +4962,15 @@ async fn main() {
                 )
                 .unwrap();
 
-            println!();
-            for key in keys {
-                let node_operator_id = key.strip_prefix(NODE_OPERATOR_RECORD_KEY_PREFIX).unwrap();
-                println!("{}", node_operator_id);
-            }
+            let records = keys
+                .iter()
+                .map(|k| k.strip_prefix(NODE_OPERATOR_RECORD_KEY_PREFIX).unwrap())
+                .collect::<Vec<_>>();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&records)
+                    .expect("Failed to serialize the records to JSON")
+            );
         }
         SubCommand::UpdateRegistryLocalStore(cmd) => {
             update_registry_local_store(opts.nns_url, cmd).await;
@@ -5112,13 +5133,14 @@ async fn main() {
             .await
         }
         SubCommand::GetDataCenter(cmd) => {
-            let (bytes, _) = registry_canister
-                .get_value(make_data_center_record_key(&cmd.dc_id).into_bytes(), None)
-                .await
-                .unwrap();
-
-            let dc = decode_registry_value::<DataCenterRecord>(bytes);
-            println!("{}", dc);
+            print_and_get_last_value::<DataCenterRecord>(
+                make_data_center_record_key(&cmd.dc_id)
+                    .into_bytes()
+                    .to_vec(),
+                &registry_canister,
+                opts.json,
+            )
+            .await;
         }
         SubCommand::ProposeToAddOrRemoveDataCenters(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -5173,7 +5195,7 @@ async fn main() {
             let table = decode_registry_value::<NodeRewardsTableFlattened>(bytes);
             println!(
                 "{}",
-                serde_json::to_string(&table)
+                serde_json::to_string_pretty(&table)
                     .expect("Failed to serialize the rewards table to JSON")
             );
         }
@@ -5213,6 +5235,7 @@ async fn main() {
                     .as_bytes()
                     .to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -5295,6 +5318,7 @@ async fn main() {
             print_and_get_last_value::<CanisterMigrations>(
                 make_canister_migrations_record_key().as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -5476,10 +5500,33 @@ fn read_file_fully(path: &Path) -> Vec<u8> {
     buffer
 }
 
+fn print_value<T: Debug + serde::Serialize>(key: &String, version: u64, value: T, as_json: bool) {
+    if as_json {
+        #[derive(Serialize)]
+        struct Entry<T> {
+            key: String,
+            version: u64,
+            value: T,
+        }
+
+        let data = Entry {
+            key: key.clone(),
+            version,
+            value,
+        };
+        println!("{}", serde_json::to_string_pretty(&data).unwrap());
+    } else {
+        // Dump as debug representation
+        println!("Fetching the most recent value for key: {}", key);
+        println!("Most recent version is {:?}. Value:\n{:?}", version, value);
+    }
+}
+
 /// Fetches the last value stored under `key` in the registry and prints it.
 async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
     key: Vec<u8>,
     registry: &RegistryCanister,
+    as_json: bool,
 ) -> T {
     let value = registry.get_value(key.clone(), None).await;
     match value.clone() {
@@ -5575,14 +5622,50 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                         hex::encode(range.end.get_ref().as_slice())
                     );
                 }
-            } else {
-                // Everything is dumped as debug representation
-                println!(
-                    "Fetching the most recent value for key: {:?}",
-                    std::str::from_utf8(&key).unwrap()
+            } else if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX.as_bytes()) {
+                #[derive(Debug, Serialize)]
+                pub struct NodeOperator {
+                    pub node_operator_principal_id: PrincipalId,
+                    pub node_allowance: u64,
+                    pub node_provider_principal_id: PrincipalId,
+                    pub dc_id: String,
+                    pub rewardable_nodes: std::collections::BTreeMap<String, u32>,
+                    pub ipv6: Option<String>,
+                }
+                let record = NodeOperatorRecord::decode(&bytes[..])
+                    .expect("Error decoding value from registry.");
+                let record = NodeOperator {
+                    node_operator_principal_id: PrincipalId::try_from(
+                        record.node_operator_principal_id,
+                    )
+                    .expect("Error decoding principal"),
+                    node_allowance: record.node_allowance,
+                    node_provider_principal_id: PrincipalId::try_from(
+                        record.node_provider_principal_id,
+                    )
+                    .expect("Error decoding principal"),
+                    dc_id: record.dc_id,
+                    rewardable_nodes: record.rewardable_nodes,
+                    ipv6: record.ipv6,
+                };
+                print_value(
+                    &std::str::from_utf8(&key)
+                        .expect("key is not a str")
+                        .to_string(),
+                    version,
+                    record,
+                    as_json,
                 );
+            } else {
                 let value = T::decode(&bytes[..]).expect("Error decoding value from registry.");
-                println!("Most recent version is {:?}. Value:\n{:?}", version, value);
+                print_value(
+                    &std::str::from_utf8(&key)
+                        .expect("key is not a str")
+                        .to_string(),
+                    version,
+                    value,
+                    as_json,
+                );
             }
         }
         Err(error) => {
