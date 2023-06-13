@@ -7,8 +7,9 @@ use ic_crypto_sha::Sha256;
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
-    GetAccountTransactionsArgs, GetAccountTransactionsResponse, GetAccountTransactionsResult,
-    IndexArg, ListSubaccountsArgs, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
+    GetAccountTransactionsResult, IndexArg, ListSubaccountsArgs, Status, TransactionWithId,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
@@ -29,9 +30,11 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Reverse;
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::hash::Hash;
 use std::ops::Bound::{Excluded, Included};
+use std::ops::Range;
 use std::time::Duration;
 
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
@@ -84,7 +87,7 @@ thread_local! {
     });
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct State {
     // Equals to `true` while the [build_index] task runs.
     is_build_index_running: bool,
@@ -97,6 +100,9 @@ struct State {
 
     // Last wait time in nanoseconds.
     pub last_wait_time: Duration,
+
+    // The fees collectors with the ranges of blocks for which they collected the fee.
+    fee_collectors: HashMap<Account, Vec<Range<BlockIndex64>>>,
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -108,6 +114,7 @@ impl Default for State {
             ledger_id: Principal::management_canister(),
             max_blocks_per_response: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
             last_wait_time: Duration::from_secs(0),
+            fee_collectors: Default::default(),
         }
     }
 }
@@ -175,7 +182,7 @@ fn mutate_state(f: impl FnOnce(&mut State)) {
     STATE
         .with(|cell| {
             let mut borrowed = cell.borrow_mut();
-            let mut state = *borrowed.get();
+            let mut state = borrowed.get().clone();
             f(&mut state);
             borrowed.set(state)
         })
@@ -372,15 +379,45 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) {
 
         // add the block idx to the indices
         with_account_block_ids(|account_block_ids| {
-            for account in get_accounts(block_index, &decoded_block) {
+            for account in get_accounts(&decoded_block) {
                 account_block_ids.insert(account_block_ids_key(account, block_index), ());
             }
         });
+
+        // add the block to the fee_collector if one is set
+        index_fee_collector(block_index, &decoded_block);
 
         // change the balance of the involved accounts
         process_balance_changes(block_index, &decoded_block);
 
         block_index += 1;
+    }
+}
+
+fn index_fee_collector(block_index: BlockIndex64, block: &Block) {
+    if let Some(fee_collector) = get_fee_collector(block_index, block) {
+        mutate_state(|s| {
+            s.fee_collectors
+                .entry(fee_collector)
+                .and_modify(|blocks_ranges| push_block(blocks_ranges, block_index))
+                .or_insert_with(|| vec![block_index..block_index + 1]);
+        });
+    }
+}
+
+fn push_block(block_ranges: &mut Vec<Range<BlockIndex64>>, block_index: BlockIndex64) {
+    if block_ranges.is_empty() {
+        block_ranges.push(block_index..block_index + 1);
+        return;
+    }
+    // if the block_index passed is the next block of the last range of block_ranges
+    // then we extend the last range of block_range to include it, otherwise
+    // we create a new range
+    let last_id = block_ranges.len() - 1;
+    if block_ranges[last_id].end == block_index {
+        block_ranges[last_id].end = block_index + 1;
+    } else {
+        block_ranges.push(block_index..block_index + 1)
     }
 }
 
@@ -450,17 +487,11 @@ fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) 
     })
 }
 
-fn get_accounts(block_index: BlockIndex64, block: &Block) -> Vec<Account> {
+fn get_accounts(block: &Block) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
-        Operation::Transfer { from, to, .. } => {
-            let mut accounts = vec![from, to];
-            if let Some(fee_collector) = get_fee_collector(block_index, block) {
-                accounts.push(fee_collector);
-            }
-            accounts
-        }
+        Operation::Transfer { from, to, .. } => vec![from, to],
     }
 }
 
@@ -741,6 +772,23 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         "Last amount of time waited between two transactions fetch.",
     )?;
     Ok(())
+}
+
+#[candid_method(query)]
+#[query]
+fn get_fee_collectors_ranges() -> FeeCollectorRanges {
+    let ranges = with_state(|s| {
+        let mut res = vec![];
+        for (fee_collector, ranges) in &s.fee_collectors {
+            let mut fee_collector_ranges = vec![];
+            for range in ranges {
+                fee_collector_ranges.push((range.start.into(), range.end.into()));
+            }
+            res.push((*fee_collector, fee_collector_ranges))
+        }
+        res
+    });
+    FeeCollectorRanges { ranges }
 }
 
 fn main() {}

@@ -103,9 +103,14 @@ type Status = record {
     num_blocks_synced : BlockIndex;
 };
 
+type FeeCollectorRanges = record {
+    ranges : vec  record { Account; vec record { BlockIndex; BlockIndex } };
+}
+
 service : (index_arg: opt IndexArg) -> {
     get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult);
     get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
+    get_fee_collectors_ranges : () -> (FeeCollectorRanges) query;
     icrc1_balance_of : (Account) -> (Tokens) query;
     ledger_id : () -> (principal) query;
     list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
