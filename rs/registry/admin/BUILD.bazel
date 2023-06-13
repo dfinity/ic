@@ -2,7 +2,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/config",
@@ -19,11 +20,7 @@ DEPENDENCIES = [
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
-    "//rs/nns/handlers/root/impl:root",
     "//rs/nns/init",
-    "//rs/nns/sns-wasm",
-    "//rs/nns/test_utils",
     "//rs/prep",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -39,8 +36,6 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/swap",
-    "//rs/sns/init",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
@@ -69,6 +64,27 @@ DEPENDENCIES = [
     "@crate_index//:url",
     "@crate_index//:walkdir",
 ]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/sns/init",
+    "//rs/nns/governance",
+    "//rs/nns/sns-wasm",
+    "//rs/nns/handlers/root/impl:root",
+    "//rs/sns/swap",
+    "//rs/nns/test_utils",
+]
+
+# (Currently not used)
+# DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+#     "//rs/sns/init:init--test_feature",
+#     "//rs/nns/governance:governance--test_feature",
+#     "//rs/nns/sns-wasm:sns-wasm--test_feature",
+#     "//rs/nns/handlers/root/impl:root--test_feature",
+#     "//rs/sns/swap:swap--test_feature",
+#     "//rs/nns/test_utils:test_utils--test_feature",
+# ]
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",

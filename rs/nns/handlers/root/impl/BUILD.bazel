@@ -12,13 +12,13 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nervous_system/root",
     "//rs/nervous_system/common",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
     "//rs/nns/handlers/root/interface",
     "//rs/protobuf",
     "//rs/registry/keys",
@@ -36,6 +36,16 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance:governance--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -91,6 +101,19 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "root--test_feature",
+    srcs = glob([
+        "src/**",
+    ]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nns_handler_root",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
 rust_canister(
