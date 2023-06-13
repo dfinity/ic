@@ -5,3 +5,4 @@ coverage/
 certs/
 junit.xml
 .DS_Store
+.env
