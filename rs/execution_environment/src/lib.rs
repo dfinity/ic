@@ -140,8 +140,18 @@ impl ExecutionServices {
             Arc::clone(&cycles_account_manager),
         ));
 
+        // If this is not a system or verified subnet we can double the
+        // number of query execution threads total because the file-backed
+        // allocator is enabled on these subnets and thus we can fit more
+        // concurrent queries in memory.
+        // TODO: remove this once the file-backed allocator is enabled on all subnets.
+        let query_execution_threads_total = if own_subnet_type == SubnetType::Application {
+            config.query_execution_threads_total * 2
+        } else {
+            config.query_execution_threads_total
+        };
         let query_scheduler = QueryScheduler::new(
-            config.query_execution_threads_total,
+            query_execution_threads_total,
             config.query_execution_threads_per_canister,
             config.query_scheduling_time_slice_per_canister,
             metrics_registry,
