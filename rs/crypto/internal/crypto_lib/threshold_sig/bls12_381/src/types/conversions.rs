@@ -123,57 +123,6 @@ impl TryFrom<&CombinedSignatureBytes> for CombinedSignature {
     }
 }
 
-impl From<IndividualSignatureBytes> for String {
-    fn from(bytes: IndividualSignatureBytes) -> String {
-        base64::encode(&bytes.0[..])
-    }
-}
-impl TryFrom<&str> for IndividualSignatureBytes {
-    type Error = CryptoError;
-
-    fn try_from(string: &str) -> Result<Self, CryptoError> {
-        let signature = base64::decode(string).map_err(|e| CryptoError::MalformedSignature {
-            algorithm: AlgorithmId::ThresBls12_381,
-            sig_bytes: string.as_bytes().to_vec(),
-            internal_error: format!("Signature is not a valid base64 encoded string: {}", e),
-        })?;
-        if signature.len() != IndividualSignatureBytes::SIZE {
-            return Err(CryptoError::MalformedSignature {
-                algorithm: AlgorithmId::ThresBls12_381,
-                sig_bytes: string.as_bytes().to_vec(),
-                internal_error: "Signature length is incorrect".to_string(),
-            });
-        }
-        let mut buffer = [0u8; IndividualSignatureBytes::SIZE];
-        buffer.copy_from_slice(&signature);
-        Ok(IndividualSignatureBytes(buffer))
-    }
-}
-impl TryFrom<&String> for IndividualSignatureBytes {
-    type Error = CryptoError;
-    fn try_from(signature: &String) -> Result<Self, CryptoError> {
-        Self::try_from(signature as &str)
-    }
-}
-
-impl From<CombinedSignatureBytes> for String {
-    fn from(bytes: CombinedSignatureBytes) -> String {
-        base64::encode(&bytes.0[..])
-    }
-}
-impl TryFrom<&str> for CombinedSignatureBytes {
-    type Error = CryptoError;
-
-    fn try_from(string: &str) -> Result<Self, CryptoError> {
-        let signature = base64::decode(string).map_err(|e| CryptoError::MalformedSignature {
-            algorithm: AlgorithmId::ThresBls12_381,
-            sig_bytes: string.as_bytes().to_vec(),
-            internal_error: format!("Signature is not a valid base64 encoded string: {}", e),
-        })?;
-        Self::try_from(&signature)
-    }
-}
-
 impl TryFrom<&Vec<u8>> for CombinedSignatureBytes {
     type Error = CryptoError;
 
@@ -188,11 +137,5 @@ impl TryFrom<&Vec<u8>> for CombinedSignatureBytes {
         let mut buffer = [0u8; CombinedSignatureBytes::SIZE];
         buffer.copy_from_slice(sig_bytes);
         Ok(CombinedSignatureBytes(buffer))
-    }
-}
-impl TryFrom<&String> for CombinedSignatureBytes {
-    type Error = CryptoError;
-    fn try_from(signature: &String) -> Result<Self, CryptoError> {
-        Self::try_from(signature as &str)
     }
 }

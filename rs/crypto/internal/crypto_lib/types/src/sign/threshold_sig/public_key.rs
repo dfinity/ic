@@ -46,7 +46,6 @@ pub mod bls12_381 {
     //! Data types for BLS12-381 threshold signature public keys.
     use super::*;
     use std::cmp::Ordering;
-    use std::convert::TryFrom;
     use std::fmt;
     use std::hash::Hasher;
 
@@ -69,50 +68,6 @@ pub mod bls12_381 {
     impl AsRef<[u8]> for PublicKeyBytes {
         fn as_ref(&self) -> &[u8] {
             &self.0
-        }
-    }
-
-    /// These conversions are used for the CLI only
-    mod conversions_for_cli {
-        use super::*;
-
-        impl From<PublicKeyBytes> for String {
-            fn from(bytes: PublicKeyBytes) -> String {
-                base64::encode(&bytes.0[..])
-            }
-        }
-
-        impl TryFrom<&str> for PublicKeyBytes {
-            type Error = ThresholdSigPublicKeyBytesConversionError;
-
-            fn try_from(string: &str) -> Result<Self, Self::Error> {
-                let bytes = base64::decode(string).map_err(|e| {
-                    ThresholdSigPublicKeyBytesConversionError::Malformed {
-                        key_bytes: Some(string.as_bytes().to_vec()),
-                        internal_error: format!(
-                            "public key is not a valid base64 encoded string: {}",
-                            e
-                        ),
-                    }
-                })?;
-                if bytes.len() != PublicKeyBytes::SIZE {
-                    return Err(ThresholdSigPublicKeyBytesConversionError::Malformed {
-                        key_bytes: Some(string.as_bytes().to_vec()),
-                        internal_error: "public key length is incorrect".to_string(),
-                    });
-                }
-                let mut buffer = [0u8; PublicKeyBytes::SIZE];
-                buffer.copy_from_slice(&bytes);
-                Ok(PublicKeyBytes(buffer))
-            }
-        }
-
-        impl TryFrom<&String> for PublicKeyBytes {
-            type Error = ThresholdSigPublicKeyBytesConversionError;
-
-            fn try_from(string: &String) -> Result<Self, Self::Error> {
-                PublicKeyBytes::try_from(string.as_str())
-            }
         }
     }
 
