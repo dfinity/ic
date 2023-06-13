@@ -1,6 +1,6 @@
 use candid::Encode;
 use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
-use criterion::{BatchSize, Criterion, Throughput};
+use criterion::{Criterion, Throughput};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::ingress::WasmResult;
 use std::{
@@ -78,10 +78,10 @@ pub fn update_bench(
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
+        initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
         bench.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
             for _ in 0..iters {
-                initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
                 let mut setup = cell.borrow_mut();
                 let (test, canister_id) = setup.as_mut().unwrap();
                 let start = Instant::now();
@@ -115,20 +115,15 @@ pub fn query_bench(
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
-        bench.iter_batched(
-            || {
-                initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
-            },
-            |()| {
-                let mut setup = cell.borrow_mut();
-                let (test, canister_id) = setup.as_mut().unwrap();
-                let result = test
-                    .non_replicated_query(*canister_id, method, payload.to_vec())
-                    .unwrap();
-                assert!(matches!(result, WasmResult::Reply(_)));
-            },
-            BatchSize::SmallInput,
-        );
+        initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
+        bench.iter(|| {
+            let mut setup = cell.borrow_mut();
+            let (test, canister_id) = setup.as_mut().unwrap();
+            let result = test
+                .non_replicated_query(*canister_id, method, payload.to_vec())
+                .unwrap();
+            assert!(matches!(result, WasmResult::Reply(_)));
+        });
     });
     group.finish();
 }
