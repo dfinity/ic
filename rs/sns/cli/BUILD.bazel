@@ -2,7 +2,8 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
@@ -10,8 +11,6 @@ DEPENDENCIES = [
     "//rs/nervous_system/proto",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
-    "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
@@ -19,10 +18,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/governance",
-    "//rs/sns/init",
     "//rs/sns/root",
-    "//rs/sns/test_utils",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
@@ -41,6 +37,24 @@ DEPENDENCIES = [
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
     "@crate_index//:url",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance",
+    "//rs/nns/sns-wasm",
+    "//rs/sns/governance",
+    "//rs/sns/init",
+    "//rs/sns/test_utils",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/sns/governance:governance--test_feature",
+    "//rs/sns/init:init--test_feature",
+    "//rs/sns/test_utils:test_utils--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -67,6 +81,20 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "cli--test_feature",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/**/*_tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_cli",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "1.0.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
+)
+
 rust_binary(
     name = "sns",
     srcs = glob(
@@ -77,6 +105,20 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.0",
     deps = DEPENDENCIES + [":cli"],
+)
+
+rust_binary(
+    name = "sns--test_feature",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/**/*_tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "sns",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "1.0.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":cli--test_feature"],
 )
 
 rust_test(
@@ -100,7 +142,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/sns/cli",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
 rust_doc_test(

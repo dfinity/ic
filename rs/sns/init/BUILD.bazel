@@ -8,7 +8,8 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
@@ -22,9 +23,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/sns/governance",
     "//rs/sns/root",
-    "//rs/sns/swap",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
@@ -37,6 +36,18 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_yaml",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/sns/governance",
+    "//rs/sns/swap",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/sns/governance:governance--test_feature",
+    "//rs/sns/swap:swap--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -67,6 +78,20 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "init--test_feature",
+    srcs = glob([
+        "src/**",
+        "gen/**",
+    ]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_init",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
+)
+
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
@@ -82,6 +107,7 @@ generated_files_check(
 rust_test(
     name = "init_test",
     crate = ":init",
+    crate_features = ["test"],
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = DEV_DEPENDENCIES,
 )

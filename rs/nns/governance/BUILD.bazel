@@ -13,7 +13,8 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
@@ -22,7 +23,6 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nervous_system/root",
     "//rs/nns/constants",
-    "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/rosetta-api/icp_ledger",
@@ -31,9 +31,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_http_metrics",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/init",
     "//rs/sns/root",
-    "//rs/sns/swap",
     "//rs/types/base_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
@@ -54,6 +52,20 @@ DEPENDENCIES = [
         "//rs/nervous_system/common/test_keys",
     ],
 })
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/sns/init",
+    "//rs/nns/sns-wasm",
+    "//rs/sns/swap",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/sns/init:init--test_feature",
+    "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/sns/swap:swap--test_feature",
+]
 
 MACRO_DEPENDENCIES = [
     "//rs/nervous_system/common/build_metadata",
@@ -113,7 +125,7 @@ rust_library(
 )
 
 rust_library(
-    name = "governance-test",
+    name = "governance--test_feature",
     srcs = glob([
         "src/**/*.rs",
     ]),
@@ -122,9 +134,8 @@ rust_library(
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
-    deps = DEPENDENCIES + [
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
-        "//rs/sns/swap:swap_test_feature",
     ],
 )
 
@@ -145,9 +156,9 @@ rust_binary(
     compile_data = ["canister/governance_test.did"],
     crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
         ":build_script",
-        ":governance-test",
+        ":governance--test_feature",
     ],
 )
 
@@ -172,8 +183,8 @@ rust_canister(
     crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
-    deps = DEPENDENCIES + [
-        ":governance-test",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [
+        ":governance--test_feature",
         ":build_script",
     ],
 )
@@ -216,7 +227,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/nns/governance",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance-test"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 rust_test(
@@ -266,8 +277,7 @@ rust_test_suite_with_extra_srcs(
         "tests/*/*.rs",
     ]) + ["tests/fake.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance-test"] + DEPENDENCIES + DEV_DEPENDENCIES + [
-        "//rs/sns/swap:swap_test_feature",
+    deps = [":governance--test_feature"] + DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES + [
         ":build_script",
     ],
 )

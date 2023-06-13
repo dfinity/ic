@@ -47,7 +47,7 @@ rust_library(
 )
 
 rust_library(
-    name = "common_test_feature",
+    name = "common--test_feature",
     srcs = glob([
         "src/**/*.rs",
     ]),
