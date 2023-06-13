@@ -11,8 +11,8 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
     artifact_pool::{ChangeResult, MutablePool, ProcessingResult, ValidatedPoolReader},
     consensus_pool::{
-        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
-        ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
+        ChainIterator, ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain,
+        ConsensusPool, ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     time_source::TimeSource,
@@ -20,16 +20,12 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
-use ic_types::artifact::ArtifactKind;
 use ic_types::{
-    artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
+    artifact::ArtifactKind, artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
     artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
 };
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
-use std::cmp::Ordering;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{cmp::Ordering, marker::PhantomData, sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]
 pub enum PoolSectionOp<T> {
@@ -504,6 +500,56 @@ impl ConsensusPoolImpl {
             Vec::new()
         }
     }
+
+    // Checks if the artifacts to be backed up contain a new finalization, and if it is the case, we simply traverse the blockchain starting from the hash
+    // of the new finalization back to the previous finalization and add to the list of artifacts
+    // all block proposals that are now provably belong to the finalized chain.
+    fn backup_artifacts(
+        &self,
+        backup: &Backup,
+        latest_finalization_height: Height,
+        time_source: &dyn TimeSource,
+        mut artifacts_for_backup: Vec<ConsensusMessage>,
+    ) {
+        // Find the highest finalization among the new artifacts
+        let new_finalization = artifacts_for_backup
+            .iter()
+            .filter_map(|artifact| {
+                if let ConsensusMessage::Finalization(finalization) = artifact {
+                    Some(finalization)
+                } else {
+                    None
+                }
+            })
+            .max_by_key(|finalization| finalization.height());
+        let find_proposal_by = |height, f: &dyn Fn(&BlockProposal) -> bool| {
+            self.validated()
+                .block_proposal()
+                .get_by_height(height)
+                .find(f)
+        };
+
+        let finalized_proposal = new_finalization.and_then(|finalization| {
+            find_proposal_by(finalization.height(), &|proposal: &BlockProposal| {
+                proposal.content.get_hash() == &finalization.content.block
+            })
+        });
+
+        if let Some(proposal) = finalized_proposal {
+            artifacts_for_backup.extend(
+                ChainIterator::new(self, proposal.content.into_inner(), None)
+                    .take_while(|block| block.height > latest_finalization_height)
+                    .filter_map(|block| {
+                        find_proposal_by(block.height, &|proposal: &BlockProposal| {
+                            proposal.content.as_ref() == &block
+                        })
+                    })
+                    .map(ConsensusMessage::BlockProposal),
+            );
+        }
+
+        backup.store(time_source, artifacts_for_backup);
+    }
 }
 
 impl ConsensusPool for ConsensusPoolImpl {
@@ -599,18 +645,38 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
             .ops
             .iter()
             .filter_map(|op| match op {
-                PoolSectionOp::Insert(artifact) => Some(artifact.msg.clone()),
+                PoolSectionOp::Insert(artifact)
+                    // When we prepare a list of artifacts for a backup, we first remove all
+                    // block proposals. We need to do this to avoid "polluting" the backup partition with non-
+                    // finalized blocks, which are the largest artifacts. 
+                    if !matches!(&artifact.msg, &ConsensusMessage::BlockProposal(_)) =>
+                {
+                    Some(artifact.msg.clone())
+                }
                 _ => None,
             })
             .collect();
+        let latest_finalization_height = self
+            .validated()
+            .finalization()
+            .max_height()
+            .unwrap_or_default();
         self.apply_changes_unvalidated(unvalidated_ops);
         let purged = self.apply_changes_validated(validated_ops);
+
         if let Some(backup) = &self.backup {
-            backup.store(time_source, artifacts_for_backup);
+            self.backup_artifacts(
+                backup,
+                latest_finalization_height,
+                time_source,
+                artifacts_for_backup,
+            );
         }
+
         if !updates.is_empty() {
             self.cache.update(self, updates);
         }
+
         ChangeResult {
             purged,
             adverts,
@@ -1251,23 +1317,77 @@ mod tests {
                 Height::from(3),
                 CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
             ));
-            let proposal = BlockProposal::fake(
-                Block::new(
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
-                    ),
-                    Height::from(4),
-                    Rank(456),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(99),
-                        certified_height: Height::from(42),
-                        time: mock_time(),
-                    },
+
+            // height 3, non-final
+            let block = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
                 ),
-                node_test_id(333),
+                Height::from(3),
+                Rank(46),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(98),
+                    certified_height: Height::from(41),
+                    time: mock_time(),
+                },
             );
+            let proposal3 = BlockProposal::fake(block, node_test_id(333));
+
+            // height 3, final
+            let block = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                ),
+                Height::from(3),
+                Rank(46),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(101),
+                    certified_height: Height::from(42),
+                    time: mock_time(),
+                },
+            );
+            let proposal3_final = BlockProposal::fake(block.clone(), node_test_id(333));
+
+            let block = Block::new(
+                ic_types::crypto::crypto_hash(&block),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                ),
+                Height::from(4),
+                Rank(456),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(99),
+                    certified_height: Height::from(42),
+                    time: mock_time(),
+                },
+            );
+            let finalization_at_4 = Finalization::fake(FinalizationContent::new(
+                Height::from(4),
+                ic_types::crypto::crypto_hash(&block),
+            ));
+            let proposal = BlockProposal::fake(block, node_test_id(333));
+
+            // non finalized one
+            let block = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                ),
+                Height::from(4),
+                Rank(46),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(98),
+                    certified_height: Height::from(41),
+                    time: mock_time(),
+                },
+            );
+            let proposal_non_final = BlockProposal::fake(block, node_test_id(333));
 
             let genesis_cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
             let mut cup = genesis_cup.clone();
@@ -1283,8 +1403,12 @@ mod tests {
                 random_beacon.clone().into_message(),
                 random_tape.clone().into_message(),
                 finalization.clone().into_message(),
+                finalization_at_4.into_message(),
                 notarization.clone().into_message(),
                 proposal.clone().into_message(),
+                proposal_non_final.clone().into_message(),
+                proposal3.clone().into_message(),
+                proposal3_final.clone().into_message(),
                 cup.clone().into_message(),
             ]
             .into_iter()
@@ -1392,8 +1516,8 @@ mod tests {
             );
             assert_eq!(
                 fs::read_dir(path.join("3")).unwrap().count(),
-                1,
-                "only one artifact for height 3 was backed up"
+                2,
+                "only two artifact for height 3 was backed up"
             );
             let mut file = fs::File::open(path.join("3").join(finalization_path)).unwrap();
             let mut buffer = Vec::new();
@@ -1405,25 +1529,50 @@ mod tests {
                 finalization, restored,
                 "restored finalization is identical with the original one"
             );
+            let proposal_path = path.join("3").join(format!(
+                "block_proposal_{}_{}.bin",
+                bytes_to_hex_str(proposal3.content.get_hash()),
+                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal3)),
+            ));
+            assert!(
+                !proposal_path.exists(),
+                "non-final proposal wasn't backed up"
+            );
+
+            let proposal_path = path.join("3").join(format!(
+                "block_proposal_{}_{}.bin",
+                bytes_to_hex_str(proposal3_final.content.get_hash()),
+                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal3_final)),
+            ));
+            assert!(proposal_path.exists(), "final proposal was backed up");
 
             // Check backup for height 4
+            assert!(
+                path.join("4").join("catch_up_package.bin").exists(),
+                "catch-up package at height 4 was backed up"
+            );
             let proposal_path = path.join("4").join(format!(
                 "block_proposal_{}_{}.bin",
                 bytes_to_hex_str(proposal.content.get_hash()),
                 bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal)),
             ));
             assert!(
-                path.join("4").join("catch_up_package.bin").exists(),
-                "catch-up package at height 4 was backed up"
-            );
-            assert!(
                 proposal_path.exists(),
                 "block proposal at height 4 was backed up"
             );
+            let non_final_proposal_path = path.join("4").join(format!(
+                "block_proposal_{}_{}.bin",
+                bytes_to_hex_str(proposal_non_final.content.get_hash()),
+                bytes_to_hex_str(&ic_types::crypto::crypto_hash(&proposal_non_final)),
+            ));
+            assert!(
+                !non_final_proposal_path.exists(),
+                "non-final block proposal at height 4 was not backed up"
+            );
             assert_eq!(
                 fs::read_dir(path.join("4")).unwrap().count(),
-                2,
-                "two artifacts for height 4 were backed up"
+                3,
+                "three artifacts for height 4 were backed up"
             );
             let mut file = fs::File::open(path.join("4").join("catch_up_package.bin")).unwrap();
             let mut buffer = Vec::new();
@@ -1546,23 +1695,25 @@ mod tests {
                 Height::from(3),
                 CryptoHashOf::from(CryptoHash(vec![1, 2, 3])),
             ));
-            let proposal = BlockProposal::fake(
-                Block::new(
-                    CryptoHashOf::from(CryptoHash(Vec::new())),
-                    Payload::new(
-                        ic_types::crypto::crypto_hash,
-                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
-                    ),
-                    Height::from(4),
-                    Rank(456),
-                    ValidationContext {
-                        registry_version: RegistryVersion::from(99),
-                        certified_height: Height::from(42),
-                        time: mock_time(),
-                    },
+            let block = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    (ic_types::consensus::dkg::Summary::fake(), None).into(),
                 ),
-                node_test_id(333),
+                Height::from(4),
+                Rank(456),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(99),
+                    certified_height: Height::from(42),
+                    time: mock_time(),
+                },
             );
+            let finalization = Finalization::fake(FinalizationContent::new(
+                Height::from(4),
+                ic_types::crypto::crypto_hash(&block),
+            ));
+            let proposal = BlockProposal::fake(block, node_test_id(333));
 
             let changeset = vec![random_beacon.into_message(), random_tape.into_message()]
                 .into_iter()
@@ -1588,10 +1739,14 @@ mod tests {
             add_age(sleep_time);
 
             // Now add new artifacts
-            let changeset = vec![notarization.into_message(), proposal.into_message()]
-                .into_iter()
-                .map(ChangeAction::AddToValidated)
-                .collect();
+            let changeset = vec![
+                notarization.into_message(),
+                proposal.into_message(),
+                finalization.into_message(),
+            ]
+            .into_iter()
+            .map(ChangeAction::AddToValidated)
+            .collect();
 
             pool.apply_changes(time_source.as_ref(), changeset);
             // sync
