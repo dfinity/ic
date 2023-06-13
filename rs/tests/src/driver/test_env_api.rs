@@ -1416,28 +1416,25 @@ where
         };
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
-        install_nns_canisters(
-            &log,
-            url,
-            &prep_dir,
-            true,
-            false,
-            customizations.ledger_balances,
-            customizations.neurons,
-        );
-        Ok(())
-    }
 
-    fn install_nns_canisters(&self) -> Result<()> {
         let (sender, receiver) = std::sync::mpsc::channel();
-        let t_cloned = Clone::clone(self);
-        // To intoduce a timeout mechanism for a sync function, we launch it in a separate thread
-        // and use channels to communicate timeout from the sync context.
+        // In order to introduce a timeout mechanism for a sync function, we launch it in a separate thread
+        // and use channels to communicate timeout to the main thread. If timeout signal is received, the main thread panics.
+        // The spawned thread, however, remains running until the parent process is stopped.
+        // This non-optimal behavior will be fixed in https://dfinity.atlassian.net/browse/VER-2358.
         let handle = std::thread::spawn(move || {
-            if let Ok(()) = sender.send(t_cloned.install_nns_canisters_with_customizations(
-                NnsCanisterWasmStrategy::TakeBuiltFromSources,
-                NnsCustomizations::default(),
-            )) {}
+            install_nns_canisters(
+                &log,
+                url,
+                &prep_dir,
+                true,
+                false,
+                customizations.ledger_balances,
+                customizations.neurons,
+            );
+            sender
+                .send(())
+                .expect("failed to send value to the channel");
         });
         if receiver.recv_timeout(NNS_CANISTER_INSTALL_TIMEOUT).is_err() {
             panic!(
@@ -1447,6 +1444,13 @@ where
         }
         handle.join().expect("Failed to join the thread handle");
         Ok(())
+    }
+
+    fn install_nns_canisters(&self) -> Result<()> {
+        self.install_nns_canisters_with_customizations(
+            NnsCanisterWasmStrategy::TakeBuiltFromSources,
+            NnsCustomizations::default(),
+        )
     }
 
     fn install_mainnet_nns_canisters(&self) -> Result<()> {
@@ -1475,7 +1479,24 @@ where
         };
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
-        install_nns_canisters(&log, url, &prep_dir, true, true, None, None);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        // In order to introduce a timeout mechanism for a sync function, we launch it in a separate thread
+        // and use channels to communicate timeout to the main thread. If timeout signal is received, the main thread panics.
+        // The spawned thread, however, remains running until the parent process is stopped.
+        // This non-optimal behavior will be fixed in https://dfinity.atlassian.net/browse/VER-2358.
+        let handle = std::thread::spawn(move || {
+            install_nns_canisters(&log, url, &prep_dir, true, true, None, None);
+            sender
+                .send(())
+                .expect("failed to send value to the channel");
+        });
+        if receiver.recv_timeout(NNS_CANISTER_INSTALL_TIMEOUT).is_err() {
+            panic!(
+                "nns canisters were not installed within timeout of {} sec",
+                NNS_CANISTER_INSTALL_TIMEOUT.as_secs()
+            );
+        }
+        handle.join().expect("Failed to join the thread handle");
         Ok(())
     }
 }
