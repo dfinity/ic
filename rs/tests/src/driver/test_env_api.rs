@@ -845,7 +845,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let replica_ver = self.read_dependency_from_env_to_string("IC_VERSION_FILE")?;
+        let replica_ver = self.read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?;
         Ok(ReplicaVersion::try_from(replica_ver)?)
     }
 
@@ -856,12 +856,14 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_ic_os_img_url(&self) -> Result<Url> {
-        let url = self.read_dependency_from_env_to_string("DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
+        let url =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_img_sha256(&self) -> Result<String> {
-        let sha256 = self.read_dependency_from_env_to_string("DEV_DISK_IMG_TAR_ZST_SHA256")?;
+        let sha256 =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
         bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
         Ok(sha256)
     }
@@ -880,12 +882,14 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_ic_os_update_img_url(&self) -> Result<Url> {
-        let url = self.read_dependency_from_env_to_string("DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
+        let url =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_update_img_sha256(&self) -> Result<String> {
-        let sha256 = self.read_dependency_from_env_to_string("DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
+        let sha256 =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
         bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
         Ok(sha256)
     }
