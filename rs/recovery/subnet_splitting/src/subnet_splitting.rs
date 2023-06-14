@@ -7,19 +7,22 @@ use crate::admin_helper::{
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_recovery::{
-    cli::read_optional,
-    error::RecoveryResult,
+    cli::{consent_given, read_optional},
+    error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
-    steps::{AdminStep, Step},
-    NeuronArgs, Recovery, RecoveryArgs,
+    steps::{AdminStep, Step, UploadAndRestartStep, WaitForCUPStep},
+    NeuronArgs, Recovery, RecoveryArgs, CHECKPOINTS, IC_REGISTRY_LOCAL_STORE, IC_STATE_DIR,
 };
 use ic_registry_routing_table::CanisterIdRange;
+use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
 use serde::{Deserialize, Serialize};
 use slog::Logger;
-use std::{iter::Peekable, net::IpAddr};
+use std::{iter::Peekable, net::IpAddr, path::PathBuf};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
+
+const DESTINATION_WORK_DIR: &str = "destination_work_dir";
 
 #[derive(
     Debug,
@@ -103,6 +106,12 @@ pub(crate) struct SubnetSplitting {
     logger: Logger,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum TargetSubnet {
+    Source,
+    Destination,
+}
+
 impl SubnetSplitting {
     pub(crate) fn new(
         logger: Logger,
@@ -120,6 +129,94 @@ impl SubnetSplitting {
             neuron_args,
             recovery,
             logger,
+        }
+    }
+
+    fn unhalt(&self, target_subnet: TargetSubnet) -> impl Step {
+        self.recovery.halt_subnet(
+            self.subnet_id(target_subnet),
+            /*is_halted=*/ false,
+            /*keys=*/ &[],
+        )
+    }
+
+    fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+        let checkpoints_dir = self
+            .work_dir(target_subnet)
+            .join(IC_STATE_DIR)
+            .join(CHECKPOINTS);
+
+        let (max_name, max_height) =
+            Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir)?;
+
+        let max_checkpoint_dir = checkpoints_dir.join(max_name);
+        let manifest = &manifest_from_path(&max_checkpoint_dir).map_err(|e| {
+            RecoveryError::CheckpointError(
+                format!(
+                    "Failed to read the manifest from path {}",
+                    max_checkpoint_dir.display()
+                ),
+                e,
+            )
+        })?;
+        let state_hash = hex::encode(manifest_hash(manifest));
+
+        self.recovery.update_recovery_cup(
+            self.subnet_id(target_subnet),
+            Recovery::get_recovery_height(max_height),
+            state_hash,
+            /*replacement_nodes=*/ &[],
+            /*registry_params=*/ None,
+            /*ecdsa_subnet_id=*/ None,
+        )
+    }
+
+    fn upload_and_restart_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+        match self.upload_node(target_subnet) {
+            Some(node_ip) => Ok(UploadAndRestartStep {
+                logger: self.recovery.logger.clone(),
+                node_ip,
+                work_dir: self.work_dir(target_subnet),
+                data_src: self.work_dir(target_subnet).join(IC_STATE_DIR),
+                require_confirmation: true,
+                key_file: self.recovery.key_file.clone(),
+                check_ic_replay_height: false,
+            }),
+            None => Err(RecoveryError::StepSkipped),
+        }
+    }
+
+    fn wait_for_cup_step(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
+        match self.upload_node(target_subnet) {
+            Some(node_ip) => Ok(WaitForCUPStep {
+                logger: self.recovery.logger.clone(),
+                node_ip,
+                work_dir: self.work_dir(target_subnet),
+            }),
+            None => Err(RecoveryError::StepSkipped),
+        }
+    }
+
+    fn upload_node(&self, target_subnet: TargetSubnet) -> Option<IpAddr> {
+        match target_subnet {
+            TargetSubnet::Source => self.params.upload_node_source,
+            TargetSubnet::Destination => self.params.upload_node_destination,
+        }
+    }
+
+    fn subnet_id(&self, target_subnet: TargetSubnet) -> SubnetId {
+        match target_subnet {
+            TargetSubnet::Source => self.params.source_subnet_id,
+            TargetSubnet::Destination => self.params.destination_subnet_id,
+        }
+    }
+
+    fn work_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
+        match target_subnet {
+            TargetSubnet::Source => self.recovery.work_dir.clone(),
+            TargetSubnet::Destination => {
+                self.recovery.work_dir.with_file_name(DESTINATION_WORK_DIR)
+            }
         }
     }
 }
@@ -152,18 +249,39 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 }
             }
 
-            StepType::DownloadStateFromSourceSubnet => todo!(),
-            StepType::CopyDir => todo!(),
+            StepType::DownloadStateFromSourceSubnet => {
+                if self.params.download_node_source.is_none() {
+                    self.params.download_node_source =
+                        read_optional(&self.logger, "Enter download IP on the Source Subnet:");
+                }
+
+                self.params.keep_downloaded_state = Some(consent_given(
+                    &self.logger,
+                    "Preserve original downloaded state locally?",
+                ));
+            }
+
             StepType::SplitOutSourceState => todo!(),
             StepType::SplitOutDestinationState => todo!(),
-            StepType::ProposeCupForSourceSubnet => todo!(),
-            StepType::UploadStateToSourceSubnet => todo!(),
-            StepType::ProposeCupForDestinationSubnet => todo!(),
-            StepType::UploadStateToDestinationSubnet => todo!(),
-            StepType::WaitForCUPOnSourceSubnet => todo!(),
-            StepType::WaitForCUPOnDestinationSubnet => todo!(),
-            StepType::UnhaltSourceSubnet => todo!(),
-            StepType::UnhaltDestinationSubnet => todo!(),
+
+            StepType::UploadStateToSourceSubnet => {
+                if self.params.upload_node_source.is_none() {
+                    self.params.upload_node_source = read_optional(
+                        &self.logger,
+                        "Enter IP of node in the Source Subnet with admin access: ",
+                    );
+                }
+            }
+
+            StepType::UploadStateToDestinationSubnet => {
+                if self.params.upload_node_destination.is_none() {
+                    self.params.upload_node_destination = read_optional(
+                        &self.logger,
+                        "Enter IP of node in the Destination Subnet with admin access: ",
+                    );
+                }
+            }
+
             StepType::Cleanup => todo!(),
             _ => (),
         }
@@ -203,18 +321,43 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             }
             .into(),
 
-            StepType::DownloadStateFromSourceSubnet => todo!(),
+            StepType::DownloadStateFromSourceSubnet => {
+                let Some(node_ip) = self.params.download_node_source else {
+                    return Err(RecoveryError::StepSkipped);
+                };
+
+                self.recovery
+                    .get_download_state_step(
+                        node_ip,
+                        self.params.pub_key.is_some(),
+                        self.params.keep_downloaded_state == Some(true),
+                        /*additional_excludes=*/
+                        vec!["orchestrator", "ic_consensus_pool", IC_REGISTRY_LOCAL_STORE],
+                    )
+                    .into()
+            }
+
             StepType::CopyDir => todo!(),
             StepType::SplitOutSourceState => todo!(),
             StepType::SplitOutDestinationState => todo!(),
-            StepType::ProposeCupForSourceSubnet => todo!(),
-            StepType::UploadStateToSourceSubnet => todo!(),
-            StepType::ProposeCupForDestinationSubnet => todo!(),
-            StepType::UploadStateToDestinationSubnet => todo!(),
-            StepType::WaitForCUPOnSourceSubnet => todo!(),
-            StepType::WaitForCUPOnDestinationSubnet => todo!(),
-            StepType::UnhaltSourceSubnet => todo!(),
-            StepType::UnhaltDestinationSubnet => todo!(),
+            StepType::ProposeCupForSourceSubnet => self.propose_cup(TargetSubnet::Source)?.into(),
+            StepType::UploadStateToSourceSubnet => {
+                self.upload_and_restart_step(TargetSubnet::Source)?.into()
+            }
+            StepType::ProposeCupForDestinationSubnet => {
+                self.propose_cup(TargetSubnet::Destination)?.into()
+            }
+            StepType::UploadStateToDestinationSubnet => self
+                .upload_and_restart_step(TargetSubnet::Destination)?
+                .into(),
+            StepType::WaitForCUPOnSourceSubnet => {
+                self.wait_for_cup_step(TargetSubnet::Source)?.into()
+            }
+            StepType::WaitForCUPOnDestinationSubnet => {
+                self.wait_for_cup_step(TargetSubnet::Destination)?.into()
+            }
+            StepType::UnhaltSourceSubnet => self.unhalt(TargetSubnet::Source).into(),
+            StepType::UnhaltDestinationSubnet => self.unhalt(TargetSubnet::Destination).into(),
 
             StepType::CompleteCanisterMigration => AdminStep {
                 logger: self.recovery.logger.clone(),

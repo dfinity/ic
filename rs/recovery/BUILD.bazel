@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/registry/nns_data_provider",
     "//rs/registry/subnet_features",
     "//rs/replay",
+    "//rs/state_manager",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
