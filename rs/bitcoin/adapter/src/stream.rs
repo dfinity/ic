@@ -3,7 +3,7 @@ use bitcoin::{
     network::message::RawNetworkMessage,
     {consensus::encode, network::message::NetworkMessage},
 };
-use futures::future::TryFutureExt;
+use futures::TryFutureExt;
 use http::Uri;
 use ic_logger::{debug, error, info, ReplicaLogger};
 use std::{io, net::SocketAddr, time::Duration};
@@ -106,6 +106,7 @@ pub enum StreamEventKind {
 
 /// This struct is used to provide an interface with the raw socket that will
 /// be connecting to the BTC node.
+#[derive(Debug)]
 pub struct Stream {
     /// This field is used to identity the node that the stream is connected to.
     address: SocketAddr,
@@ -142,48 +143,58 @@ impl Stream {
         let data = vec![0u8; STREAM_BUFFER_SIZE];
         let unparsed = vec![];
 
-        // First try to connect through local socket. If no direct connectivity can be established we fall back
-        // to the socks proxy, through which we have a IPv4 connectivity.
-        let stream = timeout(timeout_duration, async {
-            TcpStream::connect(&address)
-                .await
-                .map_err(StreamError::Io)
-        })
-        .into_inner()
-        .or_else(|_| {
-            timeout(timeout_duration, async {
-                match socks_proxy {
-                    Some(socks_proxy_addr) => {
-                        // The socks stream::connect takes a socks proxy address that implements 'tokio_socks::ToProxyAddrs'.
-                        // It uses the trait implementation to resolve the socks proxy address to a 'std::net::SocketAddr'
-                        // The resolving assumes that the string has the following format: <host>:<port>.
-                        // A badly formatted string is hard to spot since it can just resolve to nothing and a timeouts occur.
-                        // By validating the proxy address config we are reasonably sure that we have a valid socks url.
-                        let socks_addr_authority =  socks_proxy_addr.parse::<Uri>().map_err(|_| {
-                                // This should never happen since we validate the socks_proxy to be valid 'http::Uri' when reading the config.
-                                StreamError::Socks(SocksError::AddressTypeNotSupported)
-                            })?.authority().ok_or(
-                                // This should never happen since we validate the socks_proxy to be valid 'http::Uri' when reading the config.
-                                StreamError::Socks(SocksError::AddressTypeNotSupported)
-                            )?.to_owned();
-                        Ok(Socks5Stream::connect(socks_addr_authority.as_str(), address)
-                            .map_err(StreamError::Socks)
-                            .await?.into_inner())
-                    }
-                    None => {
-                        debug!(
-                            logger,
-                            "No direct connectivity to bitcoin peer {} and no socks proxy available.",
-                            address
-                        );
-                        Err(StreamError::Timeout)
-                    }
-                }
-            })
-            .into_inner()
-        })
+        let tcp_stream_attempt = timeout(
+            timeout_duration,
+            TcpStream::connect(&address).map_err(StreamError::Io),
+        )
         .await
         .map_err(|_| StreamError::Timeout)?;
+
+        // If connecting through the node socket fails we may do a second attempt through the socks proxy if it's configured.
+        let stream = match tcp_stream_attempt {
+            Ok(stream) => stream,
+            Err(err) => {
+                timeout(timeout_duration, async {
+                    match socks_proxy {
+                        Some(socks_proxy_addr) => {
+                            // The socks stream::connect takes a socks proxy address that implements 'tokio_socks::ToProxyAddrs'.
+                            // It uses the trait implementation to resolve the socks proxy address to a 'std::net::SocketAddr'
+                            // The resolving assumes that the string has the following format: <host>:<port>.
+                            // A badly formatted string is hard to spot since it can just resolve to nothing and a timeouts occur.
+                            // By validating the proxy address config we are reasonably sure that we have a valid socks url.
+                            let socks_addr_authority = socks_proxy_addr
+                                .parse::<Uri>()
+                                .map_err(|_| {
+                                    // This should never happen since we validate the socks_proxy to be valid 'http::Uri' when reading the config.
+                                    StreamError::Socks(SocksError::AddressTypeNotSupported)
+                                })?
+                                .authority()
+                                .ok_or(
+                                    // This should never happen since we validate the socks_proxy to be valid 'http::Uri' when reading the config.
+                                    StreamError::Socks(SocksError::AddressTypeNotSupported),
+                                )?
+                                .to_owned();
+                            Ok(
+                                Socks5Stream::connect(socks_addr_authority.as_str(), address)
+                                    .map_err(StreamError::Socks)
+                                    .await?
+                                    .into_inner(),
+                            )
+                        }
+                        None => {
+                            debug!(
+                                logger,
+                                "No direct connectivity to bitcoin peer {} and no socks proxy available.",
+                                address
+                            );
+                            Err(err)
+                        }
+                    }
+                })
+                .await
+                .map_err(|_| StreamError::Timeout)??
+            }
+        };
 
         let (read_half, write_half) = stream.into_split();
         Ok(Self {
@@ -357,6 +368,8 @@ pub fn handle_stream(config: StreamConfig) -> tokio::task::JoinHandle<()> {
 
 #[cfg(test)]
 pub mod test {
+    use std::net::{IpAddr, Ipv4Addr};
+
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
 
     use super::*;
@@ -412,6 +425,33 @@ pub mod test {
                 kind: StreamEventKind::Disconnected
             }
         );
+    }
+
+    /// Test that connection initialization times out in 5 seconds, to ensure the connection attempts
+    /// in the connection manager do not hang for a long period of time.
+    #[tokio::test]
+    async fn initialization_times_out_after_five_seconds() {
+        let network = Network::Bitcoin;
+        let (net_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
+        let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
+        let (stream_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
+
+        // Try to connect to a non routable IP address to force a timeout to happen.
+        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 0)), 80);
+
+        let stream_config = StreamConfig {
+            address,
+            logger: no_op_logger(),
+            magic: network.magic(),
+            network_message_receiver: adapter_rx,
+            socks_proxy: None,
+            stream_event_sender: stream_tx,
+            network_message_sender: net_tx,
+        };
+
+        let stream_result = Stream::connect(stream_config, &no_op_logger()).await;
+        let err = stream_result.unwrap_err();
+        assert!(matches!(err, StreamError::Timeout));
     }
 
     /// Test that .

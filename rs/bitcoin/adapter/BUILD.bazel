@@ -69,5 +69,6 @@ rust_binary(
 rust_test(
     name = "adapter_test",
     crate = ":adapter",
+    tags = ["requires-network"],
     deps = DEV_DEPENDENCIES,
 )
