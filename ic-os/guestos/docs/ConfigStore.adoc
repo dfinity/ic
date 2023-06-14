@@ -42,7 +42,7 @@ This directory and any file in it is optional. By default, no authorized key is 
 
 === node_operator_private_key.pem
 
-This file contains the node operator's private key, which is registered with the NNS and used to sign the IC join request. The private key can be generated using one of the following commands:
+This file contains the Node Operator private key, which is registered with the NNS and used to sign the IC join request. The private key can be generated using one of the following commands:
 
     dfx identity new --disable-encryption node_operator
     cp ~/.config/dfx/identity/node_operator/identity.pem ./node_operator_private_key.pem
@@ -149,7 +149,7 @@ If left unspecified, the bitcoin adapter will not work properly due to lack of e
 
 == Injecting external state
 
-*Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a node operator-signed "join" request to its NNS. 
+*Typical bootstrap process:* On first boot, the system will perform technical initialization (filesystems, etc.) and afterwards, initialize itself to act as a node in the IC. The node is initialized using key generation on the node itself (such that the private key never leaves the node) and through joining the IC (the node gets the rest of its state via joining the IC). "Registration" to the target IC is initiated by the node itself by sending a Node Operator-signed "join" request to its NNS. 
 
 However, the typical bootstrap process can be modified such that the node is initialized using externally generated private keys and an externally generated initial state. All "registration" to the target IC is assumed to have been performed by other means.
 

@@ -1,6 +1,6 @@
 = Guest OS
 
-GuestOS refers to the operating system running inside a QEMU virtual machine on the hostOS. A GuestOS image consists of the base Ubuntu system, along with the replica and orchestrator binaries. The IC protocol runs inside the GuestOS virtual machine.
+GuestOS refers to the operating system running inside a QEMU virtual machine on the HostOS. A GuestOS image consists of the base Ubuntu system, along with the replica and orchestrator binaries. The IC protocol runs inside the GuestOS virtual machine.
 
 For more details on the goals, structure, and disk layout of GuestOS, https://docs.google.com/presentation/d/1xECozJhVCqzFC3mMMvROD7rlB-xWDHHLKvZuVnuLgJc/edit?usp=sharing[see here]
 

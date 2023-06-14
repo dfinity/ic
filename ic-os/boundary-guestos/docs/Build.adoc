@@ -3,7 +3,7 @@
 The Ubuntu-based Boundary Node Guest OS is built by (equivalent to IC gues OS):
 
 * constructing the system using docker -- this is based on the official Ubuntu docker
-  image and simply adds the OS kernel plus our required services to it
+  image and adds the OS kernel plus our required services to it
 
 * converting this into filesystem images for `/` and `/boot`
   via `make_ext4fs`

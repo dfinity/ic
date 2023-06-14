@@ -3,7 +3,7 @@
 # Provision a node based on an injected "ic-bootstrap.tar" file. This script
 # is meant to be run as a prerequisite before launching the boundary node services.
 #
-# The configuration format is presently described in ic-os/guestos/docs/ConfigStore.adoc
+# The configuration format is described in ic-os/guestos/docs/ConfigStore.adoc
 #
 # The tar file can be supplied using one of two methods:
 # - as "ic-bootstrap.tar" stored on a (virtual) removable media attached
