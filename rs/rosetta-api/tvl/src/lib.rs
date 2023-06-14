@@ -1,13 +1,12 @@
 use crate::memory::push_entry;
-use crate::memory::{get_last_icp_price_ts, get_last_locked_icp_ts, EntryType, TVL_TIMESERIES};
+use crate::memory::{EntryType, TVL_TIMESERIES};
 use crate::state::{mutate_state, read_state, replace_state};
 use crate::types::{
     Asset, AssetClass, GetExchangeRateRequest, GetExchangeRateResult, GovernanceCachedMetrics,
     GovernanceError, TvlArgs, TvlResult, TvlResultError,
 };
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
-use candid::Nat;
-use candid::Principal;
+use candid::{CandidType, Nat, Principal};
 use ic_base_types::PrincipalId;
 use state::TvlState;
 use std::str::FromStr;
@@ -22,12 +21,46 @@ pub mod types;
 const SEC_NANOS: u64 = 1_000_000_000;
 const E8S: u64 = 100_000_000;
 // By default we update data four times a day.
-const DEFAULT_UPDATE_PERIOD: u64 = 60 * 60 * 6;
+pub const DEFAULT_UPDATE_PERIOD: u64 = 60 * 60 * 6;
+pub const ONE_DAY: Duration = Duration::from_secs(24 * 60 * 60);
 const DEFAULT_GOVERNANCE_PRINCIPAL: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 const DEFAULT_XRC_PRINCIPAL: &str = "uf6dk-hyaaa-aaaaq-qaaaq-cai";
 
 // We query XRC data slightly in the past to be sure to have a price with consensus.
 const XRC_MARGIN_SEC: u64 = 5 * 60;
+
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq, Ord, PartialOrd, Clone)]
+pub enum FiatCurrency {
+    USD,
+    EUR,
+    CNY,
+    JPY,
+    GBP,
+}
+
+impl ToString for FiatCurrency {
+    fn to_string(&self) -> String {
+        match self {
+            FiatCurrency::USD => "USD".to_string(),
+            FiatCurrency::EUR => "EUR".to_string(),
+            FiatCurrency::CNY => "CNY".to_string(),
+            FiatCurrency::JPY => "JPY".to_string(),
+            FiatCurrency::GBP => "GBP".to_string(),
+        }
+    }
+}
+
+pub const OTHER_CURRENCIES: [FiatCurrency; 4] = [
+    FiatCurrency::EUR,
+    FiatCurrency::CNY,
+    FiatCurrency::JPY,
+    FiatCurrency::GBP,
+];
+
+#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq, Clone)]
+pub struct TvlRequest {
+    pub currency: FiatCurrency,
+}
 
 pub fn init(args: TvlArgs) {
     init_state(args);
@@ -37,8 +70,7 @@ pub fn init(args: TvlArgs) {
 pub async fn post_upgrade(args: TvlArgs) {
     init_state(args);
     mutate_state(|s| {
-        s.last_ts_icp_price = get_last_icp_price_ts();
-        s.last_ts_icp_locked = get_last_locked_icp_ts();
+        s.populate_state();
     });
     // Timers have to be restarted after canister upgrade.
     init_timers();
@@ -52,57 +84,77 @@ fn init_state(args: TvlArgs) {
         xrc_principal: args
             .xrc_id
             .unwrap_or_else(|| PrincipalId::from_str(DEFAULT_XRC_PRINCIPAL).unwrap()),
-        update_period: args.update_period.unwrap_or(DEFAULT_UPDATE_PERIOD),
-        last_ts_icp_price: 0,
-        last_ts_icp_locked: 0,
+        update_period: Duration::from_secs(args.update_period.unwrap_or(DEFAULT_UPDATE_PERIOD)),
+        last_icp_rate: 0,
+        last_icp_rate_ts: 0,
+        last_icp_locked: 0,
+        last_icp_locked_ts: 0,
+        exchange_rate: Default::default(),
+        currencies_to_fetch: Default::default(),
     });
 }
 
 pub fn init_timers() {
     let update_period = read_state(|s| s.update_period);
 
-    ic_cdk_timers::set_timer_interval(Duration::from_secs(update_period), || {
+    ic_cdk_timers::set_timer_interval(update_period, || {
         ic_cdk::spawn(async {
             update_icp_price().await;
         })
     });
-    ic_cdk_timers::set_timer_interval(Duration::from_secs(update_period), || {
+    ic_cdk_timers::set_timer_interval(update_period, || {
         ic_cdk::spawn(async {
             update_locked_amount().await;
         });
     });
+    ic_cdk_timers::set_timer_interval(ONE_DAY, || {
+        ic_cdk::spawn(async {
+            let is_currencies_to_fetch_empty = read_state(|s| s.currencies_to_fetch.is_empty());
+            mutate_state(|s| {
+                for currency in OTHER_CURRENCIES {
+                    s.currencies_to_fetch.insert(currency);
+                }
+            });
+            if is_currencies_to_fetch_empty {
+                update_fiat_rates().await;
+            }
+        });
+    });
+}
+
+pub fn multiply_e8s(amount: u64, rate: u64) -> u64 {
+    const E8_FACTOR: u128 = 10_u128.pow(8); // 10^8
+
+    let amount_u128 = amount as u128;
+    let rate_u128 = rate as u128;
+    let result_u128 = amount_u128 * rate_u128 / E8_FACTOR;
+    result_u128 as u64
 }
 
 /// Retrieve last data from timeseries. Perform a TVL update if none is present.
-pub async fn get_tvl() -> Result<TvlResult, TvlResultError> {
-    TVL_TIMESERIES.with(|map| {
-        let (last_ts_icp_price, last_ts_icp_locked) =
-            read_state(|s| (s.last_ts_icp_price, s.last_ts_icp_locked));
-
-        if let Some(price) = map
-            .borrow()
-            .get(&(last_ts_icp_price, crate::memory::EntryType::ICPrice as u32))
-        {
-            if let Some(locked_amount) = map.borrow().get(&(
-                last_ts_icp_locked,
-                crate::memory::EntryType::LockedIcp as u32,
-            )) {
-                let lock_amount_f64 = locked_amount as f64 / E8S as f64;
-                let price_f64 = price as f64 / E8S as f64;
-                let tvl = Nat::from((price_f64 * lock_amount_f64) as u64);
-
+pub async fn get_tvl(req: Option<TvlRequest>) -> Result<TvlResult, TvlResultError> {
+    let (last_icp_rate, last_icp_locked) = read_state(|s| (s.last_icp_rate, s.last_icp_locked));
+    let tvl = multiply_e8s(last_icp_rate, last_icp_locked);
+    if let Some(req) = req {
+        let currency = req.currency;
+        match read_state(|s| s.exchange_rate.get(&currency).cloned()) {
+            Some(rate) => {
                 return Ok(TvlResult {
-                    time_sec: Nat::from(last_ts_icp_price),
-                    tvl,
+                    time_sec: Nat::from(read_state(|s| s.last_icp_rate_ts)),
+                    tvl: Nat::from(multiply_e8s(tvl, rate) / E8S),
                 });
             }
-            return Err(TvlResultError {
-                message: "No ICP locked amount entry.".into(),
-            });
+            None => {
+                return Err(TvlResultError {
+                    message: format!("No {} entry yet.", currency.to_string()),
+                });
+            }
         }
-        Err(TvlResultError {
-            message: "No ICP price entry.".into(),
-        })
+    }
+
+    Ok(TvlResult {
+        time_sec: Nat::from(read_state(|s| s.last_icp_rate_ts)),
+        tvl: Nat::from(tvl / E8S),
     })
 }
 
@@ -119,7 +171,15 @@ fn convert_to_8_decimals(amount: u64, decimals: u32) -> u64 {
 }
 
 pub async fn update_icp_price() -> Option<u64> {
-    let xrc_result = get_exchange_rate().await;
+    let icp = Asset {
+        symbol: "ICP".to_string(),
+        class: AssetClass::Cryptocurrency,
+    };
+    let usd = Asset {
+        symbol: "USD".to_string(),
+        class: AssetClass::FiatCurrency,
+    };
+    let xrc_result = get_exchange_rate(icp, usd).await;
     if let Ok(GetExchangeRateResult::Ok(xr)) = xrc_result {
         let time_sec = xr.timestamp;
         let icp_price = convert_to_8_decimals(xr.rate, xr.metadata.decimals);
@@ -127,6 +187,64 @@ pub async fn update_icp_price() -> Option<u64> {
         return Some(icp_price);
     }
     None
+}
+
+pub async fn update_fiat_rates() {
+    let fiat_currencies = read_state(|s| {
+        s.currencies_to_fetch
+            .iter()
+            .cloned()
+            .collect::<Vec<FiatCurrency>>()
+    });
+    let base_asset = Asset {
+        symbol: "USD".to_string(),
+        class: AssetClass::FiatCurrency,
+    };
+    for currency in fiat_currencies {
+        ic_cdk::println!("Fetching rate for currency: {:?}", currency);
+        let quote_asset = Asset {
+            symbol: currency.to_string(),
+            class: AssetClass::FiatCurrency,
+        };
+        let xrc_result = get_exchange_rate(base_asset.clone(), quote_asset.clone()).await;
+        if let Ok(GetExchangeRateResult::Ok(xr)) = xrc_result {
+            if xr.quote_asset != quote_asset || xr.base_asset != base_asset.clone() {
+                continue;
+            }
+
+            let exchange_rate = convert_to_8_decimals(xr.rate, xr.metadata.decimals);
+            let currency_clone = currency.clone();
+            match currency_clone {
+                FiatCurrency::EUR => {
+                    push_entry(xr.timestamp, currency_clone.into(), exchange_rate);
+                }
+                FiatCurrency::CNY => {
+                    push_entry(xr.timestamp, currency_clone.into(), exchange_rate);
+                }
+                FiatCurrency::JPY => {
+                    push_entry(xr.timestamp, currency_clone.into(), exchange_rate);
+                }
+                FiatCurrency::GBP => {
+                    push_entry(xr.timestamp, currency_clone.into(), exchange_rate);
+                }
+                _ => continue,
+            }
+            mutate_state(|s| {
+                s.currencies_to_fetch.remove(&currency);
+                s.exchange_rate
+                    .entry(currency)
+                    .and_modify(|curr| *curr = exchange_rate)
+                    .or_insert(exchange_rate);
+            });
+        }
+    }
+    if read_state(|s| !s.currencies_to_fetch.is_empty()) {
+        ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+            ic_cdk::spawn(async {
+                update_fiat_rates().await;
+            });
+        });
+    }
 }
 
 pub async fn update_locked_amount() -> Option<u64> {
@@ -143,23 +261,17 @@ pub async fn update_locked_amount() -> Option<u64> {
 }
 
 /// Query the XRC canister to retrieve the last ICP/USD price.
-async fn get_exchange_rate() -> Result<GetExchangeRateResult, String> {
-    let icp = Asset {
-        symbol: "ICP".to_string(),
-        class: AssetClass::Cryptocurrency,
-    };
-    let usd = Asset {
-        symbol: "USD".to_string(),
-        class: AssetClass::FiatCurrency,
-    };
-
+async fn get_exchange_rate(
+    base_asset: Asset,
+    quote_asset: Asset,
+) -> Result<GetExchangeRateResult, String> {
     // Take few minutes back to be sure to have data.
     let timestamp_sec = ic_cdk::api::time() / SEC_NANOS - XRC_MARGIN_SEC;
 
     // Retrieve last ICP/USD value.
     let args = GetExchangeRateRequest {
-        base_asset: icp,
-        quote_asset: usd,
+        base_asset,
+        quote_asset,
         timestamp: Some(timestamp_sec),
     };
 
