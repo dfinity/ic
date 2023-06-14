@@ -16,6 +16,7 @@ filegroup(
 BASE_DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nervous_system/root",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nns/common",
     "//rs/nns/constants",

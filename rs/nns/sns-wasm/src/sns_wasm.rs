@@ -23,7 +23,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
-use ic_nervous_system_root::CanisterIdRecord;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root_interface::{
     client::NnsRootCanisterClient, ChangeCanisterControllersRequest,
@@ -44,6 +43,7 @@ use std::{
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 

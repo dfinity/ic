@@ -3,11 +3,11 @@ use candid::Encode;
 use canister_test::{Project, Runtime};
 use dfn_candid::candid;
 use ic_ic00_types::CanisterInstallMode::{self, Install, Reinstall, Upgrade};
-use ic_nervous_system_root::{
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
-    change_canister::ChangeCanisterProposal,
-    CanisterIdRecord,
 };
+use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
