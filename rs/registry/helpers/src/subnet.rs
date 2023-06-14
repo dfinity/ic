@@ -16,8 +16,8 @@ use ic_registry_keys::{
 };
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_types::{
-    registry::RegistryClientError::DecodeError, Height, NodeId, PrincipalId, RegistryVersion,
-    ReplicaVersion, SubnetId,
+    registry::RegistryClientError::DecodeError, Height, NodeId, PrincipalId,
+    PrincipalIdBlobParseError, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::{
     convert::{TryFrom, TryInto},
@@ -217,8 +217,13 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
         version: RegistryVersion,
     ) -> RegistryClientResult<Vec<NodeId>> {
         let bytes = self.get_value(&make_subnet_record_key(subnet_id), version);
-        Ok(deserialize_registry_value::<SubnetRecord>(bytes)?
-            .map(|subnet| get_node_ids_from_subnet_record(&subnet)))
+        deserialize_registry_value::<SubnetRecord>(bytes)?
+            .map(|subnet| {
+                get_node_ids_from_subnet_record(&subnet).map_err(|err| DecodeError {
+                    error: format!("get_node_ids_on_subnet() failed with {}", err),
+                })
+            })
+            .transpose()
     }
 
     fn get_subnet_size(
@@ -399,7 +404,9 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
             .get_all_listed_subnet_records(version)?
             .and_then(|records| {
                 records.into_iter().find(|(_subnet_id, record)| {
-                    get_node_ids_from_subnet_record(record).contains(&node_id)
+                    get_node_ids_from_subnet_record(record)
+                        .unwrap()
+                        .contains(&node_id)
                 })
             }))
     }
@@ -451,12 +458,14 @@ impl<T: RegistryClient + ?Sized> SubnetRegistry for T {
     }
 }
 
-pub fn get_node_ids_from_subnet_record(subnet: &SubnetRecord) -> Vec<NodeId> {
+pub fn get_node_ids_from_subnet_record(
+    subnet: &SubnetRecord,
+) -> Result<Vec<NodeId>, PrincipalIdBlobParseError> {
     subnet
         .membership
         .iter()
-        .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).unwrap()))
-        .collect()
+        .map(|n| PrincipalId::try_from(&n[..]).map(NodeId::from))
+        .collect::<Result<Vec<_>, _>>()
 }
 
 /// A helper trait to access the subnet list; the list of subnets that are part
