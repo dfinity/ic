@@ -20,9 +20,6 @@ slog = { version = "2.5.2", features = ["release_max_level_trace"] }
 strum = "0.24.1"
 strum_macros = "0.24.1"
 
-[dev-dependencies]
-ic-test-utilities = { path = "../../test_utilities" }
-
 [[bin]]
 name = "subnet-splitting-tool"
 path = "src/main.rs"
