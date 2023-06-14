@@ -62,6 +62,17 @@ repos:
                 experimental/.*
             )$
 
+# The following repo is maintained by us at
+# https://gitlab.com/dfinity-lab/open/pre-commit-tools.
+- repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
+  rev: 17101bf5cebeda988b13764909a6140badc5ef03
+  hooks:
+  - id: buf-checks
+    args: ["--config=buf.yaml"]
+    exclude: |
+      (?x)(
+      )
+
 - repo: https://github.com/willthames/ansible-lint.git
   rev: v4.2.0
   hooks:
