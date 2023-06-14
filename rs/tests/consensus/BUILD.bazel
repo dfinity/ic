@@ -65,6 +65,7 @@ system_test(
 
 system_test(
     name = "liveness_with_equivocation_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
@@ -97,6 +98,7 @@ system_test(
 
 system_test(
     name = "replica_determinism_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
@@ -105,6 +107,7 @@ system_test(
 
 system_test(
     name = "request_auth_malicious_replica_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
@@ -113,6 +116,7 @@ system_test(
 
 system_test(
     name = "safety_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
