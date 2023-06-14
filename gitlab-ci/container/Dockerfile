@@ -59,11 +59,13 @@ RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 USER ubuntu
 
+# Set PATH for ubuntu user
+ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
+
 # Pre-populate the Bazel installation for ubuntu
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ENV PATH=/home/ubuntu/.cargo/bin:$PATH
 ARG rust_version=1.58.1
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
@@ -71,7 +73,6 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown
 
 # Install all python requirements
-ENV PATH=$PATH:/home/ubuntu/.local/bin
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install --ignore-installed -r /tmp/requirements.txt
 RUN pip3 install pre-commit

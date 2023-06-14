@@ -71,7 +71,6 @@ PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
 
     -u "$(id -u):$(id -g)"
-    -e PATH=/ic/bin:/home/ubuntu/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     -e HOME="/home/$USER"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     -e HOSTUSER="$USER"
