@@ -17,7 +17,6 @@ impl Default for Config {
         Self {
             exporter: Exporter::Log,
             connection_read_timeout_seconds: 300, // 5 min
-            max_tcp_connections: 20,
             max_concurrent_requests: 50,
             request_timeout_seconds: 30,
         }
@@ -28,11 +27,6 @@ impl Default for Config {
 #[serde(default)]
 pub struct Config {
     pub exporter: Exporter,
-
-    /// The endpoint can serve from at most 'max_tcp_connections'
-    /// simultaneous TCP connections. If the limit is reached and a new
-    /// TCP connection arrives, it is accepted and dropped immediately.
-    pub max_tcp_connections: usize,
 
     /// If no bytes are read from a connection for the duration of
     /// 'connection_read_timeout_seconds', then the connection is dropped.

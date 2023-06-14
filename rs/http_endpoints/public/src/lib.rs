@@ -363,20 +363,17 @@ pub fn start_server(
 
     let metrics_cl = metrics.clone();
     let log_cl = log.clone();
-    let conn_svc = ServiceBuilder::new()
-        .load_shed()
-        .layer(GlobalConcurrencyLimitLayer::new(config.max_tcp_connections))
-        .service_fn(move |tcp_stream: TcpStream| {
-            handshake_and_serve_connection(
-                log_cl.clone(),
-                config.clone(),
-                main_service.clone(),
-                tcp_stream,
-                tls_handshake.clone(),
-                registry_client.clone(),
-                metrics_cl.clone(),
-            )
-        });
+    let conn_svc = ServiceBuilder::new().service_fn(move |tcp_stream: TcpStream| {
+        handshake_and_serve_connection(
+            log_cl.clone(),
+            config.clone(),
+            main_service.clone(),
+            tcp_stream,
+            tls_handshake.clone(),
+            registry_client.clone(),
+            metrics_cl.clone(),
+        )
+    });
     let conn_svc = BoxCloneService::new(conn_svc);
     rt_handle.clone().spawn(async move {
         loop {

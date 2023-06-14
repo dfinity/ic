@@ -232,44 +232,39 @@ impl MetricsHttpEndpoint {
         let crypto_tls = self.crypto_tls.clone();
         let metrics = self.metrics.clone();
         let config = self.config.clone();
-        let conn_svc = ServiceBuilder::new()
-            .load_shed()
-            .layer(GlobalConcurrencyLimitLayer::new(
-                self.config.max_tcp_connections,
-            ))
-            .service_fn(move |tcp_stream: TcpStream| {
-                let log = log.clone();
-                let metrics_svc = metrics_svc.clone();
-                let metrics = metrics.clone();
-                let crypto_tls = crypto_tls.clone();
-                let config = config.clone();
+        let conn_svc = ServiceBuilder::new().service_fn(move |tcp_stream: TcpStream| {
+            let log = log.clone();
+            let metrics_svc = metrics_svc.clone();
+            let metrics = metrics.clone();
+            let crypto_tls = crypto_tls.clone();
+            let config = config.clone();
 
-                async move {
-                    match crypto_tls {
-                        Some((registry_client, crypto)) => {
-                            handshake_and_serve_connection(
-                                log,
-                                config,
-                                tcp_stream,
-                                metrics_svc,
-                                registry_client,
-                                crypto,
-                                metrics,
-                            )
-                            .await
-                        }
-                        None => {
-                            metrics.connections_total.with_label_values(&["http"]).inc();
-                            serve_connection_with_read_timeout(
-                                tcp_stream,
-                                metrics_svc,
-                                config.connection_read_timeout_seconds,
-                            )
-                            .await
-                        }
+            async move {
+                match crypto_tls {
+                    Some((registry_client, crypto)) => {
+                        handshake_and_serve_connection(
+                            log,
+                            config,
+                            tcp_stream,
+                            metrics_svc,
+                            registry_client,
+                            crypto,
+                            metrics,
+                        )
+                        .await
+                    }
+                    None => {
+                        metrics.connections_total.with_label_values(&["http"]).inc();
+                        serve_connection_with_read_timeout(
+                            tcp_stream,
+                            metrics_svc,
+                            config.connection_read_timeout_seconds,
+                        )
+                        .await
                     }
                 }
-            });
+            }
+        });
         let conn_svc = BoxCloneService::new(conn_svc);
 
         // Temporarily listen on [::] so that we accept both IPv4 and IPv6 connections.
