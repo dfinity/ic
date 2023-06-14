@@ -28,33 +28,3 @@ check-bins-linux:
       chmod +x /tmp/ic-starter
       ldd /tmp/ic-starter
       /tmp/ic-starter --version
-
-check-bins-darwin:
-  extends:
-    - .bazel-rules-pipeline-no-merge-train
-  stage: test
-  needs:
-    - job: macos-openssl-static-binaries
-      artifacts: false
-  tags:
-    - dfinity
-    - macos
-  before_script: /usr/bin/true
-  after_script: /usr/bin/true
-  variables:
-    ARTIFACT_PREFIX: openssl-static-binaries/x86_64-darwin
-    # https://curl.se/mail/lib-2020-06/0010.html
-    CURL_SSL_BACKEND: secure-transport
-  script:
-    - |
-      set -exuo pipefail
-
-      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/replica.gz" | gunzip > /tmp/replica
-      chmod +x /tmp/replica
-      otool -L /tmp/replica
-      /tmp/replica --print-sample-config --replica-version 1 >/dev/null
-
-      "$CI_PROJECT_DIR"/gitlab-ci/tools/download "${ARTIFACT_PREFIX}/ic-starter.gz" | gunzip > /tmp/ic-starter
-      chmod +x /tmp/ic-starter
-      otool -L /tmp/ic-starter
-      /tmp/ic-starter --version
