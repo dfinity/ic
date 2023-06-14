@@ -13,4 +13,4 @@ class GitlabPipelineConfig:
 
 
 class GitlabPipeline(Enum):
-    IC_BUILD_PUSH_BASE_CONTAINER_IMAGES = GitlabPipelineConfig(project="dfinity-lab/core/ic", pipeline_id=295024)
+    IC_BUILD_PUSH_BASE_CONTAINER_IMAGES = GitlabPipelineConfig(project="dfinity-lab/public/ic", pipeline_id=295024)

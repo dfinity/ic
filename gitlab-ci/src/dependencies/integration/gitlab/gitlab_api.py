@@ -11,7 +11,7 @@ GITLAB_TOKEN = os.environ.get("GITLAB_API_TOKEN", "")
 if GITLAB_TOKEN is None:
     logging.error("GITLAB_API_TOKEN is not set, can not send comments to GitLab")
 
-GITLAB_PROJECT_NAME = os.environ.get("CI_PROJECT_PATH", "dfinity-lab/core/ic")
+GITLAB_PROJECT_NAME = os.environ.get("CI_PROJECT_PATH", "dfinity-lab/public/ic")
 DELTA_HEADER = "*Vulnerable dependency information*"
 
 
