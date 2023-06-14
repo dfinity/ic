@@ -3,7 +3,6 @@ host-os-upgrade-test:
   # test is soon to be replaced with Farm tests: NODE-565
   extends:
     - .bazel-build-k8s
-    - .ic-build-legacy-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
