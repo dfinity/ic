@@ -18,6 +18,10 @@
 #    Dockerfiles
 #
 
+# The default will be a non_sev build
+# For a SEV-SNP build, set CPU_SUPPORT build arg to "sev"
+ARG CPU_SUPPORT=non_sev
+
 #
 # First build stage:
 # - Download 3rd party tools
@@ -51,6 +55,12 @@ RUN cd /tmp/ && \
     echo "68f3802c2dd3980667e4ba65ea2e1fb03f4a4ba026cca375f15a0390ff850949  node_exporter-1.3.1.linux-amd64.tar.gz" > node_exporter.sha256 && \
     shasum -c node_exporter.sha256
 
+# Download and verify SEV-SNP binaries
+RUN cd /tmp/ && \
+    curl -L -O https://github.com/dfinity/AMDSEV/releases/download/snp-release-2023-05-24/snp-release-2023-05-24.tar.gz && \
+    echo "dae30357ee68cbe1347d8bdf84f8b4f883c999be  snp-release-2023-05-24.tar.gz" > snp-release.sha256 && \
+    shasum -c snp-release.sha256
+
 #
 # Second build stage:
 # - Compile downloaded archives from first build stage
@@ -61,6 +71,7 @@ USER root:root
 
 ENV TZ=UTC
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# Install QEMU build dependencies
 RUN apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install \
     ca-certificates \
     build-essential \
@@ -91,6 +102,7 @@ FROM ubuntu:20.04
 
 USER root:root
 
+ARG CPU_SUPPORT
 ENV SOURCE_DATE_EPOCH=0
 ENV TZ=UTC
 ENV DEBIAN_FRONTEND=noninteractive
@@ -129,3 +141,22 @@ RUN cd /tmp/ && \
     mkdir -p /etc/node_exporter && \
     tar --strip-components=1 -C /usr/local/bin/ -zvxf node_exporter-1.3.1.linux-amd64.tar.gz node_exporter-1.3.1.linux-amd64/node_exporter && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
+
+# If CPU_SUPPORT is "sev", install the patched qemu and the host kernel
+# QEMU installed previously will be over-written by the patched QEMU
+# TODO: Generate SEV build conditionally so that QEMU 6.2 is not built unnecessarily
+COPY --from=download /tmp/snp-release-2023-05-24.tar.gz /tmp/snp-release-2023-05-24.tar.gz
+RUN \
+    echo "CPU_SUPPORT: ${CPU_SUPPORT}" && \
+    if [ "${CPU_SUPPORT}" = "sev" ] ; then \
+        cd /tmp/ && \
+        tar xf snp-release-2023-05-24.tar.gz && \
+        cd snp-release-2023-05-24 && \
+        apt-get -y install qemu ovmf && \
+        dpkg -i linux/host/linux-image-*.deb && \
+        cp kvm.conf /etc/modprobe.d/ && \
+        rm -rf /tmp/snp-release-2023-05-24 ; \
+    fi
+
+# Cleanup
+RUN rm /tmp/snp-release-2023-05-24.tar.gz
