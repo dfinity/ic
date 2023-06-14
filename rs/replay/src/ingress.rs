@@ -377,7 +377,8 @@ pub fn cmd_remove_subnet(
     context_time: Time,
 ) -> Result<Option<SignedIngress>, String> {
     let mut subnet_record = player.get_subnet_record(context_time)?;
-    let nodes = get_node_ids_from_subnet_record(&subnet_record);
+    let nodes = get_node_ids_from_subnet_record(&subnet_record)
+        .map_err(|err| format!("get_node_ids_from_subnet_record() failed with {}", err))?;
     if nodes.is_empty() {
         println!("Subnet {} has empty membership", player.subnet_id);
         Ok(None)
