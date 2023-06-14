@@ -5,11 +5,10 @@ use core::{
     fmt::Debug,
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
-use dfn_core::api::{call, time_nanos, CanisterId};
+use dfn_core::api::{time_nanos, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 use ic_ledger_core::Tokens;
 use maplit::hashmap;
 use priority_queue::priority_queue::PriorityQueue;
@@ -139,21 +138,6 @@ pub enum AuthzChangeOp {
     /// 'canister' must remove 'principal' from the authorized list of
     /// 'method_name'. 'principal' must always be Some.
     Deauthorize,
-}
-
-/// Return the status of the given canister. The caller must control the given canister.
-pub async fn get_canister_status(
-    canister_id: PrincipalId,
-) -> Result<CanisterStatusResultV2, (Option<i32>, String)> {
-    let canister_id_record: CanisterIdRecord = CanisterId::new(canister_id).unwrap().into();
-
-    call(
-        IC_00,
-        "canister_status",
-        dfn_candid::candid,
-        (canister_id_record,),
-    )
-    .await
 }
 
 /// A more convenient (but explosive) way to do token math. Not suitable for

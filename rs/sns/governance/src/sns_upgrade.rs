@@ -1,9 +1,7 @@
-use crate::pb::v1::governance::Version;
-use crate::proposal::render_version;
-use crate::types::Environment;
+use crate::{pb::v1::governance::Version, proposal::render_version, types::Environment};
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_root::canister_status::CanisterStatusResultV2;
+use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 
 /// A struct to represent all the types of SNS canisters Governance knows about.

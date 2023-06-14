@@ -1,8 +1,7 @@
 // NOTE: This file's types are all from other canisters where a current dependency cycle prevents
 // including them directly.
-// TODO(NNS1-1589): Remove all these types after depdency cycle is fixed.
+// TODO(NNS1-1589): Remove all these types after dependency cycle is fixed.
 
-//
 #[derive(
     candid::CandidType,
     candid::Deserialize,

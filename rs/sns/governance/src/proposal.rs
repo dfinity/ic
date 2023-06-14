@@ -1,28 +1,35 @@
-use crate::canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call;
-use crate::governance::{bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER};
-use crate::logs::INFO;
-use crate::pb::v1::governance::{SnsMetadata, Version};
-use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction};
-use crate::pb::v1::proposal::Action;
-use crate::pb::v1::transfer_sns_treasury_funds::TransferFrom;
-use crate::pb::v1::{
-    proposal, DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance,
-    ManageSnsMetadata, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
-    ProposalData, ProposalDecisionStatus, ProposalRewardStatus, RegisterDappCanisters, Tally,
-    TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+use crate::{
+    canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
+    governance::{bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
+    logs::INFO,
+    pb::v1::{
+        governance::{SnsMetadata, Version},
+        nervous_system_function::{FunctionType, GenericNervousSystemFunction},
+        proposal,
+        proposal::Action,
+        transfer_sns_treasury_funds::TransferFrom,
+        DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance,
+        ManageSnsMetadata, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
+        ProposalData, ProposalDecisionStatus, ProposalRewardStatus, RegisterDappCanisters, Tally,
+        TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+    },
 };
 
-use crate::sns_upgrade::{get_upgrade_params, UpgradeSnsParams};
-use crate::types::{Environment, DEFAULT_TRANSFER_FEE};
-use crate::{validate_chars_count, validate_len, validate_required_field};
+use crate::{
+    sns_upgrade::{get_upgrade_params, UpgradeSnsParams},
+    types::{Environment, DEFAULT_TRANSFER_FEE},
+    validate_chars_count, validate_len, validate_required_field,
+};
 use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha::Sha256;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
-use std::collections::{BTreeMap, HashSet};
-use std::convert::TryFrom;
+use std::{
+    collections::{BTreeMap, HashSet},
+    convert::TryFrom,
+};
 
 /// The maximum number of bytes in an SNS proposal's title.
 pub const PROPOSAL_TITLE_BYTES_MAX: usize = 256;
@@ -84,7 +91,7 @@ impl Proposal {
 /// Validates a proposal and returns a displayable text rendering of the payload
 /// if the proposal is valid.
 ///
-/// Takes in the GovernanceProto as to be able to validate agaisnt the current
+/// Takes in the GovernanceProto as to be able to validate against the current
 /// state of governance.
 pub async fn validate_and_render_proposal(
     proposal: &Proposal,
@@ -1176,9 +1183,10 @@ impl ProposalRewardStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::Subaccount;
     use crate::{
-        pb::v1::{governance, governance::Version, Empty, Governance as GovernanceProto},
+        pb::v1::{
+            governance, governance::Version, Empty, Governance as GovernanceProto, Subaccount,
+        },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
             GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
@@ -1189,11 +1197,10 @@ mod tests {
     };
     use candid::Encode;
     use futures::FutureExt;
-    use ic_base_types::NumBytes;
-    use ic_base_types::PrincipalId;
+    use ic_base_types::{NumBytes, PrincipalId};
     use ic_crypto_sha::Sha256;
+    use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-    use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_test_utilities::types::ids::canister_test_id;

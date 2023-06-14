@@ -1,18 +1,18 @@
-use crate::pb::v1::governance_error::ErrorType;
-use crate::pb::v1::neuron::DissolveState;
-use crate::pb::v1::proposal::Action;
 use crate::pb::v1::{
-    manage_neuron, Ballot, Empty, GovernanceError, Neuron, NeuronId, NeuronPermission,
-    NeuronPermissionList, NeuronPermissionType, Vote,
+    governance_error::ErrorType, manage_neuron, neuron::DissolveState, proposal::Action, Ballot,
+    Empty, GovernanceError, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+    NeuronPermissionType, Vote,
 };
 use ic_base_types::PrincipalId;
 use icrc_ledger_types::icrc1::account::Subaccount;
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashSet};
-use std::convert::{TryFrom, TryInto};
-use std::fmt::{Display, Formatter};
-use std::iter::FromIterator;
-use std::str::FromStr;
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, HashSet},
+    convert::{TryFrom, TryInto},
+    fmt::{Display, Formatter},
+    iter::FromIterator,
+    str::FromStr,
+};
 
 /// The maximum number of neurons returned by the method `list_neurons`.
 pub const MAX_LIST_NEURONS_RESULTS: u32 = 100;
