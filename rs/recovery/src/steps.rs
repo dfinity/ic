@@ -516,6 +516,7 @@ pub struct UploadAndRestartStep {
     pub data_src: PathBuf,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
+    pub check_ic_replay_height: bool,
 }
 
 impl Step for UploadAndRestartStep {
@@ -546,14 +547,17 @@ impl Step for UploadAndRestartStep {
                 "Found multiple checkpoints in upload directory"));
         };
 
-        let replay_height =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
+        if self.check_ic_replay_height {
+            let replay_height =
+                replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?
+                    .height;
 
-        if parse_hex_str(max_checkpoint)? != replay_height.get() {
-            return Err(RecoveryError::invalid_output_error(format!(
-                "Latest checkpoint height ({}) doesn't match replay output ({})",
-                max_checkpoint, replay_height
-            )));
+            if parse_hex_str(max_checkpoint)? != replay_height.get() {
+                return Err(RecoveryError::invalid_output_error(format!(
+                    "Latest checkpoint height ({}) doesn't match replay output ({})",
+                    max_checkpoint, replay_height
+                )));
+            }
         }
 
         let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);

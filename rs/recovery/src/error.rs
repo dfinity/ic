@@ -1,4 +1,5 @@
 use ic_http_utils::file_downloader::FileDownloadError;
+use ic_state_manager::CheckpointError;
 use std::{
     error::Error,
     fmt::{self, Display},
@@ -20,6 +21,7 @@ pub enum RecoveryError {
     ParsingError(serde_json::Error),
     SerializationError(serde_json::Error),
     UnexpectedError(String),
+    CheckpointError(String, CheckpointError),
     StepSkipped,
 }
 
@@ -60,28 +62,31 @@ impl fmt::Display for RecoveryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RecoveryError::IoError(msg, e) => {
-                write!(f, "IO error, message: {:?}, error: {:?}", msg, e)
+                write!(f, "IO error, message: {}, error: {}", msg, e)
             }
             RecoveryError::CommandError(code, msg) => {
-                write!(f, "Command error, message: {:?}, code: {:?}", msg, code)
+                write!(f, "Command error, message: {}, code: {:?}", msg, code)
             }
             RecoveryError::OutputError(msg) => {
-                write!(f, "Output error, message: {:?}", msg)
+                write!(f, "Output error, message: {}", msg)
             }
             RecoveryError::DownloadError(msg, e) => {
-                write!(f, "Download error, message: {:?}, error: {:?}", msg, e)
+                write!(f, "Download error, message: {}, error: {}", msg, e)
             }
             RecoveryError::UnexpectedError(msg) => {
-                write!(f, "Unexpected error, message: {:?}", msg)
+                write!(f, "Unexpected error, message: {}", msg)
             }
             RecoveryError::StepSkipped => {
                 write!(f, "Recovery step skipped.")
             }
             RecoveryError::ParsingError(e) => {
-                write!(f, "Parsing error, error: {:?}", e)
+                write!(f, "Parsing error, error: {}", e)
             }
             RecoveryError::SerializationError(e) => {
-                write!(f, "Serialization error, error: {:?}", e)
+                write!(f, "Serialization error, error: {}", e)
+            }
+            RecoveryError::CheckpointError(msg, e) => {
+                write!(f, "Checkpoint error, message: {}, error: {}", msg, e)
             }
         }
     }

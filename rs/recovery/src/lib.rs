@@ -616,6 +616,7 @@ impl Recovery {
             data_src,
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+            check_ic_replay_height: true,
         }
     }
 

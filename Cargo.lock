@@ -8571,6 +8571,7 @@ dependencies = [
  "ic-registry-replicator",
  "ic-registry-subnet-features",
  "ic-replay",
+ "ic-state-manager",
  "ic-test-utilities",
  "ic-test-utilities-tmpdir",
  "ic-types",
