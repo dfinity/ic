@@ -89,7 +89,7 @@ def system_test(
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
         uses_guestos_dev = False,
-        ic_os_fixed_version = False,
+        ic_os_fixed_version = True,
         **kwargs):
     """Declares a system-test.
 

@@ -59,6 +59,7 @@ system_test(
 
 system_test(
     name = "sr_app_same_nodes_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
@@ -170,6 +171,7 @@ system_test(
 
 system_test(
     name = "sr_nns_same_nodes_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
@@ -217,6 +219,7 @@ system_test(
 
 system_test(
     name = "upgrade_downgrade_app_subnet_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -230,6 +233,7 @@ system_test(
 
 system_test(
     name = "upgrade_downgrade_nns_subnet_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
