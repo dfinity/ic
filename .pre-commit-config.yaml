@@ -72,9 +72,3 @@ repos:
           (?x)^(
               testnet/tests/.*|.*/docker-compose.yml|testnet/env/shared-config\.yml
           )$
-
-- repo: https://github.com/bufbuild/buf
-  rev: v1.21.0
-  hooks:
-    - id: buf-breaking
-      entry: buf breaking --config buf.yaml --against '.git#branch=master'
