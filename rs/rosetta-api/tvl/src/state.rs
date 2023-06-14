@@ -1,5 +1,10 @@
+use crate::memory::EntryType;
+use crate::FiatCurrency;
+use crate::TVL_TIMESERIES;
 use ic_base_types::PrincipalId;
 use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 pub struct TvlState {
     // The principal of the governance canister of the NNS.
@@ -7,11 +12,62 @@ pub struct TvlState {
     // The principal of the exchange rate canister.
     pub xrc_principal: PrincipalId,
     // The time period to wait between two data updates, in seconds.
-    pub update_period: u64,
-    // The last timestamp of an ICP Price.
-    pub last_ts_icp_price: u64,
-    // The last timestamp of an ICP locked.
-    pub last_ts_icp_locked: u64,
+    pub update_period: Duration,
+    // The last ICP rate (e8s).
+    pub last_icp_rate: u64,
+    pub last_icp_rate_ts: u64,
+
+    // The last amount of ICP locked (e8s).
+    pub last_icp_locked: u64,
+    pub last_icp_locked_ts: u64,
+
+    // Exchange rate expressed with base asset in USD.
+    pub exchange_rate: BTreeMap<FiatCurrency, u64>,
+
+    pub currencies_to_fetch: BTreeSet<FiatCurrency>,
+}
+
+impl TvlState {
+    pub fn populate_state(&mut self) {
+        TVL_TIMESERIES.with(|map| {
+            for ((ts, entry_type), value) in map.borrow().iter() {
+                match EntryType::from(entry_type) {
+                    EntryType::EURExchangeRate => {
+                        self.exchange_rate
+                            .entry(FiatCurrency::EUR)
+                            .and_modify(|curr| *curr = value)
+                            .or_insert(value);
+                    }
+                    EntryType::CNYExchangeRate => {
+                        self.exchange_rate
+                            .entry(FiatCurrency::CNY)
+                            .and_modify(|curr| *curr = value)
+                            .or_insert(value);
+                    }
+                    EntryType::JPYExchangeRate => {
+                        self.exchange_rate
+                            .entry(FiatCurrency::JPY)
+                            .and_modify(|curr| *curr = value)
+                            .or_insert(value);
+                    }
+                    EntryType::GBPExchangeRate => {
+                        self.exchange_rate
+                            .entry(FiatCurrency::GBP)
+                            .and_modify(|curr| *curr = value)
+                            .or_insert(value);
+                    }
+                    EntryType::ICPrice => {
+                        self.last_icp_rate = value;
+                        self.last_icp_rate_ts = ts;
+                    }
+                    EntryType::LockedIcp => {
+                        self.last_icp_locked = value;
+                        self.last_icp_locked_ts = ts;
+                    }
+                }
+            }
+        })
+    }
 }
 
 thread_local! {

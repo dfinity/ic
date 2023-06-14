@@ -10493,6 +10493,7 @@ dependencies = [
 name = "ic-tvl-canister"
 version = "0.1.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "candid",
  "ciborium",
@@ -10504,30 +10505,16 @@ dependencies = [
  "ic-cdk-timers",
  "ic-metrics-encoder",
  "ic-nns-governance",
+ "ic-nns-test-utils",
  "ic-stable-structures",
+ "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
- "ic-tvl-sm-tests",
  "ic0",
  "num-traits",
+ "rand 0.8.5",
  "serde",
  "serde_bytes",
  "walkdir",
-]
-
-[[package]]
-name = "ic-tvl-sm-tests"
-version = "0.1.0"
-dependencies = [
- "candid",
- "cddl",
- "hex",
- "ic-base-types",
- "ic-nns-governance",
- "ic-nns-test-utils",
- "ic-state-machine-tests",
- "ic-tvl-canister",
- "num-traits",
- "proptest",
  "xrc-mock",
 ]
 
