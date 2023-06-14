@@ -68,7 +68,7 @@ const MAX_REMOTE_DKGS_PER_INTERVAL: usize = 1;
 const MAX_REMOTE_DKG_ATTEMPTS: u32 = 5;
 
 // Generic error string for failed remote DKG requests.
-const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attemtps to run this DKG repeatedly failed";
+const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attempts to run this DKG repeatedly failed";
 
 // Currently we assume that we run DKGs for all of these tags.
 const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
@@ -410,8 +410,8 @@ pub fn validate_payload(
 
 /// Creates the DKG payload for a new block proposal with the given parent. If
 /// the new height corresponds to a new DKG start interval, creates a summary,
-/// otherwise it creates a payload containing new dealing for the
-/// current interval.
+/// otherwise it creates a payload containing new dealings for the current
+/// interval.
 #[allow(clippy::too_many_arguments)]
 pub fn create_payload(
     subnet_id: SubnetId,
@@ -486,17 +486,31 @@ pub fn create_payload(
     )))
 }
 
-/* Creates a summary payload for the given parent and registry_version.
- *
- * We compute the summary from prev_summary as follows:
- * summary.current_transcript =
- *   prev_summary.next_transcript.unwrap_or_else(
- *      prev_summary.current_transcript
- *   )
- * // compute transcript from the dealings in the past interval
- * summary.next_transcript =  ...;
- * summary.configs.resharing_transcript = summary.current_transcript
- */
+/// Creates a summary payload for the given parent and registry_version.
+///
+/// We compute the summary from prev_summary as follows:
+/// ```ignore
+/// summary.current_transcript =
+///   prev_summary.next_transcript.unwrap_or_else(
+///      prev_summary.current_transcript
+///   )
+///
+/// // compute transcript from the dealings in the past interval
+/// summary.next_transcript = ...;
+///
+/// summary.configs.high.resharing_transcript =
+///   summary.next_transcript.unwrap_or_else(
+///      summary.current_transcript
+///   )
+/// // committee of resharing_transcript reshares to members of
+/// // subnet according to proposed stable registry version
+/// summary.configs.high = ...;
+///
+/// // members of subnet according to proposed stable registry
+/// // version create low threshold transcript among them
+/// summary.configs.low = ...;
+/// ```
+///
 #[allow(clippy::too_many_arguments)]
 fn create_summary_payload(
     subnet_id: SubnetId,
@@ -564,8 +578,11 @@ fn create_summary_payload(
     )?;
 
     let interval_length = last_summary.next_interval_length;
-    let next_interval_length =
-        get_dkg_interval_length(registry_client, registry_version, subnet_id)?;
+    let next_interval_length = get_dkg_interval_length(
+        registry_client,
+        validation_context.registry_version,
+        subnet_id,
+    )?;
     // Current transcripts come from next transcripts of the last_summary.
     let current_transcripts = last_summary.into_next_transcripts();
 
@@ -582,12 +599,18 @@ fn create_summary_payload(
         &current_transcripts
     };
 
+    // New configs are created using the new stable registry version proposed by this
+    // block, which determines receivers of the dealings.
     configs.append(&mut get_configs_for_local_transcripts(
         subnet_id,
-        get_node_list(subnet_id, registry_client, registry_version)?,
+        get_node_list(
+            subnet_id,
+            registry_client,
+            validation_context.registry_version,
+        )?,
         height,
         reshared_transcripts,
-        registry_version,
+        validation_context.registry_version,
     )?);
 
     Ok(Summary::new(
@@ -3384,73 +3407,60 @@ mod tests {
 
     /*
      * Test bases on the following example (assumption: every DKG succeeds).
+     * DKG interval = 4
      *
-     * Registry:
-     *  - Version 6: Members {A B C D E}
-     *  - Version 10: Members {A B C D}
-     *
+     * Version 5: Members {0, 1, 2, 3}
      *
      * Block 0:
+     *   - created by registry
      *   block.context.registry_version = 5
-     *   summary.registry_version = 1
-     *   summary.current_transcript is 0
-     *   summary.next_transcript is None
-     *   summary.configs: Compute DKG 1, which reshares transcript 0, and based
-     *                    on registry version 1
-     *
-     *
-     * Block 5:
-     *   block.context.registry_version = 6
      *   summary.registry_version = 5
      *   summary.current_transcript is 0
-     *   summary.next_transcript is 1
-     *   summary.configs: Compute DKG 2,  which reshares transcript 0, and based
-     *                    on registry version 5
+     *   summary.next_transcript is None
+     *   summary.configs: Compute DKG 1: committee 5 reshares transcript 0 to
+     *                    committee 5, committee 5 creates low threshold transcript
      *
-     * // here, somewhere node E is removed from subnet
+     * Version 6: Members {3, 4, 5, 6, 7}
+     *
+     * Block 5:
+     *   - created by committee 5
+     *   block.context.registry_version = 6
+     *   summary.registry_version = 5
+     *   summary.current_transcript is 0 (re-used)
+     *   summary.next_transcript is 1
+     *   summary.configs: Compute DKG 2: committee 5 reshares transcript 1 to
+     *                    committee 6, committee 6 creates low threshold transcript
+     *
+     * Version 10: Members {3, 4, 5, 6}
      *
      * Block 10:
+     *   - proposed, notarized, finalized by committee 6
+     *   - beacon, tape, certification, cup by committee 5
      *   block.context.registry_version = 10
      *   summary.registry_version = 6
      *   summary.current_transcript is 1
      *   summary.next_transcript = 2
-     *   summary.configs: Compute DKG 3,  which reshares transcript 1, and based
-     *                    on registry version 6
+     *   summary.configs: Compute DKG 3: committee 6 reshares transcript 2 to
+     *                    committee 10, committee 10 creates low threshold transcript
      *
      * Block 15:
-     *   block.context.registry_version = 14
+     *   - proposed, notarized, finalized by committee 10
+     *   - beacon, tape, certification, cup by committee 6
+     *   block.context.registry_version = 10
      *   summary.registry_version = 10
-     *   summary.current_transcript is 2
+     *   summary.current_transcript is 2, meaning nodes {0, 1, 2} can leave
      *   summary.next_transcript is 3
-     *   summary.configs: Compute DKG 4, which reshares transcript 2, and based
-     *                    on registry version 10 (this is the first DKG that no
-     *                    longer includes E)
+     *   summary.configs: Compute DKG 4: committee 10 reshares transcript 3 to
+     *                    committee 10, committee 10 creates low threshold transcript
      *
      * Block 20:
-     *   block.context.registry_version = 16
-     *   summary.registry_version = 14
-     *   summary.current_transcript is 3
+     *   - created by committee 10
+     *   block.context.registry_version = 10
+     *   summary.registry_version = 10
+     *   summary.current_transcript is 3, meaning node {7} can leave
      *   summary.next_transcript is 4
-     *   summary.configs: Compute DKG 5, which reshares transcript 3, and based
-     *                    on registry version 14
-     *
-     * Block 25: (this is the first time that node E is no longer needed)
-     *   block.context.registry_version = 20
-     *   summary.registry_version = 16
-     *   summary.current_transcript is 4
-     *   summary.next_transcript is 5
-     *   summary.configs: Compute DKG 6, which reshares transcript 4, and based
-     *                    on registry version 16
-     *
-     * Block 30:
-     *   block.context.registry_version = 22
-     *   summary.registry_version = 20
-     *   summary.current_transcript is 5
-     *   summary.next_transcript is 6
-     *   summary.configs: Compute DKG 7, which reshares transcript 5, and based
-     *                    on registry version 20
-     *
-     *
+     *   summary.configs: Compute DKG 5: committee 10 reshares transcript 4 to
+     *                    committee 10, committee 10 creates low threshold transcript
      */
     #[test]
     fn test_create_summary_registry_versions() {
@@ -3501,13 +3511,17 @@ mod tests {
                     current_transcript.committee.get(),
                     &committee1.clone().into_iter().collect::<BTreeSet<_>>()
                 );
+                assert_eq!(
+                    current_transcript.registry_version,
+                    RegistryVersion::from(5)
+                );
                 // The genesis summary cannot have next transcripts, instead we'll reuse in
                 // round 1 the active transcripts from round 0.
                 assert!(dkg_summary.next_transcript(tag).is_none());
             }
 
             // Advance for one round and update the registry to version 6 with new
-            // memebership (nodes 3, 4, 5, 6, 7).
+            // membership (nodes 3, 4, 5, 6, 7).
             pool.advance_round_normal_operation();
             let committee2 = (3..8).map(node_test_id).collect::<Vec<_>>();
             add_subnet_record(
@@ -3531,8 +3545,8 @@ mod tests {
             );
             let summary = BlockPayload::from(dkg_block.payload).into_summary();
             let dkg_summary = &summary.dkg;
-            // This registry version corresponds to the registry version from the block
-            // context of the previous summary.
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(5));
             assert_eq!(dkg_summary.height, Height::from(5));
             assert_eq!(
@@ -3546,19 +3560,22 @@ mod tests {
                     current_transcript.dkg_id.start_block_height,
                     Height::from(0)
                 );
+                // New configs are created for the new context registry version,
+                // which will be the new membership version in the next interval.
                 let (_, conf) = dkg_summary
                     .configs
                     .iter()
                     .find(|(id, _)| id.dkg_tag == *tag)
                     .unwrap();
+                assert_eq!(conf.registry_version(), RegistryVersion::from(6));
                 assert_eq!(
                     conf.receivers().get(),
-                    &committee1.clone().into_iter().collect::<BTreeSet<_>>()
+                    &committee2.clone().into_iter().collect::<BTreeSet<_>>()
                 );
             }
 
             // Advance for one round and update the registry to version 10 with new
-            // memebership (nodes 3, 4, 5, 6).
+            // membership (nodes 3, 4, 5, 6).
             pool.advance_round_normal_operation();
             let committee3 = (3..7).map(node_test_id).collect::<Vec<_>>();
             add_subnet_record(
@@ -3582,8 +3599,8 @@ mod tests {
             );
             let summary = BlockPayload::from(dkg_block.payload).into_summary();
             let dkg_summary = &summary.dkg;
-            // This registry version corresponds to the registry version from the block
-            // context of the previous summary.
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(6));
             assert_eq!(dkg_summary.height, Height::from(10));
             assert_eq!(
@@ -3598,7 +3615,7 @@ mod tests {
                     .unwrap();
                 assert_eq!(
                     conf.receivers().get(),
-                    &committee2.clone().into_iter().collect::<BTreeSet<_>>()
+                    &committee3.clone().into_iter().collect::<BTreeSet<_>>()
                 );
                 let current_transcript = dkg_summary.current_transcript(tag);
                 assert_eq!(
@@ -3606,7 +3623,7 @@ mod tests {
                     Height::from(0)
                 );
                 let next_transcript = dkg_summary.next_transcript(tag).unwrap();
-                // The DKG id start height refers to height 0, where we started computing this
+                // The DKG id start height refers to height 5, where we started computing this
                 // DKG.
                 assert_eq!(next_transcript.dkg_id.start_block_height, Height::from(5));
             }
@@ -3621,13 +3638,13 @@ mod tests {
             );
             let summary = BlockPayload::from(dkg_block.payload).into_summary();
             let dkg_summary = &summary.dkg;
-            // This registry version corresponds to the registry version from the block
-            // context of the previous summary.
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
             assert_eq!(dkg_summary.height, Height::from(15));
             assert_eq!(
                 summary.get_oldest_registry_version_in_use(),
-                RegistryVersion::from(5)
+                RegistryVersion::from(6)
             );
             for tag in TAGS.iter() {
                 let (_, conf) = dkg_summary
@@ -3658,14 +3675,13 @@ mod tests {
             );
             let summary = BlockPayload::from(dkg_block.payload).into_summary();
             let dkg_summary = &summary.dkg;
-            // This registry version corresponds to the registry version from the block
-            // context of the previous summary.
+            // This membership registry version corresponds to the registry version from
+            // the block context of the previous summary.
             assert_eq!(dkg_summary.registry_version, RegistryVersion::from(10));
             assert_eq!(dkg_summary.height, Height::from(20));
             assert_eq!(
                 summary.get_oldest_registry_version_in_use(),
-                // The current DKGs finally use `RegistryVersion` 6
-                RegistryVersion::from(6)
+                RegistryVersion::from(10)
             );
             for tag in TAGS.iter() {
                 let (_, conf) = dkg_summary

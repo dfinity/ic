@@ -199,6 +199,11 @@ impl BlockMaker {
 
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
+        //
+        // The current membership registry version (= stable registry version agreed on
+        // in the summary block initiating the previous DKG interval), determines subnet
+        // membership (in terms of the notarization committee) of the interval beginning
+        // with this block (inclusively).
         let registry_version = pool.registry_version(height).or_else(|| {
             warn!(
                 self.log,
@@ -207,8 +212,10 @@ impl BlockMaker {
             None
         })?;
 
-        // Get the subnet records that are relevant to making a block
+        // The stable registry version to be agreed on in this block. If this is a summary
+        // block, this version will be the new membership version of the next dkg interval.
         let stable_registry_version = self.get_stable_registry_version(&parent)?;
+        // Get the subnet records that are relevant to making a block
         let subnet_records =
             subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
 
