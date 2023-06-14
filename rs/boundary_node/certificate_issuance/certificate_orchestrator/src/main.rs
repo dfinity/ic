@@ -792,10 +792,12 @@ fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
         });
     }
 
+    // filter out own canister ID from response
     ListAllowedPrincipalsResponse::Ok(ALLOWED_PRINCIPALS.with(|m| {
         m.borrow()
             .iter()
             .map(|(k, _)| Principal::from_text(k.as_str()).expect("failed to parse principal"))
+            .filter(|k| k != &id())
             .collect()
     }))
 }
