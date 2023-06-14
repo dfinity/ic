@@ -7,14 +7,16 @@ use dfn_core::{
 };
 use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+    management_canister_client::ManagementCanisterClientImpl,
+};
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
-    canister_status::CanisterStatusResult,
     change_canister::{
         change_canister, AddCanisterProposal, ChangeCanisterProposal, StopOrStartCanisterProposal,
     },
-    management_canister_client::ProdManagementCanisterClient,
-    CanisterIdRecord, LOG_PREFIX,
+    LOG_PREFIX,
 };
 use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -69,7 +71,7 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
     ic_nns_handler_root::increment_open_canister_status_calls(canister_id_record.get_canister_id());
 
     let canister_status_response =
-        ic_nervous_system_root::canister_status::canister_status(canister_id_record)
+        ic_nervous_system_clients::canister_status::canister_status(canister_id_record)
             .await
             .map(CanisterStatusResult::from);
 
@@ -81,7 +83,7 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
       open status call counter to canister memory.
      */
     let _unused_canister_status_response =
-        ic_nervous_system_root::canister_status::canister_status(CanisterIdRecord::from(
+        ic_nervous_system_clients::canister_status::canister_status(CanisterIdRecord::from(
             ROOT_CANISTER_ID,
         ))
         .await
@@ -208,7 +210,7 @@ async fn change_canister_controllers_(
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
         caller(),
-        &mut ProdManagementCanisterClient::new(),
+        &mut ManagementCanisterClientImpl::new(),
     )
     .await
 }

@@ -1,14 +1,13 @@
 use dfn_core::api::{call, call_bytes, call_with_funds, print, CanisterId, Funds};
 use ic_base_types::PrincipalId;
 use ic_ic00_types::{CanisterInstallMode::Install, InstallCodeArgs};
-use ic_nervous_system_root::{
-    change_canister::{
-        start_canister, stop_canister, AddCanisterProposal, CanisterAction,
-        StopOrStartCanisterProposal,
-    },
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
     management_canister_client::ManagementCanisterClient,
     update_settings::{CanisterSettings, UpdateSettings},
-    CanisterIdRecord,
+};
+use ic_nervous_system_root::change_canister::{
+    start_canister, stop_canister, AddCanisterProposal, CanisterAction, StopOrStartCanisterProposal,
 };
 use ic_nns_common::{
     registry::{encode_or_panic, get_value, mutate_registry},

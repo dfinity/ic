@@ -2,10 +2,13 @@ use candid::{CandidType, Deserialize};
 use dfn_core::api::{call, now, CanisterId};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_ic00_types::CanisterInstallMode;
-use ic_nervous_system_root::{
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
     canister_status::CanisterStatusResultFromManagementCanister,
+};
+use ic_nervous_system_root::{
     change_canister::{change_canister, ChangeCanisterProposal},
-    CanisterIdRecord, LOG_PREFIX,
+    LOG_PREFIX,
 };
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;

@@ -1,10 +1,10 @@
 use candid::{Encode, Nat};
 use dfn_candid::candid;
-use ic_nervous_system_root::{
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
-    change_canister::AddCanisterProposal,
-    CanisterIdRecord,
 };
+use ic_nervous_system_root::change_canister::AddCanisterProposal;
 use ic_nns_constants::{REGISTRY_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
