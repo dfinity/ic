@@ -2,11 +2,11 @@
 
 == Introduction
 
-SetupOS is an operating system designed for installing both the HostOS (hypervisor) and GuestOS (virtual machine). It enables node providers/operators to independently install their nodes.
+SetupOS is an operating system designed for installing both the HostOS (hypervisor) and GuestOS (virtual machine). It enables Node Providers to independently onboard their nodes.
 
 == SetupOS Installation
 
-To install SetupOS, node operators follow these steps:
+To install SetupOS, Node Providers follow these steps:
 
 1. Obtain a SetupOS image and download it onto a bootable USB drive.
 2. Add the necessary configurations to the image.
@@ -36,3 +36,21 @@ The sequence of the scripts is defined in the main installation script, `setupos
   hostos.sh    # Installs and configures the HostOS operating system
   guestos.sh   # Installs and configures the GuestOS operating system
   devices.sh   # Handles the HSM
+
+== Node Providers, Node Technicians, and Node Operators
+
+* *Node Provider*: An entity that purchases and owns the node hardware. Node Providers are rewarded for their node's useful work.
+* *Node Technician*: These are the 'hired hands' or 'remote hands' employed by the Node Providers to maintain and manage the node. They do not necessarily own the hardware, but are responsible for its operation. Note that a single node will often have more than one Node Technician—the Node Technician can be thought of as the individual currently operating the node, so this role can cycle among several parties.
+** Note: While it is possible, it is uncommon for a Node Provider to also act as their own Node Technician.
+* *Node Operator*:
+** The term "Node Operator" refers not to a specific individual or group, but to:
+*** A specific record within the NNS registry—the *Node Operator record*, and to:
+*** A key in the Node Operator record—the *Node Operator key*.
+**** More details about the Node Operator record can be found in the file: link:../../rs/protobuf/def/registry/node_operator/v1/node_operator.proto[node_operator.proto].
+** As it relates to the Node Operator key and record, the process for onboarding nodes involves a few steps:
+1. *Creation of Node Operator key*: A Node Provider generates a private/public key pair.
+2. *Creation of Node Operator record*: Subsequently, the Node Provider creates a Node Operator record in the NNS, which contains their Node Operator public key.
+3. *Key Sharing*: The Node Provider then shares the Node Operator private key with their Node Technician, enabling the technician to onboard nodes on behalf of the Node Provider.
+4. *NNS Onboarding Approval*: Prior to approving the node onboarding, the NNS verifies the Node Operator record to confirm that the Node Provider is authorized to onboard nodes and has not exceeded their node allotment.
+
+** Note: Be aware that "Node Operator" has been overloaded, and is often erroneously used to refer to the Node Technicians. For clarity, this incorrect usage should be avoided.

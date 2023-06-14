@@ -94,7 +94,7 @@ The partition is set up as an encrypted partition as well (since IC intermediary
 data might leak to it). This is facilitated in the following way:
 
 * The script +/opt/ic/bin/setup-var-encryption.sh+ will check if the partition
-  is set up correctly already. If it is, then it is simply used as-is.
+  is set up correctly already. If it is, then it is used as-is.
   Otherwise, it is reformatted as an encrypted partition, and a filesystem
   is put in. The filesystem is initialized from the filesystem state of
   the /var subtree that is part of the root filesystem. (So this effectively

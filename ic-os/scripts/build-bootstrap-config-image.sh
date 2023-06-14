@@ -71,7 +71,7 @@ options may be specified:
     admin and root (the latter one for testing purposes only!)
 
   --node_operator_private_key path
-    Should point to a file containing a node provider private key PEM.
+    Should point to a file containing a Node Provider private key PEM.
 
   --backup_retention_time seconds
     How long the backed up consensus artifacts should stay on the spool

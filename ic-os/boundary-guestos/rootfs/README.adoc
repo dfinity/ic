@@ -59,8 +59,7 @@ customization of the installation using node-specific information. This includes
 * network environment: `network.conf` (more details below)
 * essential information about the IC: `nns.conf`
 
-For all of mentioned parameters, the system expects a file `ic-bootstrap.tar` - either
-already present at `/mnt` or supplied on a removable storage medium (e.g.
+For all of mentioned parameters, the system expects a file `ic-bootstrap.tar` supplied on a removable storage medium (e.g.
 a USB stick or an optical medium).
 
 ==== Network configuration

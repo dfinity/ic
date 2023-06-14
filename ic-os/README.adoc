@@ -5,7 +5,7 @@
 IC-OS is an umbrella term for all the operating systems within the IC, including SetupOS, HostOS, GuestOS, and Boundary-guestOS.
 
 * SetupOS: Responsible for booting a new replica node and installing HostOS and GuestOS.
-* HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design.
+* HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design to not perform any trusted capabilities.
 * GuestOS: The operating system that runs inside a virtual machine on the HostOS. The core IC protocol is executed within the GuestOS.
 * Boundary-guestOS: The operating system that runs on boundary nodes.
 
@@ -43,7 +43,7 @@ Use the following command to build images:
 
    $ bazel build //ic-os/{setupos,hostos,guestos,boundary-guestos}/envs/<TARGET>/...
 
-All build outputs are stored under `/ic/bazel-bin/ic-os/{setupos,hostos,guestos,boundary-guestos}/envs/`
+All IC-OS image build outputs are stored under `/ic/bazel-bin/ic-os/{setupos,hostos,guestos,boundary-guestos}/envs/<TARGET>`
 
 Example:
 
@@ -52,7 +52,7 @@ Example:
 
 == Under the hood: Building an image
 
-IC-OS images are first created as docker images and then transformed into "bare-metal" or "virtual-metal" images that can be use outside containerization.
+IC-OS images are first created as docker images and then transformed into "bare-metal" or "virtual-metal" images that can be used outside containerization.
 
 Rather than installing and relying on a full-blown upstream ISO image, the system is assembled based on a minimal Docker image with the required components added. This approach allows for a minimal, controlled, and well understood system - which is key for a secure platform.
 
@@ -90,7 +90,7 @@ This means that some development and testing could be done on the docker image i
 * *scripts/*: This directory contains build scripts. 
 ** Note that GuestOS has its own scripts subdirectory that still need to be unified with the outer scripts directory.
 
-* *rootfs/*: Each rootfs subdirectory contains everything required to build a bootable Ubuntu system. Various template directories (e.g., /opt) are used, which are simply copied verbatim to the target system. You can add files to these directories to include them in the image.
+* *rootfs/*: Each rootfs subdirectory contains everything required to build a bootable Ubuntu system. Various template directories (e.g., /opt) are used, which are copied verbatim to the target system. You can add files to these directories to include them in the image.
 ** For instructions on how to make changes to the OS, refer to the link:docs/Rootfs.adoc#[rootfs documentation]
 
 == SEV testing
