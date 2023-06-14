@@ -1130,7 +1130,7 @@ impl Validator {
                         verification,
                         beacon.into_message(),
                     );
-                    if ret.is_some() {
+                    if let Some(&ChangeAction::MoveToValidated(_)) = ret.as_ref() {
                         existing_shares += 1;
                     }
                     ret
@@ -1258,7 +1258,7 @@ impl Validator {
                             tape.into_message(),
                         );
                         // increment counter of validated shares
-                        if ret.is_some() {
+                        if let Some(&ChangeAction::MoveToValidated(_)) = ret.as_ref() {
                             height_share_map.insert(height, existing_shares + 1);
                         }
                         ret
