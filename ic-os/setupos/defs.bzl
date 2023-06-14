@@ -54,7 +54,7 @@ def _custom_partitions(mode):
     if mode == "dev":
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.gz")
-    if mode == "dev-sev":
+    elif mode == "dev-sev":
         guest_image = Label("//ic-os/guestos/envs/dev-sev:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/dev-sev:disk-img.tar.gz")
     else:
