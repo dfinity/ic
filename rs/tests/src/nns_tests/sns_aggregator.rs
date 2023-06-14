@@ -10,12 +10,12 @@ use crate::{
     canister_agent::CanisterAgent,
     canister_api::{CallMode, SnsRequestProvider},
     canister_requests,
-    driver::test_env_api::{retry_async, NnsCanisterWasmStrategy, NnsCustomizations},
+    driver::test_env_api::{retry_async, NnsCanisterWasmStrategy},
     generic_workload_engine::{
         engine::Engine,
         metrics::{LoadTestMetrics, RequestOutcome},
     },
-    sns_client::{oc_sns_init_payload, SnsClient},
+    sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
 };
 use anyhow::{bail, Context};
 use candid::{Decode, Principal};
@@ -43,7 +43,7 @@ use crate::{
     util::block_on,
 };
 
-use super::sns_deployment::{self, install_nns, install_sns, SaleParticipant};
+use super::sns_deployment::{self, install_nns, install_sns_legacy, SaleParticipant};
 
 use ic_base_types::PrincipalId;
 
@@ -69,9 +69,9 @@ fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStra
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    install_nns(env, wasm_strategy, NnsCustomizations::default());
-    let init = oc_sns_init_payload();
-    install_sns(env, wasm_strategy, init);
+    install_nns(env, wasm_strategy, vec![], vec![]);
+    let create_service_nervous_system_proposal = openchat_create_service_nervous_system_proposal();
+    install_sns_legacy(env, wasm_strategy, create_service_nervous_system_proposal);
 }
 
 pub fn benchmark_config(env: TestEnv) {

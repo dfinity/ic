@@ -5,9 +5,14 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_gtc::pb::v1::AccountState;
 use ic_sns_governance::pb::v1::{
     GetMetadataRequest as GetMetadataReq, GetMetadataResponse as GetMetadataRes,
-    ListNeurons as ListNeuronsReq, ListNeuronsResponse as SnsListNeuronsRes, NeuronId,
+    GetMode as GetModeReq, GetModeResponse as GetModeRes, ListNeurons as ListNeuronsReq,
+    ListNeuronsResponse as SnsListNeuronsRes, NeuronId,
 };
-use ic_sns_root::pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes;
+use ic_sns_root::{
+    pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
+    GetSnsCanistersSummaryRequest as GetSnsCanistersSummaryReq,
+    GetSnsCanistersSummaryResponse as GetSnsCanistersSummaryRes,
+};
 use ic_sns_swap::pb::v1::{
     FinalizeSwapRequest as FinalizeSwapReq, FinalizeSwapResponse,
     GetBuyerStateRequest as GetBuyerStateReq, GetBuyerStateResponse as GetBuyerStateRes,
@@ -718,6 +723,63 @@ impl GetStateRequest {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct GetSnsCanistersSummaryRequest {
+    sns_root_canister: Principal,
+}
+
+impl Request<GetSnsCanistersSummaryRes> for GetSnsCanistersSummaryRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+    fn canister_id(&self) -> Principal {
+        self.sns_root_canister
+    }
+    fn method_name(&self) -> String {
+        "get_sns_canisters_summary".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&GetSnsCanistersSummaryReq {
+            update_canister_list: Some(false)
+        })
+        .unwrap()
+    }
+}
+
+impl GetSnsCanistersSummaryRequest {
+    pub fn new(sns_root_canister: Principal) -> Self {
+        Self { sns_root_canister }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GetModeRequest {
+    sns_governance_canister: Principal,
+}
+
+impl Request<GetModeRes> for GetModeRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+    fn canister_id(&self) -> Principal {
+        self.sns_governance_canister
+    }
+    fn method_name(&self) -> String {
+        "get_mode".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&GetModeReq {}).unwrap()
+    }
+}
+
+impl GetModeRequest {
+    pub fn new(sns_governance_canister: Principal) -> Self {
+        Self {
+            sns_governance_canister,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct SnsRequestProvider {
     pub sns_canisters: SnsCanisterIds,
@@ -849,5 +911,19 @@ impl SnsRequestProvider {
             of_principal,
             mode,
         )
+    }
+
+    pub fn get_sns_canisters_summary(
+        &self,
+    ) -> impl Request<GetSnsCanistersSummaryRes> + std::fmt::Debug + Clone + Sync + Send {
+        let sns_root_canister = self.sns_canisters.root().get().into();
+        GetSnsCanistersSummaryRequest::new(sns_root_canister)
+    }
+
+    pub fn get_sns_governance_mode(
+        &self,
+    ) -> impl Request<GetModeRes> + std::fmt::Debug + Clone + Sync + Send {
+        let sns_governance_canister = self.sns_canisters.governance().get().into();
+        GetModeRequest::new(sns_governance_canister)
     }
 }

@@ -31,6 +31,7 @@ use ic_nns_handler_root_interface::{
 };
 use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterInitPayloads};
+use ic_sns_root::GetSnsCanistersSummaryResponse;
 use ic_types::{Cycles, SubnetId};
 use maplit::{btreemap, hashmap};
 use std::{
@@ -1808,6 +1809,47 @@ pub fn assert_unique_canister_ids(sns_1: &SnsCanisterIds, sns_2: &SnsCanisterIds
                     entry.get()
                 );
             }
+        }
+    }
+}
+
+impl From<DeployedSns> for SnsCanisterIds {
+    fn from(value: DeployedSns) -> Self {
+        let DeployedSns {
+            root_canister_id: root,
+            governance_canister_id: governance,
+            ledger_canister_id: ledger,
+            swap_canister_id: swap,
+            index_canister_id: index,
+        } = value;
+        Self {
+            root,
+            ledger,
+            governance,
+            swap,
+            index,
+        }
+    }
+}
+
+impl From<GetSnsCanistersSummaryResponse> for SnsCanisterIds {
+    fn from(value: GetSnsCanistersSummaryResponse) -> Self {
+        let GetSnsCanistersSummaryResponse {
+            root,
+            governance,
+            ledger,
+            swap,
+            dapps: _,
+            archives: _,
+            index,
+        } = value;
+
+        Self {
+            root: root.and_then(|c| c.canister_id),
+            ledger: ledger.and_then(|c| c.canister_id),
+            governance: governance.and_then(|c| c.canister_id),
+            swap: swap.and_then(|c| c.canister_id),
+            index: index.and_then(|c| c.canister_id),
         }
     }
 }

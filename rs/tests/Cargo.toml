@@ -57,6 +57,7 @@ ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/led
 ic-message = { path = "./test_canisters/message" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../nervous_system/common/test_keys" }
+ic-nervous-system-proto = { path = "../nervous_system/proto" }
 ic-nervous-system-root = { path = "../nervous_system/root" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-init = { path = "../nns/init" }

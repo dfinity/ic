@@ -22,9 +22,13 @@ use ic_constants::MAX_INGRESS_TTL;
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance::pb::v1::{
+    create_service_nervous_system::SwapParameters, CreateServiceNervousSystem,
+};
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
+use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Params};
 use ic_types::crypto::{AlgorithmId, UserPublicKey};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_universal_canister::{
@@ -994,7 +998,7 @@ pub(crate) async fn set_controller(
         .unwrap_or_else(|err| panic!("Could not set controller: {}", err))
 }
 
-pub(crate) async fn deposit_cycles(
+pub async fn deposit_cycles(
     controller: &UniversalCanister<'_>,
     &canister_id: &Principal,
     cycles_to_deposit: Cycles,
@@ -1535,4 +1539,69 @@ pub fn generate_identity(seed: u64) -> (Ed25519KeyPair, UserPublicKey, Principal
     let principal =
         PrincipalId::new_self_authenticating(&ed25519_public_key_to_der(pubkey.key.clone()));
     (keypair, pubkey, principal)
+}
+
+pub(crate) fn create_service_nervous_system_into_params(
+    create_service_nervous_system: CreateServiceNervousSystem,
+    swap_approved_timestamp_seconds: u64,
+) -> Result<Params, String> {
+    let SwapParameters {
+        minimum_participants,
+        minimum_icp,
+        maximum_icp,
+        minimum_participant_icp,
+        maximum_participant_icp,
+        neuron_basket_construction_parameters,
+        confirmation_text: _,
+        restricted_countries: _,
+        start_time,
+        duration,
+    } = create_service_nervous_system
+        .swap_parameters
+        .clone()
+        .ok_or("`swap_parameters` should not be None`")?;
+
+    let neuron_basket_construction_parameters: NeuronBasketConstructionParameters =
+        neuron_basket_construction_parameters
+            .ok_or("`neuron_basket_construction_parameters` should not be None")?
+            .try_into()?;
+
+    let start_time = start_time.ok_or("`start_time` should not be None")?;
+    let duration = duration.ok_or("`duration` should not be None")?;
+    let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
+        CreateServiceNervousSystem::swap_start_and_due_timestamps(
+            start_time,
+            duration,
+            swap_approved_timestamp_seconds,
+        )?;
+
+    let params = Params {
+        min_participants: minimum_participants.ok_or("`minimum_participants` should not be None")?
+            as u32,
+        min_icp_e8s: minimum_icp
+            .ok_or("`minimum_icp` should not be None")?
+            .e8s
+            .ok_or("`e8`s should not be None")?,
+        max_icp_e8s: maximum_icp
+            .ok_or("`maximum_icp` should not be None")?
+            .e8s
+            .ok_or("`e8`s should not be None")?,
+        min_participant_icp_e8s: minimum_participant_icp
+            .ok_or("`minimum_participant_icp` should not be None")?
+            .e8s
+            .ok_or("`e8`s should not be None")?,
+        max_participant_icp_e8s: maximum_participant_icp
+            .ok_or("`maximum_participant_icp` should not be None")?
+            .e8s
+            .ok_or("`e8`s should not be None")?,
+        swap_due_timestamp_seconds,
+        sns_token_e8s: create_service_nervous_system
+            .sns_token_e8s()
+            .ok_or("`swap_distribution.total.e8s` should not be None")?,
+        neuron_basket_construction_parameters: Some(neuron_basket_construction_parameters),
+        sale_delay_seconds: Some(
+            swap_start_timestamp_seconds.saturating_sub(swap_approved_timestamp_seconds),
+        ),
+    };
+    Ok(params)
 }

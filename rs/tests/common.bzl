@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
