@@ -10,7 +10,9 @@ use crate::common::{
 };
 use hyper::{client::conn::handshake, Body, Client, Method, Request, StatusCode};
 use ic_agent::{
-    agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, UpdateBuilder},
+    agent::{
+        http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, RejectResponse, UpdateBuilder,
+    },
     agent_error::HttpErrorPayload,
     export::Principal,
     hash_tree::Label,
@@ -18,6 +20,7 @@ use ic_agent::{
     Agent, AgentError,
 };
 use ic_config::http_handler::Config;
+use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_pprof::Pprof;
 use ic_protobuf::registry::crypto::v1::{
@@ -638,4 +641,59 @@ fn test_request_too_slow() {
         let response = client.request(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
     })
+}
+
+#[test]
+fn test_status_code_when_ingress_filter_fails() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let (mut ingress_filter, _, _) = start_http_endpoint(
+        rt.handle().clone(),
+        config,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
+    );
+
+    let agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
+
+    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+
+    // handle the update call
+    rt.spawn(async move {
+        let request = ingress_filter.next_request().await;
+        let (_, send_response) = request.unwrap();
+
+        let response = UserError::new(ErrorCode::IngressHistoryFull, "Test reject message");
+        send_response.send_response(Err(response));
+    });
+
+    // send update call
+    let response = rt.block_on(async {
+        agent
+            .update(&canister, "provisional_create_canister_with_cycles")
+            .call()
+            .await
+    });
+
+    let expected_response = Err(AgentError::ReplicaError(RejectResponse {
+        reject_code: ic_agent::agent::RejectCode::SysTransient,
+        reject_message: "Test reject message".to_string(),
+        error_code: Some("IC0204".to_string()),
+    }));
+
+    assert_eq!(expected_response, response);
 }

@@ -1,7 +1,7 @@
 use crate::state_reader_executor::StateReaderExecutor;
 use crate::HttpError;
 use http::request::Parts;
-use hyper::{Body, HeaderMap, Response, StatusCode};
+use hyper::{header, Body, HeaderMap, Response, StatusCode};
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
@@ -14,6 +14,8 @@ use ic_types::{
 };
 use ic_validator::RequestValidationError;
 use serde::Serialize;
+use serde_cbor::value::Value as CBOR;
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::task::Poll;
@@ -54,8 +56,6 @@ pub(crate) fn get_root_threshold_public_key(
 }
 
 pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
-    use hyper::header;
-
     let mut resp = Response::new(Body::from(message));
     *resp.status_mut() = status;
     *resp.headers_mut() = get_cors_headers();
@@ -81,61 +81,25 @@ pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Re
 ///
 /// make_response conversion applies the first case.
 pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
-    use ic_error_types::ErrorCode as C;
+    let reject_response: CBOR = CBOR::Map(BTreeMap::from([
+        (
+            CBOR::Text("error_code".to_string()),
+            CBOR::Text(user_error.code().to_string()),
+        ),
+        (
+            CBOR::Text("reject_message".to_string()),
+            CBOR::Text(user_error.description().to_string()),
+        ),
+        (
+            CBOR::Text("reject_code".to_string()),
+            CBOR::Integer(user_error.reject_code() as i128),
+        ),
+    ]));
 
-    let status = match user_error.code() {
-        C::SubnetOversubscribed => StatusCode::SERVICE_UNAVAILABLE,
-        C::MaxNumberOfCanistersReached => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterOutputQueueFull => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterQueueNotEmpty => StatusCode::SERVICE_UNAVAILABLE,
-        C::IngressMessageTimeout => StatusCode::GATEWAY_TIMEOUT,
-        C::IngressHistoryFull => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterNotFound => StatusCode::NOT_FOUND,
-        C::CanisterMethodNotFound => StatusCode::NOT_FOUND,
-        C::CanisterAlreadyInstalled => StatusCode::PRECONDITION_FAILED,
-        C::CanisterWasmModuleNotFound => StatusCode::SERVICE_UNAVAILABLE,
-        C::InsufficientMemoryAllocation => StatusCode::SERVICE_UNAVAILABLE,
-        C::InsufficientCyclesForCreateCanister => StatusCode::SERVICE_UNAVAILABLE,
-        C::SubnetNotFound => StatusCode::NOT_FOUND,
-        C::CanisterOutOfCycles => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterTrapped => StatusCode::INTERNAL_SERVER_ERROR,
-        C::CanisterCalledTrap => StatusCode::INTERNAL_SERVER_ERROR,
-        C::CanisterContractViolation => StatusCode::BAD_REQUEST,
-        C::CanisterInvalidWasm => StatusCode::BAD_REQUEST,
-        C::CanisterDidNotReply => StatusCode::INTERNAL_SERVER_ERROR,
-        C::CanisterOutOfMemory => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterStopped => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterStopping => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterNotStopped => StatusCode::PRECONDITION_FAILED,
-        C::CanisterStoppingCancelled => StatusCode::PRECONDITION_FAILED,
-        C::CanisterInvalidController => StatusCode::FORBIDDEN,
-        C::CanisterFunctionNotFound => StatusCode::NOT_FOUND,
-        C::CanisterNonEmpty => StatusCode::PRECONDITION_FAILED,
-        C::CertifiedStateUnavailable => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterRejectedMessage => StatusCode::FORBIDDEN,
-        C::QueryCallGraphLoopDetected => StatusCode::INTERNAL_SERVER_ERROR,
-        C::UnknownManagementMessage => StatusCode::BAD_REQUEST,
-        C::InvalidManagementPayload => StatusCode::BAD_REQUEST,
-        C::InsufficientCyclesInCall => StatusCode::SERVICE_UNAVAILABLE,
-        C::CanisterWasmEngineError => StatusCode::INTERNAL_SERVER_ERROR,
-        C::CanisterInstructionLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
-        C::CanisterInstallCodeRateLimited => StatusCode::TOO_MANY_REQUESTS,
-        C::CanisterMemoryAccessLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
-        C::QueryCallGraphTooDeep => StatusCode::INTERNAL_SERVER_ERROR,
-        C::QueryCallGraphTotalInstructionLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
-        C::CompositeQueryCalledInReplicatedMode => StatusCode::INTERNAL_SERVER_ERROR,
-        C::CanisterNotHostedBySubnet => StatusCode::NOT_FOUND,
-        C::QueryTimeLimitExceeded => StatusCode::INTERNAL_SERVER_ERROR,
-        C::QueryCallGraphInternal => StatusCode::INTERNAL_SERVER_ERROR,
-    };
-    make_plaintext_response(status, user_error.description().to_string())
+    cbor_response(&reject_response).0
 }
 
 pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
-    if let Some(user_error) = err.downcast_ref::<UserError>() {
-        return make_response(user_error.clone());
-    }
-
     if err.is::<Overloaded>() {
         make_plaintext_response(
             StatusCode::TOO_MANY_REQUESTS,
@@ -158,7 +122,6 @@ pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
 /// wildcard origin, POST and GET and allow Accept, Authorization and
 /// Content Type headers.
 pub(crate) fn get_cors_headers() -> HeaderMap {
-    use hyper::header;
     let mut headers = HeaderMap::new();
     headers.insert(
         header::ACCESS_CONTROL_ALLOW_METHODS,
@@ -185,7 +148,6 @@ pub(crate) fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 
 /// Write the "self describing" CBOR tag and serialize the response
 pub(crate) fn cbor_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
-    use hyper::header;
     let cbor = into_cbor(r);
     let body_size_bytes = cbor.len();
     let mut response = Response::new(Body::from(cbor));

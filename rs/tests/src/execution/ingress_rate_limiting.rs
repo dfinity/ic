@@ -20,9 +20,8 @@ use crate::{
     },
     util::*,
 };
-use ic_agent::identity::Identity;
+use ic_agent::{agent::RejectCode, identity::Identity};
 use ic_universal_canister::wasm;
-use reqwest::StatusCode;
 
 /// Not defining `canister_inspect_message` accepts all ingress messages.
 pub fn canister_accepts_ingress_by_default(env: TestEnv) {
@@ -74,14 +73,14 @@ pub fn empty_canister_inspect_rejects_all_messages(env: TestEnv) {
                 .await
                 .unwrap();
 
-            // Now send the canister an ingress message.  It should fail.
+            // Now send the canister an ingress message. It should fail.
             assert_http_submit_fails(
                 agent
                     .update(&canister.canister_id(), "update")
                     .with_arg(wasm().reply().build())
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterReject,
             );
         }
     })
@@ -148,7 +147,7 @@ pub fn canister_only_accepts_ingress_with_payload(env: TestEnv) {
             // Send the canister an ingress message without payload.  It should fail.
             assert_http_submit_fails(
                 agent.update(&canister_id, "hello").call().await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterReject,
             );
 
             // Send the canister an ingress message with payload.  It should succeed.
@@ -197,7 +196,7 @@ pub fn canister_rejects_ingress_only_from_one_caller(env: TestEnv) {
                     .update(&canister.canister_id(), "update")
                     .call()
                     .await,
-                StatusCode::INTERNAL_SERVER_ERROR,
+                RejectCode::CanisterError,
             );
 
             // Send an ingress from user 2. Should succeed.
@@ -232,7 +231,7 @@ pub fn message_to_canister_with_not_enough_balance_is_rejected(env: TestEnv) {
 
             assert_http_submit_fails(
                 agent.update(&canister.canister_id(), "update").call().await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterReject,
             );
         }
     })

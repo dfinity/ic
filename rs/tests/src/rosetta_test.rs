@@ -350,7 +350,7 @@ async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Opt
     assert_ic_error(
         &err,
         740,
-        404,
+        200,
         &format!("Canister {} not found", some_can_id),
     );
 }
