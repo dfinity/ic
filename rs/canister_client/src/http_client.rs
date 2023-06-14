@@ -10,10 +10,11 @@ use hyper::{
     },
     header::CONTENT_TYPE,
     service::Service,
-    Client as HyperClient, Method, Uri as HyperUri,
+    Client as HyperClient, Method, StatusCode, Uri as HyperUri,
 };
 use hyper_tls::HttpsConnector as HyperTlsConnector;
 use itertools::Either;
+use serde_cbor::Value;
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -189,8 +190,17 @@ impl HttpClient {
                     uri, e, status.canonical_reason().unwrap_or("empty status"),
                 )
             })?;
-        if !status.is_success() {
-            let readable_response = std::str::from_utf8(&parsed_body);
+
+        let is_update_call = uri.path().ends_with("/call");
+
+        // update calls with a response code of 200 indicates an error ocurred.
+        if !status.is_success() || (is_update_call && status == StatusCode::OK) {
+            let readable_response = if is_update_call {
+                format!("{:?}", serde_cbor::from_slice::<Value>(&parsed_body))
+            } else {
+                format!("{:?}", &std::str::from_utf8(&parsed_body))
+            };
+
             return Err(format!(
                 "HTTP Client: Request to {:?} failed with {:?}, {:?}",
                 uri,

@@ -857,20 +857,22 @@ pub(crate) fn assert_nodes_health_statuses(
     }).unwrap_or_else(|err| panic!("Retry function failed within the timeout of {} sec, {err}", READY_WAIT_TIMEOUT.as_secs()));
 }
 
+/// Asserts that the response from an agent call is rejected by the replica
+/// resulting in a [`AgentError::ReplicaError`], and an expected [`RejectCode`].
 pub(crate) fn assert_http_submit_fails(
     result: Result<RequestId, AgentError>,
-    http_status_code: reqwest::StatusCode,
+    expected_reject_code: RejectCode,
 ) {
     match result {
-        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
+        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}.", val),
         Err(agent_error) => match agent_error {
-            AgentError::HttpError(payload) => assert_eq!(
-                payload.status, http_status_code,
-                "Unexpected HTTP status code: {}",
-                payload
+            AgentError::ReplicaError(RejectResponse{reject_code, ..}) => assert_eq!(
+                expected_reject_code, reject_code,
+                "Unexpected reject_code: `{:?}`.",
+                reject_code
             ),
             others => panic!(
-                "Expected call to fail with http error but got {:?} instead",
+                "Expected agent call to replica to fail with AgentError::ReplicaError, but got {:?} instead.",
                 others
             ),
         },

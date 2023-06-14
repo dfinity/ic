@@ -44,7 +44,7 @@ use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{management_canister::builders::InstallMode, ManagementCanister};
-use reqwest::StatusCode;
+use slog::info;
 
 pub fn create_canister_via_ingress_fails(env: TestEnv) {
     let node = env.get_first_healthy_node_snapshot();
@@ -52,7 +52,10 @@ pub fn create_canister_via_ingress_fails(env: TestEnv) {
     block_on({
         async move {
             let mgr = ManagementCanister::create(&agent);
-            assert_http_submit_fails(mgr.create_canister().call().await, StatusCode::FORBIDDEN);
+            assert_http_submit_fails(
+                mgr.create_canister().call().await,
+                RejectCode::CanisterReject,
+            );
         }
     });
 }
@@ -222,6 +225,8 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .await
                 .unwrap();
             let mgr = ManagementCanister::create(&agent);
+
+            info!(logger, "Creating Canister A and canister B");
             let canister_a =
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
@@ -230,6 +235,7 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                     .await;
 
             // A creates C
+            info!(logger, "Canister A attempts to create canister C.");
             let canister_c = canister_a
                 .update(wasm().call(management::create_canister(
                     Cycles::from(2_000_000_000_000u64).into_parts(),
@@ -243,6 +249,10 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .unwrap();
 
             // Check that canister_a can ask for the status.
+            info!(
+                logger,
+                "Assert that canister A can ask for canister C's status."
+            );
             canister_a
                 .update(wasm().call(management::canister_status(canister_c)))
                 .await
@@ -258,6 +268,10 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .unwrap();
 
             // B cannot access C's canister status
+            info!(
+                logger,
+                "Assert that canister B cannot access canister C's status."
+            );
             assert_reject(
                 canister_b
                     .update(wasm().call(management::canister_status(canister_c)))
@@ -266,9 +280,13 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
             );
 
             // User also cannot fetch the status
+            info!(
+                logger,
+                "Assert that the user cannot access canister C's status."
+            );
             assert_http_submit_fails(
                 mgr.canister_status(&canister_c).call().await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Update the controllers to B and `user`
@@ -328,11 +346,19 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .unwrap();
 
             // B and `user` can no longer access status.
+            info!(
+                logger,
+                "Assert that the user can no longer access canister C's status."
+            );
             assert_http_submit_fails(
                 mgr.canister_status(&canister_c).call().await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
+            info!(
+                logger,
+                "Assert that canister B can no longer access canister C's status."
+            );
             assert_reject(
                 canister_b
                     .update(wasm().call(management::canister_status(canister_c)))
@@ -524,45 +550,53 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
             let mgr = ManagementCanister::create(&agent2);
 
             // Try reinstalling code to it. Should fail.
+            info!(
+                logger,
+                "Asserting that Reinstalling code on the canister fails."
+            );
             assert_http_submit_fails(
                 mgr.install_code(&wallet_canister.canister_id(), UNIVERSAL_CANISTER_WASM)
                     .with_mode(InstallMode::Reinstall)
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Upgrading it doesn't work either.
+            info!(logger, "Asserting that upgrading the canister fails.");
             assert_http_submit_fails(
                 mgr.install_code(&wallet_canister.canister_id(), UNIVERSAL_CANISTER_WASM)
                     .with_mode(InstallMode::Upgrade)
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Nor does stopping.
+            info!(logger, "Asserting that stopping the canister fails.");
             assert_http_submit_fails(
                 mgr.stop_canister(&wallet_canister.canister_id())
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Nor does fetching the status.
+            info!(logger, "Asserting that fetching the canister status fails.");
             assert_http_submit_fails(
                 mgr.canister_status(&wallet_canister.canister_id())
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Nor does deleting it.
+            info!(logger, "Asserting that deleting the canister fails.");
             assert_http_submit_fails(
                 mgr.delete_canister(&wallet_canister.canister_id())
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
         }
     });
@@ -1290,7 +1324,7 @@ pub fn controller_and_controllee_on_different_subnets(env: TestEnv) {
                 let mgr = ManagementCanister::create(&controllee_agent);
                 assert_http_submit_fails(
                     mgr.stop_canister(&controllee.canister_id()).call().await,
-                    StatusCode::FORBIDDEN,
+                    RejectCode::CanisterError,
                 );
 
                 install_via_cr(&controller, controllee.canister_id())
