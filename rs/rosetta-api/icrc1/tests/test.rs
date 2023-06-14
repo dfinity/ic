@@ -6,7 +6,6 @@ use ic_icrc1::{Block, Transaction};
 use ic_icrc1_test_utils::blocks_strategy;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
-
 use proptest::prelude::*;
 
 proptest! {
@@ -16,8 +15,12 @@ proptest! {
         // block->encoded_block->generic_block->encoded_block->block
         // returns the original block
         let generic_block = encoded_block_to_generic_block(&block.clone().encode());
-        let encoded_block = generic_block_to_encoded_block(generic_block).unwrap();
-        assert_eq!(block, Block::decode(encoded_block).unwrap());
+        let encoded_block = generic_block_to_encoded_block(generic_block.clone()).unwrap();
+        assert_eq!(generic_block, encoded_block_to_generic_block(&encoded_block));
+        assert_eq!(block, Block::decode(encoded_block.clone()).unwrap());
+        assert_eq!(Block::try_from(generic_block.clone()).unwrap(), block);
+        assert_eq!(Transaction::try_from(generic_block.clone()).unwrap(), block.transaction);
+        assert_eq!(generic_block.hash(), Block::block_hash(&encoded_block).as_slice());
     }
 
     #[test]

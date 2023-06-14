@@ -1,7 +1,7 @@
-use candid::types::number::Nat;
+use crate::{Block, Transaction};
 use ciborium::into_writer;
-use ciborium::value::Value as CiboriumValue;
-use ic_ledger_core::block::EncodedBlock;
+use ciborium::value::{Integer, Value as CiboriumValue};
+use ic_ledger_core::block::{BlockType, EncodedBlock};
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc3::transactions::GenericTransaction;
@@ -23,11 +23,13 @@ fn generic_block_to_ciborium_value(generic_block: GenericBlock) -> Result<cibori
             }
             GenericBlock::Nat64(int) => Ok(ciborium::Value::Integer(int.into())),
             GenericBlock::Int(int) => {
-                let v: i64 = int.0.to_i64().ok_or("Could not convert Int to i64")?;
-                let uv: u64 = v
+                let v: i128 = int.0.to_i128().ok_or("Could not convert Int to i128")?;
+                let uv: u128 = v
                     .try_into()
-                    .map_err(|e| format!("Could not convert Int to i64: {}", e))?;
-                Ok(ciborium::Value::Integer(uv.into()))
+                    .map_err(|e| format!("Could not convert Int to u128: {}", e))?;
+                Ok(ciborium::Value::Integer(
+                    Integer::try_from(uv).map_err(|err| err.to_string())?,
+                ))
             }
             GenericBlock::Blob(bytes) => Ok(ciborium::Value::Bytes(bytes.to_vec())),
             GenericBlock::Text(text) => Ok(ciborium::Value::Text(text)),
@@ -72,7 +74,7 @@ fn icrc1_block_from_value(value: &CiboriumValue) -> GenericBlock {
             let uv: u128 = v
                 .try_into()
                 .expect("blocks should not contain negative integers");
-            GenericValue::Nat(Nat::from(uv))
+            GenericValue::Int(uv.into())
         }
         CiboriumValue::Bytes(bytes) => GenericValue::Blob(ByteBuf::from(bytes.to_vec())),
         CiboriumValue::Text(text) => GenericValue::Text(text.to_string()),
@@ -114,5 +116,19 @@ pub fn generic_transaction_from_generic_block(
             })
             .cloned(),
         _ => Err("Generic Block must be a Map".into()),
+    }
+}
+
+impl TryFrom<GenericBlock> for Block {
+    type Error = String;
+    fn try_from(value: GenericBlock) -> Result<Self, Self::Error> {
+        Block::decode(generic_block_to_encoded_block(value)?)
+    }
+}
+
+impl TryFrom<GenericBlock> for Transaction {
+    type Error = String;
+    fn try_from(value: GenericBlock) -> Result<Self, Self::Error> {
+        Ok(Block::try_from(value)?.transaction)
     }
 }

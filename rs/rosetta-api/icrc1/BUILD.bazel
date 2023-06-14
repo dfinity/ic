@@ -60,5 +60,8 @@ rust_test(
     name = "icrc1_test",
     srcs = ["tests/test.rs"],
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = [":icrc1"] + DEV_DEPENDENCIES,
+    deps = [
+        ":icrc1",
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+    ] + DEV_DEPENDENCIES,
 )

@@ -154,6 +154,16 @@ fn check_memo_max_len() {
     ic_icrc1_ledger_sm_tests::test_memo_max_len(ledger_wasm(), encode_init_args);
 }
 
+#[test]
+fn test_block_transformation() {
+    ic_icrc1_ledger_sm_tests::test_block_transformation(
+        std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
+            .unwrap(),
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
 // Validate upgrade of the Ledger from previous versions
 
 fn account(n: u64) -> Account {
