@@ -16,7 +16,6 @@ use ic_btc_interface::{Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto_sha::Sha256;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
@@ -46,25 +45,24 @@ use ic_nervous_system_root::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    add_or_remove_node_provider::Change,
-    create_service_nervous_system::{
-        governance_parameters::VotingRewardParameters,
-        initial_token_distribution::{
-            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
-            TreasuryDistribution,
-        },
-        swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
-        SwapParameters,
-    },
-    manage_neuron::Command,
-    proposal::Action,
-    AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
-    NodeProvider, OpenSnsTokenSwap, Proposal, RewardNodeProviders,
-};
 use ic_nns_governance::{
     governance::{BitcoinNetwork, BitcoinSetConfigProposal},
-    pb::v1::NnsFunction,
+    pb::v1::{
+        add_or_remove_node_provider::Change,
+        create_service_nervous_system::{
+            governance_parameters::VotingRewardParameters,
+            initial_token_distribution::{
+                developer_distribution::NeuronDistribution, DeveloperDistribution,
+                SwapDistribution, TreasuryDistribution,
+            },
+            swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
+            SwapParameters,
+        },
+        manage_neuron::Command,
+        proposal::Action,
+        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
+        NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, RewardNodeProviders,
+    },
     proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
@@ -72,17 +70,18 @@ use ic_nns_governance::{
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_protobuf::registry::firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet};
-use ic_protobuf::registry::hostos_version::v1::HostOsVersionRecord;
-use ic_protobuf::registry::node_rewards::v2::{
-    NodeRewardRate, UpdateNodeRewardsTableProposalPayload,
+use ic_nns_test_utils::{
+    governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal},
+    ids::TEST_NEURON_1_ID,
 };
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
+    firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
+    hostos_version::v1::HostOsVersionRecord,
     node::v1::NodeRecord,
     node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
+    node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::{CanisterMigrations, RoutingTable},
@@ -128,44 +127,45 @@ use ic_types::{
 use itertools::izip;
 use maplit::hashmap;
 use prost::Message;
-use registry_canister::mutations::common::decode_registry_value;
-use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
-use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
-use registry_canister::mutations::do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload;
-use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
-use registry_canister::mutations::firewall::{
-    add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
-    remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
-    AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
-};
-use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use registry_canister::mutations::{
+    common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
-    do_add_hostos_version::AddHostOsVersionPayload, do_add_node_operator::AddNodeOperatorPayload,
+    do_add_hostos_version::AddHostOsVersionPayload,
+    do_add_node_operator::AddNodeOperatorPayload,
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_bless_replica_version::BlessReplicaVersionPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::CreateSubnetPayload, do_recover_subnet::RecoverSubnetPayload,
+    do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+    do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_retire_replica_version::RetireReplicaVersionPayload,
+    do_set_firewall_config::SetFirewallConfigPayload,
+    do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_nodes_hostos_version::UpdateNodesHostOsVersionPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
+    do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
+    firewall::{
+        add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
+        remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
+        AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+    },
+    node_management::do_remove_nodes::RemoveNodesPayload,
     prepare_canister_migration::PrepareCanisterMigrationPayload,
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
-use std::fmt::Debug;
-use std::sync::Arc;
 use std::{
+    collections::{BTreeMap, HashSet},
     convert::TryFrom,
+    fmt::Debug,
     fs::{metadata, read_to_string, File},
     io::Read,
     path::{Path, PathBuf},
     process::exit,
     str::FromStr,
+    sync::Arc,
     time::SystemTime,
 };
 use types::{ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord};
@@ -338,6 +338,8 @@ enum SubCommand {
     ProposeToUpdateSubnet(ProposeToUpdateSubnetCmd),
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
+    /// Submits a proposal to uninstall and install root to a particular version
+    ProposeToHardResetNnsRootToVersion(ProposeToHardResetNnsRootToVersionCmd),
     /// Submits a proposal to remove the blessing of replica versions
     ProposeToRetireReplicaVersion(ProposeToRetireReplicaVersionCmd),
     /// Submits a proposal to uninstall code of a canister.
@@ -2012,8 +2014,8 @@ struct ProposeToChangeNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> UpgradeRootProposalPayload {
+impl ProposalPayload<UpgradeRootProposal> for ProposeToChangeNnsCanisterCmd {
+    async fn payload(&self, _: Url) -> UpgradeRootProposal {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -2025,7 +2027,7 @@ impl ProposalPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsCanisterC
             .as_ref()
             .map_or(vec![], |path| read_file_fully(path));
         let stop_upgrade_start = !self.skip_stopping_before_installing;
-        UpgradeRootProposalPayload {
+        UpgradeRootProposal {
             wasm_module,
             module_arg,
             stop_upgrade_start,
@@ -2068,6 +2070,58 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
             query_allocation: self.query_allocation.map(candid::Nat::from),
             authz_changes: vec![],
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to upgrade an NNS canister.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToHardResetNnsRootToVersionCmd {
+    #[clap(long)]
+    /// The file system path to the new wasm module to ship.
+    pub wasm_module_path: Option<PathBuf>,
+
+    #[clap(long)]
+    /// The URL of the new wasm module to ship.
+    wasm_module_url: Option<Url>,
+
+    #[clap(long, required = true)]
+    /// The sha256 of the new wasm module to ship.
+    wasm_module_sha256: String,
+
+    #[clap(long)]
+    /// The path to a binary file containing the initialization args of the canister.
+    init_arg: Option<PathBuf>,
+}
+impl ProposalTitle for ProposeToHardResetNnsRootToVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Hard reset NNS root to wasm with hash: {}",
+                &self.wasm_module_sha256
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<HardResetNnsRootToVersionPayload> for ProposeToHardResetNnsRootToVersionCmd {
+    async fn payload(&self, _: Url) -> HardResetNnsRootToVersionPayload {
+        let wasm_module = read_wasm_module(
+            &self.wasm_module_path,
+            &self.wasm_module_url,
+            &self.wasm_module_sha256,
+        )
+        .await;
+        let init_arg = self
+            .init_arg
+            .as_ref()
+            .map_or(vec![], |path| read_file_fully(path));
+        HardResetNnsRootToVersionPayload {
+            wasm_module,
+            init_arg,
         }
     }
 }
@@ -4246,6 +4300,7 @@ async fn main() {
             SubCommand::ProposeToRemoveNodesFromSubnet(_) => (),
             SubCommand::ProposeToChangeSubnetMembership(_) => (),
             SubCommand::ProposeToChangeNnsCanister(_) => (),
+            SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToAddNnsCanister(_) => (),
             SubCommand::ProposeToBlessReplicaVersion(_) => (),
@@ -4740,7 +4795,7 @@ async fn main() {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
-                    UpgradeRootProposalPayload,
+                    UpgradeRootProposal,
                     ProposeToChangeNnsCanisterCmd,
                 >(
                     cmd,
@@ -4771,6 +4826,24 @@ async fn main() {
                 )
                 .await;
             }
+        }
+        SubCommand::ProposeToHardResetNnsRootToVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command::<
+                HardResetNnsRootToVersionPayload,
+                ProposeToHardResetNnsRootToVersionCmd,
+            >(
+                cmd,
+                NnsFunction::HardResetNnsRootToVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
         }
         SubCommand::ProposeToUninstallCode(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -6150,34 +6223,6 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
             PublicKey::decode(&bytes[..]).expect("Error decoding PublicKey from registry")
         }
         Err(error) => panic!("Error getting value from registry: {:?}", error),
-    }
-}
-
-/// The proposal payload to upgrade the root canister.
-///
-/// The "authoritative" data structure is the one defined in `lifeline.mo` and
-/// this should stay in sync with it
-#[derive(CandidType, Serialize)]
-pub struct UpgradeRootProposalPayload {
-    pub wasm_module: Vec<u8>,
-    pub module_arg: Vec<u8>,
-    pub stop_upgrade_start: bool,
-}
-
-impl std::fmt::Debug for UpgradeRootProposalPayload {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut wasm_sha = Sha256::new();
-        wasm_sha.write(&self.wasm_module);
-        let wasm_sha = wasm_sha.finish();
-        let mut arg_sha = Sha256::new();
-        arg_sha.write(&self.module_arg);
-        let arg_sha = arg_sha.finish();
-
-        f.debug_struct("UpgradeRootProposalPayload")
-            .field("stop_upgrade_start", &self.stop_upgrade_start)
-            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
-            .field("module_arg_sha256", &format!("{:x?}", arg_sha))
-            .finish()
     }
 }
 
