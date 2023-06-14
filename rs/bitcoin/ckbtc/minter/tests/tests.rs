@@ -1271,3 +1271,61 @@ fn test_get_logs() {
     // Test that the endpoint does not trap.
     let _log = ckbtc.get_logs();
 }
+
+#[test]
+fn test_taproot_transaction_finalization() {
+    let ckbtc = CkBtcSetup::new();
+
+    // Step 1: deposit ckBTC
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: (1..=32).collect::<Vec<u8>>(),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+
+    ckbtc.deposit_utxo(user, utxo);
+
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+
+    // Step 2: request a withdrawal
+
+    let withdrawal_amount = 50_000_000;
+    let withdrawal_account = ckbtc.withdrawal_account(user.into());
+    ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc(
+            "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0".to_string(),
+            withdrawal_amount,
+        )
+        .expect("retrieve_btc failed");
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    // Step 3: wait for the transaction to be submitted
+
+    let txid = ckbtc.await_btc_transaction(block_index, 10);
+    let mempool = ckbtc.mempool();
+    assert_eq!(
+        mempool.len(),
+        1,
+        "ckbtc transaction did not appear in the mempool"
+    );
+    let tx = mempool
+        .get(&txid)
+        .expect("the mempool does not contain the withdrawal transaction");
+
+    assert_eq!(2, tx.output.len());
+
+    // Step 4: confirm the transaction
+
+    ckbtc.finalize_transaction(tx);
+    assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+}

@@ -1,6 +1,7 @@
 //! Utilities to derive, display, and parse bitcoin addresses.
 
 use crate::ECDSAPublicKey;
+use bech32::Variant;
 use ic_btc_interface::Network;
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath, ExtendedBip32DerivationOutput};
 use ic_crypto_sha::Sha256;
@@ -20,6 +21,10 @@ pub enum BitcoinAddress {
     /// See BIP-173.
     #[serde(rename = "p2wpkh_v0")]
     P2wpkhV0([u8; 20]),
+    /// Pay to taproot address.
+    /// See BIP-341.
+    #[serde(rename = "p2tr")]
+    P2tr([u8; 32]),
     /// Pay to public key hash address.
     #[serde(rename = "p2pkh")]
     P2pkh([u8; 20]),
@@ -47,6 +52,7 @@ impl BitcoinAddress {
                 },
                 script_hash,
             ),
+            Self::P2tr(pkhash) => network_and_pkhash_to_p2tr(network, pkhash),
         }
     }
 
@@ -137,6 +143,22 @@ pub fn network_and_pkhash_to_p2wpkh(network: Network, pkhash: &[u8; 20]) -> Stri
     bech32::encode(hrp, data, bech32::Variant::Bech32).unwrap()
 }
 
+pub fn network_and_pkhash_to_p2tr(network: Network, pkhash: &[u8; 32]) -> String {
+    use bech32::u5;
+
+    let witness_version: u5 = u5::try_from_u8(1).unwrap();
+    let data: Vec<u5> = std::iter::once(witness_version)
+        .chain(
+            bech32::convert_bits(&pkhash[..], 8, 5, true)
+                .unwrap()
+                .into_iter()
+                .map(|b| u5::try_from_u8(b).unwrap()),
+        )
+        .collect();
+    let hrp = hrp(network);
+    bech32::encode(hrp, data, bech32::Variant::Bech32).unwrap()
+}
+
 pub fn version_and_hash_to_address(version: u8, hash: &[u8; 20]) -> String {
     let mut buf = Vec::with_capacity(25);
     buf.push(version);
@@ -169,6 +191,7 @@ pub fn hrp(network: Network) -> &'static str {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ParseAddressError {
+    InvalidBech32Variant { expected: Variant, found: Variant },
     UnsupportedAddressType,
     WrongNetwork { expected: Network, actual: Network },
     MalformedAddress(String),
@@ -202,6 +225,11 @@ impl fmt::Display for ParseAddressError {
                 )
             }
             Self::NoData => write!(fmt, "the address contains no data"),
+            Self::InvalidBech32Variant { expected, found } => write!(
+                fmt,
+                "invalied bech32 variant, expected: {:?}, found: {:?}",
+                expected, found
+            ),
         }
     }
 }
@@ -287,7 +315,7 @@ fn parse_bip173_address(
     address: &str,
     network: Network,
 ) -> Result<BitcoinAddress, ParseAddressError> {
-    let (found_hrp, five_bit_groups, _) =
+    let (found_hrp, five_bit_groups, variant) =
         bech32::decode(address).map_err(|e| ParseAddressError::MalformedAddress(e.to_string()))?;
     let expected_hrp = hrp(network);
 
@@ -304,36 +332,75 @@ fn parse_bip173_address(
 
     let witness_version = five_bit_groups[0].to_u8();
 
-    if witness_version != 0 {
-        return Err(ParseAddressError::UnsupportedWitnessVersion(
+    match witness_version {
+        0 => {
+            if variant != bech32::Variant::Bech32 {
+                return Err(ParseAddressError::InvalidBech32Variant {
+                    expected: bech32::Variant::Bech32,
+                    found: variant,
+                });
+            }
+
+            let data = bech32::convert_bits(
+                &five_bit_groups[1..],
+                /*from=*/ 5,
+                /*to=*/ 8,
+                /*pad=*/ false,
+            )
+            .map_err(|e| {
+                ParseAddressError::MalformedAddress(format!(
+                    "failed to decode witness from address {}: {}",
+                    address, e
+                ))
+            })?;
+
+            if data.len() != 20 {
+                return Err(ParseAddressError::BadWitnessLength {
+                    expected: 20,
+                    actual: data.len(),
+                });
+            }
+
+            let mut pkhash = [0u8; 20];
+            pkhash[..].copy_from_slice(&data[..]);
+
+            Ok(BitcoinAddress::P2wpkhV0(pkhash))
+        }
+        1 => {
+            if variant != bech32::Variant::Bech32m {
+                return Err(ParseAddressError::InvalidBech32Variant {
+                    expected: bech32::Variant::Bech32m,
+                    found: variant,
+                });
+            }
+            let data = bech32::convert_bits(
+                &five_bit_groups[1..],
+                /*from=*/ 5,
+                /*to=*/ 8,
+                /*pad=*/ false,
+            )
+            .map_err(|e| {
+                ParseAddressError::MalformedAddress(format!(
+                    "failed to decode witness from address {}: {}",
+                    address, e
+                ))
+            })?;
+
+            if data.len() != 32 {
+                return Err(ParseAddressError::BadWitnessLength {
+                    expected: 32,
+                    actual: data.len(),
+                });
+            }
+            let mut pkhash = [0u8; 32];
+            pkhash[..].copy_from_slice(&data[..]);
+
+            Ok(BitcoinAddress::P2tr(pkhash))
+        }
+        _ => Err(ParseAddressError::UnsupportedWitnessVersion(
             witness_version,
-        ));
+        )),
     }
-
-    let data = bech32::convert_bits(
-        &five_bit_groups[1..],
-        /*from=*/ 5,
-        /*to=*/ 8,
-        /*pad=*/ false,
-    )
-    .map_err(|e| {
-        ParseAddressError::MalformedAddress(format!(
-            "failed to decode witness from address {}: {}",
-            address, e
-        ))
-    })?;
-
-    if data.len() != 20 {
-        return Err(ParseAddressError::BadWitnessLength {
-            expected: 20,
-            actual: data.len(),
-        });
-    }
-
-    let mut pkhash = [0u8; 20];
-    pkhash[..].copy_from_slice(&data[..]);
-
-    Ok(BitcoinAddress::P2wpkhV0(pkhash))
 }
 
 #[cfg(test)]
@@ -359,6 +426,11 @@ mod tests {
 
     #[test]
     fn test_check_address() {
+        use crate::address::ParseAddressError::BadWitnessLength;
+        use bitcoin::util::address::Payload;
+        use bitcoin::Address;
+        use std::str::FromStr;
+
         assert_eq!(
             Ok(BitcoinAddress::P2wpkhV0([
                 117, 30, 118, 232, 25, 145, 150, 212, 84, 148, 28, 69, 209, 179, 163, 35, 241, 67,
@@ -380,17 +452,73 @@ mod tests {
             )
         );
 
+        // The following addresses can be found here:
+        // https://github.com/bitcoin/bips/blob/master/bip-0341/wallet-test-vectors.json
+        let taproot_addresses = [
+            "bc1p2wsldez5mud2yam29q22wgfh9439spgduvct83k3pm50fcxa5dps59h4z5",
+            "bc1pz37fc4cn9ah8anwm4xqqhvxygjf9rjf2resrw8h8w4tmvcs0863sa2e586",
+            "bc1punvppl2stp38f7kwv2u2spltjuvuaayuqsthe34hd2dyy5w4g58qqfuag5",
+            "bc1pwyjywgrd0ffr3tx8laflh6228dj98xkjj8rum0zfpd6h0e930h6saqxrrm",
+            "bc1pwl3s54fzmk0cjnpl3w9af39je7pv5ldg504x5guk2hpecpg2kgsqaqstjq",
+            "bc1pjxmy65eywgafs5tsunw95ruycpqcqnev6ynxp7jaasylcgtcxczs6n332e",
+        ];
+
+        for taproot_address in taproot_addresses {
+            let expected_taproot_pkhash = match Address::from_str(taproot_address).unwrap().payload
+            {
+                Payload::WitnessProgram { program, .. } => program,
+                _ => panic!("expected taproot address"),
+            };
+            let expected_taproot_pkhash = expected_taproot_pkhash.try_into().unwrap();
+            assert_eq!(
+                Ok(BitcoinAddress::P2tr(expected_taproot_pkhash)),
+                BitcoinAddress::parse(taproot_address, Network::Mainnet)
+            );
+        }
+
+        // The following addresses can be found here:
+        // https://en.bitcoin.it/wiki/BIP_0350
+        let invalid_taproot_addresses = [
+            "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqh2y7hd",
+            "bc1p38j9r5y49hruaue7wxjce0updqjuyyx0kh56v8s25huc6995vvpql3jow4",
+            "bc1pw5dgrnzv",
+            "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7v8n0nx0muaewav253zgeav",
+            "bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7v07qwwzcrf",
+        ];
+
+        for invalid_taproot_address in invalid_taproot_addresses {
+            assert!(BitcoinAddress::parse(invalid_taproot_address, Network::Mainnet).is_err());
+        }
+
+        assert_eq!(
+            Err(BadWitnessLength {
+                expected: 32,
+                actual: 40
+            }),
+            BitcoinAddress::parse(
+                "bc1pw508d6qejxtdg4y5r3zarvary0c5xw7kw508d6qejxtdg4y5r3zarvary0c5xw7kt5nd6y",
+                Network::Mainnet
+            )
+        );
+
         // Invalid checksum.
         BitcoinAddress::parse(
             "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t5",
             Network::Mainnet,
         )
         .unwrap_err();
+        // Invalid checksum
+        // https://docs.rs/bitcoin/latest/src/bitcoin/address.rs.html#1417
+        BitcoinAddress::parse(
+            "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kemeawh",
+            Network::Mainnet,
+        )
+        .unwrap_err();
 
         assert_eq!(
-            ParseAddressError::UnsupportedWitnessVersion(1),
+            ParseAddressError::UnsupportedWitnessVersion(2),
             BitcoinAddress::parse(
-                &generate_address(Some(1), &[0u8; 20], Network::Mainnet),
+                &generate_address(Some(2), &[0u8; 20], Network::Mainnet),
                 Network::Mainnet,
             )
             .unwrap_err()

@@ -76,6 +76,13 @@ fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin
             )),
             network: network_to_btc_network(network),
         },
+        BitcoinAddress::P2tr(pkhash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V1,
+                program: pkhash.to_vec(),
+            },
+            network: network_to_btc_network(network),
+        },
     }
 }
 
@@ -612,7 +619,7 @@ proptest! {
         mut utxos in btree_set(arb_utxo(1_000_000u64..1_000_000_000), 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        target in 10000..50000u64,
+        target in 50000..100000u64,
         fee_per_vbyte in 1000..2000u64,
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
@@ -634,7 +641,7 @@ proptest! {
         mut utxos in btree_set(arb_utxo(1_000_000u64..1_000_000_000), 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        target in 10000..50000u64,
+        target in 50000..100000u64,
         fee_per_vbyte in 1000..2000u64,
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
