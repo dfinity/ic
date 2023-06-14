@@ -19,11 +19,6 @@ pub struct Config {
     /// The path to write the listening port to
     pub port_file_path: Option<PathBuf>,
 
-    /// The endpoint can serve from at most 'max_tcp_connections'
-    /// simultaneous TCP connections. If the limit is reached and a new
-    /// TCP connection arrives, it is accepted and dropped immediately.
-    pub max_tcp_connections: usize,
-
     /// If no bytes are read from a connection for the duration of
     /// 'connection_read_timeout_seconds', then the connection is dropped.
     /// There is no point is setting a timeout on the write bytes since
@@ -79,7 +74,6 @@ impl Default for Config {
                 DEFAULT_PORT,
             ),
             port_file_path: None,
-            max_tcp_connections: 20_000,
             connection_read_timeout_seconds: 1_200, // 20 min
             request_timeout_seconds: 300,           // 5 min
             http_max_concurrent_streams: 256,

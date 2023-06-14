@@ -8,7 +8,7 @@ use crate::common::{
     create_conn_and_send_request, get_free_localhost_socket_addr, start_http_endpoint,
     wait_for_status_healthy,
 };
-use hyper::{client::conn::handshake, Body, Client, Method, Request, StatusCode};
+use hyper::{Body, Client, Method, Request, StatusCode};
 use ic_agent::{
     agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, UpdateBuilder},
     agent_error::HttpErrorPayload,
@@ -38,7 +38,6 @@ use std::sync::{
     Arc,
 };
 use tokio::{
-    net::TcpStream,
     runtime::Runtime,
     time::{sleep, Duration},
 };
@@ -392,49 +391,6 @@ fn test_unathorized_call() {
     });
 }
 
-/// Once we have reached the number of outstanding connection, new connections should be refused.
-#[tokio::test]
-async fn test_max_tcp_connections() {
-    let rt_handle = tokio::runtime::Handle::current();
-    let addr = get_free_localhost_socket_addr();
-    let config = Config {
-        listen_addr: addr,
-        max_tcp_connections: 50,
-        ..Default::default()
-    };
-
-    let mock_state_manager = basic_state_manager_mock();
-    let mock_consensus_cache = basic_consensus_pool_cache();
-    let mock_registry_client = basic_registry_client();
-
-    // Start server
-    start_http_endpoint(
-        rt_handle.clone(),
-        config.clone(),
-        Arc::new(mock_state_manager),
-        Arc::new(mock_consensus_cache),
-        Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
-    );
-
-    // Create max connections and store to prevent connections from being closed
-    let mut senders = vec![];
-    for _i in 0..config.max_tcp_connections {
-        let (request_sender, status_code) = create_conn_and_send_request(addr).await;
-        senders.push(request_sender);
-        assert!(status_code == StatusCode::OK);
-    }
-
-    // Expect additional connection to trigger error
-    let target_stream = TcpStream::connect(addr)
-        .await
-        .expect("tcp connection to server address failed");
-    let (_request_sender, connection) = handshake(target_stream)
-        .await
-        .expect("tcp client handshake failed");
-    assert!(connection.await.err().unwrap().is_incomplete_message());
-}
-
 /// Once no bytes are read for the duration of 'connection_read_timeout_seconds', then
 /// the connection is dropped.
 #[tokio::test]
@@ -443,7 +399,6 @@ async fn test_connection_read_timeout() {
     let addr = get_free_localhost_socket_addr();
     let config = Config {
         listen_addr: addr,
-        max_tcp_connections: 50,
         connection_read_timeout_seconds: 2,
         ..Default::default()
     };
