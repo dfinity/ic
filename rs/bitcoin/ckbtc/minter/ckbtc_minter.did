@@ -191,6 +191,7 @@ type BitcoinAddress = variant {
     p2wpkh_v0 : blob;
     p2pkh : blob;
     p2sh : blob;
+    p2tr : blob;
 };
 
 type MinterInfo = record {

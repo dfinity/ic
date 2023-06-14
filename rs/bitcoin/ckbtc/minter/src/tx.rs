@@ -26,6 +26,7 @@ pub const SIGHASH_ALL: u32 = 1;
 /// Bitcoin script opcodes.
 mod ops {
     pub const PUSH_20: u8 = 0x14;
+    pub const PUSH_32: u8 = 0x20;
     pub const DUP: u8 = 0x76;
     pub const HASH160: u8 = 0xa9;
     pub const EQUAL: u8 = 0x87;
@@ -243,6 +244,7 @@ pub fn encode_address_scipt_pubkey(btc_address: &BitcoinAddress, buf: &mut impl 
         BitcoinAddress::P2wpkhV0(pkhash) => encode_p2wpkh_script_pubkey(pkhash, buf),
         BitcoinAddress::P2pkh(pkhash) => encode_sighash_script_code(pkhash, buf),
         BitcoinAddress::P2sh(pkhash) => encode_p2sh_script_code(pkhash, buf),
+        BitcoinAddress::P2tr(pkash) => encode_p2tr_script_pubkey(pkash, buf),
     }
 }
 
@@ -496,6 +498,11 @@ fn encode_p2wpkh_script_pubkey(pkhash: &[u8; 20], buf: &mut impl Buffer) {
     //    scriptPubKey: 0 <20-byte-key-hash>
     //                 (0x0014{20-byte-key-hash})
     buf.write(&[22, 0, ops::PUSH_20]);
+    buf.write(&pkhash[..]);
+}
+
+fn encode_p2tr_script_pubkey(pkhash: &[u8; 32], buf: &mut impl Buffer) {
+    buf.write(&[34, 1, ops::PUSH_32]);
     buf.write(&pkhash[..]);
 }
 
