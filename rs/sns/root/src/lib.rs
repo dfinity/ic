@@ -161,7 +161,7 @@ pub struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug, candid::CandidType, candid::Deserialize)]
 pub struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,
     pub governance: Option<CanisterSummary>,
@@ -202,7 +202,7 @@ impl GetSnsCanistersSummaryResponse {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
+#[derive(PartialEq, Eq, Clone, Debug, candid::CandidType, candid::Deserialize)]
 pub struct CanisterSummary {
     pub canister_id: Option<PrincipalId>,
     pub status: Option<CanisterStatusResultV2>,

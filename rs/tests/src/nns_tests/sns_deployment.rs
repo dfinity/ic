@@ -20,21 +20,20 @@ use crate::driver::test_env_api::{
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome};
-use crate::sns_client::oc_sns_init_payload;
+use crate::sns_client::openchat_create_service_nervous_system_proposal;
 use candid::{Nat, Principal};
 use ic_agent::{Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
+use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
 
-use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
-use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower, SnsInitPayload};
+use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_swap::pb::v1::{
-    new_sale_ticket_response, params::NeuronBasketConstructionParameters, DerivedState,
-    FinalizeSwapResponse, GetStateResponse, Lifecycle, Params,
+    new_sale_ticket_response, DerivedState, FinalizeSwapResponse, GetStateResponse, Lifecycle,
 };
 use ic_sns_swap::swap::principal_to_subaccount;
 use ic_types::Height;
@@ -47,10 +46,7 @@ use slog::info;
 use tokio::runtime::Builder;
 
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::sns_client::{
-    two_days_from_now_in_secs, SnsClient, SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
-    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
-};
+use crate::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
 use crate::util::{assert_create_agent_with_identity, block_on};
 
 use crate::driver::ic::{
@@ -270,34 +266,72 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
 ///
 /// The NNS will be initialized with only the "test" neurons.
 /// (See [`ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder::with_test_neurons`].)
-pub fn setup_with_oc_init_payload(
+pub fn setup_with_oc_parameters(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
-    let sns_init_payload = oc_sns_init_payload();
-    setup(
+    setup_legacy(
         env,
         sale_participants,
         vec![], // no neurons
-        sns_init_payload,
+        openchat_create_service_nervous_system_proposal(),
         canister_wasm_strategy,
         fast_test_setup,
     );
 }
 
+/// Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
 pub fn setup(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
     neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
-    sns_init_payload: SnsInitPayload,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
+    setup_ic(&env, fast_test_setup);
+
+    install_nns(&env, canister_wasm_strategy, sale_participants, neurons);
+
+    // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
+    install_sns(
+        &env,
+        canister_wasm_strategy,
+        create_service_nervous_system_proposal,
+    );
+}
+
+///  Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
+pub fn setup_legacy(
+    env: TestEnv,
+    sale_participants: Vec<SaleParticipant>,
+    neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    fast_test_setup: bool,
+) {
+    setup_ic(&env, fast_test_setup);
+
+    install_nns(&env, canister_wasm_strategy, sale_participants, neurons);
+
+    // Install the SNS with an "OC-ish" init payload (generated from an "OC-ish"
+    // CreateServiceNervousSystem proposal)
+    install_sns_legacy(
+        &env,
+        canister_wasm_strategy,
+        create_service_nervous_system_proposal,
+    );
+}
+
+/// Sets up and starts the IC, and creates two subnets (one system subnet and
+/// one application subnet). If `fast_test_setup` is false, also sets up
+/// Prometheus.
+fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
     if !fast_test_setup {
         PrometheusVm::default()
-            .start(&env)
+            .start(env)
             .expect("failed to start prometheus VM");
     }
 
@@ -321,39 +355,17 @@ pub fn setup(
                 boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
             });
     }
-    ic.setup_and_start(&env)
+    ic.setup_and_start(env)
         .expect("failed to setup IC under test");
 
     if !fast_test_setup {
         env.sync_prometheus_config_with_topology();
     }
-
-    // Set up the initial ICP ledger
-    let mut ledger_balances = HashMap::new();
-    for participant in sale_participants {
-        if participant.starting_sns_balance.get_e8s() > 0 {
-            let account_identifier = participant.sns_account_identifier();
-            ledger_balances.insert(account_identifier, participant.starting_sns_balance);
-        }
-        if participant.starting_icp_balance.get_e8s() > 0 {
-            let account_identifier = participant.icp_account_identifier();
-            ledger_balances.insert(account_identifier, participant.starting_icp_balance);
-        }
-    }
-    let nns_customizations = NnsCustomizations {
-        ledger_balances: Some(ledger_balances),
-        neurons: Some(neurons),
-    };
-
-    // Install NNS with ledger customizations
-    install_nns(&env, canister_wasm_strategy, nns_customizations);
-
-    // Install the SNS with an "OC-ish" init payload
-    install_sns(&env, canister_wasm_strategy, sns_init_payload);
 }
 
+/// Sets up an SNS using "openchat-ish" parameters.
 pub fn sns_setup(env: TestEnv) {
-    setup_with_oc_init_payload(
+    setup_with_oc_parameters(
         env,
         vec![],
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -361,8 +373,9 @@ pub fn sns_setup(env: TestEnv) {
     );
 }
 
+/// Sets up an SNS using "openchat-ish" parameters, with the "fast" configuration.
 pub fn sns_setup_fast(env: TestEnv) {
-    setup_with_oc_init_payload(
+    setup_with_oc_parameters(
         env,
         vec![],
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -401,7 +414,7 @@ fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: boo
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup_with_oc_init_payload(
+    setup_with_oc_parameters(
         env,
         participants,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -434,7 +447,7 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup_with_oc_init_payload(
+    setup_with_oc_parameters(
         env,
         participants,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -531,14 +544,35 @@ pub fn check_all_participants(env: TestEnv) {
 pub fn install_nns(
     env: &TestEnv,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
-    customizations: NnsCustomizations,
+    sale_participants: Vec<SaleParticipant>,
+    neurons: Vec<ic_nns_governance::pb::v1::Neuron>,
 ) {
     let log = env.logger();
     let start_time = Instant::now();
+
+    let ledger_balances = {
+        let mut ledger_balances = HashMap::new();
+        for participant in sale_participants {
+            if participant.starting_sns_balance.get_e8s() > 0 {
+                let account_identifier = participant.sns_account_identifier();
+                ledger_balances.insert(account_identifier, participant.starting_sns_balance);
+            }
+            if participant.starting_icp_balance.get_e8s() > 0 {
+                let account_identifier = participant.icp_account_identifier();
+                ledger_balances.insert(account_identifier, participant.starting_icp_balance);
+            }
+        }
+        ledger_balances
+    };
+    let nns_customizations = NnsCustomizations {
+        ledger_balances: Some(ledger_balances),
+        neurons: Some(neurons),
+    };
+
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         canister_wasm_strategy,
-        customizations,
+        nns_customizations,
     );
     info!(
         log,
@@ -547,14 +581,19 @@ pub fn install_nns(
     );
 }
 
+/// Installs the SNS using the one-proposal flow.
 pub fn install_sns(
     env: &TestEnv,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
-    init: SnsInitPayload,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
 ) {
     let log = env.logger();
     let start_time = Instant::now();
-    let sns_client = SnsClient::install_sns_and_check_healthy(env, canister_wasm_strategy, init);
+    let sns_client = SnsClient::install_sns_and_check_healthy(
+        env,
+        canister_wasm_strategy,
+        create_service_nervous_system_proposal,
+    );
     {
         let observed = sns_client.sns_canisters.swap().get();
         let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
@@ -566,7 +605,38 @@ pub fn install_sns(
     }
     info!(
         log,
-        "========== The SNS has been installed successfully in {:?} ===========",
+        "========== The SNS has been installed successfully in {:?} ===========\n\
+        (Installation was performed using the one-proposal flow.)",
+        start_time.elapsed()
+    );
+}
+
+/// Installs the SNS using the legacy, non-one-proposal flow.
+pub fn install_sns_legacy(
+    env: &TestEnv,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+) {
+    let log = env.logger();
+    let start_time = Instant::now();
+    let sns_client = SnsClient::install_sns_legacy_and_check_healthy(
+        env,
+        canister_wasm_strategy,
+        create_service_nervous_system_proposal,
+    );
+    {
+        let observed = sns_client.sns_canisters.swap().get();
+        let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
+            .expect("cannot parse PrincipalId of the SNS sale (a.k.a. swap) canister");
+        assert_eq!(
+            observed, expected,
+            "SNS sale canister got unexpected PrincipalId {observed:?} (expected {expected:?}"
+        );
+    }
+    info!(
+        log,
+        "========== The SNS has been installed successfully in {:?} ===========\n\
+        (Installation was performed using the legacy, non-one-proposal flow.)",
         start_time.elapsed()
     );
 }
@@ -574,13 +644,21 @@ pub fn install_sns(
 /// Initiates a token swap using the given parameters. Specifically, it creates
 /// an OpenSnsTokenSwap proposal and executes it, then asserts that the SNS swap
 /// is open.
-pub fn initiate_token_swap(env: TestEnv, params: Params, community_fund_investment_e8s: u64) {
+pub fn initiate_token_swap(
+    env: TestEnv,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+    community_fund_investment_e8s: u64,
+) {
     let log = env.logger();
     let start_time = Instant::now();
 
     let sns_client = SnsClient::read_attribute(&env);
-    sns_client.initiate_token_swap(&env, params, community_fund_investment_e8s);
-    sns_client.assert_state(&env, Lifecycle::Open);
+    sns_client.initiate_token_swap_immediately(
+        &env,
+        create_service_nervous_system_proposal,
+        community_fund_investment_e8s,
+    );
+    block_on(sns_client.assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap));
     info!(
         log,
         "==== The SNS token sale has been initialized successfully in {:?} ====",
@@ -595,22 +673,12 @@ pub fn initiate_token_swap(env: TestEnv, params: Params, community_fund_investme
 /// This function should be the one used "by default" for most tests, to ensure
 /// that the tests are using realistic parameters.
 pub fn initiate_token_swap_with_oc_parameters(env: TestEnv) {
-    let params = Params {
-        min_participants: 100,
-        min_icp_e8s: 500_000 * E8,
-        max_icp_e8s: 1_000_000 * E8,
-        min_participant_icp_e8s: SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
-        max_participant_icp_e8s: SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
-        swap_due_timestamp_seconds: two_days_from_now_in_secs(),
-        sns_token_e8s: 25_000_000 * E8,
-        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-            count: 5,
-            dissolve_delay_interval_seconds: 7_889_400,
-        }),
-        sale_delay_seconds: None,
-    };
     let community_fund_investment_e8s = 333_333 * E8;
-    initiate_token_swap(env, params, community_fund_investment_e8s);
+    initiate_token_swap(
+        env,
+        openchat_create_service_nervous_system_proposal(),
+        community_fund_investment_e8s,
+    );
 }
 
 pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
@@ -1111,7 +1179,7 @@ pub fn generate_ticket_participants_workload(
 /// 3. Call sns.refresh_buyer_tokens
 /// 4. Call sns.get_buyer_state
 /// 5. Check that the ticket has been deleted via swap.get_open_ticket
-///    (This step may fail if the swap closes when sns.  is
+///    (This step may fail if the swap closes when sns.refresh_buyer_tokens is
 ///    called)
 async fn create_one_sale_participant(
     participant_name: String,
@@ -1274,8 +1342,7 @@ async fn create_one_sale_participant(
 pub async fn finalize_swap_and_check_success(
     env: TestEnv,
     expected_derived_swap_state: DerivedState,
-    swap_params: Params,
-    sns_init_payload: SnsInitPayload,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
 ) {
     let log = env.logger();
     info!(log, "Finalizing the swap");
@@ -1284,6 +1351,7 @@ pub async fn finalize_swap_and_check_success(
     let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
     let app_node = env.get_first_healthy_application_node_snapshot();
     let canister_agent = app_node.build_canister_agent().await;
+
     let finalize_swap_request = sns_request_provider.finalize_swap();
     let finalize_swap_response = canister_agent
         .call_and_parse(&finalize_swap_request)
@@ -1322,6 +1390,10 @@ pub async fn finalize_swap_and_check_success(
         Lifecycle::Committed
     );
     assert_eq!(derived_swap_state, expected_derived_swap_state);
+
+    sns_client
+        .assert_state(&env, Lifecycle::Committed, Mode::Normal)
+        .await;
 
     info!(
         log,
@@ -1367,21 +1439,24 @@ pub async fn finalize_swap_and_check_success(
         log,
         "Swap finalization check 3: Verify that the correct number of neurons were created"
     );
-    let InitialTokenDistribution::FractionalDeveloperVotingPower(FractionalDeveloperVotingPower {
-        developer_distribution: Some(developer_distribution),
-        airdrop_distribution: Some(airdrop_distribution),
-        ..
-    }) = sns_init_payload.initial_token_distribution.as_ref().unwrap() else {
-        panic!("Could not unwrap fields from provided SNS init payload: {sns_init_payload:#?}");
-    };
-    let initial_neuron_count =
-        developer_distribution.developer_neurons.len() + airdrop_distribution.airdrop_neurons.len();
+    let developer_distribution = create_service_nervous_system_proposal
+        .initial_token_distribution
+        .as_ref()
+        .unwrap()
+        .developer_distribution
+        .as_ref()
+        .unwrap();
 
-    let neuron_basket_construction_parameters =
-        swap_params.neuron_basket_construction_parameters.unwrap();
+    let initial_neuron_count = developer_distribution.developer_neurons.len();
+
+    let neuron_basket_construction_parameters = create_service_nervous_system_proposal
+        .swap_parameters
+        .unwrap()
+        .neuron_basket_construction_parameters
+        .unwrap();
     let created_neuron_count = (derived_swap_state.direct_participant_count.unwrap()
         + derived_swap_state.cf_neuron_count.unwrap())
-        * neuron_basket_construction_parameters.count;
+        * neuron_basket_construction_parameters.count.unwrap();
 
     let expected_neuron_count = initial_neuron_count as u64 + created_neuron_count;
     assert_eq!(neurons.len() as u64, expected_neuron_count);

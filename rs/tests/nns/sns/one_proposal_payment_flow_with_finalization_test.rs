@@ -82,13 +82,16 @@ fn nns_cf_neuron() -> Neuron {
         controller: Some(principal),
         dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
         not_for_profit: false,
-        joined_community_fund_timestamp_seconds: Some(1000), // should be a long time ago
+        // Join the community fund some time in the past.
+        // (It's unclear what the semantics should be if the neuron joins in the
+        // future.)
+        joined_community_fund_timestamp_seconds: Some(1000),
         ..Default::default()
     }
 }
 
-fn sns_setup_legacy(env: TestEnv) {
-    sns_deployment::setup_legacy(
+fn sns_setup_with_one_proposal(env: TestEnv) {
+    sns_deployment::setup(
         env,
         vec![],
         vec![nns_cf_neuron()],
@@ -97,6 +100,7 @@ fn sns_setup_legacy(env: TestEnv) {
         true,
     );
 }
+
 /// Initiate the token swap with the parameters returned by
 /// [`create_service_nervous_system_proposal`] (rather than the default
 /// parameters)
@@ -194,7 +198,7 @@ fn finalize_swap(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(15 * 60)) // 15 min
-        .with_setup(sns_setup_legacy)
+        .with_setup(sns_setup_with_one_proposal)
         .add_test(systest!(initiate_token_swap_with_custom_parameters))
         .add_test(systest!(
             generate_ticket_participants_workload_necessary_to_close_the_swap
