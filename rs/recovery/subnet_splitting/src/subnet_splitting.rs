@@ -1,7 +1,10 @@
-use crate::admin_helper::{
-    get_halt_subnet_at_cup_height_command, get_propose_to_complete_canister_migration_command,
-    get_propose_to_prepare_canister_migration_command,
-    get_propose_to_reroute_canister_ranges_command,
+use crate::{
+    admin_helper::{
+        get_halt_subnet_at_cup_height_command, get_propose_to_complete_canister_migration_command,
+        get_propose_to_prepare_canister_migration_command,
+        get_propose_to_reroute_canister_ranges_command,
+    },
+    steps::{CopyWorkDirStep, SplitStateStep, StateSplitStrategy},
 };
 
 use clap::Parser;
@@ -18,10 +21,10 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
 use serde::{Deserialize, Serialize};
 use slog::Logger;
-use std::{iter::Peekable, net::IpAddr, path::PathBuf};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
+use std::{iter::Peekable, net::IpAddr, path::PathBuf};
 const DESTINATION_WORK_DIR: &str = "destination_work_dir";
 
 #[derive(
@@ -129,6 +132,24 @@ impl SubnetSplitting {
             neuron_args,
             recovery,
             logger,
+        }
+    }
+
+    fn split_state_step(&self, target_subnet: TargetSubnet) -> SplitStateStep {
+        let state_split_strategy = match target_subnet {
+            TargetSubnet::Source => {
+                StateSplitStrategy::Drop(self.params.canister_id_ranges_to_move.clone())
+            }
+            TargetSubnet::Destination => {
+                StateSplitStrategy::Retain(self.params.canister_id_ranges_to_move.clone())
+            }
+        };
+
+        SplitStateStep {
+            subnet_id: self.subnet_id(target_subnet),
+            state_split_strategy,
+            work_dir: self.work_dir(target_subnet),
+            logger: self.recovery.logger.clone(),
         }
     }
 
@@ -261,9 +282,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 ));
             }
 
-            StepType::SplitOutSourceState => todo!(),
-            StepType::SplitOutDestinationState => todo!(),
-
             StepType::UploadStateToSourceSubnet => {
                 if self.params.upload_node_source.is_none() {
                     self.params.upload_node_source = read_optional(
@@ -336,10 +354,18 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     )
                     .into()
             }
+            StepType::CopyDir => CopyWorkDirStep {
+                from: self.work_dir(TargetSubnet::Source),
+                to: self.work_dir(TargetSubnet::Destination),
+                logger: self.recovery.logger.clone(),
+            }
+            .into(),
 
-            StepType::CopyDir => todo!(),
-            StepType::SplitOutSourceState => todo!(),
-            StepType::SplitOutDestinationState => todo!(),
+            StepType::SplitOutSourceState => self.split_state_step(TargetSubnet::Source).into(),
+            StepType::SplitOutDestinationState => {
+                self.split_state_step(TargetSubnet::Destination).into()
+            }
+
             StepType::ProposeCupForSourceSubnet => self.propose_cup(TargetSubnet::Source)?.into(),
             StepType::UploadStateToSourceSubnet => {
                 self.upload_and_restart_step(TargetSubnet::Source)?.into()

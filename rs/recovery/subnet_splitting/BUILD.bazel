@@ -22,7 +22,6 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/test_utilities",
 ]
 
 MACRO_DEPENDENCIES = [
