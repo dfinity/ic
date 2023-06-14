@@ -4448,7 +4448,6 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-config",
  "ic-crypto-internal-types",
- "ic-crypto-sha",
  "ic-crypto-utils-threshold-sig-der",
  "ic-http-utils",
  "ic-ic00-types",
@@ -4461,6 +4460,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-handler-lifeline-interface",
  "ic-nns-handler-root",
  "ic-nns-init",
  "ic-nns-test-utils",
@@ -8128,6 +8128,7 @@ name = "ic-nns-handler-lifeline-interface"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "ic-crypto-sha",
  "serde",
 ]
 
