@@ -1490,10 +1490,10 @@ where
 {
     fn value_as_u64(value: icrc_ledger_types::icrc::generic_value::Value) -> u64 {
         match value {
-            icrc_ledger_types::icrc::generic_value::Value::Nat(n) => {
-                n.0.to_u64().expect("Bloc index must be a u64")
+            icrc_ledger_types::icrc::generic_value::Value::Int(n) => {
+                n.0.to_u64().expect("Block index must be a u64")
             }
-            value => panic!("Expected Value::Nat but found {:?}", value),
+            value => panic!("Expected Value::Int but found {:?}", value),
         }
     }
 
@@ -1713,5 +1713,87 @@ where
             memo.len(),
             result
         ),
+    }
+}
+
+pub fn test_block_transformation<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+
+    // Setup ledger as it is deployed on the mainnet
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet,
+        encode_init_args,
+        vec![
+            (Account::from(p1.0), 10_000_000),
+            (Account::from(p2.0), 10_000_000),
+            (Account::from(p3.0), 10_000_000),
+        ],
+    );
+
+    transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p1.0, p3.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p3.0, p2.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p2.0, p1.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
+
+    // Fetch all blocks before the upgrade
+    let resp_pre_upgrade = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
+
+    // Now upgrade the ledger to the new canister wasm
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    // Default archive threshhold is 10 blocks so all blocks should be on the ledger directly
+    // Fetch all blocks after the upgrade
+    let resp_post_upgrade = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
+
+    // Make sure the same number of blocks were fetched before and after the upgrade
+    assert_eq!(
+        resp_pre_upgrade.blocks.len(),
+        resp_post_upgrade.blocks.len()
+    );
+
+    //Go through all blocks and make sure the blocks fetched before the upgrade are the same as after the upgrade
+    for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
+        .blocks
+        .into_iter()
+        .zip(resp_post_upgrade.blocks.into_iter())
+    {
+        assert_eq!(block_pre_upgrade, block_post_upgrade);
+        assert_eq!(
+            Block::try_from(block_pre_upgrade.clone()).unwrap(),
+            Block::try_from(block_post_upgrade.clone()).unwrap()
+        );
+        assert_eq!(
+            Block::try_from(block_pre_upgrade.clone()).unwrap().encode(),
+            Block::try_from(block_post_upgrade.clone())
+                .unwrap()
+                .encode()
+        );
+        assert_eq!(
+            Block::block_hash(&Block::try_from(block_pre_upgrade.clone()).unwrap().encode()),
+            Block::block_hash(
+                &Block::try_from(block_post_upgrade.clone())
+                    .unwrap()
+                    .encode()
+            )
+        );
+        assert_eq!(
+            Transaction::try_from(block_pre_upgrade.clone()).unwrap(),
+            Transaction::try_from(block_post_upgrade.clone()).unwrap()
+        );
     }
 }
