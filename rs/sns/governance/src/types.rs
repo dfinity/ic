@@ -1,33 +1,34 @@
 use crate::{
     governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     logs::{ERROR, INFO},
-    pb::v1::{
-        claim_swap_neurons_request::NeuronParameters,
-        claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
-        get_neuron_response,
-        governance::{
-            self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
-        },
-        governance_error::ErrorType,
-        manage_neuron, manage_neuron_response,
-        manage_neuron_response::StakeMaturityResponse,
-        manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
-        nervous_system_function::FunctionType,
-        neuron::Followees,
-        proposal::Action,
-        ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
-        DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
-        ManageNeuronResponse, Motion, NervousSystemFunction, NervousSystemParameters, Neuron,
-        NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-        RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-        UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
-    },
     pb::{
         sns_root_types::{
             set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
             SetDappControllersRequest,
         },
-        v1::DefaultFollowees,
+        v1::{
+            claim_swap_neurons_request::NeuronParameters,
+            claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+            get_neuron_response,
+            governance::{
+                self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
+            },
+            governance_error::ErrorType,
+            manage_neuron, manage_neuron_response,
+            manage_neuron_response::{
+                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+            },
+            nervous_system_function::FunctionType,
+            neuron::Followees,
+            proposal::Action,
+            ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
+            GovernanceError, ManageNeuronResponse, Motion, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+            NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+            VotingRewardsParameters,
+        },
     },
     proposal::ValidGenericNervousSystemFunction,
 };
@@ -36,7 +37,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha::Sha256;
 use ic_ic00_types::CanisterInstallModeError;
-use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
+use ic_ledger_core::tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
 use maplit::btreemap;
 use std::{
@@ -1977,9 +1978,11 @@ pub mod test_helpers {
     use super::*;
     use ic_crypto_sha::Sha256;
     use rand::{Rng, RngCore};
-    use std::borrow::BorrowMut;
-    use std::collections::HashMap;
-    use std::sync::{Arc, RwLock};
+    use std::{
+        borrow::BorrowMut,
+        collections::HashMap,
+        sync::{Arc, RwLock},
+    };
 
     type CanisterCallResult = Result<Vec<u8>, (Option<i32>, String)>;
 

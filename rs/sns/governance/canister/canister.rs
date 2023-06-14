@@ -33,6 +33,8 @@ use ic_nervous_system_common::{
 };
 use ic_nervous_system_root::canister_status::CanisterStatusResultV2;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+#[cfg(feature = "test")]
+use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     ledger::LedgerCanister,
@@ -50,9 +52,6 @@ use ic_sns_governance::{
     },
     types::{Environment, HeapGrowthPotential},
 };
-
-#[cfg(feature = "test")]
-use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
 
 /// Size of the buffer for stable memory reads and writes.
 ///

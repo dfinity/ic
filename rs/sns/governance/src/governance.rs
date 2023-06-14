@@ -1,4 +1,3 @@
-use crate::pb::v1::{FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse};
 use crate::{
     account_from_proto, account_to_proto,
     canister_control::{
@@ -40,7 +39,8 @@ use crate::{
             Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
             ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
             DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-            ExecuteGenericNervousSystemFunction, GetMaturityModulationRequest,
+            ExecuteGenericNervousSystemFunction, FailStuckUpgradeInProgressRequest,
+            FailStuckUpgradeInProgressResponse, GetMaturityModulationRequest,
             GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
             GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
@@ -5264,7 +5264,10 @@ mod tests {
     use futures::FutureExt;
     use ic_base_types::NumBytes;
     use ic_canister_client_sender::Sender;
-    use ic_ic00_types::CanisterIdRecord;
+    use ic_nervous_system_clients::{
+        canister_id_record::CanisterIdRecord,
+        canister_status::{CanisterStatusResultV2, CanisterStatusType},
+    };
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes,
         E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
@@ -5272,7 +5275,6 @@ mod tests {
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
     };
-    use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_sns_test_utils::itest_helpers::UserInfo;
@@ -6854,7 +6856,7 @@ mod tests {
                     Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
                     Ok(Encode!(&canister_status_for_test(
                         vec![],
-                        CanisterStatusType::Stopped
+                        CanisterStatusType::Stopped,
                     ))
                     .unwrap()),
                 );

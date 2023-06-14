@@ -20,8 +20,10 @@ use ic_nervous_system_common::i2d;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::fmt::Debug;
-use std::ops::{Add, Div, Mul, Range, RangeBounds, Sub};
+use std::{
+    fmt::Debug,
+    ops::{Add, Div, Mul, Range, RangeBounds, Sub},
+};
 
 lazy_static! {
     pub static ref SECONDS_PER_DAY: Decimal = Decimal::new(24 * 60 * 60, 0);
