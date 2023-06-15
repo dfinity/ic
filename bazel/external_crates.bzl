@@ -198,7 +198,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "0.4.0",
             ),
             "ic_bls12_381": crate.spec(
-                version = "^0.7.1",
+                version = "^0.8.0",
                 features = [
                     "alloc",
                     "experimental",

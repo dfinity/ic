@@ -5,6 +5,7 @@ use paste::paste;
 use rand::seq::IteratorRandom;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use sha2::{Digest, Sha256};
 
 fn scalar_test_encoding(scalar: Scalar, expected_value: &'static str) {
     assert_eq!(hex::encode(scalar.serialize()), expected_value);
@@ -423,6 +424,59 @@ fn test_pairing_bilinearity() {
         assert_eq!(mul_231.tag(), mul_gt.tag());
         assert_eq!(mul_312.tag(), mul_gt.tag());
         assert_eq!(mul_321.tag(), mul_gt.tag());
+    }
+}
+
+#[test]
+fn test_gt_tag_is_expected_value() {
+    fn hash_of_tag(g: &Gt) -> String {
+        let mut sha = Sha256::default();
+        sha.update(g.tag());
+        hex::encode(sha.finalize().as_slice())
+    }
+
+    // The SHA-256 of the encodings of g*1, g*2, g*3, ...
+    let expected = [
+        "300e47c99502f3af33ad2080847d528cabd90365a90ab98bc174565c27928591",
+        "067894e43096b5a855549fd6d19955d3922f402680ca82cb02ebc545f65779a7",
+        "aad5ac496dd4b1ea2a6353051e81950185d56882c75664792ab71164820d386d",
+        "557219d7adf954d8438411808e20ba5834c286e9a80e0d22e47a37c543282e6e",
+        "621f31153ec9fafd2d0547620f76b6d0c5935d3fe920ca27adcf6afa5501941c",
+        "e9e1a6e7029556364ca875f9582ebdf8dcc0db1c6f3312341292ebc0df17baa3",
+        "f93ac623ee1dc6d057070f8f19c069565fc60708431175d5053b88004106648a",
+        "c8a6cc7acc0b87a957fdb2d999108db57c71c53a81804dad951de9f34d6c1da4",
+        "0f650545765993b34996e5adf1ef3dd4c835e7b23926e15fd569ef07a36f5ab9",
+        "d446409bee1f57b697be2d71979ce6e57e54fa6cc9d7899304c0862f83bc95a8",
+        "9b526347ba5a9b440c22c164c1f62ab18ae1c32f63c42d6efa3819b53b21c37f",
+        "e44e2a3d236f34decd4d6a4f6f958dfdb98cdda8b0f8e2b7809609c2b0bf89b7",
+        "2c74b687d7f06e8ef3473463393b16128f4ec1c3e5b30aa1b297305717ef9984",
+        "789aad7bcc07c3053908a8de556ab1512cd3e3a89e9b23b63d383543235b7a11",
+        "140ff2aa98b9fc1e25900b1af0c74e242f603919b72910a52f3f6e41b6ce363e",
+        "2d7e7b7b420f6b01d0c0c822ba5dd03006f95529a702ebbd48f2c0bcb512871b",
+        "06a291618e610ea18dcc57202f6e917576997731e3b6e24db593aa9c0ed672d4",
+        "2a8c95c256fcfc3a5d003ec04d13366138421870b3b28c2dd3ed8ffa2f4a759a",
+        "12b826c18cda8414f0efb3a909fadde1909a11eb2de944837f9b0137efa1251a",
+        "3ee907fa77740c5631ed321c5b5a941af5592cf33efc1b3ee6c2674b21fc9194",
+        "37fc0038857c81a431bd361d6610441125353c8ce3b17484cf512626652bb456",
+        "ce79a21dbd31218b153b9c3e0e8fa9340bc36f92e3319aae88d3f0587b49dafa",
+        "14669f024da5757b913976dcf8b6eed5d2a35d5d5863ad5df7241cdaa33d4a44",
+        "d778f3e6645e45554ac27cb243b959427fa8786446065113ab76154a784d5d56",
+        "f7f098948e4bc9f31a5cd9a927f41a07bc225e3da130692acf99888d4a5ed606",
+        "ca027cc487f092de0e30fde26c2297f12bff759b9a59004df2dd737a84eb17df",
+        "0c683f5bc078cff9a1cdf4016bb5461e6b298a7ffb51e9fc7dde1e21b923ead8",
+        "71cb0152efdf758280de68aa539e69dbf46ec3d72a738339485a56350f41e8cc",
+        "06af9830dcab4047081894519019b04fecfb8395aff845ba96bc1e712606e636",
+        "6b638b23cbe45d4ea3d478cc1399ffecfe3f215f391d01610db26d1f2b39f356",
+        "739262709aa4c7b628d66e702836c1dc12d3df9a4e36cb3171f0d8eedf4ad0f4",
+        "a52e01b0c4776ed83790961c18264e1e1db3e275e176fa321c4e42e8010aedb8",
+        "c6bd4a052f1cbbf3eacc0ff28c0c62045fa8aca7ad1b83db1dd3a6bdbf322e6d",
+    ];
+
+    let mut g = Gt::identity();
+
+    for h in expected {
+        g += Gt::generator();
+        assert_eq!(hash_of_tag(&g), h);
     }
 }
 
