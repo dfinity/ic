@@ -4,9 +4,14 @@ use crate::{
     CanisterIdRecord,
 };
 use async_trait::async_trait;
+use candid::Encode;
+use ic_ic00_types::IC_00;
+use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use std::{
+    cell::RefCell,
     collections::VecDeque,
     sync::{Arc, Mutex},
+    thread::LocalKey,
 };
 
 /// The management (virtual) canister trait, also known as IC_00.
@@ -28,12 +33,19 @@ pub trait ManagementCanisterClient {
 }
 
 /// An example implementation of the ManagementCanisterClient trait.
-#[derive(Default)]
-pub struct ProdManagementCanisterClient {}
+pub struct ProdManagementCanisterClient {
+    proxied_canister_calls_tracker: Option<&'static LocalKey<RefCell<ProxiedCanisterCallsTracker>>>,
+}
 
 impl ProdManagementCanisterClient {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(
+        proxied_canister_calls_tracker: Option<
+            &'static LocalKey<RefCell<ProxiedCanisterCallsTracker>>,
+        >,
+    ) -> Self {
+        Self {
+            proxied_canister_calls_tracker,
+        }
     }
 }
 
@@ -45,10 +57,32 @@ impl ManagementCanisterClient for ProdManagementCanisterClient {
         &self,
         canister_id_record: CanisterIdRecord,
     ) -> Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let args = Encode!(&canister_id_record).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "canister_status",
+                &args,
+            )
+        });
+
         canister_status(canister_id_record).await
     }
 
     async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (Option<i32>, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let args = Encode!(&settings).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "update_settings",
+                &args,
+            )
+        });
+
         update_settings(settings).await
     }
 

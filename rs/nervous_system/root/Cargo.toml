@@ -14,6 +14,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { version = "0.6.0", default-features = false }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = { path = "../common" }
+ic-nervous-system-proxied-canister-calls-tracker = { path = "../proxied_canister_calls_tracker" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 lazy_static = "1.4.0"

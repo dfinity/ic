@@ -232,7 +232,7 @@ fn get_canister_status() {
 
 #[candid_method(update, rename = "get_canister_status")]
 async fn get_canister_status_(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
-    do_get_canister_status(id(), &ManagementCanisterClientImpl::new()).await
+    do_get_canister_status(id(), &ManagementCanisterClientImpl::new(None)).await
 }
 
 async fn do_get_canister_status(

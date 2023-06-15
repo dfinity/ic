@@ -184,7 +184,7 @@ async fn get_sns_canisters_summary_(
     let canister_env = CanisterEnvironment {};
     SnsRootCanister::get_sns_canisters_summary(
         &STATE,
-        &ManagementCanisterClientImpl::new(),
+        &ManagementCanisterClientImpl::new(None),
         &create_ledger_client(),
         &canister_env,
         update_canister_list,
@@ -270,7 +270,7 @@ async fn register_dapp_canister_(
     };
     let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
         &STATE,
-        &ManagementCanisterClientImpl::new(),
+        &ManagementCanisterClientImpl::new(None),
         dfn_core::api::id(),
         request,
     )
@@ -301,7 +301,7 @@ async fn register_dapp_canisters_(
 ) -> RegisterDappCanistersResponse {
     SnsRootCanister::register_dapp_canisters(
         &STATE,
-        &ManagementCanisterClientImpl::new(),
+        &ManagementCanisterClientImpl::new(None),
         dfn_core::api::id(),
         request,
     )
@@ -334,7 +334,7 @@ fn set_dapp_controllers() {
 async fn set_dapp_controllers_(request: SetDappControllersRequest) -> SetDappControllersResponse {
     SnsRootCanister::set_dapp_controllers(
         &STATE,
-        &ManagementCanisterClientImpl::new(),
+        &ManagementCanisterClientImpl::new(None),
         dfn_core::api::id(),
         dfn_core::api::caller(),
         &request,

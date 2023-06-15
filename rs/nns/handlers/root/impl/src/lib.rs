@@ -1,4 +1,12 @@
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, EXCHANGE_RATE_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
+    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+};
+use lazy_static::lazy_static;
+use maplit::btreemap;
 use std::{cell::RefCell, collections::BTreeMap};
 
 pub mod canister_management;
@@ -7,164 +15,131 @@ pub mod pb;
 pub mod root_proposals;
 
 thread_local! {
-    /// The map of CanisterId to count of open `CanisterStatus` calls to that canister. This serve
-    /// as a data source for the metrics endpoint. This is stored in a local RefCell and is not persisted
-    /// across upgrades. This state need not be persisted because the canister will not upgrade if
-    /// there are any open call contexts, which is tracked by this map.
-    pub static OPEN_CANISTER_STATUS_CALLS: RefCell<BTreeMap<CanisterId, u64>> = RefCell::new(BTreeMap::new());
-}
-
-pub fn increment_open_canister_status_calls(canister_id: CanisterId) {
-    OPEN_CANISTER_STATUS_CALLS.with(|open_calls| {
-        open_calls.borrow_mut().entry(canister_id).or_insert(0);
-        if let Some(counter) = open_calls.borrow_mut().get_mut(&canister_id) {
-            *counter = counter.saturating_add(1_u64);
-        }
-    });
-}
-
-pub fn decrement_open_canister_status_calls(canister_id: CanisterId) {
-    // TODO - remove entries in the map once their counter is decremented to
-    // zero.
-    OPEN_CANISTER_STATUS_CALLS.with(|open_calls| {
-        open_calls.borrow_mut().entry(canister_id).or_insert(0);
-        if let Some(counter) = open_calls.borrow_mut().get_mut(&canister_id) {
-            *counter = counter.saturating_sub(1_u64);
-        }
-    });
+    // TODO: Move this to canister.rs. It needs to be here for now, because
+    // other libs want to use this. Ideally, this would only be passed to the
+    // constructor of TrackingManagementCanisterClient.
+    pub static PROXIED_CANISTER_CALLS_TRACKER: RefCell<ProxiedCanisterCallsTracker> =
+        RefCell::new(ProxiedCanisterCallsTracker::new(dfn_core::api::now));
 }
 
 /// Encode the metrics in a format that can be understood by Prometheus.
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
-    let open_canister_status_calls = OPEN_CANISTER_STATUS_CALLS
-        .with(|open_canister_status_calls| open_canister_status_calls.borrow().clone());
+    PROXIED_CANISTER_CALLS_TRACKER.with(|proxied_canister_calls_tracker| {
+        let proxied_canister_calls_tracker = proxied_canister_calls_tracker.borrow();
 
-    let open_canister_status_calls_count: u64 = open_canister_status_calls.values().sum();
-
-    w.encode_gauge(
-        "nns_root_open_canister_status_calls_count",
-        open_canister_status_calls_count as f64,
-        "Count of open CanisterStatusCalls.",
-    )?;
-
-    let mut metrics = w.gauge_vec(
-        "nns_root_open_canister_status_calls",
-        "The list of counters and canister_ids with open canister_status calls.",
-    )?;
-
-    for (canister_id, call_count) in open_canister_status_calls.iter() {
-        metrics = metrics.value(
-            &[("canister_id", &format!("{}", canister_id))],
-            (*call_count) as f64,
+        let mut metric_builder = w.gauge_vec(
+            "nns_root_in_flight_proxied_canister_call_max_age_seconds",
+            "The age of incomplete canister calls that are being made on \
+             behalf of another NNS canisters, usually NNS governance.",
         )?;
-    }
+        for (key, max_age) in
+            proxied_canister_calls_tracker.get_method_name_caller_callee_to_in_flight_max_age()
+        {
+            let (method_name, caller, callee) = key;
+
+            metric_builder = metric_builder.value(
+                &[
+                    ("caller", &principal_name(caller)),
+                    ("callee", &principal_name(callee.get())),
+                    ("method_name", &method_name),
+                ],
+                max_age.as_secs_f64(),
+            )?;
+        }
+
+        let mut metrics = w.gauge_vec(
+            "nns_root_in_flight_proxied_canister_call_count",
+            "The number of proxied canister calls that are in flight and being made \
+             on behalf of another (NNS) canister.",
+        )?;
+        let in_flight_counts =
+            proxied_canister_calls_tracker.get_method_name_caller_callee_to_in_flight_count();
+        for ((method_name, caller, callee), count) in &in_flight_counts {
+            metrics = metrics.value(
+                &[
+                    ("method_name", method_name),
+                    ("caller", &principal_name(*caller)),
+                    ("callee", &principal_name(callee.get())),
+                ],
+                *count as f64,
+            )?;
+        }
+
+        // All of the following metrics are superceded (by nns_root_in_flight_proxied_canister_call_count).
+
+        let canister_status_caller_to_in_flight_count = {
+            // I am not sure if this fact is in the spec, but it is in the code.
+            let min_principal_id = CanisterId::ic_00().get();
+
+            // This is the range where method_name == "canister_status".
+            let begin = (
+                "canister_status".to_string(),
+                min_principal_id,
+                CanisterId::ic_00(),
+            );
+            let end = (
+                "canister_status\0".to_string(),
+                min_principal_id,
+                CanisterId::ic_00(),
+            );
+
+            in_flight_counts
+                .range(begin..end)
+                .map(|((_, caller, _), count)| (*caller, *count))
+                .collect::<BTreeMap<PrincipalId, u64>>()
+        };
+
+        w.encode_gauge(
+            "nns_root_open_canister_status_calls_count",
+            canister_status_caller_to_in_flight_count
+                .values()
+                .sum::<u64>() as f64,
+            "Superceded by nns_root_in_flight_proxied_canister_call_count. \
+             Count of open CanisterStatusCalls.",
+        )?;
+
+        let mut metrics = w.gauge_vec(
+            "nns_root_open_canister_status_calls",
+            "Superceded by nns_root_in_flight_proxied_canister_call_count. \
+             The list of counters and canister_ids with open canister_status calls.",
+        )?;
+        for (canister_id, call_count) in &canister_status_caller_to_in_flight_count {
+            metrics = metrics.value(
+                &[("canister_id", &format!("{}", canister_id))],
+                (*call_count) as f64,
+            )?;
+        }
+
+        std::io::Result::Ok(())
+    })?;
 
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::{
-        decrement_open_canister_status_calls, increment_open_canister_status_calls,
-        OPEN_CANISTER_STATUS_CALLS,
-    };
-    use ic_base_types::{CanisterId, PrincipalId};
-
-    fn get_canister_open_canister_status_calls(canister_id: CanisterId) -> Option<u64> {
-        OPEN_CANISTER_STATUS_CALLS.with(|open_calls| open_calls.borrow().get(&canister_id).cloned())
+fn principal_name(principal_id: PrincipalId) -> String {
+    lazy_static! {
+        static ref CANISTER_ID_TO_NAME: BTreeMap<CanisterId, &'static str> = btreemap! {
+            CanisterId::ic_00() => "management",
+            REGISTRY_CANISTER_ID => "registry",
+            GOVERNANCE_CANISTER_ID => "governance",
+            LEDGER_CANISTER_ID => "ledger",
+            ROOT_CANISTER_ID => "root",
+            CYCLES_MINTING_CANISTER_ID => "cycles_minting",
+            LIFELINE_CANISTER_ID => "lifeline",
+            GENESIS_TOKEN_CANISTER_ID => "genesis_token",
+            IDENTITY_CANISTER_ID => "identity",
+            NNS_UI_CANISTER_ID => "nns_ui",
+            SNS_WASM_CANISTER_ID => "sns_wasm",
+            EXCHANGE_RATE_CANISTER_ID => "exchange_rate",
+        };
     }
 
-    #[test]
-    pub fn test_increment_open_canister_status_calls() {
-        // Set up some test data
-        let canister_id_1 = CanisterId::try_from(PrincipalId::new_user_test_id(1)).unwrap();
-        let canister_id_2 = CanisterId::try_from(PrincipalId::new_user_test_id(2)).unwrap();
-
-        // Assert that the value is None if a canister has never been incremented
-        assert_eq!(get_canister_open_canister_status_calls(canister_id_1), None);
-
-        // Increment and check the value has increased
-        increment_open_canister_status_calls(canister_id_1);
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_1),
-            Some(1)
-        );
-
-        // Assert that the value is None if a canister has never been incremented.
-        assert_eq!(get_canister_open_canister_status_calls(canister_id_2), None);
-
-        // Increment a different canister and make sure it's count is incremented
-        increment_open_canister_status_calls(canister_id_2);
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_2),
-            Some(1)
-        );
-
-        // Increment both keys
-        increment_open_canister_status_calls(canister_id_1);
-        increment_open_canister_status_calls(canister_id_2);
-
-        // Assert the values have both been incremented again.
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_1),
-            Some(2)
-        );
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_2),
-            Some(2)
-        );
-    }
-
-    #[test]
-    pub fn test_decrement_open_canister_status_calls() {
-        // Set up some test data
-        let canister_id_1 = CanisterId::try_from(PrincipalId::new_user_test_id(1)).unwrap();
-        let canister_id_2 = CanisterId::try_from(PrincipalId::new_user_test_id(2)).unwrap();
-        let canister_id_3 = CanisterId::try_from(PrincipalId::new_user_test_id(3)).unwrap();
-
-        // Populate some keys with counts by incrementing
-        for _ in 0..3 {
-            increment_open_canister_status_calls(canister_id_1);
-            increment_open_canister_status_calls(canister_id_2);
-        }
-
-        // Assert that both keys have expected values
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_1),
-            Some(3)
-        );
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_2),
-            Some(3)
-        );
-
-        // Decrement a key and check its value and the other value in the map
-        decrement_open_canister_status_calls(canister_id_1);
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_1),
-            Some(2)
-        );
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_2),
-            Some(3)
-        );
-
-        // Decrement a different key past zero. This should result in 0 instead of a panic
-        for _ in 0..4 {
-            decrement_open_canister_status_calls(canister_id_2);
-        }
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_1),
-            Some(2)
-        );
-        assert_eq!(
-            get_canister_open_canister_status_calls(canister_id_2),
-            Some(0)
-        );
-
-        // Decrement a non-existent key. This should result in 0 and not a panic.
-        assert_eq!(get_canister_open_canister_status_calls(canister_id_3), None);
-        decrement_open_canister_status_calls(canister_id_3);
-        assert_eq!(get_canister_open_canister_status_calls(canister_id_3), None);
-    }
+    CanisterId::new(principal_id)
+        .ok()
+        .and_then(|canister_id| CANISTER_ID_TO_NAME.get(&canister_id))
+        .map(|name| format!("{}_canister", name))
+        .unwrap_or_else(|| principal_id.to_string())
 }
+
+#[cfg(test)]
+mod tests;
