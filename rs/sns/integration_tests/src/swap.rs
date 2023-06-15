@@ -4,8 +4,7 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as LedgerInit, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 
 use ic_nervous_system_common::{
     assert_is_ok, ledger::compute_neuron_staking_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
@@ -50,13 +49,16 @@ use ic_sns_init::pb::v1::{
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
     TreasuryDistribution,
 };
-use ic_sns_swap::pb::v1::{
-    self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
-    set_dapp_controllers_call_result, set_mode_call_result, ErrorRefundIcpRequest,
-    ErrorRefundIcpResponse, GetOpenTicketResponse, GetStateRequest, GetStateResponse, Init,
-    OpenRequest, SetDappControllersCallResult, SetDappControllersResponse,
+use ic_sns_swap::{
+    pb::v1::{
+        self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
+        set_dapp_controllers_call_result, set_mode_call_result, ErrorRefundIcpRequest,
+        ErrorRefundIcpResponse, GetOpenTicketResponse, GetStateRequest, GetStateResponse, Init,
+        OpenRequest, RefreshBuyerTokensResponse, SetDappControllersCallResult,
+        SetDappControllersResponse,
+    },
+    swap::principal_to_subaccount,
 };
-use ic_sns_swap::{pb::v1::RefreshBuyerTokensResponse, swap::principal_to_subaccount};
 use ic_sns_test_utils::{
     now_seconds,
     state_test_helpers::{

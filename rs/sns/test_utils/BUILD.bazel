@@ -8,6 +8,7 @@ BASE_DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/sha",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",

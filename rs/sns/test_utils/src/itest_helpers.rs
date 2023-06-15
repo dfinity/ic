@@ -1,17 +1,15 @@
 use crate::SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES;
-use candid::types::number::Nat;
-use candid::Principal;
+use candid::{types::number::Nat, Principal};
 use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_crypto_sha::Sha256;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
-use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
-use ic_icrc1_ledger::LedgerArgument;
+use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_root::canister_status::{CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
@@ -48,13 +46,17 @@ use ic_sns_root::{
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc1::{
+    account::{Account, Subaccount},
+    transfer::TransferArg,
+};
 use maplit::btreemap;
 use on_wire::IntoWire;
-use std::future::Future;
-use std::thread;
-use std::time::{Duration, Instant, SystemTime};
+use std::{
+    future::Future,
+    thread,
+    time::{Duration, Instant, SystemTime},
+};
 
 /// Constant nonce to use when generating the subaccount. Using a constant nonce
 /// allows the testing environment to calculate what a given subaccount will
@@ -951,7 +953,7 @@ impl SnsCanisters<'_> {
                 TIME_OUT_MINUTES
             );
 
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
             proposal = self.get_proposal(proposal_id).await;
         }
 
@@ -1249,7 +1251,7 @@ impl SnsCanisters<'_> {
                 );
                 return;
             }
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
         panic!(

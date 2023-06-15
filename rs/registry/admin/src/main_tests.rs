@@ -1,5 +1,4 @@
 use super::*;
-
 use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 use pretty_assertions::assert_eq;
 

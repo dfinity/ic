@@ -39,6 +39,7 @@ ic-registry-subnet-features = { path = "../subnet_features" }
 ic-registry-subnet-type = { path = "../subnet_type" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
+ic-nervous-system-clients= { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-humanize = { path = "../../nervous_system/humanize" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }

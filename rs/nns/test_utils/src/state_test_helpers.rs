@@ -12,8 +12,8 @@ use ic_ic00_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
     UpdateSettingsArgs,
 };
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
-use ic_nervous_system_root::CanisterIdRecord;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
@@ -719,7 +719,7 @@ pub fn nns_wait_for_proposal_execution(machine: &mut StateMachine, proposal_id: 
         );
 
         last_proposal = Some(proposal);
-        machine.advance_time(std::time::Duration::from_millis(100));
+        machine.advance_time(Duration::from_millis(100));
     }
 
     panic!(

@@ -1,9 +1,4 @@
 //! Command-line utility to help submitting proposals to modify the IC's NNS.
-//!
-//! TODO(NNS1-902) Move this utility to `rs/nns`.
-mod types;
-
-extern crate chrono;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode};
@@ -20,14 +15,11 @@ use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
 use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
-use ic_prep_lib::subnet_configuration;
-use ic_registry_client_helpers::deserialize_registry_value;
-use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
-use ic_types::p2p;
-#[macro_use]
-extern crate ic_admin_derive;
-use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, EcdsaKeyId};
+use ic_ic00_types::{CanisterInstallMode, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
@@ -37,11 +29,8 @@ use ic_nervous_system_humanize::{
     parse_duration, parse_percentage, parse_time_of_day, parse_tokens,
 };
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
-use ic_nervous_system_root::{
-    canister_status::CanisterStatusResult,
-    change_canister::{
-        AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
-    },
+use ic_nervous_system_root::change_canister::{
+    AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -74,6 +63,7 @@ use ic_nns_test_utils::{
     governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal},
     ids::TEST_NEURON_1_ID,
 };
+use ic_prep_lib::subnet_configuration;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
@@ -90,7 +80,8 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::{
-    crypto::CryptoRegistry, ecdsa_keys::EcdsaKeysRegistry, subnet::SubnetRegistry,
+    crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
+    subnet::SubnetRegistry,
 };
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_versions_key,
@@ -116,13 +107,14 @@ use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
+use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
     SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    p2p, CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use itertools::izip;
 use maplit::hashmap;
@@ -170,6 +162,13 @@ use std::{
 };
 use types::{ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord};
 use url::Url;
+
+#[macro_use]
+extern crate ic_admin_derive;
+
+extern crate chrono;
+
+mod types;
 
 #[cfg(test)]
 mod main_tests;

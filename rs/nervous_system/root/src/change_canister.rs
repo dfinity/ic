@@ -1,11 +1,14 @@
-use crate::{
-    canister_status::{CanisterStatusResultFromManagementCanister, CanisterStatusType},
-    CanisterIdRecord, LOG_PREFIX,
-};
+use crate::LOG_PREFIX;
 use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::{call, CanisterId};
 use ic_crypto_sha::Sha256;
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
+    canister_status::{
+        canister_status, CanisterStatusResultFromManagementCanister, CanisterStatusType,
+    },
+};
 use ic_nervous_system_common::MethodAuthzChange;
 use serde::Serialize;
 
@@ -298,14 +301,10 @@ pub async fn stop_canister(canister_id: CanisterId) {
     res.unwrap();
 
     loop {
-        let status: CanisterStatusResultFromManagementCanister = call(
-            CanisterId::ic_00(),
-            "canister_status",
-            dfn_candid::candid,
-            (CanisterIdRecord::from(canister_id),),
-        )
-        .await
-        .unwrap();
+        let status: CanisterStatusResultFromManagementCanister =
+            canister_status(CanisterIdRecord::from(canister_id))
+                .await
+                .unwrap();
 
         if status.status == CanisterStatusType::Stopped {
             return;

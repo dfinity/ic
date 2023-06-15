@@ -6,18 +6,21 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
     TEST_USER4_PRINCIPAL, TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
-use ic_nns_common::pb::v1::NeuronId as ProtoNeuronId;
-use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
-    GovernanceError, ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards,
-    NnsFunction, NodeProvider, Proposal, ProposalStatus, RewardNodeProvider, RewardNodeProviders,
+use ic_nns_common::{
+    pb::v1::NeuronId as ProtoNeuronId,
+    types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload},
 };
 use ic_nns_governance::{
     governance::TimeWarp,
-    pb::v1::reward_node_provider::{RewardMode, RewardToAccount},
+    pb::v1::{
+        manage_neuron::{Command, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        proposal::Action,
+        reward_node_provider::{RewardMode, RewardToAccount},
+        GovernanceError, ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards,
+        NnsFunction, NodeProvider, Proposal, ProposalStatus, RewardNodeProvider,
+        RewardNodeProviders,
+    },
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -374,7 +377,7 @@ fn test_automated_node_provider_remuneration() {
             .rewards
             .contains(&expected_automated_node_provider_reward_3));
 
-        // Assert additional rewards have been transfered to the Node Provider accounts
+        // Assert additional rewards have been transferred to the Node Provider accounts
         assert_account_balance(
             &nns_canisters,
             node_provider_1_account,

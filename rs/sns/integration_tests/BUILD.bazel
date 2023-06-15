@@ -61,6 +61,7 @@ MACRO_DEPENDENCIES = [
 BASE_DEV_DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/crypto",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/root",
     "//rs/nns/common",
     "//rs/protobuf",

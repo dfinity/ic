@@ -8,9 +8,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
-
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
 use ic_sns_swap::{
     pb::v1::{
@@ -20,7 +17,6 @@ use ic_sns_swap::{
     },
     swap::principal_to_subaccount,
 };
-
 use ic_sns_test_utils::state_test_helpers::{
     get_buyer_state, get_buyers_total, get_lifecycle, get_open_ticket, get_sns_sale_parameters,
     new_sale_ticket, notify_payment_failure, open_sale, refresh_buyer_tokens,
@@ -28,6 +24,10 @@ use ic_sns_test_utils::state_test_helpers::{
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, LedgerCanisterInitPayload as IcpInitArgs, DEFAULT_TRANSFER_FEE,
+};
+use icrc_ledger_types::icrc1::{
+    account::{Account, Subaccount},
+    transfer::{Memo, TransferArg},
 };
 use lazy_static::lazy_static;
 

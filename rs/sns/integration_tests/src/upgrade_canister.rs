@@ -6,11 +6,11 @@ use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
-use ic_nervous_system_root::{
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
-    CanisterIdRecord,
 };
+use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance::{
@@ -391,7 +391,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
 
         // Step 2: Execute code under test: Propose that we upgrade dapp.
 
-        // Step 2.a: Make sure that the proposal will have a discernable
+        // Step 2.a: Make sure that the proposal will have a discernible
         // effect (verified in Step 3). Specifically, that the wasm will
         // have changed (upon successful execution).
         let status: CanisterStatusResult = sns_canisters
