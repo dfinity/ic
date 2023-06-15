@@ -386,9 +386,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.69"
+version = "1.0.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "224afbd727c3d6e4b90103ece64b8d1b67fbb1973b1046c2281eed3f3803f800"
+checksum = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8"
 
 [[package]]
 name = "arbitrary"
@@ -1579,7 +1579,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "chacha20poly1305",
  "chrono",
- "clap 4.3.0",
+ "clap 4.3.3",
  "cloudflare",
  "flate2",
  "futures",
@@ -1619,7 +1619,7 @@ dependencies = [
  "async-trait",
  "axum",
  "candid",
- "clap 4.3.0",
+ "clap 4.3.3",
  "futures",
  "hyper",
  "hyper-rustls 0.24.0",
@@ -1823,20 +1823,20 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.3.0"
+version = "4.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93aae7a4192245f70fe75dd9157fc7b4a5bf53e88d30bd4396f7d8f9284d5acc"
+checksum = "ca8f255e4b8027970e78db75e78831229c9815fdbfa67eb1a1b777a62e24b4a0"
 dependencies = [
  "clap_builder",
- "clap_derive 4.3.0",
+ "clap_derive 4.3.2",
  "once_cell",
 ]
 
 [[package]]
 name = "clap_builder"
-version = "4.3.0"
+version = "4.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f423e341edefb78c9caba2d9c7f7687d0e72e89df3ce3394554754393ac3990"
+checksum = "acd4f3c17c83b0ba34ffbc4f8bbd74f079413f747f84a6f89292f138057e36ab"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1861,9 +1861,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.3.0"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "191d9573962933b4027f932c600cd252ce27a8ad5979418fe78e43c07996f27b"
+checksum = "b8cd2b2a819ad6eec39e8f1d6b53001af1e5469f8c177579cdaeb313115b825f"
 dependencies = [
  "heck 0.4.1",
  "proc-macro2 1.0.52",
@@ -2290,7 +2290,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.3.0",
+ "clap 4.3.3",
  "criterion-plot 0.5.0",
  "is-terminal",
  "itertools",
@@ -2885,6 +2885,16 @@ name = "destructure_traitobject"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c877555693c14d2f84191cfd3ad8582790fc52b5e2274b40b59cf5f5cea25c7"
+
+[[package]]
+name = "deterministic_ips"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap 4.3.3",
+ "ic-crypto-sha",
+ "thiserror",
+]
 
 [[package]]
 name = "dfn_candid"
@@ -4193,7 +4203,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "axum-server",
- "clap 4.3.0",
+ "clap 4.3.3",
  "rustls 0.21.2",
  "rustls-pemfile 1.0.2",
  "serde_json",
@@ -4755,7 +4765,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-server",
- "clap 4.3.0",
+ "clap 4.3.3",
  "futures",
  "futures-util",
  "hyper",
@@ -7134,7 +7144,7 @@ dependencies = [
  "axum",
  "candid",
  "ciborium",
- "clap 4.3.0",
+ "clap 4.3.3",
  "futures",
  "hex",
  "http",
@@ -11007,7 +11017,7 @@ dependencies = [
  "axum",
  "base64 0.11.0",
  "candid",
- "clap 4.3.0",
+ "clap 4.3.3",
  "flate2",
  "form_urlencoded",
  "futures",
@@ -12041,7 +12051,7 @@ name = "log_vector_config_generator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.3.0",
+ "clap 4.3.3",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",
@@ -17338,7 +17348,7 @@ name = "vector_config_generator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.3.0",
+ "clap 4.3.3",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",

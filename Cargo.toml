@@ -112,6 +112,7 @@ members = [
   "rs/http_endpoints/metrics",
   "rs/http_utils",
   "rs/ic_os/launch-single-vm",
+  "rs/ic_os/deterministic_ips",
   "rs/ic_os/sev",
   "rs/ic_os/sev_interfaces",
   "rs/ic_os/sevctl",
