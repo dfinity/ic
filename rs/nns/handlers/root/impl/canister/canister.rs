@@ -8,8 +8,9 @@ use dfn_core::{
 use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
-    management_canister_client::ManagementCanisterClientImpl,
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResult,
+    management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
 };
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
@@ -23,6 +24,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANIST
 use ic_nns_handler_root::{
     canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
+    PROXIED_CANISTER_CALLS_TRACKER,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
@@ -68,14 +70,11 @@ fn canister_status() {
 
 #[candid_method(update, rename = "canister_status")]
 async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
-    ic_nns_handler_root::increment_open_canister_status_calls(canister_id_record.get_canister_id());
-
-    let canister_status_response =
-        ic_nervous_system_clients::canister_status::canister_status(canister_id_record)
-            .await
-            .map(CanisterStatusResult::from);
-
-    ic_nns_handler_root::decrement_open_canister_status_calls(canister_id_record.get_canister_id());
+    let client = ManagementCanisterClientImpl::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
+    let canister_status_response = client
+        .canister_status(canister_id_record)
+        .await
+        .map(CanisterStatusResult::from);
 
     /*
     TODO NNS1-2197 - Remove this un-needed call to get the canister_status of NNS Root(this canister)
@@ -210,7 +209,7 @@ async fn change_canister_controllers_(
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
         caller(),
-        &mut ManagementCanisterClientImpl::new(),
+        &mut ManagementCanisterClientImpl::new(Some(&PROXIED_CANISTER_CALLS_TRACKER)),
     )
     .await
 }

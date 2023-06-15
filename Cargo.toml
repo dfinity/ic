@@ -152,6 +152,7 @@ members = [
   "rs/nervous_system/humanize",
   "rs/nervous_system/proto",
   "rs/nervous_system/proto/protobuf_generator",
+  "rs/nervous_system/proxied_canister_calls_tracker",
   "rs/nervous_system/root",
   "rs/nns/constants",
   "rs/nns/common",

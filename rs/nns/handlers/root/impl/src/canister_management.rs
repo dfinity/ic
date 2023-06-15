@@ -1,4 +1,5 @@
-use dfn_core::api::{call, call_bytes, call_with_funds, print, CanisterId, Funds};
+use crate::PROXIED_CANISTER_CALLS_TRACKER;
+use dfn_core::api::{call, call_bytes, call_with_funds, caller, print, CanisterId, Funds};
 use ic_base_types::PrincipalId;
 use ic_ic00_types::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_clients::{
@@ -6,6 +7,7 @@ use ic_nervous_system_clients::{
     management_canister_client::ManagementCanisterClient,
     update_settings::{CanisterSettings, UpdateSettings},
 };
+use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::{
     start_canister, stop_canister, AddCanisterProposal, CanisterAction, StopOrStartCanisterProposal,
 };
@@ -174,14 +176,23 @@ pub async fn call_canister(proposal: CallCanisterProposal) {
         proposal.canister_id, proposal.method_name,
     ));
 
-    let res = call_bytes(
-        proposal.canister_id,
-        &proposal.method_name,
-        &proposal.payload,
-        Funds::zero(),
-    )
-    .await
-    .map_err(|(code, msg)| format!("Error: {}:{}", code.unwrap_or_default(), msg));
+    let CallCanisterProposal {
+        canister_id,
+        method_name,
+        payload,
+    } = &proposal;
+
+    let _tracker = ProxiedCanisterCallsTracker::start_tracking(
+        &PROXIED_CANISTER_CALLS_TRACKER,
+        caller(),
+        *canister_id,
+        method_name,
+        payload,
+    );
+
+    let res = call_bytes(*canister_id, method_name, payload, Funds::zero())
+        .await
+        .map_err(|(code, msg)| format!("Error: {}:{}", code.unwrap_or_default(), msg));
 
     print(format!(
         "Call {}::{} returned {:?}",

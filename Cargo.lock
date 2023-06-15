@@ -7824,6 +7824,7 @@ dependencies = [
  "dfn_core",
  "ic-base-types",
  "ic-ic00-types",
+ "ic-nervous-system-proxied-canister-calls-tracker",
  "num-traits",
  "serde",
  "serde_bytes",
@@ -7948,6 +7949,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-proxied-canister-calls-tracker"
+version = "0.0.1"
+dependencies = [
+ "ic-base-types",
+ "maplit",
+ "pretty_assertions 0.6.1",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-root"
 version = "0.1.0"
 dependencies = [
@@ -7960,6 +7971,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common",
+ "ic-nervous-system-proxied-canister-calls-tracker",
  "ic-nns-constants",
  "lazy_static",
  "num-traits",
@@ -8153,6 +8165,7 @@ dependencies = [
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
+ "ic-nervous-system-proxied-canister-calls-tracker",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
@@ -8171,6 +8184,7 @@ dependencies = [
  "lazy_static",
  "maplit",
  "on_wire",
+ "pretty_assertions 0.6.1",
  "prost",
  "registry-canister",
  "serde",
