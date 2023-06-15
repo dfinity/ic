@@ -17,6 +17,7 @@ use ic_test_utilities::{
     types::ids::{call_context_test_id, user_test_id},
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_types::MemoryAllocation;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
     ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId,
@@ -81,6 +82,7 @@ fn test_api_for_update(
                 instruction_limit,
             ),
             canister_memory_limit,
+            memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,

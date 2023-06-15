@@ -15,7 +15,7 @@ use ic_system_api::{
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, mock_time, types::ids::canister_test_id,
 };
-use ic_types::{ComputeAllocation, NumBytes, NumInstructions};
+use ic_types::{ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 use lazy_static::lazy_static;
@@ -54,6 +54,7 @@ fn test_wasmtime_system_api() {
                 MAX_NUM_INSTRUCTIONS,
             ),
             canister_memory_limit,
+            memory_allocation: MemoryAllocation::default(),
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,

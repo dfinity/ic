@@ -14,7 +14,7 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ExecutionParameters, InstructionLimits,
     ModificationTracking, SystemApiImpl,
 };
-use ic_types::{ComputeAllocation, NumInstructions};
+use ic_types::{ComputeAllocation, MemoryAllocation, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
 use crate::{
@@ -146,6 +146,7 @@ impl WasmtimeInstanceBuilder {
                     self.num_instructions,
                 ),
                 canister_memory_limit: self.canister_memory_limit,
+                memory_allocation: MemoryAllocation::default(),
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,

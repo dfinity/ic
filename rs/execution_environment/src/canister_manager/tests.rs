@@ -105,6 +105,7 @@ lazy_static! {
             MAX_NUM_INSTRUCTIONS
         ),
         canister_memory_limit: NumBytes::new(u64::MAX / 2),
+        memory_allocation: MemoryAllocation::default(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,

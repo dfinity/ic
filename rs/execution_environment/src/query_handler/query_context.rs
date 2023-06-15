@@ -888,7 +888,8 @@ impl<'a> QueryContext<'a> {
         ExecutionParameters {
             instruction_limits,
             canister_memory_limit: canister.memory_limit(self.max_canister_memory_size),
-            compute_allocation: canister.scheduler_state.compute_allocation,
+            memory_allocation: canister.memory_allocation(),
+            compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode: ExecutionMode::NonReplicated,
         }

@@ -26,8 +26,8 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{SystemMethod, WasmClosure},
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, NumBytes, NumInstructions, NumPages,
-    PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, NumPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -154,6 +154,7 @@ impl InstructionLimits {
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
+    pub memory_allocation: MemoryAllocation,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,
@@ -575,6 +576,9 @@ struct MemoryUsage {
 
     /// Message memory allocated during this message execution.
     allocated_message_memory: NumBytes,
+
+    /// The memory allocation of the canister.
+    memory_allocation: MemoryAllocation,
 }
 
 impl MemoryUsage {
@@ -584,6 +588,7 @@ impl MemoryUsage {
         limit: NumBytes,
         current_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
+        memory_allocation: MemoryAllocation,
     ) -> Self {
         // A canister's current usage should never exceed its limit. This is
         // most probably a bug. Panicking here due to this inconsistency has the
@@ -604,6 +609,7 @@ impl MemoryUsage {
             subnet_available_memory,
             allocated_execution_memory: NumBytes::from(0),
             allocated_message_memory: NumBytes::from(0),
+            memory_allocation,
         }
     }
 
@@ -633,6 +639,9 @@ impl MemoryUsage {
     /// refers to the number of requested bytes for Wasm/stable memory; and
     /// `message_bytes` refers to the bytes requested for messages.
     ///
+    /// If the canister has memory allocation, then this function doesn't allocate
+    /// bytes, but only increases `current_usage`.
+    ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
     /// if either the canister memory limit, the subnet memory limit, or the
     /// message memory limit would be exceeded.
@@ -648,34 +657,67 @@ impl MemoryUsage {
         if overflow || new_usage > self.limit.get() {
             return Err(HypervisorError::OutOfMemory);
         }
-        match self.subnet_available_memory.try_decrement(
-            execution_bytes,
-            message_bytes,
-            NumBytes::from(0),
-        ) {
-            Ok(()) => {
+
+        // The canister can increase its memory usage up to the reserved bytes without
+        // decrementing the subnet available memory because it was already decremented
+        // at the time of reservation.
+        match self.memory_allocation {
+            MemoryAllocation::BestEffort => {
+                match self.subnet_available_memory.try_decrement(
+                    execution_bytes,
+                    message_bytes,
+                    NumBytes::from(0),
+                ) {
+                    Ok(()) => {
+                        self.current_usage = NumBytes::from(new_usage);
+                        self.allocated_execution_memory += execution_bytes;
+                        self.allocated_message_memory += message_bytes;
+                        Ok(())
+                    }
+                    Err(_err) => Err(HypervisorError::OutOfMemory),
+                }
+            }
+            MemoryAllocation::Reserved(reserved_bytes) => {
+                // Note that this branch should be unreachable because
+                // `self.limit` should already be set to `reserved_bytes` and
+                // the guard above should have returned an error. In order to
+                // keep code robust, we repeat the check here again.
+                if new_usage > reserved_bytes.get() {
+                    return Err(HypervisorError::OutOfMemory);
+                }
                 self.current_usage = NumBytes::from(new_usage);
-                self.allocated_execution_memory += execution_bytes;
-                self.allocated_message_memory += message_bytes;
                 Ok(())
             }
-            Err(_err) => Err(HypervisorError::OutOfMemory),
         }
     }
 
-    /// Unconditionally deallocates the given number of execution bytes and message bytes.
-    /// Should only be called immediately after `allocate_memory()`, with the same number
-    /// of bytes, in case growing the heap failed or upon clean up.
+    /// Deallocates the given number of execution bytes and message bytes.
+    /// Should only be called immediately after `allocate_memory()`, with the
+    /// same number of bytes, in case growing the heap failed or upon clean up.
+    ///
+    /// If the canister has memory allocation, then this function doesn't deallocate
+    /// bytes, but only decreases `current_usage`.
     fn deallocate_memory(&mut self, execution_bytes: NumBytes, message_bytes: NumBytes) {
-        self.subnet_available_memory
-            .increment(execution_bytes, message_bytes, NumBytes::from(0));
-
         debug_assert!(self.current_usage >= execution_bytes);
-        debug_assert!(self.allocated_execution_memory >= execution_bytes);
-        debug_assert!(self.allocated_message_memory >= message_bytes);
         self.current_usage -= execution_bytes;
-        self.allocated_execution_memory -= execution_bytes;
-        self.allocated_message_memory -= message_bytes;
+
+        match self.memory_allocation {
+            MemoryAllocation::BestEffort => {
+                self.subnet_available_memory.increment(
+                    execution_bytes,
+                    message_bytes,
+                    NumBytes::from(0),
+                );
+                debug_assert!(self.allocated_execution_memory >= execution_bytes);
+                debug_assert!(self.allocated_message_memory >= message_bytes);
+                self.allocated_execution_memory -= execution_bytes;
+                self.allocated_message_memory -= message_bytes;
+            }
+            MemoryAllocation::Reserved(reserved_bytes) => {
+                debug_assert!(self.current_usage + execution_bytes <= reserved_bytes);
+                // Nothing to do since we didn't actually allocate new memory.
+            }
+        }
     }
 }
 
@@ -746,6 +788,7 @@ impl SystemApiImpl {
             execution_parameters.canister_memory_limit,
             canister_current_memory_usage,
             subnet_available_memory,
+            execution_parameters.memory_allocation,
         );
         let stable_memory = StableMemory::new(stable_memory);
         let slice_limit = execution_parameters.instruction_limits.slice().get();
