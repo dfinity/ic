@@ -922,7 +922,7 @@ pub(crate) fn extend_tau(
     map.insert_hashed("ciphertext-chunks", &cc.to_vec());
     map.insert_hashed("randomizers-r", &rr.to_vec());
     map.insert_hashed("randomizers-s", &ss.to_vec());
-    map.insert_hashed("epoch", &(epoch.get() as usize));
+    map.insert_hashed("epoch", &(epoch.get() as u64));
     map.insert_hashed("associated-data", &associated_data.to_vec());
 
     let hash = random_oracle(DOMAIN_CIPHERTEXT_NODE, &map);

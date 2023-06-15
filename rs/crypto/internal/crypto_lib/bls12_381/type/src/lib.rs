@@ -494,6 +494,33 @@ impl Scalar {
         accum
     }
 
+    /// Multiscalar multiplication with u64 multiplicands
+    ///
+    /// Equivalent to p1*s1 + p2*s2 + p3*s3 + ... + pn*sn
+    ///
+    /// Returns zero if terms is empty
+    ///
+    /// Warning: this function may leak information about the u64 values via
+    /// memory-based side channels. Do not use this function with secret usize
+    /// arguments.
+    ///
+    /// Warning: if lhs.len() != rhs.len() this function ignores trailing elements
+    /// of the longer slice.
+    ///
+    /// Currently only a naive version is implemented.
+    ///
+    /// This function could take advantage of the fact that rhs is known to be
+    /// at most 64 bits, limiting the number of doublings.
+    pub fn muln_u64_vartime(lhs: &[Self], rhs: &[u64]) -> Self {
+        let terms = std::cmp::min(lhs.len(), rhs.len());
+        let mut accum = Self::zero();
+        for i in 0..terms {
+            accum += &lhs[i] * Scalar::from_u64(rhs[i]);
+        }
+        accum
+    }
+
+
     /// Compare a Scalar with another
     ///
     /// If self < other returns -1
@@ -1438,8 +1465,8 @@ macro_rules! declare_mul2_table_impl {
                 a: &[Scalar; N],
                 b: &[Scalar; N],
             ) -> [$projective; N] {
-                let iota: [usize; N] = std::array::from_fn(|i| i);
-                iota.map(|i| self.mul2(&a[i], &b[i]))
+                let iota: [u64; N] = std::array::from_fn(|i| i as u64);
+                iota.map(|i| self.mul2(&a[i as usize], &b[i as usize]))
             }
         }
     };

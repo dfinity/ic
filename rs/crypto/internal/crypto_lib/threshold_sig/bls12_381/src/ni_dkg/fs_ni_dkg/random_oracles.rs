@@ -49,6 +49,18 @@ impl UniqueHash for usize {
     }
 }
 
+/// Computes the unique digest of an integer.
+///
+/// The digest is the hash of the domain separator appended with the big-endian
+/// encoding of the byte representation of the integer.
+impl UniqueHash for u64 {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
+        let mut hasher = new_hasher_with_domain(DOMAIN_RO_INT);
+        hasher.write(&self.to_be_bytes());
+        hasher.finish()
+    }
+}
+
 /// Computes the unique digest of a byte vector.
 ///
 /// The digest is the hash of the domain separator appended with the bytes in
