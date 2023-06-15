@@ -77,6 +77,12 @@ COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install --ignore-installed -r /tmp/requirements.txt
 RUN pip3 install pre-commit
 
+# Add buf
+ARG BUF_BIN="/usr/local/bin"
+ARG BUF_VERSION="1.21.0"
+RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" \
+    -o "${BUF_BIN}/buf" && chmod +x "${BUF_BIN}/buf"
+
 WORKDIR /
 USER 0
 
