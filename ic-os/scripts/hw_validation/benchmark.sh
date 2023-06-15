@@ -49,7 +49,7 @@ OUTPUT_FILE="$(pwd)/bench_results_$(hostname)_$(date +%Y-%m-%dT%H-%M-%S).txt"
     print_exec sysbench memory run \
         --threads=1 \
         --memory-total-size=200G \
-        --memory-block-size=2G \
+        --memory-block-size=2M \
         --validate=on
 
     print_exec sysbench memory run \
@@ -61,7 +61,7 @@ OUTPUT_FILE="$(pwd)/bench_results_$(hostname)_$(date +%Y-%m-%dT%H-%M-%S).txt"
     print_exec sysbench memory run \
         --threads="$NUM_PROCS" \
         --memory-total-size=200G \
-        --memory-block-size=2G \
+        --memory-block-size=2M \
         --validate=on
 
     print_exec sysbench memory run \
