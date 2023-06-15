@@ -319,7 +319,7 @@ impl FinalizerMetrics {
                 "Total number of canister http messages delivered as timeouts",
             ),
             canister_http_divergences_delivered: metrics_registry.int_counter(
-                "canister_http_divergences_delivered", 
+                "canister_http_divergences_delivered",
                 "Total number of canister http messages delivered as divergences",
             ),
         }
@@ -519,7 +519,7 @@ impl ValidatorMetrics {
                     if timestamp >= start_time {
                         self.time_to_receive_block
                             .with_label_values(&[RANKS_TO_RECORD[rank]])
-                            .observe((timestamp - start_time).as_secs_f64());
+                            .observe((timestamp.saturating_sub(start_time)).as_secs_f64());
                     }
                 }
             }

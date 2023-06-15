@@ -1939,7 +1939,7 @@ fn observe_replicated_state_metrics(
                     error!(
                         logger,
                         "Call context has been open for {:?}: origin: {:?}, respondent: {}",
-                        state.time() - *origin_time,
+                        state.time().saturating_sub(*origin_time),
                         origin,
                         canister.canister_id()
                     );

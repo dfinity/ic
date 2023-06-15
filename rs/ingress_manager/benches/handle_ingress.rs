@@ -138,7 +138,7 @@ impl SimulatedIngressHistory {
         let set_limit = MAX_INGRESS_COUNT_PER_PAYLOAD * (MAX_INGRESS_TTL.as_secs() as usize) / 2;
         while time < end_time {
             let min_time = if start_time + MAX_INGRESS_TTL < time {
-                time - MAX_INGRESS_TTL
+                time.saturating_sub_duration(MAX_INGRESS_TTL)
             } else {
                 start_time
             };
@@ -248,12 +248,12 @@ where
 /// randomly distributed over the given expiry time period.
 fn prepare(time_source: &dyn TimeSource, duration: Duration, num: usize) -> Vec<SignedIngress> {
     let now = time_source.get_relative_time();
-    let max_expiry = now + duration;
     let mut rng = rand::thread_rng();
     (0..num)
         .map(|i| {
-            let expiry =
-                Duration::from_millis(rng.gen::<u64>() % ((max_expiry - now).as_millis() as u64));
+            let expiry = Duration::from_millis(
+                rng.gen::<u64>() % ((duration.as_millis() as u64).saturating_sub(1) + 1),
+            );
             SignedIngressBuilder::new()
                 .method_payload(vec![0; PAYLOAD_SIZE])
                 .nonce(i as u64)

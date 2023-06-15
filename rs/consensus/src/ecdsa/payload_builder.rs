@@ -753,14 +753,9 @@ pub(crate) fn create_data_payload_helper_2(
     ecdsa_payload.uid_generator.update_height(height)?;
     let current_key_transcript = ecdsa_payload.key_transcript.current.as_ref().cloned();
 
-    let request_expiry_time = ecdsa_config.signature_request_timeout_ns.and_then(|t| {
-        let timeout = Duration::from_nanos(t);
-        if context_time.as_nanos_since_unix_epoch() >= t {
-            Some(context_time - timeout)
-        } else {
-            None
-        }
-    });
+    let request_expiry_time = ecdsa_config
+        .signature_request_timeout_ns
+        .and_then(|timeout| context_time.checked_sub_duration(Duration::from_nanos(timeout)));
     update_signature_agreements(all_signing_requests, signature_builder, ecdsa_payload);
     let new_signing_requests = get_signing_requests(
         height,
@@ -898,7 +893,7 @@ fn make_new_quadruples_if_needed_helper(
 /// the SubnetCallContextManager struct (see
 /// rs/replicated_state/src/metadata_state/subnet_call_context_manager.rs).
 /// callback_id's are obtained from a counter that gets incremented as requests
-/// get made.  
+/// get made.
 ///
 /// The Q_i's are ordered in the order in which their construction was
 /// initiated, which is determined by QuadrupleId.  QuadrupleId's are obtained

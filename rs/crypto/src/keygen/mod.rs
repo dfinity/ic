@@ -412,8 +412,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
         time_of_registration: Time,
         key_rotation_period: Duration,
     ) -> bool {
-        if let Some(time_to_rotate) = time_of_registration.checked_add_duration(key_rotation_period)
-        {
+        if let Some(time_to_rotate) = time_of_registration.checked_add(key_rotation_period) {
             let current_time = self.time_source.get_relative_time();
             current_time > time_to_rotate
         } else {

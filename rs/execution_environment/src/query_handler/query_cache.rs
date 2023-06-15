@@ -185,11 +185,7 @@ impl EntryValue {
     }
 
     fn elapsed_seconds(&self, now: Time) -> f64 {
-        if now > self.env.batch_time {
-            (now - self.env.batch_time).as_secs_f64()
-        } else {
-            0.0
-        }
+        now.saturating_sub(self.env.batch_time).as_secs_f64()
     }
 }
 
@@ -301,7 +297,7 @@ mod tests {
         assert_eq!(2.0, entry_value.elapsed_seconds(forward_time));
 
         // Negative time differences should give just 0.
-        let backward_time = current_time - Duration::from_secs(2);
+        let backward_time = current_time.saturating_sub_duration(Duration::from_secs(2));
         assert_eq!(0.0, entry_value.elapsed_seconds(backward_time));
     }
 }

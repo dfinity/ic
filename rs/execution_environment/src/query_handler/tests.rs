@@ -325,8 +325,11 @@ fn query_cache_metrics_evicted_entries_negative_duration_works() {
     assert_eq!(output, Ok(WasmResult::Reply([1; REPLY_SIZE / 2].into())));
 
     // Move the time backward.
-    test.state_mut().metadata.batch_time =
-        test.state_mut().metadata.batch_time - Duration::from_secs(2);
+    test.state_mut().metadata.batch_time = test
+        .state_mut()
+        .metadata
+        .batch_time
+        .saturating_sub_duration(Duration::from_secs(2));
 
     // The second query should evict the first one, as there is no room in the cache for two queries.
     let output = test.query(
@@ -661,8 +664,11 @@ fn query_cache_env_invalidated_entries_negative_duration_works() {
         vec![],
     );
     // Move the time backward.
-    test.state_mut().metadata.batch_time =
-        test.state_mut().metadata.batch_time - Duration::from_secs(1);
+    test.state_mut().metadata.batch_time = test
+        .state_mut()
+        .metadata
+        .batch_time
+        .saturating_sub_duration(Duration::from_secs(1));
     let output_2 = test.query(
         UserQuery {
             source: user_test_id(1),

@@ -1506,8 +1506,7 @@ impl Validator {
         match pool_reader.pool().unvalidated().get_timestamp(id) {
             Some(timestamp) => {
                 let now = self.time_source.get_relative_time();
-                now >= timestamp // otherwise subtraction can panic!
-                    && now - timestamp >= Duration::from_secs(SECONDS_TO_LOG_UNVALIDATED)
+                now >= timestamp + Duration::from_secs(SECONDS_TO_LOG_UNVALIDATED)
             }
             None => false, // should never happen.
         }
@@ -1535,7 +1534,7 @@ impl Validator {
                     //< CATCH_UP_NEGLIGIBLE_HEIGHT
                     < Self::get_next_interval_length(catch_up_package).get() / 4
                     // Check that the finalized height is higher than this cup
-                    // In order to validate the finalization of height `h` we need to have a valid random beacon 
+                    // In order to validate the finalization of height `h` we need to have a valid random beacon
                     // of height `h-1` and a valid block of height `h`.
                     // In order to have a valid block of height `h` you need to have a valid block of height `h-1`.
                     // The same is true for the random beacon.
@@ -1552,9 +1551,7 @@ impl Validator {
                         .unvalidated()
                         .get_timestamp(&catch_up_package.get_id())
                     {
-                        Some(timestamp)
-                            if now >= timestamp && now - timestamp > CATCH_UP_HOLD_OF_TIME =>
-                        {
+                        Some(timestamp) if now > timestamp + CATCH_UP_HOLD_OF_TIME => {
                             warn!(
                                 self.log,
                                 "Validating CUP after holding it back for {} seconds",
