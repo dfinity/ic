@@ -1,14 +1,12 @@
-use std::collections::BTreeSet;
-
 use candid::{Decode, Encode};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-use ic_nervous_system_root::{
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType},
-    CanisterIdRecord,
 };
+use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers};
 use ic_sns_root::{
     pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
@@ -23,6 +21,7 @@ use ic_sns_test_utils::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
+use std::collections::BTreeSet;
 
 #[test]
 fn test_get_status() {

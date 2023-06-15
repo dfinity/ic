@@ -3,25 +3,30 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount;
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
-use ic_nns_test_utils::state_test_helpers;
-use ic_nns_test_utils::state_test_helpers::{
-    icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_make_proposal,
-    sns_stake_neuron, sns_wait_for_proposal_execution,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    state_test_helpers,
+    state_test_helpers::{
+        icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_make_proposal,
+        sns_stake_neuron, sns_wait_for_proposal_execution,
+    },
 };
-use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-use ic_sns_governance::pb::v1::proposal::Action;
-use ic_sns_governance::pb::v1::transfer_sns_treasury_funds::TransferFrom;
-use ic_sns_governance::pb::v1::{
-    NervousSystemParameters, NeuronPermissionList, NeuronPermissionType, Proposal,
-    TransferSnsTreasuryFunds,
+use ic_sns_governance::{
+    governance::TREASURY_SUBACCOUNT_NONCE,
+    pb::v1::{
+        proposal::Action, transfer_sns_treasury_funds::TransferFrom, NervousSystemParameters,
+        NeuronPermissionList, NeuronPermissionType, Proposal, TransferSnsTreasuryFunds,
+    },
+    types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
 };
-use ic_sns_governance::types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN};
-use ic_sns_test_utils::itest_helpers::SnsTestsInitPayloadBuilder;
-use ic_sns_test_utils::state_test_helpers::setup_sns_canisters;
+use ic_sns_test_utils::{
+    itest_helpers::SnsTestsInitPayloadBuilder, state_test_helpers::setup_sns_canisters,
+};
 use ic_state_machine_tests::StateMachine;
-use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, Subaccount as IcpSubaccount};
+use icp_ledger::{
+    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount as IcpSubaccount,
+    DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,
+};
 use icrc_ledger_types::icrc1::account::Account;
 use std::ops::Sub;
 

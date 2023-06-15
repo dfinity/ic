@@ -1,7 +1,6 @@
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::types::number::Nat;
-use candid::Encode;
+use candid::{types::number::Nat, Encode};
 use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
@@ -41,21 +40,25 @@ use ic_sns_governance::{
     },
     types::{test_helpers::NativeEnvironment, Environment, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS},
 };
-use ic_sns_test_utils::icrc1;
-use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, NONCE,
+use ic_sns_test_utils::{
+    icrc1,
+    itest_helpers::{
+        local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, NONCE,
+    },
+    now_seconds,
 };
-use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
+use icrc_ledger_types::icrc1::{
+    account::{Account, Subaccount},
+    transfer::{Memo, TransferArg},
+};
 use maplit::btreemap;
 use rust_decimal_macros::dec;
-use std::time::SystemTime;
 use std::{
     collections::HashSet,
     convert::TryInto,
     iter::{zip, FromIterator},
+    time::SystemTime,
 };
 
 const E8: u64 = 1_0000_0000;

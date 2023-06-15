@@ -10,12 +10,6 @@
 // the did definition of the method.
 
 use async_trait::async_trait;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
-use std::{boxed::Box, convert::TryFrom, time::SystemTime};
-
-use prost::Message;
-
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
@@ -25,13 +19,13 @@ use dfn_core::{
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nervous_system_common::{
     cmc::CMCCanister,
     ledger::IcpLedgerCanister,
     serve_logs, serve_logs_v2, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
-use ic_nervous_system_root::canister_status::CanisterStatusResultV2;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
@@ -52,6 +46,10 @@ use ic_sns_governance::{
     },
     types::{Environment, HeapGrowthPotential},
 };
+use prost::Message;
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
+use std::{boxed::Box, convert::TryFrom, time::SystemTime};
 
 /// Size of the buffer for stable memory reads and writes.
 ///

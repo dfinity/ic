@@ -2,15 +2,15 @@ use canister_test::{Canister, Project};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR, TEST_USER5_KEYPAIR,
     TEST_USER6_KEYPAIR,
 };
-use ic_nervous_system_root::{
-    canister_status::CanisterStatusResult, change_canister::ChangeCanisterProposal,
-    CanisterIdRecord,
-};
+use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_test_utils::{

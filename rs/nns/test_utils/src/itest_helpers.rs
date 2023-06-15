@@ -21,12 +21,12 @@ use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
 use ic_ic00_types::CanisterInstallMode;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nervous_system_root::{
-    canister_status::{CanisterStatusResult, CanisterStatusType::Running},
-    change_canister::ChangeCanisterProposal,
-    CanisterIdRecord,
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
+    canister_status::{CanisterStatusResult, CanisterStatusType},
 };
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nns_common::{
     init::LifelineCanisterInitPayload,
     types::{NeuronId, ProposalId},
@@ -751,7 +751,9 @@ pub async fn upgrade_root_canister_by_proposal(
             )
             .await
             .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash && status.status == Running {
+        if status.module_hash.unwrap().as_slice() == new_module_hash
+            && status.status == CanisterStatusType::Running
+        {
             break;
         }
     }
@@ -821,7 +823,9 @@ async fn change_nns_canister_by_proposal(
             )
             .await
             .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash && status.status == Running {
+        if status.module_hash.unwrap().as_slice() == new_module_hash
+            && status.status == CanisterStatusType::Running
+        {
             break;
         }
     }

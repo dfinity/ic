@@ -10,6 +10,7 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",

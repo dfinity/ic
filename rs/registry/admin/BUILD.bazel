@@ -11,6 +11,7 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/http_utils",
     "//rs/interfaces/registry",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/humanize",
