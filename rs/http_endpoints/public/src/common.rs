@@ -38,7 +38,7 @@ pub(crate) fn poll_ready(r: Poll<Result<(), Infallible>>) -> Poll<Result<(), Box
 
 pub(crate) fn get_root_threshold_public_key(
     log: &ReplicaLogger,
-    registry_client: Arc<dyn RegistryClient>,
+    registry_client: &dyn RegistryClient,
     version: RegistryVersion,
     nns_subnet_id: &SubnetId,
 ) -> Option<ThresholdSigPublicKey> {
