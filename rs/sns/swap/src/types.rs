@@ -91,39 +91,56 @@ impl ErrorRefundIcpResponse {
     }
 }
 
+fn principal_string_to_canister_id(s: &str) -> Result<CanisterId, String> {
+    let principal_id = PrincipalId::from_str(s).map_err(|err| err.to_string())?;
+    let canister_id = CanisterId::new(principal_id).map_err(|err| err.to_string())?;
+    Ok(canister_id)
+}
+
 impl Init {
-    pub fn nns_governance_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.nns_governance_canister_id).unwrap()).unwrap()
+    pub fn nns_governance(&self) -> Result<CanisterId, String> {
+        principal_string_to_canister_id(&self.nns_governance_canister_id)
     }
 
-    pub fn nns_governance(&self) -> Result<CanisterId, String> {
-        let principal_id = PrincipalId::from_str(&self.nns_governance_canister_id)
-            .map_err(|err| err.to_string())?;
+    pub fn nns_governance_or_panic(&self) -> CanisterId {
+        self.nns_governance()
+            .expect("could not get canister id of nns governance")
+    }
 
-        CanisterId::new(principal_id).map_err(|err| err.to_string())
+    pub fn sns_root(&self) -> Result<CanisterId, String> {
+        principal_string_to_canister_id(&self.sns_root_canister_id)
     }
 
     pub fn sns_root_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.sns_root_canister_id).unwrap()).unwrap()
-    }
-
-    pub fn sns_governance_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.sns_governance_canister_id).unwrap()).unwrap()
+        self.sns_root()
+            .expect("could not get canister id of sns root")
     }
 
     pub fn sns_governance(&self) -> Result<CanisterId, String> {
-        let principal_id = PrincipalId::from_str(&self.sns_governance_canister_id)
-            .map_err(|err| err.to_string())?;
+        principal_string_to_canister_id(&self.sns_governance_canister_id)
+    }
 
-        CanisterId::new(principal_id).map_err(|err| err.to_string())
+    pub fn sns_governance_or_panic(&self) -> CanisterId {
+        self.sns_governance()
+            .expect("could not get canister id of sns governance")
+    }
+
+    pub fn sns_ledger(&self) -> Result<CanisterId, String> {
+        principal_string_to_canister_id(&self.sns_ledger_canister_id)
     }
 
     pub fn sns_ledger_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.sns_ledger_canister_id).unwrap()).unwrap()
+        self.sns_ledger()
+            .expect("could not get canister id of sns ledger")
+    }
+
+    pub fn icp_ledger(&self) -> Result<CanisterId, String> {
+        principal_string_to_canister_id(&self.icp_ledger_canister_id)
     }
 
     pub fn icp_ledger_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.icp_ledger_canister_id).unwrap()).unwrap()
+        self.icp_ledger()
+            .expect("could not get canister id of icp ledger")
     }
 
     pub fn transaction_fee_e8s_or_panic(&self) -> u64 {

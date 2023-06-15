@@ -391,23 +391,8 @@ fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPayme
 /// Tries to commit or abort the swap if the parameters have been satisfied.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
-    const NUMBER_OF_TICKETS_THRESHOLD: u64 = 100_000_000; // 100M * ~size(ticket) = ~25GB
-    const TWO_DAYS_IN_NANOSECONDS: u64 = 60 * 60 * 24 * 2 * 1_000_000_000;
-    const MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT: u64 = 100_000;
-
-    swap_mut().try_purge_old_tickets(
-        dfn_core::api::time_nanos,
-        NUMBER_OF_TICKETS_THRESHOLD,
-        TWO_DAYS_IN_NANOSECONDS,
-        MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
-    );
-    let now = now_seconds();
-    if swap_mut().try_open_after_delay(now) {
-        log!(INFO, "Sale opened at timestamp {}", now);
-    }
-    if swap_mut().try_commit_or_abort(now) {
-        log!(INFO, "Swap committed/aborted at timestamp {}", now);
-    }
+    let now_seconds = now_seconds();
+    swap_mut().run_periodic_tasks(now_seconds);
 }
 
 fn now_seconds() -> u64 {

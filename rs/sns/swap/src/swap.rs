@@ -591,6 +591,25 @@ impl Swap {
     // --- state modifying methods ---------------------------------------------
     //
 
+    pub fn run_periodic_tasks(&mut self, now_seconds: u64) {
+        const NUMBER_OF_TICKETS_THRESHOLD: u64 = 100_000_000; // 100M * ~size(ticket) = ~25GB
+        const TWO_DAYS_IN_NANOSECONDS: u64 = 60 * 60 * 24 * 2 * 1_000_000_000;
+        const MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT: u64 = 100_000;
+
+        self.try_purge_old_tickets(
+            dfn_core::api::time_nanos,
+            NUMBER_OF_TICKETS_THRESHOLD,
+            TWO_DAYS_IN_NANOSECONDS,
+            MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
+        );
+        if self.try_open_after_delay(now_seconds) {
+            log!(INFO, "Sale opened at timestamp {}", now_seconds);
+        }
+        if self.try_commit_or_abort(now_seconds) {
+            log!(INFO, "Swap committed/aborted at timestamp {}", now_seconds);
+        }
+    }
+
     /*
 
     Transfers IN - these transfers happen on ICP ledger canister and
