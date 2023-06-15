@@ -264,7 +264,7 @@ async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalRes
 }
 
 /// Restores all dapp canisters to the fallback controllers as specified
-/// in the SNS initialization process, marking the Sale as aborted in the
+/// in the SNS initialization process, marking the Swap as aborted in the
 /// process. `restore_dapp_controllers` is only callable by NNS Governance.
 #[export_name = "canister_update restore_dapp_controllers"]
 fn restore_dapp_controllers() {
@@ -272,7 +272,7 @@ fn restore_dapp_controllers() {
 }
 
 /// Restores all dapp canisters to the fallback controllers as specified
-/// in the SNS initialization process, marking the Sale as aborted in the
+/// in the SNS initialization process, marking the Swap as aborted in the
 /// process. `restore_dapp_controllers` is only callable by NNS Governance.
 #[candid_method(update, rename = "restore_dapp_controllers")]
 async fn restore_dapp_controllers_(
@@ -312,13 +312,13 @@ async fn get_init_(_request: GetInitRequest) -> GetInitResponse {
     }
 }
 
-/// Return the current derived state of the Sale
+/// Return the current derived state of the Swap
 #[export_name = "canister_query get_derived_state"]
 fn get_derived_state() {
     over_async(candid_one, get_derived_state_)
 }
 
-/// Return the current derived state of the Sale
+/// Return the current derived state of the Swap
 #[candid_method(query, rename = "get_derived_state")]
 async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
     log!(INFO, "get_derived_state");
@@ -347,13 +347,13 @@ async fn new_sale_ticket_(request: NewSaleTicketRequest) -> NewSaleTicketRespons
     swap_mut().new_sale_ticket(&request, caller(), dfn_core::api::time_nanos())
 }
 
-/// Lists direct participants in the Sale.
+/// Lists direct participants in the Swap.
 #[export_name = "canister_query list_direct_participants"]
 fn list_direct_participants() {
     over_async(candid_one, list_direct_participants_)
 }
 
-/// Lists direct participants in the Sale.
+/// Lists direct participants in the Swap.
 #[candid_method(query, rename = "list_direct_participants")]
 async fn list_direct_participants_(
     request: ListDirectParticipantsRequest,
@@ -531,7 +531,7 @@ fn canister_post_upgrade() {
     // rolls back.
     swap().rebuild_indexes().unwrap_or_else(|err| {
         panic!(
-            "Error rebuilding the Sale canister indexes. The stable memory has been exhausted: {}",
+            "Error rebuilding the Swap canister indexes. The stable memory has been exhausted: {}",
             err
         )
     });

@@ -13,7 +13,7 @@
 ///                                                                      sufficient_participation
 ///                                                                      && (swap_due || icp_target_reached)
 /// PENDING -------------------> ADOPTED ---------------------> OPEN -----------------------------------------> COMMITTED
-///          Sale recieves a request        The opening delay      |                                                |
+///          Swap recieves a request        The opening delay      |                                                |
 ///          from NNS governance to         has elapsed            | not sufficient_participation                   |
 ///          schedule opening                                      | && (swap_due || icp_target_reached)            |
 ///                                                                v                                                v
@@ -114,15 +114,15 @@
 /// Data flow for the community fund.
 ///
 /// - A SNS is created.
-/// - Proposal to open a decentralization sale for the SNS is submitted to the NNS.
+/// - Proposal to open a decentralization swap for the SNS is submitted to the NNS.
 ///    - ProposalToOpenDecentralizationSale
 ///      - The Community Fund investment amount
-///      - The parameters of the decentralization sale (`Params`).
+///      - The parameters of the decentralization swap (`Params`).
 ///    - Call to open swap:
 ///      - Parameters
 ///      - CF Investments
 ///      - NNS Proposal ID of the NNS proposal to open the swap.
-/// - On accept of proposal to open decentralization sale:
+/// - On accept of proposal to open decentralization swap:
 ///    - Compute the maturity contribution of each CF neuron and deduct this amount from the CF neuron.
 ///    - The swap is informed about the corresponding amount of ICP (`CfParticipant`) in the call to open.
 ///    - Call back to NNS governance after the swap is committed or aborted:
@@ -130,7 +130,7 @@
 ///        - Ask the NNS to mint the right amount of ICP for the SNS corresponding to the CF investment (the NNS governance canister keeps track of the total).
 ///      - On aborted swap:
 ///        - Send the information about CF participants (`CfParticipant`) back to NNS governance which will return it to the corresponding neurons. Assign the control of the dapp (now under the SNS control) back to the specified principals.
-/// - On reject of proposal to open decentralization sale:
+/// - On reject of proposal to open decentralization swap:
 ///    - Assign the control of the dapp (now under the SNS control) back to the specified principals.
 #[derive(
     candid::CandidType,
@@ -183,9 +183,9 @@ pub struct Swap {
     /// release the lock in the post upgrade hook.
     #[prost(bool, optional, tag = "10")]
     pub finalize_swap_in_progress: ::core::option::Option<bool>,
-    /// The timestamp for the actual opening of the sale, with an optional delay
-    /// (specified via params.sale_delay_seconds) after the adoption of the sale proposal.
-    /// Gets set when NNS calls open() upon the adoption of the sale proposal.
+    /// The timestamp for the actual opening of the swap, with an optional delay
+    /// (specified via params.sale_delay_seconds) after the adoption of the swap proposal.
+    /// Gets set when NNS calls open() upon the adoption of the swap proposal.
     #[prost(uint64, optional, tag = "11")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
     /// This ticket id counter keeps track of the latest ticket id. Whenever a new
@@ -368,8 +368,8 @@ pub struct Params {
     #[prost(message, optional, tag = "8")]
     pub neuron_basket_construction_parameters:
         ::core::option::Option<params::NeuronBasketConstructionParameters>,
-    /// An optional delay, so that the actual sale does not get opened immediately
-    /// after the adoption of the sale proposal.
+    /// An optional delay, so that the actual swap does not get opened immediately
+    /// after the adoption of the swap proposal.
     #[prost(uint64, optional, tag = "9")]
     pub sale_delay_seconds: ::core::option::Option<u64>,
 }
@@ -556,7 +556,7 @@ pub mod sns_neuron_recipe {
         /// Actions known to governance at the time. Additional followees and following
         /// relations can be added after neuron creation.
         ///
-        /// TODO NNS1-1589 - Due to the dependency cycle, the Sale canister's protobuf cannot directly
+        /// TODO NNS1-1589 - Due to the dependency cycle, the Swap canister's protobuf cannot directly
         /// depend on SNS Governance NeuronId type. The followees NeuronId's are
         /// of a duplicated type, which is converted to SNS governance NeuronId at the time
         /// of claiming.
@@ -1690,7 +1690,7 @@ pub mod get_open_ticket_response {
         ::prost::Message,
     )]
     pub struct Ok {
-        /// If there is an open sale ticket for the caller then this field contains it
+        /// If there is an open swap ticket for the caller then this field contains it
         #[prost(message, optional, tag = "1")]
         pub ticket: ::core::option::Option<super::Ticket>,
     }
@@ -1874,7 +1874,7 @@ pub mod new_sale_ticket_response {
             /// When this is the `error_type`, then the field existing_ticket
             /// is set and contains the ticket itself.
             TicketExists = 3,
-            /// The amount sent by the user is not within the Sale parameters.
+            /// The amount sent by the user is not within the Swap parameters.
             ///
             /// When this is the `error_type`, then the field invalid_user_amount
             /// is set and describes minimum and maximum amounts.
@@ -1919,7 +1919,7 @@ pub mod new_sale_ticket_response {
     }
 }
 /// Request struct for the method `list_direct_participants`. This method
-/// paginates over all direct participants in the decentralization sale.
+/// paginates over all direct participants in the decentralization swap.
 /// Direct participants are participants who did not participate via the
 /// CommunityFund.
 #[derive(
@@ -1952,7 +1952,7 @@ pub struct ListDirectParticipantsRequest {
 )]
 pub struct ListDirectParticipantsResponse {
     /// The list of Participants returned from the invocation of `list_direct_participants`.
-    /// The list is a page of all the buyers in the Sale canister at the time of the
+    /// The list is a page of all the buyers in the Swap canister at the time of the
     /// method call. The size of the page is equal to either
     /// - the max page size (30,000),
     /// - the corresponding `ListDirectParticipantsRequest.limit`,
@@ -1963,7 +1963,7 @@ pub struct ListDirectParticipantsResponse {
     #[prost(message, repeated, tag = "1")]
     pub participants: ::prost::alloc::vec::Vec<Participant>,
 }
-/// A direct Participant in the decentralization sale.
+/// A direct Participant in the decentralization swap.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2127,8 +2127,8 @@ pub enum Lifecycle {
     /// the SNS ledger, a call to `open` with valid parameters will start
     /// the swap.
     Pending = 1,
-    /// In ADOPTED state, the proposal to start decentralization sale
-    /// has been adopted, and the sale can be opened after a delay
+    /// In ADOPTED state, the proposal to start the decentralization swap
+    /// has been adopted, and the swap can be opened after a delay
     /// specified by params.sale_delay_seconds.
     Adopted = 5,
     /// In OPEN state, prospective buyers can register for the token
