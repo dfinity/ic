@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use instant_acme::{
@@ -5,6 +7,7 @@ use instant_acme::{
 };
 use mockall::automock;
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
+use tokio::time::sleep;
 
 #[automock]
 #[async_trait]
@@ -131,6 +134,9 @@ impl Finalize for Acme {
             .finalize(&csr)
             .await
             .context("failed to finalize order")?;
+
+        // Inject artificial delay of 5 seconds to allow certificate processing to complete
+        sleep(Duration::from_secs(5)).await;
 
         let cert_chain_pem = match order
             .certificate()
