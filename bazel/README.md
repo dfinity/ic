@@ -227,7 +227,7 @@ Note that if a module is defined with a package dependency, then the test does n
 
 Some good examples for writing bazel tests can be found in `scalability/BUILD.bazel`.
 
-To add new packages required for a test run in bazel, follow [these instructions](/../ic/gitlab-ci/src/docs/HowTo-Developer.adoc).
+To add new packages required for a test run in bazel, follow [these instructions](https://github.com/dfinity/ic/blob/master/gitlab-ci/src/docs/HowTo-Developer.adoc).
 
 ## Target Labels
 
