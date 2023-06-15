@@ -249,10 +249,10 @@ fn test_open() {
             .unwrap();
         assert!(r.is_err());
     }
-    // assert that before sale is open, no tokens are available for sale.
+    // assert that before swap is open, no tokens are available for swap.
     assert_eq!(
         swap.sns_token_e8s().unwrap_err(),
-        "Sale not open, no tokens available.".to_string()
+        "Swap not open, no tokens available.".to_string()
     );
     // Funding is available - now we can open.
     {
@@ -1576,7 +1576,7 @@ fn test_error_refund_single_user() {
         .now_or_never()
         .unwrap();
 
-        // Verify that SNS Sale canister registered the tokens
+        // Verify that SNS Swap canister registered the tokens
         assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
         // User has not commited yet --> No neuron has been created
@@ -1693,7 +1693,7 @@ fn test_error_refund_single_user() {
 
         // User can't get a refund after sweep. Balance of the subaccount of the buyer is now 0
         // since it was transferred to the sns governance canister. Transfer Response is set to be
-        // an Error since the account of the user1 in the sns sales canister is 0 and cannot pay for
+        // an Error since the account of the user1 in the sns swap canister is 0 and cannot pay for
         // fees.
         let refund_err = try_error_refund_err(
             &mut swap,
@@ -1772,7 +1772,7 @@ fn test_error_refund_multiple_users() {
         assert!(refund_err.description.unwrap().contains("escrow"));
         assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
 
-        // If user2 has sent ICP to the SNS sale in error but did not go through normal payment flow they should be able to get a refund
+        // If user2 has sent ICP to the SNS swap in error but did not go through normal payment flow they should be able to get a refund
         let refund_ok = try_error_refund_ok(
             &mut swap,
             &user2,
@@ -1807,7 +1807,7 @@ fn test_error_refund_multiple_users() {
         assert_eq!(global_failures, 0);
 
         //After user1 has gotten back their ICP they should not be able to call the refund_error function again and get back any ICP>0
-        //Transfer Response is set to be an Error since the account of the user1 in the sns sales canister is 0 and cannot pay for fees or the amount requested
+        //Transfer Response is set to be an Error since the account of the user1 in the sns swap canister is 0 and cannot pay for fees or the amount requested
         let refund_err = try_error_refund_err(
             &mut swap,
             &user1,
@@ -1828,7 +1828,7 @@ fn test_error_refund_multiple_users() {
     }
 }
 
-/// Test the error refund method after sale has closed
+/// Test the error refund method after swap has closed
 #[test]
 fn test_error_refund_after_close() {
     let user1 = *TEST_USER1_PRINCIPAL;
@@ -1863,7 +1863,7 @@ fn test_error_refund_after_close() {
         .now_or_never()
         .unwrap();
 
-        //Verify that SNS Sale canister registered the tokens
+        //Verify that SNS Swap canister registered the tokens
         assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
         //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
@@ -1905,7 +1905,7 @@ fn test_error_refund_after_close() {
         assert_eq!(invalid, 0);
         assert_eq!(global_failures, 0);
 
-        // If user2 has sent ICP in Error but never committed their tokens , i.e. never called refresh_buyer_tokens they should be able to get their funds back even after the sale is committed
+        // If user2 has sent ICP in Error but never committed their tokens , i.e. never called refresh_buyer_tokens they should be able to get their funds back even after the swap is committed
         let refund_ok = try_error_refund_ok(
             &mut swap,
             &user2,
@@ -2142,7 +2142,7 @@ fn test_finalize_swap_rejects_concurrent_calls() {
             None => panic!("Expected finalize_swap to reject this concurrent request"),
             Some(error_message) => {
                 assert!(error_message
-                    .contains("The Sale canister has finalize_swap call already in progress"))
+                    .contains("The Swap canister has finalize_swap call already in progress"))
             }
         }
 
@@ -2179,10 +2179,10 @@ fn test_finalize_swap_rejects_concurrent_calls() {
     }
 }
 
-/// Test that the Sale canister must be in the terminal state (Aborted || Committed)
+/// Test that the Swap canister must be in the terminal state (Aborted || Committed)
 /// for finalize to be invoked correctly.
 #[tokio::test]
-async fn test_sale_must_be_terminal_to_invoke_finalize() {
+async fn test_swap_must_be_terminal_to_invoke_finalize() {
     let invalid_finalize_lifecycles = vec![Open, Unspecified, Pending];
 
     for lifecycle in invalid_finalize_lifecycles {
@@ -2211,7 +2211,7 @@ async fn test_sale_must_be_terminal_to_invoke_finalize() {
         // Assert the error message contains the correct message
         assert!(
             error_message
-                .contains("The Sale can only be finalized in the COMMITTED or ABORTED states"),
+                .contains("The Swap can only be finalized in the COMMITTED or ABORTED states"),
             "{}",
             error_message,
         );
@@ -2448,7 +2448,7 @@ async fn test_finalization_halts_when_sweep_icp_fails() {
 
     assert_eq!(
         result.error_message,
-        Some(String::from("Transferring ICP did not complete fully, some transfers were invalid or failed. Halting sale finalization"))
+        Some(String::from("Transferring ICP did not complete fully, some transfers were invalid or failed. Halting swap finalization"))
     );
 
     // Assert all other fields are set to None because finalization was halted
@@ -2750,7 +2750,7 @@ async fn test_finalization_halts_when_sweep_sns_fails() {
 
     assert_eq!(
         result.error_message,
-        Some(String::from("Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting sale finalization"))
+        Some(String::from("Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting swap finalization"))
     );
 
     // Assert all other fields are set to None because finalization was halted
@@ -2839,7 +2839,7 @@ async fn test_finalization_halts_when_settle_cf_fails() {
     assert_eq!(
         result.error_message,
         Some(String::from(
-            "Settling the CommunityFund participation did not succeed. Halting sale finalization"
+            "Settling the CommunityFund participation did not succeed. Halting swap finalization"
         ))
     );
 
@@ -2969,7 +2969,7 @@ async fn test_restore_dapp_controllers_happy() {
     // Assert that the response contains no failures
     assert_eq!(set_dapp_controller_response.failed_updates, vec![],);
 
-    // Assert that with a successful call the Lifecycle of the Sale has been set to aborted
+    // Assert that with a successful call the Lifecycle of the Swap has been set to aborted
     assert_eq!(swap.lifecycle(), Aborted);
 
     // Inspect the request to SNS Root and that it has all the fallback controllers
@@ -3052,7 +3052,7 @@ async fn test_finalization_halts_when_set_mode_fails() {
         })
     );
 
-    assert_eq!(result.error_message, Some(String::from("Setting the SNS Governance mode to normal did not complete fully. Halting sale finalization")));
+    assert_eq!(result.error_message, Some(String::from("Setting the SNS Governance mode to normal did not complete fully. Halting swap finalization")));
 
     // Assert that sweep_icp was executed correctly, but ignore the specific values
     assert!(result.sweep_icp_result.is_some());
@@ -3134,7 +3134,7 @@ async fn test_restore_dapp_controllers_cannot_parse_fallback_controllers() {
         canister_call_error.description
     );
 
-    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
     assert_eq!(swap.lifecycle(), Aborted);
 }
 
@@ -3180,7 +3180,7 @@ async fn test_restore_dapp_controllers_handles_external_root_failures() {
     // Assert that the error code is expected
     assert_eq!(canister_call_error.code, Some(0));
 
-    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
     assert_eq!(swap.lifecycle(), Aborted);
 }
 
@@ -3224,7 +3224,7 @@ async fn test_restore_dapp_controllers_handles_internal_root_failures() {
         vec![set_dapp_controllers_response::FailedUpdate::default()],
     );
 
-    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
     assert_eq!(swap.lifecycle(), Aborted);
 }
 
@@ -3832,7 +3832,7 @@ fn test_list_direct_participants_list_is_deterministic() {
         LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
     ]);
 
-    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // Participate in the swap by calling refresh_buyer_tokens. This will update the
     // buyers map and BUYERS_LIST_INDEX
     for i in 0..4 {
         swap.refresh_buyer_token_e8s(
@@ -3872,7 +3872,7 @@ fn test_list_direct_participants_paginates_all_participants() {
         LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
     ]);
 
-    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // Participate in the swap by calling refresh_buyer_tokens. This will update the
     // buyers map and BUYERS_LIST_INDEX
     for i in 0..4 {
         swap.refresh_buyer_token_e8s(
@@ -3960,7 +3960,7 @@ fn test_rebuild_indexes_ignores_existing_index() {
         LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
     ]);
 
-    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // Participate in the swap by calling refresh_buyer_tokens. This will update the
     // buyers map and BUYERS_LIST_INDEX
     for i in 0..2 {
         swap.refresh_buyer_token_e8s(
@@ -4247,7 +4247,7 @@ fn test_refresh_buyer_tokens() {
             100 * E8
         );
 
-        //Try and buy 41 more tokens. Since user1 has already participated in the sale they can purchase the missing amount until the user limit
+        //Try and buy 41 more tokens. Since user1 has already participated in the swap they can purchase the missing amount until the user limit
         buy_token_ok(
             &mut swap,
             &user1,
@@ -4304,7 +4304,7 @@ fn test_refresh_buyer_tokens() {
                 < params.min_participant_icp_e8s
         );
 
-        // No user that has not participated in the sale yet can buy this one token left
+        // No user that has not participated in the swap yet can buy this one token left
         buy_token_err(
             &mut swap,
             &user1,
@@ -4604,7 +4604,7 @@ fn test_get_state_bounds_data_sources() {
     assert!(!swap.buyers.is_empty());
 }
 
-/// Assert that an aborted sale that successfully refunds buyers also clears these buyers' buyer
+/// Assert that an aborted swap that successfully refunds buyers also clears these buyers' buyer
 /// state (i.e. sets their committed amounts to 0).
 #[tokio::test]
 async fn test_finalize_swap_abort_sets_amount_transferred_and_fees_correctly() {

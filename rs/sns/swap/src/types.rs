@@ -322,11 +322,11 @@ impl Params {
             .swap_due_timestamp_seconds
             .saturating_sub(open_timestamp_seconds);
 
-        // Sale must be at least MIN_SALE_DURATION_SECONDS long
+        // Swap must be at least MIN_SALE_DURATION_SECONDS long
         if duration_seconds < Self::MIN_SALE_DURATION_SECONDS {
             return false;
         }
-        // Sale can be at most MAX_SALE_DURATION_SECONDS long
+        // Swap can be at most MAX_SALE_DURATION_SECONDS long
         if duration_seconds > Self::MAX_SALE_DURATION_SECONDS {
             return false;
         }
@@ -627,7 +627,7 @@ impl FinalizeSwapResponse {
     pub fn set_sweep_icp_result(&mut self, sweep_icp_result: SweepResult) {
         if !sweep_icp_result.is_successful_sweep() {
             self.set_error_message(
-                "Transferring ICP did not complete fully, some transfers were invalid or failed. Halting sale finalization".to_string()
+                "Transferring ICP did not complete fully, some transfers were invalid or failed. Halting swap finalization".to_string()
             );
         }
         self.sweep_icp_result = Some(sweep_icp_result);
@@ -639,7 +639,7 @@ impl FinalizeSwapResponse {
     ) {
         if !result.is_successful_settlement() {
             self.set_error_message(
-                "Settling the CommunityFund participation did not succeed. Halting sale finalization".to_string());
+                "Settling the CommunityFund participation did not succeed. Halting swap finalization".to_string());
         }
         self.settle_community_fund_participation_result = Some(result);
     }
@@ -647,7 +647,7 @@ impl FinalizeSwapResponse {
     pub fn set_set_dapp_controllers_result(&mut self, result: SetDappControllersCallResult) {
         if !result.is_successful_set_dapp_controllers() {
             self.set_error_message(
-                "Restoring the dapp canisters controllers did not succeed. Halting sale finalization".to_string());
+                "Restoring the dapp canisters controllers did not succeed. Halting swap finalization".to_string());
         }
         self.set_dapp_controllers_call_result = Some(result);
     }
@@ -655,7 +655,7 @@ impl FinalizeSwapResponse {
     pub fn set_sweep_sns_result(&mut self, sweep_sns_result: SweepResult) {
         if !sweep_sns_result.is_successful_sweep() {
             self.set_error_message(
-                "Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting sale finalization".to_string()
+                "Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting swap finalization".to_string()
             );
         }
         self.sweep_sns_result = Some(sweep_sns_result);
@@ -664,7 +664,7 @@ impl FinalizeSwapResponse {
     pub fn set_claim_neuron_result(&mut self, claim_neuron_result: SweepResult) {
         if !claim_neuron_result.is_successful_sweep() {
             self.set_error_message(
-                "Claiming SNS Neurons did not complete fully, some claims were invalid or failed. Halting sale finalization".to_string()
+                "Claiming SNS Neurons did not complete fully, some claims were invalid or failed. Halting swap finalization".to_string()
             );
         }
         self.claim_neuron_result = Some(claim_neuron_result);
@@ -673,7 +673,7 @@ impl FinalizeSwapResponse {
     pub fn set_set_mode_call_result(&mut self, set_mode_call_result: SetModeCallResult) {
         if !set_mode_call_result.is_successful_set_mode_call() {
             self.set_error_message(
-                "Setting the SNS Governance mode to normal did not complete fully. Halting sale finalization".to_string()
+                "Setting the SNS Governance mode to normal did not complete fully. Halting swap finalization".to_string()
             );
         }
         self.set_mode_call_result = Some(set_mode_call_result);
@@ -1022,7 +1022,7 @@ mod tests {
 
     #[test]
     fn sale_cannot_be_open_more_than_90_days() {
-        // Should be valid with the sale deadline set to MAX_SALE_DURATION_SECONDS from now.
+        // Should be valid with the swap deadline set to MAX_SALE_DURATION_SECONDS from now.
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
@@ -1038,7 +1038,7 @@ mod tests {
         };
         assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
 
-        // Should be invalid with the sale deadline set MAX_SALE_DURATION_SECONDS + 1 second from now.
+        // Should be invalid with the swap deadline set MAX_SALE_DURATION_SECONDS + 1 second from now.
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS + 1,
             sale_delay_seconds: Some(0),
@@ -1079,7 +1079,7 @@ mod tests {
 
     #[test]
     fn sale_must_be_open_for_at_least_one_day() {
-        // Should be valid with the sale length set to MIN_SALE_DURATION_SECONDS.
+        // Should be valid with the swap length set to MIN_SALE_DURATION_SECONDS.
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
@@ -1095,7 +1095,7 @@ mod tests {
         };
         assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
 
-        // Should fail with the sale length set to one second less than MIN_SALE_DURATION_SECONDS.
+        // Should fail with the swap length set to one second less than MIN_SALE_DURATION_SECONDS.
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS - 1,
             sale_delay_seconds: Some(0),
@@ -1115,8 +1115,8 @@ mod tests {
 
     #[test]
     fn sale_must_be_open_for_at_least_one_day_takes_into_account_delay() {
-        // Should be valid with the sale deadline set to MIN_SALE_DURATION_SECONDS + 1 second from now
-        // with a sale delay of 1 second.
+        // Should be valid with the swap deadline set to MIN_SALE_DURATION_SECONDS + 1 second from now
+        // with a swap delay of 1 second.
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS + 1,
             sale_delay_seconds: Some(1),
@@ -1133,8 +1133,8 @@ mod tests {
         };
         assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
 
-        // Should be invalid with the sale deadline set to MIN_SALE_DURATION_SECONDS from now
-        // with a sale delay of 1 second.
+        // Should be invalid with the swap deadline set to MIN_SALE_DURATION_SECONDS from now
+        // with a swap delay of 1 second.
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(1),
