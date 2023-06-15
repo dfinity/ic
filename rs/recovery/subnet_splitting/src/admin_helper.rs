@@ -1,10 +1,9 @@
 use ic_base_types::SubnetId;
-use ic_recovery::admin_helper::{AdminHelper, IcAdmin};
+use ic_recovery::admin_helper::{
+    quote, AdminHelper, CommandHelper, IcAdmin, SSH_READONLY_ACCESS_ARG, SUMMARY_ARG,
+};
 use ic_registry_routing_table::CanisterIdRange;
 
-use std::fmt::Display;
-
-const SUMMARY_ARG: &str = "summary";
 const SOURCE_SUBNET_ARG: &str = "source-subnet";
 const DESTINATION_SUBNET_ARG: &str = "destination-subnet";
 const CANISTER_ID_RANGES_ARG: &str = "canister-id-ranges";
@@ -113,7 +112,7 @@ pub(crate) fn get_halt_subnet_at_cup_height_command(
         .add_argument("halt-at-cup-height", true);
 
     if let Some(key) = key {
-        ic_admin.add_argument("ssh-readonly-access", quote(key));
+        ic_admin.add_argument(SSH_READONLY_ACCESS_ARG, quote(key));
     }
 
     ic_admin
@@ -121,59 +120,6 @@ pub(crate) fn get_halt_subnet_at_cup_height_command(
 
 fn canister_id_range_to_string(canister_id_range: &CanisterIdRange) -> String {
     format!("{}:{}", canister_id_range.start, canister_id_range.end)
-}
-
-trait CommandHelper {
-    fn add_positional_argument(&mut self, action: impl ToString) -> &mut Self;
-    fn add_argument(&mut self, argument: impl ToString, value: impl ToString) -> &mut Self;
-    fn add_arguments<I>(&mut self, argument: impl ToString, values: I) -> &mut Self
-    where
-        I: IntoIterator,
-        I::Item: ToString;
-}
-
-impl CommandHelper for IcAdmin {
-    fn add_positional_argument(&mut self, action: impl ToString) -> &mut Self {
-        self.push(action.to_string());
-
-        self
-    }
-
-    fn add_argument(&mut self, argument: impl ToString, value: impl ToString) -> &mut Self {
-        self.push(prepend_if_necessary(argument, "--"));
-        self.push(value.to_string());
-
-        self
-    }
-
-    fn add_arguments<I>(&mut self, argument: impl ToString, values: I) -> &mut Self
-    where
-        I: IntoIterator,
-        I::Item: ToString,
-    {
-        self.push(prepend_if_necessary(argument, "--"));
-
-        for value in values {
-            self.push(value.to_string());
-        }
-
-        self
-    }
-}
-
-/// Prepends a prefix to the string, if the prefix is not there yet.
-fn prepend_if_necessary(argument: impl ToString, prefix: &str) -> String {
-    let string = argument.to_string();
-
-    if string.starts_with(prefix) {
-        string
-    } else {
-        String::from(prefix) + &string
-    }
-}
-
-fn quote(text: impl Display) -> String {
-    format!("\"{}\"", text)
 }
 
 #[cfg(test)]

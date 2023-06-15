@@ -2,12 +2,17 @@ use crate::NeuronArgs;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_ic00_types::EcdsaKeyId;
 use ic_types::{Height, ReplicaVersion, SubnetId};
+use url::Url;
+
 use std::{
+    fmt::Display,
     path::PathBuf,
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
-use url::Url;
+
+pub const SUMMARY_ARG: &str = "summary";
+pub const SSH_READONLY_ACCESS_ARG: &str = "ssh-readonly-access";
 
 pub type IcAdmin = Vec<String>;
 
@@ -40,16 +45,17 @@ impl AdminHelper {
         let mut ica = self.binary.clone();
         ica.push("ic-admin");
         let mut ic_admin = vec![ica.display().to_string()];
-        ic_admin.push("--nns-url".to_string());
-        ic_admin.push(format!("\"{}\"", self.nns_url));
+
+        ic_admin.add_argument("nns-url", quote(&self.nns_url));
 
         // Existence of [NeuronArgs] implies no testing mode. Add hsm parameters to
         // base.
         if let Some(args) = neuron_args {
-            ic_admin.push("--use-hsm".to_string());
-            ic_admin.push(format!("--slot={}", args.slot));
-            ic_admin.push(format!("--key-id={}", args.key_id));
-            ic_admin.push(format!("--pin=\"{}\"", args.dfx_hsm_pin));
+            ic_admin
+                .add_positional_argument("--use-hsm")
+                .add_argument("slot", &args.slot)
+                .add_argument("key-id", &args.key_id)
+                .add_argument("pin", quote(&args.dfx_hsm_pin));
         }
 
         ic_admin
@@ -60,9 +66,10 @@ impl AdminHelper {
         neuron_args: &Option<NeuronArgs>,
         subnet_id: SubnetId,
     ) {
-        ic_admin.push("propose-to-update-subnet".to_string());
-        ic_admin.push("--subnet".to_string());
-        ic_admin.push(subnet_id.to_string());
+        ic_admin
+            .add_positional_argument("propose-to-update-subnet")
+            .add_argument("subnet", subnet_id);
+
         AdminHelper::add_proposer_args(ic_admin, neuron_args);
     }
 
@@ -70,10 +77,9 @@ impl AdminHelper {
     // else add test neuron proposer.
     pub fn add_proposer_args(ic_admin: &mut IcAdmin, neuron_args: &Option<NeuronArgs>) {
         if let Some(args) = neuron_args {
-            ic_admin.push("--proposer".to_string());
-            ic_admin.push(args.neuron_id.clone());
+            ic_admin.add_argument("proposer", &args.neuron_id);
         } else {
-            ic_admin.push("--test-neuron-proposer".to_string());
+            ic_admin.add_positional_argument("--test-neuron-proposer");
         }
     }
 
@@ -85,16 +91,19 @@ impl AdminHelper {
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
         AdminHelper::add_propose_to_update_subnet_base(&mut ic_admin, &self.neuron_args, subnet_id);
-        ic_admin.push(format!("--is-halted={}", is_halted));
-        keys.iter()
-            .map(|k| format!("--ssh-readonly-access=\"{}\"", k))
-            .for_each(|k| ic_admin.push(k));
-        ic_admin.push("--summary".to_string());
-        ic_admin.push(format!(
-            "\"{} subnet {}, for recovery and update ssh readonly access\"",
-            if is_halted { "Halt" } else { "Unhalt" },
-            subnet_id,
-        ));
+
+        ic_admin.add_argument("is-halted", is_halted);
+        if !keys.is_empty() {
+            ic_admin.add_arguments(SSH_READONLY_ACCESS_ARG, keys.iter().map(quote));
+        }
+        ic_admin.add_argument(
+            SUMMARY_ARG,
+            quote(format!(
+                "{} subnet {}, for recovery and update ssh readonly access",
+                if is_halted { "Halt" } else { "Unhalt" },
+                subnet_id,
+            )),
+        );
 
         ic_admin
     }
@@ -106,17 +115,20 @@ impl AdminHelper {
         sha256: String,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
-        ic_admin.push("propose-to-update-elected-replica-versions".to_string());
-        ic_admin.push("--replica-version-to-elect".to_string());
-        ic_admin.push(format!("\"{upgrade_version}\""));
-        ic_admin.push("--release-package-urls".to_string());
-        ic_admin.push(format!("\"{upgrade_url}\""));
-        ic_admin.push("--release-package-sha256-hex".to_string());
-        ic_admin.push(format!("\"{sha256}\""));
-        ic_admin.push("--summary".to_string());
-        ic_admin.push(format!(
-            "\"Elect new replica binary revision (commit {upgrade_version})\""
-        ));
+
+        ic_admin
+            .add_positional_argument("propose-to-update-elected-replica-versions")
+            .add_argument("replica-version-to-elect", quote(upgrade_version))
+            .add_argument("release-package-urls", quote(upgrade_url))
+            .add_argument("release-package-sha256-hex", quote(sha256))
+            .add_argument(
+                SUMMARY_ARG,
+                quote(format!(
+                    "Elect new replica binary revision (commit {})",
+                    upgrade_version,
+                )),
+            );
+
         AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
         ic_admin
     }
@@ -127,14 +139,16 @@ impl AdminHelper {
         upgrade_version: &ReplicaVersion,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
-        ic_admin.push("propose-to-update-subnet-replica-version".to_string());
-        ic_admin.push(subnet_id.to_string());
-        ic_admin.push(upgrade_version.to_string());
-        ic_admin.push("--summary".to_string());
-        ic_admin.push(format!(
-            "\"Upgrade replica version of subnet {}.\"",
-            subnet_id
-        ));
+
+        ic_admin
+            .add_positional_argument("propose-to-update-subnet-replica-version")
+            .add_positional_argument(subnet_id)
+            .add_positional_argument(upgrade_version)
+            .add_argument(
+                SUMMARY_ARG,
+                quote(format!("Upgrade replica version of subnet {}.", subnet_id)),
+            );
+
         AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
         ic_admin
     }
@@ -151,52 +165,44 @@ impl AdminHelper {
         time: SystemTime,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
-        ic_admin.push("propose-to-update-recovery-cup".to_string());
-        ic_admin.push("--subnet-index".to_string());
-        ic_admin.push(subnet_id.to_string());
-        ic_admin.push("--height".to_string());
-        ic_admin.push(checkpoint_height.to_string());
-        ic_admin.push("--state-hash".to_string());
-        ic_admin.push(state_hash);
 
-        let ecdsa_subnet = ecdsa_subnet_id
-            .map(|id| format!(r#", "subnet_id": "{}""#, id))
-            .unwrap_or_default();
+        ic_admin
+            .add_positional_argument("propose-to-update-recovery-cup")
+            .add_argument("subnet-index", subnet_id)
+            .add_argument("height", checkpoint_height)
+            .add_argument("state-hash", state_hash);
 
         if !ecdsa_key_ids.is_empty() {
-            ic_admin.push("--ecdsa-keys-to-request".to_string());
+            let ecdsa_subnet = ecdsa_subnet_id
+                .map(|id| format!(r#", "subnet_id": "{}""#, id))
+                .unwrap_or_default();
+
             let keys = ecdsa_key_ids
                 .iter()
                 .map(|k| format!(r#"{{ "key_id": "{}"{} }}"#, k, ecdsa_subnet))
                 .collect::<Vec<String>>()
                 .join(" , ");
-            ic_admin.push(format!("'[ {} ]'", keys));
+
+            ic_admin.add_argument("ecdsa-keys-to-request", format!("'[ {} ]'", keys));
         }
 
         if !replacement_nodes.is_empty() {
-            ic_admin.push("--replacement-nodes".to_string());
-            replacement_nodes
-                .iter()
-                .for_each(|n| ic_admin.push(format!("\"{}\"", n)));
+            ic_admin.add_arguments("replacement-nodes", replacement_nodes.iter().map(quote));
         }
 
         if let Some(params) = registry_params {
-            ic_admin.push("--registry-store-uri".to_string());
-            ic_admin.push(params.registry_store_uri.to_string());
-            ic_admin.push("--registry-store-hash".to_string());
-            ic_admin.push(params.registry_store_hash);
-            ic_admin.push("--registry-version".to_string());
-            ic_admin.push(params.registry_version.to_string());
+            ic_admin
+                .add_argument("registry-store-uri", params.registry_store_uri)
+                .add_argument("registry-store-hash", params.registry_store_hash)
+                .add_argument("registry-version", params.registry_version);
         }
 
-        ic_admin.push("--summary".to_string());
-        ic_admin.push(format!("\"Recover subnet {}.\"", subnet_id));
+        ic_admin.add_argument(SUMMARY_ARG, quote(format!("Recover subnet {}.", subnet_id)));
 
         let since_the_epoch = time
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards");
-        ic_admin.push("--time-ns".to_string());
-        ic_admin.push(since_the_epoch.as_nanos().to_string());
+        ic_admin.add_argument("time-ns", since_the_epoch.as_nanos());
 
         AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
         ic_admin
@@ -210,25 +216,25 @@ impl AdminHelper {
         node_ids: &[NodeId],
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
-        ic_admin.append(&mut vec![
-            "propose-to-create-subnet".to_string(),
-            "--unit-delay-millis".to_string(),
-            "2000".to_string(),
-            "--subnet-handler-id".to_string(),
-            "unused".to_string(),
-            "--replica-version-id".to_string(),
-            replica_version.to_string(),
-            "--subnet-id-override".to_string(),
-            subnet_id_override.to_string(),
-            "--dkg-interval-length".to_string(),
-            "12".to_string(),
-            "--is-halted".to_string(),
-            "--subnet-type".to_string(),
-            "system".to_string(),
-            "--summary".to_string(),
-            format!("Create subnet with id {}", subnet_id_override),
-        ]);
-        node_ids.iter().for_each(|id| ic_admin.push(id.to_string()));
+
+        ic_admin
+            .add_positional_argument("propose-to-create-subnet")
+            .add_argument("unit-delay-millis", 2000)
+            .add_argument("subnet-handler-id", "unused")
+            .add_argument("replica-version-id", replica_version)
+            .add_argument("subnet-id-override", subnet_id_override)
+            .add_argument("dkg-interval-length", 12)
+            .add_positional_argument("--is-halted")
+            .add_argument("subnet-type", "system")
+            .add_argument(
+                SUMMARY_ARG,
+                format!("Create subnet with id {}", subnet_id_override),
+            );
+
+        for node_id in node_ids {
+            ic_admin.add_positional_argument(node_id);
+        }
+
         AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
         ic_admin
     }
@@ -244,6 +250,60 @@ impl AdminHelper {
         }));
         cmd
     }
+}
+
+pub trait CommandHelper {
+    fn add_positional_argument(&mut self, action: impl ToString) -> &mut Self;
+    fn add_argument(&mut self, argument: impl ToString, value: impl ToString) -> &mut Self;
+    fn add_arguments<I>(&mut self, argument: impl ToString, values: I) -> &mut Self
+    where
+        I: IntoIterator,
+        I::Item: ToString;
+}
+
+impl CommandHelper for IcAdmin {
+    fn add_positional_argument(&mut self, action: impl ToString) -> &mut Self {
+        self.push(action.to_string());
+
+        self
+    }
+
+    fn add_argument(&mut self, argument: impl ToString, value: impl ToString) -> &mut Self {
+        self.push(prepend_if_necessary(argument, "--"));
+        self.push(value.to_string());
+
+        self
+    }
+
+    fn add_arguments<I>(&mut self, argument: impl ToString, values: I) -> &mut Self
+    where
+        I: IntoIterator,
+        I::Item: ToString,
+    {
+        self.push(prepend_if_necessary(argument, "--"));
+
+        for value in values {
+            self.push(value.to_string());
+        }
+
+        self
+    }
+}
+
+/// Prepends a prefix to the string, if the prefix is not there yet.
+fn prepend_if_necessary(argument: impl ToString, prefix: &str) -> String {
+    let string = argument.to_string();
+
+    if string.starts_with(prefix) {
+        string
+    } else {
+        String::from(prefix) + &string
+    }
+}
+
+/// Wraps a string in escaped quotation marks.
+pub fn quote(text: impl Display) -> String {
+    format!("\"{}\"", text)
 }
 
 #[cfg(test)]
@@ -278,8 +338,8 @@ mod tests {
             propose-to-update-subnet \
             --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --test-neuron-proposer \
-            --is-halted=true \
-            --ssh-readonly-access=\"fake public key\" \
+            --is-halted true \
+            --ssh-readonly-access \"fake public key\" \
             --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\""
             );
     }
@@ -386,9 +446,9 @@ mod tests {
             "/fake/ic/admin/dir/ic-admin \
             --nns-url \"https://fake_nns_url.com:8080/\" \
             --use-hsm \
-            --slot=fake_slot \
-            --key-id=fake_key_id \
-            --pin=\"fake_dfx_hsm_pin\" \
+            --slot fake_slot \
+            --key-id fake_key_id \
+            --pin \"fake_dfx_hsm_pin\" \
             propose-to-update-recovery-cup \
             --subnet-index gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
             --height 666 \
