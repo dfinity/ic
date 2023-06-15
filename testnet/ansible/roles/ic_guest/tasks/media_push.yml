@@ -12,9 +12,10 @@
 
 - name: copy media.img to remote
   vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(api_nodes)  | difference(aux_nodes)  | difference(boundary_nodes)}}"
   copy:
     # copy the media image built for the node, or fallback to the generic 'media.img'
     src: "{{ lookup('first_found', ['{{ ic_media_path }}/{{ item }}.img', '{{ ic_media_path }}/media.img']) }}"
@@ -24,6 +25,30 @@
     group: root
   loop: "{{ replica_nodes | union(aux_nodes) }}"
   tags: [ "ic_guest" ]
+
+- name: copy new api node VM media.img to remote
+  copy:
+    # copy the media image built for the new api node
+    src: "{{ api_media_path }}/{{ item }}.img"
+    dest: "/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}/api/"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+  tags: [ "api_node_vm" ]
+
+- name: copy single api node VM media.img to remote
+  copy:
+    # copy the media image built for the new api node
+    src: "{{ api_media_path }}/{{ item }}.img"
+    dest: "/var/lib/libvirt/media/{{ item }}.img"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+  loop_control:
+    index_var: index
+  tags: [ "api_node_vm" ]
 
 - name: copy new boundary node VM media.img to remote
   copy:
