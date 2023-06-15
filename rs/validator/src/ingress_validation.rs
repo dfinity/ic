@@ -331,7 +331,7 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
             ))
         })?;
     let max_allowed_expiry = min_allowed_expiry
-        .checked_add_duration(max_expiry_diff)
+        .checked_add(max_expiry_diff)
         .ok_or_else(|| {
             InvalidIngressExpiry(format!(
                 "Addition of min_allowed_expiry {min_allowed_expiry:?} \

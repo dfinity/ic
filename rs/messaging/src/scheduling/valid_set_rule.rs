@@ -32,7 +32,6 @@ use ic_types::{
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 use std::sync::Arc;
-use std::time::Duration;
 
 struct VsrMetrics {
     /// Counts of ingress message induction attempts, by status.
@@ -240,12 +239,7 @@ impl ValidSetRuleImpl {
         status: &str,
         ingress_expiry: Time,
     ) {
-        let current_expiry_time = expiry_time_from_now();
-        let delta_in_nanos = if current_expiry_time <= ingress_expiry {
-            Duration::from_secs(0)
-        } else {
-            current_expiry_time - ingress_expiry
-        };
+        let delta_in_nanos = expiry_time_from_now().saturating_sub(ingress_expiry);
         self.metrics
             .unreliable_induct_ingress_message_duration
             .with_label_values(&[status])

@@ -234,7 +234,7 @@ impl IngressHistoryWriterImpl {
         }
         if let Some(timer) = timer {
             Some((
-                (time - timer.ic_time).as_secs_f64(),
+                (time.saturating_sub(timer.ic_time)).as_secs_f64(),
                 timer.system_time.elapsed(),
             ))
         } else {

@@ -80,9 +80,9 @@ impl RosettaRequestHandler {
         let mut ingress_expiries = vec![];
         let mut now = ingress_start;
         while now < ingress_end {
-            let ingress_expiry = (now + ic_constants::MAX_INGRESS_TTL
-                - ic_constants::PERMITTED_DRIFT)
-                .as_nanos_since_unix_epoch();
+            let ingress_expiry = (now
+                + ic_constants::MAX_INGRESS_TTL.saturating_sub(ic_constants::PERMITTED_DRIFT))
+            .as_nanos_since_unix_epoch();
             ingress_expiries.push(ingress_expiry);
             now += interval;
         }

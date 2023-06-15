@@ -386,7 +386,7 @@ impl ExecutionEnvironment {
                 return match context {
                     None => (state, Some(NumInstructions::from(0))),
                     Some(context) => {
-                        let time_elapsed = state.time() - context.get_time();
+                        let time_elapsed = state.time().saturating_sub(context.get_time());
                         let request = context.get_request();
 
                         self.metrics.observe_subnet_message(

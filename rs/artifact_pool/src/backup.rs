@@ -141,7 +141,7 @@ struct PurgingThread {
     // Path containing all backups of all versions running on the current node.
     backup_path: PathBuf,
     // The maximum age backup artifacts can reach before purging.
-    age_threshold_secs: Duration,
+    age_threshold: Duration,
     metrics: Metrics,
     log: ReplicaLogger,
     age: Box<dyn BackupAge>,
@@ -174,14 +174,14 @@ impl BackupAge for FileSystemAge {
 impl PurgingThread {
     fn new(
         backup_path: PathBuf,
-        age_threshold_secs: Duration,
+        age_threshold: Duration,
         metrics: Metrics,
         log: ReplicaLogger,
         age: Box<dyn BackupAge>,
     ) -> Self {
         Self {
             backup_path,
-            age_threshold_secs,
+            age_threshold,
             metrics,
             log,
             age,
@@ -203,7 +203,7 @@ impl PurgingThread {
                 Ok(PurgingRequest::Purge) => {
                     let start = std::time::Instant::now();
                     if let Err(err) = purge(
-                        self.age_threshold_secs,
+                        self.age_threshold,
                         &self.backup_path,
                         self.log.clone(),
                         self.age.as_ref(),
@@ -239,7 +239,7 @@ pub(super) struct Backup {
     // Thread handle of the thread executing the purging.
     purging_thread: Option<thread::JoinHandle<()>>,
     // Time interval between purges.
-    purge_interval_secs: Duration,
+    purge_interval: Duration,
     metrics: Metrics,
     log: ReplicaLogger,
 }
@@ -249,8 +249,8 @@ impl Backup {
         pool: &dyn ConsensusPool,
         backup_path: PathBuf,
         version_path: PathBuf,
-        age_threshold_secs: Duration,
-        purge_interval_secs: Duration,
+        age_threshold: Duration,
+        purge_interval: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
         age: Box<dyn BackupAge>,
@@ -260,7 +260,7 @@ impl Backup {
             BackupThread::new(version_path.clone(), metrics.clone(), log.clone()).start();
         let (purging_queue, purging_thread) = PurgingThread::new(
             backup_path,
-            age_threshold_secs,
+            age_threshold,
             metrics.clone(),
             log.clone(),
             age,
@@ -272,7 +272,7 @@ impl Backup {
             backup_thread: Some(backup_thread),
             purging_queue,
             purging_thread: Some(purging_thread),
-            purge_interval_secs,
+            purge_interval,
             metrics,
             log,
         };
@@ -296,8 +296,8 @@ impl Backup {
         pool: &dyn ConsensusPool,
         backup_path: PathBuf,
         version_path: PathBuf,
-        age_threshold_secs: Duration,
-        purge_interval_secs: Duration,
+        age_threshold: Duration,
+        purge_interval: Duration,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
@@ -305,8 +305,8 @@ impl Backup {
             pool,
             backup_path,
             version_path,
-            age_threshold_secs,
-            purge_interval_secs,
+            age_threshold,
+            purge_interval,
             metrics_registry,
             log,
             Box::new(FileSystemAge {}),
@@ -334,7 +334,7 @@ impl Backup {
         // purging has not finished yet, which is not expected with sufficiently
         // large PURGE_INTERVAL.
         let time_of_last_purge = *self.time_of_last_purge.read().unwrap();
-        if time_source.get_relative_time() - time_of_last_purge >= self.purge_interval_secs {
+        if time_source.get_relative_time() >= time_of_last_purge + self.purge_interval {
             if self.purging_queue.send(PurgingRequest::Purge).is_err() {
                 error!(
                     self.log,
@@ -407,7 +407,7 @@ fn store_artifacts(artifacts: Vec<ConsensusMessage>, path: &Path) -> Result<(), 
 /// specified retention time. Age of a leave is determined by calling the given
 /// implementation of [`BackupAge`]
 fn purge(
-    threshold_secs: Duration,
+    age_threshold: Duration,
     path: &Path,
     log: ReplicaLogger,
     age: &dyn BackupAge,
@@ -433,7 +433,7 @@ fn purge(
 
             Err(PurgingError::Permanent(err)) => return Err(err),
         };
-        if age > threshold_secs {
+        if age > age_threshold {
             fs::remove_dir_all(path)?;
         }
     }

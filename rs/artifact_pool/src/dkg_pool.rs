@@ -22,7 +22,7 @@ use ic_types::{
     Height,
 };
 use prometheus::IntCounter;
-use std::{ops::Sub, time::Duration};
+use std::time::Duration;
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
 /// the process of executing DKG.
@@ -207,7 +207,7 @@ impl DkgPool for DkgPoolImpl {
         &self,
         age_threshold: Duration,
     ) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
-        self.entries_older_than(current_time().sub(age_threshold))
+        self.entries_older_than(current_time().saturating_sub_duration(age_threshold))
     }
 
     fn get_unvalidated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
@@ -244,7 +244,7 @@ mod test {
         signature::BasicSignature,
         NodeId,
     };
-    use std::ops::{Add, Sub};
+    use std::ops::Add;
 
     fn make_message(start_height: Height, node_id: NodeId) -> dkg::Message {
         let dkg_id = NiDkgId {
@@ -330,7 +330,7 @@ mod test {
             ic_types::crypto::crypto_hash(&msg),
             ValidatedArtifact {
                 msg,
-                timestamp: now.sub(Duration::from_secs(200)),
+                timestamp: now.saturating_sub_duration(Duration::from_secs(200)),
             },
         );
 
@@ -340,7 +340,7 @@ mod test {
             ic_types::crypto::crypto_hash(&msg),
             ValidatedArtifact {
                 msg,
-                timestamp: now.sub(Duration::from_secs(100)),
+                timestamp: now.saturating_sub_duration(Duration::from_secs(100)),
             },
         );
 
@@ -350,7 +350,7 @@ mod test {
             ic_types::crypto::crypto_hash(&msg),
             ValidatedArtifact {
                 msg,
-                timestamp: now.sub(Duration::from_secs(50)),
+                timestamp: now.saturating_sub_duration(Duration::from_secs(50)),
             },
         );
 
@@ -365,22 +365,22 @@ mod test {
         );
 
         assert_eq!(
-            pool.entries_older_than(now.sub(Duration::from_secs(300)))
+            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(300)))
                 .count(),
             0
         );
         assert_eq!(
-            pool.entries_older_than(now.sub(Duration::from_secs(150)))
+            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(150)))
                 .count(),
             1
         );
         assert_eq!(
-            pool.entries_older_than(now.sub(Duration::from_secs(75)))
+            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(75)))
                 .count(),
             2
         );
         assert_eq!(
-            pool.entries_older_than(now.sub(Duration::from_secs(50)))
+            pool.entries_older_than(now.saturating_sub_duration(Duration::from_secs(50)))
                 .count(),
             3
         );
