@@ -86,6 +86,18 @@ nodes:
       - "elasticsearch-node-1.testnet.dfinity.systems:443"
       - "elasticsearch-node-2.testnet.dfinity.systems:443"
 
+api:
+  vars:
+    ipv6_debug_ips:
+      - "2001:4d78:40d::/48"  # FR1
+      - "2607:f6f0:3004::/48" # CH1
+      - "2607:fb58:9005::/48" # SF1-old
+      - "2602:fb2b:100::/48"  # SF1
+      - "2a00:fb01:400::/56"  # ZH1
+    ipv6_monitoring_ips:
+      - "2a05:d01c:e2c:a700::/56" # AWS eu-west-2 London Monitoring VPC
+      - "2a05:d01c:d9:2b00::/56" # prometheus.mainnet.dfinity.network
+
 boundary:
   vars:
     api_listen_port: 443

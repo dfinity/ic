@@ -129,7 +129,7 @@
   include_tasks: 
     file: url_waitfor_connect.yml
   when:
-    - "'subnet_unassigned' not in hostvars[item].group_names and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
+    - "'subnet_unassigned' not in hostvars[item].group_names and 'api' not in hostvars[item].group_names and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
   loop: "{{ groups['nodes'] }}"
   loop_control:
     label: 

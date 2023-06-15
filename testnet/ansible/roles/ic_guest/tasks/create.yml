@@ -2,9 +2,10 @@
 
 - name: copy file media.img
   vars:
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(api_nodes) | difference(aux_nodes)  | difference(boundary_nodes) }}"
   shell: |
     set -eExuo pipefail
 
@@ -21,9 +22,10 @@
 
 - name: copy file disk.img for replica
   vars:
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(api_nodes) | difference(aux_nodes)  | difference(boundary_nodes) }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
   shell: |
     set -eExuo pipefail
@@ -61,8 +63,49 @@
   when: boundary_nodes | length > 0
   tags: [ "boundary_node_vm" ]
 
+- name: copy file media.img for api node VMs
+  vars:
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+  shell: |
+    set -eExuo pipefail
+
+    MEDIA_DIR="/var/local/ic/media/{{ ic_deployment_name }}/{{ ic_git_revision }}/api"
+    ITEMS=({{ api_nodes | join(' ') }})
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty cp -v --reflink=auto --sparse=always $MEDIA_DIR/'{}.img' /var/lib/libvirt/media/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/media/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/media/'{}.img'
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  args:
+    executable: /bin/bash
+  when: api_nodes | length > 0
+  tags: [ "api_node_vm" ]
+
+- name: copy file disk.img for api nodes
+  vars:
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
+  shell: |
+    set -eExuo pipefail
+
+    # Deploy replica images
+    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/api{{ bn_image_type }}"
+    ITEMS=({{ api_nodes | join(' ') }})
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
+
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chown libvirt-qemu:kvm /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty chmod 0664 /var/lib/libvirt/images/'{}.img'
+    parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty truncate --size {{ ic_disk_size_bytes }} /var/lib/libvirt/images/'{}.img'
+  register: script_res
+  changed_when: "script_res.stdout | default('')"
+  args:
+    executable: /bin/bash
+  when: api_nodes | length > 0
+  tags: [ "api_node_vm" ]
+
 - name: copy file disk.img for boundary nodes
   vars:
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
   shell: |

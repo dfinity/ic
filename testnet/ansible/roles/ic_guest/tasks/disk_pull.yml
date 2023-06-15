@@ -2,9 +2,10 @@
 
 - name: Download disk images
   vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(api_nodes) | difference(aux_nodes)  | difference(boundary_nodes) }}"
   shell: |
     set -eExuo pipefail
     # check if disk image is available on the new or the old location for the given hash
@@ -14,20 +15,23 @@
     DEFAULT_UNIVERSAL_VM_IMG_SHA256="ca2ddfab45f940564503e2edf3d2c02acc05988edde4e3a7400355bd22d69d44"
 
     declare -A proxy_image_cdn=(
-      [replica]="${PROXY_CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
+      [api]="${PROXY_CDN_URL}/ic/{{ ic_git_revision }}/boundary-api-os/disk-img{{ bn_image_type }}"
       [aux]="${PROXY_CDN_URL}/farm/universal-vm/${DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux"
       [boundary]="${PROXY_CDN_URL}/ic/{{ ic_git_revision }}/boundary-os/disk-img{{ bn_image_type }}"
+      [replica]="${PROXY_CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
     )
 
     declare -A image_cdn=(
-      [replica]="${CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
+      [api]="${CDN_URL}/ic/{{ ic_git_revision }}/boundary-api-os/disk-img{{ bn_image_type }}"
       [aux]="${CDN_URL}/farm/universal-vm/${DEFAULT_UNIVERSAL_VM_IMG_SHA256}/x86_64-linux"
       [boundary]="${CDN_URL}/ic/{{ ic_git_revision }}/boundary-os/disk-img{{ bn_image_type }}"
+      [replica]="${CDN_URL}/ic/{{ ic_git_revision }}/guest-os/disk-img-dev"
     )
 
     declare -A image_dir=(
-      [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
+      [api]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/api{{ bn_image_type }}"
       [aux]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
+      [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
       [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary{{ bn_image_type }}"
     )
 
@@ -70,6 +74,9 @@
     }
 
     disk_types=()
+    if [ ! -z "{{ api_nodes | join(' ') }}" ]; then
+        disk_types+=(api)
+    fi
     if [ ! -z "{{ aux_nodes | join(' ') }}" ]; then
         disk_types+=(aux)
     fi
@@ -80,7 +87,7 @@
         disk_types+=(replica)
     fi
 
-    # download the IC-OS disk images for replica, boundary and aux, in parallel
+    # download the IC-OS disk images for api, aux, boundary, and replica in parallel
     set +x
     source /usr/bin/env_parallel.bash
     env_parallel curl_disk_img ::: "${disk_types[@]}"
@@ -95,20 +102,25 @@
 
 - name: unarchive image files # noqa risky-shell-pipe
   vars:
-    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    api_nodes: "{{ hostvars[inventory_hostname].groups.api | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
-    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(boundary_nodes) | difference(aux_nodes) }}"
+    boundary_nodes: "{{ hostvars[inventory_hostname].groups.boundary | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
+    replica_nodes: "{{ hostvars[inventory_hostname].ic_guests | default([]) | difference(api_nodes) | difference(aux_nodes)  | difference(boundary_nodes) }}"
   shell: |
     # if the unpacked file does not exist or if the archive is newer than the unpacked file
     set -eExuo pipefail
 
     declare -A image_dir=(
-        [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
+        [api]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/api{{ bn_image_type }}"
         [aux]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
         [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary{{ bn_image_type }}"
+        [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
     )
 
     disk_types=()
+    if [ ! -z "{{ api_nodes | join(' ') }}" ]; then
+        disk_types+=(api)
+    fi
     if [ ! -z "{{ aux_nodes | join(' ') }}" ]; then
         disk_types+=(aux)
     fi
