@@ -148,6 +148,7 @@ impl AdminHelper {
         replacement_nodes: &[NodeId],
         registry_params: Option<RegistryParams>,
         ecdsa_subnet_id: Option<SubnetId>,
+        time: SystemTime,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
         ic_admin.push("propose-to-update-recovery-cup".to_string());
@@ -191,8 +192,7 @@ impl AdminHelper {
         ic_admin.push("--summary".to_string());
         ic_admin.push(format!("\"Recover subnet {}.\"", subnet_id));
 
-        let start = SystemTime::now();
-        let since_the_epoch = start
+        let since_the_epoch = time
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards");
         ic_admin.push("--time-ns".to_string());
@@ -243,5 +243,213 @@ impl AdminHelper {
             }
         }));
         cmd
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use ic_base_types::PrincipalId;
+    use std::{str::FromStr, time::Duration};
+
+    const FAKE_IC_ADMIN_DIR: &str = "/fake/ic/admin/dir/";
+    const FAKE_NNS_URL: &str = "https://fake_nns_url.com:8080";
+    const FAKE_SUBNET_ID_1: &str =
+        "gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe";
+    const FAKE_SUBNET_ID_2: &str =
+        "mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe";
+    const FAKE_NODE_ID: &str = "nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe";
+    const FAKE_REPLICA_VERSION: &str = "fake_replica_version";
+
+    #[test]
+    fn get_halt_subnet_command_test() {
+        let result = fake_admin_helper()
+            .get_halt_subnet_command(
+                subnet_id_from_str(FAKE_SUBNET_ID_1),
+                /*is_halted=*/ true,
+                &["fake public key".to_string()],
+            )
+            .join(" ");
+
+        assert_eq!(result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-update-subnet \
+            --subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            --test-neuron-proposer \
+            --is-halted=true \
+            --ssh-readonly-access=\"fake public key\" \
+            --summary \"Halt subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe, for recovery and update ssh readonly access\""
+            );
+    }
+
+    #[test]
+    fn get_propose_to_create_test_system_subnet_test() {
+        let result = fake_admin_helper()
+            .get_propose_to_create_test_system_subnet(
+                subnet_id_from_str(FAKE_SUBNET_ID_1),
+                ReplicaVersion::try_from(FAKE_REPLICA_VERSION).unwrap(),
+                &[node_id_from_str(FAKE_NODE_ID)],
+            )
+            .join(" ");
+
+        assert_eq!(result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-create-subnet \
+            --unit-delay-millis 2000 \
+            --subnet-handler-id unused \
+            --replica-version-id fake_replica_version \
+            --subnet-id-override gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            --dkg-interval-length 12 \
+            --is-halted \
+            --subnet-type system \
+            --summary Create subnet with id gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe \
+            --test-neuron-proposer");
+    }
+
+    #[test]
+    fn get_propose_to_update_elected_replica_versions_command_test() {
+        let result = fake_admin_helper()
+            .get_propose_to_update_elected_replica_versions_command(
+                &ReplicaVersion::try_from(FAKE_REPLICA_VERSION).unwrap(),
+                &Url::try_from("https://fake_upgrade_url.com").unwrap(),
+                "fake_sha_256".to_string(),
+            )
+            .join(" ");
+
+        assert_eq!(
+            result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-update-elected-replica-versions \
+            --replica-version-to-elect \"fake_replica_version\" \
+            --release-package-urls \"https://fake_upgrade_url.com/\" \
+            --release-package-sha256-hex \"fake_sha_256\" \
+            --summary \"Elect new replica binary revision (commit fake_replica_version)\" \
+            --test-neuron-proposer"
+        );
+    }
+
+    #[test]
+    fn get_propose_to_update_recovery_cup_command_minimum_options_test() {
+        let result = fake_admin_helper()
+            .get_propose_to_update_recovery_cup_command(
+                subnet_id_from_str(FAKE_SUBNET_ID_1),
+                Height::from(666),
+                "fake_state_hash".to_string(),
+                vec![],
+                &[],
+                None,
+                None,
+                UNIX_EPOCH + Duration::from_nanos(123456),
+            )
+            .join(" ");
+
+        assert_eq!(result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-update-recovery-cup \
+            --subnet-index gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            --height 666 \
+            --state-hash fake_state_hash \
+            --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
+            --time-ns 123456 \
+            --test-neuron-proposer");
+    }
+
+    #[test]
+    fn get_propose_to_update_recovery_cup_command_maximum_options_test() {
+        let result = fake_admin_helper_with_neuron_args()
+            .get_propose_to_update_recovery_cup_command(
+                subnet_id_from_str(FAKE_SUBNET_ID_1),
+                Height::from(666),
+                "fake_state_hash".to_string(),
+                vec![
+                    EcdsaKeyId::from_str("Secp256k1:some_key_1").unwrap(),
+                    EcdsaKeyId::from_str("Secp256k1:some_key_2").unwrap(),
+                ],
+                &[node_id_from_str(FAKE_NODE_ID)],
+                Some(RegistryParams {
+                    registry_store_uri: Url::try_from("https://fake_registry_store_uri.com")
+                        .unwrap(),
+                    registry_store_hash: "fake_registry_store_hash".to_string(),
+                    registry_version: RegistryVersion::from(666),
+                }),
+                Some(subnet_id_from_str(FAKE_SUBNET_ID_2)),
+                UNIX_EPOCH + Duration::from_nanos(123456),
+            )
+            .join(" ");
+
+        assert_eq!(result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            --use-hsm \
+            --slot=fake_slot \
+            --key-id=fake_key_id \
+            --pin=\"fake_dfx_hsm_pin\" \
+            propose-to-update-recovery-cup \
+            --subnet-index gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            --height 666 \
+            --state-hash fake_state_hash \
+            --ecdsa-keys-to-request '[ { \"key_id\": \"Secp256k1:some_key_1\", \"subnet_id\": \"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\" } , { \"key_id\": \"Secp256k1:some_key_2\", \"subnet_id\": \"mklno-zzmhy-zutel-oujwg-dzcli-h6nfy-2serg-gnwru-vuwck-hcxit-wqe\" } ]' \
+            --replacement-nodes \"nqpqw-cp42a-rmdsx-fpui3-ncne5-kzq6o-m67an-w25cx-zu636-lcf2v-fqe\" \
+            --registry-store-uri https://fake_registry_store_uri.com/ \
+            --registry-store-hash fake_registry_store_hash \
+            --registry-version 666 \
+            --summary \"Recover subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
+            --time-ns 123456 \
+            --proposer fake_neuron_id");
+    }
+
+    #[test]
+    fn get_propose_to_update_subnet_replica_version_command_test() {
+        let result = fake_admin_helper()
+            .get_propose_to_update_subnet_replica_version_command(
+                subnet_id_from_str(FAKE_SUBNET_ID_1),
+                &ReplicaVersion::try_from(FAKE_REPLICA_VERSION).unwrap(),
+            )
+            .join(" ");
+
+        assert_eq!(result,
+            "/fake/ic/admin/dir/ic-admin \
+            --nns-url \"https://fake_nns_url.com:8080/\" \
+            propose-to-update-subnet-replica-version \
+            gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe \
+            fake_replica_version \
+            --summary \"Upgrade replica version of subnet gpvux-2ejnk-3hgmh-cegwf-iekfc-b7rzs-hrvep-5euo2-3ywz3-k3hcb-cqe.\" \
+            --test-neuron-proposer");
+    }
+
+    fn subnet_id_from_str(subnet_id: &str) -> SubnetId {
+        PrincipalId::from_str(subnet_id)
+            .map(SubnetId::from)
+            .unwrap()
+    }
+
+    fn node_id_from_str(subnet_id: &str) -> NodeId {
+        PrincipalId::from_str(subnet_id).map(NodeId::from).unwrap()
+    }
+
+    fn fake_admin_helper() -> AdminHelper {
+        AdminHelper::new(
+            PathBuf::from(FAKE_IC_ADMIN_DIR),
+            Url::try_from(FAKE_NNS_URL).unwrap(),
+            /*neuron_args=*/ None,
+        )
+    }
+
+    fn fake_admin_helper_with_neuron_args() -> AdminHelper {
+        AdminHelper::new(
+            PathBuf::from(FAKE_IC_ADMIN_DIR),
+            Url::try_from(FAKE_NNS_URL).unwrap(),
+            Some(NeuronArgs {
+                dfx_hsm_pin: "fake_dfx_hsm_pin".to_string(),
+                slot: "fake_slot".to_string(),
+                neuron_id: "fake_neuron_id".to_string(),
+                key_id: "fake_key_id".to_string(),
+            }),
+        )
     }
 }

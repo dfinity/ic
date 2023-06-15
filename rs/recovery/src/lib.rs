@@ -41,8 +41,8 @@ use std::{
     process::Command,
     str::FromStr,
     sync::Arc,
-    thread, time,
-    time::Duration,
+    thread,
+    time::{self, Duration, SystemTime},
 };
 use steps::*;
 use url::Url;
@@ -760,6 +760,7 @@ impl Recovery {
                     replacement_nodes,
                     registry_params,
                     ecdsa_subnet_id,
+                    SystemTime::now(),
                 ),
         })
     }
