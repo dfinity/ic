@@ -570,15 +570,6 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         allow_symlink = True,
     )
 
-    copy_file(
-        name = "copy_ic_version_id",
-        src = ":version.txt",
-        out = "ic_version_id",
-        allow_symlink = True,
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
-    )
-
     ext4_image(
         name = "partition-boot.tar",
         src = _dict_value_search(image_deps["rootfs"], "/"),
@@ -809,15 +800,6 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
         src = "//bazel:version.txt",
         out = "version.txt",
         allow_symlink = True,
-    )
-
-    copy_file(
-        name = "copy_ic_version_id",
-        src = ":version.txt",
-        out = "ic_version_id",
-        allow_symlink = True,
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
     )
 
     ext4_image(
