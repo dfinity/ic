@@ -1953,6 +1953,8 @@ impl Gt {
     ///
     /// These are not deserializable, and serve only to uniquely identify
     /// the group element.
+    ///
+    /// We do guarantee that the tag of an element will remain stable over time
     pub fn tag(&self) -> [u8; Self::BYTES] {
         self.value.to_bytes()
     }

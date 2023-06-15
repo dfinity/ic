@@ -4323,9 +4323,9 @@ checksum = "187fa0cecf46628330b7a390a1a65fb0637ea00d3a1121aa847ecbebc0f3ff79"
 
 [[package]]
 name = "ic_bls12_381"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42a180f02c79a71fcbc10b194406dbffd6a883c916f96be4f17ae3aeb96348c5"
+checksum = "c682cb199cd8fcb582a6023325d571a6464edda26c8063fe04b6f6082a1a363c"
 dependencies = [
  "digest 0.9.0",
  "ff 0.12.1",

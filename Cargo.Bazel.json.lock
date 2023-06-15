@@ -1,5 +1,5 @@
 {
-  "checksum": "a695cdfb3b684bde344f9c97d35cf4e755a6c9496d49cf3eefcb6898748c406e",
+  "checksum": "94c2d2ab2fbc2b95d113fdfb01be99aea7c6668f3c649ec40b2df120c4248af3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13737,7 +13737,7 @@
               "target": "ic0"
             },
             {
-              "id": "ic_bls12_381 0.7.1",
+              "id": "ic_bls12_381 0.8.0",
               "target": "ic_bls12_381"
             },
             {
@@ -22472,13 +22472,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic_bls12_381 0.7.1": {
+    "ic_bls12_381 0.8.0": {
       "name": "ic_bls12_381",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic_bls12_381/0.7.1/download",
-          "sha256": "42a180f02c79a71fcbc10b194406dbffd6a883c916f96be4f17ae3aeb96348c5"
+          "url": "https://crates.io/api/v1/crates/ic_bls12_381/0.8.0/download",
+          "sha256": "c682cb199cd8fcb582a6023325d571a6464edda26c8063fe04b6f6082a1a363c"
         }
       },
       "targets": [
@@ -22548,7 +22548,7 @@
           "-C",
           "opt-level=3"
         ],
-        "version": "0.7.1"
+        "version": "0.8.0"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -52123,8 +52123,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -52135,8 +52135,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
