@@ -144,7 +144,8 @@ where
             MAX_NUM_INSTRUCTIONS,
         ),
         canister_memory_limit: canister_state.memory_limit(NumBytes::new(std::u64::MAX)),
-        compute_allocation: canister_state.scheduler_state.compute_allocation,
+        memory_allocation: canister_state.memory_allocation(),
+        compute_allocation: canister_state.compute_allocation(),
         subnet_type: hypervisor.subnet_type(),
         execution_mode: ExecutionMode::Replicated,
     };

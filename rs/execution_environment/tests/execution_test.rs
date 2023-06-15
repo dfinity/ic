@@ -852,3 +852,200 @@ fn subnet_memory_reservation_works() {
         WasmResult::Reject(err) => unreachable!("Unexpected reject: {}", err),
     }
 }
+
+#[test]
+fn canister_with_memory_allocation_does_not_fail_when_growing_wasm_memory() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_reservation: NumBytes::from(0),
+            ..Default::default()
+        },
+    ));
+
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+            (func $update
+                (if (i32.ne (memory.grow (i32.const 400)) (i32.const 1))
+                  (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+            (memory $memory 1)
+            (export "canister_update update" (func $update))
+        )"#;
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let a_id = env
+        .install_canister_with_cycles(
+            wasm.clone(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(50_000_000)
+                    .with_freezing_threshold(0)
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    env.install_canister_with_cycles(
+        wasm,
+        vec![],
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(45_000_000)
+                .with_freezing_threshold(0)
+                .build(),
+        ),
+        INITIAL_CYCLES_BALANCE,
+    )
+    .unwrap();
+
+    let res = env.execute_ingress(a_id, "update", vec![]).unwrap();
+    match res {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(err) => unreachable!("Unexpected reject: {}", err),
+    }
+}
+
+#[test]
+fn canister_with_memory_allocation_does_not_fail_when_growing_stable_memory() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_reservation: NumBytes::from(0),
+            ..Default::default()
+        },
+    ));
+
+    let a_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(50_000_000)
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    env.install_canister_with_cycles(
+        UNIVERSAL_CANISTER_WASM.into(),
+        vec![],
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(45_000_000)
+                .build(),
+        ),
+        INITIAL_CYCLES_BALANCE,
+    )
+    .unwrap();
+
+    let a = wasm()
+        .stable64_grow(600)
+        .stable64_read(30_000_000, 8)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let res = env.execute_ingress(a_id, "update", a).unwrap();
+    match res {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(err) => unreachable!("Unexpected reject: {}", err),
+    }
+}
+
+#[test]
+fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_reservation: NumBytes::from(0),
+            ..Default::default()
+        },
+    ));
+
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32)))
+            (func $update
+                (if (i32.ne (memory.grow (i32.const 400)) (i32.const 1))
+                  (then (unreachable))
+                )
+                (call $msg_reply)
+            )
+            (memory $memory 1)
+            (export "canister_update update" (func $update))
+        )"#;
+
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let a_id = env
+        .install_canister_with_cycles(
+            wasm,
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(300 * 64 * 1024)
+                    .with_freezing_threshold(0)
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let err = env.execute_ingress(a_id, "update", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterOutOfMemory);
+}
+
+#[test]
+fn canister_with_memory_allocation_cannot_grow_stable_memory_above_allocation() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_reservation: NumBytes::from(0),
+            ..Default::default()
+        },
+    ));
+
+    let a_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(300 * 64 * 1024)
+                    .build(),
+            ),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let a = wasm()
+        .stable64_grow(400)
+        .stable64_read(30_000_000, 8)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let err = env.execute_ingress(a_id, "update", a).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+}

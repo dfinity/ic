@@ -23,7 +23,7 @@ use ic_test_utilities::{
 };
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    ComputeAllocation, NumBytes, NumInstructions,
+    ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::CanisterModule;
 
@@ -94,6 +94,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
             DEFAULT_NUM_INSTRUCTIONS,
         ),
         canister_memory_limit: NumBytes::from(4 << 30),
+        memory_allocation: MemoryAllocation::default(),
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,

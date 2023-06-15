@@ -416,6 +416,7 @@ impl InstallCodeHelper {
             .requested_memory_allocation
             .unwrap_or(old_memory_allocation);
         self.canister.system_state.memory_allocation = new_memory_allocation;
+        self.execution_parameters.memory_allocation = new_memory_allocation;
 
         // It is impossible to transition from `MemoryAllocation::Reserved` to
         // `MemoryAllocation::BestEffort` because `None` in `InstallCodeArgs` is
