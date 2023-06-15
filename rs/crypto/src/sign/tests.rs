@@ -173,7 +173,6 @@ pub fn registry_returning_none() -> Arc<dyn RegistryClient> {
 
 // TODO(DFN-1397): add exact error checks to the tests that
 // expect a specific error.
-#[allow(dead_code)]
 pub fn registry_returning(error: RegistryClientError) -> Arc<dyn RegistryClient> {
     let mut registry = MockRegistryClient::new();
     registry
@@ -202,7 +201,6 @@ fn should_panic_when_panicking_registry_is_used() {
     let _ = registry.get_value(&key, REG_V1);
 }
 
-#[allow(dead_code)]
 pub fn dummy_registry() -> Arc<dyn RegistryClient> {
     Arc::new(FakeRegistryClient::new(Arc::new(
         ProtoRegistryDataProvider::new(),
