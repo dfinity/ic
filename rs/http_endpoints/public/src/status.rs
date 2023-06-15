@@ -78,7 +78,7 @@ impl Service<Request<Body>> for StatusService {
         // and is the public key of the root (i.e. NNS) subnet.
         let root_key = common::get_root_threshold_public_key(
             &log,
-            self.registry_client.clone(),
+            self.registry_client.as_ref(),
             self.registry_client.get_latest_version(),
             &nns_subnet_id,
         )
