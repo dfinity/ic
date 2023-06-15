@@ -64,3 +64,11 @@ message CanisterHttpShare {
 message CanisterHttpResponseDivergence {
    repeated CanisterHttpShare shares = 1;
 }
+
+message CanisterHttpResponseMessage {
+  oneof message_type {
+    CanisterHttpResponseWithConsensus response = 1;
+    uint64 timeout = 2;
+    CanisterHttpResponseDivergence divergence_response = 3;
+  }
+}

@@ -625,9 +625,9 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
-        let delivered_ids = parse::parse_past_payload_ids(past_payloads);
+        let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = self.get_canister_http_payload_impl(height, context, delivered_ids, max_size);
-        parse::payload_to_bytes(&payload)
+        parse::payload_to_bytes(&payload, max_size)
     }
 
     fn validate_payload(
@@ -639,9 +639,11 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
     ) -> Result<(), BatchPayloadValidationError> {
         let payload_len = payload.len() as u64;
 
-        let delivered_ids = parse::parse_past_payload_ids(past_payloads);
+        let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = parse::bytes_to_payload(payload).map_err(|e| {
-            BatchPayloadValidationError::CanisterHttp(ValidationError::Permanent(e))
+            BatchPayloadValidationError::CanisterHttp(ValidationError::Permanent(
+                CanisterHttpPermanentValidationError::DecodeError(e),
+            ))
         })?;
         self.validate_canister_http_payload_impl(height, &payload, context, delivered_ids)
             .map(|num_bytes| {

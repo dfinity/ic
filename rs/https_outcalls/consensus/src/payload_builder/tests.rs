@@ -3,6 +3,7 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
+use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{
@@ -50,8 +51,6 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-
-use super::CanisterHttpPayloadBuilderImpl;
 
 /// The maximum subnet size up to which we will check the functionality of the canister http feature.
 const MAX_SUBNET_SIZE: usize = 40;
