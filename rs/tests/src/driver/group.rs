@@ -44,8 +44,8 @@ use super::report::{SystemGroupSummary, SystemTestGroupError};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
-const MAX_RUNTIME_THREADS: usize = 16;
-const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
+pub const MAX_RUNTIME_THREADS: usize = 16;
+pub const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
 
 const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
 const REPORT_TASK_NAME: &str = "report";

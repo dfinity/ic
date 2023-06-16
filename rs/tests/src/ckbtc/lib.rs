@@ -85,7 +85,7 @@ pub fn install_nns_canisters_at_ids(env: &TestEnv) {
         .next()
         .expect("there is no NNS node");
     nns_node
-        .install_nns_canisters_at_ids()
+        .install_nns_canisters_at_ids(None)
         .expect("NNS canisters not installed");
     info!(&env.logger(), "NNS canisters installed");
 }

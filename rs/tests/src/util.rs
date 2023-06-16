@@ -1,5 +1,6 @@
 use crate::canister_agent::CanisterAgent;
 use crate::canister_api::GenericRequest;
+use crate::driver::group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS};
 use crate::driver::test_env_api::*;
 use crate::generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics};
 use crate::types::*;
@@ -56,7 +57,8 @@ use std::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::net::{TcpSocket, TcpStream};
-use tokio::runtime::Runtime as TRuntime;
+use tokio::runtime::Builder;
+use tokio::runtime::Handle as THandle;
 use url::Url;
 
 pub mod delegations;
@@ -1017,9 +1019,24 @@ pub async fn deposit_cycles(
 }
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
-    let rt =
-        TRuntime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
-    rt.block_on(f)
+    // Try to get the current tokio runtime, otherwise create a new one
+    match THandle::try_current() {
+        Ok(h) => h.block_on(f),
+        Err(_) => {
+            let rt = {
+                let cpus = num_cpus::get();
+                let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
+                let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
+                Builder::new_multi_thread()
+                    .worker_threads(workers)
+                    .max_blocking_threads(blocking_threads)
+                    .enable_all()
+                    .build()
+            }
+            .unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
+            rt.block_on(f)
+        }
+    }
 }
 
 pub(crate) async fn create_canister_via_canister(

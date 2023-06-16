@@ -139,7 +139,7 @@ use crate::driver::boundary_node::BoundaryNodeVm;
 use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
-use crate::util::create_agent;
+use crate::util::{block_on, create_agent};
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
@@ -1356,9 +1356,10 @@ pub trait NnsInstallationExt {
         &self,
         canister_wasm_strategy: NnsCanisterWasmStrategy,
         customizations: NnsCustomizations,
+        installation_timeout: Option<Duration>,
     ) -> Result<()>;
 
-    fn install_nns_canisters_at_ids(&self) -> Result<()>;
+    fn install_nns_canisters_at_ids(&self, installation_timeout: Option<Duration>) -> Result<()>;
 }
 
 #[derive(Default)]
@@ -1383,6 +1384,7 @@ where
         &self,
         canister_wasm_strategy: NnsCanisterWasmStrategy,
         customizations: NnsCustomizations,
+        installation_timeout: Option<Duration>,
     ) -> Result<()> {
         let test_env = self.test_env();
         let log = test_env.logger();
@@ -1417,13 +1419,9 @@ where
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
 
-        let (sender, receiver) = std::sync::mpsc::channel();
-        // In order to introduce a timeout mechanism for a sync function, we launch it in a separate thread
-        // and use channels to communicate timeout to the main thread. If timeout signal is received, the main thread panics.
-        // The spawned thread, however, remains running until the parent process is stopped.
-        // This non-optimal behavior will be fixed in https://dfinity.atlassian.net/browse/VER-2358.
-        let handle = std::thread::spawn(move || {
-            install_nns_canisters(
+        block_on(async {
+            let timeout = installation_timeout.unwrap_or(NNS_CANISTER_INSTALL_TIMEOUT);
+            let install_future = install_nns_canisters(
                 &log,
                 url,
                 &prep_dir,
@@ -1432,17 +1430,14 @@ where
                 customizations.ledger_balances,
                 customizations.neurons,
             );
-            sender
-                .send(())
-                .expect("failed to send value to the channel");
+            let timeout_result = tokio::time::timeout(timeout, install_future).await;
+            if timeout_result.is_err() {
+                println!(
+                    "NNS canisters were not installed within timeout of {} sec",
+                    timeout.as_secs()
+                );
+            }
         });
-        if receiver.recv_timeout(NNS_CANISTER_INSTALL_TIMEOUT).is_err() {
-            panic!(
-                "nns canisters were not installed within timeout of {} sec",
-                NNS_CANISTER_INSTALL_TIMEOUT.as_secs()
-            );
-        }
-        handle.join().expect("Failed to join the thread handle");
         Ok(())
     }
 
@@ -1450,6 +1445,7 @@ where
         self.install_nns_canisters_with_customizations(
             NnsCanisterWasmStrategy::TakeBuiltFromSources,
             NnsCustomizations::default(),
+            None,
         )
     }
 
@@ -1457,6 +1453,7 @@ where
         self.install_nns_canisters_with_customizations(
             NnsCanisterWasmStrategy::TakeLatestMainnetDeployments,
             NnsCustomizations::default(),
+            None,
         )
     }
 
@@ -1464,10 +1461,11 @@ where
         self.install_nns_canisters_with_customizations(
             NnsCanisterWasmStrategy::NnsReleaseQualification,
             NnsCustomizations::default(),
+            None,
         )
     }
 
-    fn install_nns_canisters_at_ids(&self) -> Result<()> {
+    fn install_nns_canisters_at_ids(&self, installation_timeout: Option<Duration>) -> Result<()> {
         let test_env = self.test_env();
         test_env.set_nns_canisters_env_vars()?;
         let log = test_env.logger();
@@ -1479,24 +1477,18 @@ where
         };
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
-        let (sender, receiver) = std::sync::mpsc::channel();
-        // In order to introduce a timeout mechanism for a sync function, we launch it in a separate thread
-        // and use channels to communicate timeout to the main thread. If timeout signal is received, the main thread panics.
-        // The spawned thread, however, remains running until the parent process is stopped.
-        // This non-optimal behavior will be fixed in https://dfinity.atlassian.net/browse/VER-2358.
-        let handle = std::thread::spawn(move || {
-            install_nns_canisters(&log, url, &prep_dir, true, true, None, None);
-            sender
-                .send(())
-                .expect("failed to send value to the channel");
+        block_on(async {
+            let timeout = installation_timeout.unwrap_or(NNS_CANISTER_INSTALL_TIMEOUT);
+            let install_future =
+                install_nns_canisters(&log, url, &prep_dir, true, true, None, None);
+            let timeout_result = tokio::time::timeout(timeout, install_future).await;
+            if timeout_result.is_err() {
+                println!(
+                    "NNS canisters were not installed within timeout of {} sec",
+                    timeout.as_secs()
+                );
+            }
         });
-        if receiver.recv_timeout(NNS_CANISTER_INSTALL_TIMEOUT).is_err() {
-            panic!(
-                "nns canisters were not installed within timeout of {} sec",
-                NNS_CANISTER_INSTALL_TIMEOUT.as_secs()
-            );
-        }
-        handle.join().expect("Failed to join the thread handle");
         Ok(())
     }
 }
@@ -1853,7 +1845,7 @@ trait RegistryResultHelper<T> {
 pub const TEST_USER1_STARTING_TOKENS: Tokens = Tokens::from_e8s(u64::MAX / 2);
 
 /// Installs the NNS canister versions provided by `canister_wasm_strategy`, with `customizations`, on the node given by `url` using the initial registry created by `ic-prep`, stored under `registry_local_store`.
-pub fn install_nns_canisters(
+pub async fn install_nns_canisters(
     logger: &Logger,
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
@@ -1862,76 +1854,73 @@ pub fn install_nns_canisters(
     ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
     neurons: Option<Vec<Neuron>>,
 ) {
-    let rt = Rt::new().expect("Could not create tokio runtime.");
     info!(
         logger,
         "Compiling/installing NNS canisters (might take a while)."
     );
-    rt.block_on(async move {
-        let mut init_payloads = NnsInitPayloadsBuilder::new();
-        if nns_test_neurons_present {
-            let mut ledger_balances = if let Some(ledger_balances) = ledger_balances {
-                ledger_balances
-            } else {
-                HashMap::new()
-            };
-            let neurons = if let Some(neurons) = neurons {
-                neurons
-            } else {
-                Vec::new()
-            };
-            ledger_balances.insert(
-                LIFELINE_CANISTER_ID.get().into(),
-                Tokens::from_tokens(10_000).unwrap(),
-            );
-            ledger_balances.insert((*TEST_USER1_PRINCIPAL).into(), TEST_USER1_STARTING_TOKENS);
-            if ledger_balances.len() > 100 {
-                let first_100_ledger_balances: HashMap<AccountIdentifier, Tokens> = ledger_balances
-                    .iter()
-                    .take(100)
-                    .map(|(x, y)| (*x, *y))
-                    .collect();
-                info!(
-                    logger,
-                    "Initial ledger (showing the first 100 entries out of {}): {:?}",
-                    ledger_balances.len(),
-                    first_100_ledger_balances
-                );
-            } else {
-                info!(logger, "Initial ledger: {:?}", ledger_balances);
-            }
-
-            let ledger_init_payload = LedgerCanisterInitPayload::builder()
-                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
-                .initial_values(ledger_balances)
-                .send_whitelist(HashSet::from([CYCLES_MINTING_CANISTER_ID]))
-                .build()
-                .unwrap();
-
-            init_payloads
-                .with_test_neurons()
-                .with_additional_neurons(neurons)
-                .with_ledger_init_state(ledger_init_payload);
-        }
-        let registry_local_store = ic_prep_state_dir.registry_local_store_path();
-        let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
-        init_payloads.with_initial_mutations(initial_mutations);
-
-        let agent = InternalAgent::new(
-            url,
-            Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
-        );
-        let runtime = Runtime::Remote(RemoteTestRuntime {
-            agent,
-            effective_canister_id: REGISTRY_CANISTER_ID.into(),
-        });
-
-        if install_at_ids {
-            NnsCanisters::set_up_at_ids(&runtime, init_payloads.build()).await;
+    let mut init_payloads = NnsInitPayloadsBuilder::new();
+    if nns_test_neurons_present {
+        let mut ledger_balances = if let Some(ledger_balances) = ledger_balances {
+            ledger_balances
         } else {
-            NnsCanisters::set_up(&runtime, init_payloads.build()).await;
+            HashMap::new()
+        };
+        let neurons = if let Some(neurons) = neurons {
+            neurons
+        } else {
+            Vec::new()
+        };
+        ledger_balances.insert(
+            LIFELINE_CANISTER_ID.get().into(),
+            Tokens::from_tokens(10_000).unwrap(),
+        );
+        ledger_balances.insert((*TEST_USER1_PRINCIPAL).into(), TEST_USER1_STARTING_TOKENS);
+        if ledger_balances.len() > 100 {
+            let first_100_ledger_balances: HashMap<AccountIdentifier, Tokens> = ledger_balances
+                .iter()
+                .take(100)
+                .map(|(x, y)| (*x, *y))
+                .collect();
+            info!(
+                logger,
+                "Initial ledger (showing the first 100 entries out of {}): {:?}",
+                ledger_balances.len(),
+                first_100_ledger_balances
+            );
+        } else {
+            info!(logger, "Initial ledger: {:?}", ledger_balances);
         }
+
+        let ledger_init_payload = LedgerCanisterInitPayload::builder()
+            .minting_account(GOVERNANCE_CANISTER_ID.get().into())
+            .initial_values(ledger_balances)
+            .send_whitelist(HashSet::from([CYCLES_MINTING_CANISTER_ID]))
+            .build()
+            .unwrap();
+
+        init_payloads
+            .with_test_neurons()
+            .with_additional_neurons(neurons)
+            .with_ledger_init_state(ledger_init_payload);
+    }
+    let registry_local_store = ic_prep_state_dir.registry_local_store_path();
+    let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
+    init_payloads.with_initial_mutations(initial_mutations);
+
+    let agent = InternalAgent::new(
+        url,
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+    let runtime = Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: REGISTRY_CANISTER_ID.into(),
     });
+
+    if install_at_ids {
+        NnsCanisters::set_up_at_ids(&runtime, init_payloads.build()).await;
+    } else {
+        NnsCanisters::set_up(&runtime, init_payloads.build()).await;
+    }
 }
 
 /// A short wasm module that is a legal canister binary.

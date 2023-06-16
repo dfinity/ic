@@ -245,7 +245,7 @@ pub fn install_nns_with_customizations_and_check_progress(
         .nodes()
         .next()
         .unwrap()
-        .install_nns_canisters_with_customizations(canister_wasm_strategy, customizations)
+        .install_nns_canisters_with_customizations(canister_wasm_strategy, customizations, None)
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 
