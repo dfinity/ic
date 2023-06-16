@@ -450,33 +450,30 @@ impl Expirer {
     }
 }
 
-impl Expire for Expirer {
-    fn expire(&self, t: u64) -> Result<(), ExpireError> {
+impl Expirer {
+    fn get_id(&self, t: u64) -> Option<String> {
         self.expirations.with(|exps| {
             let mut exps = exps.borrow_mut();
-            #[allow(clippy::while_let_loop)]
-            loop {
-                // Check for next expiration
-                let p = match exps.peek() {
-                    Some((_, p)) => p.0,
-                    None => break,
-                };
+            // Check for next expiration
+            let p = exps.peek().map(|(_, p)| p.0)?;
 
-                if p > t {
-                    break;
-                }
-
-                let id = match exps.pop() {
-                    Some((id, _)) => id,
-                    None => break,
-                };
-
-                // Remove registration
-                self.remover.with(|r| r.borrow().remove(&id))?;
+            if p > t {
+                return None;
             }
-            set_root_hash();
-            Ok(())
+
+            exps.pop().map(|(id, _)| id)
         })
+    }
+}
+
+impl Expire for Expirer {
+    fn expire(&self, t: u64) -> Result<(), ExpireError> {
+        while let Some(id) = self.get_id(t) {
+            // Remove registration
+            self.remover.with(|r| r.borrow().remove(&id))?;
+        }
+        set_root_hash();
+        Ok(())
     }
 }
 
