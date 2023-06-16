@@ -33,7 +33,7 @@ fe_derive::derive_field_element!(
     SSWU_Z = "-11",
 );
 
-#[derive(Clone, Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum EccFieldElement {
     K256(Secp256k1FieldElement),
     P256(Secp256r1FieldElement),
@@ -43,7 +43,18 @@ impl fmt::Display for EccFieldElement {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "FieldElem({}, 0x{})",
+            "EccFieldElement({}, 0x{})",
+            self.curve_type(),
+            hex::encode(self.as_bytes())
+        )
+    }
+}
+
+impl fmt::Debug for EccFieldElement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "EccFieldElement({}, 0x{})",
             self.curve_type(),
             hex::encode(self.as_bytes())
         )
