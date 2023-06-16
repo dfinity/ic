@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use ic_base_types::CanisterId;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
+use ic_nervous_system_common_test_utils::SpyLedger;
 use ic_sns_governance::pb::v1::{
     manage_neuron_response, manage_neuron_response::ClaimOrRefreshResponse,
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
@@ -9,6 +10,7 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_swap::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
+    environment::CanisterClients,
     pb::v1::{
         CanisterCallError, GovernanceError, SetDappControllersRequest, SetDappControllersResponse,
         SettleCommunityFundParticipation,
@@ -317,5 +319,49 @@ impl ICRC1Ledger for MockLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
+    }
+}
+
+pub fn spy_clients() -> CanisterClients<
+    SpySnsRootClient,
+    SpySnsGovernanceClient,
+    SpyLedger,
+    SpyLedger,
+    SpyNnsGovernanceClient,
+> {
+    let sns_root = SpySnsRootClient::default();
+    let sns_governance = SpySnsGovernanceClient::default();
+    let sns_ledger = SpyLedger::default();
+    let icp_ledger = SpyLedger::default();
+    let nns_governance = SpyNnsGovernanceClient::with_successful_replies();
+
+    CanisterClients {
+        sns_root,
+        sns_governance,
+        sns_ledger,
+        icp_ledger,
+        nns_governance,
+    }
+}
+
+pub fn spy_clients_exploding_root() -> CanisterClients<
+    ExplodingSnsRootClient,
+    SpySnsGovernanceClient,
+    SpyLedger,
+    SpyLedger,
+    SpyNnsGovernanceClient,
+> {
+    let sns_root = ExplodingSnsRootClient::default();
+    let sns_governance = SpySnsGovernanceClient::default();
+    let sns_ledger = SpyLedger::default();
+    let icp_ledger = SpyLedger::default();
+    let nns_governance = SpyNnsGovernanceClient::with_successful_replies();
+
+    CanisterClients {
+        sns_root,
+        sns_governance,
+        sns_ledger,
+        icp_ledger,
+        nns_governance,
     }
 }
