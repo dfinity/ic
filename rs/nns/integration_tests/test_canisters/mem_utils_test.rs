@@ -2,7 +2,7 @@
 
 use dfn_candid::candid;
 use dfn_core::{over, println, stable};
-use ic_nervous_system_common::stable_mem_utils::{
+use ic_nervous_system_common::dfn_core_stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
 use ic_nns_governance::pb::v1::{Governance, Neuron};

@@ -13,7 +13,7 @@ use ic_nervous_system_clients::{
     management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
 };
 use ic_nervous_system_common::{
-    serve_logs, serve_logs_v2, serve_metrics, stable_mem_utils::BufferedStableMemReader,
+    dfn_core_stable_mem_utils::BufferedStableMemReader, serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_sns_governance::ledger::LedgerCanister;
 use ic_sns_swap::{

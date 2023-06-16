@@ -22,9 +22,9 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nervous_system_common::{
     cmc::CMCCanister,
+    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     ledger::IcpLedgerCanister,
     serve_logs, serve_logs_v2, serve_metrics,
-    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
