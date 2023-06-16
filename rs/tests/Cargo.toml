@@ -572,3 +572,15 @@ path = "testing_verification/testnets/sns_testing.rs"
 [[bin]]
 name = "ic-systest-medium"
 path = "testing_verification/testnets/medium.rs"
+
+[[bin]]
+name = "ic-systest-consensus-performance"
+path = "consensus/consensus_performance.rs"
+
+[[bin]]
+name = "ic-systest-consensus-performance-bytes"
+path = "consensus/throughput_with_large_messages.rs"
+
+[[bin]]
+name = "ic-systest-consensus-performance-requests"
+path = "consensus/throughput_with_small_messages.rs"

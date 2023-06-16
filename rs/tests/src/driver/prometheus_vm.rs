@@ -165,11 +165,11 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
         let prometheus_fqdn = format!("{PROMETHEUS_DOMAIN_NAME}.{suffix}");
         let grafana_fqdn = format!("{GRAFANA_DOMAIN_NAME}.{suffix}");
         info!(log, "Prometheus Web UI at http://{prometheus_fqdn}",);
-        info!(log, "Grafana at http://{grafana_fqdn}",);
         info!(
             log,
             "IC Progress Clock at http://{grafana_fqdn}/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now"
         );
+        info!(log, "Grafana at http://{grafana_fqdn}",);
         Ok(())
     }
 }
