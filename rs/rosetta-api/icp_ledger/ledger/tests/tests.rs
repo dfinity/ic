@@ -1,9 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use candid::Encode;
+use candid::{Decode, Encode, Nat};
+use ic_icrc1_ledger_sm_tests::MINTER;
 use ic_ledger_core::Tokens;
-use ic_state_machine_tests::{PrincipalId, StateMachine};
+use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{AccountIdentifier, InitArgs, LedgerCanisterInitPayload, LedgerCanisterPayload};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::{Memo, TransferArg, TransferError},
+};
+use serde_bytes::ByteBuf;
 
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -141,4 +147,55 @@ fn check_new_init() {
     .unwrap();
     env.install_canister(ledger_wasm(), new_init, None)
         .expect("Unable to install the Ledger canister with the new init");
+}
+
+#[test]
+fn check_memo() {
+    let env = StateMachine::new();
+    let new_init = Encode!(&LedgerCanisterPayload::Init(InitArgs {
+        archive_options: None,
+        minting_account: MINTER.into(),
+        icrc1_minting_account: None,
+        initial_values: HashMap::new(),
+        max_message_size_bytes: None,
+        transaction_window: None,
+        send_whitelist: HashSet::new(),
+        transfer_fee: None,
+        token_symbol: Some("ICP".into()),
+        token_name: Some("Internet Computer".into()),
+    }))
+    .unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm(), new_init, None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let mint_with_memo = |memo_size_bytes: usize| -> Result<Result<Nat, TransferError>, UserError> {
+        let req = TransferArg {
+            from_subaccount: None,
+            to: Account {
+                owner: PrincipalId::new_user_test_id(10).0,
+                subaccount: None,
+            }
+            .into(),
+            fee: None,
+            created_at_time: None,
+            memo: Some(Memo(ByteBuf::from(vec![0; memo_size_bytes]))),
+            amount: 100_000_000.into(),
+        };
+        let req = Encode!(&req).unwrap();
+        env.execute_ingress_as(PrincipalId(MINTER.owner), ledger_id, "icrc1_transfer", req)
+            .map(|res| Decode!(&res.bytes(), Result<Nat, TransferError>).unwrap())
+    };
+
+    for memo_size_bytes in 0..=32 {
+        assert_eq!(
+            Ok(Ok(memo_size_bytes.into())),
+            mint_with_memo(memo_size_bytes)
+        );
+    }
+
+    for memo_size_bytes in 33..40 {
+        assert_eq!(Err(UserError::new(ErrorCode::CanisterCalledTrap, "Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: the memo field is too large")),
+            mint_with_memo(memo_size_bytes));
+    }
 }
