@@ -517,6 +517,15 @@ impl MemoryAllocation {
             MemoryAllocation::BestEffort => NumBytes::from(0),
         }
     }
+
+    /// Returns the number of actually allocated bytes considering both
+    /// the memory allocation and the memory usage of the canister.
+    pub fn allocated_bytes(&self, memory_usage: NumBytes) -> NumBytes {
+        match self {
+            MemoryAllocation::Reserved(bytes) => (*bytes).max(memory_usage),
+            MemoryAllocation::BestEffort => memory_usage,
+        }
+    }
 }
 
 impl fmt::Display for MemoryAllocation {
