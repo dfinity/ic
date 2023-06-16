@@ -57,9 +57,7 @@ system_test(
     name = "certificate_orchestrator_test",
     flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
+    tags = [],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
                    GUESTOS_RUNTIME_DEPS +
