@@ -7,7 +7,7 @@
 //! can finish within the execution limit.
 use dfn_core::println;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::stable_mem_utils::BufferedStableMemWriter;
+use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter;
 use ic_nns_common::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
 use ic_nns_governance::{
     governance::{

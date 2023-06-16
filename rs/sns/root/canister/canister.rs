@@ -12,8 +12,8 @@ use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
 use ic_nervous_system_common::{
+    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     serve_logs, serve_logs_v2, serve_metrics,
-    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_sns_root::{

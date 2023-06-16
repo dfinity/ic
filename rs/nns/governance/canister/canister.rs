@@ -20,8 +20,8 @@ use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{
     cmc::CMCCanister,
+    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     ledger::IcpLedgerCanister,
-    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     MethodAuthzChange,
 };
 use ic_nns_common::{

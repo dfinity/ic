@@ -8,7 +8,7 @@
 
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::stable_mem_utils::BufferedStableMemWriter;
+use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter;
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
