@@ -321,32 +321,33 @@ impl BlockMaker {
                     (summary, ecdsa_summary).into()
                 }
                 dkg::Payload::Dealings(dealings) => {
-                    let batch_payload = self.build_batch_payload(
-                        pool,
-                        height,
-                        certified_height,
-                        &context,
-                        &parent,
-                        subnet_records,
-                    )?;
-
-                    match status::get_status(
+                    let (batch_payload, dealings, ecdsa_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
                         self.replica_config.subnet_id,
                         pool,
                         &self.log,
                     )? {
-                        // Use empty DKG dealings if a replica is halted.
-                        Status::Halting | Status::Halted => {
-                            let new_dealings = dkg::Dealings::new_empty(dealings.start_height);
-                            self.metrics.report_byte_estimate_metrics(
-                                batch_payload.xnet.size_bytes(),
-                                batch_payload.ingress.count_bytes(),
-                            );
-                            (batch_payload, new_dealings, None).into()
+                        // Don't propose any block if the replica is halted.
+                        Status::Halted => {
+                            return None;
                         }
+                        // Use empty payload and empty DKG dealings if the replica is halting.
+                        Status::Halting => (
+                            BatchPayload::default(),
+                            dkg::Dealings::new_empty(dealings.start_height),
+                            /*ecdsa_data=*/ None,
+                        ),
                         Status::Running => {
+                            let batch_payload = self.build_batch_payload(
+                                pool,
+                                height,
+                                certified_height,
+                                &context,
+                                &parent,
+                                subnet_records,
+                            );
+
                             let ecdsa_data = ecdsa::create_data_payload(
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
@@ -364,13 +365,16 @@ impl BlockMaker {
                             })
                             .ok()
                             .flatten();
-                            self.metrics.report_byte_estimate_metrics(
-                                batch_payload.xnet.size_bytes(),
-                                batch_payload.ingress.count_bytes(),
-                            );
-                            (batch_payload, dealings, ecdsa_data).into()
+
+                            (batch_payload, dealings, ecdsa_data)
                         }
-                    }
+                    };
+
+                    self.metrics.report_byte_estimate_metrics(
+                        batch_payload.xnet.size_bytes(),
+                        batch_payload.ingress.count_bytes(),
+                    );
+                    (batch_payload, dealings, ecdsa_data).into()
                 }
             },
         );
@@ -400,36 +404,19 @@ impl BlockMaker {
         context: &ValidationContext,
         parent: &Block,
         subnet_records: &SubnetRecords,
-    ) -> Option<BatchPayload> {
-        match status::get_status(
-            parent.height.increment(),
-            self.registry_client.as_ref(),
-            self.replica_config.subnet_id,
-            pool,
-            &self.log,
-        )? {
-            // Don't propose any block when the subnet is halted.
-            Status::Halted => None,
-            // Use empty payload if the subnet is halting.
-            Status::Halting => Some(BatchPayload::default()),
-            Status::Running => {
-                let past_payloads =
-                    pool.get_payloads_from_height(certified_height.increment(), parent.clone());
-                let payload = self.payload_builder.get_payload(
-                    height,
-                    &past_payloads,
-                    context,
-                    subnet_records,
-                );
+    ) -> BatchPayload {
+        let past_payloads =
+            pool.get_payloads_from_height(certified_height.increment(), parent.clone());
+        let payload =
+            self.payload_builder
+                .get_payload(height, &past_payloads, context, subnet_records);
 
-                self.metrics
-                    .get_payload_calls
-                    .with_label_values(&["success"])
-                    .inc();
+        self.metrics
+            .get_payload_calls
+            .with_label_values(&["success"])
+            .inc();
 
-                Some(payload)
-            }
-        }
+        payload
     }
 
     /// Log an entry for the proposed block and each of its ingress messages
