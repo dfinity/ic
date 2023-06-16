@@ -1,20 +1,26 @@
 use candid::{candid_method, Principal};
 use ic_cdk_macros::{init, query};
 use ic_cdk_timers::TimerId;
-use ic_icp_index::InitArg;
+use ic_icp_index::{
+    GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
+    GetAccountIdentifierTransactionsResult, InitArg, TransactionWithId,
+};
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use ic_stable_structures::StableBTreeMap;
 use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
     DefaultMemoryImpl, Storable,
 };
 use icp_ledger::{
-    ArchivedBlocksRange, CandidBlock, GetBlocksArgs, QueryBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier, ArchivedBlocksRange, Block, BlockIndex, CandidBlock, GetBlocksArgs,
+    Operation, QueryBlocksResponse, MAX_BLOCKS_PER_REQUEST,
 };
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::cmp::Reverse;
 use std::convert::TryFrom;
 use std::time::Duration;
 
@@ -25,13 +31,19 @@ const DEFAULT_MAX_BLOCKS_PER_RESPONSE: usize = MAX_BLOCKS_PER_REQUEST;
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
 const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
+const ACCOUNTIDENTIFIER_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(60);
 const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(10);
 
-type StateCell = StableCell<State, VirtualMemory<DefaultMemoryImpl>>;
-type BlockLog =
-    StableLog<Vec<u8>, VirtualMemory<DefaultMemoryImpl>, VirtualMemory<DefaultMemoryImpl>>;
+type VM = VirtualMemory<DefaultMemoryImpl>;
+type StateCell = StableCell<State, VM>;
+type BlockLog = StableLog<Vec<u8>, VM, VM>;
+
+// The block indexes are stored in reverse order because the blocks/transactions
+// are returned in reversed order.
+type AccountIdentifierBlockIdsMapKey = ([u8; 28], Reverse<u64>);
+type AccountIdentifierBlockIdsMap = StableBTreeMap<AccountIdentifierBlockIdsMapKey, (), VM>;
 
 thread_local! {
     /// Static memory manager to manage the memory available for stable structures.
@@ -47,6 +59,11 @@ thread_local! {
     static BLOCKS: RefCell<BlockLog> = with_memory_manager(|memory_manager| {
         RefCell::new(BlockLog::init(memory_manager.get(BLOCK_LOG_INDEX_MEMORY_ID), memory_manager.get(BLOCK_LOG_DATA_MEMORY_ID))
             .expect("failed to initialize stable log"))
+    });
+
+    /// Map that contains the block ids of an account_identifier.
+    static ACCOUNTIDENTIFIER_BLOCK_IDS: RefCell<AccountIdentifierBlockIdsMap> = with_memory_manager(|memory_manager| {
+        RefCell::new(AccountIdentifierBlockIdsMap::init(memory_manager.get(ACCOUNTIDENTIFIER_BLOCK_IDS_MEMORY_ID)))
     });
 }
 
@@ -107,6 +124,23 @@ fn with_memory_manager<R>(f: impl FnOnce(&MemoryManager<DefaultMemoryImpl>) -> R
 /// A helper function to access the block list.
 fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
     BLOCKS.with(|cell| f(&cell.borrow()))
+}
+
+/// A helper function to access the account_identifier block ids.
+fn with_account_identifier_block_ids<R>(
+    f: impl FnOnce(&mut AccountIdentifierBlockIdsMap) -> R,
+) -> R {
+    ACCOUNTIDENTIFIER_BLOCK_IDS.with(|cell| f(&mut cell.borrow_mut()))
+}
+
+fn with_blocks_and_indices<R>(
+    f: impl FnOnce(&BlockLog, &mut AccountIdentifierBlockIdsMap) -> R,
+) -> R {
+    with_blocks(|blocks| {
+        with_account_identifier_block_ids(|account_identifier_block_ids| {
+            f(blocks, account_identifier_block_ids)
+        })
+    })
 }
 
 #[init]
@@ -226,33 +260,58 @@ pub fn compute_wait_time(indexed_tx_count: usize) -> Duration {
 }
 
 fn append_blocks(new_blocks: Vec<CandidBlock>) {
-    with_blocks(|blocks| {
+    with_blocks_and_indices(|blocks, account_identifier_block_ids| {
+        // the index of the next block that we
+        // are going to append
+        let mut block_index = blocks.len();
         for candid_block in new_blocks {
             let encoded_block = icp_ledger::Block::try_from(candid_block)
                 .unwrap_or_else(|msg| ic_cdk::api::trap(&msg))
                 .encode();
             blocks
-                .append(&encoded_block.into_vec())
+                .append(&encoded_block.clone().into_vec())
                 .unwrap_or_else(|_| ic_cdk::api::trap("no space left"));
+
+            // add the block idx to the indices
+            let decoded_block = decode_encoded_block_or_trap(block_index, encoded_block);
+            for account_identifiers in get_account_identifiers(decoded_block) {
+                account_identifier_block_ids.insert(
+                    account_identifier_block_ids_key(account_identifiers, block_index),
+                    (),
+                );
+            }
+
+            block_index += 1;
         }
     })
 }
 
-#[query]
-#[candid_method(query)]
-fn get_blocks(
-    req: icrc_ledger_types::icrc3::blocks::GetBlocksRequest,
-) -> ic_icp_index::GetBlocksResponse {
-    let chain_length = with_blocks(|blocks| blocks.len());
-    let (start, length) = req
-        .as_start_and_length()
-        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+fn decode_encoded_block_or_trap(block_index: BlockIndex, block: EncodedBlock) -> Block {
+    Block::decode(block).unwrap_or_else(|e| {
+        ic_cdk::api::trap(&format!(
+            "Unable to decode encoded block at index {}. Error: {}",
+            block_index, e
+        ))
+    })
+}
 
-    let blocks = get_block_range_from_stable_memory(start, length);
-    ic_icp_index::GetBlocksResponse {
-        chain_length,
-        blocks,
+fn get_account_identifiers(block: Block) -> Vec<AccountIdentifier> {
+    match block.transaction.operation {
+        Operation::Burn { from, .. } => vec![from],
+        Operation::Mint { to, .. } => vec![to],
+        Operation::Transfer { from, to, .. } => vec![from, to],
+        Operation::Approve { from, spender, .. } => vec![from, spender],
+        Operation::TransferFrom {
+            from, to, spender, ..
+        } => vec![from, to, spender],
     }
+}
+
+fn account_identifier_block_ids_key(
+    account_identifier: AccountIdentifier,
+    block_index: BlockIndex,
+) -> AccountIdentifierBlockIdsMapKey {
+    (account_identifier.hash, Reverse(block_index))
 }
 
 #[query]
@@ -275,6 +334,85 @@ fn get_block_range_from_stable_memory(start: u64, length: u64) -> Vec<EncodedBlo
                 }))
             })
             .collect()
+    })
+}
+
+fn get_oldest_tx_id(account_identifier: AccountIdentifier) -> Option<BlockIndex> {
+    // There is no easy way to get the oldest index for an account_identifier
+    // in one step. Instead, we do it in two steps:
+    // 1. check if index 0 is owned by the account_identifier
+    // 2. if not then return the oldest index of the account_identifier that
+    //    is not 0 via iter_upper_bound
+    let last_key = account_identifier_block_ids_key(account_identifier, 0);
+    with_account_identifier_block_ids(|account_identifier_block_ids| {
+        account_identifier_block_ids
+            .get(&last_key)
+            .map(|_| 0)
+            .or_else(|| {
+                account_identifier_block_ids
+                    .iter_upper_bound(&last_key)
+                    .find(|((account_identifier, _), _)| account_identifier == &last_key.0)
+                    .map(|(key, _)| key.1 .0)
+            })
+    })
+}
+
+#[query]
+#[candid_method(query)]
+fn get_blocks(
+    req: icrc_ledger_types::icrc3::blocks::GetBlocksRequest,
+) -> ic_icp_index::GetBlocksResponse {
+    let chain_length = with_blocks(|blocks| blocks.len());
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+
+    let blocks = get_block_range_from_stable_memory(start, length);
+    ic_icp_index::GetBlocksResponse {
+        chain_length,
+        blocks,
+    }
+}
+
+#[query]
+#[candid_method(query)]
+fn get_account_identifier_transactions(
+    arg: GetAccountIdentifierTransactionsArgs,
+) -> GetAccountIdentifierTransactionsResult {
+    let length = arg
+        .max_results
+        .min(DEFAULT_MAX_BLOCKS_PER_RESPONSE as u64)
+        .min(usize::MAX as u64) as usize;
+    // TODO: deal with the user setting start to u64::MAX
+    let start = arg.start.map_or(u64::MAX, |n| n);
+    let key = account_identifier_block_ids_key(arg.account_identifier, start);
+    let mut transactions = vec![];
+    let indices = with_account_identifier_block_ids(|account_identifier_block_ids| {
+        account_identifier_block_ids
+            .range(key..)
+            // old txs of the requested account_identifier and skip the start index
+            .filter(|(k, _)| k.0 == key.0 && k.1 .0 != start)
+            .take(length)
+            .map(|(k, _)| k.1 .0)
+            .collect::<Vec<BlockIndex>>()
+    });
+    for id in indices {
+        let block = with_blocks(|blocks| {
+            blocks.get(id).unwrap_or_else(|| {
+                ic_cdk::api::trap(&format!(
+                    "Block {} not found in the block log, account_identifier blocks map is corrupted!",
+                    id
+                ))
+            })
+        });
+        let transaction = decode_encoded_block_or_trap(id, block.into()).transaction;
+        let transaction_with_idx = TransactionWithId { id, transaction };
+        transactions.push(transaction_with_idx);
+    }
+    let oldest_tx_id = get_oldest_tx_id(arg.account_identifier);
+    Ok(GetAccountIdentifierTransactionsResponse {
+        transactions,
+        oldest_tx_id,
     })
 }
 
