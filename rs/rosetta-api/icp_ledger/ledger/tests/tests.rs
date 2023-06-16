@@ -175,8 +175,7 @@ fn check_memo() {
             to: Account {
                 owner: PrincipalId::new_user_test_id(10).0,
                 subaccount: None,
-            }
-            .into(),
+            },
             fee: None,
             created_at_time: None,
             memo: Some(Memo(ByteBuf::from(vec![0; memo_size_bytes]))),
