@@ -179,19 +179,19 @@ class JiraFindingDataSource(FindingDataSource):
         if owning_teams:
             for team_obj in owning_teams:
                 team = team_obj.name
-                if team == JIRA_OWNER_GROUP_BY_TEAM[Team.NODE_TEAM]:
+                if team == JIRA_OWNER_GROUP_BY_TEAM[Team.NODE_TEAM]["name"]:
                     owners.append(Team.NODE_TEAM)
-                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.BOUNDARY_NODE_TEAM]:
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.BOUNDARY_NODE_TEAM]["name"]:
                     owners.append(Team.BOUNDARY_NODE_TEAM)
-                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.TRUST_TEAM]:
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.TRUST_TEAM]["name"]:
                     owners.append(Team.TRUST_TEAM)
-                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.GIX_TEAM]:
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.GIX_TEAM]["name"]:
                     owners.append(Team.GIX_TEAM)
-                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.SDK_TEAM]:
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.SDK_TEAM]["name"]:
                     owners.append(Team.SDK_TEAM)
-                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM]:
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM]["name"]:
                     owners.append(Team.FINANCIAL_INTEGRATIONS_TEAM)
-                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.EXECUTION_TEAM]:
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.EXECUTION_TEAM]["name"]:
                     owners.append(Team.EXECUTION_TEAM)
         return owners
 
