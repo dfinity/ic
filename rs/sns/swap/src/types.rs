@@ -1,4 +1,6 @@
 use crate::{
+    clients::{RealNnsGovernanceClient, RealSnsGovernanceClient, RealSnsRootClient},
+    environment::{CanisterClients, CanisterEnvironment},
     logs::{ERROR, INFO},
     pb::v1::{
         error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
@@ -141,6 +143,55 @@ impl Init {
     pub fn icp_ledger_or_panic(&self) -> CanisterId {
         self.icp_ledger()
             .expect("could not get canister id of icp ledger")
+    }
+
+    pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+        use ic_nervous_system_common::ledger::IcpLedgerCanister;
+        use ic_sns_governance::ledger::LedgerCanister;
+
+        let sns_root = {
+            let sns_root_canister_id = self
+                .sns_root()
+                .map_err(|s| format!("unable to get sns root canister id: {s}"))?;
+
+            RealSnsRootClient::new(sns_root_canister_id)
+        };
+
+        let sns_governance = {
+            let sns_governance_canister_id = self
+                .sns_governance()
+                .map_err(|s| format!("unable to get sns governance canister id: {s}"))?;
+            RealSnsGovernanceClient::new(sns_governance_canister_id)
+        };
+
+        let icp_ledger = {
+            let icp_ledger_canister_id = self
+                .icp_ledger()
+                .map_err(|s| format!("unable to get icp ledger canister id: {s}"))?;
+            IcpLedgerCanister::new(icp_ledger_canister_id)
+        };
+
+        let sns_ledger = {
+            let sns_ledger_canister_id = self
+                .sns_ledger()
+                .map_err(|s| format!("unable to get sns ledger canister id: {s}"))?;
+            LedgerCanister::new(sns_ledger_canister_id)
+        };
+
+        let nns_governance = {
+            let nns_governance_canister_id = self
+                .nns_governance()
+                .map_err(|s| format!("unable to get nns governance canister id: {s}"))?;
+            RealNnsGovernanceClient::new(nns_governance_canister_id)
+        };
+
+        Ok(CanisterClients {
+            sns_root,
+            sns_governance,
+            sns_ledger,
+            icp_ledger,
+            nns_governance,
+        })
     }
 
     pub fn transaction_fee_e8s_or_panic(&self) -> u64 {

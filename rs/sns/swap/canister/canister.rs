@@ -17,7 +17,7 @@ use ic_nervous_system_common::{
 };
 use ic_sns_governance::ledger::LedgerCanister;
 use ic_sns_swap::{
-    clients::{RealNnsGovernanceClient, RealSnsGovernanceClient, RealSnsRootClient},
+    clients::RealSnsRootClient,
     logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
     pb::v1::{
@@ -194,24 +194,12 @@ fn finalize_swap() {
 #[candid_method(update, rename = "finalize_swap")]
 async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     log!(INFO, "finalize_swap");
-    let mut sns_root_client = RealSnsRootClient::new(swap().init_or_panic().sns_root_or_panic());
-    let mut sns_governance_client =
-        RealSnsGovernanceClient::new(swap().init_or_panic().sns_governance_or_panic());
-    let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
-    let sns_ledger = create_real_icrc1_ledger(swap().init_or_panic().sns_ledger_or_panic());
-    let mut nns_governance_client =
-        RealNnsGovernanceClient::new(swap().init_or_panic().nns_governance_or_panic());
+    let mut clients = swap()
+        .init_or_panic()
+        .environment()
+        .expect("unable to create canister clients");
 
-    swap_mut()
-        .finalize(
-            now_fn,
-            &mut sns_root_client,
-            &mut sns_governance_client,
-            &icp_ledger,
-            &sns_ledger,
-            &mut nns_governance_client,
-        )
-        .await
+    swap_mut().finalize(now_fn, &mut clients).await
 }
 
 #[export_name = "canister_update error_refund_icp"]

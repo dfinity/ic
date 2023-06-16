@@ -1,5 +1,6 @@
 use crate::{
     clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
+    environment::CanisterEnvironment,
     logs::{ERROR, INFO},
     memory,
     pb::v1::{
@@ -1015,11 +1016,7 @@ impl Swap {
     pub async fn finalize(
         &mut self,
         now_fn: fn(bool) -> u64,
-        sns_root_client: &mut impl SnsRootClient,
-        sns_governance_client: &mut impl SnsGovernanceClient,
-        icp_ledger: &dyn ICRC1Ledger,
-        sns_ledger: &dyn ICRC1Ledger,
-        nns_governance_client: &mut impl NnsGovernanceClient,
+        environment: &mut impl CanisterEnvironment,
     ) -> FinalizeSwapResponse {
         // Acquire the lock or return a FinalizeSwapResponse with an error message.
         if let Err(error_message) = self.lock_finalize_swap() {
@@ -1028,16 +1025,7 @@ impl Swap {
 
         // The lock is now acquired and asynchronous calls to finalize are blocked.
         // Perform all subactions.
-        let finalize_swap_response = self
-            .finalize_inner(
-                now_fn,
-                sns_root_client,
-                sns_governance_client,
-                icp_ledger,
-                sns_ledger,
-                nns_governance_client,
-            )
-            .await;
+        let finalize_swap_response = self.finalize_inner(now_fn, environment).await;
 
         if finalize_swap_response.has_error_message() {
             log!(
@@ -1072,11 +1060,7 @@ impl Swap {
     pub async fn finalize_inner(
         &mut self,
         now_fn: fn(bool) -> u64,
-        sns_root_client: &mut impl SnsRootClient,
-        sns_governance_client: &mut impl SnsGovernanceClient,
-        icp_ledger: &dyn ICRC1Ledger,
-        sns_ledger: &dyn ICRC1Ledger,
-        nns_governance_client: &mut impl NnsGovernanceClient,
+        environment: &mut impl CanisterEnvironment,
     ) -> FinalizeSwapResponse {
         let mut finalize_swap_response = FinalizeSwapResponse::default();
 
@@ -1089,14 +1073,15 @@ impl Swap {
         }
 
         // Transfer the ICP tokens from the Swap canister.
-        finalize_swap_response.set_sweep_icp_result(self.sweep_icp(now_fn, icp_ledger).await);
+        finalize_swap_response
+            .set_sweep_icp_result(self.sweep_icp(now_fn, environment.icp_ledger()).await);
         if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
 
         // Settle the CommunityFund's participation in the Swap (if any).
         finalize_swap_response.set_settle_community_fund_participation_result(
-            self.settle_community_fund_participation(nns_governance_client)
+            self.settle_community_fund_participation(environment.nns_governance_mut())
                 .await,
         );
         if finalize_swap_response.has_error_message() {
@@ -1107,7 +1092,7 @@ impl Swap {
             // Restore controllers of dapp canisters to their original
             // owners (i.e. self.init.fallback_controller_principal_ids).
             finalize_swap_response.set_set_dapp_controllers_result(
-                self.set_dapp_controllers_for_finalize(sns_root_client)
+                self.set_dapp_controllers_for_finalize(environment.sns_root_mut())
                     .await,
             );
 
@@ -1118,21 +1103,24 @@ impl Swap {
         }
 
         // Transfer the SNS tokens from the Swap canister.
-        finalize_swap_response.set_sweep_sns_result(self.sweep_sns(now_fn, sns_ledger).await);
+        finalize_swap_response
+            .set_sweep_sns_result(self.sweep_sns(now_fn, environment.sns_ledger()).await);
         if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
 
         // Once SNS tokens have been distributed to the correct accounts, claim
         // them as neurons on behalf of the Swap participants.
-        finalize_swap_response
-            .set_claim_neuron_result(self.claim_swap_neurons(sns_governance_client).await);
+        finalize_swap_response.set_claim_neuron_result(
+            self.claim_swap_neurons(environment.sns_governance_mut())
+                .await,
+        );
         if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
 
         finalize_swap_response.set_set_mode_call_result(
-            Self::set_sns_governance_to_normal_mode(sns_governance_client).await,
+            Self::set_sns_governance_to_normal_mode(environment.sns_governance_mut()).await,
         );
 
         finalize_swap_response
