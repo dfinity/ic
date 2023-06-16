@@ -296,7 +296,7 @@ fn install_code_validate_input_memory_allocation() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB total memory and 0 B in wasm custom sections memory but the Subnet's remaining total memory capacity is 10.00 MiB and wasm custom sections capacity is 2.00 GiB"))
+        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet"))
     );
 }
 

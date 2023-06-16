@@ -1,12 +1,15 @@
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterSettingsArgs;
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_types::{
     ComputeAllocation, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };
 use num_traits::cast::ToPrimitive;
 use std::convert::TryFrom;
+
+use crate::canister_manager::CanisterManagerError;
 
 /// Struct used for decoding CanisterSettingsArgs
 #[derive(Default)]
@@ -217,4 +220,131 @@ impl From<InvalidMemoryAllocationError> for UpdateSettingsError {
     fn from(err: InvalidMemoryAllocationError) -> Self {
         Self::MemoryAllocation(err)
     }
+}
+
+pub(crate) struct ValidatedCanisterSettings {
+    controller: Option<PrincipalId>,
+    controllers: Option<Vec<PrincipalId>>,
+    compute_allocation: Option<ComputeAllocation>,
+    memory_allocation: Option<MemoryAllocation>,
+    freezing_threshold: Option<NumSeconds>,
+}
+
+impl ValidatedCanisterSettings {
+    pub fn controller(&self) -> Option<PrincipalId> {
+        self.controller
+    }
+
+    pub fn controllers(&self) -> Option<Vec<PrincipalId>> {
+        self.controllers.clone()
+    }
+
+    pub fn compute_allocation(&self) -> Option<ComputeAllocation> {
+        self.compute_allocation
+    }
+
+    pub fn memory_allocation(&self) -> Option<MemoryAllocation> {
+        self.memory_allocation
+    }
+
+    pub fn freezing_threshold(&self) -> Option<NumSeconds> {
+        self.freezing_threshold
+    }
+}
+
+/// Validates the new canisters settings:
+/// - memory allocation:
+///     - it cannot be lower than the current canister memory usage.
+///     - there must be enough available subnet capacity for the change.
+/// - compute allocation:
+///     - there must be enough available compute capacity for the change.
+/// - controllers:
+///     - the number of controllers cannot exceed the given maximum.
+pub(crate) fn validate_canister_settings(
+    settings: CanisterSettings,
+    canister_memory_usage: NumBytes,
+    canister_memory_allocation: MemoryAllocation,
+    subnet_available_memory: &SubnetAvailableMemory,
+    canister_compute_allocation: ComputeAllocation,
+    subnet_compute_allocation_usage: u64,
+    subnet_compute_allocation_capacity: u64,
+    max_controllers: usize,
+) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
+    if let Some(new_memory_allocation) = settings.memory_allocation {
+        // The new memory allocation cannot be lower than the current canister
+        // memory usage.
+        if let MemoryAllocation::Reserved(reserved_bytes) = new_memory_allocation {
+            if reserved_bytes < canister_memory_usage {
+                return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
+                    memory_allocation_given: new_memory_allocation,
+                    memory_usage_needed: canister_memory_usage,
+                });
+            }
+        }
+
+        let old_memory_allocation =
+            canister_memory_allocation.allocated_bytes(canister_memory_usage);
+
+        // If the available memory in the subnet is negative, then we must cap
+        // it at zero such that the new memory allocation can change between
+        // zero and the old memory allocation. Note that capping at zero also
+        // makes conversion from `i64` to `u64` valid.
+        let subnet_available_memory = subnet_available_memory.get_execution_memory().max(0) as u64;
+        let available_memory_allocation =
+            subnet_available_memory.saturating_add(old_memory_allocation.get());
+        if new_memory_allocation.bytes().get() > available_memory_allocation {
+            return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
+                requested: new_memory_allocation.bytes(),
+                available: NumBytes::from(available_memory_allocation),
+            });
+        }
+    }
+
+    if let Some(new_compute_allocation) = settings.compute_allocation {
+        // The saturating `u64` subtractions ensure that the available compute
+        // capacity of the subnet never goes below zero. This means that even if
+        // compute capacity is oversubscribed, the new compute allocation can
+        // change between zero and the old compute allocation.
+        let available_compute_allocation = subnet_compute_allocation_capacity
+            .saturating_sub(subnet_compute_allocation_usage)
+            // Minus 1 below guarantees there is always at least 1% of free compute
+            // if the subnet was not already oversubscribed.
+            .saturating_sub(1)
+            .saturating_add(canister_compute_allocation.as_percent());
+        if new_compute_allocation.as_percent() > available_compute_allocation {
+            return Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {
+                requested: new_compute_allocation,
+                available: available_compute_allocation,
+            });
+        }
+    }
+
+    // Field `controller` is kept for backward compatibility. However, specifying
+    // both `controller` and `controllers` fields in the same request results in an
+    // error.
+    let controllers = settings.controllers();
+    if let (Some(_), Some(_)) = (settings.controller(), &controllers) {
+        return Err(CanisterManagerError::InvalidSettings {
+                message: "Invalid settings: 'controller' and 'controllers' fields cannot be set simultaneously".to_string(),
+            });
+    }
+    match &controllers {
+        Some(controllers) => {
+            if controllers.len() > max_controllers {
+                return Err(CanisterManagerError::InvalidSettings {
+                    message: "Invalid settings: 'controllers' length exceeds maximum size allowed"
+                        .to_string(),
+                });
+            }
+        }
+        None => {}
+    }
+
+    Ok(ValidatedCanisterSettings {
+        controller: settings.controller(),
+        controllers: settings.controllers(),
+        compute_allocation: settings.compute_allocation(),
+        memory_allocation: settings.memory_allocation(),
+        freezing_threshold: settings.freezing_threshold(),
+    })
 }
