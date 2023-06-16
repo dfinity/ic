@@ -268,3 +268,106 @@ fn test_from_bytes_of_max_integer_rejected() -> Result<(), ThresholdEcdsaError> 
 
     Ok(())
 }
+
+#[test]
+fn test_fe_from_bytes_of_secp256r1_modulus_is_rejected() -> Result<(), ThresholdEcdsaError> {
+    let curve_type = EccCurveType::P256;
+    let prime =
+        hex::decode("FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFF").unwrap();
+    assert!(EccFieldElement::from_bytes(curve_type, &prime).is_err());
+
+    let prime_minus_1 =
+        hex::decode("FFFFFFFF00000001000000000000000000000000FFFFFFFFFFFFFFFFFFFFFFFE").unwrap();
+    assert_eq!(
+        EccFieldElement::from_bytes(curve_type, &prime_minus_1)?,
+        EccFieldElement::one(curve_type).negate()?
+    );
+    Ok(())
+}
+
+#[test]
+fn test_fe_from_bytes_of_secp256k1_modulus_is_rejected() -> Result<(), ThresholdEcdsaError> {
+    let curve_type = EccCurveType::K256;
+    let prime =
+        hex::decode("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F").unwrap();
+    assert!(EccFieldElement::from_bytes(curve_type, &prime).is_err());
+
+    let prime_minus_1 =
+        hex::decode("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2E").unwrap();
+    assert_eq!(
+        EccFieldElement::from_bytes(curve_type, &prime_minus_1)?,
+        EccFieldElement::one(curve_type).negate()?
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_display_and_debug_of_fe_have_same_output() {
+    for curve_type in EccCurveType::all() {
+        let fe = random_field_element(curve_type);
+
+        assert_eq!(format!("{:?}", fe), format!("{}", fe));
+    }
+}
+
+#[test]
+fn test_string_repr_of_k256_fe_is_expected_value() -> Result<(), ThresholdEcdsaError> {
+    let curve_type = EccCurveType::K256;
+
+    let valid =
+        hex::decode("1197ca51cd104a209c8d25160fc29001dee520fb8a536c0da13f6d204ada391b").unwrap();
+
+    let fe = EccFieldElement::from_bytes(curve_type, &valid)?;
+
+    assert_eq!(format!("{}", fe),
+               "EccFieldElement(secp256k1, 0x1197ca51cd104a209c8d25160fc29001dee520fb8a536c0da13f6d204ada391b)");
+
+    Ok(())
+}
+
+#[test]
+fn test_string_repr_of_p256_fe_is_expected_value() -> Result<(), ThresholdEcdsaError> {
+    let curve_type = EccCurveType::P256;
+
+    let valid =
+        hex::decode("1197ca51cd104a209c8d25160fc29001dee520fb8a536c0da13f6d204ada391b").unwrap();
+
+    let fe = EccFieldElement::from_bytes(curve_type, &valid)?;
+
+    assert_eq!(format!("{}", fe),
+               "EccFieldElement(secp256r1, 0x1197ca51cd104a209c8d25160fc29001dee520fb8a536c0da13f6d204ada391b)");
+
+    Ok(())
+}
+
+#[test]
+fn test_cross_curve_operations_fail() -> Result<(), ThresholdEcdsaError> {
+    let fe1 = random_field_element(EccCurveType::K256);
+    let fe2 = random_field_element(EccCurveType::P256);
+
+    for (lhs, rhs) in [(&fe1, &fe2), (&fe2, &fe1)] {
+        assert_eq!(lhs.add(rhs), Err(ThresholdEcdsaError::CurveMismatch));
+
+        assert_eq!(lhs.sub(rhs), Err(ThresholdEcdsaError::CurveMismatch));
+
+        assert_eq!(lhs.mul(rhs), Err(ThresholdEcdsaError::CurveMismatch));
+
+        assert_eq!(
+            lhs.ct_eq(rhs).unwrap_err(),
+            ThresholdEcdsaError::CurveMismatch
+        );
+
+        for bit in [0, 1] {
+            let assign = subtle::Choice::from(bit);
+
+            let mut target = lhs.clone();
+            assert_eq!(
+                target.ct_assign(rhs, assign),
+                Err(ThresholdEcdsaError::CurveMismatch)
+            );
+        }
+    }
+
+    Ok(())
+}
