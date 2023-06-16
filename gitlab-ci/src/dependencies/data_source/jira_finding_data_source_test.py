@@ -168,9 +168,9 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
     risk = Mock()
     risk.id = JIRA_SECURITY_RISK_TO_ID[SecurityRisk.CRITICAL]
     team1 = Mock()
-    team1.name = JIRA_OWNER_GROUP_BY_TEAM[Team.GIX_TEAM]
+    team1.name = JIRA_OWNER_GROUP_BY_TEAM[Team.GIX_TEAM]["name"]
     team2 = Mock()
-    team2.name = JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM]
+    team2.name = JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM]["name"]
     issue_data = {
         JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
