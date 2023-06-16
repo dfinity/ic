@@ -322,6 +322,7 @@ pub fn read_and_maybe_update_state<T: Serialize + DeserializeOwned + Clone + Par
             if let Err(e) = state.save() {
                 warn!(logger, "Failed to save the recovery state: {}", e);
             }
+            return state;
         }
     }
 

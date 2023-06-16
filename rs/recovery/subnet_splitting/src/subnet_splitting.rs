@@ -300,7 +300,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 }
             }
 
-            StepType::Cleanup => todo!(),
             _ => (),
         }
     }
@@ -396,7 +395,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             }
             .into(),
 
-            StepType::Cleanup => todo!(),
+            StepType::Cleanup => self.recovery.get_cleanup_step().into(),
         };
 
         Ok(step)
