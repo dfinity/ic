@@ -113,9 +113,10 @@ cargo_build_script(
 
 rust_library(
     name = "governance",
-    srcs = glob([
-        "src/**/*.rs",
-    ]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
     aliases = ALIASES,
     crate_name = "ic_nns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -127,9 +128,10 @@ rust_library(
 
 rust_library(
     name = "governance--test_feature",
-    srcs = glob([
-        "src/**/*.rs",
-    ]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["**/*tests.rs"],
+    ),
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_nns_governance",
@@ -233,6 +235,7 @@ rust_test(
 
 rust_test(
     name = "governance_test",
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate = ":governance",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

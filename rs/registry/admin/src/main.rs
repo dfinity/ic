@@ -3789,7 +3789,7 @@ struct ProposeToCreateServiceNervousSystemCmd {
     swap_neuron_dissolve_delay: nervous_system_pb::Duration,
 
     #[clap(long, value_parser=parse_time_of_day)]
-    swap_start_time: nervous_system_pb::GlobalTimeOfDay,
+    swap_start_time: Option<nervous_system_pb::GlobalTimeOfDay>,
 
     #[clap(long, value_parser=parse_duration)]
     swap_duration: nervous_system_pb::Duration,
@@ -3999,7 +3999,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             let maximum_icp = Some(swap_maximum_icp);
             let minimum_participant_icp = Some(swap_minimum_participant_icp);
             let maximum_participant_icp = Some(swap_maximum_participant_icp);
-            let start_time = Some(swap_start_time);
+            let start_time = swap_start_time;
             let duration = Some(swap_duration);
 
             let neuron_basket_construction_parameters = {

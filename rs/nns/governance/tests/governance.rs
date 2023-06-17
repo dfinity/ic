@@ -11887,7 +11887,7 @@ fn swap_start_and_due_timestamps_if_start_time_is_before_swap_approved() {
         + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
         - 1;
     let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
-        swap_start_time_of_day,
+        Some(swap_start_time_of_day),
         duration,
         swap_approved_timestamp_seconds,
     )
@@ -11914,7 +11914,7 @@ fn swap_start_and_due_timestamps_if_start_time_is_after_swap_approved() {
         + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
         + 1;
     let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
-        swap_start_time_of_day,
+        Some(swap_start_time_of_day),
         duration,
         swap_approved_timestamp_seconds,
     )
@@ -11941,7 +11941,7 @@ fn swap_start_and_due_timestamps_if_start_time_is_when_swap_approved() {
     let swap_approved_timestamp_seconds =
         day_offset * SECONDS_PER_DAY + swap_start_time_of_day.seconds_after_utc_midnight.unwrap();
     let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
-        swap_start_time_of_day,
+        Some(swap_start_time_of_day),
         duration,
         swap_approved_timestamp_seconds,
     )

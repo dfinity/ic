@@ -1585,7 +1585,7 @@ pub(crate) fn create_service_nervous_system_into_params(
             .ok_or("`neuron_basket_construction_parameters` should not be None")?
             .try_into()?;
 
-    let start_time = start_time.ok_or("`start_time` should not be None")?;
+    let start_time = start_time;
     let duration = duration.ok_or("`duration` should not be None")?;
     let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
         CreateServiceNervousSystem::swap_start_and_due_timestamps(
