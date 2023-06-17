@@ -66,6 +66,7 @@ use icp_ledger::{
     AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
 };
 use itertools::Itertools;
+use rand::Rng;
 use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
@@ -8321,13 +8322,15 @@ impl CreateServiceNervousSystem {
     ///
     /// The end time is calculated by adding `duration` to the computed start time.
     ///
-    /// TODO(NNS1-2297): Pick a random time of day if none is provided
+    /// if start_time_of_day is None, then randomly_pick_swap_start is used to
+    /// pick a start time.
     pub fn swap_start_and_due_timestamps(
-        start_time_of_day: GlobalTimeOfDay,
+        start_time_of_day: Option<GlobalTimeOfDay>,
         duration: Duration,
         swap_approved_timestamp_seconds: u64,
     ) -> Result<(u64, u64), String> {
         let start_time_of_day = start_time_of_day
+            .unwrap_or_else(Self::randomly_pick_swap_start)
             .seconds_after_utc_midnight
             .ok_or("`seconds_after_utc_midnight` should not be None")?;
         let duration = duration.seconds.ok_or("`seconds` should not be None")?;
@@ -8366,5 +8369,19 @@ impl CreateServiceNervousSystem {
             .ok_or("`duration` should not be None")?;
 
         Ok((swap_start_timestamp_seconds, swap_due_timestamp_seconds))
+    }
+
+    /// Picks a value uniformly at random in [00:00, 23:45] that is a multiple of 15
+    /// minutes past midnight.
+    fn randomly_pick_swap_start() -> GlobalTimeOfDay {
+        let time_of_day_seconds = rand::thread_rng().gen_range(0..SECONDS_PER_DAY);
+
+        // Round down to nearest multiple of 15 min.
+        let remainder_seconds = time_of_day_seconds % (15 * 60);
+        let seconds_after_utc_midnight = Some(time_of_day_seconds - remainder_seconds);
+
+        GlobalTimeOfDay {
+            seconds_after_utc_midnight,
+        }
     }
 }

@@ -165,8 +165,8 @@ pub(crate) struct Swap {
     #[serde(rename = "VestingSchedule")]
     vesting_schedule: VestingSchedule,
 
-    #[serde(with = "ic_nervous_system_humanize::serde::time_of_day")]
-    start_time: nervous_system_pb::GlobalTimeOfDay,
+    #[serde(with = "ic_nervous_system_humanize::serde::optional_time_of_day")]
+    start_time: Option<nervous_system_pb::GlobalTimeOfDay>,
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     duration: nervous_system_pb::Duration,
 }
@@ -670,7 +670,7 @@ impl Swap {
         let neuron_basket_construction_parameters =
             Some(vesting_schedule.convert_to_neuron_basket_construction_parameters());
 
-        let start_time = Some(*start_time);
+        let start_time = *start_time;
         let duration = Some(*duration);
 
         nns_governance_pb::SwapParameters {

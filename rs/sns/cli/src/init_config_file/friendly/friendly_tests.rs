@@ -188,7 +188,7 @@ fn test_parse() {
                 interval: parse_duration("17 days").unwrap(),
             },
 
-            start_time: nervous_system_pb::GlobalTimeOfDay::from_hh_mm(12, 0).unwrap(),
+            start_time: Some(nervous_system_pb::GlobalTimeOfDay::from_hh_mm(12, 0).unwrap()),
             duration: nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
             },
