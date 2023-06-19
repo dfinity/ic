@@ -52,6 +52,12 @@ repos:
     always_run: true
     verbose: true
 
+  - id: buf-breaking
+    name: Check no breaking changes were introduced
+    entry: ./pre-commit/check-incompabilities.sh
+    language: script
+    pass_filenames: false
+
 -   repo: https://github.com/nix-community/nixpkgs-fmt
     rev: 6740ea881d3ac5942d4fbf124f5956b896666c76
     hooks:
@@ -61,17 +67,6 @@ repos:
                 .*/Cargo\.nix|
                 experimental/.*
             )$
-
-# The following repo is maintained by us at
-# https://gitlab.com/dfinity-lab/open/pre-commit-tools.
-- repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
-  rev: 17101bf5cebeda988b13764909a6140badc5ef03
-  hooks:
-  - id: buf-checks
-    args: ["--config=buf.yaml"]
-    exclude: |
-      (?x)(
-      )
 
 - repo: https://github.com/willthames/ansible-lint.git
   rev: v4.2.0
