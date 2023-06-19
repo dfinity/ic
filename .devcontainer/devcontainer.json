@@ -29,6 +29,11 @@
       "type": "bind"
     },
     {
+      "source": "${localEnv:HOME}/.local",
+      "target": "/home/ubuntu/.local",
+      "type": "bind"
+    },
+    {
       "source": "${localEnv:SSH_AUTH_SOCK}",
       "target": "${localEnv:SSH_AUTH_SOCK}",
       "type": "bind"
