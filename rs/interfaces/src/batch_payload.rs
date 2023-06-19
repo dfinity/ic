@@ -1,33 +1,8 @@
-use crate::{
-    canister_http::CanisterHttpPayloadValidationError,
-    ingress_manager::IngressPayloadValidationError, messaging::XNetPayloadValidationError,
-    self_validating_payload::SelfValidatingPayloadValidationError, validation::ValidationResult,
-};
+use crate::{consensus::PayloadValidationError, validation::ValidationResult};
 use ic_base_types::NumBytes;
 use ic_types::{
     batch::ValidationContext, consensus::BlockPayload, crypto::CryptoHashOf, Height, Time,
 };
-
-/// Collection of all possible validation errors that may occur during
-/// validation of a batch payload.
-#[derive(Debug)]
-pub enum BatchPayloadValidationError {
-    Ingress(IngressPayloadValidationError),
-    XNet(XNetPayloadValidationError),
-    Bitcoin(SelfValidatingPayloadValidationError),
-    CanisterHttp(CanisterHttpPayloadValidationError),
-}
-
-impl BatchPayloadValidationError {
-    pub fn is_transient(&self) -> bool {
-        match self {
-            Self::Ingress(e) => e.is_transient(),
-            Self::XNet(e) => e.is_transient(),
-            Self::Bitcoin(e) => e.is_transient(),
-            Self::CanisterHttp(e) => e.is_transient(),
-        }
-    }
-}
 
 /// A list of [`PastPayload`] will be passed to invocation of
 ///  [`BatchPayloadBuilder::build_payload`].
@@ -101,7 +76,7 @@ pub trait BatchPayloadBuilder: Send {
         payload: &[u8],
         past_payloads: &[PastPayload],
         context: &ValidationContext,
-    ) -> ValidationResult<BatchPayloadValidationError>;
+    ) -> ValidationResult<PayloadValidationError>;
 }
 
 /// Indicates that a payload can be transformed into a set of messages, which
