@@ -239,6 +239,24 @@ impl CryptoMetrics {
         }
     }
 
+    /// Observes the minimum epoch in active NI-DKG transcripts
+    pub fn observe_minimum_epoch_in_active_nidkg_transcripts(&self, epoch: u32) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .observe_minimum_epoch_in_active_nidkg_transcripts
+                .set(epoch as f64);
+        }
+    }
+
+    /// Observes the epoch in loaded NI-DKG transcript
+    pub fn observe_epoch_in_loaded_nidkg_transcript(&self, epoch: u32) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .observe_epoch_in_loaded_nidkg_transcript
+                .set(epoch as f64);
+        }
+    }
+
     /// Observes the minimum registry version in active iDKG transcripts.
     pub fn observe_minimum_registry_version_in_active_idkg_transcripts(
         &self,
@@ -492,6 +510,12 @@ struct Metrics {
     /// Metrics for the cache of successfully verified BLS12-381 threshold signatures.
     pub crypto_bls12_381_sig_cache_metrics: bls12_381_sig_cache::Metrics,
 
+    /// Gauge for the minimum epoch in active NI-DKG transcripts.
+    observe_minimum_epoch_in_active_nidkg_transcripts: Gauge,
+
+    /// Gauge for the epoch in loaded NI-DKG transcripts.
+    observe_epoch_in_loaded_nidkg_transcript: Gauge,
+
     /// Gauge for the minimum registry version in active iDKG transcripts.
     observe_minimum_registry_version_in_active_idkg_transcripts: Gauge,
 
@@ -658,6 +682,14 @@ impl Metrics {
                     "crypto_bls12_381_sig_cache_misses",
                 "Number of cache misses for successfully verified BLS12-381 threshold signatures"), 
             },
+            observe_minimum_epoch_in_active_nidkg_transcripts: r.gauge(
+                "crypto_minimum_epoch_in_active_nidkg_transcripts",
+                "Minimum epoch in active NI-DKG transcripts"
+            ),
+            observe_epoch_in_loaded_nidkg_transcript: r.gauge(
+                "crypto_epoch_in_loaded_nidkg_transcript",
+                "Epoch in loaded NI-DKG transcript"
+            ),
             observe_minimum_registry_version_in_active_idkg_transcripts: r.gauge(
                 "crypto_minimum_registry_version_in_active_idkg_transcripts",
                 "Minimum registry version in active iDKG transcripts"

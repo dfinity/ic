@@ -514,4 +514,10 @@ pub trait NiDkgCspClient {
         &self,
         active_keys: BTreeSet<CspPublicCoefficients>,
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError>;
+
+    /// Make a metrics observation of the minimum epoch in active transcripts.
+    fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch);
+
+    /// Make a metrics observation of the epoch in loaded transcript.
+    fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch);
 }

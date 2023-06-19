@@ -239,6 +239,10 @@ mock! {
             &self,
             active_keys: BTreeSet<CspPublicCoefficients>
         ) -> Result<(), CspDkgRetainThresholdKeysError>;
+
+        fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch);
+
+        fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch);
     }
 
     pub trait CspPublicAndSecretKeyStoreChecker {

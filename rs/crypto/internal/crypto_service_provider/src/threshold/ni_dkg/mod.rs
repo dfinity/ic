@@ -266,6 +266,16 @@ impl NiDkgCspClient for Csp {
         self.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
     }
+
+    fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch) {
+        self.metrics
+            .observe_minimum_epoch_in_active_nidkg_transcripts(epoch.get());
+    }
+
+    fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch) {
+        self.metrics
+            .observe_epoch_in_loaded_nidkg_transcript(epoch.get());
+    }
 }
 
 fn dkg_dealing_encryption_key_id<T: CspPublicKeyStore>(
