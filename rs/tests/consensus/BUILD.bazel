@@ -134,7 +134,6 @@ system_test(
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "dynamic_testnet",
         "experimental_system_test_colocation",
         "manual",
     ],
@@ -154,7 +153,6 @@ system_test(
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "dynamic_testnet",
         "experimental_system_test_colocation",
         "manual",
     ],
@@ -174,7 +172,6 @@ system_test(
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "dynamic_testnet",
         "experimental_system_test_colocation",
         "manual",
     ],
