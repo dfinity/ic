@@ -10,12 +10,13 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, BatchPayloadValidationError, PastPayload},
+    batch_payload::{BatchPayloadBuilder, PastPayload},
     canister_http::{
         CanisterHttpPayloadBuilder, CanisterHttpPayloadValidationError,
         CanisterHttpPermanentValidationError, CanisterHttpPool,
         CanisterHttpTransientValidationError,
     },
+    consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
     consensus_pool::ConsensusPoolCache,
     validation::ValidationError,
 };
@@ -636,12 +637,12 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         payload: &[u8],
         past_payloads: &[PastPayload],
         context: &ValidationContext,
-    ) -> Result<(), BatchPayloadValidationError> {
+    ) -> Result<(), PayloadValidationError> {
         let payload_len = payload.len() as u64;
 
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = parse::bytes_to_payload(payload).map_err(|e| {
-            BatchPayloadValidationError::CanisterHttp(ValidationError::Permanent(
+            ValidationError::Permanent(PayloadPermanentError::CanisterHttpPayloadValidationError(
                 CanisterHttpPermanentValidationError::DecodeError(e),
             ))
         })?;
@@ -650,7 +651,14 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 // TODO: Remove after switching to new interface. We can enforce size constraint on the serialized payload
                 assert!(num_bytes.get() <= payload_len);
             })
-            .map_err(BatchPayloadValidationError::CanisterHttp)
+            .map_err(|err| match err {
+                ValidationError::Permanent(err) => ValidationError::Permanent(
+                    PayloadPermanentError::CanisterHttpPayloadValidationError(err),
+                ),
+                ValidationError::Transient(err) => ValidationError::Transient(
+                    PayloadTransientError::CanisterHttpPayloadValidationError(err),
+                ),
+            })
     }
 }
 
