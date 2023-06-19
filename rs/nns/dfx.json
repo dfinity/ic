@@ -33,7 +33,7 @@
     },
     "lifeline": {
       "type": "custom",
-      "candid": "handlers/lifeline/lifeline.did",
+      "candid": "handlers/lifeline/impl/lifeline.did",
       "wasm": "../target/wasm32-unknown-unknown/release/lifeline_canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p lifeline"
     },
