@@ -240,6 +240,19 @@ impl SubnetRecordBuilder {
         self
     }
 
+    pub fn with_membership(mut self, node_ids: &[NodeId]) -> Self {
+        self.record.membership = node_ids
+            .iter()
+            .map(|node_id| node_id.get().as_slice().to_vec())
+            .collect();
+        self
+    }
+
+    pub fn with_max_number_of_canisters(mut self, max_number_of_canisters: u64) -> Self {
+        self.record.max_number_of_canisters = max_number_of_canisters;
+        self
+    }
+
     pub fn build(self) -> SubnetRecord {
         self.record
     }
