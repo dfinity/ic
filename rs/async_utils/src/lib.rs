@@ -2,11 +2,13 @@ use slog::{info, Logger};
 
 mod http;
 mod hyper;
+mod join_map;
 mod unix;
 
 pub use self::{
     http::{receive_body, receive_body_without_timeout, BodyReceiveError},
     hyper::ExecuteOnTokioRuntime,
+    join_map::JoinMap,
     unix::{
         incoming_from_first_systemd_socket, incoming_from_nth_systemd_socket, incoming_from_path,
         incoming_from_second_systemd_socket,
