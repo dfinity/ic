@@ -34,9 +34,8 @@ use ic_registry_subnet_type::SubnetType;
 use rand::distributions::{Distribution, Uniform};
 use rand_chacha::ChaCha8Rng;
 use slog::{debug, info, Logger};
-use ssh2::Session;
 use std::cmp::{max, min};
-use std::io::{self, Read, Write};
+use std::io::{self};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -414,7 +413,9 @@ fn stress_node_periodically(
             if should_stop(remaining_duration) {
                 break;
             } else {
-                let _ = execute_ssh_command(&session, reset_tc_ssh_command())?;
+                let _ = node
+                    .block_on_bash_script_from_session(&session, &reset_tc_ssh_command())
+                    .expect("Failed to execute bash script from session");
                 let max_duration =
                     fraction_of_duration(remaining_duration, FRACTION_FROM_REMAINING_DURATION);
                 let sleep_time = Uniform::from(
@@ -441,8 +442,12 @@ fn stress_node_periodically(
                 let action_time =
                     Uniform::from(MIN_NODE_STRESS_TIME..=max(max_duration, MIN_NODE_STRESS_TIME))
                         .sample(&mut rng);
-                let tc_rules =
-                    execute_ssh_command(&session, limit_tc_randomly_ssh_command(&mut rng))?;
+                let tc_rules = node
+                    .block_on_bash_script_from_session(
+                        &session,
+                        &limit_tc_randomly_ssh_command(&mut rng),
+                    )
+                    .expect("Failed to execute bash script from session");
                 info!(
                     &log,
                     "Node with id={} is stressed for {} sec. The applied tc rules are:\n{}",
@@ -463,28 +468,6 @@ fn stress_node_periodically(
 
 fn fraction_of_duration(time: Duration, fraction: f64) -> Duration {
     Duration::from_secs((time.as_secs() as f64 * fraction) as u64)
-}
-
-fn execute_ssh_command(session: &Session, ssh_command: String) -> Result<String, io::Error> {
-    let mut channel = session.channel_session()?;
-    channel.exec("bash")?;
-    channel.write_all(ssh_command.as_bytes())?;
-    channel.flush()?;
-    channel.send_eof()?;
-    let mut stderr = String::new();
-    let mut command_output = String::new();
-    channel.stderr().read_to_string(&mut stderr)?;
-    channel.read_to_string(&mut command_output)?;
-    if !stderr.is_empty() {
-        panic!("Channel exited with an stderr=\n{}", stderr);
-    }
-    channel.close()?;
-    channel.wait_close()?;
-    let exit_code = channel.exit_status()?;
-    if exit_code != 0 {
-        panic!("Channel exited with an exit code {}.", exit_code);
-    }
-    Ok(command_output)
 }
 
 fn reset_tc_ssh_command() -> String {
