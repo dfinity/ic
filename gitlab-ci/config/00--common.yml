@@ -103,6 +103,8 @@ after_script:
     export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
     buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" after-script -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
 
+    rm -rf "${CI_PROJECT_DIR}/target"
+
     # Finish and collapse the after_script section
     echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
 
