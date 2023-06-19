@@ -242,6 +242,8 @@ mod loading {
             transcript.dkg_id,
             &transcript.committee,
         );
+        let epoch = epoch(transcript.registry_version);
+        ni_dkg_csp_client.observe_epoch_in_loaded_transcript(epoch);
         Ok(result)
     }
 

@@ -14,9 +14,8 @@ pub fn retain_only_active_keys<C: NiDkgCspClient>(
     transcripts: TranscriptsToRetain,
 ) -> Result<(), DkgKeyRemovalError> {
     ni_dkg_csp_client.retain_threshold_keys_if_present(transcripts.public_keys())?;
-    ni_dkg_csp_client.update_forward_secure_epoch(
-        AlgorithmId::NiDkg_Groth20_Bls12_381,
-        epoch(transcripts.min_registry_version()),
-    )?;
+    let epoch = epoch(transcripts.min_registry_version());
+    ni_dkg_csp_client.observe_minimum_epoch_in_active_transcripts(epoch);
+    ni_dkg_csp_client.update_forward_secure_epoch(AlgorithmId::NiDkg_Groth20_Bls12_381, epoch)?;
     Ok(())
 }
