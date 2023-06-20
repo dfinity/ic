@@ -178,6 +178,7 @@ pub fn transfer_args_with_sender(
                     amount: amount.into(),
                 },
                 Operation::Approve { .. } => todo!(),
+                Operation::TransferFrom { .. } => todo!(),
             })
             .collect()
     })

@@ -128,6 +128,107 @@ fn test_approvals_are_not_cumulative() {
 }
 
 #[test]
+fn test_approval_transfer_from() {
+    let now = ts(1);
+
+    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+    let to = test_account_id(3);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+    let fee = 10_000;
+
+    let tr = Transaction {
+        operation: Operation::TransferFrom {
+            from,
+            to,
+            spender,
+            amount: 100_000,
+            fee: Some(fee),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    assert_eq!(
+        tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: tokens(0)
+        }
+    );
+
+    let tr = Transaction {
+        operation: Operation::Approve {
+            from,
+            spender,
+            amount: 150_000,
+            expected_allowance: None,
+            expires_at: None,
+            fee: Some(fee),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(190_000));
+
+    let tr = Transaction {
+        operation: Operation::TransferFrom {
+            from,
+            to,
+            spender,
+            amount: 100_000,
+            fee: Some(fee),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&to), tokens(100_000));
+    assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
+    assert_eq!(ctx.balances().account_balance(&from), tokens(80_000));
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(40_000),
+            expires_at: None
+        },
+    );
+
+    let tr = Transaction {
+        operation: Operation::TransferFrom {
+            from,
+            to,
+            spender,
+            amount: 100_000,
+            fee: Some(fee),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    assert_eq!(
+        tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: tokens(40_000)
+        }
+    );
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(40_000),
+            expires_at: None
+        },
+    );
+    assert_eq!(ctx.balances().account_balance(&from), tokens(80_000),);
+    assert_eq!(ctx.balances().account_balance(&to), tokens(100_000),);
+}
+
+#[test]
 fn test_approval_expiration_override() {
     let now = ts(1000);
 
@@ -246,4 +347,121 @@ fn test_approval_no_fee_on_reject() {
     );
 
     assert_eq!(ctx.balances().account_balance(&from), tokens(20_000));
+}
+
+#[test]
+fn test_self_transfer_from() {
+    let now = ts(1000);
+
+    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+
+    let from = test_account_id(1);
+    let to = test_account_id(2);
+
+    ctx.balances_mut().mint(&from, tokens(100_000)).unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &from, now),
+        Allowance::default(),
+    );
+
+    let tr = Transaction {
+        operation: Operation::TransferFrom {
+            from,
+            to,
+            spender: from,
+            amount: 20_000,
+            fee: Some(10_000),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(70_000));
+    assert_eq!(ctx.balances().account_balance(&to), tokens(20_000));
+}
+
+#[test]
+fn test_approval_allowance_covers_fee() {
+    let now = ts(1);
+
+    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+    let to = test_account_id(3);
+
+    ctx.balances_mut().mint(&from, tokens(20_000)).unwrap();
+
+    let tr = Transaction {
+        operation: Operation::Approve {
+            from,
+            spender,
+            amount: 10_000,
+            expected_allowance: None,
+            expires_at: None,
+            fee: None,
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    let fee = 10_000;
+    let tr = Transaction {
+        operation: Operation::TransferFrom {
+            from,
+            to,
+            spender,
+            amount: 10_000,
+            fee: Some(fee),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    assert_eq!(
+        tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: tokens(10_000)
+        }
+    );
+
+    let tr = Transaction {
+        operation: Operation::Approve {
+            from,
+            spender,
+            amount: 20_000,
+            expected_allowance: None,
+            expires_at: None,
+            fee: None,
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    let tr = Transaction {
+        operation: Operation::TransferFrom {
+            from,
+            to,
+            spender,
+            amount: 10_000,
+            fee: Some(fee),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(0));
+    assert_eq!(ctx.balances().account_balance(&to), tokens(10_000));
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(0),
+            expires_at: None
+        },
+    );
 }

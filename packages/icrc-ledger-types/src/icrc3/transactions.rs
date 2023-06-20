@@ -53,6 +53,17 @@ pub struct Approve {
     pub created_at_time: Option<u64>,
 }
 
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct TransferFrom {
+    pub spender: Account,
+    pub from: Account,
+    pub to: Account,
+    pub amount: Nat,
+    pub memo: Option<Memo>,
+    pub fee: Option<Nat>,
+    pub created_at_time: Option<u64>,
+}
+
 // Representation of a Transaction which supports the Icrc1 Standard functionalities
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Transaction {
@@ -61,6 +72,7 @@ pub struct Transaction {
     pub burn: Option<Burn>,
     pub transfer: Option<Transfer>,
     pub approve: Option<Approve>,
+    pub transfer_from: Option<TransferFrom>,
     pub timestamp: u64,
 }
 
@@ -73,6 +85,7 @@ impl Transaction {
             burn: Some(burn),
             transfer: None,
             approve: None,
+            transfer_from: None,
         }
     }
 
@@ -84,6 +97,7 @@ impl Transaction {
             burn: None,
             transfer: None,
             approve: None,
+            transfer_from: None,
         }
     }
 
@@ -95,6 +109,7 @@ impl Transaction {
             burn: None,
             transfer: Some(transfer),
             approve: None,
+            transfer_from: None,
         }
     }
 
@@ -106,6 +121,18 @@ impl Transaction {
             burn: None,
             transfer: None,
             approve: Some(approve),
+            transfer_from: None,
+        }
+    }
+    pub fn transfer_from(transfer_from: TransferFrom, timestamp: u64) -> Self {
+        Self {
+            kind: "approve".into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: None,
+            approve: None,
+            transfer_from: Some(transfer_from),
         }
     }
 }
