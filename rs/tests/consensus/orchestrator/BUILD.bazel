@@ -71,6 +71,7 @@ system_test(
 
 system_test(
     name = "sr_app_same_nodes_enable_tecdsa_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
@@ -84,6 +85,7 @@ system_test(
 
 system_test(
     name = "sr_app_same_nodes_with_tecdsa_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
@@ -207,6 +209,7 @@ system_test(
 
 system_test(
     name = "unstuck_subnet_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -257,6 +260,7 @@ system_test(
 
 system_test(
     name = "upgrade_with_alternative_urls",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -269,6 +273,7 @@ system_test(
 
 system_test(
     name = "unassigned_node_upgrade_test",
+    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
