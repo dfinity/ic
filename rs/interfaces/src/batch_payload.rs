@@ -38,7 +38,7 @@ pub struct PastPayload<'a> {
 /// # Ordering
 /// The `past_payloads` in [`BatchPayloadBuilder::build_payload`] and
 /// [`BatchPayloadBuilder::validate_payload`] MUST be in descending `height` order.
-pub trait BatchPayloadBuilder: Send {
+pub trait BatchPayloadBuilder: Send + Sync {
     /// Builds a payload and returns it in serialized form.
     ///
     /// # Arguments
