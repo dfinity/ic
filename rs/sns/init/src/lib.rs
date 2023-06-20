@@ -28,10 +28,10 @@ use isocountry::CountryCode;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-
-#[cfg(feature = "test")]
-use std::str::FromStr;
+use std::{
+    collections::{BTreeMap, BTreeSet, HashSet},
+    str::FromStr,
+};
 
 pub mod distributions;
 pub mod pb;
@@ -59,6 +59,9 @@ pub const MAX_CONFIRMATION_TEXT_BYTES: usize = 8 * MAX_CONFIRMATION_TEXT_LENGTH;
 
 /// The minimum number of characters allowed for confirmation text.
 pub const MIN_CONFIRMATION_TEXT_LENGTH: usize = 1;
+
+/// The maximum number of fallback controllers can be included in the SnsInitPayload.
+pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 
 pub enum RestrictedCountriesValidationError {
     EmptyList,
@@ -735,6 +738,37 @@ impl SnsInitPayload {
             );
         }
 
+        if self.fallback_controller_principal_ids.len()
+            > MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT
+        {
+            return Err(format!(
+                "Error: The number of fallback_controller_principal_ids \
+                must be less than {}. Current count is {}",
+                MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
+                self.fallback_controller_principal_ids.len()
+            ));
+        }
+
+        let invalid_principals: Vec<_> = self
+            .fallback_controller_principal_ids
+            .iter()
+            .map(|principal_id_string| {
+                (
+                    principal_id_string,
+                    PrincipalId::from_str(principal_id_string),
+                )
+            })
+            .filter(|pair| pair.1.is_err())
+            .map(|pair| pair.0)
+            .collect();
+
+        if !invalid_principals.is_empty() {
+            return Err(format!(
+                "Error: One or more fallback_controller_principal_ids is not a valid principal id. \
+                The follow principals are invalid: {:?}", invalid_principals
+            ));
+        }
+
         Ok(())
     }
 
@@ -1018,7 +1052,8 @@ mod test {
         },
         FractionalDeveloperVotingPower, RestrictedCountriesValidationError, SnsCanisterIds,
         SnsInitPayload, MAX_CONFIRMATION_TEXT_LENGTH, MAX_DAPP_CANISTERS_COUNT,
-        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
+        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MAX_TOKEN_NAME_LENGTH,
+        MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
@@ -1692,5 +1727,42 @@ mod test {
                 .expect("Neuron must have an account on the Ledger");
             assert_eq!(account_balance, neuron.cached_neuron_stake_e8s);
         }
+    }
+
+    #[test]
+    fn test_fallback_controller_principal_ids_validation() {
+        let generate_pids = |count| -> Vec<String> {
+            (0..count)
+                .map(|i| PrincipalId::new_user_test_id(i as u64).to_string())
+                .collect()
+        };
+
+        // Build a payload that passes validation, then test the parts that wouldn't
+        let get_sns_init_payload = || {
+            SnsInitPayload::with_valid_values_for_testing()
+                .validate()
+                .expect("Payload did not pass validation.")
+        };
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = generate_pids(0);
+        assert!(sns_init_payload.validate().is_err());
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids =
+            generate_pids(MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT + 1);
+        assert!(sns_init_payload.validate().is_err());
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = vec![
+            "not a valid pid".to_string(),
+            "definitely not a valid pid".to_string(),
+        ];
+        assert!(sns_init_payload.validate().is_err());
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids =
+            vec![PrincipalId::new_user_test_id(1).to_string()];
+        assert!(sns_init_payload.validate().is_ok());
     }
 }
