@@ -137,7 +137,6 @@ pub(crate) struct CanisterIdRecordExtended {
 #[derive(
     CandidType, Serialize, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy,
 )]
-// #[serde(rename_all = "lowercase")]
 pub enum CanisterStatusType {
     /// The canister is running.
     #[serde(rename = "running")]

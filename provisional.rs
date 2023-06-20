@@ -28,7 +28,7 @@ pub struct ProvisionalTopUpCanisterArgument {
     pub amount: Nat,
 }
 
-/// Create a new canister with specified amout of cycles balance.
+/// Create a new canister with specified amount of cycles balance.
 ///
 /// This method is only available in local development instances.
 ///
