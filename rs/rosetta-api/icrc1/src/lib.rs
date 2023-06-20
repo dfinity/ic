@@ -7,6 +7,7 @@ use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 pub use ic_ledger_core::tokens::Tokens;
 use ic_ledger_core::{
+    approvals::Approvals,
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
@@ -46,6 +47,21 @@ pub enum Operation {
         from: Account,
         #[serde(rename = "amt")]
         amount: u64,
+    },
+    #[serde(rename = "approve")]
+    Approve {
+        #[serde(with = "compact_account")]
+        from: Account,
+        #[serde(with = "compact_account")]
+        spender: Account,
+        #[serde(rename = "amt")]
+        amount: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        expected_allowance: Option<Tokens>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        expires_at: Option<TimeStamp>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fee: Option<u64>,
     },
 }
 
@@ -106,7 +122,7 @@ impl LedgerTransaction for Transaction {
     fn apply<C>(
         &self,
         context: &mut C,
-        _now: TimeStamp,
+        now: TimeStamp,
         effective_fee: Tokens,
     ) -> Result<(), TxApplyError>
     where
@@ -132,6 +148,36 @@ impl LedgerTransaction for Transaction {
                 .burn(from, Tokens::from_e8s(*amount))?,
             Operation::Mint { to, amount } => {
                 context.balances_mut().mint(to, Tokens::from_e8s(*amount))?
+            }
+            Operation::Approve {
+                from,
+                spender,
+                amount,
+                expected_allowance,
+                expires_at,
+                fee,
+            } => {
+                context
+                    .balances_mut()
+                    .burn(from, fee.map(Tokens::from_e8s).unwrap_or(effective_fee))?;
+                let result = context
+                    .approvals_mut()
+                    .approve(
+                        from,
+                        spender,
+                        Tokens::from_e8s(*amount),
+                        *expires_at,
+                        now,
+                        *expected_allowance,
+                    )
+                    .map_err(TxApplyError::from);
+                if let Err(e) = result {
+                    context
+                        .balances_mut()
+                        .mint(from, fee.map(Tokens::from_e8s).unwrap_or(effective_fee))
+                        .expect("bug: failed to refund approval fee");
+                    return Err(e);
+                }
             }
         }
         Ok(())

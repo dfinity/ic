@@ -1,5 +1,8 @@
 pub mod cdk_runtime;
 
+#[cfg(test)]
+mod tests;
+
 use crate::cdk_runtime::CdkRuntime;
 use candid::{
     types::number::{Int, Nat},
@@ -154,6 +157,8 @@ pub enum LedgerArgument {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     balances: LedgerBalances,
+    #[serde(default)]
+    approvals: AllowanceTable<ApprovalKey, Account>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
 
     minting_account: Account,
@@ -191,6 +196,7 @@ impl Ledger {
     ) -> Self {
         let mut ledger = Self {
             balances: LedgerBalances::default(),
+            approvals: Default::default(),
             blockchain: Blockchain::new_with_archive(archive_options),
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
@@ -222,7 +228,7 @@ impl Ledger {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
 pub struct ApprovalKey(Account, Account);
 
 impl From<(&Account, &Account)> for ApprovalKey {
@@ -245,11 +251,11 @@ impl LedgerContext for Ledger {
     }
 
     fn approvals(&self) -> &Self::Approvals {
-        unimplemented!()
+        &self.approvals
     }
 
     fn approvals_mut(&mut self) -> &mut Self::Approvals {
-        unimplemented!()
+        &mut self.approvals
     }
 
     fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>> {

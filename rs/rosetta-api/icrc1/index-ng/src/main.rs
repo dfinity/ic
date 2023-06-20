@@ -23,7 +23,7 @@ use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock, GetBlocksRequest, GetBlocksResponse,
 };
-use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
 use num_traits::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
@@ -443,6 +443,15 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
                 credit(block_index, fee_collector, fee);
             }
         }
+        Operation::Approve { from, fee, .. } => {
+            let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
+                ic_cdk::trap(&format!(
+                    "Block {} is of type Approve but has no fee or effective fee!",
+                    block_index
+                ))
+            });
+            debit(block_index, from, fee);
+        }
     }
 }
 
@@ -492,6 +501,7 @@ fn get_accounts(block: &Block) -> Vec<Account> {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
         Operation::Transfer { from, to, .. } => vec![from, to],
+        Operation::Approve { from, .. } => vec![from],
     }
 }
 
@@ -650,6 +660,26 @@ fn encoded_block_bytes_to_flat_transaction(
                 from,
                 to,
                 amount: amount.into(),
+                fee: fee.map(|fee| fee.into()),
+                created_at_time,
+                memo,
+            },
+            timestamp,
+        ),
+        Operation::Approve {
+            from,
+            spender,
+            amount,
+            expected_allowance,
+            expires_at,
+            fee,
+        } => Transaction::approve(
+            Approve {
+                from,
+                spender,
+                amount: amount.into(),
+                expected_allowance: expected_allowance.map(|ea| Nat::from(ea.get_e8s())),
+                expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
                 fee: fee.map(|fee| fee.into()),
                 created_at_time,
                 memo,
