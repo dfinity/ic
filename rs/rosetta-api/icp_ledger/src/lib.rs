@@ -43,6 +43,8 @@ pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
+pub const MEMO_SIZE_BYTES: usize = 32;
+
 pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
 
 #[derive(
