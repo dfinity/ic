@@ -4,7 +4,7 @@ use serde_bytes::ByteBuf;
 
 pub type BlockIndex = Nat;
 
-use super::account::{Account, Subaccount};
+use super::{account::Account, subaccount::Subaccount};
 
 pub type NumTokens = Nat;
 

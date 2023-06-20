@@ -1,6 +1,8 @@
 use candid::{CandidType, Deserialize, Nat};
 
-use super::super::icrc1::account::{Account, Subaccount};
+use crate::icrc1::subaccount::Subaccount;
+
+use super::super::icrc1::account::Account;
 use super::super::icrc1::transfer::Memo;
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
