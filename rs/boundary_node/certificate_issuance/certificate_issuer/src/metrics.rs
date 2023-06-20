@@ -325,8 +325,10 @@ impl<T: Process> Process for WithMetrics<T> {
         let status = match &out {
             Ok(_) => "ok",
             Err(err) => match err {
+                ProcessError::AwaitingAcmeOrderCreation => "awaiting-acme-order-creation",
                 ProcessError::AwaitingDnsPropagation => "awaiting-dns-propagation",
                 ProcessError::AwaitingAcmeOrderReady => "awaiting-acme-order-ready",
+                ProcessError::FailedUserConfigurationCheck => "failed-user-configuration-check",
                 ProcessError::UnexpectedError(_) => "fail",
             },
         };
