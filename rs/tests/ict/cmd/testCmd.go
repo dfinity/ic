@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strings"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -14,10 +14,10 @@ var DEFAULT_TEST_KEEPALIVE_MINS = 60
 
 type Config struct {
 	isFuzzyMatch bool
-	isDryRun    bool
-	keepAlive   bool
-	filterTests string
-	farmBaseUrl string
+	isDryRun     bool
+	keepAlive    bool
+	filterTests  string
+	farmBaseUrl  string
 }
 
 func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) error {
@@ -50,7 +50,7 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 			command = append(command, "--test_arg=--farm-base-url="+cfg.farmBaseUrl)
 		}
 		if cfg.keepAlive {
-			keepAlive := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(DEFAULT_TEST_KEEPALIVE_MINS * 60))
+			keepAlive := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(DEFAULT_TEST_KEEPALIVE_MINS*60))
 			command = append(command, keepAlive)
 			command = append(command, "--test_arg=--debug-keepalive")
 		}
