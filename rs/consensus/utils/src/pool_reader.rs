@@ -1,6 +1,7 @@
 //! Wrapper to read the consensus pool
 
 use crate::{lookup_replica_version, registry_version_at_height};
+use ic_interfaces::batch_payload::PastPayload;
 use ic_interfaces::consensus_pool::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
@@ -533,6 +534,31 @@ impl<'a> PoolReader<'a> {
             log,
             registry_version,
         )
+    }
+
+    /// Take a slice returned by [`PoolReader::get_payloads_from_height`]
+    /// and return it in the [`PastPayload`] format that is used by the batch payload builders
+    ///
+    /// The returned vector contains only the values for which the supplied closure `filter`
+    /// returns Some(value).
+    pub fn filter_past_payloads<P>(
+        input: &'a [(Height, Time, Payload)],
+        filter: P,
+    ) -> Vec<PastPayload<'a>>
+    where
+        P: Fn(&Height, &Time, &Payload) -> Option<&'a [u8]>,
+    {
+        input
+            .iter()
+            .filter_map(|(height, time, payload)| {
+                filter(height, time, payload).map(|data| PastPayload {
+                    height: *height,
+                    time: *time,
+                    block_hash: payload.get_hash().clone(),
+                    payload: data,
+                })
+            })
+            .collect()
     }
 }
 
