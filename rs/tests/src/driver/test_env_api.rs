@@ -1344,22 +1344,12 @@ pub trait NnsInstallationExt {
     /// is installed with test neurons enabled which simplify voting on proposals in testing.
     fn install_nns_canisters(&self) -> Result<()>;
 
-    /// Installs the mainnet NNS canisters on the subnet this node belongs to. The NNS
-    /// is installed with test neurons enabled which simplify voting on proposals in testing.
-    fn install_mainnet_nns_canisters(&self) -> Result<()>;
-
-    /// Installs the qualifying NNS canisters on the subnet this node belongs to. The NNS
-    /// is installed with test neurons enabled which simplify voting on proposals in testing.
-    fn install_qualifying_nns_canisters(&self) -> Result<()>;
-
     fn install_nns_canisters_with_customizations(
         &self,
         canister_wasm_strategy: NnsCanisterWasmStrategy,
         customizations: NnsCustomizations,
         installation_timeout: Option<Duration>,
     ) -> Result<()>;
-
-    fn install_nns_canisters_at_ids(&self, installation_timeout: Option<Duration>) -> Result<()>;
 }
 
 #[derive(Default)]
@@ -1367,6 +1357,7 @@ pub struct NnsCustomizations {
     /// Summarizes the custom parameters that a newly installed NNS should have.
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
     pub neurons: Option<Vec<Neuron>>,
+    pub install_at_ids: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1426,7 +1417,7 @@ where
                 url,
                 &prep_dir,
                 true,
-                false,
+                customizations.install_at_ids,
                 customizations.ledger_balances,
                 customizations.neurons,
             );
@@ -1447,49 +1438,6 @@ where
             NnsCustomizations::default(),
             None,
         )
-    }
-
-    fn install_mainnet_nns_canisters(&self) -> Result<()> {
-        self.install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::TakeLatestMainnetDeployments,
-            NnsCustomizations::default(),
-            None,
-        )
-    }
-
-    fn install_qualifying_nns_canisters(&self) -> Result<()> {
-        self.install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::NnsReleaseQualification,
-            NnsCustomizations::default(),
-            None,
-        )
-    }
-
-    fn install_nns_canisters_at_ids(&self, installation_timeout: Option<Duration>) -> Result<()> {
-        let test_env = self.test_env();
-        test_env.set_nns_canisters_env_vars()?;
-        let log = test_env.logger();
-        let ic_name = self.ic_name();
-        let url = self.get_public_url();
-        let prep_dir = match test_env.prep_dir(&ic_name) {
-            Some(v) => v,
-            None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
-        };
-        info!(log, "Wait for node reporting healthy status");
-        self.await_status_is_healthy().unwrap();
-        block_on(async {
-            let timeout = installation_timeout.unwrap_or(NNS_CANISTER_INSTALL_TIMEOUT);
-            let install_future =
-                install_nns_canisters(&log, url, &prep_dir, true, true, None, None);
-            let timeout_result = tokio::time::timeout(timeout, install_future).await;
-            if timeout_result.is_err() {
-                println!(
-                    "NNS canisters were not installed within timeout of {} sec",
-                    timeout.as_secs()
-                );
-            }
-        });
-        Ok(())
     }
 }
 
