@@ -28,7 +28,7 @@ use icp_ledger::{
     CandidBlock, Decimals, GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo,
     Name, Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount,
     Symbol, TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
+    TransferFeeArgs, MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -820,6 +820,10 @@ async fn icrc1_transfer(
     let from_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
+    };
+    match arg.memo.as_ref() {
+        Some(memo) if memo.0.len() > MEMO_SIZE_BYTES => ic_cdk::trap("the memo field is too large"),
+        _ => {}
     };
     let amount = match arg.amount.0.to_u64() {
         Some(n) => Tokens::from_e8s(n),
