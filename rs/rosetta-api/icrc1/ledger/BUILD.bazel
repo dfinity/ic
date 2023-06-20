@@ -117,3 +117,21 @@ rust_test(
         "@crate_index//:serde_bytes",
     ],
 )
+
+rust_test(
+    name = "ledger_unit_test",
+    srcs = ["src/tests.rs"],
+    compile_data = [
+        "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
+    ],
+    crate = "ledger",
+    deps = [
+        ":ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/icrc1/ledger/sm-tests",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/types/base_types",
+    ],
+)

@@ -177,6 +177,7 @@ pub fn transfer_args_with_sender(
                     memo: block.transaction.memo,
                     amount: amount.into(),
                 },
+                Operation::Approve { .. } => todo!(),
             })
             .collect()
     })
