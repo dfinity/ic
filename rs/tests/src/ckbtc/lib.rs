@@ -3,7 +3,7 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationExt, SubnetSnapshot,
+            NnsCanisterWasmStrategy, NnsCustomizations, NnsInstallationExt, SubnetSnapshot,
         },
     },
     icrc1_agent_test::install_icrc1_ledger,
@@ -84,8 +84,17 @@ pub fn install_nns_canisters_at_ids(env: &TestEnv) {
         .nodes()
         .next()
         .expect("there is no NNS node");
+    let install_customizations = NnsCustomizations {
+        ledger_balances: Default::default(),
+        neurons: Default::default(),
+        install_at_ids: true,
+    };
     nns_node
-        .install_nns_canisters_at_ids(None)
+        .install_nns_canisters_with_customizations(
+            NnsCanisterWasmStrategy::TakeBuiltFromSources,
+            install_customizations,
+            None,
+        )
         .expect("NNS canisters not installed");
     info!(&env.logger(), "NNS canisters installed");
 }

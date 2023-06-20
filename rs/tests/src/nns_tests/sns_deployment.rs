@@ -567,6 +567,7 @@ pub fn install_nns(
     let nns_customizations = NnsCustomizations {
         ledger_balances: Some(ledger_balances),
         neurons: Some(neurons),
+        install_at_ids: false,
     };
 
     install_nns_with_customizations_and_check_progress(
