@@ -5,10 +5,12 @@ use crate::{
     manifest::build_file_group_chunks, StateSyncRefs, EXTRA_CHECKPOINTS_TO_KEEP,
     NUMBER_OF_CHECKPOINT_THREADS,
 };
+use ic_base_types::NodeId;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor},
     artifact_pool::{ProcessingResult, UnvalidatedArtifact},
-    time_source::TimeSource,
+    state_sync_client::StateSyncClient,
+    time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
 use ic_logger::{info, warn, ReplicaLogger};
@@ -17,9 +19,10 @@ use ic_types::{
         Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncFilter,
         StateSyncMessage,
     },
-    chunkable::Chunkable,
+    chunkable::{ArtifactChunk, ChunkId, Chunkable, ChunkableArtifact},
     crypto::crypto_hash,
     state_sync::FileGroupChunks,
+    time::UNIX_EPOCH,
     Height,
 };
 use std::sync::{Arc, Mutex};
@@ -349,5 +352,49 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
         }
 
         (artifacts, ProcessingResult::StateUnchanged)
+    }
+}
+
+impl StateSyncClient for StateSync {
+    /// Non-blocking.
+    fn latest_state(&self) -> Option<StateSyncArtifactId> {
+        // Using height 0 here is sane because for state sync `get_all_validated_by_filter`
+        // return at most the number of states present on the node. Currently this is usually 1-2.
+        let filter = StateSyncFilter {
+            height: Height::from(0),
+        };
+        self.get_all_validated_by_filter(&filter)
+            .last()
+            .cloned()
+            .map(|a| a.id)
+    }
+
+    /// Non-blocking.
+    fn start_state_sync(
+        &self,
+        id: &StateSyncArtifactId,
+    ) -> Option<Box<dyn Chunkable + Send + Sync>> {
+        if self.get_priority_function()(id, &()) != Priority::Fetch {
+            return None;
+        }
+        Some(self.get_chunk_tracker(id))
+    }
+
+    /// Blocking. Makes synchroneous file system calls.
+    fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk> {
+        let msg = self.get_validated_by_identifier(id)?;
+        Box::new(msg).get_chunk(chunk_id)
+    }
+
+    /// Blocking. Makes synchroneous file system calls.
+    fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
+        let _ = self.process_changes(
+            &SysTimeSource::new(),
+            vec![UnvalidatedArtifact {
+                message: msg,
+                peer_id,
+                timestamp: UNIX_EPOCH,
+            }],
+        );
     }
 }
