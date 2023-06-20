@@ -24,7 +24,7 @@ impl Account {
 
     #[inline]
     pub fn effective_subaccount(&self) -> &Subaccount {
-        self.subaccount.as_ref().unwrap_or(&DEFAULT_SUBACCOUNT)
+        self.subaccount.as_ref().unwrap_or(DEFAULT_SUBACCOUNT)
     }
 
     fn compute_checksum(&self) -> Vec<u8> {
@@ -111,9 +111,7 @@ impl fmt::Display for Account {
                     write!(f, "{}", self.owner)
                 } else {
                     let checksum = self.compute_base32_checksum();
-                    let hex_str = hex::encode(&subaccount.as_slice())
-                        .trim_start_matches('0')
-                        .to_owned();
+                    let hex_str = subaccount.to_hex();
                     write!(f, "{}-{}.{}", self.owner, checksum, hex_str)
                 }
             }

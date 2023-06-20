@@ -1,13 +1,13 @@
-use super::{account::Account, base32::base32_decode};
+use super::account::Account;
 use candid::{CandidType, Deserialize, Principal};
 use serde::Serialize;
 
-use std::{cmp, fmt, hash, mem::size_of};
+use std::{cmp, fmt, hash, mem::size_of, str::FromStr};
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Copy, Debug, PartialEq)]
 pub struct Subaccount(pub [u8; 32]);
 
-pub const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0u8; 32]);
+pub const DEFAULT_SUBACCOUNT: &Subaccount = &Subaccount([0u8; 32]);
 
 impl Default for Subaccount {
     fn default() -> Self {
@@ -16,6 +16,10 @@ impl Default for Subaccount {
 }
 
 impl Subaccount {
+    /// Creates a new subaccount with the given nonce
+    /// The nonce is used to generate the subaccount id
+    /// The nonce is stored in the last 8 bytes of the subaccount id
+    /// The nonce is used to generate the smallest subaccount ids
     pub fn new(nonce: u64) -> Self {
         let mut subaccount = [0; 32];
         // Convert the nonce into bytes in big-endian order
@@ -27,6 +31,10 @@ impl Subaccount {
         Subaccount(subaccount)
     }
 
+    /// returns the account id of the subaccount
+    /// The account id is the first 24 bytes of the subaccount id
+    /// if first byte of the subaccount id is 29 then its an Principal
+    /// otherwise its an Account
     pub fn nonce(&self) -> u64 {
         if self.0[0] == 29 {
             return 0;
@@ -61,10 +69,20 @@ impl Subaccount {
         self.0.to_vec()
     }
 
+    /// Returns the hex representation of the subaccount
+    /// with leading zeros removed
+    /// e.g. 0000000
+    /// will be returned as 0
+    /// 0000001
+    /// will be returned as 1
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.0)
+        hex::encode(&self.as_slice())
+            .trim_start_matches('0')
+            .to_owned()
     }
 
+    /// Returns the hex representation of the subaccount
+    /// with add leading zeros if necessary
     pub fn from_hex(hex: &str) -> Result<Self, SubaccountError> {
         // add leading zeros if necessary
         let hex = if hex.len() < 64 {
@@ -77,12 +95,6 @@ impl Subaccount {
 
         let bytes = hex::decode(hex).map_err(|e| SubaccountError::HexError(e.to_string()))?;
 
-        Subaccount::from_slice(&bytes)
-    }
-
-    pub fn from_base32(base32: &str) -> Result<Self, SubaccountError> {
-        let bytes =
-            base32_decode(base32).map_err(|e| SubaccountError::Base32Error(e.to_string()))?;
         Subaccount::from_slice(&bytes)
     }
 }
@@ -146,14 +158,11 @@ impl TryFrom<Vec<u8>> for Subaccount {
     }
 }
 
-impl TryFrom<&str> for Subaccount {
-    type Error = SubaccountError;
+impl FromStr for Subaccount {
+    type Err = SubaccountError;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        let bytes =
-            hex::decode(value).map_err(|e| SubaccountError::InvalidSubaccount(e.to_string()))?;
-
-        Ok(Self::try_from(bytes)?)
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from_hex(s)?)
     }
 }
 
@@ -224,15 +233,9 @@ mod test {
             ])
         );
 
-        assert_eq!(
-            subaccount.to_hex(),
-            "0000000000000000000000000000000000000000000000000000000000000001"
-        );
+        assert_eq!(subaccount.to_hex(), "1");
 
-        let subaccount = Subaccount::try_from(
-            "0000000000000000000000000000000000000000000000000000000000000001",
-        )
-        .expect("Failed to parse subaccount");
+        let subaccount = "001".parse::<Subaccount>().unwrap();
 
         assert_eq!(
             subaccount,
