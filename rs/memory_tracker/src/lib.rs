@@ -794,6 +794,41 @@ fn print_enomem_help(errno: Errno) -> Errno {
     errno
 }
 
+/// # Safety
+///
+/// `siginfo_ptr` must be a valid pointer to a `libc::siginfo_t` because it will
+/// be dereferenced.
+pub unsafe fn signal_access_kind_and_address(
+    siginfo_ptr: *const libc::siginfo_t,
+    ucontext_ptr: *const libc::c_void,
+) -> (Option<AccessKind>, *mut libc::c_void) {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let access_kind = {
+        let ucontext_ptr = ucontext_ptr as *const libc::ucontext_t;
+        let error_register = libc::REG_ERR as usize;
+        let error_code = unsafe { (*ucontext_ptr).uc_mcontext.gregs[error_register] };
+        // The second least-significant bit distinguishes between read and write
+        // accesses. See https://git.io/JEQn3.
+        if error_code & 0x2 == 0 {
+            Some(AccessKind::Read)
+        } else {
+            Some(AccessKind::Write)
+        }
+    };
+    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+    let access_kind: Option<AccessKind> = {
+        // Prevent a warning about unused parameter.
+        let _use_ucontext_ptr = ucontext_ptr;
+        None
+    };
+
+    let (_si_signo, _si_errno, _si_code, si_addr) = unsafe {
+        let s = *siginfo_ptr;
+        (s.si_signo, s.si_errno, s.si_code, s.si_addr())
+    };
+    (access_kind, si_addr)
+}
+
 #[cfg(test)]
 mod tests;
 

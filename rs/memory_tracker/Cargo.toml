@@ -25,6 +25,7 @@ sigsegv_handler_checksum = []
 ic-types = { path = "../types/types" }
 tempfile = "3.1.0"
 criterion = "0.3"
+proptest = "1.0"
 
 [[bench]]
 name = "traps"

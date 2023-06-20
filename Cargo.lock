@@ -12251,6 +12251,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "nix 0.23.2",
+ "proptest",
  "slog",
  "tempfile",
 ]
