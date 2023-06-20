@@ -270,6 +270,22 @@ impl Update for Updater {
                     self.expirations.with(|exps| exps.borrow_mut().remove(id));
                     self.retries.with(|rets| rets.borrow_mut().remove(id));
                 }
+
+                // If a registration is being processed, but its expiration has not been scheduled,
+                // schedule it. This is needed, for example, for certificate renewals
+                if state != State::Available
+                    && !self
+                        .expirations
+                        .with(|exps| exps.borrow().get(id).is_some())
+                {
+                    self.expirations.with(|exps| {
+                        let mut exps = exps.borrow_mut();
+                        exps.push(
+                            id.to_owned(),
+                            Reverse(time() + REGISTRATION_EXPIRATION_TTL.as_nanos() as u64),
+                        );
+                    });
+                }
             }
         }
 

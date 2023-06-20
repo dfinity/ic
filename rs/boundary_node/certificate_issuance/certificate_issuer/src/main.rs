@@ -59,7 +59,7 @@ use crate::{
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, Remove, State, Update, UpdateType},
     verification::CertificateVerifier,
-    work::{Dispense, DispenseError, Peek, PeekError, Process, Queue},
+    work::{Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue},
 };
 
 mod acme;
@@ -422,6 +422,7 @@ async fn main() -> Result<(), Error> {
 
     let processor = work::Processor::new(
         cli.delegation_domain,
+        registration_checker.clone(),
         Box::new(resolver),
         Box::new(acme_order),
         Box::new(acme_ready),
@@ -452,6 +453,7 @@ async fn main() -> Result<(), Error> {
                 let processor = processor.clone();
                 let queuer = queuer.clone();
                 let registration_updater = registration_updater.clone();
+                let registration_remover = registration_remover.clone();
 
                 // First check with a query call if there's anything to dispense
                 if let Err(err) = peeker.peek().await {
@@ -498,6 +500,15 @@ async fn main() -> Result<(), Error> {
                                 .update(&id, &UpdateType::State(State::Available))
                                 .await
                                 .context("failed to update registration {id}")?;
+                        }
+                        Err(ProcessError::FailedUserConfigurationCheck) => {
+                            // Attempted a renewal, but the domain is not configured properly
+                            // (missing or wrong DNS configuration, missing well-known domains).
+                            // The custom domain and its certificate are removed.
+                            registration_remover
+                                .remove(&id)
+                                .await
+                                .context("failed to delete existing registration {id}")?;
                         }
                         Err(err) => {
                             let d: Duration = (&err).into();
