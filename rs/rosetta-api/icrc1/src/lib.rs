@@ -63,6 +63,19 @@ pub enum Operation {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<u64>,
     },
+    #[serde(rename = "transfer_from")]
+    TransferFrom {
+        #[serde(with = "compact_account")]
+        spender: Account,
+        #[serde(with = "compact_account")]
+        from: Account,
+        #[serde(with = "compact_account")]
+        to: Account,
+        #[serde(rename = "amt")]
+        amount: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fee: Option<u64>,
+    },
 }
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -178,6 +191,46 @@ impl LedgerTransaction for Transaction {
                         .expect("bug: failed to refund approval fee");
                     return Err(e);
                 }
+            }
+            Operation::TransferFrom {
+                spender,
+                from,
+                to,
+                amount,
+                fee,
+            } => {
+                let fee = fee.map(Tokens::from_e8s).unwrap_or(effective_fee);
+                if from == spender {
+                    // Bypass the allowance check if the account owner calls
+                    // transfer_from.
+                    context.balances_mut().transfer(
+                        from,
+                        to,
+                        Tokens::from_e8s(*amount),
+                        fee,
+                        fee_collector,
+                    )?;
+                    return Ok(());
+                }
+
+                let allowance = context.approvals().allowance(from, spender, now);
+                let used_allowance = Tokens::from_e8s(*amount + fee.get_e8s());
+                if allowance.amount < used_allowance {
+                    return Err(TxApplyError::InsufficientAllowance {
+                        allowance: allowance.amount,
+                    });
+                }
+                context.balances_mut().transfer(
+                    from,
+                    to,
+                    Tokens::from_e8s(*amount),
+                    fee,
+                    fee_collector,
+                )?;
+                context
+                    .approvals_mut()
+                    .use_allowance(from, spender, used_allowance, now)
+                    .expect("bug: cannot use allowance");
             }
         }
         Ok(())

@@ -699,6 +699,7 @@ fn test_get_account_transactions_pagination() {
                     }),
                     transfer: None,
                     approve: None,
+                    transfer_from: None,
                     timestamp: 0,
                 },
                 transaction,
