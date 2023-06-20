@@ -75,7 +75,7 @@ impl FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
-            wasm_native_stable_memory: FlagStatus::Disabled,
+            wasm_native_stable_memory: FlagStatus::Enabled,
         }
     }
 }

@@ -86,7 +86,7 @@ fn install_code_fails_on_invalid_memory_allocation() {
 
 #[test]
 fn dts_resume_works_in_install_code() {
-    const INSTRUCTION_LIMIT: u64 = 2_000_000;
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
@@ -137,7 +137,7 @@ fn dts_resume_works_in_install_code() {
 
 #[test]
 fn dts_abort_works_in_install_code() {
-    const INSTRUCTION_LIMIT: u64 = 2_000_000;
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
