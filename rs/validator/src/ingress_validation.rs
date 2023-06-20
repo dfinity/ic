@@ -47,7 +47,7 @@ pub fn validate_request<C: HttpRequestContent + HasCanisterId>(
     ingress_signature_verifier: &dyn IngressSigVerifier,
     current_time: Time,
     registry_version: RegistryVersion,
-    malicious_flags: &MaliciousFlags,
+    #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
 ) -> Result<(), RequestValidationError> {
     #[cfg(feature = "malicious_code")]
     {
@@ -56,22 +56,46 @@ pub fn validate_request<C: HttpRequestContent + HasCanisterId>(
         }
     }
 
-    get_authorized_canisters(
+    validate_request_content(
         request,
         ingress_signature_verifier,
         current_time,
         registry_version,
-        malicious_flags,
     )
-    .and_then(|targets| {
-        if targets.contains(&request.content().canister_id()) {
-            Ok(())
-        } else {
-            Err(CanisterNotInDelegationTargets(
-                request.content().canister_id(),
-            ))
-        }
-    })
+    .and_then(|targets| validate_request_target(request, targets))
+}
+
+pub fn validate_request_content<C: HttpRequestContent>(
+    request: &HttpRequest<C>,
+    ingress_signature_verifier: &dyn IngressSigVerifier,
+    current_time: Time,
+    registry_version: RegistryVersion,
+) -> Result<CanisterIdSet, RequestValidationError> {
+    validate_ingress_expiry(request, current_time)?;
+    validate_user_id_and_signature(
+        ingress_signature_verifier,
+        &request.sender(),
+        &request.id(),
+        match request.authentication() {
+            Authentication::Anonymous => None,
+            Authentication::Authenticated(signature) => Some(signature),
+        },
+        current_time,
+        registry_version,
+    )
+}
+
+pub fn validate_request_target<C: HasCanisterId>(
+    request: &HttpRequest<C>,
+    targets: CanisterIdSet,
+) -> Result<(), RequestValidationError> {
+    if targets.contains(&request.content().canister_id()) {
+        Ok(())
+    } else {
+        Err(CanisterNotInDelegationTargets(
+            request.content().canister_id(),
+        ))
+    }
 }
 
 /// Returns the set of canisters that the request is authorized to act on.
@@ -91,16 +115,9 @@ pub fn get_authorized_canisters<C: HttpRequestContent>(
             return Ok(CanisterIdSet::all());
         }
     }
-
-    validate_ingress_expiry(request, current_time)?;
-    validate_user_id_and_signature(
+    validate_request_content(
+        request,
         ingress_signature_verifier,
-        &request.sender(),
-        &request.id(),
-        match request.authentication() {
-            Authentication::Anonymous => None,
-            Authentication::Authenticated(signature) => Some(signature),
-        },
         current_time,
         registry_version,
     )
