@@ -1,4 +1,4 @@
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
@@ -13,6 +13,7 @@ use icp_ledger::{LedgerCanisterInitPayload, Memo, Operation, Transaction};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -93,6 +94,34 @@ fn account(owner: u64, subaccount: u128) -> Account {
         owner: PrincipalId::new_user_test_id(owner).0,
         subaccount: Some(sub),
     }
+}
+
+fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
+    let res = env
+        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .expect("Failed to send icrc1_balance_of")
+        .bytes();
+    Decode!(&res, Nat)
+        .expect("Failed to decode icrc1_balance_of response")
+        .0
+        .to_u64()
+        .expect("Balance must be a u64!")
+}
+
+fn icp_balance_of(
+    env: &StateMachine,
+    canister_id: CanisterId,
+    account_identifier: AccountIdentifier,
+) -> u64 {
+    let res = env
+        .execute_ingress(
+            canister_id,
+            "get_account_identifier_balance",
+            Encode!(&account_identifier).unwrap(),
+        )
+        .expect("Failed to send get_account_identifier_balance")
+        .bytes();
+    Decode!(&res, u64).expect("Failed to decode get_account_identifier_balance response")
 }
 
 fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::Block> {
@@ -583,4 +612,85 @@ fn test_get_account_identifier_transactions_pagination() {
         // order guarantee that last_seen_txid < start
         start = last_seen_txid;
     }
+}
+
+#[test]
+fn test_icp_balance_of() {
+    let initial_balances = HashMap::new();
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let index_id = install_index(env, ledger_id);
+    for i in 0..10 {
+        transfer(
+            env,
+            ledger_id,
+            Account {
+                owner: MINTER_PRINCIPAL.into(),
+                subaccount: None,
+            },
+            account(1, 0),
+            i * 10_000,
+        );
+
+        transfer(
+            env,
+            ledger_id,
+            Account {
+                owner: MINTER_PRINCIPAL.into(),
+                subaccount: None,
+            },
+            account(2, 0),
+            i * 10_000,
+        );
+    }
+    trigger_sync(env);
+
+    // Test Mint operations
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        icp_balance_of(env, index_id, account(1, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        icp_balance_of(env, index_id, account(2, 0).into())
+    );
+
+    // Test burn operations
+    transfer(
+        env,
+        ledger_id,
+        account(1, 0),
+        Account {
+            owner: MINTER_PRINCIPAL.into(),
+            subaccount: None,
+        },
+        10_000,
+    );
+    trigger_sync(env);
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        icp_balance_of(env, index_id, account(1, 0).into())
+    );
+
+    // Test transfer operations
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 10_000);
+    trigger_sync(env);
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        icp_balance_of(env, index_id, account(1, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        icp_balance_of(env, index_id, account(2, 0).into())
+    );
+    transfer(env, ledger_id, account(2, 0), account(3, 0), 10_000);
+    trigger_sync(env);
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(3, 0)),
+        icp_balance_of(env, index_id, account(3, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        icp_balance_of(env, index_id, account(2, 0).into())
+    );
 }
