@@ -59,6 +59,7 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
+chrono = "0.4.19"
 ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-csp-proptest-utils = { path = "./csp_proptest_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }

@@ -2,6 +2,8 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils::empty_fake_registry;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_interfaces::crypto::CurrentNodePublicKeysError;
+use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
 
@@ -67,44 +69,91 @@ mod vault_rng {
     const SEED_0: [u8; 32] = [0u8; 32];
     const SEED_1: [u8; 32] = [1u8; 32];
 
-    // Should produce same iDKG keys and key rotation results for same configs and RNGs.
     #[test]
-    fn should_set_correct_rng_in_local_vault() {
-        let temp_crypto_0_rng_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-            ReproducibleRng::from_seed(SEED_0),
-            false,
-        );
-        let temp_crypto_1_rng_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-            ReproducibleRng::from_seed(SEED_0),
-            false,
-        );
-        let temp_crypto_2_rng_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-            ReproducibleRng::from_seed(SEED_1),
-            false,
-        );
+    fn should_have_same_initial_keys_with_same_rng() {
+        for set_remote_vault in [true, false] {
+            println!("Running tests for remote vault: {set_remote_vault}");
+            let crypto_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
+                ReproducibleRng::from_seed(SEED_0),
+                set_remote_vault,
+            );
+            let crypto_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
+                ReproducibleRng::from_seed(SEED_0),
+                set_remote_vault,
+            );
 
-        test_vault_consistency(
-            temp_crypto_0_rng_0,
-            temp_crypto_1_rng_0,
-            temp_crypto_2_rng_1,
-        );
+            assert_eq!(
+                crypto_0.current_node_public_keys(),
+                crypto_1.current_node_public_keys()
+            );
+        }
     }
 
-    // Should produce same iDKG keys and key rotation results for same configs and RNGs.
     #[test]
-    fn should_set_correct_rng_in_remote_vault() {
-        let temp_crypto_0_rng_0 =
-            new_idkg_crypto_with_rng_and_opt_remote_vault(ReproducibleRng::from_seed(SEED_0), true);
-        let temp_crypto_1_rng_0 =
-            new_idkg_crypto_with_rng_and_opt_remote_vault(ReproducibleRng::from_seed(SEED_0), true);
-        let temp_crypto_2_rng_1 =
-            new_idkg_crypto_with_rng_and_opt_remote_vault(ReproducibleRng::from_seed(SEED_1), true);
+    fn should_have_different_initial_keys_with_different_rng() {
+        for set_remote_vault in [true, false] {
+            println!("Running tests for remote vault: {set_remote_vault}");
+            let crypto_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
+                ReproducibleRng::from_seed(SEED_0),
+                set_remote_vault,
+            );
+            let crypto_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
+                ReproducibleRng::from_seed(SEED_1),
+                set_remote_vault,
+            );
 
-        test_vault_consistency(
-            temp_crypto_0_rng_0,
-            temp_crypto_1_rng_0,
-            temp_crypto_2_rng_1,
-        );
+            assert_ne_each_key(
+                crypto_0.current_node_public_keys(),
+                crypto_1.current_node_public_keys(),
+            );
+        }
+    }
+
+    #[test]
+    fn should_have_same_rotated_keys_with_same_rng() {
+        for set_remote_vault in [true, false] {
+            println!("Running tests for remote vault: {set_remote_vault}");
+            let crypto_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
+                ReproducibleRng::from_seed(SEED_0),
+                set_remote_vault,
+            );
+            let crypto_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
+                ReproducibleRng::from_seed(SEED_0),
+                set_remote_vault,
+            );
+
+            assert_matches!(crypto_0.rotate_idkg_dealing_encryption_keys(REG_V1), Ok(_));
+            assert_matches!(crypto_1.rotate_idkg_dealing_encryption_keys(REG_V1), Ok(_));
+
+            let rotated_keys_0 = crypto_0.current_node_public_keys();
+            let rotated_keys_1 = crypto_1.current_node_public_keys();
+
+            assert_eq!(rotated_keys_0, rotated_keys_1);
+        }
+    }
+
+    #[test]
+    fn should_have_different_rotated_keys_with_different_rng() {
+        for set_remote_vault in [true, false] {
+            println!("Running tests for remote vault: {set_remote_vault}");
+            let crypto_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
+                ReproducibleRng::from_seed(SEED_0),
+                set_remote_vault,
+            );
+            let crypto_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
+                ReproducibleRng::from_seed(SEED_1),
+                set_remote_vault,
+            );
+
+            // rotate iDKG keys
+            assert_matches!(crypto_0.rotate_idkg_dealing_encryption_keys(REG_V1), Ok(_));
+            assert_matches!(crypto_1.rotate_idkg_dealing_encryption_keys(REG_V1), Ok(_));
+
+            let rotated_keys_0 = crypto_0.current_node_public_keys();
+            let rotated_keys_1 = crypto_1.current_node_public_keys();
+
+            assert_ne_each_key(rotated_keys_0, rotated_keys_1);
+        }
     }
 
     fn new_idkg_crypto_with_rng_and_opt_remote_vault(
@@ -140,59 +189,33 @@ mod vault_rng {
         crypto_component
     }
 
-    /// Tests the vault consistency by checking (in)equality of the initially
-    /// generated keys, then rotating keys and checking the (in)equality again.
-    /// The first two crypto components are initialized with the same RNG seed,
-    /// whereas the last one with a different RNG seed.
-    fn test_vault_consistency(
-        temp_crypto_0_rng_0: TempCryptoComponentGeneric<Csp, ReproducibleRng>,
-        temp_crypto_1_rng_0: TempCryptoComponentGeneric<Csp, ReproducibleRng>,
-        temp_crypto_2_rng_1: TempCryptoComponentGeneric<Csp, ReproducibleRng>,
+    fn assert_ne_each_key(
+        lhs: Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>,
+        rhs: Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>,
     ) {
-        use ic_protobuf::registry::crypto::v1::PublicKey;
-        fn get_idkg_keys(crypto: &TempCryptoComponentGeneric<Csp, ReproducibleRng>) -> PublicKey {
-            crypto
-                .current_node_public_keys()
-                .expect("Failed to retrieve current node public keys")
-                .idkg_dealing_encryption_public_key
-                .expect("Failed to retrieve IDKG encryption pubkey")
-        }
-        let initial_keys_0 = get_idkg_keys(&temp_crypto_0_rng_0);
-        let initial_keys_1 = get_idkg_keys(&temp_crypto_1_rng_0);
-        let initial_keys_2 = get_idkg_keys(&temp_crypto_2_rng_1);
+        let CurrentNodePublicKeys {
+            node_signing_public_key: l_ns_pk,
+            committee_signing_public_key: l_cs_pk,
+            tls_certificate: l_tls_cert,
+            dkg_dealing_encryption_public_key: l_dkg_de_pk,
+            idkg_dealing_encryption_public_key: l_idkg_de_pk,
+        } = lhs.expect("failed to retrieve current node public keys");
 
-        // TODO(CRP-2065): Compare all keys after replacing OpenSSL's time source in
-        // certificate generation with vault's time source.
+        let CurrentNodePublicKeys {
+            node_signing_public_key: r_ns_pk,
+            committee_signing_public_key: r_cs_pk,
+            tls_certificate: r_tls_cert,
+            dkg_dealing_encryption_public_key: r_dkg_de_pk,
+            idkg_dealing_encryption_public_key: r_idkg_de_pk,
+        } = rhs.expect("failed to retrieve current node public keys");
 
-        // check (in)equality of initial iDKG keys for crypto components
-        assert_eq!(initial_keys_0, initial_keys_1);
-        assert_ne!(initial_keys_0, initial_keys_2);
-
-        // rotate iDKG keys
-        assert_matches!(
-            temp_crypto_0_rng_0.rotate_idkg_dealing_encryption_keys(REG_V1),
-            Ok(_)
+        assert_matches!((l_ns_pk, r_ns_pk), (Some(l_pk), Some(r_pk)) if l_pk.key_value != r_pk.key_value);
+        assert_matches!((l_cs_pk, r_cs_pk), (Some(l_pk), Some(r_pk)) if l_pk.key_value != r_pk.key_value);
+        assert_ne!(
+            l_tls_cert.expect("failed to obtain cert"),
+            r_tls_cert.expect("failed to obtain cert")
         );
-        assert_matches!(
-            temp_crypto_1_rng_0.rotate_idkg_dealing_encryption_keys(REG_V1),
-            Ok(_)
-        );
-        assert_matches!(
-            temp_crypto_2_rng_1.rotate_idkg_dealing_encryption_keys(REG_V1),
-            Ok(_)
-        );
-
-        let rotated_keys_0 = get_idkg_keys(&temp_crypto_0_rng_0);
-        let rotated_keys_1 = get_idkg_keys(&temp_crypto_1_rng_0);
-        let rotated_keys_2 = get_idkg_keys(&temp_crypto_2_rng_1);
-
-        // check inequality of rotated iDKG keys and initial keys
-        assert_ne!(initial_keys_0, rotated_keys_0);
-        assert_ne!(initial_keys_1, rotated_keys_1);
-        assert_ne!(initial_keys_2, rotated_keys_2);
-
-        // check (in)equality of rotated iDKG keys for crypto components
-        assert_eq!(rotated_keys_0, rotated_keys_1);
-        assert_ne!(rotated_keys_0, rotated_keys_2);
+        assert_matches!((l_dkg_de_pk, r_dkg_de_pk), (Some(l_pk), Some(r_pk)) if l_pk.key_value != r_pk.key_value);
+        assert_matches!((l_idkg_de_pk, r_idkg_de_pk), (Some(l_pk), Some(r_pk)) if l_pk.key_value != r_pk.key_value);
     }
 }

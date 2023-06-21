@@ -72,6 +72,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/in_memory_logger",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
+    "@crate_index//:chrono",
     "@crate_index//:lazy_static",
     "@crate_index//:mockall_0_7_2",
     "@crate_index//:proptest",
