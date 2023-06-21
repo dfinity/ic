@@ -148,6 +148,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "axum-server": crate.spec(
                 version = "^0.5.1",
                 features = [
+                    "tls-openssl",
                     "tls-rustls",
                 ],
             ),
