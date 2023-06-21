@@ -6,3 +6,6 @@ certs/
 junit.xml
 .DS_Store
 .env
+tmp/
+.dfx
+*.log
