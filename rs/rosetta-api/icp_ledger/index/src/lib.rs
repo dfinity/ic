@@ -48,3 +48,8 @@ pub struct GetAccountIdentifierTransactionsError {
 
 pub type GetAccountIdentifierTransactionsResult =
     Result<GetAccountIdentifierTransactionsResponse, GetAccountIdentifierTransactionsError>;
+
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+pub struct Status {
+    pub num_blocks_synced: BlockIndex,
+}
