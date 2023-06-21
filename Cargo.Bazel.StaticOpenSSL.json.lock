@@ -1,5 +1,5 @@
 {
-  "checksum": "87e2a2f7e29b036ddce10c4d9aad97c6a9fb0dc0dbf825c314fe24b59dd893e1",
+  "checksum": "5fa1c007c653bf5c9b4c71ba3dcb669bb80ba04251ca58ba05208b749ccd2948",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3508,10 +3508,13 @@
         "crate_features": [
           "arc-swap",
           "default",
+          "openssl",
           "pin-project-lite",
           "rustls",
           "rustls-pemfile",
+          "tls-openssl",
           "tls-rustls",
+          "tokio-openssl",
           "tokio-rustls"
         ],
         "deps": {
@@ -3541,6 +3544,10 @@
               "target": "hyper"
             },
             {
+              "id": "openssl 0.10.55",
+              "target": "openssl"
+            },
+            {
               "id": "pin-project-lite 0.2.9",
               "target": "pin_project_lite"
             },
@@ -3555,6 +3562,10 @@
             {
               "id": "tokio 1.28.2",
               "target": "tokio"
+            },
+            {
+              "id": "tokio-openssl 0.6.3",
+              "target": "tokio_openssl"
             },
             {
               "id": "tokio-rustls 0.24.1",
@@ -52147,8 +52158,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -52159,8 +52170,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

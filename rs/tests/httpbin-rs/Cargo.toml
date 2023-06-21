@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6.18"
-axum-server = { version = "0.5.1", features = ["tls-rustls"] }
+axum-server = { version = "0.5.1", features = ["tls-openssl", "tls-rustls"] }
 clap = { version = "4.0", features = ["derive"] }
 rustls = "0.21.1"
 rustls-pemfile = "1.0.2"
