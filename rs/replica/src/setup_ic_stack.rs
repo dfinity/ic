@@ -63,8 +63,6 @@ pub fn construct_ic_stack(
     IngressIngestionService,
     XNetEndpoint,
 )> {
-    // ---------- ARTIFACT POOLS DEPS FOLLOW ----------
-    create_consensus_pool_dir(&config);
     // Determine the correct catch-up package.
     let catch_up_package = {
         use ic_types::consensus::HasHeight;
@@ -101,10 +99,19 @@ pub fn construct_ic_stack(
             }
         }
     };
+
     let root_subnet_id = registry
         .get_root_subnet_id(catch_up_package.content.registry_version())
         .expect("cannot read from registry")
         .expect("cannot find root subnet id");
+    let subnet_type = get_subnet_type(
+        log,
+        subnet_id,
+        registry.get_latest_version(),
+        registry.as_ref(),
+    );
+    // ---------- ARTIFACT POOLS DEPS FOLLOW ----------
+    create_consensus_pool_dir(&config);
 
     let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool.clone());
     let artifact_pools = init_artifact_pools(
@@ -116,13 +123,6 @@ pub fn construct_ic_stack(
         catch_up_package,
     );
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
-    let subnet_type = get_subnet_type(
-        log,
-        subnet_id,
-        registry.get_latest_version(),
-        registry.as_ref(),
-    );
-
     let consensus_pool_cache = artifact_pools.consensus_pool.read().unwrap().get_cache();
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
     let state_manager = Arc::new(StateManagerImpl::new(
@@ -190,7 +190,7 @@ pub fn construct_ic_stack(
     let message_router = Arc::new(message_router);
     let xnet_config = XNetEndpointConfig::from(Arc::clone(&registry) as Arc<_>, node_id, log);
     let xnet_endpoint = XNetEndpoint::new(
-        rt_handle_xnet,
+        rt_handle_xnet.clone(),
         Arc::clone(&certified_stream_store),
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
@@ -198,13 +198,13 @@ pub fn construct_ic_stack(
         metrics_registry,
         log.clone(),
     );
-    // Use default runtime to spawn xnet client threads.
+    // Use XNet runtime to spawn XNet client threads.
     let xnet_payload_builder = Arc::new(XNetPayloadBuilderImpl::new(
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&certified_stream_store) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
         registry.clone(),
-        rt_handle.clone(),
+        rt_handle_xnet,
         node_id,
         subnet_id,
         metrics_registry,
