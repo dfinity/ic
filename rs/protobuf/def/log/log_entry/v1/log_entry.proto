@@ -3,7 +3,6 @@ syntax = "proto3";
 package log.log_entry.v1;
 
 import "log/consensus_log_entry/v1/consensus_log_entry.proto";
-import "log/replica_config/v1/replica_config.proto";
 import "log/crypto_log_entry/v1/crypto_log_entry.proto";
 import "log/p2p_log_entry/v1/p2p_log_entry.proto";
 import "log/messaging_log_entry/v1/messaging_log_entry.proto";

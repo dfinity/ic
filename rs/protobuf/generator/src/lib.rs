@@ -71,12 +71,6 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        ReplicaConfig,
-        "log.replica_config.v1",
-        replica_config
-    );
-    add_log_proto_derives!(
-        config,
         ConsensusLogEntry,
         "log.consensus_log_entry.v1",
         consensus,
