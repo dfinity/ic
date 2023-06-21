@@ -2,6 +2,7 @@ pub use ic_universal_canister as universal_canister;
 pub use util::mock_time;
 pub use util::with_timeout;
 pub use util::FastForwardTimeSource;
+pub use util::MockTimeSource;
 
 pub mod artifact_pool_config;
 pub mod assert_utils;

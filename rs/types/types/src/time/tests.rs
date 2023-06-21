@@ -1,4 +1,4 @@
-use crate::time::{TimeInstantiationError, NANOS_PER_MILLI};
+use crate::time::{TimeInstantiationError, NANOS_PER_MILLI, NANOS_PER_SEC};
 use crate::Time;
 use assert_matches::assert_matches;
 use std::time::SystemTime;
@@ -46,7 +46,64 @@ mod millis {
         assert_matches!(result, Err(TimeInstantiationError::Overflow(_)));
 
         let result = Time::from_millis_since_unix_epoch(max_millis);
-        assert_matches!(result, Ok(time) if time == Time::from_nanos_since_unix_epoch(18_446_744_073_709_000_000));
+        assert_eq!(
+            result,
+            Ok(Time::from_nanos_since_unix_epoch(
+                18_446_744_073_709_000_000
+            ))
+        );
+    }
+}
+
+mod secs {
+    use super::*;
+    use crate::time::GENESIS;
+    use std::time::Duration;
+
+    #[test]
+    fn should_convert_genesis_to_secs() {
+        let genesis_secs = GENESIS.as_secs_since_unix_epoch();
+        assert_eq!(genesis_secs, 1_620_328_630);
+    }
+
+    #[test]
+    fn should_be_zero() {
+        let less_than_one_sec =
+            Time::from_duration(Duration::from_secs(1) - Duration::from_nanos(1));
+        assert_eq!(less_than_one_sec.as_secs_since_unix_epoch(), 0);
+    }
+
+    #[test]
+    fn should_ignore_sub_secs_precision() {
+        let sub_sec_offset = Duration::from_secs(1) - Duration::from_nanos(1);
+
+        let result_in_secs = (GENESIS + sub_sec_offset).as_secs_since_unix_epoch();
+
+        assert_eq!(result_in_secs, 1_620_328_630);
+    }
+
+    #[test]
+    fn should_not_overflow() {
+        let genesis_secs = Time::from_secs_since_unix_epoch(1_620_328_630);
+        assert_matches!( genesis_secs, Ok(time) if time == GENESIS )
+    }
+
+    #[test]
+    fn should_overflow_in_year_2554() {
+        // Equals 18_446_744_073 s since epoch
+        // Corresponds to Sunday, 21 July 2554 23:34:33 (GMT)
+        let max_secs = u64::MAX / NANOS_PER_SEC;
+
+        let result = Time::from_secs_since_unix_epoch(max_secs + 1);
+        assert_matches!(result, Err(TimeInstantiationError::Overflow(_)));
+
+        let result = Time::from_secs_since_unix_epoch(max_secs);
+        assert_eq!(
+            result,
+            Ok(Time::from_nanos_since_unix_epoch(
+                18_446_744_073_000_000_000
+            ))
+        );
     }
 }
 

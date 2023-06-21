@@ -29,6 +29,7 @@ pub const UNIX_EPOCH: Time = Time(0);
 pub const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 
 const NANOS_PER_MILLI: u64 = 1_000_000;
+const NANOS_PER_SEC: u64 = 1_000_000_000;
 
 impl std::ops::Add<Duration> for Time {
     type Output = Time;
@@ -66,6 +67,22 @@ impl Time {
                 TimeInstantiationError::Overflow(format!(
                     "The number of milliseconds {} is too large and cannot be converted into a u64 of nanoseconds",
                     millis
+                ))
+            })
+    }
+
+    /// Number of seconds since UNIX EPOCH
+    pub fn as_secs_since_unix_epoch(self) -> u64 {
+        self.as_nanos_since_unix_epoch() / NANOS_PER_SEC
+    }
+
+    pub fn from_secs_since_unix_epoch(secs: u64) -> Result<Self, TimeInstantiationError> {
+        secs.checked_mul(NANOS_PER_SEC)
+            .map(Time)
+            .ok_or_else(|| {
+                TimeInstantiationError::Overflow(format!(
+                    "The number of seconds {} is too large and cannot be converted into a u64 of nanoseconds",
+                    secs
                 ))
             })
     }

@@ -6,6 +6,7 @@ use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
+use ic_test_utilities::FastForwardTimeSource;
 use ic_types_test_utils::ids::node_test_id;
 
 mod keygen {
@@ -17,7 +18,13 @@ mod keygen {
     use crate::vault::api::CspTlsKeygenError;
     use crate::vault::api::TlsHandshakeCspVault;
     use crate::vault::local_csp_vault::LocalCspVault;
+    use ic_test_utilities::MockTimeSource;
+    use ic_types::time::Time;
     use mockall::Sequence;
+    use openssl::asn1::Asn1Time;
+    use openssl::asn1::Asn1TimeRef;
+    use proptest::proptest;
+    use std::sync::Arc;
 
     const NOT_AFTER: &str = "99991231235959Z";
 
@@ -114,14 +121,17 @@ mod keygen {
     }
 
     #[test]
-    fn should_return_error_if_not_after_date_is_in_the_past() {
-        let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
-        let date_in_the_past = "20211004235959Z";
+    fn should_return_error_if_not_after_date_is_not_after_not_before_date() {
+        let csp_vault = LocalCspVault::builder_for_test()
+            .with_time_source(FastForwardTimeSource::new())
+            .build_into_arc();
+        const UNIX_EPOCH: &str = "19700101000000Z";
+        const UNIX_EPOCH_AS_TIME_DATE: &str = "(Jan  1 00:00:00 1970 GMT)";
 
-        let result =
-            csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), date_in_the_past);
+        let result = csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), UNIX_EPOCH);
+        let expected_message = format!("'not after' date {UNIX_EPOCH_AS_TIME_DATE} must be after 'not before' date {UNIX_EPOCH_AS_TIME_DATE}");
         assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-            if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
+            if message == expected_message && not_after == UNIX_EPOCH
         );
     }
 
@@ -135,9 +145,34 @@ mod keygen {
             unexpected_not_after_date,
         );
 
-        assert_matches!(result, Err(CspTlsKeygenError::InternalError {internal_error}) 
+        assert_matches!(result, Err(CspTlsKeygenError::InternalError {internal_error})
             if internal_error.contains("TLS certificate validation error") &&
             internal_error.contains("notAfter date is not RFC 5280 value 99991231235959Z"));
+    }
+
+    proptest! {
+        #[test]
+        fn should_pass_the_correct_time_and_date(secs in 0..1_000_000i64) {
+            let mut mock = MockTimeSource::new();
+            mock.expect_get_relative_time()
+                .return_const(Time::from_secs_since_unix_epoch(secs as u64).expect("failed to create Time object"));
+            let csp_vault = LocalCspVault::builder_for_test()
+                .with_time_source(Arc::new(mock))
+                .build_into_arc();
+
+            let cert = csp_vault
+                .gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), NOT_AFTER)
+                .expect("Failed to generate certificate");
+            let not_before = cert.as_x509().not_before();
+
+            let expected_not_before: &Asn1TimeRef = &Asn1Time::from_unix(secs).expect("failed to convert time");
+            let diff = not_before.diff(expected_not_before).expect("failed to obtain time diff");
+
+            assert_eq!(diff, openssl::asn1::TimeDiff{
+                days: 0,
+                secs: 0,
+            });
+        }
     }
 
     #[test]

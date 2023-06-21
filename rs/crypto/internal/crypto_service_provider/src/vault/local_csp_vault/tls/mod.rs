@@ -111,16 +111,30 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 not_after: not_after.to_string(),
             }
         })?;
-        let (cert, secret_key) =
-            generate_tls_key_pair_der(&mut *self.rng_write_lock(), common_name, &not_after_asn1)
-                .map_err(
-                    |TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message: e }| {
-                        CspTlsKeygenError::InvalidNotAfterDate {
-                            message: e,
-                            not_after: not_after.to_string(),
-                        }
-                    },
-                )?;
+        let secs_since_unix_epoch = (self
+            .time_source
+            .get_relative_time()
+            .as_secs_since_unix_epoch()) as i64;
+        let not_before = Asn1Time::from_unix(secs_since_unix_epoch).map_err(|_| {
+            CspTlsKeygenError::InternalError {
+                internal_error: format!("Failed to convert raw not_before ({secs_since_unix_epoch} seconds since Unix epoch) to Asn1Time"),
+            }
+        })?;
+
+        let (cert, secret_key) = generate_tls_key_pair_der(
+            &mut *self.rng_write_lock(),
+            common_name,
+            &not_before,
+            &not_after_asn1,
+        )
+        .map_err(
+            |TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message: e }| {
+                CspTlsKeygenError::InvalidNotAfterDate {
+                    message: e,
+                    not_after: not_after.to_string(),
+                }
+            },
+        )?;
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes).map_err(|err| {
             CspTlsKeygenError::InternalError {
                 internal_error: format!(

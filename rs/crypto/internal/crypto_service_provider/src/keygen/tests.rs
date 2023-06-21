@@ -4,6 +4,7 @@ use crate::keygen::fixtures::multi_bls_test_vector;
 use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use crate::KeyId;
+use crate::LocalCspVault;
 use assert_matches::assert_matches;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
@@ -68,7 +69,6 @@ mod gen_node_siging_key_pair_tests {
     #[test]
     fn should_not_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        use crate::LocalCspVault;
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
@@ -114,7 +114,6 @@ mod gen_key_pair_with_pop_tests {
     #[test]
     fn should_not_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        use crate::LocalCspVault;
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
@@ -171,7 +170,6 @@ mod idkg_create_mega_key_pair_tests {
     #[test]
     fn should_fail_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        use crate::LocalCspVault;
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
@@ -193,7 +191,6 @@ mod idkg_create_mega_key_pair_tests {
 
     #[test]
     fn should_handle_serialization_failure_upon_insert() {
-        use crate::LocalCspVault;
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
@@ -216,7 +213,6 @@ mod idkg_create_mega_key_pair_tests {
 
     #[test]
     fn should_handle_io_error_upon_insert() {
-        use crate::LocalCspVault;
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
@@ -281,8 +277,11 @@ fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng {
 
 mod tls {
     use super::*;
+    use ic_interfaces::time_source::TimeSource;
+    use ic_test_utilities::FastForwardTimeSource;
     use openssl::x509::X509VerifyResult;
     use std::collections::BTreeSet;
+    use std::sync::Arc;
 
     const NODE_1: u64 = 4241;
     const NOT_AFTER: &str = "99991231235959Z";
@@ -317,7 +316,6 @@ mod tls {
     #[test]
     fn should_not_panic_if_secret_key_insertion_yields_duplicate_error() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        use crate::LocalCspVault;
         let csp = Csp::builder_for_test()
             .with_vault(
                 LocalCspVault::builder_for_test()
@@ -433,6 +431,47 @@ mod tls {
     }
 
     #[test]
+    fn should_set_cert_not_before_correctly() {
+        use chrono::prelude::*;
+        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+        use ic_types::time::Time;
+        use std::time::{Duration, UNIX_EPOCH};
+        // ~31.7 years
+        const MAX_TIME_SECS: u64 = 1_000_000_000;
+        let mut rng = reproducible_rng();
+        for _ in 0..100 {
+            let random_time_secs = rng.gen_range(0..MAX_TIME_SECS);
+            let time_source = FastForwardTimeSource::new();
+            time_source
+                .set_time(
+                    Time::from_secs_since_unix_epoch(random_time_secs)
+                        .expect("failed to convert time"),
+                )
+                .expect("failed to set time");
+            // We are deliberately not using `Asn1Time::from_unix` used in
+            // productiong to ensure the right time unit is passed.
+            let expected_not_before = {
+                let millis = time_source.get_relative_time().as_millis_since_unix_epoch();
+                let utc = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_millis(millis));
+                utc.format("%b %e %H:%M:%S %Y GMT").to_string()
+            };
+            let csp = Csp::builder_for_test()
+                .with_vault(
+                    LocalCspVault::builder_for_test()
+                        .with_time_source(time_source)
+                        .build(),
+                )
+                .build();
+
+            let cert = csp
+                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+                .expect("error generating TLS certificate");
+
+            assert_eq!(cert.as_x509().not_before().to_string(), expected_not_before);
+        }
+    }
+
+    #[test]
     fn should_set_cert_not_after_correctly() {
         let csp = Csp::builder_for_test().build();
         let not_after = NOT_AFTER;
@@ -445,7 +484,7 @@ mod tls {
     }
 
     #[test]
-    fn should_panic_on_invalid_not_after_date() {
+    fn should_fail_on_invalid_not_after_date() {
         let csp = Csp::builder_for_test().build();
         let invalid_not_after = "invalid_not_after_date";
 
@@ -456,13 +495,22 @@ mod tls {
     }
 
     #[test]
-    fn should_panic_if_not_after_date_is_in_the_past() {
-        let csp = Csp::builder_for_test().build();
-        let date_in_the_past = "20211004235959Z";
+    fn should_fail_if_not_after_date_is_not_after_not_before_date() {
+        let time_source = FastForwardTimeSource::new();
+        let csp = Csp::builder_for_test()
+            .with_vault(
+                LocalCspVault::builder_for_test()
+                    .with_time_source(Arc::clone(&time_source) as _)
+                    .build(),
+            )
+            .build();
+        const UNIX_EPOCH: &str = "19700101000000Z";
+        const UNIX_EPOCH_AS_TIME_DATE: &str = "(Jan  1 00:00:00 1970 GMT)";
 
-        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
+        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), UNIX_EPOCH);
+        let expected_message = format!("'not after' date {UNIX_EPOCH_AS_TIME_DATE} must be after 'not before' date {UNIX_EPOCH_AS_TIME_DATE}");
         assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-            if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
+            if  message == expected_message && not_after == UNIX_EPOCH
         );
     }
 
@@ -494,8 +542,6 @@ mod tls {
 }
 
 fn csp_seeded_with(seed: u64) -> Csp {
-    use crate::LocalCspVault;
-
     Csp::builder_for_test()
         .with_vault(
             LocalCspVault::builder_for_test()
