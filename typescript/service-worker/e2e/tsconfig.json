@@ -1,7 +1,13 @@
 {
-  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "types": ["node", "@wdio/globals/types", "jasmine"]
+    "types": ["node"],
+    "lib": ["DOM"],
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "node",
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "allowSyntheticDefaultImports": true
   },
-  "include": ["pages/**/*.ts", "specs/**/*.ts"]
+  "include": ["specs/**/*.mts", "utils/**/*.mts"]
 }

@@ -6,4 +6,6 @@ junit.xml
 .DS_Store
 target
 .env
+tmp/
 .dfx
+*.log
