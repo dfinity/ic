@@ -2,7 +2,10 @@
 
 use crate::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
 use ic_base_types::RegistryVersion;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{
+    proxy::{try_from_option_field, ProxyDecodeError},
+    types::v1 as pb,
+};
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
@@ -104,6 +107,25 @@ pub type ValidatedConsensusArtifact = ValidatedArtifact<ConsensusMessage>;
 
 /// Unvalidated consensus artifact.
 pub type UnvalidatedConsensusArtifact = UnvalidatedArtifact<ConsensusMessage>;
+
+impl From<&ValidatedConsensusArtifact> for pb::ValidatedConsensusArtifact {
+    fn from(value: &ValidatedConsensusArtifact) -> Self {
+        Self {
+            msg: Some(value.msg.clone().into()),
+            timestamp: value.timestamp.as_nanos_since_unix_epoch(),
+        }
+    }
+}
+
+impl TryFrom<pb::ValidatedConsensusArtifact> for ValidatedConsensusArtifact {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::ValidatedConsensusArtifact) -> Result<Self, Self::Error> {
+        Ok(Self {
+            msg: try_from_option_field(value.msg, "ValidatedConsensusArtifact::msg")?,
+            timestamp: Time::from_nanos_since_unix_epoch(value.timestamp),
+        })
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct HeightRange {

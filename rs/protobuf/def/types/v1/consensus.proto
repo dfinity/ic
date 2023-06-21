@@ -10,6 +10,11 @@ import "types/v1/dkg.proto";
 import "types/v1/ecdsa.proto";
 import "messaging/xnet/v1/certified_stream_slice.proto";
 
+message ValidatedConsensusArtifact {
+	ConsensusMessage msg = 1;
+	uint64 timestamp = 2;
+}
+
 message CatchUpPackage {
 	bytes content = 1;
 	bytes signature = 2;

@@ -31,7 +31,7 @@ pub mod thunk;
 
 pub use catchup::*;
 use hashed::Hashed;
-pub use payload::{BlockPayload, DataPayload, Payload, SummaryPayload};
+pub use payload::{BlockPayload, DataPayload, Payload, PayloadType, SummaryPayload};
 
 /// Abstract messages with height attribute
 pub trait HasHeight {
@@ -317,7 +317,7 @@ impl From<&BlockProposal> for pb::BlockProposal {
 impl TryFrom<pb::BlockProposal> for BlockProposal {
     type Error = ProxyDecodeError;
     fn try_from(block_proposal: pb::BlockProposal) -> Result<Self, Self::Error> {
-        let ret = Signed {
+        Ok(Signed {
             content: Hashed {
                 value: Block::try_from(
                     block_proposal
@@ -331,14 +331,7 @@ impl TryFrom<pb::BlockProposal> for BlockProposal {
                 signature: BasicSigOf::from(BasicSig(block_proposal.signature)),
                 signer: node_id_try_from_option(block_proposal.signer)?,
             },
-        };
-        if ret.check_integrity() {
-            Ok(ret)
-        } else {
-            Err(ProxyDecodeError::Other(
-                "Block proposal validity check failed".to_string(),
-            ))
-        }
+        })
     }
 }
 

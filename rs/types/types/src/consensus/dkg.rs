@@ -93,7 +93,7 @@ impl HasVersion for DealingContent {
 /// The DKG summary will be present as the DKG payload at every block,
 /// corresponding to the start of a new DKG interval.
 #[serde_as]
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Summary {
     /// The registry version used to create this summary.
     pub registry_version: RegistryVersion,
