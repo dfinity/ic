@@ -209,7 +209,7 @@
   artifacts:
     expire_in: 3 days
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   variables:
@@ -218,7 +218,7 @@
   artifacts:
     expire_in: 3 days
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   variables:
@@ -383,7 +383,7 @@ after_script:
     SHELL_WRAPPER: "/usr/bin/time"
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -409,7 +409,7 @@ after_script:
     BAZEL_CI_CONFIG: "--config=ci"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -465,7 +465,7 @@ after_script:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
 ".macos-cargo-native":
@@ -541,7 +541,7 @@ no-interrupt:
   script:
   - echo "This pipeline is not interruptible"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: init
@@ -572,7 +572,7 @@ cargo-audit:
   script:
   - cd rs; cargo audit
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: init
@@ -615,7 +615,7 @@ boundary-node-service-worker:
     cmd \"${ROOT_PIPELINE_ID}\" \"${CI_JOB_ID}\" rclone -- \\\n  gitlab-ci/src/artifacts/rclone_upload.py
     --version=\"${GIT_REVISION}\" \"typescript/service-worker/artifacts\" service-worker\n"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   needs: []
@@ -640,7 +640,7 @@ boundary-node-service-worker:
     BAZEL_CI_CONFIG: "--config=ci"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -687,7 +687,7 @@ after-script-test-ic-build-legacy-image:
     BAZEL_CI_CONFIG: "--config=ci"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -735,7 +735,7 @@ after-script-test-ic-build-image:
     BAZEL_CI_CONFIG: "--config=ci"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -798,7 +798,7 @@ bazel-build-fuzzers:
     BAZEL_COMMAND: build
     BAZEL_TARGETS: "//rs/..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -861,7 +861,7 @@ bazel-build-fuzzers-weekly:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -934,7 +934,7 @@ bazel-build-fuzzers-archives:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -1049,7 +1049,7 @@ bazel-build-fuzzers-archives:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1123,7 +1123,7 @@ bazel-test-all:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1195,7 +1195,7 @@ linux-openssl-static-binaries:
     BAZEL_TARGETS: "//publish/binaries:upload"
     DFINITY_OPENSSL_STATIC: 1
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1266,7 +1266,7 @@ bazel-test-all-allow-to-fail:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1334,7 +1334,7 @@ bazel-system-test-hourly:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1409,7 +1409,7 @@ bazel-system-test-hotfix:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1484,7 +1484,7 @@ bazel-system-test-staging:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1560,7 +1560,7 @@ bazel-system-test-nightly:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1635,7 +1635,7 @@ bazel-config-check-all-rebuild:
     BAZEL_COMMAND: build
     BAZEL_TARGETS: "//rs/..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1702,7 +1702,7 @@ bazel-cache-perf-test-linux:
     BAZEL_COMMAND: test
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1774,7 +1774,7 @@ bazel-test-all-rebuild:
     BAZEL_COMMAND: build
     BAZEL_TARGETS: "//..."
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -1846,7 +1846,7 @@ bazel-build-macos:
   - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
   - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - macos
   extends:
@@ -1919,7 +1919,7 @@ macos-openssl-static-binaries:
   - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
   - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - macos
   extends:
@@ -2000,7 +2000,7 @@ bazel-cache-perf-test-macos:
     allow_failure: true
   - if: $SCHEDULE_NAME == "run-all-master"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - macos
   extends:
@@ -2048,7 +2048,7 @@ bazel-cache-perf-test-macos:
     paths:
     - bazel-build-log*.json*
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   variables:
@@ -2117,7 +2117,7 @@ build-ic:
     paths:
     - bazel-build-log*.json*
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   variables:
@@ -2199,7 +2199,7 @@ build-ic-release:
     paths:
     - bazel-build-log*.json*
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   variables:
@@ -2283,7 +2283,7 @@ pre-commit:
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     PRE_COMMIT_HOME: "/cache/pre-commit/$CI_CONCURRENT_ID"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2383,7 +2383,7 @@ cargo-lock-generate:
       exit 1
     fi
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   needs: []
@@ -2415,7 +2415,7 @@ docker-generate-runner-list:
     set -euo pipefail
     ./gitlab-ci/src/gitlab_runners_check/create-gitlab-runner-jobs.py
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity
   - docker
@@ -2452,7 +2452,7 @@ gitlab-ci-config-validation:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2487,7 +2487,7 @@ python-gitlab-ci-tests:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2555,7 +2555,7 @@ container-autobuild-protected:
       docker push docker.io/dfinity/ic-build:latest
     fi
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   needs: []
@@ -2661,7 +2661,7 @@ container-autobuild:
     fi
     df -h /
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   needs: []
@@ -2684,7 +2684,7 @@ dependencies-check:
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     CARGO_AUDIT_VERSION: 0.16.0
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2720,7 +2720,7 @@ dependency-scan-nightly:
     CARGO_AUDIT_VERSION: 0.16.0
     NVM_VERSION: '19'
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2762,7 +2762,7 @@ dependency-scan-release-cut:
     PYTHONPATH: "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     CARGO_AUDIT_VERSION: 0.16.0
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2796,7 +2796,7 @@ test-testnet-deployment:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     TESTNET: small14
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2870,6 +2870,47 @@ check-bins-linux:
     chmod +x /tmp/ic-starter
     ldd /tmp/ic-starter
     /tmp/ic-starter --version
+zz-generated-gitlab:
+  artifacts:
+    expire_in: 3 days
+  image:
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+  tags:
+  - dfinity-ic
+  variables:
+    GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
+  needs: []
+  stage: test
+  extends:
+  - ".ic-build-image"
+  rules:
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    changes:
+    - gitlab-ci/config/**/*
+    - ".gitlab-ci.yml"
+  script:
+  - |
+    set -eEuo pipefail
+
+    output_file="zz-generated-gitlab-ci.yaml"
+
+    curl -G "https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/ci/lint" \
+        -d "dry_run=true" \
+        -d "include_jobs=true" \
+        -d "ref=$CI_COMMIT_REF_NAME" \
+        -H "Authorization: Bearer $GITLAB_API_TOKEN" | jq -r '.merged_yaml' >"$output_file"
+
+    set -x
+
+    if [ -n "$(git status --porcelain)" ]; then
+        git config --global user.email "idx@dfinity.org"
+        git config --global user.name "IDX GitLab Automation"
+        git commit -am "Updating $output_file"
+        git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+        git push --set-upstream origin HEAD:"$CI_COMMIT_REF_NAME"
+    else
+        echo "git working tree clean - no changes to be commited"
+    fi
 cargo-clippy-linux:
   interruptible: true
   artifacts:
@@ -2891,7 +2932,7 @@ cargo-clippy-linux:
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2936,7 +2977,7 @@ legacy-cargo-check:
     BAZEL_CI_CONFIG: "--config=ci"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -2980,7 +3021,7 @@ cargo-build-release-linux:
     BAZEL_CI_CONFIG: "--config=ci"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3030,7 +3071,7 @@ benchmarks:
     BAZEL_TARGETS: "//..."
     RUST_BACKTRACE: full
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -3151,7 +3192,7 @@ benchmarks:
     SHELL_WRAPPER: "/usr/bin/time"
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3214,7 +3255,7 @@ build-guestos-base:
     IMAGE: guestos-base
     REF_FILE: ic-os/guestos/rootfs/docker-base.prod
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3276,7 +3317,7 @@ build-guestos-base-dev:
     IMAGE: guestos-base-dev
     REF_FILE: ic-os/guestos/rootfs/docker-base.dev
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3339,7 +3380,7 @@ build-guestos-base-dev-sev:
     IMAGE: guestos-base-dev-sev
     REF_FILE: ic-os/guestos/rootfs/docker-base.dev-sev
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3402,7 +3443,7 @@ build-boundaryos-base:
     IMAGE: boundaryos-base
     REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.prod
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3464,7 +3505,7 @@ build-boundaryos-base-snp:
     IMAGE: boundaryos-base-snp
     REF_FILE: ic-os/boundary-guestos/rootfs/docker-base.snp
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3527,7 +3568,7 @@ build-boundaryos-api-guestos-base:
     IMAGE: boundary-api-guestos-base
     REF_FILE: ic-os/boundary-api-guestos/rootfs/docker-base.prod
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3589,7 +3630,7 @@ build-boundaryos-api-guestos-base-snp:
     IMAGE: boundary-api-guestos-base-snp
     REF_FILE: ic-os/boundary-api-guestos/rootfs/docker-base.snp
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3652,7 +3693,7 @@ build-hostos-base:
     IMAGE: hostos-base
     REF_FILE: ic-os/hostos/rootfs/docker-base.prod
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3714,7 +3755,7 @@ build-hostos-base-dev:
     IMAGE: hostos-base-dev
     REF_FILE: ic-os/hostos/rootfs/docker-base.dev
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3777,7 +3818,7 @@ build-hostos-base-dev-sev:
     IMAGE: hostos-base-dev-sev
     REF_FILE: ic-os/hostos/rootfs/docker-base.dev-sev
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3841,7 +3882,7 @@ build-setupos-base:
     IMAGE: setupos-base
     REF_FILE: ic-os/setupos/rootfs/docker-base.prod
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3903,7 +3944,7 @@ build-setupos-base-dev:
     IMAGE: setupos-base-dev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -3966,7 +4007,7 @@ build-setupos-base-dev-sev:
     IMAGE: setupos-base-dev-sev
     REF_FILE: ic-os/setupos/rootfs/docker-base.dev-sev
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -4028,7 +4069,7 @@ build-base-images-ref-update:
     SHELL_WRAPPER: "/usr/bin/time"
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -4122,7 +4163,7 @@ rosetta-release:
     BAZEL_CI_CONFIG: "--config=ci"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -4186,7 +4227,7 @@ rosetta-api-docker-image:
     BAZEL_CI_CONFIG: "--config=ci"
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -4257,7 +4298,7 @@ host-os-upgrade-test:
     HOST_OS_TEST_TIMEOUT: 2400
     E2E_TEST_TIMEOUT: 480
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -4315,7 +4356,7 @@ build-determinism-binaries:
     PATH0: release
     PATH1: build-ic/release
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -4366,7 +4407,7 @@ build-determinism-canisters:
     PATH0: canisters
     PATH1: build-ic/canisters
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -4415,7 +4456,7 @@ build-determinism-guest-update-img:
     PATH0: guest-os/update-img
     PATH1: build-ic/guest-os
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -4464,7 +4505,7 @@ build-determinism-host-update-img:
     PATH0: host-os/update-img
     PATH1: build-ic/host-os
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -4514,7 +4555,7 @@ build-determinism-setupos-img:
     PATH1: build-ic/setup-os
     SETUPOS_FLAG: 'true'
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   - zh
@@ -4561,7 +4602,7 @@ build-determinism-setupos-img:
     PATH0: build-ic-release/release
     PATH1: release
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -4609,7 +4650,7 @@ build-determinism-binaries-release:
     PATH0: build-ic-release/release
     PATH1: release
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -4656,7 +4697,7 @@ build-determinism-canisters-release:
     PATH0: build-ic-release/canisters
     PATH1: canisters
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -4703,7 +4744,7 @@ build-determinism-guest-update-img-release:
     PATH0: build-ic-release/guest-os
     PATH1: guest-os/update-img
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   extends:
@@ -4894,7 +4935,7 @@ prod-hotfix-triggered:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -4967,7 +5008,7 @@ maximum-capacity-canister-http:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5039,7 +5080,7 @@ maximum-capacity-system-baseline-query:
     # Upload results from both run (the entire folder of that GIT revision)
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5095,7 +5136,7 @@ maximum-capacity-system-baseline-update:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5151,7 +5192,7 @@ maximum-capacity-large-memory-query:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5207,7 +5248,7 @@ maximum-capacity-large-memory-update:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5263,7 +5304,7 @@ maximum-capacity-multiple-large-memory-update:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5319,7 +5360,7 @@ maximum-capacity-mixed-workloads:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5378,7 +5419,7 @@ maximum-capacity-mixed-counter-memory:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5434,7 +5475,7 @@ maximum-capacity-qr:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5490,7 +5531,7 @@ maximum-capacity-sha256:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5547,7 +5588,7 @@ benchmark-response-payload:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5604,7 +5645,7 @@ benchmark-xnet:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5659,7 +5700,7 @@ statesync-experiment:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -5717,7 +5758,7 @@ statesync-experiment:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-spot-tests
@@ -5780,7 +5821,7 @@ system-baseline-query-performance-test-nightly:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-spot-tests
@@ -5843,7 +5884,7 @@ system-baseline-update-performance-test-nightly:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-spot-tests
@@ -5905,7 +5946,7 @@ heavy-memory-update-performance-test-nightly:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-spot-tests
@@ -5969,7 +6010,7 @@ large-response-downloading-nightly:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-spot-tests
@@ -6033,7 +6074,7 @@ xnet-nightly:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-spot-tests
@@ -6089,7 +6130,7 @@ xnet-nightly:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: sns-tests
@@ -6143,7 +6184,7 @@ sns-deployment-test-nightly:
     find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
     cd -
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: sns-tests
@@ -6196,7 +6237,7 @@ tecdsa:
     find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
     cd -
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -6246,7 +6287,7 @@ delegated-identity-bench:
     find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
     cd -
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -6302,7 +6343,7 @@ maximum-capacity-boundary-nodes-queries:
 
     $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: benchmark-tests
@@ -6346,7 +6387,7 @@ test-push-branch:
     git switch --force-create post-merge-tests-passed HEAD
     git push --force --set-upstream origin post-merge-tests-passed
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: push-branches
@@ -6388,7 +6429,7 @@ cut-release-candidate:
     git switch --force-create "$RC_BRANCH_NAME" HEAD
     git push --force --set-upstream origin  "$RC_BRANCH_NAME"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: push-branches
@@ -6463,7 +6504,7 @@ release-boundary-node-service-worker:
       npm publish "file:artifacts/dfinity-service-worker-$PACKAGE_JSON_VERSION.tgz" --access public
     )
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: npm-release
@@ -6511,7 +6552,7 @@ notify-gitlab-success:
     \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" notify-slack -- notify_slack/notify_slack.py
     \\\n        \"${MESSAGE}\" --channel \"release-management-alerts\"\nfi\n"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: finalize
@@ -6557,7 +6598,7 @@ notify-gitlab-failure:
     || true\n    buildevents cmd \"$ROOT_PIPELINE_ID\" \"$CI_JOB_ID\" notify-slack
     -- notify_slack/notify_slack.py \\\n        \"${MESSAGE}\" --channel \"release-management-alerts\"\nfi\n"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: finalize
@@ -6613,7 +6654,7 @@ notify-gitlab-failure:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -6668,7 +6709,7 @@ notify-gitlab-failure:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -6724,7 +6765,7 @@ notify-gitlab-failure:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -6780,7 +6821,7 @@ notify-gitlab-failure:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -6839,7 +6880,7 @@ notify-gitlab-failure:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests-02
@@ -6897,7 +6938,7 @@ notify-gitlab-failure:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -6949,7 +6990,7 @@ rejoin-nightly:
 
     $SHELL_WRAPPER timeout 46m ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests-02
@@ -7001,7 +7042,7 @@ nns-state-deployment-test-nightly:
     export GIT_REVISION
     $SHELL_WRAPPER timeout 1h ./testnet/tests/scripts/nns_state_deployment_test.sh "$TESTNET" "$CI_JOB_STAGE/$CI_JOB_NAME"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests-02
@@ -7052,7 +7093,7 @@ rejoin-test-slo:
 
     $SHELL_WRAPPER ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 large "$CI_JOB_STAGE/$CI_JOB_NAME"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -7104,7 +7145,7 @@ icos-deploy-stress:
 
     $SHELL_WRAPPER timeout 10m ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -7172,7 +7213,7 @@ icos-deploy-stress:
 
     set +x
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -7221,7 +7262,7 @@ rejoin-hotfix:
 
     $SHELL_WRAPPER ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 normal "$CI_JOB_STAGE/$CI_JOB_NAME"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests
@@ -7267,7 +7308,7 @@ ingress-manager-proptests-nightly:
     cd "${CI_PROJECT_DIR}/rs"
     $SHELL_WRAPPER cargo test --release -p ic-ingress-manager proptest
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:87db40a372221bb8eddffc354d833c68f0e7f5664f7d90a28a71cf36c7aa19ae
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   tags:
   - dfinity-ic
   stage: prod-tests

@@ -66,7 +66,7 @@ ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
 RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
-ARG rust_version=1.58.1
+ARG rust_version=1.66.1
 RUN curl --fail https://sh.rustup.rs -sSf \
     | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
