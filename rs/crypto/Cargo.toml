@@ -41,7 +41,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 lazy_static = "1.4.0"
 num-integer = "0.1.41"
-openssl = "0.10.29"
+openssl = "0.10.55"
 parking_lot = "0.12.1"
 prometheus = { version = "0.12.0", features = ["process"] }
 prost = "0.11.0"
