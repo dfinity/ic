@@ -3,7 +3,7 @@ use ic_cdk_macros::{init, query};
 use ic_cdk_timers::TimerId;
 use ic_icp_index::{
     GetAccountIdentifierTransactionsArgs, GetAccountIdentifierTransactionsResponse,
-    GetAccountIdentifierTransactionsResult, InitArg, TransactionWithId,
+    GetAccountIdentifierTransactionsResult, InitArg, Status, TransactionWithId,
 };
 use ic_ledger_core::block::{BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
@@ -531,6 +531,13 @@ fn get_account_identifier_transactions(
 #[candid_method(query)]
 fn get_account_identifier_balance(account_identifier: AccountIdentifier) -> u64 {
     get_balance(account_identifier)
+}
+
+#[query]
+#[candid_method(query)]
+fn status() -> Status {
+    let num_blocks_synced = with_blocks(|blocks| blocks.len());
+    Status { num_blocks_synced }
 }
 
 fn main() {}
