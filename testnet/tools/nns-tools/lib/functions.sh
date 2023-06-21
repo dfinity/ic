@@ -101,7 +101,7 @@ propose_upgrade_canister_wasm_file_pem() {
 
     # See note at variable declaration
     PROPOSAL="$MY_DOWNLOAD_DIR"/testnet_upgrade_proposal.txt
-    echo "Testnet $CANISTER_NAME upgrade" >$PROPOSAL
+    echo "Testnet $CANISTER_ID upgrade" >$PROPOSAL
 
     local WASM_SHA=$(sha_256 "$WASM_FILE")
 
