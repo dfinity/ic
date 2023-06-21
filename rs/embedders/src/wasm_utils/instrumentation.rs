@@ -1258,7 +1258,8 @@ fn injections(code: &[Operator]) -> Vec<InjectionPoint> {
             | MemoryCopy { .. }
             | MemoryInit { .. }
             | TableCopy { .. }
-            | TableInit { .. } => {
+            | TableInit { .. }
+            | TableFill { .. } => {
                 res.push(InjectionPoint::new_dynamic_cost(position));
             }
             // Nothing special to be done for other instructions.
