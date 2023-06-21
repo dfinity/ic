@@ -1,5 +1,5 @@
 {
-  "checksum": "94c2d2ab2fbc2b95d113fdfb01be99aea7c6668f3c649ec40b2df120c4248af3",
+  "checksum": "89c43637b2fca3d868ae1dc49d4d8d9ac892eb3fbd94885aa3911fb0040ed727",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13924,11 +13924,11 @@
               "target": "openssh_keys"
             },
             {
-              "id": "openssl 0.10.54",
+              "id": "openssl 0.10.55",
               "target": "openssl"
             },
             {
-              "id": "openssl-sys 0.9.88",
+              "id": "openssl-sys 0.9.90",
               "target": "openssl_sys"
             },
             {
@@ -26601,7 +26601,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.88",
+                "id": "openssl-sys 0.9.90",
                 "target": "openssl_sys"
               }
             ]
@@ -29505,7 +29505,7 @@
                 "target": "log"
               },
               {
-                "id": "openssl 0.10.54",
+                "id": "openssl 0.10.55",
                 "target": "openssl"
               },
               {
@@ -29513,7 +29513,7 @@
                 "target": "openssl_probe"
               },
               {
-                "id": "openssl-sys 0.9.88",
+                "id": "openssl-sys 0.9.90",
                 "target": "openssl_sys"
               }
             ],
@@ -31684,13 +31684,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "openssl 0.10.54": {
+    "openssl 0.10.55": {
       "name": "openssl",
-      "version": "0.10.54",
+      "version": "0.10.55",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/openssl/0.10.54/download",
-          "sha256": "69b3f656a17a6cbc115b5c7a40c616947d213ba182135b014d6051b73ab6f019"
+          "url": "https://crates.io/api/v1/crates/openssl/0.10.55/download",
+          "sha256": "345df152bc43501c5eb9e4654ff05f794effb78d4efe3d53abc158baddc0703d"
         }
       },
       "targets": [
@@ -31750,11 +31750,11 @@
               "target": "once_cell"
             },
             {
-              "id": "openssl 0.10.54",
+              "id": "openssl 0.10.55",
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.88",
+              "id": "openssl-sys 0.9.90",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -31771,7 +31771,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.54"
+        "version": "0.10.55"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -31780,7 +31780,7 @@
         "deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.88",
+              "id": "openssl-sys 0.9.90",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -31873,13 +31873,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "openssl-sys 0.9.88": {
+    "openssl-sys 0.9.90": {
       "name": "openssl-sys",
-      "version": "0.9.88",
+      "version": "0.9.90",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/openssl-sys/0.9.88/download",
-          "sha256": "c2ce0f250f34a308dcfdbb351f511359857d4ed2134ba715a4eadd46e1ffd617"
+          "url": "https://crates.io/api/v1/crates/openssl-sys/0.9.90/download",
+          "sha256": "374533b0e45f3a7ced10fcaeccca020e66656bc03dac384f852e4e5a7a8104a6"
         }
       },
       "targets": [
@@ -31920,14 +31920,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.88",
+              "id": "openssl-sys 0.9.90",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.88"
+        "version": "0.9.90"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -43372,7 +43372,7 @@
               "target": "kvm_ioctls"
             },
             {
-              "id": "openssl 0.10.54",
+              "id": "openssl 0.10.55",
               "target": "openssl"
             },
             {
@@ -48654,11 +48654,11 @@
               "target": "futures_util"
             },
             {
-              "id": "openssl 0.10.54",
+              "id": "openssl 0.10.55",
               "target": "openssl"
             },
             {
-              "id": "openssl-sys 0.9.88",
+              "id": "openssl-sys 0.9.90",
               "target": "openssl_sys"
             },
             {
@@ -52111,6 +52111,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -52125,18 +52137,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
