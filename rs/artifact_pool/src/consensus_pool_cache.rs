@@ -440,6 +440,8 @@ mod test {
             let mut block = pool.make_next_block();
             let time = mock_time() + Duration::from_secs(10);
             block.content.as_mut().context.time = time;
+            // recompute the hash to make sure it's still correct
+            block.update_content();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
             let finalization = Finalization::fake(FinalizationContent::new(

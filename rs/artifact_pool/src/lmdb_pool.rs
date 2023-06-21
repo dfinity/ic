@@ -3,7 +3,6 @@ use crate::lmdb_iterator::{LMDBEcdsaIterator, LMDBIterator};
 use crate::metrics::EcdsaPoolMetrics;
 use ic_config::artifact_pool::LMDBConfig;
 use ic_interfaces::{
-    artifact_pool::ValidatedArtifact,
     consensus_pool::{
         HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
     },
@@ -25,8 +24,8 @@ use ic_types::{
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, Finalization, FinalizationShare, HasHeight,
-        Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
-        RandomTapeShare,
+        Notarization, NotarizationShare, Payload, PayloadType, RandomBeacon, RandomBeaconShare,
+        RandomTape, RandomTapeShare,
     },
     crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
@@ -36,6 +35,7 @@ use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
     Transaction, WriteFlags,
 };
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
@@ -89,18 +89,6 @@ pub struct PersistentHeightIndexedPool<T> {
     log: ReplicaLogger,
 }
 
-/// PersistedConsensusMessage exists to allow the direct persistence of protobuf
-/// CUP Messages. This is important to ensure that we can properly serve a
-/// version of the CUP whose signature can be verified by other nodes over HTTP.
-/// Without directly persisting the original protobuf, it might become
-/// impossible to verify the CUP signature across versions of the replica with
-/// difference in the way the cup struct is structured.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub enum PersistedConsensusMessage {
-    OriginalCUPBytes(pb::CatchUpPackage),
-    ConsensusMessage(ConsensusMessage),
-}
-
 /// A trait for loading/saving pool artifacts (of ArtifactKind). It allows a
 /// flexible data schema to be used for pool objects. For example, objects may
 /// be normalized and serialized into multiple data entries, and they are
@@ -143,7 +131,9 @@ pub trait PoolArtifact: Sized {
         artifacts: Database,
         tx: &RoTransaction<'a>,
         log: &ReplicaLogger,
-    ) -> lmdb::Result<T>;
+    ) -> lmdb::Result<T>
+    where
+        <T as TryFrom<Self>>::Error: Debug;
 }
 
 /// A unique representation for each type of supported message.
@@ -437,7 +427,10 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         &self,
         min_key: HeightKey,
         max_key: HeightKey,
-    ) -> Box<dyn Iterator<Item = Message>> {
+    ) -> Box<dyn Iterator<Item = Message>>
+    where
+        <Message as TryFrom<Artifact>>::Error: Debug,
+    {
         let type_key = Message::type_key();
         let index_db = self.get_index_db(&type_key);
         let db_env = self.db_env.clone();
@@ -465,6 +458,20 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     where
         Artifact: PoolArtifact<ObjectType = PoolObject>,
     {
+        self.tx_insert_prepare(tx, key)?;
+        Artifact::save(&key.id_key, value, self.artifacts, tx, &self.log)
+    }
+
+    /// Prepares pool for artifact insertion, by checking index DB for duplicates and
+    /// updating the metadata.
+    fn tx_insert_prepare<'a, PoolObject>(
+        &self,
+        tx: &mut RwTransaction<'a>,
+        key: &ArtifactKey,
+    ) -> lmdb::Result<()>
+    where
+        Artifact: PoolArtifact<ObjectType = PoolObject>,
+    {
         // update index db first, because requiring NO_DUP_DATA may lead to
         // error when dup is detected. Insertion can be skipped in this case.
         let index_db = self.get_index_db(&key.type_key);
@@ -485,9 +492,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                 min: key.height_key,
                 max: key.height_key,
             });
-        self.update_meta(tx, &key.type_key, &meta)?;
-        // update artifacts (ignore KeyExists)
-        Artifact::save(&key.id_key, value, self.artifacts, tx, &self.log)
+        self.update_meta(tx, &key.type_key, &meta)
     }
 
     /// Remove the pool object of the given type/height/id key.
@@ -643,15 +648,27 @@ impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> 
             .begin_rw_txn()
             .expect("Unable to begin transation to initialize consensus pool");
         let key = ArtifactKey::from(cup.get_id());
-        self.tx_insert(
-            &mut tx,
-            &key,
-            ValidatedArtifact {
-                msg: PersistedConsensusMessage::OriginalCUPBytes(cup_proto),
-                timestamp: cup.content.block.as_ref().context.time,
-            },
-        )
-        .expect("Insertion of CUP into initial consensus pool failed");
+
+        // convert cup to bytes
+        let bytes = &pb::ValidatedConsensusArtifact {
+            msg: Some(pb::ConsensusMessage {
+                msg: Some(pb::consensus_message::Msg::Cup(cup_proto)),
+            }),
+            timestamp: cup
+                .content
+                .block
+                .as_ref()
+                .context
+                .time
+                .as_nanos_since_unix_epoch(),
+        }
+        .encode_to_vec();
+
+        // insert raw bytes
+        self.tx_insert_prepare(&mut tx, &key)
+            .expect("Insertion of metadata or updating index failed");
+        tx.put(self.artifacts, &key.id_key, bytes, WriteFlags::empty())
+            .expect("Insertion of CUP into initial consensus pool failed");
         tx.commit()
             .expect("Transaction inserting initial CUP into pool failed to commit");
     }
@@ -661,6 +678,7 @@ impl<Artifact: PoolArtifact, Message> HeightIndexedPool<Message>
     for PersistentHeightIndexedPool<Artifact>
 where
     Message: TryFrom<Artifact> + HasTypeKey + 'static,
+    <Message as TryFrom<Artifact>>::Error: Debug,
 {
     fn height_range(&self) -> Option<HeightRange> {
         let mut tx = log_err!(self.db_env.begin_ro_txn(), self.log, "begin_ro_txn")?;
@@ -874,28 +892,8 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
     }
 }
 
-impl From<ConsensusMessage> for PersistedConsensusMessage {
-    fn from(message: ConsensusMessage) -> PersistedConsensusMessage {
-        PersistedConsensusMessage::ConsensusMessage(message)
-    }
-}
-
-impl TryFrom<PersistedConsensusMessage> for ConsensusMessage {
-    type Error = String;
-    fn try_from(message: PersistedConsensusMessage) -> Result<Self, Self::Error> {
-        match message {
-            PersistedConsensusMessage::OriginalCUPBytes(protobuf) => {
-                CatchUpPackage::try_from(&protobuf)
-                    .map(ConsensusMessage::CatchUpPackage)
-                    .map_err(|e| e.to_string())
-            }
-            PersistedConsensusMessage::ConsensusMessage(message) => Ok(message),
-        }
-    }
-}
-
 impl PoolArtifact for ConsensusMessage {
-    type ObjectType = ValidatedArtifact<PersistedConsensusMessage>;
+    type ObjectType = ValidatedConsensusArtifact;
     type Id = ConsensusMessageId;
 
     fn type_keys() -> &'static [TypeKey] {
@@ -910,10 +908,7 @@ impl PoolArtifact for ConsensusMessage {
         log: &ReplicaLogger,
     ) -> lmdb::Result<()> {
         // special handling for block proposal & its payload
-        if let PersistedConsensusMessage::ConsensusMessage(ConsensusMessage::BlockProposal(
-            mut proposal,
-        )) = value.msg
-        {
+        if let ConsensusMessage::BlockProposal(mut proposal) = value.msg {
             // store block payload separately
             let block = proposal.content.as_mut();
             let payload_hash = block.payload.get_hash().clone();
@@ -934,24 +929,22 @@ impl PoolArtifact for ConsensusMessage {
             block.payload = Payload::new_with(
                 payload_hash,
                 payload_type,
-                Box::new(move || {
-                    (
+                // A dummy payload. Note that during deserialization, this dummy is
+                // used to determine the payload type. So it's important that the
+                // dummy has the SAME payload type as the real payload.
+                Box::new(move || match payload_type {
+                    PayloadType::Summary => (dkg::Summary::default(), None).into(),
+                    PayloadType::Data => (
                         BatchPayload::default(),
                         dkg::Dealings::new_empty(start_height),
                         None,
                     )
-                        .into()
+                        .into(),
                 }),
             );
-            value.msg = PersistedConsensusMessage::from(proposal.into_message());
+            value.msg = proposal.into_message();
         }
-        let bytes = log_err!(
-            // TODO: Remove bincode here and store protobuf representation
-            bincode::serialize::<Self::ObjectType>(&value),
-            log,
-            "ConsensusArtifact::save serialize"
-        )
-        .ok_or(lmdb::Error::Panic)?;
+        let bytes = pb::ValidatedConsensusArtifact::from(&value).encode_to_vec();
         tx.put(artifacts, &key, &bytes, WriteFlags::empty())
     }
 
@@ -961,43 +954,52 @@ impl PoolArtifact for ConsensusMessage {
         artifacts: Database,
         tx: &RoTransaction<'a>,
         log: &ReplicaLogger,
-    ) -> lmdb::Result<T> {
+    ) -> lmdb::Result<T>
+    where
+        <T as TryFrom<Self>>::Error: Debug,
+    {
         let bytes = tx.get(artifacts, &key)?;
-        let mut artifact = log_err!(
-            bincode::deserialize::<Self::ObjectType>(bytes),
+        let protobuf = log_err!(
+            pb::ValidatedConsensusArtifact::decode(bytes),
             log,
-            "ConsensusArtifact::load_as deserialize"
+            "ConsensusArtifact::load_as protobuf decoding"
         )
         .ok_or(lmdb::Error::Panic)?;
-        // Lazy loading of block proposal and its payload
-        if let PersistedConsensusMessage::ConsensusMessage(ConsensusMessage::BlockProposal(
-            mut proposal,
-        )) = artifact.msg
-        {
-            let block = proposal.content.as_mut();
-            let payload_hash = block.payload.get_hash();
-            let payload_key = IdKey::from((block.height(), payload_hash.get_ref()));
-            let log = log.clone();
-            block.payload = Payload::new_with(
-                payload_hash.clone(),
-                block.payload.payload_type(),
-                Box::new(move || {
-                    log_err!(
-                        load_block_payload(db_env, artifacts, &payload_key, &log),
-                        log,
-                        "ConsensusArtifact::load_as load_block_payload"
-                    )
-                    .unwrap()
-                }),
-            );
-            artifact.msg = PersistedConsensusMessage::from(proposal.into_message());
-        }
-        log_err!(
-            ConsensusMessage::try_from(artifact.msg)
-                .map_err(|_| ())
-                .and_then(|msg| msg.try_into().map_err(|_| ())),
+        let artifact: ValidatedConsensusArtifact = log_err!(
+            protobuf.try_into(),
             log,
-            "ConsensusArtifact::load_as casting"
+            "ConsensusArtifact::load_as protobuf conversion"
+        )
+        .ok_or(lmdb::Error::Panic)?;
+
+        let msg = match artifact.msg {
+            ConsensusMessage::BlockProposal(mut proposal) => {
+                // Lazy loading of block proposal and its payload
+                let block = proposal.content.as_mut();
+                let payload_hash = block.payload.get_hash();
+                let payload_key = IdKey::from((block.height(), payload_hash.get_ref()));
+                let log_clone = log.clone();
+                block.payload = Payload::new_with(
+                    payload_hash.clone(),
+                    block.payload.payload_type(),
+                    Box::new(move || {
+                        log_err!(
+                            load_block_payload(db_env, artifacts, &payload_key, &log_clone),
+                            log_clone,
+                            "ConsensusArtifact::load_as load_block_payload"
+                        )
+                        .unwrap()
+                    }),
+                );
+                proposal.into_message()
+            }
+            consensus_message => consensus_message,
+        };
+
+        log_err!(
+            T::try_from(msg),
+            log,
+            "ConsensusArtifact::load_as conversion"
         )
         .ok_or(lmdb::Error::Panic)
     }
@@ -1042,11 +1044,7 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                     let msg_id = artifact.msg.get_id();
                     let key = ArtifactKey::from(msg_id);
                     // Ignore KeyExist
-                    match self.tx_insert(
-                        &mut tx,
-                        &key,
-                        artifact.map(PersistedConsensusMessage::ConsensusMessage),
-                    ) {
+                    match self.tx_insert(&mut tx, &key, artifact) {
                         Err(lmdb::Error::KeyExist) => Ok(()),
                         result => result,
                     }?
@@ -1156,11 +1154,11 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             format!("get_timestamp get {:?}", msg_id)
         )?;
         log_err!(
-            bincode::deserialize::<ValidatedArtifact<PersistedConsensusMessage>>(bytes),
+            pb::ValidatedConsensusArtifact::decode(bytes),
             self.log,
             "get_timestamp deserialize"
         )
-        .map(|x| x.timestamp)
+        .map(|x| Time::from_nanos_since_unix_epoch(x.timestamp))
     }
 
     fn random_beacon(&self) -> &dyn HeightIndexedPool<RandomBeacon> {
@@ -1224,19 +1222,17 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             move |tx: &RoTransaction<'_>, key: &[u8]| {
                 let bytes = tx.get(artifacts, &key)?;
                 let artifact = log_err!(
-                    // TODO: Get rid of bincode serialization, and unify
-                    // PersistedConsensusMessage with ConsensusMessage.
-                    bincode::deserialize::<PersistedConsensusMessage>(bytes),
+                    pb::ValidatedConsensusArtifact::decode(bytes),
                     log,
                     "CatchUpPackage protobuf deserialize"
                 )
                 .ok_or(lmdb::Error::Panic)?;
-                match artifact {
-                    PersistedConsensusMessage::OriginalCUPBytes(protobuf) => Ok(protobuf),
-                    PersistedConsensusMessage::ConsensusMessage(
-                        ConsensusMessage::CatchUpPackage(cup),
-                    ) => Ok(pb::CatchUpPackage::from(&cup)),
-                    _ => panic!("Unexpected artifact type when deserializing CUP"),
+                match artifact.msg {
+                    Some(pb::ConsensusMessage {
+                        msg: Some(pb::consensus_message::Msg::Cup(cup_proto)),
+                    }) => Ok(cup_proto),
+                    Some(_) => panic!("unexpected artifact type when deserializing CUP"),
+                    None => panic!("No consensus message found"),
                 }
             },
             self.log.clone(),
