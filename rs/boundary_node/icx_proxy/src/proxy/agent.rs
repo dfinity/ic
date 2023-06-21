@@ -142,6 +142,7 @@ fn is_h2_goaway(e: &anyhow::Error) -> bool {
     false
 }
 
+#[allow(unknown_lints)]
 #[instrument(level = "info", skip_all, fields(addr = display(addr), replica = display(&*args.replica_uri)))]
 pub async fn handler<V: Validate, C: HyperService<Body>>(
     State(mut args): State<Args<V, C>>,
