@@ -10,7 +10,7 @@ ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-types = { path = "../../../../../types/types" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
-openssl = "0.10.29"
+openssl = "0.10.55"
 p256 = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0.99", features = ["derive"] }

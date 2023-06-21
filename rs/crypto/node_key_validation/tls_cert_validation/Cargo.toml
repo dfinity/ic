@@ -27,4 +27,4 @@ curve25519-dalek = "3.0.2"
 ic-crypto-test-utils = { path = "../../test_utils" }
 ic-crypto-test-utils-keys = { path = "../../test_utils/keys" }
 ic-test-utilities = { path = "../../../test_utilities" }
-openssl = "0.10.29"
+openssl = "0.10.55"

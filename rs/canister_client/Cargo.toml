@@ -33,7 +33,7 @@ ic-crypto-test-utils = { path = "../crypto/test_utils" }
 ic-certification-test-utils = { path = "../certification/test-utils" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-validator = { path = "../validator" }
-openssl = "0.10.29"
+openssl = "0.10.55"
 rand = "0.8"
 rand_chacha = "0.3"
 tokio-test = "0.4.0"

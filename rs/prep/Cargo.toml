@@ -31,7 +31,7 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-transport = { path = "../registry/transport" }
 ic-types = { path = "../types/types" }
 json5 = "0.4.1"
-openssl = "0.10.29"
+openssl = "0.10.55"
 maplit = "1.0.2"
 prost = "0.11.0"
 rand = "0.8"

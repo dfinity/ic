@@ -16,6 +16,6 @@ serde = { version = "1.0.99", features = ["derive"] }
 sha2 = "0.9.1"
 thiserror = "1"
 tokio = { version = "1.15.0", features = ["full"] }
-openssl = "0.10.45"
+openssl = "0.10.55"
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
 sev = { version = "1.1", features = ["openssl"] }

@@ -7,4 +7,4 @@ edition = "2021"
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 tokio-rustls = "0.24.0"
-openssl = "0.10.29"
+openssl = "0.10.55"

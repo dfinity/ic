@@ -7,4 +7,4 @@ edition = "2021"
 ic-crypto-internal-sha2 = { path = "../internal/crypto_lib/sha2" }
 
 [dev-dependencies]
-openssl = "0.10.29"
+openssl = "0.10.55"
