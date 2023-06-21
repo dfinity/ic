@@ -4,6 +4,8 @@ load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//rs/tests:common.bzl", "symlink_dir")
 
+IC_OS_ENV = "//ic-os/guestos/envs/dev-fixed-version"
+
 # there were some issues with loading uuid, therefore we need load requirements individually instead of usings all_requirements
 py_library(
     name = "misc",
@@ -218,7 +220,7 @@ symlink_dir(
 
 copy_file(
     name = "githash",
-    src = "//ic-os/guestos/envs/dev:version.txt",
+    src = IC_OS_ENV + ":version.txt",
     out = "release/githash",
 )
 
@@ -265,8 +267,6 @@ py_binary(
         requirement("toml"),
     ],
 )
-
-IC_OS_ENV = "//ic-os/guestos/envs/dev-fixed-version"
 
 sh_test(
     name = "run-e2e-scalability-tests",
