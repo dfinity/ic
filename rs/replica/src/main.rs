@@ -94,8 +94,9 @@ fn main() -> io::Result<()> {
         .build()
         .unwrap();
 
+    let xnet_rt_worker_threads = std::cmp::max(num_cpus::get() / 4, 1);
     let rt_xnet = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1)
+        .worker_threads(xnet_rt_worker_threads)
         .thread_name("XNet_Thread".to_string())
         .enable_all()
         .build()
