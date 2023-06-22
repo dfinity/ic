@@ -125,31 +125,6 @@ after_script:
     GIT_STRATEGY: "fetch"  # And then pull only new commits
     SHELL_WRAPPER: "/usr/bin/time"
 
-.cargo-build-env-base:
-  extends:
-    - .cargo-rules
-    - .build-env-base
-  variables:
-    BUILD_COMMAND_PRE: ""
-    BUILD_COMMAND: "echo Replace this with a build command"
-    BUILD_COMMAND_POST: ""
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
-
 .ubuntu-k8s:
   extends:
     - .build-env-base
@@ -171,7 +146,7 @@ after_script:
 
 .ubuntu-cargo-k8s:
   extends:
-    - .cargo-build-env-base
+    - .build-env-base
     - .ubuntu-k8s
     - .ic-build-legacy-image
   variables:
@@ -180,7 +155,7 @@ after_script:
 
 .macos-cargo-native:
   extends:
-    - .cargo-build-env-base
+    - .build-env-base
   tags:
     - dfinity
     - macos

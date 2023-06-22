@@ -195,30 +195,11 @@
       when: manual
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_NIGHTLY"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: benchmark-spot-tests
   tags:
     - dfinity-ic
   timeout: 1 hour
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
@@ -251,30 +232,11 @@
       when: manual
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_SUITE"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: benchmark-tests
   tags:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -490,50 +452,6 @@
     - dfinity-ic
   variables:
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
-".cargo-build-env-base":
-  artifacts:
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".cargo-rules"
-    - ".build-env-base"
-  interruptible: true
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" && $DISKIMG_BRANCH == ""
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "trigger"
-      when: manual
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
-  variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 ".cargo-rules":
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -570,40 +488,12 @@
       - coredumps/*.gz
     when: always
   extends:
-    - ".cargo-build-env-base"
+    - ".build-env-base"
   interruptible: true
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" && $DISKIMG_BRANCH == ""
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "trigger"
-      when: manual
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   tags:
     - dfinity
     - macos
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
@@ -633,30 +523,11 @@
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: prod-tests
   tags:
     - dfinity-ic
   timeout: 55 minutes
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -688,29 +559,10 @@
       when: manual
     - if: $CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: prod-tests
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -742,30 +594,11 @@
       when: manual
     - if: $CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: prod-tests
   tags:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -798,30 +631,11 @@
       when: manual
     - if: $CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: prod-tests-02
   tags:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -855,30 +669,11 @@
       when: manual
     - if: $CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: prod-tests
   tags:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -910,29 +705,10 @@
       when: manual
     - if: $CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: prod-tests
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -964,29 +740,10 @@
       when: manual
     - if: $CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: prod-tests
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -1080,30 +837,11 @@
       when: manual
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"
       when: always
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   stage: sns-tests
   tags:
     - dfinity-ic
   timeout: 1 hour
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CD_ENV: SNS_CD
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
@@ -1124,43 +862,15 @@
       - coredumps/*.gz
     when: always
   extends:
-    - ".cargo-build-env-base"
+    - ".build-env-base"
     - ".ubuntu-k8s"
     - ".ic-build-legacy-image"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" && $DISKIMG_BRANCH == ""
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "trigger"
-      when: manual
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -2370,9 +2080,6 @@ benchmark-response-payload:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -2426,9 +2133,6 @@ benchmark-xnet:
     - dfinity-ic
   timeout: 6 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -2587,9 +2291,6 @@ boundary-node-service-worker:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4042,9 +3743,6 @@ cargo-audit:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4145,7 +3843,9 @@ cargo-lock-generate:
       - coredumps/*.txt
       - coredumps/*.gz
     when: always
-  extends: ".ubuntu-cargo-k8s"
+  extends:
+    - ".ubuntu-cargo-k8s"
+    - ".cargo-rules"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -4190,9 +3890,6 @@ cargo-lock-generate:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4347,9 +4044,6 @@ container-autobuild:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4402,9 +4096,6 @@ container-autobuild-protected:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4443,9 +4134,6 @@ cut-release-candidate:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4495,9 +4183,6 @@ delegated-identity-bench:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -4642,9 +4327,6 @@ docker-generate-runner-list:
     - docker
     - ubuntu
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4743,9 +4425,6 @@ heavy-memory-update-performance-test-nightly:
     - dfinity-ic
   timeout: 1 hour
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
@@ -4861,9 +4540,6 @@ icos-deploy-stress:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4904,9 +4580,6 @@ ingress-manager-proptests-nightly:
     - dfinity-ic
   timeout: 70 minutes
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -4961,9 +4634,6 @@ large-response-downloading-nightly:
     - dfinity-ic
   timeout: 1 hour
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
@@ -5214,9 +4884,6 @@ maximum-capacity-boundary-nodes-queries:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5286,9 +4953,6 @@ maximum-capacity-canister-http:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5341,9 +5005,6 @@ maximum-capacity-large-memory-query:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5396,9 +5057,6 @@ maximum-capacity-large-memory-update:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5454,9 +5112,6 @@ maximum-capacity-mixed-counter-memory:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5509,9 +5164,6 @@ maximum-capacity-mixed-workloads:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5564,9 +5216,6 @@ maximum-capacity-multiple-large-memory-update:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5619,9 +5268,6 @@ maximum-capacity-qr:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5674,9 +5320,6 @@ maximum-capacity-sha256:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5745,9 +5388,6 @@ maximum-capacity-system-baseline-query:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5800,9 +5440,6 @@ maximum-capacity-system-baseline-update:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -5852,9 +5489,6 @@ nns-state-deployment-test-nightly:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -5885,9 +5519,6 @@ no-interrupt:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -5921,9 +5552,6 @@ notify-gitlab-failure:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -5957,9 +5585,6 @@ notify-gitlab-success:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -6212,9 +5837,6 @@ rejoin-hotfix:
     - dfinity-ic
   timeout: 55 minutes
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -6262,9 +5884,6 @@ rejoin-nightly:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -6311,9 +5930,6 @@ rejoin-test-slo:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -6387,9 +6003,6 @@ release-boundary-node-service-worker:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -6568,9 +6181,6 @@ sns-deployment-test-nightly:
     - dfinity-ic
   timeout: 1 hour
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CD_ENV: SNS_CD
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
@@ -6648,9 +6258,6 @@ statesync-experiment:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -6707,9 +6314,6 @@ system-baseline-query-performance-test-nightly:
     - dfinity-ic
   timeout: 1 hour
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
@@ -6769,9 +6373,6 @@ system-baseline-update-performance-test-nightly:
     - dfinity-ic
   timeout: 1 hour
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
@@ -6824,9 +6425,6 @@ tecdsa:
     - dfinity-ic
   timeout: 3 hours
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
     GET_SOURCES_ATTEMPTS: 5
@@ -6869,9 +6467,6 @@ test-push-branch:
   tags:
     - dfinity-ic
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     GET_SOURCES_ATTEMPTS: 5
     GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
     GIT_DEPTH: 0
@@ -6964,9 +6559,6 @@ xnet-nightly:
     - dfinity-ic
   timeout: 1 hour
   variables:
-    BUILD_COMMAND: echo Replace this with a build command
-    BUILD_COMMAND_POST: ''
-    BUILD_COMMAND_PRE: ''
     CD_ENV: BENCHMARK_NIGHTLY
     CURRENT_BRANCH: "$CI_COMMIT_REF_NAME"
     DISKIMG_BRANCH: "${CI_COMMIT_SHA}"
