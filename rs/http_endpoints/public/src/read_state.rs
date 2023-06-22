@@ -389,7 +389,7 @@ fn can_read_canister_metadata(
                 .get_custom_section(custom_section_name)
                 .ok_or_else(|| HttpError {
                     status: StatusCode::NOT_FOUND,
-                    message: format!("Custom section {} not found.", custom_section_name),
+                    message: format!("Custom section {:.100} not found.", custom_section_name),
                 })?;
 
             // Only the controller can request this custom section.
@@ -399,7 +399,7 @@ fn can_read_canister_metadata(
                 return Err(HttpError {
                     status: StatusCode::FORBIDDEN,
                     message: format!(
-                        "Custom section {} can only be requested by the controllers of the canister.",
+                        "Custom section {:.100} can only be requested by the controllers of the canister.",
                         custom_section_name
                     ),
                 });
