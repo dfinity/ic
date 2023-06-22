@@ -1,7 +1,21 @@
 .prod-test:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-prod-tests
+  rules:
+    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
+      when: manual
+      allow_failure: true
+    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "web" && $CD_ENV != "BENCHMARK_SUITE"'
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
+      # Run debug targets on the debug pipeline, when it is enabled (DEBUG_PIPELINE == 'true')
+      # If this is not the DEBUG_PIPELINE, we must ignore '$cd_debug_target' so that it
+      # gets included in any case.
+    - if: '$CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"'
+      when: always
   stage: prod-tests
   dependencies: []  # don't copy artifacts from other jobs by default
   variables:
@@ -137,7 +151,19 @@ icos-deploy-stress:
 .prod-hotfix-test:
   extends:
     - .prod-test
-    - .rules-prod-hotfix-tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"'
+      when: manual
+      allow_failure: true  # the pipeline continues running even if the manual job is not run
+    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/'
+      when: always
+    - if: '$CD_ENV == $cd_target_env && ( $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i )'
+    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
   variables:
     cd_target_env: "HOTFIX"
   timeout: 55 minutes

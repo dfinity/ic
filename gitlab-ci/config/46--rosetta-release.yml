@@ -2,7 +2,8 @@ rosetta-release:
   extends:
     - .bazel-build-k8s
     - .ic-build-image
-    - .rules-scheduled-rosetta-release
+  rules:
+    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-release"
   stage: guest-os-build
   script:
     - |

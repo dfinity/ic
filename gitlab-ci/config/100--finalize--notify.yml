@@ -3,9 +3,15 @@
 # must be run after `buildevents step` of the common after script.
 
 notify-gitlab-success:
-  extends: 
+  extends:
     - .ubuntu-cargo-k8s
-    - .on-success-rules
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: on_success
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+      when: on_success
   stage: finalize
   dependencies: []  # don't copy artifacts from other jobs
   script:
@@ -29,7 +35,13 @@ notify-gitlab-success:
 notify-gitlab-failure:
   extends:
     - .ubuntu-cargo-k8s
-    - .on-failure-rules
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: on_failure
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: on_failure
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+      when: on_failure
   stage: finalize
   dependencies: []  # don't copy artifacts from other jobs
   script:
