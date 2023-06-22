@@ -1,7 +1,12 @@
 .benchmark-test:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-benchmark-tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_SUITE"'
+      when: always
   stage: benchmark-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
@@ -409,7 +414,12 @@ statesync-experiment:
 .benchmark-spot-test:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-benchmark-spot-tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_NIGHTLY"'
+      when: always
   stage: benchmark-spot-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
@@ -589,7 +599,12 @@ xnet-nightly:
 .sns-tests:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-sns-tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[sns\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"'
+      when: always
   stage: sns-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default

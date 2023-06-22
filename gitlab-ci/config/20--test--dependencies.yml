@@ -1,18 +1,18 @@
 dependencies-check:
     # TODO(PSEC-970)
     # we want to skip this job on the merge_train for now
-    # When we grant exceptions, the exception is based on the 
-    # latest commit in the branch obtained from CI_COMMIT_SHA. 
+    # When we grant exceptions, the exception is based on the
+    # latest commit in the branch obtained from CI_COMMIT_SHA.
     # On the merge_train, this will be different i.e the merge
     # commit in the master branch. This would cause the job to
-    # fail even if it has successfully passed. 
-  extends: 
+    # fail even if it has successfully passed.
+  extends:
     - .ubuntu-k8s
   rules :
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
   needs: []  # don't wait on other jobs
   stage: test
-  variables: 
+  variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     CARGO_AUDIT_VERSION : "0.16.0"
   script:
@@ -24,12 +24,13 @@ dependencies-check:
   allow_failure: false
 
 dependency-scan-nightly:
-  extends: 
+  extends:
     - .ubuntu-k8s
-    - .rules-dependency-scan-schedule
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"'
   needs: []  # don't wait on other jobs
   stage: test
-  variables: 
+  variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     CARGO_AUDIT_VERSION : "0.16.0"
     NVM_VERSION : "19"
@@ -51,12 +52,13 @@ dependency-scan-nightly:
   allow_failure: true
 
 dependency-scan-release-cut:
-  extends: 
+  extends:
     - .ubuntu-k8s
-    - .rules-dependency-scan-release-cut
-  needs: []  # don't wait on other jobs
+  needs: []
+  rules :
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
   stage: test
-  variables: 
+  variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     CARGO_AUDIT_VERSION : "0.16.0"
   script:

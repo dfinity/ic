@@ -185,7 +185,6 @@
   dependencies: []
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-benchmark-spot-tests"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -242,7 +241,6 @@
   dependencies: []
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-benchmark-tests"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -287,13 +285,6 @@
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: cdslo
-".boundary-node-service-worker":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/
-    - if: $CI_PARENT_PIPELINE_SOURCE == "trigger"
 ".build-base-image": |
   set -euo pipefail
 
@@ -553,15 +544,6 @@
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "trigger"
       when: manual
-".cargo-rules-autorun-on-trigger":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" && $DISKIMG_BRANCH == ""
-      when: manual
-    - if: $CI_PIPELINE_SOURCE != "trigger" && $CI_COMMIT_BRANCH =~ /^rc--/
-    - if: $CI_PIPELINE_SOURCE == "trigger"
 ".ic-build-image":
   artifacts:
     expire_in: 3 days
@@ -626,22 +608,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     SHELL_WRAPPER: "/usr/bin/time"
-".on-failure-rules":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: on_failure
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: on_failure
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
-      when: on_failure
-".on-success-rules":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: on_success
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-      when: on_success
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
-      when: on_success
 ".prod-hotfix-test":
   artifacts:
     expire_in: 3 days
@@ -651,7 +617,6 @@
   dependencies: []
   extends:
     - ".prod-test"
-    - ".rules-prod-hotfix-tests"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -984,7 +949,6 @@
   dependencies: []
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-prod-tests"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -1029,23 +993,6 @@
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
     SHELL_WRAPPER: "/usr/bin/time"
-".rules-any-schedule":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-".rules-benchmark-spot-tests":
-  rules:
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_NIGHTLY"
-      when: always
-".rules-benchmark-tests":
-  rules:
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_SUITE"
-      when: always
 ".rules-build-base-images":
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"
@@ -1066,45 +1013,12 @@
         - ic-os/setupos/rootfs/packages.common
         - ic-os/setupos/rootfs/packages.dev
       if: $CI_PARENT_PIPELINE_SOURCE == "merge_request_event"
-".rules-cargo-audit-schedule":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "cargo-audit"
-".rules-dependency-scan-release-cut":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
-".rules-dependency-scan-schedule":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"
-".rules-master-schedule-push-branch":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
-      when: on_success
-".rules-merge-branch-only":
-  rules:
-    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
 ".rules-parent-pipeline":
   rules:
     - allow_failure: true
       if: $CI_PARENT_PIPELINE_SOURCE == "trigger"
       when: manual
     - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
-".rules-parent-pipeline-autorun-on-trigger":
-  rules:
-    - if: $CI_PARENT_PIPELINE_SOURCE == "trigger"
-    - if: $CI_PIPELINE_SOURCE == "parent_pipeline"
-".rules-parent-pipeline-protected-branch-only":
-  rules:
-    - allow_failure: true
-      if: $CI_PARENT_PIPELINE_SOURCE == "trigger"
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH == "master"
-    - if: $CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH =~ /^rc--.*/
-".rules-parent-pipeline-prs-only":
-  rules:
-    - allow_failure: true
-      if: $CI_PARENT_PIPELINE_SOURCE == "trigger"
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH != "master" && $CI_COMMIT_BRANCH != "post-merge-tests-passed" && $CI_COMMIT_BRANCH !~ /^rc--.*/
 ".rules-pipeline-no-merge-train":
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
@@ -1123,43 +1037,6 @@
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "merge_request_event"
       when: manual
-".rules-prod-hotfix-tests":
-  rules:
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"
-      when: manual
-    - if: "$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/"
-      when: always
-    - if: "$CD_ENV == $cd_target_env && ( $CI_MERGE_REQUEST_TITLE =~ /\\[rc\\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i )"
-    - allow_failure: true
-      if: "$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /(\\[rc\\]|hotfix)/i"
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: manual
-".rules-prod-tests":
-  rules:
-    - allow_failure: true
-      if: "$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i"
-      when: manual
-    - allow_failure: true
-      if: "$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\\[rc\\]/"
-      when: manual
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "web" && $CD_ENV != "BENCHMARK_SUITE"
-      when: manual
-    - if: $CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"
-      when: always
-".rules-protected-branch":
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH =~ /^rc--/
-".rules-prs-only":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-".rules-rc-cut-schedule":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"
 ".rules-rollout-pipeline-auto":
   rules:
     - allow_failure: true
@@ -1173,11 +1050,6 @@
     - allow_failure: true
       if: $CI_PIPELINE_SOURCE == "trigger"
       when: manual
-".rules-rollout-pipeline-manual":
-  rules:
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/
-      when: manual
 ".rules-rollout-pipeline-run-on-trigger":
   rules:
     - allow_failure: true
@@ -1186,22 +1058,9 @@
 ".rules-scheduled-reproducibility":
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-".rules-scheduled-rosetta-release":
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-release"
-".rules-service-worker-release":
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/
 ".rules-simple-prober":
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_REF_NAME == "precious-automation/run-simple-prober-v4"
-".rules-sns-tests":
-  rules:
-    - allow_failure: true
-      if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[sns\]/
-      when: manual
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"
-      when: always
 ".sns-tests":
   artifacts:
     expire_in: 3 days
@@ -1211,7 +1070,6 @@
   dependencies: []
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-sns-tests"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -2687,7 +2545,6 @@ boundary-node-service-worker:
     when: always
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".boundary-node-service-worker"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -2699,7 +2556,33 @@ boundary-node-service-worker:
     - if: $CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/
     - if: $CI_PARENT_PIPELINE_SOURCE == "trigger"
   script:
-    - "set -eExuo pipefail\n# shellcheck disable=SC1090\nsource \"$NVM_DIR/nvm.sh\"\nnvm use 18\nnode --version\nnpm --version\n\n(\n  cd typescript/service-worker\n  npm ci\n  npm run lint\n  npm run format:check\n  npm test\n  npm run build \n  npm run build-dev\n  npm pack\n  mkdir artifacts\n  mv dfinity-service-worker-*.tgz artifacts\n  cd artifacts\n  sha256sum dfinity-service-worker-*.tgz > SHA256SUMS\n)\n\nROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}\nGIT_REVISION=$(\"$CI_PROJECT_DIR\"/gitlab-ci/src/artifacts/find-build-id.sh)\nbuildevents cmd \"${ROOT_PIPELINE_ID}\" \"${CI_JOB_ID}\" rclone -- \\\n  gitlab-ci/src/artifacts/rclone_upload.py --version=\"${GIT_REVISION}\" \"typescript/service-worker/artifacts\" service-worker\n"
+    - |
+      set -eExuo pipefail
+      # shellcheck disable=SC1090
+      source "$NVM_DIR/nvm.sh"
+      nvm use 18
+      node --version
+      npm --version
+
+      (
+        cd typescript/service-worker
+        npm ci
+        npm run lint
+        npm run format:check
+        npm test
+        npm run build
+        npm run build-dev
+        npm pack
+        mkdir artifacts
+        mv dfinity-service-worker-*.tgz artifacts
+        cd artifacts
+        sha256sum dfinity-service-worker-*.tgz > SHA256SUMS
+      )
+
+      ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/find-build-id.sh)
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+        gitlab-ci/src/artifacts/rclone_upload.py --version="${GIT_REVISION}" "typescript/service-worker/artifacts" service-worker
   stage: test
   tags:
     - dfinity-ic
@@ -4148,7 +4031,6 @@ cargo-audit:
     when: always
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-cargo-audit-schedule"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -4540,7 +4422,6 @@ cut-release-candidate:
   dependencies: []
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-rc-cut-schedule"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -4672,7 +4553,6 @@ dependency-scan-nightly:
     when: always
   extends:
     - ".ubuntu-k8s"
-    - ".rules-dependency-scan-schedule"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -4715,7 +4595,6 @@ dependency-scan-release-cut:
     when: always
   extends:
     - ".ubuntu-k8s"
-    - ".rules-dependency-scan-release-cut"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -5995,7 +5874,6 @@ no-interrupt:
     when: always
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-any-schedule"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: false
@@ -6027,7 +5905,6 @@ notify-gitlab-failure:
   dependencies: []
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".on-failure-rules"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -6064,7 +5941,6 @@ notify-gitlab-success:
   dependencies: []
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".on-success-rules"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -6455,7 +6331,6 @@ release-boundary-node-service-worker:
     when: always
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-service-worker-release"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -6603,7 +6478,6 @@ rosetta-release:
   extends:
     - ".bazel-build-k8s"
     - ".ic-build-image"
-    - ".rules-scheduled-rosetta-release"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -6974,7 +6848,6 @@ test-push-branch:
   dependencies: []
   extends:
     - ".ubuntu-cargo-k8s"
-    - ".rules-master-schedule-push-branch"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true
@@ -7015,7 +6888,6 @@ test-testnet-deployment:
     when: always
   extends:
     - ".ubuntu-k8s"
-    - ".rules-protected-branch"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
   interruptible: true

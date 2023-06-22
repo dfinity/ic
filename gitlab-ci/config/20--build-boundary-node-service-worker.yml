@@ -1,8 +1,13 @@
 boundary-node-service-worker:
   extends:
     - .ubuntu-cargo-k8s
-    - .boundary-node-service-worker
-  needs: [] # don't wait on other jobs
+  needs: []
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
+    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
   stage: test
   script:
     - |
@@ -19,7 +24,7 @@ boundary-node-service-worker:
         npm run lint
         npm run format:check
         npm test
-        npm run build 
+        npm run build
         npm run build-dev
         npm pack
         mkdir artifacts
