@@ -31,7 +31,7 @@ end::catalog[] */
 use crate::driver::ic::InternetComputer;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::util::{
     block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
@@ -81,8 +81,8 @@ pub fn test(env: TestEnv) {
         .unwrap();
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
     info!(log, "Installing NNS canisters ...");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
 
     block_on(async move {

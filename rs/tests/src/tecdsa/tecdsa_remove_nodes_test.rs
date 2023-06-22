@@ -19,7 +19,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::nns::remove_nodes_via_endpoint;
 use crate::tecdsa::tecdsa_signature_test::{
@@ -72,8 +72,8 @@ pub fn test(env: TestEnv) {
     };
     info!(log, "Setup: install all necessary NNS canisters");
     let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(nns_node, &env)
         .expect("Could not install NNS canisters");
     let message_hash = [0xabu8; 32];
     let (canister_id, public_key) = block_on(async {

@@ -28,7 +28,7 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::util::{block_on, runtime_from_url};
 use canister_test::{Canister, Runtime};
@@ -132,12 +132,9 @@ pub async fn test_async(env: TestEnv, config: Config) {
     // nodes the registry might be too big for installation as a canister)
     if config.runtime > Duration::from_secs(1200) {
         info!(logger, "Installing NNS canisters on the root subnet...");
-        topology
-            .root_subnet()
-            .nodes()
-            .next()
-            .unwrap()
-            .install_nns_canisters()
+        let nns_node = topology.root_subnet().nodes().next().unwrap();
+        NnsInstallationBuilder::new()
+            .install(&nns_node, &env)
             .expect("Could not install NNS canisters");
         info!(&logger, "NNS canisters installed successfully.");
     }

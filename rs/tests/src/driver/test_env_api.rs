@@ -1339,19 +1339,6 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-pub trait NnsInstallationExt {
-    /// Installs the NNS canisters on the subnet this node belongs to. The NNS
-    /// is installed with test neurons enabled which simplify voting on proposals in testing.
-    fn install_nns_canisters(&self) -> Result<()>;
-
-    fn install_nns_canisters_with_customizations(
-        &self,
-        canister_wasm_strategy: NnsCanisterWasmStrategy,
-        customizations: NnsCustomizations,
-        installation_timeout: Option<Duration>,
-    ) -> Result<()>;
-}
-
 #[derive(Default)]
 pub struct NnsCustomizations {
     /// Summarizes the custom parameters that a newly installed NNS should have.
@@ -1367,19 +1354,68 @@ pub enum NnsCanisterWasmStrategy {
     NnsReleaseQualification,
 }
 
-impl<T> NnsInstallationExt for T
-where
-    T: HasIcName + HasPublicApiUrl + Clone + 'static,
-{
-    fn install_nns_canisters_with_customizations(
-        &self,
+pub struct NnsInstallationBuilder {
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    customizations: NnsCustomizations,
+    installation_timeout: Duration,
+}
+
+impl Default for NnsInstallationBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NnsInstallationBuilder {
+    pub fn new() -> Self {
+        Self {
+            canister_wasm_strategy: NnsCanisterWasmStrategy::TakeBuiltFromSources,
+            customizations: NnsCustomizations::default(),
+            installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
+        }
+    }
+
+    pub fn use_mainnet_nns_canisters(mut self) -> Self {
+        self.canister_wasm_strategy = NnsCanisterWasmStrategy::TakeLatestMainnetDeployments;
+        self
+    }
+
+    pub fn use_qualifying_nns_canisters(mut self) -> Self {
+        self.canister_wasm_strategy = NnsCanisterWasmStrategy::NnsReleaseQualification;
+        self
+    }
+
+    pub fn use_nns_canisters_from_current_branch(mut self) -> Self {
+        self.canister_wasm_strategy = NnsCanisterWasmStrategy::TakeBuiltFromSources;
+        self
+    }
+
+    pub fn with_overall_timeout(mut self, duration: Duration) -> Self {
+        self.installation_timeout = duration;
+        self
+    }
+
+    pub fn at_ids(mut self) -> Self {
+        self.customizations.install_at_ids = true;
+        self
+    }
+
+    pub fn with_customizations(mut self, customizations: NnsCustomizations) -> Self {
+        self.customizations = customizations;
+        self
+    }
+
+    pub fn with_canister_wasm_strategy(
+        mut self,
         canister_wasm_strategy: NnsCanisterWasmStrategy,
-        customizations: NnsCustomizations,
-        installation_timeout: Option<Duration>,
-    ) -> Result<()> {
-        let test_env = self.test_env();
+    ) -> Self {
+        self.canister_wasm_strategy = canister_wasm_strategy;
+        self
+    }
+
+    pub fn install(&self, node: &IcNodeSnapshot, test_env: &TestEnv) -> Result<()> {
         let log = test_env.logger();
-        match canister_wasm_strategy {
+        match self.canister_wasm_strategy {
             NnsCanisterWasmStrategy::TakeBuiltFromSources => {
                 info!(
                     log,
@@ -1397,47 +1433,41 @@ where
                         "rs/tests/qualifying-nns-canisters/selected-qualifying-nns-canisters.json",
                     )
                     .unwrap();
-                info!(log, "Installing qualification NNS canisters ({qual}) ...");
+                info!(log, "Installing qualification NNS canisters ({}) ...", qual);
                 test_env.set_qualifying_nns_canisters_env_vars()?;
             }
         }
-        let ic_name = self.ic_name();
-        let url = self.get_public_url();
+
+        let ic_name = node.ic_name();
+        let url = node.get_public_url();
         let prep_dir = match test_env.prep_dir(&ic_name) {
             Some(v) => v,
             None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
         };
         info!(log, "Wait for node reporting healthy status");
-        self.await_status_is_healthy().unwrap();
+        node.await_status_is_healthy().unwrap();
 
+        let install_future = install_nns_canisters(
+            &log,
+            url,
+            &prep_dir,
+            true,
+            self.customizations.install_at_ids,
+            self.customizations.ledger_balances.clone(),
+            self.customizations.neurons.clone(),
+        );
         block_on(async {
-            let timeout = installation_timeout.unwrap_or(NNS_CANISTER_INSTALL_TIMEOUT);
-            let install_future = install_nns_canisters(
-                &log,
-                url,
-                &prep_dir,
-                true,
-                customizations.install_at_ids,
-                customizations.ledger_balances,
-                customizations.neurons,
-            );
-            let timeout_result = tokio::time::timeout(timeout, install_future).await;
+            let timeout_result =
+                tokio::time::timeout(self.installation_timeout, install_future).await;
             if timeout_result.is_err() {
-                println!(
+                warn!(
+                    log,
                     "NNS canisters were not installed within timeout of {} sec",
-                    timeout.as_secs()
+                    self.installation_timeout.as_secs()
                 );
             }
         });
         Ok(())
-    }
-
-    fn install_nns_canisters(&self) -> Result<()> {
-        self.install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::TakeBuiltFromSources,
-            NnsCustomizations::default(),
-            None,
-        )
     }
 }
 

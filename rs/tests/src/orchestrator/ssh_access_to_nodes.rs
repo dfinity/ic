@@ -16,7 +16,7 @@ use crate::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, NnsInstallationExt,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, NnsInstallationBuilder,
             SubnetSnapshot, TopologySnapshot,
         },
     },
@@ -106,8 +106,8 @@ pub fn keys_in_the_subnet_record_can_be_updated(env: TestEnv) {
     let (nns_node, app_node, _unassigned_node, app_subnet) =
         topology_entities(env.topology_snapshot());
 
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("NNS canisters not installed");
 
     let app_subnet_id = app_subnet.subnet_id;

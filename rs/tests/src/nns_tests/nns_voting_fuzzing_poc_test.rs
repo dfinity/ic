@@ -2,7 +2,7 @@ use slog::{info, Logger};
 
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::util::{block_on, runtime_from_url};
 
@@ -48,8 +48,8 @@ pub fn test(env: TestEnv) {
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     info!(log, "Installing NNS canisters on the root subnet...");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     info!(log, "NNS canisters installed successfully.");
     block_on(async move {

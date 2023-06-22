@@ -22,7 +22,8 @@ end::catalog[] */
 
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
+    NnsInstallationBuilder,
 };
 use crate::util::{block_on, runtime_from_url};
 use rand_chacha::ChaCha8Rng;
@@ -82,8 +83,8 @@ pub fn test(env: TestEnv) {
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     info!(logger, "Installing NNS canisters ...");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     info!(logger, "NNS canisters installed successfully");
     let app_node = topology

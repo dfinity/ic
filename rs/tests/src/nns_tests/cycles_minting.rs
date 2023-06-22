@@ -1,6 +1,6 @@
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::nns::{
     change_subnet_type_assignment, change_subnet_type_assignment_with_failure,
@@ -102,8 +102,8 @@ pub fn test(env: TestEnv) {
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     let app_node = topology
         .subnets()
@@ -823,8 +823,8 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     block_on(async move {
         let agent_client = HttpClient::new();

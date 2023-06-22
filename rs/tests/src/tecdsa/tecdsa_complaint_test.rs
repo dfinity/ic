@@ -4,7 +4,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::tecdsa::tecdsa_signature_test::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature, KEY_ID1,
@@ -56,8 +56,8 @@ pub fn test(env: TestEnv) {
         .find(|n| n.is_malicious())
         .expect("No malicious node found in the subnet");
     info!(&log, "Installing NNS canisters on the System subnet...");
-    nns_honest_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_honest_node, &env)
         .expect("Could not install NNS canisters.");
     info!(&log, "Successfully installed NNS canisters");
     let nns_agent = nns_honest_node.with_default_agent(|agent| async move { agent });

@@ -28,7 +28,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
     SshSession,
 };
 use crate::nns::{
@@ -90,8 +90,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         .next()
         .unwrap();
     info!(log, "Installing NNS canisters on the root subnet...");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     info!(&log, "NNS canisters installed successfully.");
 

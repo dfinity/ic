@@ -30,8 +30,8 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
-            NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, SubnetSnapshot,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::{
@@ -111,12 +111,14 @@ pub fn config(
         .expect("Failed to setup IC under test.");
     env.sync_prometheus_config_with_topology();
     info!(logger, "Step 1: Intalling NNS canisters ...");
-    env.topology_snapshot()
+    let nns_node = env
+        .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
-        .unwrap()
-        .install_nns_canisters()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters.");
 
     let bn = if use_boundary_node {

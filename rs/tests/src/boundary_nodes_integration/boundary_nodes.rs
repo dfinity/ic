@@ -23,7 +23,8 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
-            NnsInstallationExt, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     util::assert_create_agent,
@@ -200,12 +201,15 @@ fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    env.topology_snapshot()
+    let nns_node = env
+        .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
-        .unwrap()
-        .install_nns_canisters()
+        .unwrap();
+
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
 
     let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
