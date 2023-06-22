@@ -678,7 +678,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.0",
             ),
             "openssl": crate.spec(
-                version = "^0.10.29",
+                version = "^0.10.55",
             ),
             "openssl-sys": crate.spec(
                 version = "0.9",
