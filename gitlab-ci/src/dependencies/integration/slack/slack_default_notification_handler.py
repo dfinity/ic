@@ -3,6 +3,7 @@ import os
 from typing import Optional
 
 from integration.slack.slack_api import SlackApi
+from integration.slack.slack_channel_config import SlackChannelConfig
 from model.finding import Finding
 from notification.notification_event import (
     AppOwnerNotificationEvent,
@@ -15,13 +16,11 @@ from notification.notification_event import (
 )
 from notification.notification_handler import NotificationHandler
 
+SLACK_CHANNEL_ID = "C04815E0T16"
 SLACK_CHANNEL = "#security-vulnerability-management"
 SLACK_LOG_TO_CONSOLE = False
 APP_OWNERS = "<@U03JGGJBM7V> <@U02EFHJA8D9>"  # Thomas, Venkkatesh
 
-SLACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL_PSEC_VULN_MGT")
-if SLACK_WEBHOOK is None:
-    logging.error(f"SLACK_WEBHOOK not set, can't post to {SLACK_CHANNEL}")
 SLACK_OAUTH_TOKEN = os.environ.get("SLACK_PSEC_BOT_OAUTH_TOKEN")
 if SLACK_OAUTH_TOKEN is None:
     logging.error("SLACK_OAUTH_TOKEN not set, can't retrieve slack user IDs")
@@ -31,7 +30,7 @@ class SlackDefaultNotificationHandler(NotificationHandler):
 
     def __init__(
             self,
-            slack_api: SlackApi = SlackApi(SLACK_CHANNEL, SLACK_LOG_TO_CONSOLE, SLACK_WEBHOOK, SLACK_OAUTH_TOKEN),
+            slack_api: SlackApi = SlackApi(SlackChannelConfig(channel_id=SLACK_CHANNEL_ID, channel=SLACK_CHANNEL), SLACK_LOG_TO_CONSOLE,  SLACK_OAUTH_TOKEN),
     ):
         self.slack_api = slack_api
 

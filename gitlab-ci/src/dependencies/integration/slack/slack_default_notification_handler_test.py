@@ -3,6 +3,7 @@ from typing import Dict, List, Optional
 
 import pytest
 from integration.slack.slack_api import SlackApi
+from integration.slack.slack_channel_config import SlackChannelConfig
 from integration.slack.slack_default_notification_handler import APP_OWNERS, SlackDefaultNotificationHandler
 from model.dependency import Dependency
 from model.finding import Finding
@@ -250,7 +251,7 @@ class MockSlackApi(SlackApi):
     user_to_slack_id: Dict[str, str]
 
     def __init__(self, known_users: List[User] = None):
-        super().__init__("", True, "", "")
+        super().__init__(SlackChannelConfig(channel_id=None, channel="#dont-care"), True, "")
         self.messages = []
         self.user_to_slack_id = {}
         if known_users is not None:
