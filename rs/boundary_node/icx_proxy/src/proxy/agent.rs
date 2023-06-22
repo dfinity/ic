@@ -142,6 +142,9 @@ fn is_h2_goaway(e: &anyhow::Error) -> bool {
     false
 }
 
+// Suppresses a clippy::let_with_type_underscore lint error which only manifests on GitHub CI
+// and seems unrelated to this function.
+// Remove "#[allow(unknown_lints)]" to check if issue persists.
 #[allow(unknown_lints)]
 #[instrument(level = "info", skip_all, fields(addr = display(addr), replica = display(&*args.replica_uri)))]
 pub async fn handler<V: Validate, C: HyperService<Body>>(
