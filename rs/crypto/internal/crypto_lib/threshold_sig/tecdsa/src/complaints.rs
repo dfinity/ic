@@ -11,14 +11,13 @@ pub struct IDkgComplaintInternal {
 }
 
 impl IDkgComplaintInternal {
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
-        serde_cbor::to_vec(self)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 }
 
@@ -204,9 +203,9 @@ impl IDkgComplaintInternal {
 }
 
 impl TryFrom<&IDkgComplaint> for IDkgComplaintInternal {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(complaint: &IDkgComplaint) -> ThresholdEcdsaResult<Self> {
+    fn try_from(complaint: &IDkgComplaint) -> ThresholdEcdsaSerializationResult<Self> {
         Self::deserialize(&complaint.internal_complaint_raw)
     }
 }

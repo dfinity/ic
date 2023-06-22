@@ -220,32 +220,43 @@ impl EccScalar {
     }
 
     /// Deserialize a SEC1 formatted scalar value (with tag)
-    pub fn deserialize_tagged(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize_tagged(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         if bytes.is_empty() {
-            return Err(ThresholdEcdsaError::InvalidScalar);
+            return Err(ThresholdEcdsaSerializationError(
+                "Empty bytestring".to_string(),
+            ));
         }
 
         match EccCurveType::from_tag(bytes[0]) {
             Some(curve) => Self::deserialize(curve, &bytes[1..]),
-            None => Err(ThresholdEcdsaError::InvalidScalar),
+            None => Err(ThresholdEcdsaSerializationError(
+                "Unknown curve tag".to_string(),
+            )),
         }
     }
 
     /// Deserialize a SEC1 formatted scalar value
-    pub fn deserialize(curve: EccCurveType, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(
+        curve: EccCurveType,
+        bytes: &[u8],
+    ) -> ThresholdEcdsaSerializationResult<Self> {
         if bytes.len() != curve.scalar_bytes() {
-            return Err(ThresholdEcdsaError::InvalidScalar);
+            return Err(ThresholdEcdsaSerializationError(
+                "Unexpected length".to_string(),
+            ));
         }
 
         match curve {
             EccCurveType::K256 => {
-                let s = secp256k1::Scalar::deserialize(bytes)
-                    .ok_or(ThresholdEcdsaError::InvalidScalar)?;
+                let s = secp256k1::Scalar::deserialize(bytes).ok_or_else(|| {
+                    ThresholdEcdsaSerializationError("Invalid point encoding".to_string())
+                })?;
                 Ok(Self::K256(s))
             }
             EccCurveType::P256 => {
-                let s = secp256r1::Scalar::deserialize(bytes)
-                    .ok_or(ThresholdEcdsaError::InvalidScalar)?;
+                let s = secp256r1::Scalar::deserialize(bytes).ok_or_else(|| {
+                    ThresholdEcdsaSerializationError("Invalid point encoding".to_string())
+                })?;
                 Ok(Self::P256(s))
             }
         }
@@ -379,9 +390,9 @@ pub enum EccScalarBytes {
 }
 
 impl TryFrom<&EccScalarBytes> for EccScalar {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(bytes: &EccScalarBytes) -> ThresholdEcdsaResult<Self> {
+    fn try_from(bytes: &EccScalarBytes) -> ThresholdEcdsaSerializationResult<Self> {
         match bytes {
             EccScalarBytes::K256(raw) => EccScalar::deserialize(EccCurveType::K256, raw.as_ref()),
         }
@@ -389,13 +400,13 @@ impl TryFrom<&EccScalarBytes> for EccScalar {
 }
 
 impl TryFrom<&EccScalar> for EccScalarBytes {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(scalar: &EccScalar) -> ThresholdEcdsaResult<Self> {
+    fn try_from(scalar: &EccScalar) -> ThresholdEcdsaSerializationResult<Self> {
         match scalar.curve_type() {
             EccCurveType::K256 => {
                 Ok(Self::K256(scalar.serialize().try_into().map_err(|e| {
-                    ThresholdEcdsaError::SerializationError(format!("{:?}", e))
+                    ThresholdEcdsaSerializationError(format!("{:?}", e))
                 })?))
             }
             _ => {

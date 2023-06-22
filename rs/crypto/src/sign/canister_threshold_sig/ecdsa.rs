@@ -1,7 +1,8 @@
 //! Implementations of ThresholdEcdsaSigner
 use ic_crypto_internal_csp::api::{CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner};
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
+    IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSerializationError,
+    ThresholdEcdsaSigShareInternal,
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -40,17 +41,26 @@ pub fn sign_share<C: CspThresholdEcdsaSigner>(
     inputs: &ThresholdEcdsaSigInputs,
     logger: &ReplicaLogger,
 ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
+    fn conv_error(e: ThresholdEcdsaSerializationError) -> ThresholdEcdsaSignShareError {
+        ThresholdEcdsaSignShareError::SerializationError {
+            internal_error: e.0,
+        }
+    }
+
     ensure_self_was_receiver(self_node_id, inputs.receivers().get())?;
 
     let kappa_unmasked =
-        internal_transcript_from_transcript(inputs.presig_quadruple().kappa_unmasked())?;
-    let lambda_masked =
-        internal_transcript_from_transcript(inputs.presig_quadruple().lambda_masked())?;
+        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_unmasked())
+            .map_err(conv_error)?;
+    let lambda_masked = IDkgTranscriptInternal::try_from(inputs.presig_quadruple().lambda_masked())
+        .map_err(conv_error)?;
     let kappa_times_lambda =
-        internal_transcript_from_transcript(inputs.presig_quadruple().kappa_times_lambda())?;
+        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_times_lambda())
+            .map_err(conv_error)?;
     let key_times_lambda =
-        internal_transcript_from_transcript(inputs.presig_quadruple().key_times_lambda())?;
-    let key = internal_transcript_from_transcript(inputs.key_transcript())?;
+        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().key_times_lambda())
+            .map_err(conv_error)?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
     let master_key = get_tecdsa_master_public_key_from_internal_transcript(&key);
     info!(
         logger,
@@ -85,15 +95,24 @@ pub fn verify_sig_share<C: CspThresholdEcdsaSigVerifier>(
     inputs: &ThresholdEcdsaSigInputs,
     share: &ThresholdEcdsaSigShare,
 ) -> Result<(), ThresholdEcdsaVerifySigShareError> {
+    fn conv_error(e: ThresholdEcdsaSerializationError) -> ThresholdEcdsaVerifySigShareError {
+        ThresholdEcdsaVerifySigShareError::SerializationError {
+            internal_error: e.0,
+        }
+    }
+
     let kappa_unmasked =
-        internal_transcript_from_transcript(inputs.presig_quadruple().kappa_unmasked())?;
-    let lambda_masked =
-        internal_transcript_from_transcript(inputs.presig_quadruple().lambda_masked())?;
+        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_unmasked())
+            .map_err(conv_error)?;
+    let lambda_masked = IDkgTranscriptInternal::try_from(inputs.presig_quadruple().lambda_masked())
+        .map_err(conv_error)?;
     let kappa_times_lambda =
-        internal_transcript_from_transcript(inputs.presig_quadruple().kappa_times_lambda())?;
+        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_times_lambda())
+            .map_err(conv_error)?;
     let key_times_lambda =
-        internal_transcript_from_transcript(inputs.presig_quadruple().key_times_lambda())?;
-    let key = internal_transcript_from_transcript(inputs.key_transcript())?;
+        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().key_times_lambda())
+            .map_err(conv_error)?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
 
     let sig_share =
         ThresholdEcdsaSigShareInternal::deserialize(&share.sig_share_raw).map_err(|e| {
@@ -127,9 +146,18 @@ pub fn verify_combined_signature<C: CspThresholdEcdsaSigVerifier>(
     inputs: &ThresholdEcdsaSigInputs,
     signature: &ThresholdEcdsaCombinedSignature,
 ) -> Result<(), ThresholdEcdsaVerifyCombinedSignatureError> {
+    fn conv_error(
+        e: ThresholdEcdsaSerializationError,
+    ) -> ThresholdEcdsaVerifyCombinedSignatureError {
+        ThresholdEcdsaVerifyCombinedSignatureError::SerializationError {
+            internal_error: e.0,
+        }
+    }
+
     let kappa_unmasked =
-        internal_transcript_from_transcript(inputs.presig_quadruple().kappa_unmasked())?;
-    let key = internal_transcript_from_transcript(inputs.key_transcript())?;
+        IDkgTranscriptInternal::try_from(inputs.presig_quadruple().kappa_unmasked())
+            .map_err(conv_error)?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
 
     let signature =
         ThresholdEcdsaCombinedSigInternal::deserialize(inputs.algorithm_id(), &signature.signature)
@@ -155,23 +183,25 @@ pub fn combine_sig_shares<C: CspThresholdEcdsaSigVerifier>(
     inputs: &ThresholdEcdsaSigInputs,
     shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
 ) -> Result<ThresholdEcdsaCombinedSignature, ThresholdEcdsaCombineSigSharesError> {
+    fn conv_error(e: ThresholdEcdsaSerializationError) -> ThresholdEcdsaCombineSigSharesError {
+        ThresholdEcdsaCombineSigSharesError::SerializationError {
+            internal_error: e.0,
+        }
+    }
+
     ensure_sufficient_sig_shares_collected(inputs, shares)?;
 
-    let kappa_unmasked = IDkgTranscriptInternal::deserialize(
-        &inputs
-            .presig_quadruple()
-            .kappa_unmasked()
-            .internal_transcript_raw,
-    )
-    .map_err(
-        |e| ThresholdEcdsaCombineSigSharesError::SerializationError {
-            internal_error: format!("{:?}", e),
-        },
-    )?;
+    let kappa_transcript = &inputs
+        .presig_quadruple()
+        .kappa_unmasked()
+        .internal_transcript_raw;
+
+    let kappa_unmasked =
+        IDkgTranscriptInternal::deserialize(kappa_transcript).map_err(conv_error)?;
 
     let internal_shares = internal_sig_shares_by_index_from_sig_shares(shares, inputs.receivers())?;
 
-    let key = internal_transcript_from_transcript(inputs.key_transcript())?;
+    let key = IDkgTranscriptInternal::try_from(inputs.key_transcript()).map_err(conv_error)?;
 
     let internal_combined_sig = csp_client.ecdsa_combine_sig_shares(
         inputs.derivation_path(),
@@ -268,45 +298,4 @@ fn internal_sig_shares_by_index_from_sig_shares(
             Ok((index, internal_share))
         })
         .collect()
-}
-
-fn internal_transcript_from_transcript(
-    transcript: &IDkgTranscript,
-) -> Result<IDkgTranscriptInternal, TranscriptDeserializationError> {
-    IDkgTranscriptInternal::try_from(transcript)
-        .map_err(|e| TranscriptDeserializationError(format!("{:?}", e)))
-}
-
-struct TranscriptDeserializationError(String);
-
-impl From<TranscriptDeserializationError> for ThresholdEcdsaSignShareError {
-    fn from(transcript_deserialization_error: TranscriptDeserializationError) -> Self {
-        ThresholdEcdsaSignShareError::SerializationError {
-            internal_error: transcript_deserialization_error.0,
-        }
-    }
-}
-
-impl From<TranscriptDeserializationError> for ThresholdEcdsaVerifySigShareError {
-    fn from(transcript_deserialization_error: TranscriptDeserializationError) -> Self {
-        ThresholdEcdsaVerifySigShareError::SerializationError {
-            internal_error: transcript_deserialization_error.0,
-        }
-    }
-}
-
-impl From<TranscriptDeserializationError> for ThresholdEcdsaCombineSigSharesError {
-    fn from(transcript_deserialization_error: TranscriptDeserializationError) -> Self {
-        ThresholdEcdsaCombineSigSharesError::SerializationError {
-            internal_error: transcript_deserialization_error.0,
-        }
-    }
-}
-
-impl From<TranscriptDeserializationError> for ThresholdEcdsaVerifyCombinedSignatureError {
-    fn from(transcript_deserialization_error: TranscriptDeserializationError) -> Self {
-        ThresholdEcdsaVerifyCombinedSignatureError::SerializationError {
-            internal_error: transcript_deserialization_error.0,
-        }
-    }
 }

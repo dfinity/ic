@@ -63,9 +63,12 @@ impl MEGaPublicKey {
     ///
     /// A successful deserialization also guarantees that the public
     /// key is valid, that is, that it is a point on the curve.
-    pub fn deserialize(curve: EccCurveType, value: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(
+        curve: EccCurveType,
+        value: &[u8],
+    ) -> ThresholdEcdsaSerializationResult<Self> {
         let point = EccPoint::deserialize(curve, value)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{:?}", e)))?;
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{:?}", e)))?;
         Ok(Self { point })
     }
 
@@ -97,9 +100,12 @@ impl MEGaPrivateKey {
         Self { secret }
     }
 
-    pub fn deserialize(curve: EccCurveType, value: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(
+        curve: EccCurveType,
+        value: &[u8],
+    ) -> ThresholdEcdsaSerializationResult<Self> {
         let secret = EccScalar::deserialize(curve, value)
-            .map_err(|_| ThresholdEcdsaError::SerializationError("REDACTED".to_string()))?;
+            .map_err(|_| ThresholdEcdsaSerializationError("REDACTED".to_string()))?;
         Ok(Self { secret })
     }
 
@@ -715,9 +721,9 @@ macro_rules! generate_serializable_keyset {
     ($curve:ident, $pub_size:expr, $priv_size:expr) => {
         paste! {
             impl TryFrom<&[<MEGaPublicKey $curve Bytes>]> for MEGaPublicKey {
-                type Error = ThresholdEcdsaError;
+                type Error = ThresholdEcdsaSerializationError;
 
-                fn try_from(raw: &[<MEGaPublicKey $curve Bytes>]) -> ThresholdEcdsaResult<Self> {
+                fn try_from(raw: &[<MEGaPublicKey $curve Bytes>]) -> ThresholdEcdsaSerializationResult<Self> {
                     Self::deserialize(EccCurveType::$curve, &raw.0)
                 }
             }
@@ -731,16 +737,16 @@ macro_rules! generate_serializable_keyset {
             }
 
             impl TryFrom<&MEGaPublicKey> for [<MEGaPublicKey $curve Bytes>] {
-                type Error = ThresholdEcdsaError;
+                type Error = ThresholdEcdsaSerializationError;
 
-                fn try_from(key: &MEGaPublicKey) -> ThresholdEcdsaResult<Self> {
+                fn try_from(key: &MEGaPublicKey) -> ThresholdEcdsaSerializationResult<Self> {
                     match key.curve_type() {
                         EccCurveType::$curve => {
                             Ok(Self(key.serialize().try_into().map_err(|e| {
-                                ThresholdEcdsaError::SerializationError(format!("{:?}", e))
+                                ThresholdEcdsaSerializationError(format!("{:?}", e))
                             })?))
                         }
-                        _ => Err(ThresholdEcdsaError::SerializationError(
+                        _ => Err(ThresholdEcdsaSerializationError(
                             "Wrong curve".to_string(),
                         )),
                     }
@@ -748,9 +754,9 @@ macro_rules! generate_serializable_keyset {
             }
 
             impl TryFrom<&[<MEGaPrivateKey $curve Bytes>]> for MEGaPrivateKey {
-                type Error = ThresholdEcdsaError;
+                type Error = ThresholdEcdsaSerializationError;
 
-                fn try_from(raw: &[<MEGaPrivateKey $curve Bytes>]) -> ThresholdEcdsaResult<Self> {
+                fn try_from(raw: &[<MEGaPrivateKey $curve Bytes>]) -> ThresholdEcdsaSerializationResult<Self> {
                     Self::deserialize(EccCurveType::$curve, raw.0.expose_secret().as_ref())
                 }
             }
@@ -769,20 +775,20 @@ macro_rules! generate_serializable_keyset {
             }
 
             impl TryFrom<&MEGaPrivateKey> for [<MEGaPrivateKey $curve Bytes>] {
-                type Error = ThresholdEcdsaError;
+                type Error = ThresholdEcdsaSerializationError;
 
-                fn try_from(key: &MEGaPrivateKey) -> ThresholdEcdsaResult<Self> {
+                fn try_from(key: &MEGaPrivateKey) -> ThresholdEcdsaSerializationResult<Self> {
                     match key.curve_type() {
                         EccCurveType::$curve => {
                             let mut bits: [u8; Self::SIZE] = key.serialize().try_into().map_err(|e| {
-                                ThresholdEcdsaError::SerializationError(format!("{:?}", e))
+                                ThresholdEcdsaSerializationError(format!("{:?}", e))
                             })?;
 
                             let arr = SecretArray::new_and_zeroize_argument(&mut bits);
 
                             Ok(Self(arr))
                         }
-                        _ => Err(ThresholdEcdsaError::SerializationError(
+                        _ => Err(ThresholdEcdsaSerializationError(
                             "Wrong curve".to_string(),
                         )),
                     }

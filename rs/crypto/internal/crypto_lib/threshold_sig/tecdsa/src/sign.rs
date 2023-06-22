@@ -219,10 +219,13 @@ impl ThresholdEcdsaCombinedSigInternal {
         sig
     }
 
-    pub fn deserialize(algorithm_id: AlgorithmId, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(
+        algorithm_id: AlgorithmId,
+        bytes: &[u8],
+    ) -> ThresholdEcdsaSerializationResult<Self> {
         let curve_type = match algorithm_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
-            x => Err(ThresholdEcdsaError::SerializationError(format!(
+            x => Err(ThresholdEcdsaSerializationError(format!(
                 "Invalid algorithm {:?} for threshold ECDSA",
                 x
             ))),
@@ -231,13 +234,16 @@ impl ThresholdEcdsaCombinedSigInternal {
         let slen = curve_type.scalar_bytes();
 
         if bytes.len() != 2 * slen {
-            return Err(ThresholdEcdsaError::SerializationError(
+            return Err(ThresholdEcdsaSerializationError(
                 "Bad signature length".to_string(),
             ));
         }
 
-        let r = EccScalar::deserialize(curve_type, &bytes[..slen])?;
-        let s = EccScalar::deserialize(curve_type, &bytes[slen..])?;
+        let r = EccScalar::deserialize(curve_type, &bytes[..slen])
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("Invalid r: {:?}", e)))?;
+
+        let s = EccScalar::deserialize(curve_type, &bytes[slen..])
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("Invalid s: {:?}", e)))?;
 
         Ok(Self { r, s })
     }

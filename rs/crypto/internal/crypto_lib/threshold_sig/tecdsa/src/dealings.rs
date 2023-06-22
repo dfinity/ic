@@ -66,11 +66,11 @@ impl Debug for SecretShares {
 }
 
 impl TryFrom<(&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>)> for SecretShares {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
     fn try_from(
         commitments: (&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>),
-    ) -> ThresholdEcdsaResult<Self> {
+    ) -> ThresholdEcdsaSerializationResult<Self> {
         match commitments {
             (CommitmentOpeningBytes::Simple(bytes), None) => {
                 let scalar = EccScalar::try_from(bytes)?;
@@ -93,8 +93,8 @@ impl TryFrom<(&CommitmentOpeningBytes, Option<&CommitmentOpeningBytes>)> for Sec
                     (scalar_2, scalar_3),
                 ))
             }
-            _ => Err(ThresholdEcdsaError::SerializationError(
-                "inconsistent combination of commitment types".to_string(),
+            _ => Err(ThresholdEcdsaSerializationError(
+                "Unexpected commitment types".to_string(),
             )),
         }
     }
@@ -446,21 +446,22 @@ impl IDkgDealingInternal {
         Ok(())
     }
 
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
-        serde_cbor::to_vec(self)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 }
 
 impl TryFrom<&BatchSignedIDkgDealing> for IDkgDealingInternal {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(signed_dealing: &BatchSignedIDkgDealing) -> ThresholdEcdsaResult<Self> {
+    fn try_from(
+        signed_dealing: &BatchSignedIDkgDealing,
+    ) -> ThresholdEcdsaSerializationResult<Self> {
         Self::deserialize(&signed_dealing.idkg_dealing().internal_dealing_raw)
     }
 }

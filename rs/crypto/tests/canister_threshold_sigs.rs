@@ -2498,7 +2498,7 @@ mod verify_dealing_public {
 
         assert_matches!(
             result,
-            Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason.starts_with("SerializationError")
+            Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason.starts_with("ThresholdEcdsaSerializationError")
         );
     }
 }
