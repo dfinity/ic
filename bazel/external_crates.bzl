@@ -868,6 +868,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 package = "rsa",
                 version = "^0.4.0",
             ),
+            "rstack-self": crate.spec(
+                version = "^0.3",
+            ),
             "rusqlite": crate.spec(
                 version = "^0.28.0",
                 features = ["bundled"],

@@ -136,6 +136,7 @@ members = [
   "rs/messaging",
   "rs/monitoring/adapter_metrics",
   "rs/monitoring/adapter_metrics_service",
+  "rs/monitoring/backtrace",
   "rs/monitoring/context_logger",
   "rs/monitoring/logger",
   "rs/monitoring/metrics",

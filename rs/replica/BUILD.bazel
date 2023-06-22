@@ -69,7 +69,12 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tracing",
-]
+] + select({
+    "@rules_rust//rust/platform:linux": [
+        "//rs/monitoring/backtrace",
+    ],
+    "//conditions:default": [],
+})
 
 MACRO_DEPENDENCIES = []
 

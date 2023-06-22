@@ -17,6 +17,7 @@ mod query;
 mod read_state;
 mod state_reader_executor;
 mod status;
+mod threads;
 mod types;
 mod validator_executor;
 
@@ -690,6 +691,10 @@ async fn make_router(
             "/_/pprof/flamegraph" => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofFlamegraph.into());
                 pprof_flamegraph_service
+            }
+            "/_/threads" => {
+                timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::Threads.into());
+                return (threads::collect().await, timer);
             }
             _ => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
