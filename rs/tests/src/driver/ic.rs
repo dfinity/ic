@@ -380,6 +380,14 @@ impl Subnet {
         self
     }
 
+    pub fn with_max_ingress_messages_per_block(
+        mut self,
+        max_ingress_messages_per_block: u64,
+    ) -> Self {
+        self.max_ingress_messages_per_block = Some(max_ingress_messages_per_block);
+        self
+    }
+
     /// An empty subnet that's optimized to be "fast".
     ///
     /// The subnet is able to execute calls faster because the block time

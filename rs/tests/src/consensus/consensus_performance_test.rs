@@ -14,7 +14,7 @@ use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
 use crate::nns_dapp::set_authorized_subnets;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::util::{assert_canister_counter_with_retries, block_on};
+use crate::util::assert_canister_counter_with_retries;
 use crate::workload_counter_canister_test::install_counter_canister;
 
 use futures::future::join_all;
@@ -22,14 +22,17 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
 use std::time::Duration;
+use tokio::runtime::{Builder, Runtime};
 
-const NODES_COUNT: usize = 25;
+const NODES_COUNT: usize = 13;
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f32 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TESTING_PERIOD: Duration = Duration::from_secs(300);
+const TESTING_PERIOD: Duration = Duration::from_secs(900);
 const DKG_INTERVAL: u64 = 999;
+const MAX_RUNTIME_THREADS: usize = 64;
+const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -51,9 +54,10 @@ pub fn setup(env: TestEnv) {
             Subnet::new(SubnetType::Application)
                 .with_default_vm_resources(VmResources {
                     vcpus: Some(NrOfVCPUs::new(64)),
-                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512142680)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
                 })
+                .with_max_ingress_messages_per_block(10_000)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(NODES_COUNT),
         )
@@ -69,7 +73,7 @@ pub fn setup(env: TestEnv) {
 }
 
 pub fn test_small_messages(env: TestEnv) {
-    test(env, 12, 1000)
+    test(env, 640, 8500)
 }
 
 pub fn test_large_messages(env: TestEnv) {
@@ -83,7 +87,7 @@ pub fn custom_message_test(env: TestEnv) {
 fn test(env: TestEnv, message_size: usize, rps: usize) {
     let log = env.logger();
 
-    let canister_count: usize = 2;
+    let canister_count: usize = 4;
     let duration: Duration = TESTING_PERIOD;
 
     let app_node = env
@@ -95,7 +99,21 @@ fn test(env: TestEnv, message_size: usize, rps: usize) {
         .next()
         .unwrap();
 
-    block_on(async move {
+    // create the runtime that lives until this variable is dropped.
+    info!(
+        env.logger(),
+        "Set tokio runtime: worker_threads={}, blocking_threads={}",
+        MAX_RUNTIME_THREADS,
+        MAX_RUNTIME_BLOCKING_THREADS
+    );
+    let rt: Runtime = Builder::new_multi_thread()
+        .worker_threads(MAX_RUNTIME_THREADS)
+        .max_blocking_threads(MAX_RUNTIME_BLOCKING_THREADS)
+        .enable_all()
+        .build()
+        .unwrap();
+
+    rt.block_on(async move {
         info!(
             log,
             "Step 1: Install {} canisters on the subnet..", canister_count
@@ -140,6 +158,8 @@ fn test(env: TestEnv, message_size: usize, rps: usize) {
                         idx,
                         1 * agents[idx%agents.len()] => GenericRequest::new(canisters[0], "write".to_string(), payload.clone(), CallMode::Update),
                         1 * agents[idx%agents.len()] => GenericRequest::new(canisters[1], "write".to_string(), payload.clone(), CallMode::Update),
+                        1 * agents[idx%agents.len()] => GenericRequest::new(canisters[2], "write".to_string(), payload.clone(), CallMode::Update),
+                        1 * agents[idx%agents.len()] => GenericRequest::new(canisters[3], "write".to_string(), payload.clone(), CallMode::Update),
                     ];
                     request_outcome.into_test_outcome()
                 }
