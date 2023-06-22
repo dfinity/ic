@@ -156,7 +156,7 @@ fn check_memo_max_len() {
 
 #[test]
 fn test_block_transformation() {
-    ic_icrc1_ledger_sm_tests::test_block_transformation(
+    ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
         std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
             .unwrap(),
         ledger_wasm(),
