@@ -11,11 +11,8 @@ from notification.notification_handler import NotificationHandler
 from scanner.manager.bazel_trivy_dependency_manager import TRIVY_SCANNER_ID
 
 SUPPORTED_TEAMS = (Team.NODE_TEAM, Team.BOUNDARY_NODE_TEAM)
-SLACK_CHANNEL_CONFIG_BY_TEAM = {Team.NODE_TEAM : SlackChannelConfig(webhook=os.environ.get("SLACK_WEBHOOK_URL_PSEC_ENG_NODE"), channel="#eng-node"),
-                                Team.BOUNDARY_NODE_TEAM: SlackChannelConfig(webhook=os.environ.get("SLACK_WEBHOOK_URL_PSEC_ENG_BND_NODE"), channel="#eng-boundary-nodes")}
-for team_key, config in SLACK_CHANNEL_CONFIG_BY_TEAM.items():
-    if config.webhook is None:
-        logging.error(f"Slack webhook not set for team {team_key}")
+SLACK_CHANNEL_CONFIG_BY_TEAM = {Team.NODE_TEAM : SlackChannelConfig(channel_id="C05CYLM94KU", channel="#eng-node-psec"),
+                                Team.BOUNDARY_NODE_TEAM: SlackChannelConfig(channel_id="C01R76CSJ4R", channel="#eng-boundary-nodes")}
 SLACK_TEAM_GROUP_ID = {Team.NODE_TEAM: "<!subteam^S027838EY30>", Team.BOUNDARY_NODE_TEAM: "<!subteam^S0313LYB9FZ>"}
 
 SLACK_LOG_TO_CONSOLE = False
@@ -37,7 +34,7 @@ class SlackTrivyFindingNotificationHandler(NotificationHandler):
             if slack_api:
                 self.slack_api_by_team[team] = slack_api
             else:
-                self.slack_api_by_team[team] = SlackApi(SLACK_CHANNEL_CONFIG_BY_TEAM[team].channel, SLACK_LOG_TO_CONSOLE, SLACK_CHANNEL_CONFIG_BY_TEAM[team].webhook, SLACK_OAUTH_TOKEN)
+                self.slack_api_by_team[team] = SlackApi(SLACK_CHANNEL_CONFIG_BY_TEAM[team], SLACK_LOG_TO_CONSOLE, SLACK_OAUTH_TOKEN)
         self.gitlab_handler = gitlab_handler
 
     def can_handle(self, event: NotificationEvent) -> bool:

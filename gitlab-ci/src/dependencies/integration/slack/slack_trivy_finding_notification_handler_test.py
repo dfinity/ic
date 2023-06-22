@@ -4,6 +4,7 @@ from unittest.mock import Mock
 
 import pytest
 from integration.slack.slack_api import SlackApi
+from integration.slack.slack_channel_config import SlackChannelConfig
 from integration.slack.slack_trivy_finding_notification_handler import (
     SLACK_CHANNEL_CONFIG_BY_TEAM,
     SLACK_TEAM_GROUP_ID,
@@ -194,7 +195,7 @@ class MockSlackApi(SlackApi):
     user_to_slack_id: Dict[str, str]
 
     def __init__(self, known_users: List[User] = None):
-        super().__init__("", True, "", "")
+        super().__init__(SlackChannelConfig(channel_id=None, channel="#dont-care"), True, "")
         self.messages = []
         self.user_to_slack_id = {}
         if known_users is not None:

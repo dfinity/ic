@@ -4,7 +4,7 @@ from typing import Optional
 
 @dataclass
 class SlackChannelConfig:
-    webhook: Optional[str] # might be None during testing
+    channel_id: Optional[str] # might be None during testing
     channel: str
 
     def __post_init__(self):
