@@ -10,7 +10,7 @@
   extends:
     - ".bazel-build-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -56,7 +56,7 @@
     - ".ubuntu-k8s"
     - ".ic-build-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   tags:
     - dfinity-ic
@@ -145,7 +145,7 @@
     - ".bazel-rules-pipeline"
     - ".bazel-build-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -186,7 +186,7 @@
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -223,7 +223,7 @@
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -274,7 +274,7 @@
     - ".ubuntu-k8s"
     - ".rules-build-base-images"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -335,7 +335,7 @@
     - ".ubuntu-k8s"
     - ".rules-scheduled-reproducibility"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - job: build-ic-release
@@ -394,7 +394,7 @@
   extends:
     - ".ic-build-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   needs: []
   script:
     - |
@@ -466,7 +466,7 @@
   artifacts:
     expire_in: 3 days
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   tags:
     - dfinity-ic
   variables:
@@ -475,7 +475,7 @@
   artifacts:
     expire_in: 3 days
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   tags:
     - dfinity-ic
   variables:
@@ -508,7 +508,7 @@
   extends:
     - ".prod-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - allow_failure: true
@@ -544,7 +544,7 @@
   dependencies: []
   extends: ".prod-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -579,7 +579,7 @@
   dependencies: []
   extends: ".prod-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -615,7 +615,7 @@
   dependencies: []
   extends: ".prod-nightly-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   resource_group: "$TESTNET2"
@@ -654,7 +654,7 @@
   dependencies: []
   extends: ".prod-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -690,7 +690,7 @@
   dependencies: []
   extends: ".prod-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -726,7 +726,7 @@
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - allow_failure: true
@@ -828,7 +828,7 @@
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -866,7 +866,7 @@
     - ".ubuntu-k8s"
     - ".ic-build-legacy-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   tags:
     - dfinity-ic
@@ -889,7 +889,7 @@
     - ".build-env-base"
     - ".ic-build-legacy-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   tags:
     - dfinity-ic
@@ -913,7 +913,7 @@ after-script-test-ic-build-image:
   extends:
     - ".after-script-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -959,7 +959,7 @@ after-script-test-ic-build-legacy-image:
     - ".after-script-test"
     - ".ic-build-legacy-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1046,7 +1046,7 @@ bazel-build-fuzzers:
   extends:
     - ".bazel-test-all"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1118,7 +1118,7 @@ bazel-build-fuzzers-archives:
     - ".bazel-test-all"
     - ".ic-build-legacy-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1188,7 +1188,7 @@ bazel-build-fuzzers-weekly:
     - ".bazel-test-all"
     - ".ic-build-legacy-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1258,7 +1258,7 @@ bazel-build-macos:
     - ".bazel-test-all"
     - ".bazel-rules-pipeline-no-merge-train"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1327,7 +1327,7 @@ bazel-cache-perf-test-linux:
     - bazel-test-all
     - ".bazel-rules-post-master"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -1397,7 +1397,7 @@ bazel-cache-perf-test-macos:
     - bazel-build-macos
     - ".bazel-rules-post-master"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -1465,7 +1465,7 @@ bazel-config-check-all-rebuild:
   extends:
     - ".bazel-test-all"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1537,7 +1537,7 @@ bazel-system-test-hotfix:
     - ".bazel-test-all"
     - ".rules-prod-hotfix-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1611,7 +1611,7 @@ bazel-system-test-hourly:
     - ".bazel-test-all"
     - ".bazel-rules-post-master"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1679,7 +1679,7 @@ bazel-system-test-nightly:
     - ".bazel-test-all"
     - ".rules-rollout-pipeline-auto"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1755,7 +1755,7 @@ bazel-system-test-staging:
     - ".bazel-test-all"
     - ".rules-rollout-pipeline-auto"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1828,7 +1828,7 @@ bazel-test-all:
   extends:
     - ".bazel-test-all"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1901,7 +1901,7 @@ bazel-test-all-allow-to-fail:
     - ".bazel-test-all"
     - ".bazel-rules-pipeline-no-merge-train-allow-to-fail"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -1971,7 +1971,7 @@ bazel-test-all-rebuild:
     - ".bazel-test-all"
     - ".bazel-rules-post-master"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -2046,7 +2046,7 @@ benchmark-response-payload:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -2099,7 +2099,7 @@ benchmark-xnet:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -2182,7 +2182,7 @@ benchmarks:
   extends:
     - ".bazel-test-all"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   parallel:
@@ -2250,7 +2250,7 @@ boundary-node-service-worker:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -2309,7 +2309,7 @@ build-base-images-ref-update:
     - ".ubuntu-k8s"
     - ".rules-build-base-images"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - build-guestos-base
@@ -2395,7 +2395,7 @@ build-boundaryos-api-guestos-base:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -2456,7 +2456,7 @@ build-boundaryos-api-guestos-base-snp:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -2518,7 +2518,7 @@ build-boundaryos-base:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -2579,7 +2579,7 @@ build-boundaryos-base-snp:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -2644,7 +2644,7 @@ build-determinism-binaries:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -2692,7 +2692,7 @@ build-determinism-binaries-release:
   extends:
     - ".build-determinism-release"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - job: build-ic-release
@@ -2740,7 +2740,7 @@ build-determinism-canisters:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -2788,7 +2788,7 @@ build-determinism-canisters-release:
   extends:
     - ".build-determinism-release"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - job: build-ic-release
@@ -2834,7 +2834,7 @@ build-determinism-guest-update-img:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -2882,7 +2882,7 @@ build-determinism-guest-update-img-release:
   extends:
     - ".build-determinism-release"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - job: build-ic-release
@@ -2930,7 +2930,7 @@ build-determinism-host-update-img:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -2977,7 +2977,7 @@ build-determinism-setupos-img:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -3024,7 +3024,7 @@ build-guestos-base:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3085,7 +3085,7 @@ build-guestos-base-dev:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3147,7 +3147,7 @@ build-guestos-base-dev-sev:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3209,7 +3209,7 @@ build-hostos-base:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3270,7 +3270,7 @@ build-hostos-base-dev:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3332,7 +3332,7 @@ build-hostos-base-dev-sev:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3397,7 +3397,7 @@ build-ic:
     - ".build-ic"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
@@ -3477,7 +3477,7 @@ build-ic-release:
     - ".build-ic"
     - ".rules-scheduled-reproducibility"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   needs: []
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
@@ -3546,7 +3546,7 @@ build-setupos-base:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3607,7 +3607,7 @@ build-setupos-base-dev:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3669,7 +3669,7 @@ build-setupos-base-dev-sev:
   extends:
     - ".build-base-image-job"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3733,7 +3733,7 @@ cargo-audit:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "cargo-audit"
@@ -3761,7 +3761,7 @@ cargo-build-release-linux:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3803,7 +3803,7 @@ cargo-clippy-linux:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3847,7 +3847,7 @@ cargo-lock-generate:
     - ".ubuntu-cargo-k8s"
     - ".cargo-rules"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -3958,7 +3958,7 @@ container-autobuild:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -4061,7 +4061,7 @@ container-autobuild-protected:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -4114,7 +4114,7 @@ cut-release-candidate:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"
@@ -4156,7 +4156,7 @@ delegated-identity-bench:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -4205,7 +4205,7 @@ dependencies-check:
   extends:
     - ".ubuntu-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -4239,7 +4239,7 @@ dependency-scan-nightly:
   extends:
     - ".ubuntu-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -4281,7 +4281,7 @@ dependency-scan-release-cut:
   extends:
     - ".ubuntu-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -4313,7 +4313,7 @@ docker-generate-runner-list:
     - ".ubuntu-cargo-k8s"
     - ".rules-simple-prober"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_REF_NAME == "precious-automation/run-simple-prober-v4"
@@ -4346,7 +4346,7 @@ gitlab-ci-config-validation:
     - ".ubuntu-k8s"
     - ".rules-pipeline-no-merge-train"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"
@@ -4389,7 +4389,7 @@ heavy-memory-update-performance-test-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -4447,7 +4447,7 @@ host-os-upgrade-test:
   extends:
     - ".bazel-build-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -4503,7 +4503,7 @@ icos-deploy-stress:
   dependencies: []
   extends: ".prod-stress-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   parallel:
     matrix:
@@ -4557,7 +4557,7 @@ ingress-manager-proptests-nightly:
   extends:
     - ".prod-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - allow_failure: true
@@ -4596,7 +4596,7 @@ large-response-downloading-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -4659,7 +4659,7 @@ legacy-cargo-check:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -4730,7 +4730,7 @@ linux-openssl-static-binaries:
     - ".bazel-test-all"
     - ".bazel-rules-pipeline-no-merge-train"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -4801,7 +4801,7 @@ macos-openssl-static-binaries:
     - ".bazel-test-all"
     - ".bazel-rules-pipeline-no-merge-train"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -4851,7 +4851,7 @@ maximum-capacity-boundary-nodes-queries:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -4903,7 +4903,7 @@ maximum-capacity-canister-http:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -4972,7 +4972,7 @@ maximum-capacity-large-memory-query:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5024,7 +5024,7 @@ maximum-capacity-large-memory-update:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5076,7 +5076,7 @@ maximum-capacity-mixed-counter-memory:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5131,7 +5131,7 @@ maximum-capacity-mixed-workloads:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5183,7 +5183,7 @@ maximum-capacity-multiple-large-memory-update:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5235,7 +5235,7 @@ maximum-capacity-qr:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5287,7 +5287,7 @@ maximum-capacity-sha256:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5339,7 +5339,7 @@ maximum-capacity-system-baseline-query:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5407,7 +5407,7 @@ maximum-capacity-system-baseline-update:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5460,7 +5460,7 @@ nns-state-deployment-test-nightly:
   dependencies: []
   extends: ".prod-nightly-test-group-2"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   resource_group: "$TESTNET2"
@@ -5509,7 +5509,7 @@ no-interrupt:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: false
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
@@ -5537,7 +5537,7 @@ notify-gitlab-failure:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -5570,7 +5570,7 @@ notify-gitlab-success:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -5603,7 +5603,7 @@ pre-commit:
     - ".bazel-build-k8s"
     - ".bazel-rules-pipeline"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -5777,7 +5777,7 @@ python-gitlab-ci-tests:
     - ".ubuntu-k8s"
     - ".rules-pipeline-no-merge-train"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   rules:
@@ -5808,7 +5808,7 @@ rejoin-hotfix:
   dependencies: []
   extends: ".prod-hotfix-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET2"
   rules:
@@ -5854,7 +5854,7 @@ rejoin-nightly:
   dependencies: []
   extends: ".prod-nightly-test-group-2"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs: []
   resource_group: "$TESTNET2"
@@ -5902,7 +5902,7 @@ rejoin-test-slo:
   dependencies: []
   extends: ".prod-slo-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -5948,7 +5948,7 @@ release-boundary-node-service-worker:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - boundary-node-service-worker
@@ -6020,7 +6020,7 @@ rosetta-api-docker-image:
   extends:
     - ".bazel-build-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -6092,7 +6092,7 @@ rosetta-release:
     - ".bazel-build-k8s"
     - ".ic-build-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-release"
@@ -6151,7 +6151,7 @@ sns-deployment-test-nightly:
   dependencies: []
   extends: ".sns-tests"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -6226,7 +6226,7 @@ statesync-experiment:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -6277,7 +6277,7 @@ system-baseline-query-performance-test-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -6336,7 +6336,7 @@ system-baseline-update-performance-test-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -6395,7 +6395,7 @@ tecdsa:
   dependencies: []
   extends: ".benchmark-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -6447,7 +6447,7 @@ test-push-branch:
   extends:
     - ".ubuntu-cargo-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
@@ -6484,7 +6484,7 @@ test-testnet-deployment:
   extends:
     - ".ubuntu-k8s"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   needs:
     - artifacts: false
@@ -6521,7 +6521,7 @@ xnet-nightly:
   dependencies: []
   extends: ".benchmark-spot-test"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   interruptible: true
   resource_group: "$TESTNET"
   rules:
@@ -6578,7 +6578,7 @@ zz-generated-gitlab:
   extends:
     - ".ic-build-image"
   image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:5db577eac5ab2bcdbc26c754a2857d31c690b98f742c6da60fc30cb81995c601
+    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1
   needs: []
   rules:
     - changes:
