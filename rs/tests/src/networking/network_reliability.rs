@@ -22,7 +22,7 @@ use crate::driver::constants::DEVICE_NAME;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
     SshSession,
 };
 use crate::util::{
@@ -113,12 +113,14 @@ pub fn test(env: TestEnv, config: Config) {
         &log,
         "Step 1: Installing NNS canisters on the System subnet ..."
     );
-    env.topology_snapshot()
+    let nns_node = env
+        .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
-        .unwrap()
-        .install_nns_canisters()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters.");
     info!(
         &log,

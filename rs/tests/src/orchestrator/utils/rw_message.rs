@@ -240,12 +240,11 @@ pub fn install_nns_with_customizations_and_check_progress(
     });
     info!(logger, "IC is healthy and ready.");
 
-    topology
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
-        .install_nns_canisters_with_customizations(canister_wasm_strategy, customizations, None)
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    NnsInstallationBuilder::new()
+        .with_customizations(customizations)
+        .with_canister_wasm_strategy(canister_wasm_strategy)
+        .install(&nns_node, &topology.test_env())
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 

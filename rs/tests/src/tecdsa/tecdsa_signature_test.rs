@@ -143,13 +143,14 @@ pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
 
     // Currently, we make the assumption that the first subnets is the root
     // subnet. This might not hold in the future.
-    test_env
+    let nns_node = test_env
         .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
-        .unwrap()
-        .install_nns_canisters()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &test_env)
         .expect("Failed to install NNS canisters");
 }
 
@@ -187,13 +188,14 @@ pub fn config(test_env: TestEnv) {
 
     // Currently, we make the assumption that the first subnets is the root
     // subnet. This might not hold in the future.
-    test_env
+    let nns_node = test_env
         .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
-        .unwrap()
-        .install_nns_canisters()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &test_env)
         .expect("Failed to install NNS canisters");
 }
 

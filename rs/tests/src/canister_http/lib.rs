@@ -42,8 +42,8 @@ pub fn install_nns_canisters(env: &TestEnv) {
         .nodes()
         .next()
         .expect("there is no NNS node");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, env)
         .expect("NNS canisters not installed");
     info!(&env.logger(), "NNS canisters installed");
 }
@@ -56,12 +56,9 @@ pub fn install_mainnet_nns_canisters(env: &TestEnv) {
         .nodes()
         .next()
         .expect("there is no NNS node");
-    nns_node
-        .install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::TakeLatestMainnetDeployments,
-            NnsCustomizations::default(),
-            None,
-        )
+    NnsInstallationBuilder::new()
+        .use_mainnet_nns_canisters()
+        .install(&nns_node, env)
         .expect("Mainnet NNS canisters not installed");
     info!(&env.logger(), "Mainnet NNS canisters installed");
 }
@@ -74,12 +71,9 @@ pub fn install_qualifying_nns_canisters(env: &TestEnv) {
         .nodes()
         .next()
         .expect("there is no NNS node");
-    nns_node
-        .install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::NnsReleaseQualification,
-            NnsCustomizations::default(),
-            None,
-        )
+    NnsInstallationBuilder::new()
+        .use_qualifying_nns_canisters()
+        .install(&nns_node, env)
         .expect("Qualifying NNS canisters not installed");
     info!(&env.logger(), "Qualifying NNS canisters installed");
 }

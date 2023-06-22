@@ -22,7 +22,8 @@ use crate::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, SshSession,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
+            SshSession,
         },
         universal_vm::{UniversalVm, UniversalVms},
     },
@@ -66,8 +67,8 @@ pub fn config(env: TestEnv) {
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     info!(log, "Installing NNS canisters on the root subnet...");
 
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     info!(&log, "NNS canisters installed successfully.");
 }

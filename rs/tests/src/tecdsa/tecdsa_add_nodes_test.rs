@@ -22,7 +22,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::tecdsa::tecdsa_signature_test::{
     enable_ecdsa_signing, get_public_key_with_logger, get_signature_with_logger, make_key,
@@ -85,8 +85,8 @@ pub fn test(env: TestEnv) {
     };
     assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT as usize);
     info!(log, "Installing nns canisters.");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters.");
     info!(log, "Enabling ECDSA signatures.");
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());

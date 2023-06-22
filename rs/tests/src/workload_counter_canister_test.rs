@@ -28,7 +28,7 @@ use crate::canister_requests;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
@@ -118,12 +118,14 @@ fn test(
 
     if is_install_nns_canisters {
         info!(log, "Installing NNS canisters...");
-        env.topology_snapshot()
+        let nns_node = env
+            .topology_snapshot()
             .root_subnet()
             .nodes()
             .next()
-            .unwrap()
-            .install_nns_canisters()
+            .unwrap();
+        NnsInstallationBuilder::new()
+            .install(&nns_node, &env)
             .expect("Could not install NNS canisters");
     }
 

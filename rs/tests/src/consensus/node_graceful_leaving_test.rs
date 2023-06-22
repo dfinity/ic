@@ -22,7 +22,7 @@ use crate::{
     driver::{
         test_env::TestEnv,
         test_env_api::{
-            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
+            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
         },
     },
     nns::remove_nodes_via_endpoint,
@@ -72,8 +72,8 @@ pub fn test(env: TestEnv) {
     };
 
     info!(log, "Installing NNS canisters ...");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(nns_node, &env)
         .expect("Could not install NNS canisters");
     info!(
         log,

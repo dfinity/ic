@@ -16,7 +16,7 @@ Success:: balances obtained by queries matches expected balances after transfers
 end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::util;
 
@@ -62,8 +62,8 @@ pub fn test(env: TestEnv) {
     info!(log, "Creating app agent ...");
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
     info!(log, "Installing NNS canisters...");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(nns_node, &env)
         .expect("Could not install NNS canisters");
     let nns_runtime =
         util::runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
