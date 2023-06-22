@@ -180,7 +180,7 @@ fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
 }
 
-fn transfer(
+pub fn transfer(
     env: &StateMachine,
     ledger: CanisterId,
     from: impl Into<Account>,
@@ -1716,7 +1716,7 @@ where
     }
 }
 
-pub fn test_block_transformation<T>(
+pub fn icrc1_test_block_transformation<T>(
     ledger_wasm_mainnet: Vec<u8>,
     ledger_wasm_current: Vec<u8>,
     encode_init_args: fn(InitArgs) -> T,

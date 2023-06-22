@@ -1,15 +1,21 @@
-use std::collections::{HashMap, HashSet};
-
+use candid::Principal;
 use candid::{Decode, Encode, Nat};
-use ic_icrc1_ledger_sm_tests::MINTER;
-use ic_ledger_core::Tokens;
+use dfn_protobuf::ProtoBuf;
+use ic_base_types::CanisterId;
+use ic_icrc1_ledger_sm_tests::{transfer, MINTER};
+use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
-use icp_ledger::{AccountIdentifier, InitArgs, LedgerCanisterInitPayload, LedgerCanisterPayload};
+use icp_ledger::{
+    AccountIdentifier, Block, GetBlocksArgs, GetBlocksRes, InitArgs, LedgerCanisterInitPayload,
+    LedgerCanisterPayload, QueryBlocksResponse,
+};
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{Memo, TransferArg, TransferError},
 };
+use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
+use std::collections::{HashMap, HashSet};
 
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -34,6 +40,53 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterI
         .token_symbol_and_name(&args.token_symbol, &args.token_name)
         .build()
         .unwrap()
+}
+
+fn query_blocks(
+    env: &StateMachine,
+    caller: Principal,
+    ledger: CanisterId,
+    start: u64,
+    length: u64,
+) -> QueryBlocksResponse {
+    Decode!(
+        &env.execute_ingress_as(
+            PrincipalId(caller),
+            ledger,
+            "query_blocks",
+            Encode!(&GetBlocksArgs {
+                start,
+                length: length as usize
+            })
+            .unwrap()
+        )
+        .expect("failed to query blocks")
+        .bytes(),
+        QueryBlocksResponse
+    )
+    .expect("failed to decode transfer response")
+}
+
+fn get_blocks_pb(
+    env: &StateMachine,
+    caller: Principal,
+    ledger: CanisterId,
+    start: u64,
+    length: usize,
+) -> GetBlocksRes {
+    let bytes = env
+        .execute_ingress_as(
+            PrincipalId(caller),
+            ledger,
+            "get_blocks_pb",
+            ProtoBuf(GetBlocksArgs { start, length })
+                .into_bytes()
+                .unwrap(),
+        )
+        .expect("failed to query blocks")
+        .bytes();
+    let result: GetBlocksRes = ProtoBuf::from_bytes(bytes).map(|c| c.0).unwrap();
+    result
 }
 
 #[test]
@@ -196,5 +249,88 @@ fn check_memo() {
     for memo_size_bytes in 33..40 {
         assert_eq!(Err(UserError::new(ErrorCode::CanisterCalledTrap, "Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: the memo field is too large")),
             mint_with_memo(memo_size_bytes));
+    }
+}
+
+#[test]
+fn test_block_transformation() {
+    let ledger_wasm_mainnet =
+        std::fs::read(std::env::var("ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap()).unwrap();
+    let ledger_wasm_current = ledger_wasm();
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
+    initial_balances.insert(Account::from(p2.0).into(), Tokens::from_e8s(10_000_000));
+    initial_balances.insert(Account::from(p3.0).into(), Tokens::from_e8s(10_000_000));
+    let init_args = Encode!(&LedgerCanisterPayload::Init(InitArgs {
+        archive_options: None,
+        minting_account: MINTER.into(),
+        icrc1_minting_account: Some(MINTER),
+        initial_values: initial_balances,
+        max_message_size_bytes: None,
+        transaction_window: None,
+        send_whitelist: HashSet::new(),
+        transfer_fee: Some(Tokens::from_e8s(10_000)),
+        token_symbol: Some("ICP".into()),
+        token_name: Some("Internet Computer".into()),
+    }))
+    .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm_mainnet, init_args, None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p1.0, p3.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p3.0, p2.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p2.0, p1.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
+
+    // Fetch all blocks before the upgrade
+    let resp_pre_upgrade = get_blocks_pb(&env, p1.0, canister_id, 0, 8).0.unwrap();
+    let certificate_pre_upgrade =
+        query_blocks(&env, p1.0, canister_id, 0, u32::MAX.into()).certificate;
+    // Now upgrade the ledger to the new canister wasm
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current,
+        Encode!(&LedgerCanisterPayload::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    // Fetch all blocks after the upgrade
+    let resp_post_upgrade = get_blocks_pb(&env, p1.0, canister_id, 0, 8).0.unwrap();
+    let certificate_post_upgrade =
+        query_blocks(&env, p1.0, canister_id, 0, u32::MAX.into()).certificate;
+
+    // Make sure the same number of blocks were fetched before and after the upgrade
+    assert_eq!(resp_pre_upgrade.len(), resp_post_upgrade.len());
+
+    // Make sure the certificates are the same
+    assert_eq!(certificate_pre_upgrade, certificate_post_upgrade);
+
+    //Go through all blocks and make sure the blocks fetched before the upgrade are the same as after the upgrade
+    for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
+        .into_iter()
+        .zip(resp_post_upgrade.into_iter())
+    {
+        assert_eq!(block_pre_upgrade, block_post_upgrade);
+        assert_eq!(
+            Block::decode(block_pre_upgrade.clone()).unwrap(),
+            Block::decode(block_post_upgrade.clone()).unwrap()
+        );
+        assert_eq!(
+            Block::decode(block_pre_upgrade.clone()).unwrap().encode(),
+            Block::decode(block_post_upgrade.clone()).unwrap().encode()
+        );
+        assert_eq!(
+            Block::block_hash(&block_pre_upgrade),
+            Block::block_hash(&block_post_upgrade)
+        );
     }
 }

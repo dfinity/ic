@@ -460,8 +460,8 @@ http_file(
 http_file(
     name = "mainnet_icp_ledger_canister",
     downloaded_file_path = "ledger-canister_notify-method.wasm.gz",
-    sha256 = "900e30c4bf3293244cd4649e8470ece822e18723e9a942decabc32d46257b514",
-    url = "https://download.dfinity.systems/ic/f02cc38677905e24a9016637fddc697039930808/canisters/ledger-canister_notify-method.wasm.gz",
+    sha256 = "cb16acc20a8948b68cc40b7d7328a53ec36c3cf713b3111921b49d009b98c5a5",
+    url = "https://download.dfinity.systems/ic/c63b73baa88d65a45a60f4d7e0ec043f1fbf98be/canisters/ledger-canister_notify-method.wasm.gz",
 )
 
 # From https://dashboard.internetcomputer.org/proposal/44955
