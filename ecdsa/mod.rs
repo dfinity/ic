@@ -6,6 +6,8 @@ use candid::Principal;
 mod types;
 pub use types::*;
 
+const SIGN_WITH_ECDSA_FEE: u128 = 26_153_846_153;
+
 /// Return a SEC1 encoded ECDSA public key for the given canister using the given derivation path.
 ///
 /// See [IC method `ecdsa_public_key`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-ecdsa_public_key).
@@ -19,17 +21,15 @@ pub async fn ecdsa_public_key(
 ///
 /// See [IC method `sign_with_ecdsa`](https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-sign_with_ecdsa).
 ///
-/// This call requires cycles payment. The required cycles varies according to the subnet size (number of nodes).
+/// This call requires cycles payment.
+/// This method handles the cycles cost under the hood.
 /// Check [Gas and cycles cost](https://internetcomputer.org/docs/current/developer-docs/gas-cost) for more details.
-pub async fn sign_with_ecdsa(
-    arg: SignWithEcdsaArgument,
-    cycles: u128,
-) -> CallResult<(SignWithEcdsaResponse,)> {
+pub async fn sign_with_ecdsa(arg: SignWithEcdsaArgument) -> CallResult<(SignWithEcdsaResponse,)> {
     call_with_payment128(
         Principal::management_canister(),
         "sign_with_ecdsa",
         (arg,),
-        cycles,
+        SIGN_WITH_ECDSA_FEE,
     )
     .await
 }
