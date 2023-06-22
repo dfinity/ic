@@ -2,9 +2,11 @@
 
 PATH=$PATH:/usr/sbin
 
-STATUSFILE="${CI_PROJECT_DIR:-}/bazel-out/volatile-status.txt"
+if [ -f "${VERSION_FILE_PATH:-}" ]; then
+    STATUSFILE="$(cat "${VERSION_FILE_PATH}")"
+fi
 
-if [ -f "${STATUSFILE}" ]; then
+if [ -f "${STATUSFILE:-}" ]; then
     while read -r k v; do
         case "$k" in
             CI_JOB_ID | CI_RUNNER_TAGS)

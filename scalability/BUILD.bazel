@@ -274,6 +274,7 @@ sh_test(
     srcs = ["common/tests/e2e-scalability-tests.sh"],
     data = [
         ":e2e-scalability-tests",
+        "//bazel:version_file_path",
         "//ic-os:scripts/build-bootstrap-config-image.sh",
         IC_OS_ENV + ":disk-img.tar.zst.cas-url",
         IC_OS_ENV + ":disk-img.tar.zst.sha256",
@@ -281,12 +282,12 @@ sh_test(
     ],
     env = {
         "E2E_TEST_BIN": "$(rootpath :e2e-scalability-tests)",
+        "VERSION_FILE_PATH": "$(rootpath //bazel:version_file_path)",
         "IC_OS_VERSION_FILE": "$(rootpath " + IC_OS_ENV + ":version.txt)",
         "IC_OS_IMAGE_URL": "$(rootpath " + IC_OS_ENV + ":disk-img.tar.zst.cas-url)",
         "IC_OS_IMAGE_SHA256SUM": "$(rootpath " + IC_OS_ENV + ":disk-img.tar.zst.sha256)",
     },
     env_inherit = [
-        "CI_PROJECT_DIR",
         "HOME",
     ],
     tags = [

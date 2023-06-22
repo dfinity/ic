@@ -134,7 +134,10 @@ sh_test(
 # WARNING! It has to be used carefully: never use it the way that may affect results as this will make your rule nonhermetic and cached results invalid!
 version_file_path(
     name = "version_file_path",
-    visibility = ["//rs/tests:__subpackages__"],
+    visibility = [
+        "//rs/tests:__subpackages__",
+        "//scalability:__pkg__",
+    ],
 )
 
 sh_binary(
