@@ -34,8 +34,8 @@ use certificate_orchestrator_interface::{
     GetRegistrationResponse, Id, InitArg, ListAllowedPrincipalsError,
     ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
     PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, RemoveRegistrationError,
-    RemoveRegistrationResponse, State, UpdateRegistrationResponse, UpdateType,
-    UploadCertificateError, UploadCertificateResponse,
+    RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse,
+    UpdateType, UploadCertificateError, UploadCertificateResponse,
 };
 use ic_agent::{identity::Secp256k1Identity, Agent, Identity};
 use ic_registry_subnet_type::SubnetType;
@@ -224,6 +224,8 @@ pub fn registration_test(env: TestEnv) {
     let domain_a = String::from("example.com");
     let domain_b = String::from("www.test.org");
 
+    let inexistent_registration_id = String::from("inexistent");
+
     info!(&logger, "installing canister");
 
     let args = Encode!(&InitArg {
@@ -286,23 +288,55 @@ pub fn registration_test(env: TestEnv) {
         check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::PendingOrder).await;
 
         // Update registrations by going through all registration states
-        update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::PendingChallengeResponse)).await;
+        match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::PendingChallengeResponse)).await
+        {
+            UpdateRegistrationResponse::Ok(()) => {},
+            v => panic!("updateRegistration failed: {v:?}, expected ok"),
+        };
         check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingChallengeResponse).await;
 
-        update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::PendingAcmeApproval)).await;
+        match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::PendingAcmeApproval)).await
+        {
+            UpdateRegistrationResponse::Ok(()) => {},
+            v => panic!("updateRegistration failed: {v:?}, expected ok"),
+        };
         check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::PendingAcmeApproval).await;
 
-        update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::Available)).await;
+        match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::State(State::Available)).await
+        {
+            UpdateRegistrationResponse::Ok(()) => {},
+            v => panic!("updateRegistration failed: {v:?}, expected ok"),
+        };
         check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_a, State::Available).await;
 
-        update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::Canister(canister_b)).await;
+        match update_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), UpdateType::Canister(canister_b)).await
+        {
+            UpdateRegistrationResponse::Ok(()) => {},
+            v => panic!("updateRegistration failed: {v:?}, expected ok"),
+        };
         check_registration(agent.clone(), ident_a.clone(), cid, registration_a_id.clone(), domain_a.clone(), canister_b, State::Available).await;
 
-        // Try to update registration without permissions
-        update_registration(agent.clone(), ident_b.clone(), cid, registration_b_id.clone(), UpdateType::Canister(canister_a)).await;
+        // Update inexistent registration
+        match update_registration(agent.clone(), ident_a.clone(), cid, inexistent_registration_id.clone(), UpdateType::State(State::Available)).await
+        {
+            UpdateRegistrationResponse::Err(UpdateRegistrationError::NotFound) => {},
+            v => panic!("updateRegistration failed: {v:?}, expected UpdateRegistrationError::NotFound"),
+        };
 
-        // Set registrationt to failed state
-        update_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), UpdateType::State(State::Failed(BoundedString::<127>::from("Test")))).await;
+        // Try to update registration without permissions
+        match update_registration(agent.clone(), ident_b.clone(), cid, registration_b_id.clone(), UpdateType::Canister(canister_a)).await
+        {
+            UpdateRegistrationResponse::Err(UpdateRegistrationError::Unauthorized) => {},
+            v => panic!("updateRegistration failed: {v:?}, expected UpdateRegistrationError::Unauthorized"),
+        };
+
+        // Set registration to failed state
+        match update_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), UpdateType::State(State::Failed(BoundedString::<127>::from("Test")))).await
+        {
+            UpdateRegistrationResponse::Ok(()) => {},
+            v => panic!("updateRegistration failed: {v:?}, expected ok"),
+        };
+        check_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone(), domain_b.clone(), canister_b, State::Failed(BoundedString::<127>::from("Test"))).await;
 
         // Remove failed registration
         if let RemoveRegistrationResponse::Err(err) = remove_registration(agent.clone(), ident_a.clone(), cid, registration_b_id.clone()).await {
