@@ -306,14 +306,13 @@ impl CommitmentOpening {
         )
     }
 
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
-        serde_cbor::to_vec(self)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 }
 
@@ -343,9 +342,9 @@ impl Debug for CommitmentOpening {
 }
 
 impl TryFrom<&CommitmentOpeningBytes> for CommitmentOpening {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(bytes: &CommitmentOpeningBytes) -> Result<Self, ThresholdEcdsaError> {
+    fn try_from(bytes: &CommitmentOpeningBytes) -> Result<Self, ThresholdEcdsaSerializationError> {
         match bytes {
             CommitmentOpeningBytes::Simple(scalar_bytes) => {
                 Ok(Self::Simple(EccScalar::try_from(scalar_bytes)?))
@@ -359,9 +358,9 @@ impl TryFrom<&CommitmentOpeningBytes> for CommitmentOpening {
 }
 
 impl TryFrom<&IDkgOpening> for CommitmentOpening {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(idkg_opening: &IDkgOpening) -> Result<Self, ThresholdEcdsaError> {
+    fn try_from(idkg_opening: &IDkgOpening) -> Result<Self, ThresholdEcdsaSerializationError> {
         Self::deserialize(&idkg_opening.internal_opening_raw)
     }
 }
@@ -373,9 +372,11 @@ pub enum CommitmentOpeningBytes {
 }
 
 impl TryFrom<&CommitmentOpening> for CommitmentOpeningBytes {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(commitment_opening: &CommitmentOpening) -> Result<Self, ThresholdEcdsaError> {
+    fn try_from(
+        commitment_opening: &CommitmentOpening,
+    ) -> Result<Self, ThresholdEcdsaSerializationError> {
         match commitment_opening {
             CommitmentOpening::Simple(scalar) => {
                 Ok(Self::Simple(EccScalarBytes::try_from(scalar)?))
@@ -537,14 +538,13 @@ impl From<PedersenCommitment> for PolynomialCommitment {
 }
 
 impl PolynomialCommitment {
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
-        serde_cbor::to_vec(self)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
     /// This returns a stable serialization of the commitment

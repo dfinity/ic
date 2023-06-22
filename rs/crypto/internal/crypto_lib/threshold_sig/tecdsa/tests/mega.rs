@@ -233,7 +233,7 @@ fn mega_private_key_bytes_should_redact_logs() -> Result<(), ThresholdEcdsaError
 
     let sk = MEGaPrivateKey::generate(curve, &mut rng);
 
-    let bytes = MEGaPrivateKeyK256Bytes::try_from(&sk)?;
+    let bytes = MEGaPrivateKeyK256Bytes::try_from(&sk).expect("Deserialization failed");
 
     let log = format!("{:?}", bytes);
     assert_eq!("MEGaPrivateKeyK256Bytes - REDACTED", log);

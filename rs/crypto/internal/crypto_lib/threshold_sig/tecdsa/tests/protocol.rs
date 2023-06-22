@@ -214,7 +214,8 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
         sig: &ThresholdEcdsaCombinedSigInternal,
     ) -> Result<(), ThresholdEcdsaError> {
         let bytes = sig.serialize();
-        let sig2 = ThresholdEcdsaCombinedSigInternal::deserialize(alg, &bytes)?;
+        let sig2 = ThresholdEcdsaCombinedSigInternal::deserialize(alg, &bytes)
+            .expect("Deserialization failed");
         assert_eq!(*sig, sig2);
         Ok(())
     }

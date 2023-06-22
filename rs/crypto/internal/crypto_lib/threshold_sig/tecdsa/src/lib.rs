@@ -240,11 +240,16 @@ pub enum ThresholdEcdsaError {
     InvalidSignature,
     InvalidSignatureShare,
     InvalidThreshold(usize, usize),
-    SerializationError(String),
     UnexpectedCommitmentType,
 }
 
 pub type ThresholdEcdsaResult<T> = std::result::Result<T, ThresholdEcdsaError>;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ThresholdEcdsaSerializationError(pub String);
+
+pub type ThresholdEcdsaSerializationResult<T> =
+    std::result::Result<T, ThresholdEcdsaSerializationError>;
 
 mod complaints;
 mod dealings;
@@ -627,14 +632,13 @@ impl From<&ExtendedDerivationPath> for DerivationPath {
 }
 
 impl ThresholdEcdsaSigShareInternal {
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
-        serde_cbor::to_vec(self)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(raw: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(raw: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(raw)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 }
 
@@ -906,7 +910,6 @@ impl From<ThresholdEcdsaError> for ThresholdEcdsaDerivePublicKeyError {
             | ThresholdEcdsaError::InvalidSignature
             | ThresholdEcdsaError::InvalidSignatureShare
             | ThresholdEcdsaError::InvalidThreshold(_, _)
-            | ThresholdEcdsaError::SerializationError(_)
             | ThresholdEcdsaError::UnexpectedCommitmentType => Self::InternalError(e),
         }
     }

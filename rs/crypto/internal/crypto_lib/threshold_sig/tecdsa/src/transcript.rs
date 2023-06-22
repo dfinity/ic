@@ -13,14 +13,13 @@ pub struct IDkgTranscriptInternal {
 }
 
 impl IDkgTranscriptInternal {
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
-        serde_cbor::to_vec(self)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
     pub fn constant_term(&self) -> EccPoint {
@@ -35,9 +34,11 @@ impl IDkgTranscriptInternal {
 }
 
 impl TryFrom<&IDkgTranscript> for IDkgTranscriptInternal {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(idkm_transcript: &IDkgTranscript) -> Result<Self, ThresholdEcdsaError> {
+    fn try_from(
+        idkm_transcript: &IDkgTranscript,
+    ) -> Result<Self, ThresholdEcdsaSerializationError> {
         Self::deserialize(&idkm_transcript.internal_transcript_raw)
     }
 }
@@ -77,14 +78,13 @@ impl CombinedCommitment {
         }
     }
 
-    pub fn serialize(&self) -> ThresholdEcdsaResult<Vec<u8>> {
-        serde_cbor::to_vec(self)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+    pub fn serialize(&self) -> ThresholdEcdsaSerializationResult<Vec<u8>> {
+        serde_cbor::to_vec(self).map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 
-    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(bytes: &[u8]) -> ThresholdEcdsaSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| ThresholdEcdsaError::SerializationError(format!("{}", e)))
+            .map_err(|e| ThresholdEcdsaSerializationError(format!("{}", e)))
     }
 }
 
@@ -99,9 +99,11 @@ pub enum IDkgTranscriptOperationInternal {
 }
 
 impl TryFrom<&IDkgTranscriptOperation> for IDkgTranscriptOperationInternal {
-    type Error = ThresholdEcdsaError;
+    type Error = ThresholdEcdsaSerializationError;
 
-    fn try_from(idkm_transcript_op: &IDkgTranscriptOperation) -> Result<Self, ThresholdEcdsaError> {
+    fn try_from(
+        idkm_transcript_op: &IDkgTranscriptOperation,
+    ) -> Result<Self, ThresholdEcdsaSerializationError> {
         match idkm_transcript_op {
             IDkgTranscriptOperation::Random => Ok(Self::Random),
             IDkgTranscriptOperation::ReshareOfMasked(idkm_transcript) => {
