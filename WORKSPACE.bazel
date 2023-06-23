@@ -469,8 +469,8 @@ http_file(
 http_file(
     name = "mainnet_icp_ledger-archive-node-canister",
     downloaded_file_path = "ledger-archive-node-canister.wasm.gz",
-    sha256 = "a88d0b6a327361208a48dd8dab5b7f47f8e1ed0f3c2aca6b6ad383187520ff67",
-    url = "https://download.dfinity.systems/ic/1b98a5d984176b1c948d0cb92227d88ad5ee8044/canisters/ledger-archive-node-canister.wasm.gz",
+    sha256 = "569d498b638668733953a756f4a417533e1f513d1d41d55960abcd2f160d2aad",
+    url = "https://download.dfinity.systems/ic/acd7e2928237a8e8bc1aa5e73efd47c8a8dfb556/canisters/ledger-archive-node-canister.wasm.gz",
 )
 
 http_file(
@@ -483,9 +483,8 @@ http_file(
 http_file(
     name = "mainnet_nns_lifeline_canister",
     downloaded_file_path = "lifeline-canister.wasm.gz",
-    sha256 = "2cce2f281c86325988528624dc9375272ecd2adc96e1021e41d08943a6e9e5a1",
-    # TODO: change to https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/lifeline_canister.wasm.gz after the next lifeline canister release.
-    url = "https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/lifeline.wasm.gz",
+    sha256 = "775303f6b99530db496117df1edfa1e24153a161895c56e79d4e39daae36e28b",
+    url = "https://download.dfinity.systems/ic/e4a9c0aa4ef24f7ee5bb9d27ce930551a7c5e24d/canisters/lifeline_canister.wasm.gz",
 )
 
 http_file(
