@@ -155,23 +155,8 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
                 return Box::pin(async move { Ok(res) });
             }
         };
-        // Collect requested path.
+
         let read_state = request.content().clone();
-        let mut paths: Vec<Path> = read_state.paths.clone();
-
-        // Always add "time" to the paths even if not explicitly requested.
-        paths.push(Path::from(Label::from("time")));
-
-        let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
-            Ok(tree) => tree,
-            Err(TooLongPathError {}) => {
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    "Failed to parse requested paths: path is too long.".to_string(),
-                );
-                return Box::pin(async move { Ok(res) });
-            }
-        };
         let registry_client = self.registry_client.get_latest_version();
         let malicious_flags = self.malicious_flags.clone();
         let state_reader_executor = self.state_reader_executor.clone();
@@ -204,6 +189,23 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
             {
                 return Ok(make_plaintext_response(status, message));
             }
+
+            // Create labeled tree. This may be an expensive operation and by
+            // creating the labeled tree after verifying the paths we know that
+            // the depth is max 4.
+            // Always add "time" to the paths even if not explicitly requested.
+            let mut paths: Vec<Path> = read_state.paths;
+            paths.push(Path::from(Label::from("time")));
+            let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
+                Ok(tree) => tree,
+                Err(TooLongPathError) => {
+                    let res = make_plaintext_response(
+                        StatusCode::BAD_REQUEST,
+                        "Failed to parse requested paths: path is too long.".to_string(),
+                    );
+                    return Ok(res);
+                }
+            };
 
             let res = match state_reader_executor
                 .read_certified_state(&labeled_tree)
@@ -290,7 +292,12 @@ async fn verify_paths(
             [b"subnet"] => {}
             [b"subnet", _subnet_id, b"public_key"] => {}
             [b"subnet", _subnet_id, b"canister_ranges"] => {}
-            [b"request_status", request_id] | [b"request_status", request_id, ..] => {
+            [b"request_status", request_id]
+            | [b"request_status", request_id, b"status"]
+            | [b"request_status", request_id, b"reply"]
+            | [b"request_status", request_id, b"reject_code"]
+            | [b"request_status", request_id, b"reject_message"]
+            | [b"request_status", request_id, b"error_code"] => {
                 // Verify that the request was signed by the same user.
                 if let Ok(message_id) = MessageId::try_from(*request_id) {
                     if let Some(request_status_id) = request_status_id {
