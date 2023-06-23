@@ -16,3 +16,12 @@ prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 tokio = { version = "1.15.0", features = ["full"] }
+
+[dev-dependencies]
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
