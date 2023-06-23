@@ -380,13 +380,18 @@ impl StateSyncClient for StateSync {
         Some(self.get_chunk_tracker(id))
     }
 
-    /// Blocking. Makes synchroneous file system calls.
+    /// Non-Blocking.
+    fn should_cancel(&self, id: &StateSyncArtifactId) -> bool {
+        self.get_priority_function()(id, &()) == Priority::Drop
+    }
+
+    /// Blocking. Makes synchronous file system calls.
     fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk> {
         let msg = self.get_validated_by_identifier(id)?;
         Box::new(msg).get_chunk(chunk_id)
     }
 
-    /// Blocking. Makes synchroneous file system calls.
+    /// Blocking. Makes synchronous file system calls.
     fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId) {
         let _ = self.process_changes(
             &SysTimeSource::new(),

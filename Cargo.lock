@@ -8749,6 +8749,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-quic-transport"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "http",
+ "ic-types",
+]
+
+[[package]]
 name = "ic-recovery"
 version = "0.1.0"
 dependencies = [
@@ -10171,6 +10181,31 @@ dependencies = [
  "tempfile",
  "tree-deserializer",
  "uuid 1.3.0",
+]
+
+[[package]]
+name = "ic-state-sync-manager"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.11.0",
+ "bincode",
+ "bytes",
+ "futures",
+ "ic-async-utils",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-quic-transport",
+ "ic-types",
+ "prometheus 0.12.0",
+ "prost",
+ "rand 0.8.5",
+ "serde",
+ "slog",
+ "tokio",
 ]
 
 [[package]]

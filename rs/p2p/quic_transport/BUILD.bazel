@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = [
+    "//rs/p2p/quic_transport:__subpackages__",
+    "//rs/p2p/state_sync_manager:__subpackages__",
+])
+
+DEPENDENCIES = [
+    "//rs/types/types",
+    "@crate_index//:bytes",
+    "@crate_index//:http",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "quic_transport",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_quic_transport",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
