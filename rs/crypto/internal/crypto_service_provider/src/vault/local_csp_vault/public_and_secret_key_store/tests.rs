@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
-use crate::vault::test_utils;
 use crate::LocalCspVault;
 
 mod key_id_computations {
     use super::*;
+    use crate::vault::api::PublicKeyStoreCspVault;
     use crate::vault::local_csp_vault::public_and_secret_key_store::{
         compute_committee_signing_key_id, compute_dkg_dealing_encryption_key_id,
         compute_idkg_dealing_encryption_key_id, compute_node_signing_key_id,
@@ -130,7 +130,7 @@ mod key_id_computations {
 
     #[test]
     fn should_fail_to_compute_idkg_dealing_encryption_key_id_on_incorrect_algorithm_id() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let mut idkg_dealing_encryption_public_key = {
             let _ = generate_idkg_dealing_encryption_key_pair(&csp_vault);
             csp_vault
@@ -196,14 +196,12 @@ mod public_key_comparisons {
     use crate::vault::test_utils::pks_and_sks::{
         convert_to_external_public_keys, generate_all_keys,
     };
-    use crate::CspVault;
     use assert_matches::assert_matches;
     use ic_types::crypto::CurrentNodePublicKeys;
-    use std::sync::Arc;
 
     #[test]
     fn should_return_success_for_identical_registry_and_local_public_keys() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -214,7 +212,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_node_signing_public_keys_mismatch() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let mut external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -235,7 +233,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_committee_signing_public_keys_mismatch() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let mut external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -256,7 +254,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_tls_certificate_mismatch() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let mut external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -277,7 +275,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_dkg_dealing_encryption_public_keys_mismatch() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let mut external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -300,7 +298,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_idkg_dealing_encryption_public_keys_mismatch() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let mut external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -323,7 +321,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_missing_local_node_signing_public_key() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -344,7 +342,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_missing_local_committee_signing_public_key() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -365,7 +363,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_missing_local_tls_certificate() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -386,7 +384,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_missing_local_dkg_dealing_encryption_public_keys() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -407,7 +405,7 @@ mod public_key_comparisons {
 
     #[test]
     fn should_fail_for_missing_local_idkg_dealing_encryption_public_keys() {
-        let csp_vault: Arc<dyn CspVault> = LocalCspVault::builder_for_test().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build();
         let current_node_public_keys = generate_all_keys(&csp_vault);
         let external_public_keys =
             convert_to_external_public_keys(current_node_public_keys.clone());
@@ -444,119 +442,444 @@ mod public_key_comparisons {
 
 mod pks_and_sks_contains {
     use super::*;
+    use crate::vault::api::PublicAndSecretKeyStoreCspVault;
+    use crate::vault::api::PublicKeyStoreCspVault;
+    use crate::vault::api::{
+        BasicSignatureCspVault, ExternalPublicKeyError, LocalPublicKeyError,
+        MultiSignatureCspVault, NiDkgCspVault, NodeKeysError, NodeKeysErrors,
+        PksAndSksContainsErrors, SecretKeyError, TlsHandshakeCspVault,
+    };
+    use crate::vault::test_utils::pks_and_sks::convert_to_external_public_keys;
+    use crate::vault::test_utils::pks_and_sks::generate_all_keys;
+    use crate::vault::test_utils::pks_and_sks::generate_idkg_dealing_encryption_key_pair;
+    use crate::vault::test_utils::pks_and_sks::NODE_1;
+    use assert_matches::assert_matches;
+    use ic_types_test_utils::ids::node_test_id;
 
     #[test]
     fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_one_idkg_key() {
-        test_utils::pks_and_sks::should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_one_idkg_key(LocalCspVault::builder_for_test().build_into_arc());
+        let csp_vault = LocalCspVault::builder_for_test().build();
+
+        let current_node_public_keys = generate_all_keys(&csp_vault);
+
+        assert!(csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
+            .is_ok());
     }
 
     #[test]
     fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_multiple_idkg_keys() {
-        test_utils::pks_and_sks::should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_multiple_idkg_keys(
-            LocalCspVault::builder_for_test().build_into_arc(),
-        );
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let current_node_public_keys = generate_all_keys(&csp_vault);
+        let _second_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
+        let _third_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
+
+        assert!(csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
+            .is_ok());
     }
 
     #[test]
     fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_multiple_idkg_keys_and_external_key_not_first_in_vector(
     ) {
-        test_utils::pks_and_sks::should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_multiple_idkg_keys_and_external_key_not_first_in_vector(
-            LocalCspVault::builder_for_test().build_into_arc(),
-        );
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let _initial_node_public_keys = generate_all_keys(&csp_vault);
+        let _second_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
+        let current_node_public_keys = csp_vault
+            .current_node_public_keys()
+            .expect("Failed to get current node public keys");
+        let _third_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
+
+        assert!(csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys))
+            .is_ok());
     }
 
     #[test]
     fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_where_idkg_keys_have_different_timestamps(
     ) {
-        test_utils::pks_and_sks::should_return_success_for_pks_and_sks_contains_if_all_keys_match_where_idkg_keys_have_different_timestamps(
-            LocalCspVault::builder_for_test().build_into_arc(),
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let _current_node_public_keys = generate_all_keys(&csp_vault);
+        let mut external_public_keys = convert_to_external_public_keys(
+            csp_vault
+                .current_node_public_keys_with_timestamps()
+                .expect("error getting current node public keys with timestamp"),
         );
+        external_public_keys
+            .idkg_dealing_encryption_public_key
+            .timestamp = external_public_keys
+            .idkg_dealing_encryption_public_key
+            .timestamp
+            .expect("timestamp of generated iDKG dealing encryption key is none")
+            .checked_add(42);
+
+        assert!(csp_vault.pks_and_sks_contains(external_public_keys).is_ok());
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_no_keys_match() {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_no_keys_match(
-            LocalCspVault::builder_for_test().build_into_arc(),
-            LocalCspVault::builder_for_test().build_into_arc(),
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let shadow_csp_vault = LocalCspVault::builder_for_test().build();
+        let _current_node_public_keys = generate_all_keys(&csp_vault);
+        let shadow_node_public_keys = generate_all_keys(&shadow_csp_vault);
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(shadow_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+                committee_signing_key_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+                tls_certificate_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+                dkg_dealing_encryption_key_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+                idkg_dealing_encryption_key_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+            }))
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_node_signing_key_does_not_match() {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_node_signing_key_does_not_match(
-            LocalCspVault::builder_for_test().build_into_arc(),
-            LocalCspVault::builder_for_test().build_into_arc()
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let shadow_csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        current_node_public_keys.node_signing_public_key = {
+            let _ = shadow_csp_vault
+                .gen_node_signing_key_pair()
+                .expect("Failed to generate node signing key pair");
+            shadow_csp_vault
+                .current_node_public_keys()
+                .expect("Failed to get current node public keys")
+                .node_signing_public_key
+        };
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+                committee_signing_key_error: None,
+                tls_certificate_error: None,
+                dkg_dealing_encryption_key_error: None,
+                idkg_dealing_encryption_key_error: None,
+            }))
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_committee_signing_key_does_not_match() {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_committee_signing_key_does_not_match(
-            LocalCspVault::builder_for_test().build_into_arc(),
-            LocalCspVault::builder_for_test().build_into_arc()
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let shadow_csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        current_node_public_keys.committee_signing_public_key = {
+            let _ = shadow_csp_vault
+                .gen_committee_signing_key_pair()
+                .expect("Failed to generate committee signing key pair");
+            shadow_csp_vault
+                .current_node_public_keys()
+                .expect("Failed to get current node public keys")
+                .committee_signing_public_key
+        };
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: None,
+                committee_signing_key_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+                tls_certificate_error: None,
+                dkg_dealing_encryption_key_error: None,
+                idkg_dealing_encryption_key_error: None,
+            }))
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_dkg_dealing_encryption_key_does_not_match() {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_dkg_dealing_encryption_key_does_not_match(
-            LocalCspVault::builder_for_test().build_into_arc(),
-            LocalCspVault::builder_for_test().build_into_arc()
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let shadow_csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        current_node_public_keys.dkg_dealing_encryption_public_key = {
+            let _ = shadow_csp_vault
+                .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
+                .expect("Failed to generate dkg dealing encryption signing key pair");
+            shadow_csp_vault
+                .current_node_public_keys()
+                .expect("Failed to get current node public keys")
+                .dkg_dealing_encryption_public_key
+        };
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: None,
+                committee_signing_key_error: None,
+                tls_certificate_error: None,
+                dkg_dealing_encryption_key_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+                idkg_dealing_encryption_key_error: None,
+            }))
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_tls_certificate_does_not_match() {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_tls_certificate_does_not_match(
-            LocalCspVault::builder_for_test().build_into_arc(),
-            LocalCspVault::builder_for_test().build_into_arc()
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let shadow_csp_vault = LocalCspVault::builder_for_test().build();
+        const NOT_AFTER: &str = "99991231235959Z";
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        current_node_public_keys.tls_certificate = {
+            let _ = shadow_csp_vault
+                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+                .expect("Failed to generate tks certificate");
+            shadow_csp_vault
+                .current_node_public_keys()
+                .expect("Failed to get current node public keys")
+                .tls_certificate
+        };
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: None,
+                committee_signing_key_error: None,
+                tls_certificate_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+                dkg_dealing_encryption_key_error: None,
+                idkg_dealing_encryption_key_error: None,
+            }))
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_idkg_dealing_encryption_key_does_not_match()
     {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_idkg_dealing_encryption_key_does_not_match(
-            LocalCspVault::builder_for_test().build_into_arc(),
-            LocalCspVault::builder_for_test().build_into_arc()
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let shadow_csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        current_node_public_keys.idkg_dealing_encryption_public_key = {
+            let _ = generate_idkg_dealing_encryption_key_pair(&shadow_csp_vault);
+            shadow_csp_vault
+                .current_node_public_keys()
+                .expect("Failed to get current node public keys")
+                .idkg_dealing_encryption_public_key
+        };
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: None,
+                committee_signing_key_error: None,
+                tls_certificate_error: None,
+                dkg_dealing_encryption_key_error: None,
+                idkg_dealing_encryption_key_error: Some(NodeKeysError {
+                    external_public_key_error: None,
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::NotFound),
+                }),
+            }))
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_external_node_signing_key_is_malformed() {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_external_node_signing_key_is_malformed(
-            LocalCspVault::builder_for_test().build_into_arc(),
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        if let Some(node_signing_public_key) = &mut current_node_public_keys.node_signing_public_key
+        {
+            node_signing_public_key.key_value = b"malformed key".to_vec();
+        } else {
+            panic!("Node signing key missing");
+        }
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: Some(NodeKeysError {
+                    external_public_key_error: Some(ExternalPublicKeyError(malformed_error)),
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::CannotComputeKeyId),
+                }),
+                committee_signing_key_error: None,
+                tls_certificate_error: None,
+                dkg_dealing_encryption_key_error: None,
+                idkg_dealing_encryption_key_error: None,
+            })) if malformed_error.contains("Malformed Ed25519 public key")
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_external_committee_signing_key_is_malformed()
     {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_external_committee_signing_key_is_malformed(
-            LocalCspVault::builder_for_test().build_into_arc(),
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        if let Some(committee_signing_public_key) =
+            &mut current_node_public_keys.committee_signing_public_key
+        {
+            committee_signing_public_key.key_value = b"malformed key".to_vec();
+        } else {
+            panic!("Committee signing key missing");
+        }
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: None,
+                committee_signing_key_error: Some(NodeKeysError {
+                    external_public_key_error: Some(ExternalPublicKeyError(malformed_error)),
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::CannotComputeKeyId),
+                }),
+                tls_certificate_error: None,
+                dkg_dealing_encryption_key_error: None,
+                idkg_dealing_encryption_key_error: None,
+            })) if malformed_error.contains("Malformed MultiBls12_381 public key")
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_external_dkg_dealing_encryption_key_is_malformed(
     ) {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_external_dkg_dealing_encryption_key_is_malformed(
-            LocalCspVault::builder_for_test().build_into_arc(),
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        if let Some(dkg_dealing_encryption_public_key) =
+            &mut current_node_public_keys.dkg_dealing_encryption_public_key
+        {
+            dkg_dealing_encryption_public_key.key_value = b"malformed key".to_vec();
+        } else {
+            panic!("DKG dealing encryption key missing");
+        }
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: None,
+                committee_signing_key_error: None,
+                tls_certificate_error: None,
+                dkg_dealing_encryption_key_error: Some(NodeKeysError {
+                    external_public_key_error: Some(ExternalPublicKeyError(malformed_error)),
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::CannotComputeKeyId),
+                }),
+                idkg_dealing_encryption_key_error: None,
+            })) if malformed_error.contains("Malformed public key")
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_external_tls_certificate_is_malformed() {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_external_tls_certificate_is_malformed(
-            LocalCspVault::builder_for_test().build_into_arc(),
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        if let Some(tls_certificate) = &mut current_node_public_keys.tls_certificate {
+            tls_certificate.certificate_der = b"malformed certificate".to_vec();
+        } else {
+            panic!("TLS certificate missing");
+        }
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: None,
+                committee_signing_key_error: None,
+                tls_certificate_error: Some(NodeKeysError {
+                    external_public_key_error: Some(ExternalPublicKeyError(malformed_error)),
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::CannotComputeKeyId),
+                }),
+                dkg_dealing_encryption_key_error: None,
+                idkg_dealing_encryption_key_error: None,
+            })) if malformed_error.contains("Malformed certificate: TlsPublicKeyCertCreationError")
         );
     }
 
     #[test]
     fn should_return_error_for_pks_and_sks_contains_if_external_idkg_dealing_encryption_key_is_malformed(
     ) {
-        test_utils::pks_and_sks::should_return_error_for_pks_and_sks_contains_if_external_idkg_dealing_encryption_key_is_malformed(
-            LocalCspVault::builder_for_test().build_into_arc(),
+        let csp_vault = LocalCspVault::builder_for_test().build();
+        let mut current_node_public_keys = generate_all_keys(&csp_vault);
+        if let Some(idkg_dealing_encryption_public_key) =
+            &mut current_node_public_keys.idkg_dealing_encryption_public_key
+        {
+            idkg_dealing_encryption_public_key.key_value = b"malformed key".to_vec();
+        } else {
+            panic!("iDKG dealing encryption key missing");
+        }
+
+        let result = csp_vault
+            .pks_and_sks_contains(convert_to_external_public_keys(current_node_public_keys));
+
+        assert_matches!(
+            result,
+            Err(PksAndSksContainsErrors::NodeKeysErrors(NodeKeysErrors {
+                node_signing_key_error: None,
+                committee_signing_key_error: None,
+                tls_certificate_error: None,
+                dkg_dealing_encryption_key_error: None,
+                idkg_dealing_encryption_key_error: Some(NodeKeysError {
+                    external_public_key_error: Some(ExternalPublicKeyError(malformed_error)),
+                    local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+                    secret_key_error: Some(SecretKeyError::CannotComputeKeyId),
+                }),
+            })) if malformed_error.contains("Malformed public key: I-DKG dealing encryption key malformed")
         );
     }
 }
