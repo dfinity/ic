@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
+    "//rs/nervous_system/runtime",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "@crate_index//:anyhow",

@@ -84,9 +84,9 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
       open status call counter to canister memory.
      */
     let _unused_canister_status_response =
-        ic_nervous_system_clients::canister_status::canister_status(CanisterIdRecord::from(
-            ROOT_CANISTER_ID,
-        ))
+        ic_nervous_system_clients::canister_status::canister_status::<DfnRuntime>(
+            CanisterIdRecord::from(ROOT_CANISTER_ID),
+        )
         .await
         .map(CanisterStatusResult::from);
 
@@ -146,7 +146,7 @@ fn change_nns_canister() {
     over(candid, |(proposal,): (ChangeCanisterProposal,)| {
         // Because change_canister is async, and because we can't directly use
         // `await`, we need to use the `spawn` trick.
-        let future = change_canister(proposal);
+        let future = change_canister::<DfnRuntime>(proposal);
 
         // Starts the proposal execution, which will continue after this function has
         // returned.

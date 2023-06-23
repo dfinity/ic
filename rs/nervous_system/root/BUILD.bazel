@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/runtime",
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nns/constants",
     "//rs/rust_canisters/dfn_candid",

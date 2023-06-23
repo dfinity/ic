@@ -14,6 +14,7 @@ use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_clients::canister_status::{
     canister_status, CanisterStatusResultV2, CanisterStatusType,
 };
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 use ic_sns_wasm::{
@@ -247,20 +248,16 @@ impl CanisterApiImpl {
         let mut count = 0;
         // Wait until canister is in the stopped state.
         loop {
-            let status: CanisterStatusResultV2 = canister_status(CanisterIdRecord::from(canister))
-                .await
-                .map(CanisterStatusResultV2::from)
-                .map_err(|(code, msg)| {
-                    format!(
-                        "{}{}",
-                        code.map(|c| format!(
-                            "Unable to get target canister status: error code {}: ",
-                            c
-                        ))
-                        .unwrap_or_default(),
-                        msg
-                    )
-                })?;
+            let status: CanisterStatusResultV2 =
+                canister_status::<DfnRuntime>(CanisterIdRecord::from(canister))
+                    .await
+                    .map(CanisterStatusResultV2::from)
+                    .map_err(|(code, msg)| {
+                        format!(
+                            "Unable to get target canister status: error code {}: {}",
+                            code, msg
+                        )
+                    })?;
 
             if status.status() == CanisterStatusType::Stopped {
                 return Ok(());

@@ -157,7 +157,7 @@ fn canister_status() {
 
 #[candid_method(update, rename = "canister_status")]
 async fn canister_status_(id: CanisterIdRecord) -> CanisterStatusResult {
-    ic_nervous_system_clients::canister_status::canister_status(id)
+    ic_nervous_system_clients::canister_status::canister_status::<DfnRuntime>(id)
         .await
         .map(CanisterStatusResult::from)
         .unwrap()
@@ -233,9 +233,9 @@ fn change_canister() {
     // spawn to do the real work in the background.
     over(candid_one, |proposal: ChangeCanisterProposal| {
         assert_change_canister_proposal_is_valid(&proposal);
-        dfn_core::api::futures::spawn(ic_nervous_system_root::change_canister::change_canister(
-            proposal,
-        ));
+        dfn_core::api::futures::spawn(ic_nervous_system_root::change_canister::change_canister::<
+            DfnRuntime,
+        >(proposal));
     });
 }
 

@@ -1,7 +1,8 @@
 use async_trait::async_trait;
-use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
+use ic_nervous_system_runtime::Runtime;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
+use std::marker::PhantomData;
 
 /// A trait defining common patterns for accessing the CMC canister.
 #[async_trait]
@@ -10,38 +11,34 @@ pub trait CMC: Send + Sync {
     async fn neuron_maturity_modulation(&mut self) -> Result<i32, String>;
 }
 
-pub struct CMCCanister {
+pub struct CMCCanister<Rt: Runtime> {
     canister_id: CanisterId,
+    _phantom: PhantomData<Rt>,
 }
 
-impl CMCCanister {
+impl<Rt: Runtime> CMCCanister<Rt> {
     pub fn new() -> Self {
         CMCCanister {
             canister_id: CYCLES_MINTING_CANISTER_ID,
+            _phantom: PhantomData,
         }
     }
 }
 
-impl Default for CMCCanister {
+impl<Rt: Runtime> Default for CMCCanister<Rt> {
     fn default() -> Self {
         Self::new()
     }
 }
 
 #[async_trait]
-impl CMC for CMCCanister {
+impl<Rt: Runtime + Send + Sync> CMC for CMCCanister<Rt> {
     /// Returns the maturity_modulation from the CMC in basis points.
     async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
-        let result: Result<Result<i32, String>, (Option<i32>, String)> =
-            dfn_core::api::call_with_cleanup(
-                self.canister_id,
-                "neuron_maturity_modulation",
-                candid_one,
-                (),
-            )
-            .await;
+        let result: Result<(Result<i32, String>,), (i32, String)> =
+            Rt::call_with_cleanup(self.canister_id, "neuron_maturity_modulation", ()).await;
         match result {
-            Ok(result) => result,
+            Ok(result) => result.0,
             Err(error) => Err(error.1),
         }
     }

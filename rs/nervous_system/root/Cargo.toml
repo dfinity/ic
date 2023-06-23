@@ -16,6 +16,7 @@ ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-clients = { path = "../clients" }
 ic-nervous-system-common = { path = "../common" }
 ic-nervous-system-proxied-canister-calls-tracker = { path = "../proxied_canister_calls_tracker" }
+ic-nervous-system-runtime = { path = "../runtime" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 lazy_static = "1.4.0"

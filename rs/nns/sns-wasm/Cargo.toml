@@ -26,9 +26,10 @@ ic-cdk = "0.6.0"
 ic-crypto-sha = { path = "../../crypto/sha/" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-metrics-encoder = "1"
-ic-nervous-system-clients = { path =  "../../nervous_system/clients" }
-ic-nervous-system-common = { path =  "../../nervous_system/common" }
+ic-nervous-system-clients = { path = "../../nervous_system/clients" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
+ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-constants = { path = "../constants" }
 ic-nns-handler-root-interface = { path = "../handlers/root/interface" }
 ic-sns-governance = { path = "../../sns/governance" }

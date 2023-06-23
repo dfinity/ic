@@ -26,6 +26,7 @@ use ic_nervous_system_common::{
     ledger::IcpLedgerCanister,
     serve_logs, serve_logs_v2, serve_metrics,
 };
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
@@ -217,7 +218,7 @@ fn canister_init_(init_payload: GovernanceProto) {
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(ledger_canister_id)),
             Box::new(IcpLedgerCanister::new(NNS_LEDGER_CANISTER_ID)),
-            Box::new(CMCCanister::new()),
+            Box::new(CMCCanister::<DfnRuntime>::new()),
         ));
     }
 }
