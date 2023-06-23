@@ -14,14 +14,14 @@ fn should_be_maximal_algorithm_index_id_to_ensure_all_variants_covered_by_strate
 }
 
 macro_rules! should_have_a_strategy_for_each_variant {
-    ($enum_name:ty, $base_case:expr, $($variant:ident $pattern:tt),+ $(,)?) => {
+    ($enum_name:ty, $base_case:expr, $($variant:ident $($pattern:tt)?),+ $(,)?) => {
         paste::paste! {
             #[test]
             fn [<should_have_a_strategy_for_each_variant_of_ $enum_name:snake >]() {
                 let error_to_match = $base_case;
                 let _ = match error_to_match {
                     $(
-                    $enum_name::$variant $pattern => proptest::strategy::Strategy::boxed(
+                    $enum_name::$variant $($pattern)? => proptest::strategy::Strategy::boxed(
                         crate::[< $enum_name:snake >]::[<arb_ $variant:snake _variant>]()
                     ),
                     )+
@@ -197,4 +197,34 @@ should_have_a_strategy_for_each_variant!(
     CspPublicKeyStoreError,
     CspPublicKeyStoreError::TransientInternalError("dummy error to match upon".to_string(),),
     TransientInternalError(_),
+);
+
+use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
+should_have_a_strategy_for_each_variant!(
+    PksAndSksContainsErrors,
+    PksAndSksContainsErrors::TransientInternalError("dummy error to match upon".to_string()),
+    NodeKeysErrors(_),
+    TransientInternalError(_),
+);
+
+use ic_crypto_internal_csp::vault::api::ValidatePksAndSksKeyPairError;
+should_have_a_strategy_for_each_variant!(
+    ValidatePksAndSksKeyPairError,
+    ValidatePksAndSksKeyPairError::PublicKeyInvalid("dummy error to match upon".to_string()),
+    PublicKeyInvalid(_),
+    SecretKeyNotFound { .. },
+    PublicKeyNotFound
+);
+
+use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
+should_have_a_strategy_for_each_variant!(
+    ValidatePksAndSksError,
+    ValidatePksAndSksError::TransientInternalError("dummy error to match upon".to_string()),
+    NodeSigningKeyError(_),
+    CommitteeSigningKeyError(_),
+    TlsCertificateError(_),
+    DkgDealingEncryptionKeyError(_),
+    IdkgDealingEncryptionKeyError(_),
+    TransientInternalError(_),
+    EmptyPublicKeyStore
 );

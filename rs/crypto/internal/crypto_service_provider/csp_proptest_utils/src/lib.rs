@@ -22,10 +22,22 @@ pub use csp_public_key_store_error::arb_csp_public_key_store_error;
 pub use csp_secret_key_store_contains_error::arb_csp_secret_key_store_contains_error;
 pub use csp_signature::arb_csp_signature;
 pub use csp_threshold_sign_error::arb_csp_threshold_sign_error;
-pub use current_node_public_keys::arb_current_node_public_keys;
+pub use node_public_keys::arb_current_node_public_keys;
+pub use node_public_keys::arb_external_public_keys;
+pub use pks_and_sks_contains_errors::arb_pks_and_sks_contains_errors;
+pub use validate_pks_and_sks_error::arb_validate_pks_and_sks_error;
 
 /// Creates a proptest strategy for a given enum variant.
 macro_rules! proptest_strategy_for_enum_variant {
+    // Match simple enum variant struct without any data,
+    // like ValidatePksAndSksKeyPairError::PublicKeyNotFound
+    ($enum_name:ty, $variant:ident) => {
+        paste! {
+            pub(super) fn [<arb_ $variant:snake _variant>]() -> impl proptest::strategy::Strategy<Value=$enum_name> {
+                proptest::prelude::Just($enum_name::$variant)
+            }
+        }
+    };
     // Match simple enum variant struct without any fields,
     // like CspThresholdSignError::WrongSecretKeyType {}
     ($enum_name:ty, $variant:ident => {}) => {
@@ -74,9 +86,9 @@ macro_rules! proptest_strategy_for_enum_variant {
 /// * Creates a wrapper strategy for the whole enum, where one of the strategies for a variant will be chosen.
 macro_rules! proptest_strategy_for_enum {
     ($enum_name:ty;
-    $($variant:ident => $args:tt),+ $(,)?) => {
+    $($variant:ident $(=> $args:tt)?),+ $(,)?) => {
         $(
-           proptest_strategy_for_enum_variant!($enum_name, $variant => $args);
+           proptest_strategy_for_enum_variant!($enum_name, $variant $(=> $args)?);
         )*
         paste! {
            pub fn [<arb_ $enum_name:snake >]() -> proptest::prelude::BoxedStrategy<$enum_name> {
@@ -425,8 +437,9 @@ mod csp_public_key_store_error {
     );
 }
 
-mod current_node_public_keys {
+mod node_public_keys {
     use super::*;
+    use ic_crypto_internal_csp::types::ExternalPublicKeys;
     use ic_protobuf::registry::crypto::v1::{
         PublicKey as PublicKeyProto, X509PublicKeyCert as X509PublicKeyCertProto,
     };
@@ -474,4 +487,114 @@ mod current_node_public_keys {
             }
         }
     }
+
+    prop_compose! {
+        pub fn arb_external_public_keys()(
+            node_signing_public_key in arb_public_key_proto(),
+            committee_signing_public_key in arb_public_key_proto(),
+            tls_certificate in arb_x509_public_key_cert_proto(),
+            dkg_dealing_encryption_public_key in arb_public_key_proto(),
+            idkg_dealing_encryption_public_key in arb_public_key_proto()
+        ) -> ExternalPublicKeys {
+            ExternalPublicKeys {
+                node_signing_public_key,
+                committee_signing_public_key,
+                tls_certificate,
+                dkg_dealing_encryption_public_key,
+                idkg_dealing_encryption_public_key
+            }
+        }
+    }
+}
+
+mod pks_and_sks_contains_errors {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::{
+        ExternalPublicKeyError, LocalPublicKeyError, NodeKeysError, NodeKeysErrors,
+        PksAndSksContainsErrors, SecretKeyError,
+    };
+    use proptest::prelude::{Just, Strategy};
+    use proptest::prop_oneof;
+
+    proptest_strategy_for_enum!(PksAndSksContainsErrors;
+        NodeKeysErrors => (errors in arb_node_keys_errors()),
+        TransientInternalError => (error in ".*")
+    );
+
+    prop_compose! {
+        fn arb_node_keys_errors()(
+            node_signing_key_error in proptest::option::of(arb_node_keys_error()),
+            committee_signing_key_error in proptest::option::of(arb_node_keys_error()),
+            tls_certificate_error in proptest::option::of(arb_node_keys_error()),
+            dkg_dealing_encryption_key_error in proptest::option::of(arb_node_keys_error()),
+            idkg_dealing_encryption_key_error in proptest::option::of(arb_node_keys_error()),
+        ) -> NodeKeysErrors {
+            NodeKeysErrors {
+                node_signing_key_error,
+                committee_signing_key_error,
+                tls_certificate_error,
+                dkg_dealing_encryption_key_error,
+                idkg_dealing_encryption_key_error
+            }
+        }
+    }
+
+    prop_compose! {
+        fn arb_node_keys_error()(
+            external_public_key_error in proptest::option::of(arb_external_public_key_error()),
+            local_public_key_error in proptest::option::of(arb_local_public_key_error()),
+            secret_key_error in proptest::option::of(arb_secret_key_error()),
+        ) -> NodeKeysError {
+            NodeKeysError {
+                external_public_key_error,
+                local_public_key_error,
+                secret_key_error
+            }
+        }
+    }
+
+    fn arb_external_public_key_error() -> impl Strategy<Value = ExternalPublicKeyError> {
+        ".*".prop_map(|error| ExternalPublicKeyError(Box::new(error)))
+    }
+
+    fn arb_local_public_key_error() -> impl Strategy<Value = LocalPublicKeyError> {
+        prop_oneof![
+            Just(LocalPublicKeyError::NotFound),
+            Just(LocalPublicKeyError::Mismatch),
+        ]
+    }
+
+    fn arb_secret_key_error() -> impl Strategy<Value = SecretKeyError> {
+        prop_oneof![
+            Just(SecretKeyError::CannotComputeKeyId),
+            Just(SecretKeyError::NotFound)
+        ]
+    }
+}
+
+mod validate_pks_and_sks_key_pair_error {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::ValidatePksAndSksKeyPairError;
+
+    proptest_strategy_for_enum!(ValidatePksAndSksKeyPairError;
+        PublicKeyNotFound,
+        PublicKeyInvalid => (s in ".*"),
+        SecretKeyNotFound => {key_id in ".*"}
+    );
+}
+
+mod validate_pks_and_sks_error {
+    use super::*;
+    use crate::validate_pks_and_sks_key_pair_error::arb_validate_pks_and_sks_key_pair_error;
+    use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
+
+    proptest_strategy_for_enum!(ValidatePksAndSksError;
+        EmptyPublicKeyStore,
+        NodeSigningKeyError => (error in arb_validate_pks_and_sks_key_pair_error()),
+        CommitteeSigningKeyError => (error in arb_validate_pks_and_sks_key_pair_error()),
+        TlsCertificateError => (error in arb_validate_pks_and_sks_key_pair_error()),
+        DkgDealingEncryptionKeyError => (error in arb_validate_pks_and_sks_key_pair_error()),
+        IdkgDealingEncryptionKeyError => (error in arb_validate_pks_and_sks_key_pair_error()),
+        TransientInternalError => (error in ".*")
+    );
 }

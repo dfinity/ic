@@ -7,13 +7,12 @@ use crate::keygen::utils::{
     idkg_dealing_encryption_pk_to_proto, node_signing_pk_to_proto,
 };
 use crate::vault::api::BasicSignatureCspVault;
-use crate::vault::api::CspVault;
-use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::api::MultiSignatureCspVault;
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::api::TlsHandshakeCspVault;
-use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
+use crate::vault::test_utils::pks_and_sks::generate_all_keys;
+use crate::vault::test_utils::pks_and_sks::generate_idkg_dealing_encryption_key_pair;
 use ic_types::crypto::CurrentNodePublicKeys;
 
 const NODE_1: u64 = 4241;
@@ -330,33 +329,4 @@ mod current_node_public_keys_with_timestamps {
         time_source.set_time(GENESIS).expect("wrong time");
         time_source
     }
-}
-
-fn generate_idkg_dealing_encryption_key_pair<V: IDkgProtocolCspVault>(
-    csp_vault: &V,
-) -> MEGaPublicKey {
-    csp_vault
-        .idkg_gen_dealing_encryption_key_pair()
-        .expect("Failed to generate IDkg dealing encryption keys")
-}
-
-fn generate_all_keys<V: CspVault>(csp_vault: &V) -> CurrentNodePublicKeys {
-    const NOT_AFTER: &str = "99991231235959Z";
-
-    let _node_signing_pk = csp_vault
-        .gen_node_signing_key_pair()
-        .expect("Failed to generate node signing key pair");
-    let _committee_signing_pk = csp_vault
-        .gen_committee_signing_key_pair()
-        .expect("Failed to generate committee signing key pair");
-    let _dkg_dealing_encryption_pk = csp_vault
-        .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
-        .expect("Failed to generate NI-DKG dealing encryption key pair");
-    let _tls_certificate = csp_vault
-        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
-        .expect("Failed to generate TLS certificate");
-    let _idkg_dealing_encryption_key = generate_idkg_dealing_encryption_key_pair(csp_vault);
-    csp_vault
-        .current_node_public_keys()
-        .expect("Failed to get current node public keys")
 }
