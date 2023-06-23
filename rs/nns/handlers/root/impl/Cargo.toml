@@ -22,17 +22,18 @@ candid = "0.8.1"
 dfn_candid = { path = "../../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../../rust_canisters/dfn_core" }
 dfn_macro = { path = "../../../../rust_canisters/dfn_macro" }
-ic-base-types = { path = "../../../../types/base_types"}
+ic-base-types = { path = "../../../../types/base_types" }
 ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
 ic-crypto-sha = { path = "../../../../crypto/sha" }
 ic-ic00-types = { path = "../../../../types/ic00_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../../../nervous_system/common" }
+ic-nervous-system-runtime = { path = "../../../../nervous_system/runtime" }
 ic-nervous-system-common-build-metadata = { path = "../../../../nervous_system/common/build_metadata" }
 ic-nervous-system-proxied-canister-calls-tracker = { path = "../../../../nervous_system/proxied_canister_calls_tracker" }
 ic-nervous-system-root = { path = "../../../../nervous_system/root" }
-ic-nns-common = { path="../../../common" }
+ic-nns-common = { path = "../../../common" }
 ic-nns-constants = { path = "../../../constants" }
 ic-nns-governance = { path = "../../../governance" }
 ic-nns-handler-root-interface = { path = "../interface" }
@@ -42,7 +43,7 @@ ic-registry-transport = { path = "../../../../registry/transport" }
 ic-registry-routing-table = { path = "../../../../registry/routing_table" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
-on_wire = { path = "../../../../rust_canisters/on_wire"}
+on_wire = { path = "../../../../rust_canisters/on_wire" }
 prost = "0.11.0"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
@@ -63,7 +64,8 @@ registry-canister = { path = "../../../../registry/canister" }
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version="0.0.26", default-features = false, features = [] }
+build-info-build = { version = "0.0.26", default-features = false, features = [
+] }
 
 [dev-dependencies]
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }

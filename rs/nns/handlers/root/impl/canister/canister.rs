@@ -19,6 +19,7 @@ use ic_nervous_system_root::{
     },
     LOG_PREFIX,
 };
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root::{
@@ -70,7 +71,8 @@ fn canister_status() {
 
 #[candid_method(update, rename = "canister_status")]
 async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
-    let client = ManagementCanisterClientImpl::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
+    let client =
+        ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER));
     let canister_status_response = client
         .canister_status(canister_id_record)
         .await
@@ -209,7 +211,7 @@ async fn change_canister_controllers_(
     canister_management::change_canister_controllers(
         change_canister_controllers_request,
         caller(),
-        &mut ManagementCanisterClientImpl::new(Some(&PROXIED_CANISTER_CALLS_TRACKER)),
+        &mut ManagementCanisterClientImpl::<DfnRuntime>::new(Some(&PROXIED_CANISTER_CALLS_TRACKER)),
     )
     .await
 }

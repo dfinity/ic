@@ -5214,6 +5214,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cdk"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1faa7b42964694fb38d7f62172e0d8261381e39ce85b4d6b519929f7cad9b4fb"
+dependencies = [
+ "candid",
+ "ic-cdk-macros",
+ "ic0",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-cdk-macros"
 version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7884,6 +7897,7 @@ dependencies = [
  "ic-base-types",
  "ic-ic00-types",
  "ic-nervous-system-proxied-canister-calls-tracker",
+ "ic-nervous-system-runtime",
  "num-traits",
  "serde",
  "serde_bytes",
@@ -8037,6 +8051,18 @@ dependencies = [
  "num-traits",
  "serde",
  "serde_bytes",
+]
+
+[[package]]
+name = "ic-nervous-system-runtime"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "ic-base-types",
+ "ic-cdk 0.8.1",
 ]
 
 [[package]]
@@ -8227,6 +8253,7 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-proxied-canister-calls-tracker",
  "ic-nervous-system-root",
+ "ic-nervous-system-runtime",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -9791,6 +9818,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-root",
+ "ic-nervous-system-runtime",
  "ic-sns-root-protobuf-generator",
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
@@ -9841,6 +9869,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-proto",
+ "ic-nervous-system-runtime",
  "ic-nns-common",
  "ic-protobuf",
  "ic-sns-governance",
@@ -10976,9 +11005,9 @@ dependencies = [
 
 [[package]]
 name = "ic0"
-version = "0.18.9"
+version = "0.18.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "978b91fc78de9d2eb0144db717839cde3b35470199ea51aca362cb6310e93dfd"
+checksum = "187fa0cecf46628330b7a390a1a65fb0637ea00d3a1121aa847ecbebc0f3ff79"
 
 [[package]]
 name = "ic_bls12_381"

@@ -7,9 +7,11 @@ use async_trait::async_trait;
 use candid::Encode;
 use ic_ic00_types::IC_00;
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
+use ic_nervous_system_runtime::Runtime;
 use std::{
     cell::RefCell,
     collections::VecDeque,
+    marker::PhantomData,
     sync::{Arc, Mutex},
     thread::LocalKey,
 };
@@ -27,18 +29,19 @@ pub trait ManagementCanisterClient {
     ) -> Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)>;
 
     /// A call to the `update_settings` management canister endpoint.
-    async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (Option<i32>, String)>;
+    async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (i32, String)>;
 
     fn canister_version(&self) -> Option<u64>;
 }
 
 /// An example implementation of the ManagementCanisterClient trait.
 #[derive(Default)]
-pub struct ManagementCanisterClientImpl {
+pub struct ManagementCanisterClientImpl<Rt: Runtime> {
     proxied_canister_calls_tracker: Option<&'static LocalKey<RefCell<ProxiedCanisterCallsTracker>>>,
+    _phantom: PhantomData<Rt>,
 }
 
-impl ManagementCanisterClientImpl {
+impl<Rt: Runtime> ManagementCanisterClientImpl<Rt> {
     pub fn new(
         proxied_canister_calls_tracker: Option<
             &'static LocalKey<RefCell<ProxiedCanisterCallsTracker>>,
@@ -46,6 +49,7 @@ impl ManagementCanisterClientImpl {
     ) -> Self {
         Self {
             proxied_canister_calls_tracker,
+            _phantom: PhantomData,
         }
     }
 }
@@ -53,7 +57,7 @@ impl ManagementCanisterClientImpl {
 /// Implementation of the ManagementCanisterClient trait for the ManagementCanisterClientImpl
 /// using the methods defined in this crate.
 #[async_trait]
-impl ManagementCanisterClient for ManagementCanisterClientImpl {
+impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientImpl<Rt> {
     async fn canister_status(
         &self,
         canister_id_record: CanisterIdRecord,
@@ -72,7 +76,7 @@ impl ManagementCanisterClient for ManagementCanisterClientImpl {
         canister_status(canister_id_record).await
     }
 
-    async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (Option<i32>, String)> {
+    async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (i32, String)> {
         let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
             let args = Encode!(&settings).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
@@ -84,7 +88,7 @@ impl ManagementCanisterClient for ManagementCanisterClientImpl {
             )
         });
 
-        update_settings(settings).await
+        update_settings::<Rt>(settings).await
     }
 
     fn canister_version(&self) -> Option<u64> {
@@ -129,7 +133,7 @@ pub enum MockManagementCanisterClientCall {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)>),
-    UpdateSettings(Result<(), (Option<i32>, String)>),
+    UpdateSettings(Result<(), (i32, String)>),
 }
 
 #[async_trait]
@@ -162,7 +166,7 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
         }
     }
 
-    async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (Option<i32>, String)> {
+    async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (i32, String)> {
         self.calls
             .lock()
             .unwrap()

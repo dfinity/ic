@@ -570,7 +570,7 @@ impl SnsRootCanister {
                         "Unable to set controller of {dapp_canister_id}: {err:#?}"
                     );
                     let err = Some(CanisterCallError {
-                        code: err.0,
+                        code: Some(err.0),
                         description: err.1,
                     });
                     failed_updates.push(set_dapp_controllers_response::FailedUpdate {

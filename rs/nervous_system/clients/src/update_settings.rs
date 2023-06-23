@@ -1,7 +1,7 @@
 use candid::CandidType;
-use dfn_core::call;
 use ic_base_types::PrincipalId;
 use ic_ic00_types::IC_00;
+use ic_nervous_system_runtime::Runtime;
 use serde::Deserialize;
 
 /// The UpdateSettings struct as defined in the ic-interface-spec
@@ -24,12 +24,9 @@ pub struct CanisterSettings {
 }
 
 /// A wrapper call to the management canister `update_settings` API.
-pub async fn update_settings(update_settings: UpdateSettings) -> Result<(), (Option<i32>, String)> {
-    call(
-        IC_00,
-        "update_settings",
-        dfn_candid::candid,
-        (update_settings,),
-    )
-    .await
+pub async fn update_settings<Rt>(update_settings: UpdateSettings) -> Result<(), (i32, String)>
+where
+    Rt: Runtime,
+{
+    Rt::call(IC_00, "update_settings", (update_settings,)).await
 }

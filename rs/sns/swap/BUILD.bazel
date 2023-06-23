@@ -17,6 +17,7 @@ BASE_DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/runtime",
     "//rs/nervous_system/proto",
     "//rs/protobuf",
     "//rs/registry/canister",
