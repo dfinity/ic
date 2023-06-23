@@ -6,40 +6,31 @@ notify-gitlab-success:
   extends:
     - .ubuntu-cargo-k8s
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: on_success
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: on_success
+    # Send a slack notification on rc--* pipeline succees.
+    # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
+    # scheduled pipelines that developers may create off the rc branch.
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
       when: on_success
   stage: finalize
   dependencies: []  # don't copy artifacts from other jobs
   script:
     - |
-      echo "notify gitlab success"
-
-      # Send a slack notification on rc--* pipeline succees.
-      # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
-      # scheduled pipelines that developers may create off the rc branch.
-      if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
-          if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
-              MESSAGE="✔ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🫑🫑🫑"
-          else
-              MESSAGE="✅ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🎉🎉🎉"
-          fi
-          cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
-              "${MESSAGE}" --channel "release-management-alerts"
+      if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
+          MESSAGE="✔ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🫑🫑🫑"
+      else
+          MESSAGE="✅ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🎉🎉🎉"
       fi
+      cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
+          "${MESSAGE}" --channel "release-management-alerts"
 
 notify-gitlab-failure:
   extends:
     - .ubuntu-cargo-k8s
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: on_failure
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: on_failure
+    # Send a slack alert on rc--* pipeline failures.
+    # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
+    # scheduled pipelines that developers may create off the rc branch.
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
       when: on_failure
   stage: finalize
@@ -47,17 +38,11 @@ notify-gitlab-failure:
   script:
     - |
       echo "notify gitlab failure"
-
-      # Send a slack alert on rc--* pipeline failures.
-      # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
-      # scheduled pipelines that developers may create off the rc branch.
-      if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
-          if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
-              MESSAGE="✘ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 🌶🌶🌶"
-          else
-              MESSAGE="❌ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 😭😭😭"
-          fi
-          cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
-          buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
-              "${MESSAGE}" --channel "release-management-alerts"
+      if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
+          MESSAGE="✘ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 🌶🌶🌶"
+      else
+          MESSAGE="❌ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> failed. 😭😭😭"
       fi
+      cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
+          "${MESSAGE}" --channel "release-management-alerts"
