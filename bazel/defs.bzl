@@ -65,9 +65,11 @@ def _sha256sum2url_impl(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.run(
-        executable = ctx.executable._sha256sum2url_sh,
+        executable = "timeout",
+        arguments = ["10m", ctx.executable._sha256sum2url_sh.path],
         inputs = [ctx.file.src],
         outputs = [out],
+        tools = [ctx.executable._sha256sum2url_sh],
         env = {
             "SHASUMFILE": ctx.file.src.path,
             "OUT": out.path,
