@@ -100,7 +100,7 @@ async fn test_change_canister_controllers_authentication() {
 #[tokio::test]
 async fn test_change_canister_controllers_handles_replica_errors() {
     let target_canister_id = CanisterId::from_u64(42).get();
-    let expected_replica_error_code = Some(1_i32);
+    let expected_replica_error_code = 1_i32;
     let expected_replica_error_description = "ERROR!".to_string();
 
     // Create a shared MockManagementCanisterClient, and load it with the one reply
@@ -128,7 +128,7 @@ async fn test_change_canister_controllers_handles_replica_errors() {
             panic!("Expected change_canister_controllers to fail")
         }
         ChangeCanisterControllersResult::Err(error) => {
-            assert_eq!(error.code, expected_replica_error_code);
+            assert_eq!(error.code, Some(expected_replica_error_code));
             assert_eq!(error.description, expected_replica_error_description);
         }
     }

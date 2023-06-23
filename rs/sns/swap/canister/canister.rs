@@ -15,6 +15,7 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::BufferedStableMemReader, serve_logs, serve_logs_v2, serve_metrics,
 };
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_sns_governance::ledger::LedgerCanister;
 use ic_sns_swap::{
     clients::RealSnsRootClient,
@@ -220,7 +221,7 @@ fn get_canister_status() {
 
 #[candid_method(update, rename = "get_canister_status")]
 async fn get_canister_status_(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
-    do_get_canister_status(id(), &ManagementCanisterClientImpl::new(None)).await
+    do_get_canister_status(id(), &ManagementCanisterClientImpl::<DfnRuntime>::new(None)).await
 }
 
 async fn do_get_canister_status(

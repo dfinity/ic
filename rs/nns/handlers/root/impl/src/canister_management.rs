@@ -233,6 +233,8 @@ pub async fn change_canister_controllers(
         .await
     {
         Ok(()) => ChangeCanisterControllersResponse::ok(),
-        Err((code, description)) => ChangeCanisterControllersResponse::error(code, description),
+        Err((code, description)) => {
+            ChangeCanisterControllersResponse::error(Some(code), description)
+        }
     }
 }

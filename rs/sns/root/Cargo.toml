@@ -28,6 +28,7 @@ ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
+ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-sns-swap = { path = "../swap" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 num-traits = "0.2.12"
@@ -38,11 +39,12 @@ serde = { version = "1.0", features = ["derive"] }
 ic-sns-root-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = [ "full" ] }
+tokio = { version = "1.15.0", features = ["full"] }
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [] }
+build-info-build = { version = "0.0.26", default-features = false, features = [
+] }
 
 [features]
 test = []

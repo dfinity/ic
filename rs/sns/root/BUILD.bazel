@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
+    "//rs/nervous_system/runtime",
     "//rs/nervous_system/clients",
     "//rs/rosetta-api/icrc1",
     "//rs/rust_canisters/canister_log",

@@ -19,6 +19,7 @@ BASE_DEPENDENCIES = [
     "//rs/nervous_system/common",
     "//rs/nervous_system/proxied_canister_calls_tracker",
     "//rs/nervous_system/root",
+    "//rs/nervous_system/runtime",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/handlers/root/interface",
