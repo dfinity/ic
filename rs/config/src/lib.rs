@@ -8,7 +8,6 @@ pub mod subnet_config;
 
 pub mod adapters;
 pub mod artifact_pool;
-pub mod consensus;
 pub mod crypto;
 pub mod embedders;
 pub mod execution_environment;

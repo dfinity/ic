@@ -1,7 +1,7 @@
 #![cfg(target_os = "linux")]
 
 use clap::{Args, Parser};
-use vsock_lib::protocol::{Command, NodeIdData, NotifyData, UpgradeData};
+use vsock_lib::protocol::{Command, NodeIdData, NotifyData, Payload, UpgradeData};
 use vsock_lib::send_command;
 fn main() -> Result<(), String> {
     let cli = Cli::parse();
@@ -10,7 +10,12 @@ fn main() -> Result<(), String> {
     let command = get_command(cli)?;
     let payload = send_command(command, port)?;
 
-    println!("RESPONSE: {}", payload);
+    // Output the values directly
+    match payload {
+        Payload::HostOSVsockVersion(version) => println!("{}", version),
+        Payload::HostOSVersion(version) => println!("{}", version),
+        Payload::NoPayload => (),
+    }
 
     Ok(())
 }
@@ -26,7 +31,7 @@ struct Cli {
     #[clap(long)]
     attach_hsm: bool,
 
-    /// Request hostOS to detach the HSM to to the guest VM
+    /// Request hostOS to detach the HSM from the guest VM
     #[clap(long)]
     detach_hsm: bool,
 
@@ -39,7 +44,7 @@ struct Cli {
     set_node_id: Option<String>,
 
     /// Set a custom port
-    #[clap(long, default_value_t = 19090)]
+    #[clap(long, default_value = "19090")]
     port: u32,
 
     #[clap(flatten)]
@@ -56,7 +61,7 @@ struct Notify {
     notify: Option<String>,
 
     /// The number of times to notify the hostOS of a message
-    #[clap(long, value_name = "COUNT", default_value_t = 1)]
+    #[clap(long, value_name = "COUNT", default_value = "1")]
     count: u32,
 }
 

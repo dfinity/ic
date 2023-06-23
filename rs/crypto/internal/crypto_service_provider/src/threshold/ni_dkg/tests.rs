@@ -31,8 +31,8 @@ mod gen_dealing_encryption_key_pair_tests {
 
     #[test]
     fn should_correctly_generate_dealing_encryption_key_pair() {
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_rng(rng()).build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_rng(rng()).build())
             .build();
         let (public_key, pop) = csp
             .gen_dealing_encryption_key_pair(NODE_1)
@@ -57,7 +57,7 @@ mod gen_dealing_encryption_key_pair_tests {
 
     #[test]
     fn should_fail_with_internal_error_if_dealing_encryption_pubkey_already_set() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
         let node_id = NODE_1;
 
         assert!(csp.gen_dealing_encryption_key_pair(node_id).is_ok());
@@ -77,9 +77,9 @@ mod gen_dealing_encryption_key_pair_tests {
     #[test]
     fn should_fail_with_internal_error_on_duplicate_secret_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(
                         secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
@@ -111,7 +111,7 @@ mod dkg_dealing_encryption_key_id {
 
     #[test]
     fn should_return_key_not_found_error_when_no_dkg_encryption_key() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
         let result = dkg_dealing_encryption_key_id(&csp);
         assert_matches!(
             result,
@@ -142,9 +142,9 @@ mod dkg_dealing_encryption_key_id {
             .expect_idkg_dealing_encryption_pubkeys()
             .times(1)
             .return_const(vec![]);
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_public_key_store(public_key_store)
                     .build(),
@@ -161,7 +161,7 @@ mod dkg_dealing_encryption_key_id {
 
     #[test]
     fn should_get_dkg_dealing_encryption_key_id() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
         let (generated_dkg_pk, _pop) = csp
             .gen_dealing_encryption_key_pair(NODE_1)
             .expect("no dkg key");

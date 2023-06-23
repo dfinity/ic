@@ -109,7 +109,6 @@ rust_library(
 
 rust_test(
     name = "execution_environment_test",
-    # TODO(EXC-1349): Split the test to run targets in parallel.
     timeout = "long",
     aliases = ALIASES,
     crate = ":execution_environment",
@@ -126,8 +125,6 @@ rust_test_suite(
     aliases = ALIASES,
     data = DATA,
     env = ENV,
-    # https://dfinity.atlassian.net/browse/EXC-1349
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -163,9 +160,9 @@ BENCH_DEPENDENCIES = [
 rust_library(
     name = "execution_environment_bench",
     srcs = [
-        "benchmarks/common.rs",
-        "benchmarks/common_wat.rs",
-        "benchmarks/lib.rs",
+        "benches/lib/src/common.rs",
+        "benches/lib/src/lib.rs",
+        "benches/lib/src/wat.rs",
     ],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -175,7 +172,7 @@ rust_library(
 
 rust_bench(
     name = "execute_inspect_message_bench",
-    srcs = ["benchmarks/execute_inspect_message.rs"],
+    srcs = ["benches/execute_inspect_message.rs"],
     data = DATA,
     env = ENV,
     deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
@@ -183,7 +180,7 @@ rust_bench(
 
 rust_bench(
     name = "execute_query_bench",
-    srcs = ["benchmarks/execute_query.rs"],
+    srcs = ["benches/execute_query.rs"],
     data = DATA,
     env = ENV,
     deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
@@ -191,7 +188,7 @@ rust_bench(
 
 rust_bench(
     name = "execute_update_bench",
-    srcs = ["benchmarks/execute_update.rs"],
+    srcs = ["benches/execute_update.rs"],
     data = DATA,
     env = ENV,
     deps = [":execution_environment_bench"] + BENCH_DEPENDENCIES,
@@ -199,7 +196,7 @@ rust_bench(
 
 rust_bench(
     name = "scheduler_bench",
-    srcs = ["benchmarks/scheduler.rs"],
+    srcs = ["benches/scheduler.rs"],
     data = DATA,
     env = ENV,
     deps = [
@@ -212,7 +209,7 @@ rust_bench(
 
 rust_bench(
     name = "100k_canisters_bench",
-    srcs = ["benchmarks/100k_canisters.rs"],
+    srcs = ["benches/100k_canisters.rs"],
     data = DATA + ["//rs/rust_canisters/canister_creator:canister_creator_canister"],
     env = dict(ENV.items() + [
         ("CANISTER_CREATOR_CANISTER_WASM_PATH", "$(rootpath //rs/rust_canisters/canister_creator:canister_creator_canister)"),

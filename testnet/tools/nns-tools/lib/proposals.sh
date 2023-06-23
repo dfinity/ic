@@ -8,7 +8,7 @@ generate_sale_canister_upgrade_proposal_text() {
     local CANISTER_ID=$3
     local OUTPUT_FILE=${4:-}
 
-    WASM_GZ=$(get_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
+    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
     CAPITALIZED_CANISTER_NAME="Swap"
     LAST_WASM_HASH=$(canister_hash ic $CANISTER_ID)
@@ -57,12 +57,13 @@ EOF
 
 }
 
-generate_nns_proposal_text() {
+generate_nns_upgrade_proposal_text() {
 
     local LAST_COMMIT=$1
     local NEXT_COMMIT=$2
     local CANISTER_NAME=$3
-    local OUTPUT_FILE=${4:-}
+    local CANDID_ARGS=${4:-}
+    local OUTPUT_FILE=${5:-}
 
     WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
@@ -75,12 +76,18 @@ generate_nns_proposal_text() {
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
     RELATIVE_CODE_LOCATION="$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")"
 
+    ARGS_HASH=""
+    if [ ! -z "$CANDID_ARGS" ]; then
+        FILE=$(encode_candid_args_in_file "$CANDID_ARGS")
+        ARGS_HASH=$(sha_256 "$FILE")
+    fi
+
     OUTPUT=$(
         cat <<EOF
 ## Proposal to Upgrade the $CAPITALIZED_CANISTER_NAME Canister
 ### Proposer: DFINITY Foundation
 ### Git Hash: $NEXT_COMMIT
-### New Wasm Hash: $WASM_SHA
+### New Wasm Hash: $WASM_SHA$([ ! -z "$ARGS_HASH" ] && echo $'\n'"### Upgrade Args Hash: $ARGS_HASH")
 ### Target canister: $(nns_canister_id "$CANISTER_NAME")
 ---
 ## Features
@@ -90,6 +97,14 @@ TODO ADD FEATURE NOTES
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
 $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
 \`\`\`
+$([ ! -z "$CANDID_ARGS" ] && echo "## Candid Post Upgrade Args
+\`\`\`candid
+$CANDID_ARGS
+\`\`\`
+### Validating Candid Args
+Verify that the hash of the args matches proposal contents.
+\`didc encode '$CANDID_ARGS' | xxd -r -p | sha256sum\`
+")
 ## Wasm Verification
 Verify that the hash of the gzipped WASM matches the proposed hash.
 \`\`\`
@@ -120,7 +135,7 @@ generate_sns_bless_wasm_proposal_text() {
     local CANISTER_TYPE=$3
     local OUTPUT_FILE=${4:-}
 
-    WASM_GZ=$(get_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$NEXT_COMMIT")
+    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
     CAPITALIZED_CANISTER_TYPE="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_TYPE:0:1})${CANISTER_TYPE:1}"
 
@@ -237,6 +252,95 @@ EOF
     echo "$OUTPUT"
 }
 
+##: generate_forum_post_nns_upgrades
+## Usage: $1 <proposal_file> (<proposal_file>...)
+## Example: $1 directory_with_new_proposals/*
+## Example: $1 proposal_1.md proposal_2.md
+generate_forum_post_nns_upgrades() {
+    PROPOSAL_FILES=$(ls "$@")
+
+    THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)
+
+    OUTPUT=$(
+        cat <<EOF
+The NNS Team will be submitting the following upgrade proposals this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+
+## Additional Notes / Breaking Changes
+
+TODO - delete if nothing relevant
+
+## Proposals to be Submitted
+
+$(for file in $PROPOSAL_FILES; do
+            echo "### $(nns_upgrade_proposal_canister_raw_name $file)"
+            echo '````'
+            cat $file
+            echo '````'
+            echo
+        done)
+EOF
+    )
+
+    echo "$OUTPUT"
+}
+
+##: generate_forum_post_sns_wasm_publish
+## Usage: $1 <proposal_file> (<proposal_file>...)
+## Example: $1 directory_with_new_proposals/*
+## Example: $1 proposal_1.md proposal_2.md
+generate_forum_post_sns_wasm_publish() {
+    PROPOSAL_FILES=$(ls "$@")
+
+    THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)
+
+    OUTPUT=$(
+        cat <<EOF
+The NNS Team will be submitting the following proposals to publish new versions of SNS canisters to SNS-WASM this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+
+## Additional Notes / Breaking Changes
+
+TODO - delete if nothing relevant
+
+## Proposals to be Submitted
+
+$(for file in $PROPOSAL_FILES; do
+            echo "### $(sns_wasm_publish_proposal_canister_raw_name $file)"
+            echo '````'
+            cat $file
+            echo '````'
+            echo
+        done)
+EOF
+    )
+
+    echo "$OUTPUT"
+}
+
+#### Helper functions
+encode_candid_args_in_file() {
+    ARGS=$1
+    ENCODED_ARGS_FILE=$(mktemp)
+    didc encode \
+        "$ARGS" \
+        | xxd -r -p >"$ENCODED_ARGS_FILE"
+
+    echo "$ENCODED_ARGS_FILE"
+}
+
+# Return the candid args when none are passsed.
+# Usually returns empty string to say "no args passed", but
+# In cases where upgrade args are needed, even as a "None", a value must
+# be encoded
+empty_candid_upgrade_args() {
+    CANISTER_NAME=$1
+
+    if [ "$CANISTER_NAME" == "cycles-minting" ]; then
+        echo "()"
+    fi
+    # Empty string means do nothing
+    echo ""
+}
+
 #### Proposal value extractors (based on common format of proposal elements)
 
 # Extracts "LAST_COMMIT" from string like "git log $LAST_COMMIT..$NEXT_COMMIT" where commits are git commit ids
@@ -244,6 +348,18 @@ EOF
 extract_previous_version() {
     local FILE=$1
     cat $FILE | grep "git log" | sed 's/.*\([0-9a-f]\{40\}\)\.\.[0-9a-f]\{40\}.*/\1/'
+}
+
+# Get the candid args in the proposal, or supply the empty argument to be passed.
+extract_candid_upgrade_args() {
+    local FILE=$1
+    local EXTRACTED=$(cat "$FILE" | sed -n '/```candid/,/```/p' | grep -v '^```')
+
+    if [ -z "$EXTRACTED" ]; then
+        empty_candid_upgrade_args "$CANISTER_NAME"
+    else
+        echo "$EXTRACTED"
+    fi
 }
 
 # Extracts a proposal header field value if the field title is given.
@@ -257,6 +373,15 @@ proposal_header_field_value() {
     cat $FILE | grep "### $FIELD" | sed "s/.*$FIELD[[:space:]]*//"
 }
 
+nns_upgrade_proposal_canister_raw_name() {
+    local FILE=$1
+    cat "$FILE" | grep "## Proposal to Upgrade the" | cut -d' ' -f6
+}
+
+sns_wasm_publish_proposal_canister_raw_name() {
+    local FILE=$1
+    cat "$FILE" | grep "## Proposal to Publish the SNS" | cut -d' ' -f7
+}
 #### Proposal text validators
 
 validate_no_todos() {
@@ -296,7 +421,7 @@ validate_sns_version_wasm_sha() {
     local EXPECTED_SHA=$3
 
     _base_validate_version_wasm_sha \
-        $(get_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION") \
+        $(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION") \
         "$EXPECTED_SHA"
 }
 

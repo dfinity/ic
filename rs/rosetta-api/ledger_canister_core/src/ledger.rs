@@ -1,16 +1,17 @@
 use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, runtime::Runtime};
 use ic_base_types::CanisterId;
 use ic_canister_log::{log, Sink};
-use ic_ledger_core::approvals::{Approvals, ExpiredApproval, InsufficientAllowance};
+use ic_ledger_core::approvals::{Approvals, ApproveError, InsufficientAllowance};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
 use std::time::Duration;
 
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore, InspectableBalancesStore};
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
+use ic_ledger_hash_of::HashOf;
 
 /// The memo to use for balances burned during trimming
 const TRIMMED_MEMO: u64 = u64::MAX;
@@ -26,6 +27,8 @@ pub enum TxApplyError {
     InsufficientFunds { balance: Tokens },
     InsufficientAllowance { allowance: Tokens },
     ExpiredApproval { now: TimeStamp },
+    AllowanceChanged { current_allowance: Tokens },
+    SelfApproval,
 }
 
 impl From<BalanceError> for TxApplyError {
@@ -42,16 +45,21 @@ impl From<InsufficientAllowance> for TxApplyError {
     }
 }
 
-impl From<ExpiredApproval> for TxApplyError {
-    fn from(e: ExpiredApproval) -> Self {
-        Self::ExpiredApproval { now: e.now }
+impl From<ApproveError> for TxApplyError {
+    fn from(ae: ApproveError) -> Self {
+        match ae {
+            ApproveError::ExpiredApproval { now } => Self::ExpiredApproval { now },
+            ApproveError::AllowanceChanged { current_allowance } => {
+                Self::AllowanceChanged { current_allowance }
+            }
+            ApproveError::SelfApproval => Self::SelfApproval,
+        }
     }
 }
 
 pub trait LedgerContext {
     type AccountId: std::hash::Hash + Ord + Eq + Clone;
-    type SpenderId;
-    type Approvals: Approvals<AccountId = Self::AccountId, SpenderId = Self::SpenderId>;
+    type Approvals: Approvals<AccountId = Self::AccountId>;
     type BalancesStore: BalancesStore<AccountId = Self::AccountId> + Default;
 
     fn balances(&self) -> &Balances<Self::BalancesStore>;
@@ -65,7 +73,6 @@ pub trait LedgerContext {
 
 pub trait LedgerTransaction: Sized {
     type AccountId: Clone;
-    type SpenderId;
 
     /// Constructs a new "burn" transaction that removes the specified `amount` of tokens from the
     /// `from` account.
@@ -90,7 +97,7 @@ pub trait LedgerTransaction: Sized {
         effective_fee: Tokens,
     ) -> Result<(), TxApplyError>
     where
-        C: LedgerContext<AccountId = Self::AccountId, SpenderId = Self::SpenderId>;
+        C: LedgerContext<AccountId = Self::AccountId>;
 }
 
 pub trait LedgerAccess {
@@ -115,9 +122,7 @@ pub trait LedgerData: LedgerContext {
     type ArchiveWasm: ArchiveCanisterWasm;
     type Runtime: Runtime;
     type Block: BlockType<Transaction = Self::Transaction, AccountId = Self::AccountId>;
-    type Transaction: LedgerTransaction<AccountId = Self::AccountId, SpenderId = Self::SpenderId>
-        + Ord
-        + Clone;
+    type Transaction: LedgerTransaction<AccountId = Self::AccountId> + Ord + Clone;
 
     // Purge configuration
 
@@ -173,6 +178,8 @@ pub enum TransferError {
     TxCreatedInFuture { ledger_time: TimeStamp },
     TxThrottled,
     TxDuplicate { duplicate_of: BlockIndex },
+    AllowanceChanged { current_allowance: Tokens },
+    SelfApproval,
 }
 
 /// Adds a new block with the specified transaction to the ledger.
@@ -229,6 +236,10 @@ where
             TxApplyError::ExpiredApproval { now } => {
                 TransferError::ExpiredApproval { ledger_time: now }
             }
+            TxApplyError::AllowanceChanged { current_allowance } => {
+                TransferError::AllowanceChanged { current_allowance }
+            }
+            TxApplyError::SelfApproval => TransferError::SelfApproval,
         })?;
 
     let fee_collector = ledger.fee_collector().cloned();

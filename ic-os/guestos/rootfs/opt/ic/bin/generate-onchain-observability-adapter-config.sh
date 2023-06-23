@@ -49,15 +49,14 @@ if [ "${OUT_FILE}" == "" ]; then
     exit 1
 fi
 
-# Set "canister_id": "{ID}" to enable service
-# ex. "canister_id": "3kvk3-xyaaa-aaaae-qaesq-cai"
 CONFIG='{
     "logger": {
         "format": "json",
         "level": "info"
     },
     "report_length_sec": 3600,
-    "sampling_interval_sec": 60
+    "sampling_interval_sec": 60,
+    "canister_id": "3kvk3-xyaaa-aaaae-qaesq-cai"
 }'
 
 if [ "${OVERRIDES}" != "" -a -e "${OVERRIDES}" ]; then

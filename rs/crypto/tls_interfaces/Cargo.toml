@@ -7,7 +7,7 @@ edition = "2021"
 async-trait = "0.1.41"
 ic-types = { path = "../../types/types" }
 ic-protobuf = { path = "../../protobuf" }
-openssl = "0.10.29"
+openssl = "0.10.55"
 serde = { version = "1.0.99", features = ["derive"] }
 tokio = { version = "1.15.0", features = ["net", "io-util"] }
 tokio-rustls = "0.24.0"

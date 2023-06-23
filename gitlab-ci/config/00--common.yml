@@ -12,7 +12,6 @@ stages:             # Files from the given stage should be prefixed with:
   - guest-os-build      # 46--
   - guest-os-test       # 47--
   - host-os-test        # 54--
-  - build-determinism-test  # 55--
   - prod-tests          # 60--
     # Shard prod tests into 5 groups, because there are 5 'cdnightly' testnet environments.
     # The stages are purely for visual convenience when rendering the pipeline in the GitLab UI.
@@ -79,8 +78,10 @@ before_script:
     if [ "$(uname)" == "Linux" ]; then
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
 
-      # set ownership to ic-build container's user
-      sudo chown "$(id -u):$(id -g)" -R "${CI_PROJECT_DIR}"
+      # set ownership to ic-build container's user,
+      # but ignore errors that happen due to git gc:
+      #   `chown: changing ownership of '.git/shallow.lock': No such file or directory`
+      sudo chown "$(id -u):$(id -g)" -fR "${CI_PROJECT_DIR}" || true
     fi
 
   - echo -e "\e[0Ksection_end:$(date +%s):before_script\r\e[0K"
@@ -100,6 +101,8 @@ after_script:
     # Export all the environmental variables so that the GITLAB configured variables are available to after_script.sh
     export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
     buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" after-script -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
+
+    rm -rf "${CI_PROJECT_DIR}/target"
 
     # Finish and collapse the after_script section
     echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
@@ -121,40 +124,15 @@ after_script:
     GIT_STRATEGY: "fetch"  # And then pull only new commits
     SHELL_WRAPPER: "/usr/bin/time"
 
-.cargo-build-env-base:
-  extends:
-    - .cargo-rules
-    - .build-env-base
-  variables:
-    BUILD_COMMAND_PRE: ""
-    BUILD_COMMAND: "echo Replace this with a build command"
-    BUILD_COMMAND_POST: ""
-  script:
-    - |
-      set -eExuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
-
-      if [[ -n "${BUILD_COMMAND_PRE:-}" ]]; then
-          $BUILD_COMMAND_PRE
-      fi
-
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- "$BUILD_COMMAND"
-
-      if [[ -n "${BUILD_COMMAND_POST:-}" ]]; then
-          $BUILD_COMMAND_POST
-      fi
-
-      set +x
-
 .ubuntu-k8s:
   extends:
     - .build-env-base
-    - .ic-build-image
+    - .ic-build-legacy-image
 
 .bazel-build-k8s:
   extends:
     - .ubuntu-k8s
-    - .ic-build-bazel-image
+    - .ic-build-image
   tags:
     - dfinity-ic
     # Run in ZH since BuildFarm is in ZH
@@ -163,19 +141,20 @@ after_script:
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
     BAZEL_CI_CONFIG: "--config=ci"
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
 .ubuntu-cargo-k8s:
   extends:
-    - .cargo-build-env-base
+    - .build-env-base
     - .ubuntu-k8s
-    - .ic-build-image
+    - .ic-build-legacy-image
   variables:
     # This MUST match the directory used in our `build-ic.sh` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
 .macos-cargo-native:
   extends:
-    - .cargo-build-env-base
+    - .build-env-base
   tags:
     - dfinity
     - macos

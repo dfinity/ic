@@ -6,12 +6,12 @@ exports_files([
     "partitions.csv",
     "rootfs/docker-base.dev",
     "rootfs/docker-base.prod",
+    "rootfs/docker-base.dev-sev",
     "rootfs/allow_console_root",
     "rootfs/extra_boot_args.template",
     "rootfs/dev-certs/canister_http_test_ca.cert",
     "rootfs/dev-certs/canister_http_test_ca.key",
     "rootfs/opt/ic/share/ic.json5.template",
-    "scripts/build-bootstrap-config-image.sh",
 ])
 
 filegroup(
@@ -40,7 +40,7 @@ genrule(
         "//rs/ic_os/launch-single-vm",
         "//ic-os/guestos/envs/dev:disk-img-url",
         "//ic-os/guestos/envs/dev:disk-img.tar.zst.sha256",
-        "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+        "//ic-os:scripts/build-bootstrap-config-image.sh",
         "//bazel:version.txt",
     ],
     outs = ["launch_single_vm_script"],
@@ -49,7 +49,7 @@ BIN="$(location //rs/ic_os/launch-single-vm:launch-single-vm)"
 VERSION="$$(cat $(location //bazel:version.txt))"
 URL="$$(cat $(location //ic-os/guestos/envs/dev:disk-img-url))"
 SHA="$$(cat $(location //ic-os/guestos/envs/dev:disk-img.tar.zst.sha256))"
-SCRIPT="$(location //ic-os/guestos:scripts/build-bootstrap-config-image.sh)"
+SCRIPT="$(location //ic-os:scripts/build-bootstrap-config-image.sh)"
 cat <<EOF > $@
 #!/usr/bin/env bash
 set -euo pipefail
@@ -66,5 +66,6 @@ EOF
 #
 # bazel run   //ic-os/guestos/envs/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
 # bazel build //ic-os/guestos/envs/dev/...
+# bazel build //ic-os/guestos/envs/dev-sev/...
 #
 # check //ic-os/defs.bzl for the full list of targets.

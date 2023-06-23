@@ -5,9 +5,16 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_gtc::pb::v1::AccountState;
 use ic_sns_governance::pb::v1::{
     GetMetadataRequest as GetMetadataReq, GetMetadataResponse as GetMetadataRes,
+    GetMode as GetModeReq, GetModeResponse as GetModeRes, ListNeurons as ListNeuronsReq,
+    ListNeuronsResponse as SnsListNeuronsRes, NeuronId,
 };
-use ic_sns_root::pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes;
+use ic_sns_root::{
+    pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
+    GetSnsCanistersSummaryRequest as GetSnsCanistersSummaryReq,
+    GetSnsCanistersSummaryResponse as GetSnsCanistersSummaryRes,
+};
 use ic_sns_swap::pb::v1::{
+    FinalizeSwapRequest as FinalizeSwapReq, FinalizeSwapResponse,
     GetBuyerStateRequest as GetBuyerStateReq, GetBuyerStateResponse as GetBuyerStateRes,
     GetOpenTicketRequest as GetOpenTicketReq, GetOpenTicketResponse as GetOpenTicketRes,
     GetStateRequest as GetStateReq, GetStateResponse as GetStateRes,
@@ -291,6 +298,7 @@ impl NewSaleTicketRequest {
 pub struct RefreshBuyerTokensRequest {
     sale_canister: Principal,
     buyer: Option<PrincipalId>,
+    confirmation_text: Option<String>,
 }
 
 impl Request<RefreshBuyerTokensRes> for RefreshBuyerTokensRequest {
@@ -308,17 +316,23 @@ impl Request<RefreshBuyerTokensRes> for RefreshBuyerTokensRequest {
             buyer: self
                 .buyer
                 .map(|p| p.to_string())
-                .unwrap_or_else(|| "".to_string())
+                .unwrap_or_else(|| "".to_string()),
+            confirmation_text: self.confirmation_text.clone(),
         })
         .unwrap()
     }
 }
 
 impl RefreshBuyerTokensRequest {
-    pub fn new(sale_canister: Principal, buyer: Option<PrincipalId>) -> Self {
+    pub fn new(
+        sale_canister: Principal,
+        buyer: Option<PrincipalId>,
+        confirmation_text: Option<String>,
+    ) -> Self {
         Self {
             sale_canister,
             buyer,
+            confirmation_text,
         }
     }
 }
@@ -511,6 +525,32 @@ impl Icrc1TransferRequest {
 }
 
 #[derive(Clone, Debug)]
+pub struct FinalizeSwapRequest {
+    swap_canister: Principal,
+}
+
+impl Request<FinalizeSwapResponse> for FinalizeSwapRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+    fn canister_id(&self) -> Principal {
+        self.swap_canister
+    }
+    fn method_name(&self) -> String {
+        "finalize_swap".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&FinalizeSwapReq {}).unwrap()
+    }
+}
+
+impl FinalizeSwapRequest {
+    pub fn new(swap_canister: Principal) -> Self {
+        Self { swap_canister }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Icrc1MetadataRequest {
     mode: CallMode,
     icrc1_canister: Principal,
@@ -612,6 +652,48 @@ impl Icrc1RequestProvider {
 }
 
 #[derive(Clone, Debug)]
+pub struct ListSnsNeuronsRequest {
+    mode: CallMode,
+    sns_governance_canister: Principal,
+    payload: ListNeuronsReq,
+}
+
+impl Request<SnsListNeuronsRes> for ListSnsNeuronsRequest {
+    fn mode(&self) -> CallMode {
+        self.mode.clone()
+    }
+    fn canister_id(&self) -> Principal {
+        self.sns_governance_canister
+    }
+    fn method_name(&self) -> String {
+        "list_neurons".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&self.payload).unwrap()
+    }
+}
+
+impl ListSnsNeuronsRequest {
+    pub fn new(
+        governance_canister: Principal,
+        limit: u32,
+        start_page_at: Option<NeuronId>,
+        of_principal: Option<PrincipalId>,
+        mode: CallMode,
+    ) -> Self {
+        Self {
+            mode,
+            sns_governance_canister: governance_canister,
+            payload: ListNeuronsReq {
+                limit,
+                start_page_at,
+                of_principal,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct GetStateRequest {
     mode: CallMode,
     sale_canister: Principal,
@@ -637,6 +719,63 @@ impl GetStateRequest {
         Self {
             mode,
             sale_canister,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GetSnsCanistersSummaryRequest {
+    sns_root_canister: Principal,
+}
+
+impl Request<GetSnsCanistersSummaryRes> for GetSnsCanistersSummaryRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+    fn canister_id(&self) -> Principal {
+        self.sns_root_canister
+    }
+    fn method_name(&self) -> String {
+        "get_sns_canisters_summary".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&GetSnsCanistersSummaryReq {
+            update_canister_list: Some(false)
+        })
+        .unwrap()
+    }
+}
+
+impl GetSnsCanistersSummaryRequest {
+    pub fn new(sns_root_canister: Principal) -> Self {
+        Self { sns_root_canister }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GetModeRequest {
+    sns_governance_canister: Principal,
+}
+
+impl Request<GetModeRes> for GetModeRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+    fn canister_id(&self) -> Principal {
+        self.sns_governance_canister
+    }
+    fn method_name(&self) -> String {
+        "get_mode".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&GetModeReq {}).unwrap()
+    }
+}
+
+impl GetModeRequest {
+    pub fn new(sns_governance_canister: Principal) -> Self {
+        Self {
+            sns_governance_canister,
         }
     }
 }
@@ -677,9 +816,10 @@ impl SnsRequestProvider {
     pub fn refresh_buyer_tokens(
         &self,
         buyer: Option<PrincipalId>,
+        confirmation_text: Option<String>,
     ) -> impl Request<RefreshBuyerTokensRes> + std::fmt::Debug + Clone + Sync + Send {
         let sale_canister = self.sns_canisters.swap().get().into();
-        RefreshBuyerTokensRequest::new(sale_canister, buyer)
+        RefreshBuyerTokensRequest::new(sale_canister, buyer, confirmation_text)
     }
 
     pub fn get_buyer_state(
@@ -697,6 +837,13 @@ impl SnsRequestProvider {
     ) -> impl Request<GetOpenTicketRes> + std::fmt::Debug + Clone + Sync + Send {
         let sale_canister = self.sns_canisters.swap().get().into();
         GetOpenTicketRequest::new(sale_canister, mode)
+    }
+
+    pub fn finalize_swap(
+        &self,
+    ) -> impl Request<FinalizeSwapResponse> + std::fmt::Debug + Clone + Sync + Send {
+        let sale_canister = self.sns_canisters.swap().get().into();
+        FinalizeSwapRequest::new(sale_canister)
     }
 
     // The requests below are used by the aggregator canister
@@ -747,5 +894,36 @@ impl SnsRequestProvider {
     ) -> impl Request<GetStateRes> + std::fmt::Debug + Clone + Sync + Send {
         let sale_canister = self.sns_canisters.swap().get().into();
         GetStateRequest::new(sale_canister, mode)
+    }
+
+    pub fn list_neurons(
+        &self,
+        limit: u32,
+        start_page_at: Option<NeuronId>,
+        of_principal: Option<PrincipalId>,
+        mode: CallMode,
+    ) -> impl Request<SnsListNeuronsRes> + std::fmt::Debug + Clone + Sync + Send {
+        let sns_governance_canister = self.sns_canisters.governance().get().into();
+        ListSnsNeuronsRequest::new(
+            sns_governance_canister,
+            limit,
+            start_page_at,
+            of_principal,
+            mode,
+        )
+    }
+
+    pub fn get_sns_canisters_summary(
+        &self,
+    ) -> impl Request<GetSnsCanistersSummaryRes> + std::fmt::Debug + Clone + Sync + Send {
+        let sns_root_canister = self.sns_canisters.root().get().into();
+        GetSnsCanistersSummaryRequest::new(sns_root_canister)
+    }
+
+    pub fn get_sns_governance_mode(
+        &self,
+    ) -> impl Request<GetModeRes> + std::fmt::Debug + Clone + Sync + Send {
+        let sns_governance_canister = self.sns_canisters.governance().get().into();
+        GetModeRequest::new(sns_governance_canister)
     }
 }

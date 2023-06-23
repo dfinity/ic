@@ -1,7 +1,6 @@
 prod-nightly-pipeline:
   extends: .rules-rollout-pipeline-auto
   stage: prod-tests
-  needs: ["cargo-pipeline"]
   variables:
     CD_ENV: "NIGHTLY"
     TESTNET1: "cdnightly"
@@ -19,7 +18,6 @@ prod-nightly-pipeline:
 prod-hotfix-pipeline:
   extends: .rules-prod-hotfix-pipeline
   stage: prod-tests
-  needs: ["cargo-pipeline"]
   variables:
     CD_ENV: "HOTFIX"
     TESTNET1: "cdhotfix01"

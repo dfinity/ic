@@ -23,17 +23,17 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
-            NnsInstallationExt, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
-    util::{assert_create_agent, delay},
+    util::assert_create_agent,
 };
 
 use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
-use garcon::Delay;
 use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
 use ic_base_types::PrincipalId;
 use ic_interfaces_registry::RegistryValue;
@@ -137,7 +137,7 @@ async fn create_canister(
         .create_canister()
         .as_provisional_create_with_amount(None)
         .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
         .0;
@@ -148,7 +148,7 @@ async fn create_canister(
     }
 
     install_code
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .map_err(|err| format!("Couldn't install canister: {}", err))?;
 
@@ -201,12 +201,15 @@ fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    env.topology_snapshot()
+    let nns_node = env
+        .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
-        .unwrap()
-        .install_nns_canisters()
+        .unwrap();
+
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
 
     let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
@@ -1692,10 +1695,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             agent.fetch_root_key().await?;
 
             info!(&logger, "updating canister");
-            agent
-                .update(&cid, "write")
-                .call_and_wait(Delay::builder().build())
-                .await?;
+            agent.update(&cid, "write").call_and_wait().await?;
 
             info!(&logger, "querying canister");
             let out = agent.query(&cid, "read").call().await?;
@@ -1850,7 +1850,6 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             for (k, v) in [
                 ("Access-Control-Allow-Origin", "*"),
                 ("Access-Control-Allow-Methods", &allowed_methods),
-                ("Access-Control-Allow-Credentials", "true"),
                 ("Access-Control-Allow-Headers", "DNT,User-Agent,X-Requested-With,If-None-Match,If-Modified-Since,Cache-Control,Content-Type,Range,Cookie"),
                 ("Access-Control-Expose-Headers", "Accept-Ranges,Content-Length,Content-Range"),
                 ("Access-Control-Max-Age", "600"),
@@ -2039,10 +2038,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             agent.fetch_root_key().await?;
 
             info!(&logger, "updating canister");
-            agent
-                .update(&cid, "write")
-                .call_and_wait(Delay::builder().build())
-                .await?;
+            agent.update(&cid, "write").call_and_wait().await?;
 
             info!(&logger, "querying canister");
             let out = agent.query(&cid, "read").call().await?;

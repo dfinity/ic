@@ -268,6 +268,12 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
             owner: ic_cdk::api::caller(),
             subaccount: arg.from_subaccount,
         };
+        match arg.memo.as_ref() {
+            Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
+                ic_cdk::trap("the memo field is too large")
+            }
+            _ => {}
+        };
         let amount = match arg.amount.0.to_u64() {
             Some(n) => Tokens::from_e8s(n),
             None => {
@@ -428,18 +434,16 @@ fn check_candid_interface() {
 
     let new_interface = __export_service();
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    for candid_file in ["icrc1.did", "txlog.did"].iter() {
-        let old_interface = manifest_dir.join(candid_file);
-        service_compatible(
-            CandidSource::Text(&new_interface),
-            CandidSource::File(old_interface.as_path()),
+    let old_interface = manifest_dir.join("ledger.did");
+    service_compatible(
+        CandidSource::Text(&new_interface),
+        CandidSource::File(old_interface.as_path()),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "the ledger interface is not compatible with {}: {:?}",
+            old_interface.display(),
+            e
         )
-        .unwrap_or_else(|e| {
-            panic!(
-                "the ledger interface is not compatible with {}: {:?}",
-                old_interface.display(),
-                e
-            )
-        });
-    }
+    });
 }

@@ -58,7 +58,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -85,6 +85,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            halt_at_cup_height: None,
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
@@ -156,6 +157,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            halt_at_cup_height: false,
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
@@ -178,7 +180,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
@@ -212,6 +214,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            halt_at_cup_height: None,
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
@@ -264,7 +267,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
@@ -282,6 +285,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             start_as_nns: false,
                             subnet_type: SubnetType::Application.into(),
                             is_halted: false,
+                            halt_at_cup_height: false,
                             max_instructions_per_message: 5_000_000_000,
                             max_instructions_per_round: 7_000_000_000,
                             max_instructions_per_install_code: 200_000_000_000,
@@ -329,6 +333,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             start_as_nns: None,
             subnet_type: Some(SubnetType::Application),
             is_halted: Some(true),
+            halt_at_cup_height: Some(true),
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
@@ -384,6 +389,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
+                halt_at_cup_height: true,
                 max_instructions_per_message: 6_000_000_000,
                 max_instructions_per_round: 8_000_000_000,
                 max_instructions_per_install_code: 300_000_000_000,
@@ -411,7 +417,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
     const NO_ECDSA_CONFIG_REJECT_MSG: &str = "Canister rejected with message: \
     IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at \
-    '[Registry]  invariant check failed with message:The subnet \
+    '[Registry]  invariant check failed with message: The subnet \
     bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae does not \
     have an ECDSA config'";
 
@@ -437,6 +443,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            halt_at_cup_height: false,
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
@@ -453,7 +460,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
@@ -647,6 +654,7 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
+        halt_at_cup_height: None,
         max_instructions_per_message: None,
         max_instructions_per_round: None,
         max_instructions_per_install_code: None,

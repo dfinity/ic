@@ -14,7 +14,9 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::{
-        execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
+        execution_state::{
+            CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
+        },
         testing::new_canister_queues_for_test,
     },
     metadata_state::subnet_call_context_manager::{
@@ -503,6 +505,7 @@ impl Default for ExecutionStateBuilder {
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 metadata: wasm_metadata,
                 last_executed_round: ExecutionRound::from(0),
+                next_scheduled_method: NextScheduledMethod::default(),
             },
         }
     }

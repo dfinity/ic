@@ -6,6 +6,7 @@ pub(crate) mod block_maker;
 mod catchup_package_maker;
 pub mod dkg_key_manager;
 mod finalizer;
+#[cfg(feature = "malicious_code")]
 mod malicious_consensus;
 pub(crate) mod metrics;
 mod notary;
@@ -16,16 +17,11 @@ mod purger;
 mod random_beacon_maker;
 mod random_tape_maker;
 mod share_aggregator;
+mod status;
 pub mod validator;
 
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
-
-use ic_consensus_utils::{
-    crypto::ConsensusCrypto, get_notarization_delay_settings, is_root_subnet,
-    membership::Membership, pool_reader::PoolReader, RoundRobin,
-};
-pub use metrics::ValidatorMetrics;
 
 use crate::consensus::{
     block_maker::BlockMaker,
@@ -42,7 +38,10 @@ use crate::consensus::{
     share_aggregator::ShareAggregator,
     validator::Validator,
 };
-use ic_config::consensus::ConsensusConfig;
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto, get_notarization_delay_settings, is_root_subnet,
+    membership::Membership, pool_reader::PoolReader, RoundRobin,
+};
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     canister_http::CanisterHttpPayloadBuilder,
@@ -68,11 +67,13 @@ use ic_types::{
     replica_config::ReplicaConfig,
     Height, Time,
 };
-use std::collections::BTreeMap;
-use std::sync::Arc;
-use std::sync::RwLock;
-use std::time::Duration;
-use std::{cell::RefCell, sync::Mutex};
+pub use metrics::ValidatorMetrics;
+use std::{
+    cell::RefCell,
+    collections::BTreeMap,
+    sync::{Arc, Mutex, RwLock},
+    time::Duration,
+};
 use strum_macros::AsRefStr;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, AsRefStr)]
@@ -94,7 +95,7 @@ enum ConsensusSubcomponent {
 /// registry for longer than this, the subnet should halt.
 pub const HALT_AFTER_REGISTRY_UNREACHABLE: Duration = Duration::from_secs(60 * 60);
 
-/// ConsensusImpl holds all consensus subcomponents, and implements the
+/// [ConsensusImpl] holds all consensus subcomponents, and implements the
 /// Consensus trait by calling each subcomponent in round-robin manner.
 pub struct ConsensusImpl {
     notary: Notary,
@@ -117,16 +118,14 @@ pub struct ConsensusImpl {
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
     log: ReplicaLogger,
-    config: ConsensusConfig,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
 }
 
 impl ConsensusImpl {
-    /// Create a new ConsensusImpl along with all subcomponents it manages.
+    /// Create a new [ConsensusImpl] along with all subcomponents it manages.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         replica_config: ReplicaConfig,
-        consensus_config: ConsensusConfig,
         registry_client: Arc<dyn RegistryClient>,
         membership: Arc<Membership>,
         crypto: Arc<dyn ConsensusCrypto>,
@@ -259,14 +258,13 @@ impl ConsensusImpl {
             replica_config,
             last_invoked: RefCell::new(last_invoked),
             schedule: RoundRobin::default(),
-            config: consensus_config,
             local_store_time_reader,
         }
     }
 
     /// Call the given sub-component's `on_state_change` function, mark the
     /// time it takes to complete, increment its invocation counter, and mark
-    /// the size of the `ChangeSet` result.
+    /// the size of the [`ChangeSet`] result.
     fn call_with_metrics<F>(
         &self,
         sub_component: ConsensusSubcomponent,
@@ -372,7 +370,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     /// Otherwise return an empty [ChangeSet] if all subcomponents return
     /// empty.
     ///
-    /// There are two decisions that ConsensusImpl makes:
+    /// There are two decisions that [ConsensusImpl] makes:
     ///
     /// 1. It must return immediately if one of the subcomponent returns a
     /// non-empty [ChangeSet]. It is important that a [ChangeSet] is fully
@@ -382,7 +380,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
     ///
     /// 2. The order in which subcomponents are called also matters. At the
     /// moment it is important to call finalizer first, because otherwise
-    /// we'll just keep producing notarized blocks indefintely without
+    /// we'll just keep producing notarized blocks indefinitely without
     /// finalizing anything, due to the above decision of having to return
     /// early. The order of the rest subcomponents decides whom is given
     /// a priority, but it should not affect liveness or correctness.
@@ -502,15 +500,15 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
             let unit_delay = settings.unit_delay;
             let current_time = self.time_source.get_relative_time();
             for (component, last_invoked_time) in self.last_invoked.borrow().iter() {
-                let time_since_last_invoked = current_time - *last_invoked_time;
+                let time_since_last_invoked = current_time.saturating_sub(*last_invoked_time);
                 let component_name = component.as_ref();
                 self.metrics
                     .time_since_last_invoked
                     .with_label_values(&[component_name])
                     .set(time_since_last_invoked.as_secs_f64());
 
-                // Log starvation if configured
-                if self.config.detect_starvation() && time_since_last_invoked > unit_delay {
+                // Log starvation
+                if time_since_last_invoked > unit_delay {
                     self.metrics
                         .starvation_counter
                         .with_label_values(&[component_name])
@@ -566,7 +564,7 @@ pub struct ConsensusGossipImpl {
 }
 
 impl ConsensusGossipImpl {
-    /// Create a new ConsensusGossipImpl.
+    /// Create a new [ConsensusGossipImpl].
     pub fn new(
         message_routing: Arc<dyn MessageRouting>,
         metrics_registry: MetricsRegistry,
@@ -612,7 +610,6 @@ impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
 /// and ConsensusGossip interfaces respectively.
 pub fn setup(
     replica_config: ReplicaConfig,
-    consensus_config: ConsensusConfig,
     registry_client: Arc<dyn RegistryClient>,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -635,9 +632,9 @@ pub fn setup(
     // Currently, the orchestrator polls the registry every
     // `registry_poll_delay_duration_ms` and writes new updates into the
     // registry local store. The registry client polls the local store
-    // for updates every `registry::POLLING_PERIOD`. These two polls are completelly
+    // for updates every `registry::POLLING_PERIOD`. These two polls are completely
     // async, so that every replica sees a new registry version at any time
-    // between >0 and the sum of both polling intervals. To accomodate for that,
+    // between >0 and the sum of both polling intervals. To accommodate for that,
     // we use this sum as the minimal age of a registry version we consider as
     // stable.
 
@@ -646,7 +643,6 @@ pub fn setup(
     (
         ConsensusImpl::new(
             replica_config,
-            consensus_config,
             registry_client,
             membership,
             crypto,
@@ -691,9 +687,7 @@ mod tests {
     };
     use ic_test_utilities_registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder};
     use ic_types::{crypto::CryptoHash, CryptoHashOfState, SubnetId};
-    use std::borrow::Borrow;
-    use std::sync::Arc;
-    use std::time::Duration;
+    use std::{borrow::Borrow, sync::Arc, time::Duration};
 
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
@@ -736,7 +730,6 @@ mod tests {
 
         let consensus_impl = ConsensusImpl::new(
             replica_config,
-            ConsensusConfig::default(),
             registry,
             membership,
             crypto.clone(),

@@ -61,24 +61,48 @@ def _sha256sum2url_impl(ctx):
     """
     Returns cas url pointing to the artifact with checksum specified.
 
-    The rule does not check existance of the artifact!
-    Ensure that the corresponding rule that creates the artifact is remote cacheable!
+    Waits for the artifact to be published before returning url.
     """
     out = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.run(
-        executable = "awk",
-        arguments = ["-v", "out=" + out.path, '{ printf "https://artifacts.idx.dfinity.network/cas/%s", $1 > out }', ctx.file.src.path],
+        executable = ctx.executable._sha256sum2url_sh,
         inputs = [ctx.file.src],
         outputs = [out],
+        env = {
+            "SHASUMFILE": ctx.file.src.path,
+            "OUT": out.path,
+        },
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
 
-sha256sum2url = rule(
+_sha256sum2url = rule(
     implementation = _sha256sum2url_impl,
     attrs = {
         "src": attr.label(allow_single_file = True),
+        "_sha256sum2url_sh": attr.label(executable = True, cfg = "exec", default = "//bazel:sha256sum2url_sh"),
     },
 )
+
+def sha256sum2url(name, src, tags = [], **kwargs):
+    """
+    Returns cas url pointing to the artifact which checksum is returned by src.
+
+    The rule waits until the cache will return http/200 for this artifact.
+    The rule adds "requires-network" as it needs to talk to bazel cache and "manual" to only be performed
+    when its result is requested (directly or by another rule) to not wait when not required.
+
+    Args:
+        name:     the name of the rule
+        src:      the label that returns the file with sha256 checksum of requested artifact.
+        tags:     additinal tags.
+        **kwargs: the rest of arguments to be passed to the underlying rule.
+    """
+    _sha256sum2url(
+        name = name,
+        src = src,
+        tags = tags + ["requires-network", "manual"],
+        **kwargs
+    )
 
 def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
     """ A rule for creating a test suite for a set of `rust_test` targets.

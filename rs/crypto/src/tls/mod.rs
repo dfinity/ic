@@ -2,21 +2,137 @@ use super::*;
 use async_trait::async_trait;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, MalformedPeerCertificateError, TlsClientHandshakeError,
+    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsConfig, TlsConfigError,
     TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
 };
 use ic_logger::{debug, new_logger};
 use ic_types::registry::RegistryClientError;
-use ic_types::{NodeId, PrincipalId, RegistryVersion};
-use openssl::nid::Nid;
-use openssl::string::OpensslString;
-use openssl::x509::{X509NameEntries, X509NameEntryRef};
-use std::str::FromStr;
+use ic_types::{NodeId, RegistryVersion};
 use tokio::net::TcpStream;
 
 mod rustls;
 #[cfg(test)]
 mod tests;
+
+impl<CSP> TlsConfig for CryptoComponentImpl<CSP>
+where
+    CSP: CryptoServiceProvider + Send + Sync,
+{
+    fn server_config(
+        &self,
+        allowed_clients: AllowedClients,
+        registry_version: RegistryVersion,
+    ) -> Result<tokio_rustls::rustls::ServerConfig, TlsConfigError> {
+        let log_id = get_log_id(&self.logger, module_path!());
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "TlsConfig",
+            crypto.method_name => "server_config",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.registry_version => registry_version.get(),
+            crypto.allowed_tls_clients => format!("{:?}", allowed_clients),
+        );
+        let start_time = self.metrics.now();
+        let result = rustls::server_handshake::server_config(
+            &self.csp,
+            self.node_id,
+            Arc::clone(&self.registry_client),
+            allowed_clients,
+            registry_version,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::TlsConfig,
+            MetricsScope::Full,
+            "server_config",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
+    fn server_config_without_client_auth(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<tokio_rustls::rustls::ServerConfig, TlsConfigError> {
+        let log_id = get_log_id(&self.logger, module_path!());
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "TlsConfig",
+            crypto.method_name => "server_config_without_client_auth",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.registry_version => registry_version.get(),
+            crypto.allowed_tls_clients => "all clients allowed",
+        );
+        let start_time = self.metrics.now();
+        let result = rustls::server_handshake::server_config_without_client_auth(
+            &self.csp,
+            self.node_id,
+            self.registry_client.as_ref(),
+            registry_version,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::TlsConfig,
+            MetricsScope::Full,
+            "server_config_without_client_auth",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+
+    fn client_config(
+        &self,
+        server: NodeId,
+        registry_version: RegistryVersion,
+    ) -> Result<tokio_rustls::rustls::ClientConfig, TlsConfigError> {
+        let log_id = get_log_id(&self.logger, module_path!());
+        let logger = new_logger!(&self.logger;
+            crypto.log_id => log_id,
+            crypto.trait_name => "TlsConfig",
+            crypto.method_name => "client_config",
+        );
+        debug!(logger;
+            crypto.description => "start",
+            crypto.registry_version => registry_version.get(),
+            crypto.tls_server => format!("{}", server),
+        );
+        let start_time = self.metrics.now();
+        let result = rustls::client_handshake::client_config(
+            &self.csp,
+            self.node_id,
+            Arc::clone(&self.registry_client),
+            server,
+            registry_version,
+        );
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::TlsConfig,
+            MetricsScope::Full,
+            "client_config",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        debug!(logger;
+            crypto.description => "end",
+            crypto.is_ok => result.is_ok(),
+            crypto.error => log_err(result.as_ref().err()),
+        );
+        result
+    }
+}
 
 #[async_trait]
 impl<CSP> TlsHandshake for CryptoComponentImpl<CSP>
@@ -148,50 +264,6 @@ where
     }
 }
 
-fn node_id_from_cert_subject_common_name(
-    cert: &TlsPublicKeyCert,
-) -> Result<NodeId, MalformedPeerCertificateError> {
-    let common_name_entry = ensure_exactly_one_subject_common_name_entry(cert)?;
-    let common_name = common_name_entry_as_string(common_name_entry)?;
-    let principal_id = parse_principal_id(common_name)?;
-    Ok(NodeId::from(principal_id))
-}
-
-fn ensure_exactly_one_subject_common_name_entry(
-    cert: &TlsPublicKeyCert,
-) -> Result<&X509NameEntryRef, MalformedPeerCertificateError> {
-    if common_name_entries(cert).count() > 1 {
-        return Err(MalformedPeerCertificateError::new(
-            "Too many X509NameEntryRefs",
-        ));
-    }
-    common_name_entries(cert)
-        .next()
-        .ok_or_else(|| MalformedPeerCertificateError::new("Missing X509NameEntryRef"))
-}
-
-fn common_name_entry_as_string(
-    common_name_entry: &X509NameEntryRef,
-) -> Result<OpensslString, MalformedPeerCertificateError> {
-    common_name_entry.data().as_utf8().map_err(|e| {
-        MalformedPeerCertificateError::new(&format!("ASN1 to UTF-8 conversion error: {}", e))
-    })
-}
-
-fn parse_principal_id(
-    common_name: OpensslString,
-) -> Result<PrincipalId, MalformedPeerCertificateError> {
-    PrincipalId::from_str(common_name.as_ref()).map_err(|e| {
-        MalformedPeerCertificateError::new(&format!("Principal ID parse error: {}", e))
-    })
-}
-
-fn common_name_entries(cert: &TlsPublicKeyCert) -> X509NameEntries {
-    cert.as_x509()
-        .subject_name()
-        .entries_by_nid(Nid::COMMONNAME)
-}
-
 pub fn tls_cert_from_registry_raw(
     registry: &dyn RegistryClient,
     node_id: NodeId,
@@ -231,6 +303,24 @@ pub enum TlsCertFromRegistryError {
     CertificateMalformed {
         internal_error: String,
     },
+}
+
+impl From<TlsCertFromRegistryError> for TlsConfigError {
+    fn from(registry_error: TlsCertFromRegistryError) -> Self {
+        match registry_error {
+            TlsCertFromRegistryError::RegistryError(e) => TlsConfigError::RegistryError(e),
+            TlsCertFromRegistryError::CertificateNotInRegistry {
+                node_id,
+                registry_version,
+            } => TlsConfigError::CertificateNotInRegistry {
+                node_id,
+                registry_version,
+            },
+            TlsCertFromRegistryError::CertificateMalformed { internal_error } => {
+                TlsConfigError::MalformedSelfCertificate { internal_error }
+            }
+        }
+    }
 }
 
 impl From<RegistryClientError> for TlsCertFromRegistryError {

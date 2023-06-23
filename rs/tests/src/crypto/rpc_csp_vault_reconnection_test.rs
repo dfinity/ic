@@ -11,10 +11,12 @@ Runbook::
 . Set up a subnet with a single node
 . Ensure that usual crypto operations work: install a message canister and store message
   (uses update calls that need crypto to go through consensus)
-. Simulate an RPC connection problem by shutting down the crypto CSP vault server via SSH
+. Simulate an RPC connection problem by shutting down (SIGTERM) the crypto CSP vault server via SSH
 . Ensure disconnection was noticed by CSP vault client (like the one managed by the replica process).
 . (Reconnection should be handled transparently, the CSP vault server will be automatically restarted
   by systemd upon the next connection to the socket.)
+. Ensure that crypto operations work as usual: try to store a message in the message canister (uses an update call).
+. Simulate a panic in the server by killing the server (SIGKILL).
 . Ensure that crypto operations work as usual: try to store a message in the message canister (uses an update call).
 
 Success:: The shutdown of the crypto CSP vault server is handled transparently for the node
@@ -32,11 +34,11 @@ use crate::driver::test_env_api::{
     retry, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     IcNodeSnapshot, SshSession,
 };
-use crate::orchestrator::utils::rw_message::{can_read_msg, can_store_msg, store_message};
+use crate::util::{assert_create_agent, block_on, MessageCanister};
 use anyhow::bail;
-use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
-use slog::{debug, info, Logger};
+use slog::{debug, info, warn, Logger};
+use std::thread;
 
 pub fn setup_with_single_node(env: TestEnv) {
     InternetComputer::new()
@@ -64,12 +66,31 @@ pub fn rpc_csp_vault_reconnection_test(env: TestEnv) {
     };
 
     assert_eq!("active".to_string(), crypto_csp_service.state());
-    let canister_id = create_message_canister_and_store_message(&node, &logger);
+
+    let agent = block_on(assert_create_agent(node.get_public_url().as_str()));
+    let message_canister = block_on(MessageCanister::new(&agent, node.effective_canister_id()));
+    ensure_replica_is_not_stuck(&message_canister, "Replica process update calls", &logger);
 
     crypto_csp_service.stop();
     replica_service.wait_until_log_entry_contains("Detected disconnection from socket");
 
-    ensure_replica_is_not_stuck(&node, canister_id, &logger);
+    ensure_replica_is_not_stuck(
+        &message_canister,
+        "Replica process update calls after stopping server with systemd",
+        &logger,
+    );
+    assert_eq!("active".to_string(), crypto_csp_service.state());
+
+    crypto_csp_service.kill();
+    crypto_csp_service.wait_until_log_entry_contains(
+        "ic-crypto-csp.service: Main process exited, code=killed, status=9/KILL",
+    );
+
+    ensure_replica_is_not_stuck(
+        &message_canister,
+        "Replica process update calls after killing server",
+        &logger,
+    );
     assert_eq!("active".to_string(), crypto_csp_service.state());
 }
 
@@ -91,6 +112,16 @@ impl SystemdCli<'_> {
             .expect("run command")
             .trim()
             .to_string()
+    }
+
+    fn kill(&self) {
+        info!(self.logger, "Killing {}", self.service);
+        let cmd = format!(
+            "sudo kill -9 $(systemctl show --property MainPID --value {})",
+            &self.service
+        );
+        self.log_ssh_command(&cmd);
+        self.node.block_on_bash_script(&cmd).expect("run command");
     }
 
     fn stop(&self) {
@@ -138,25 +169,49 @@ impl SystemdCli<'_> {
     }
 }
 
-fn create_message_canister_and_store_message(node: &IcNodeSnapshot, logger: &Logger) -> Principal {
-    const MSG: &str = "RPC CSP vault reconnection";
-    let canister_id = store_message(&node.get_public_url(), node.effective_canister_id(), MSG);
-    info!(logger, "Stored message to canister ID {}", canister_id);
-    assert!(can_read_msg(
+fn ensure_replica_is_not_stuck(message_canister: &MessageCanister, msg: &str, logger: &Logger) {
+    debug!(
         logger,
-        &node.get_public_url(),
-        canister_id,
-        MSG
-    ));
-    canister_id
-}
+        "Ensure replica can process update calls by storing message '{}' to message canister '{}'",
+        msg,
+        message_canister.canister_id()
+    );
 
-fn ensure_replica_is_not_stuck(node: &IcNodeSnapshot, canister_id: Principal, logger: &Logger) {
-    info!(logger, "Ensure update calls can be processed");
-    assert!(can_store_msg(
-        logger,
-        &node.get_public_url(),
-        canister_id,
-        "alive"
-    ));
+    match block_on(async {
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            message_canister.try_store_msg(msg.to_string()),
+        )
+        .await
+    }) {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => panic!("update call to the canister should succeed: {err:?}"),
+        Err(err) => {
+            warn!(logger, "Timeout while waiting for replica to process update call '{msg}': {err:?}.
+            This could happen because the server was stopped after having received a request but before having sent a response.
+            In that case the client having made the request will wait until DEFAULT_RPC_TIMEOUT is reached, which is currently 5 minutes.
+            If the call was not made in a separate thread (like some multi-sign operation done by consensus) then the replica is stuck for the duration of DEFAULT_RPC_TIMEOUT.
+            For this reason, we will wait 4min 30s before retrying once more.");
+
+            debug!(
+                logger,
+                "Sleeping for 4min 30s before retrying update call to the canister '{}' for message '{msg}'",
+                message_canister.canister_id()
+            );
+            thread::sleep(Duration::from_secs(270));
+
+            debug!(
+                logger,
+                "Retrying update call to the canister '{}' for message '{msg}'",
+                message_canister.canister_id()
+            );
+            block_on(message_canister.try_store_msg(msg))
+                .expect("tentative 2nd update call to the canister should succeed");
+        }
+    };
+
+    assert_eq!(
+        block_on(message_canister.try_read_msg()),
+        Ok(Some(msg.to_string()))
+    );
 }

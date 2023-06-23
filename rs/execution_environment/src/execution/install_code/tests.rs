@@ -1,15 +1,21 @@
+use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
-use ic_types::{CanisterId, Cycles, NumInstructions};
+use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+};
 
-use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{
+    CanisterChange, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
+};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
-use ic_types::ingress::WasmResult;
 use ic_types::messages::MessageId;
+use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
 use ic_types_test_utils::ids::user_test_id;
+use std::mem::size_of;
 
 const DTS_INSTALL_WAT: &str = r#"
     (module
@@ -70,14 +76,17 @@ fn install_code_fails_on_invalid_memory_allocation() {
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert_eq!(
-        "MemoryAllocation expected to be in the range [0..55_834_574_848], got 18_446_744_073_709_551_615",
+        format!(
+            "MemoryAllocation expected to be in the range [0..{}], got 18_446_744_073_709_551_615",
+            candid::Nat((MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES).into())
+        ),
         err.description()
     );
 }
 
 #[test]
 fn dts_resume_works_in_install_code() {
-    const INSTRUCTION_LIMIT: u64 = 2_000_000;
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
@@ -128,7 +137,7 @@ fn dts_resume_works_in_install_code() {
 
 #[test]
 fn dts_abort_works_in_install_code() {
-    const INSTRUCTION_LIMIT: u64 = 2_000_000;
+    const INSTRUCTION_LIMIT: u64 = 3_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
@@ -244,7 +253,8 @@ fn install_code_validate_input_compute_allocation() {
 fn install_code_validate_input_memory_allocation() {
     let mib: u64 = 1024 * 1024;
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(500 * mib as i64)
+        .with_subnet_execution_memory(500 * mib as i64)
+        .with_subnet_memory_reservation(0)
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
@@ -286,7 +296,7 @@ fn install_code_validate_input_memory_allocation() {
     let result = check_ingress_status(test.ingress_status(&message_id));
     assert_eq!(
         result,
-        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB total memory and 0 B in wasm custom sections memory but the Subnet's remaining total memory capacity is 10.00 MiB and wasm custom sections capacity is 2.00 GiB"))
+        Err(UserError::new(ErrorCode::SubnetOversubscribed, "Canister requested 260.00 MiB of memory but only 250.00 MiB are available in the subnet"))
     );
 }
 
@@ -444,7 +454,9 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
 
 #[test]
 fn install_code_respects_wasm_custom_sections_available_memory() {
-    let available_wasm_custom_sections_memory = 200 * 1024; // 200KiB
+    // As we install canisters in a loop, using more memory spawns thousands of
+    // canister sandboxes, which lead to a few GiB memory usage.
+    let available_wasm_custom_sections_memory = 20 * 1024; // 20KiB
 
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
@@ -458,7 +470,7 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
         .with_manual_execution()
         .build();
 
-    let subnet_available_memory_before = test.subnet_available_memory().get_total_memory();
+    let subnet_available_memory_before = test.subnet_available_memory().get_execution_memory();
     let mut iterations = 0;
     loop {
         let canister_id = test
@@ -507,7 +519,7 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
 
     assert!(result.is_err());
     assert_eq!(
-        test.subnet_available_memory().get_total_memory(),
+        test.subnet_available_memory().get_execution_memory(),
         subnet_available_memory_before - iterations * total_memory_taken_per_canister_in_bytes
     );
 }
@@ -750,7 +762,16 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
-    let canister_id = test.create_canister(Cycles::new(900_000));
+    // canister history memory usage at the beginning of attempted install
+    let canister_history_memory_usage = size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
+        ic_config::execution_environment::Config::default().default_freeze_threshold,
+        MemoryAllocation::BestEffort,
+        NumBytes::new(canister_history_memory_usage as u64),
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+    );
+    let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
@@ -770,8 +791,8 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
-            format!("Canister installation failed with `Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold 0 cycles`", canister_id, 
-            minimum_balance, original_balance)
+            format!("Canister installation failed with `Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles`", canister_id,
+            minimum_balance, original_balance, freezing_threshold_cycles)
         ))
     );
 }

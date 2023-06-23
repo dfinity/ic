@@ -26,7 +26,7 @@ export async function queryCallHandler(
     const minAllowedVerificationVersion = getMinVerificationVersion();
     const streamedBody = await streamBody(agent, httpResponse, canisterId);
 
-    const certificationResult = responseVerification(
+    const verificationResult = responseVerification(
       httpRequest,
       {
         ...httpResponse,
@@ -37,22 +37,24 @@ export async function queryCallHandler(
       agent.rootKey
     );
 
-    if (!certificationResult.passed || !certificationResult.response) {
+    if (!verificationResult.passed || !verificationResult.response) {
       return {
-        response: new Response('Body does not pass verification', {
+        response: new Response('Response verification failed', {
           status: 500,
+          statusText: 'Response verification failed',
         }),
         certifiedHeaders: new Headers(),
       };
     }
 
-    if (certificationResult.verificationVersion < 2) {
+    if (verificationResult.verificationVersion < 2) {
       if (httpResponse.status_code >= 300 && httpResponse.status_code < 400) {
         return {
           response: new Response(
-            'Due to security reasons redirects are blocked on the IC until further notice!',
+            'Response verification v1 does not allow redirects',
             {
               status: 500,
+              statusText: 'Response verification v1 does not allow redirects',
             }
           ),
           certifiedHeaders: new Headers(),
@@ -68,13 +70,14 @@ export async function queryCallHandler(
         status: httpResponse.status_code,
         headers: responseHeaders,
       }),
-      certifiedHeaders: new Headers(certificationResult.response.headers),
+      certifiedHeaders: new Headers(verificationResult.response.headers),
     };
   } catch (error) {
     if (error instanceof ResponseVerificationError) {
       return {
-        response: new Response('Body does not pass verification', {
+        response: new Response('Response verification failed', {
           status: 500,
+          statusText: 'Response verification failed',
         }),
         certifiedHeaders: new Headers(),
       };

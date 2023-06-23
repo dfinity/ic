@@ -1,7 +1,11 @@
-dist/
-dist-prod/
-node_modules/
-coverage/
-src/
-bin/
+dist-dev
+dist-prod
+node_modules
+coverage
 junit.xml
+.DS_Store
+target
+.env
+tmp/
+.dfx
+*.log

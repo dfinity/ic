@@ -10,12 +10,6 @@
 // the did definition of the method.
 
 use async_trait::async_trait;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
-use std::{boxed::Box, convert::TryFrom, time::SystemTime};
-
-use prost::Message;
-
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
@@ -25,21 +19,24 @@ use dfn_core::{
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_ic00_types::CanisterStatusResultV2;
+use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nervous_system_common::{
-    get_canister_status,
+    cmc::CMCCanister,
+    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     ledger::IcpLedgerCanister,
     serve_logs, serve_logs_v2, serve_metrics,
-    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+#[cfg(feature = "test")]
+use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     ledger::LedgerCanister,
     logs::{ERROR, INFO},
     pb::v1::{
         governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-        FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetMetadataRequest,
+        FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+        GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
         GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
         GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
@@ -49,9 +46,10 @@ use ic_sns_governance::{
     },
     types::{Environment, HeapGrowthPotential},
 };
-
-#[cfg(feature = "test")]
-use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
+use prost::Message;
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
+use std::{boxed::Box, convert::TryFrom, time::SystemTime};
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -219,6 +217,7 @@ fn canister_init_(init_payload: GovernanceProto) {
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(ledger_canister_id)),
             Box::new(IcpLedgerCanister::new(NNS_LEDGER_CANISTER_ID)),
+            Box::new(CMCCanister::new()),
         ));
     }
 }
@@ -480,17 +479,8 @@ fn get_latest_reward_event_() -> RewardEvent {
     governance().latest_reward_event()
 }
 
-/// Returns the root canister's status.
-///
-/// This is a specialized version of the root canister's `canister_status`
-/// method. Getting the root canister's status is special, because root is the
-/// canister that gets the status of all other canisters in the SNS.
-///
-/// The way the underlying system call works is that a principal can only
-/// request the status of canisters that it controls. In theory, this interface
-/// could be generalized to target any canister, but in practice, only the root
-/// canister would ever be targeted, because that is the only canister that
-/// governance controls.
+/// Deprecated method. Previously returned the root canister's status.
+/// No longer necessary now that canisters can get their own status.
 #[export_name = "canister_update get_root_canister_status"]
 fn get_root_canister_status() {
     over_async(candid_one, get_root_canister_status_)
@@ -499,14 +489,7 @@ fn get_root_canister_status() {
 /// Internal method for calling get_root_canister_status.
 #[candid_method(update, rename = "get_root_canister_status")]
 async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
-    get_canister_status(
-        governance()
-            .proto
-            .root_canister_id
-            .expect("Root canister ID not set"),
-    )
-    .await
-    .expect("Unable to get the status of the SNS root canister.")
+    panic!("This method is deprecated and should not be used. Please use the root canister's `get_sns_canisters_summary` method.")
 }
 
 /// Gets the current SNS version, as understood by Governance.  This is useful
@@ -597,6 +580,21 @@ fn claim_swap_neurons_(
     claim_swap_neurons_request: ClaimSwapNeuronsRequest,
 ) -> ClaimSwapNeuronsResponse {
     governance_mut().claim_swap_neurons(claim_swap_neurons_request, caller())
+}
+
+/// This is not really useful to the public. It is, however, useful to integration tests.
+#[export_name = "canister_query get_maturity_modulation"]
+fn get_maturity_modulation() {
+    log!(INFO, "get_maturity_modulation");
+    over(candid_one, get_maturity_modulation_)
+}
+
+/// Internal method for calling get_maturity_modulation.
+#[candid_method(update, rename = "get_maturity_modulation")]
+fn get_maturity_modulation_(
+    request: GetMaturityModulationRequest,
+) -> GetMaturityModulationResponse {
+    governance().get_maturity_modulation(request)
 }
 
 /// The canister's heartbeat.

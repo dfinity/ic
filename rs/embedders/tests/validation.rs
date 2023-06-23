@@ -17,6 +17,9 @@ use ic_replicated_state::canister_state::execution_state::{
 };
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
+use wasmtime_environ::WASM_PAGE_SIZE;
+
+const KB: u32 = 1024;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
     wat::parse_str(wat).map(BinaryEncodedWasm::new)
@@ -348,6 +351,92 @@ fn can_validate_duplicate_query_and_composite_query_methods() {
             "Duplicate function 'read' exported multiple times \
              with different call types: update, query, or composite_query."
                 .to_string()
+        ))
+    );
+}
+
+fn many_exported_functions(n: usize) -> String {
+    let mut ret: String = "(module\n  (func $read)\n".to_string();
+    for i in 0..n {
+        let typ = if i % 3 == 0 {
+            "update"
+        } else if i % 3 == 1 {
+            "query"
+        } else {
+            "composite_query"
+        };
+        ret = format!(
+            "{}  (export \"canister_{} xxx{}\" (func $read))\n",
+            ret, typ, i
+        );
+    }
+    format!("{}\n)", ret)
+}
+
+#[test]
+fn can_validate_many_exported_functions() {
+    let wasm = wat2wasm(&many_exported_functions(1000)).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Ok(WasmValidationDetails {
+            largest_function_instruction_count: NumInstructions::new(1),
+            ..Default::default()
+        })
+    );
+}
+
+#[test]
+fn can_validate_too_many_exported_functions() {
+    let wasm = wat2wasm(&many_exported_functions(1001)).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 1000.".to_string()
+        ))
+    );
+}
+
+#[test]
+fn can_validate_large_sum_exported_function_name_lengths() {
+    let func_a = String::from_utf8(vec![b'a'; 6666]).unwrap();
+    let func_b = String::from_utf8(vec![b'b'; 6667]).unwrap();
+    let func_c = String::from_utf8(vec![b'c'; 6667]).unwrap();
+    let wasm = wat2wasm(&format!(
+        r#"(module
+                    (func $read)
+                    (export "canister_update {}" (func $read))
+                    (export "canister_composite_query {}" (func $read))
+                    (export "canister_query {}" (func $read)))"#,
+        func_a, func_b, func_c
+    ))
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Ok(WasmValidationDetails {
+            largest_function_instruction_count: NumInstructions::new(1),
+            ..Default::default()
+        })
+    );
+}
+
+#[test]
+fn can_validate_too_large_sum_exported_function_name_lengths() {
+    let func_a = String::from_utf8(vec![b'a'; 6667]).unwrap();
+    let func_b = String::from_utf8(vec![b'b'; 6667]).unwrap();
+    let func_c = String::from_utf8(vec![b'c'; 6667]).unwrap();
+    let wasm = wat2wasm(&format!(
+        r#"(module
+                    (func $read)
+                    (export "canister_update {}" (func $read))
+                    (export "canister_composite_query {}" (func $read))
+                    (export "canister_query {}" (func $read)))"#,
+        func_a, func_b, func_c
+    ))
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 20000.".to_string()
         ))
     );
 }
@@ -870,5 +959,146 @@ fn complex_function_rejected() {
             complexity: 15_001,
             allowed: 15_000
         })
+    )
+}
+
+/// Creates a was with roughly the given sizes for the code and data sections
+/// (may be off by a few bytes).
+fn wasm_with_fixed_sizes(code_section_size: u32, data_section_size: u32) -> BinaryEncodedWasm {
+    // Initial memory needs to be large enough to fit the data
+    let memory_size = data_section_size / WASM_PAGE_SIZE + 1;
+    let mut wat = "(module (func".to_string();
+    // Each (block) is 3 bytes: 2 bytes for "block" and 1 for "end"
+    for _ in 0..code_section_size / 3 {
+        wat.push_str("(block)");
+    }
+    wat.push(')');
+    wat.push_str(&format!("(memory {})", memory_size));
+    wat.push_str(&format!(
+        "(data (i32.const 0) \"{}\")",
+        "a".repeat(data_section_size as usize),
+    ));
+    wat.push(')');
+    wat2wasm(&wat).unwrap()
+}
+
+#[test]
+fn large_code_section_rejected() {
+    let wasm = wasm_with_fixed_sizes(10 * KB * KB + 10, 0);
+    let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+    let result = validate_and_instrument_for_testing(&embedder, &wasm);
+    assert_matches!(
+        result,
+        Err(HypervisorError::InvalidWasm(
+            WasmValidationError::CodeSectionTooLarge { .. },
+        ))
+    )
+}
+
+#[test]
+fn large_wasm_with_small_code_accepted() {
+    let wasm = wasm_with_fixed_sizes(KB, 20 * KB * KB);
+    let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+    let result = validate_and_instrument_for_testing(&embedder, &wasm);
+    assert_matches!(result, Ok(_))
+}
+
+/// We are trusting the code section size reported in the header when
+/// determining if the code section is too long.  A Wasm which has been
+/// manipulated to report an incorrectly small size in the header should be
+/// rejected should later be rejected when we try to validate it with Wasmtime.
+#[test]
+fn incorrect_wasm_code_size_is_invalid() {
+    use wasmparser::{Parser, Payload};
+
+    let wasm = wasm_with_fixed_sizes(10 * KB * KB + 10, 0);
+
+    let parser = Parser::new(0);
+    let payloads = parser.parse_all(wasm.as_slice());
+    let mut manipulated_wasm = vec![];
+    for payload in payloads {
+        if let Payload::CodeSectionStart { range, .. } = payload.unwrap() {
+            // The section header contains the byte 10 as the section id
+            // followed by a variable length encoded u32 for the size.
+            //
+            // Note that the `size` field doesn't include the encoding of the
+            // function count (which is 1), so it differs from the length of the
+            // `range` (which does include the count encoding).
+            //
+            // The code section should have size 0xa0000f, which is 0x8f808005
+            // as a variable-length u32.
+            assert_eq!(range.end - range.start, 0xa0000f);
+            assert_eq!(
+                wasm.as_slice()[range.start - 5..range.start],
+                [0xa /*Code section id*/, 0x8f, 0x80, 0x80, 0x05]
+            );
+            // Copy everything up to and including the code section id.
+            manipulated_wasm.extend_from_slice(&wasm.as_slice()[..range.start - 4]);
+            // Push 0x7f = 127 for the code section size.
+            manipulated_wasm.push(0x7f);
+            // Copy everything after the code section size unchanged.
+            manipulated_wasm.extend_from_slice(&wasm.as_slice()[range.start..]);
+            break;
+        }
+    }
+
+    let manipulated_wasm = BinaryEncodedWasm::new(manipulated_wasm);
+    let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+    let result = validate_and_instrument_for_testing(&embedder, &manipulated_wasm);
+    assert_matches!(
+        result,
+        Err(HypervisorError::InvalidWasm(
+            WasmValidationError::WasmtimeValidation(_),
+        ))
+    )
+}
+
+/// We're assuming there is at most one code section in the Wasm. The spec
+/// doesn't allow multiple code sections, so if there are multiple code sections
+/// the module should fail validation.
+#[test]
+fn wasm_with_multiple_code_sections_is_invalid() {
+    use wasmparser::{Parser, Payload};
+
+    let wasm = wasm_with_fixed_sizes(10, 0);
+
+    let parser = Parser::new(0);
+    let payloads = parser.parse_all(wasm.as_slice());
+    let mut manipulated_wasm = vec![];
+    for payload in payloads {
+        if let Payload::CodeSectionStart { range, .. } = payload.unwrap() {
+            // The section header contains the byte 10 as the section id
+            // followed by a variable length encoded u32 for the size.
+            //
+            // Note that the `size` field doesn't include the encoding of the
+            // function count (which is 1), so it differs from the length of the
+            // `range` (which does include the count encoding).
+            //
+            // The code section should have size 0xa, which is unchanged as a
+            // variable-length u32.
+            assert_eq!(range.end - range.start, 0xd);
+            assert_eq!(
+                wasm.as_slice()[range.start - 2..range.start],
+                [0xa /*Code section id*/, 0x0d]
+            );
+            // Copy everything before the code section
+            manipulated_wasm.extend_from_slice(&wasm.as_slice()[..range.start - 2]);
+            // Copy the code section twice
+            manipulated_wasm.extend_from_slice(&wasm.as_slice()[range.start - 2..range.end]);
+            manipulated_wasm.extend_from_slice(&wasm.as_slice()[range.start - 2..range.end]);
+            // Copy everything after the code section size unchanged.
+            manipulated_wasm.extend_from_slice(&wasm.as_slice()[range.start..]);
+            break;
+        }
+    }
+
+    let manipulated_wasm = BinaryEncodedWasm::new(manipulated_wasm);
+    let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger());
+    let result = validate_and_instrument_for_testing(&embedder, &manipulated_wasm);
+    assert_matches!(
+        result,
+        Err(HypervisorError::InvalidWasm(
+            WasmValidationError::WasmtimeValidation(_),
+        ))
     )
 }

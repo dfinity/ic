@@ -5,7 +5,8 @@ use std::sync::Arc;
 use core::ops::Deref;
 use std::time::Instant;
 
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
+use ic_ledger_hash_of::HashOf;
 use icp_ledger::{Block, TipOfChainRes};
 use log::{debug, error, info, trace, warn};
 use tokio::sync::RwLock;
@@ -420,9 +421,10 @@ mod test {
     use std::sync::Arc;
 
     use async_trait::async_trait;
-    use ic_ledger_core::block::{BlockType, EncodedBlock, HashOf};
+    use ic_ledger_core::block::{BlockType, EncodedBlock};
     use ic_ledger_core::timestamp::TimeStamp;
     use ic_ledger_core::Tokens;
+    use ic_ledger_hash_of::HashOf;
     use ic_types::PrincipalId;
     use icp_ledger::{
         AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes, DEFAULT_TRANSFER_FEE,

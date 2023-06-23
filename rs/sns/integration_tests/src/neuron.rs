@@ -1,19 +1,19 @@
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::types::number::Nat;
-use candid::Encode;
+use candid::{types::number::Nat, Encode};
 use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
-use ic_nervous_system_common::{i2d, NervousSystemError};
+use ic_nervous_system_common::{cmc::FakeCmc, i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
-use ic_nns_test_utils::itest_helpers::{
-    forward_call_via_universal_canister, set_up_universal_canister,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{forward_call_via_universal_canister, set_up_universal_canister, NnsCanisters},
 };
 use ic_sns_governance::{
     account_to_proto,
@@ -40,21 +40,25 @@ use ic_sns_governance::{
     },
     types::{test_helpers::NativeEnvironment, Environment, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS},
 };
-use ic_sns_test_utils::icrc1;
-use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, NONCE,
+use ic_sns_test_utils::{
+    icrc1,
+    itest_helpers::{
+        local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, NONCE,
+    },
+    now_seconds,
 };
-use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
+use icrc_ledger_types::icrc1::{
+    account::{Account, Subaccount},
+    transfer::{Memo, TransferArg},
+};
 use maplit::btreemap;
 use rust_decimal_macros::dec;
-use std::time::SystemTime;
 use std::{
     collections::HashSet,
     convert::TryInto,
     iter::{zip, FromIterator},
+    time::SystemTime,
 };
 
 const E8: u64 = 1_0000_0000;
@@ -723,48 +727,6 @@ fn get_sns_canisters_now_seconds() -> i64 {
         + 1
 }
 
-// TODO(NNS1-2021): remove this test
-#[test]
-fn test_disburse_maturity_fails_as_unavailable() {
-    local_test_on_sns_subnet(|runtime| async move {
-        // 1. Setup test environment.
-        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-        let (sns_canisters, neuron_id, subaccount) =
-            create_sns_canisters_with_staked_neuron_and_maturity(&runtime, &user).await;
-
-        let neuron = sns_canisters.get_neuron(&neuron_id).await;
-        let earned_maturity_e8s = neuron.maturity_e8s_equivalent;
-        assert!(earned_maturity_e8s > 0);
-
-        // 2. Disburse all of the neuron's rewards aka maturity.
-        let manage_neuron_response: ManageNeuronResponse = sns_canisters
-            .governance
-            .update_from_sender(
-                "manage_neuron",
-                candid_one,
-                ManageNeuron {
-                    subaccount: subaccount.to_vec(),
-                    command: Some(Command::DisburseMaturity(DisburseMaturity {
-                        percentage_to_disburse: 100,
-                        to_account: None,
-                    })),
-                },
-                &user,
-            )
-            .await
-            .expect("Error calling the manage_neuron API.");
-
-        // 3. Inspect the command response.
-        assert_matches!(
-        manage_neuron_response.command.expect("Missing command response"),
-        CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
-            if code == ErrorType::Unavailable as i32 && msg.to_lowercase().contains("disabled"));
-        Ok(())
-    });
-}
-
-// TODO(NNS1-2021): re-enable
-#[ignore]
 #[test]
 fn test_disburse_maturity_succeeds_to_self() {
     local_test_on_sns_subnet(|runtime| async move {
@@ -833,8 +795,6 @@ fn test_disburse_maturity_succeeds_to_self() {
     });
 }
 
-// TODO(NNS1-2021): re-enable
-#[ignore]
 #[test]
 fn test_disburse_maturity_succeeds_to_other_account() {
     local_test_on_sns_subnet(|runtime| async move {
@@ -916,11 +876,13 @@ fn test_disburse_maturity_succeeds_to_other_account() {
     });
 }
 
-// TODO(NNS1-2021): re-enable
-#[ignore]
 #[test]
 fn test_disburse_maturity_fails_if_no_maturity() {
     local_test_on_sns_subnet(|runtime| async move {
+        // Only needed for the Cycles Minting Canister (CMC), because it provides maturity modulation.
+        let _nns_canisters =
+            NnsCanisters::set_up(&runtime, NnsInitPayloadsBuilder::new().build()).await;
+
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
             owner: user.get_principal_id().0,
@@ -941,6 +903,7 @@ fn test_disburse_maturity_fails_if_no_maturity() {
             .build();
 
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        sns_canisters.wait_for_maturity_modulation_or_panic().await;
 
         // Stake and claim a neuron capable of making a proposal
         let neuron_id = sns_canisters
@@ -975,9 +938,110 @@ fn test_disburse_maturity_fails_if_no_maturity() {
             .expect("Error calling the manage_neuron API.");
 
         assert_matches!(
-        manage_neuron_response.command.expect("Missing command response"),
-        CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
-            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
+            manage_neuron_response.command.as_ref().expect("Missing command response"),
+            CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
+                if *code == ErrorType::PreconditionFailed as i32 &&
+                   msg.to_lowercase().contains("can't merge an amount less than"),
+            "{:#?}",
+            manage_neuron_response,
+        );
+
+        Ok(())
+    });
+}
+
+#[test]
+fn test_disburse_maturity_no_maturity_modulation() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let account_identifier = Account {
+            owner: user.get_principal_id().0,
+            subaccount: None,
+        };
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let sys_params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+            .with_ledger_account(account_identifier, alloc)
+            .with_nervous_system_parameters(sys_params.clone())
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+        // Assert that SNS governance does not know any maturity modulation
+        // value. Ofc, that shouldn't be possible, since there is no Cycles
+        // Minting Canister in this test. This is just a sanity test, not a test
+        // of the code under test (called later).
+        assert_eq!(
+            sns_canisters
+                .get_maturity_modulation()
+                .await
+                .maturity_modulation,
+            None,
+        );
+
+        // Stake and claim a neuron capable of making a proposal
+        let neuron_id = sns_canisters
+            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+
+        let subaccount = neuron_id
+            .subaccount()
+            .expect("Error creating the subaccount");
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+
+        // No maturity should have been gained as no voting rewards have been distributed
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+
+        // Disburse all of the neuron's rewards aka maturity.
+        let ManageNeuronResponse { command } = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::DisburseMaturity(DisburseMaturity {
+                        percentage_to_disburse: 100,
+                        to_account: None,
+                    })),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling the manage_neuron API.");
+
+        match &command {
+            Some(CommandResponse::Error(GovernanceError {
+                error_type,
+                error_message,
+            })) => {
+                assert_eq!(
+                    ErrorType::from_i32(*error_type).unwrap(),
+                    ErrorType::Unavailable,
+                    "{:#?}",
+                    command
+                );
+                assert!(
+                    error_message.to_lowercase().contains("maturity modulation"),
+                    "{:#?}",
+                    command
+                );
+                assert!(error_message.contains("retriev"), "{:#?}", command);
+                assert!(
+                    error_message.contains("Cycles Minting Canister"),
+                    "{:#?}",
+                    command
+                );
+            }
+            _ => panic!("Unexpected response: {:#?}", command),
+        }
 
         Ok(())
     });
@@ -987,12 +1051,15 @@ async fn create_sns_canisters_with_staked_neuron_and_maturity<'a>(
     runtime: &'a Runtime,
     owner: &'a Sender,
 ) -> (SnsCanisters<'a>, NeuronId, Subaccount) {
+    // Only needed for the Cycles Minting Canister (CMC), because it provides maturity modulation.
+    let _nns_canisters = NnsCanisters::set_up(runtime, NnsInitPayloadsBuilder::new().build()).await;
+
     let account_identifier = Account {
         owner: owner.get_principal_id().0,
         subaccount: None,
     };
     let alloc = Tokens::from_tokens(1000).unwrap();
-    let sys_params = NervousSystemParameters {
+    let nervous_system_parameters = NervousSystemParameters {
         neuron_claimer_permissions: Some(NeuronPermissionList {
             permissions: NeuronPermissionType::all(),
         }),
@@ -1005,10 +1072,11 @@ async fn create_sns_canisters_with_staked_neuron_and_maturity<'a>(
 
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()
         .with_ledger_account(account_identifier, alloc)
-        .with_nervous_system_parameters(sys_params.clone())
+        .with_nervous_system_parameters(nervous_system_parameters)
         .build();
 
     let sns_canisters = SnsCanisters::set_up(runtime, sns_init_payload).await;
+    sns_canisters.wait_for_maturity_modulation_or_panic().await;
 
     // Stake and claim a neuron capable of making a proposal
     let neuron_id = sns_canisters
@@ -1317,6 +1385,7 @@ async fn zero_total_reward_shares() {
         Box::new(environment),
         Box::new(EmptyLedger {}),
         Box::new(EmptyLedger {}),
+        Box::new(FakeCmc::new()),
     );
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;
@@ -1533,6 +1602,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
         Box::new(environment),
         Box::new(StubLedger {}),
         Box::new(StubLedger {}),
+        Box::new(FakeCmc::new()),
     );
     // Prevent gc.
     governance.latest_gc_timestamp_seconds = now;

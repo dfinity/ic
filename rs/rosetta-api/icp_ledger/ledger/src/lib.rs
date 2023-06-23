@@ -6,15 +6,13 @@ use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
 use ic_ledger_core::{
-    approvals::AllowanceTable,
-    balances::Balances,
-    block::{EncodedBlock, HashOf},
-    timestamp::TimeStamp,
+    approvals::AllowanceTable, balances::Balances, block::EncodedBlock, timestamp::TimeStamp,
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
+use ic_ledger_hash_of::HashOf;
 use icp_ledger::{
     AccountIdentifier, ApprovalKey, Block, LedgerBalances, Memo, Operation, PaymentError,
-    Transaction, TransferError, TransferFee, DEFAULT_TRANSFER_FEE,
+    Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -66,7 +64,7 @@ fn unknown_token() -> String {
 pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]
-    pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier, AccountIdentifier>,
+    pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
     // A cap on the maximum number of accounts
     pub maximum_number_of_accounts: usize,
@@ -108,8 +106,7 @@ pub struct Ledger {
 
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
-    type SpenderId = AccountIdentifier;
-    type Approvals = AllowanceTable<ApprovalKey, Self::AccountId, Self::SpenderId>;
+    type Approvals = AllowanceTable<ApprovalKey, Self::AccountId>;
     type BalancesStore = HashMap<AccountIdentifier, Tokens>;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
@@ -296,6 +293,8 @@ impl Ledger {
                     )
                     .to_string(),
                 ),
+                CTE::AllowanceChanged { .. } => todo!(),
+                CTE::SelfApproval { .. } => todo!(),
             }
         })
     }
@@ -411,6 +410,20 @@ impl Ledger {
     pub fn transfer_fee(&self) -> TransferFee {
         TransferFee {
             transfer_fee: self.transfer_fee,
+        }
+    }
+
+    pub fn upgrade(&mut self, args: UpgradeArgs) {
+        if let Some(maximum_number_of_accounts) = args.maximum_number_of_accounts {
+            self.maximum_number_of_accounts = maximum_number_of_accounts;
+        }
+        if let Some(icrc1_minting_account) = args.icrc1_minting_account {
+            if Some(AccountIdentifier::from(icrc1_minting_account)) != self.minting_account_id {
+                ic_cdk::trap(
+                    "The icrc1 minting account is not the same as the minting account set during initialization",
+                );
+            }
+            self.icrc1_minting_account = Some(icrc1_minting_account);
         }
     }
 }

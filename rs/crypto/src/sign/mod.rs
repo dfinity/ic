@@ -43,8 +43,7 @@ mod multi_sig;
 mod threshold_sig;
 
 pub use canister_threshold_sig::{
-    fetch_idkg_dealing_encryption_public_key_from_registry, get_mega_pubkey,
-    MegaKeyFromRegistryError,
+    retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
 };
 
 #[cfg(test)]
@@ -717,7 +716,12 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentImpl<C> {
             crypto.signature_inputs => format!("{:?}", inputs),
         );
         let start_time = self.metrics.now();
-        let result = canister_threshold_sig::ecdsa::sign_share(&self.csp, &self.node_id, inputs);
+        let result = canister_threshold_sig::ecdsa::sign_share(
+            &self.csp,
+            &self.node_id,
+            inputs,
+            &self.logger,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::ThresholdEcdsa,
             MetricsScope::Full,

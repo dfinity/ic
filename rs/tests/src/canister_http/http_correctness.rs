@@ -449,34 +449,7 @@ pub fn test(env: TestEnv) {
                     },
                     cycles: 500_000_000_000,
                 },
-                |response| matches!(response, Ok(r) if r.body.contains("Redirecting")),
-            )
-            .await,
-        );
-        // Test: Drip response. 100 Bytes with 1s between byte
-        test_results.push(
-            test_canister_http_property(
-                "Http endpoint that slowly drips response",
-                &logger,
-                &proxy_canister,
-                RemoteHttpRequest {
-                    request: CanisterHttpRequestArgs {
-                        url: format!("https://[{webserver_ipv6}]:20443/drip/100/100"),
-                        headers: vec![],
-                        method: HttpMethod::GET,
-                        body: Some("".as_bytes().to_vec()),
-                        transform: Some(TransformContext {
-                            function: TransformFunc(candid::Func {
-                                principal: proxy_canister.canister_id().get().0,
-                                method: "transform".to_string(),
-                            }),
-                            context: vec![0, 1, 2],
-                        }),
-                        max_response_bytes: None,
-                    },
-                    cycles: 500_000_000_000,
-                },
-                |response| matches!(response, Err((RejectionCode::SysFatal, _))),
+                |response| matches!(response, Ok(r) if r.status == 303),
             )
             .await,
         );

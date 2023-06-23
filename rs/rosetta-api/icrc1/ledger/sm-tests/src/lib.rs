@@ -1,9 +1,11 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_error_types::UserError;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
-use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
+use ic_ledger_core::block::{BlockIndex, BlockType};
+use ic_ledger_hash_of::HashOf;
+use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
@@ -178,7 +180,7 @@ fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
 }
 
-fn transfer(
+pub fn transfer(
     env: &StateMachine,
     ledger: CanisterId,
     from: impl Into<Account>,
@@ -422,7 +424,7 @@ fn arb_transaction() -> impl Strategy<Value = Transaction> {
         .prop_map(|(operation, ts, memo)| Transaction {
             operation,
             created_at_time: ts,
-            memo: memo.map(Memo::from),
+            memo: memo.map(|m| Memo::from(m.to_vec())),
         })
 }
 
@@ -959,92 +961,6 @@ where
     );
 }
 
-pub fn test_memo_validation<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
-    T: CandidType,
-{
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let (env, canister_id) = setup(
-        ledger_wasm,
-        encode_init_args,
-        vec![(Account::from(p1.0), 10_000_000)],
-    );
-    // [ic_icrc1::endpoints::TransferArg] does not allow invalid memos by construction, we
-    // need another type to check invalid inputs.
-    #[derive(CandidType)]
-    struct TransferArg {
-        to: Account,
-        amount: Nat,
-        memo: Option<Vec<u8>>,
-    }
-    type TxResult = Result<Nat, TransferError>;
-
-    // 8-byte memo should work
-    Decode!(
-        &env.execute_ingress_as(
-            p1,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&TransferArg {
-                to: p2.0.into(),
-                amount: Nat::from(10_000),
-                memo: Some(vec![1u8; 8]),
-            })
-            .unwrap()
-        )
-        .expect("failed to call transfer")
-        .bytes(),
-        TxResult
-    )
-    .unwrap()
-    .expect("transfer failed");
-
-    // 32-byte memo should work
-    Decode!(
-        &env.execute_ingress_as(
-            p1,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&TransferArg {
-                to: p2.0.into(),
-                amount: Nat::from(10_000),
-                memo: Some(vec![1u8; 32]),
-            })
-            .unwrap()
-        )
-        .expect("failed to call transfer")
-        .bytes(),
-        TxResult
-    )
-    .unwrap()
-    .expect("transfer failed");
-
-    // 33-byte memo should fail
-    match env.execute_ingress_as(
-        p1,
-        canister_id,
-        "icrc1_transfer",
-        Encode!(&TransferArg {
-            to: p2.0.into(),
-            amount: Nat::from(10_000),
-            memo: Some(vec![1u8; 33]),
-        })
-        .unwrap(),
-    ) {
-        Err(user_error) => assert_eq!(
-            user_error.code(),
-            ErrorCode::CanisterCalledTrap,
-            "unexpected error: {}",
-            user_error
-        ),
-        Ok(result) => panic!(
-            "expected a reject for a 33-byte memo, got result {:?}",
-            result
-        ),
-    }
-}
-
 pub fn test_tx_time_bounds<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
@@ -1574,10 +1490,10 @@ where
 {
     fn value_as_u64(value: icrc_ledger_types::icrc::generic_value::Value) -> u64 {
         match value {
-            icrc_ledger_types::icrc::generic_value::Value::Nat(n) => {
-                n.0.to_u64().expect("Bloc index must be a u64")
+            icrc_ledger_types::icrc::generic_value::Value::Int(n) => {
+                n.0.to_u64().expect("Block index must be a u64")
             }
-            value => panic!("Expected Value::Nat but found {:?}", value),
+            value => panic!("Expected Value::Int but found {:?}", value),
         }
     }
 
@@ -1710,4 +1626,174 @@ where
             },
         )
         .unwrap()
+}
+
+pub fn test_memo_max_len<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from_account = Principal::from_slice(&[1u8; 29]).into();
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(from_account, 1_000_000_000)],
+    );
+    let to_account = Principal::from_slice(&[2u8; 29]).into();
+    let transfer_with_memo = |memo: &[u8]| -> Result<WasmResult, UserError> {
+        env.execute_ingress_as(
+            PrincipalId(from_account.owner),
+            ledger_id,
+            "icrc1_transfer",
+            Encode!(&TransferArg {
+                from_subaccount: None,
+                to: to_account,
+                amount: Nat::from(1),
+                fee: None,
+                created_at_time: None,
+                memo: Some(Memo::from(memo.to_vec())),
+            })
+            .unwrap(),
+        )
+    };
+
+    // We didn't set the max_memo_length in the init params of the ledger
+    // so the memo will be accepted only if it's 32 bytes or less
+    for i in 0..=32 {
+        assert!(
+            transfer_with_memo(&vec![0u8; i]).is_ok(),
+            "Memo size: {}",
+            i
+        );
+    }
+    expect_memo_length_error(transfer_with_memo, &[0u8; 33]);
+
+    // Change the memo to 64 bytes
+    let args = ic_icrc1_ledger::LedgerArgument::Upgrade(Some(ic_icrc1_ledger::UpgradeArgs {
+        max_memo_length: Some(64),
+        ..ic_icrc1_ledger::UpgradeArgs::default()
+    }));
+    let args = Encode!(&args).unwrap();
+    env.upgrade_canister(ledger_id, ledger_wasm.clone(), args)
+        .unwrap();
+
+    // now the ledger should accept memos up to 64 bytes
+    for i in 0..=64 {
+        assert!(
+            transfer_with_memo(&vec![0u8; i]).is_ok(),
+            "Memo size: {}",
+            i
+        );
+    }
+    expect_memo_length_error(transfer_with_memo, &[0u8; 65]);
+
+    expect_memo_length_error(transfer_with_memo, &[0u8; u16::MAX as usize + 1]);
+
+    // Trying to shrink the memo should result in a failure
+    let args = ic_icrc1_ledger::LedgerArgument::Upgrade(Some(ic_icrc1_ledger::UpgradeArgs {
+        max_memo_length: Some(63),
+        ..ic_icrc1_ledger::UpgradeArgs::default()
+    }));
+    let args = Encode!(&args).unwrap();
+    assert!(env.upgrade_canister(ledger_id, ledger_wasm, args).is_err());
+}
+
+fn expect_memo_length_error<T>(transfer_with_memo: T, memo: &[u8])
+where
+    T: FnOnce(&[u8]) -> Result<WasmResult, UserError>,
+{
+    match transfer_with_memo(memo) {
+        Err(user_error) => assert_eq!(
+            user_error.code(),
+            ErrorCode::CanisterCalledTrap,
+            "unexpected error: {}",
+            user_error
+        ),
+        Ok(result) => panic!(
+            "expected a reject for a {}-byte memo, got result {:?}",
+            memo.len(),
+            result
+        ),
+    }
+}
+
+pub fn icrc1_test_block_transformation<T>(
+    ledger_wasm_mainnet: Vec<u8>,
+    ledger_wasm_current: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+
+    // Setup ledger as it is deployed on the mainnet
+    let (env, canister_id) = setup(
+        ledger_wasm_mainnet,
+        encode_init_args,
+        vec![
+            (Account::from(p1.0), 10_000_000),
+            (Account::from(p2.0), 10_000_000),
+            (Account::from(p3.0), 10_000_000),
+        ],
+    );
+
+    transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p1.0, p3.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p3.0, p2.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p2.0, p1.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
+
+    // Fetch all blocks before the upgrade
+    let resp_pre_upgrade = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
+
+    // Now upgrade the ledger to the new canister wasm
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm_current,
+        Encode!(&LedgerArgument::Upgrade(None)).unwrap(),
+    )
+    .unwrap();
+
+    // Default archive threshhold is 10 blocks so all blocks should be on the ledger directly
+    // Fetch all blocks after the upgrade
+    let resp_post_upgrade = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
+
+    // Make sure the same number of blocks were fetched before and after the upgrade
+    assert_eq!(
+        resp_pre_upgrade.blocks.len(),
+        resp_post_upgrade.blocks.len()
+    );
+
+    //Go through all blocks and make sure the blocks fetched before the upgrade are the same as after the upgrade
+    for (block_pre_upgrade, block_post_upgrade) in resp_pre_upgrade
+        .blocks
+        .into_iter()
+        .zip(resp_post_upgrade.blocks.into_iter())
+    {
+        assert_eq!(block_pre_upgrade, block_post_upgrade);
+        assert_eq!(
+            Block::try_from(block_pre_upgrade.clone()).unwrap(),
+            Block::try_from(block_post_upgrade.clone()).unwrap()
+        );
+        assert_eq!(
+            Block::try_from(block_pre_upgrade.clone()).unwrap().encode(),
+            Block::try_from(block_post_upgrade.clone())
+                .unwrap()
+                .encode()
+        );
+        assert_eq!(
+            Block::block_hash(&Block::try_from(block_pre_upgrade.clone()).unwrap().encode()),
+            Block::block_hash(
+                &Block::try_from(block_post_upgrade.clone())
+                    .unwrap()
+                    .encode()
+            )
+        );
+        assert_eq!(
+            Transaction::try_from(block_pre_upgrade.clone()).unwrap(),
+            Transaction::try_from(block_post_upgrade.clone()).unwrap()
+        );
+    }
 }

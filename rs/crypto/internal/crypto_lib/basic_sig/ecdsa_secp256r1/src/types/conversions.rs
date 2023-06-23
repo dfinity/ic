@@ -9,32 +9,6 @@ impl From<Vec<u8>> for PublicKeyBytes {
     }
 }
 
-impl From<PublicKeyBytes> for String {
-    fn from(val: PublicKeyBytes) -> Self {
-        base64::encode(&val.0[..])
-    }
-}
-
-impl TryFrom<&str> for PublicKeyBytes {
-    type Error = CryptoError;
-
-    fn try_from(key: &str) -> Result<Self, CryptoError> {
-        let key = base64::decode(key).map_err(|e| CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::EcdsaP256,
-            key_bytes: None,
-            internal_error: format!("Key {} is not a valid base64 encoded string: {}", key, e),
-        })?;
-        Ok(PublicKeyBytes(key))
-    }
-}
-
-impl TryFrom<&String> for PublicKeyBytes {
-    type Error = CryptoError;
-    fn try_from(pk_string: &String) -> Result<Self, CryptoError> {
-        Self::try_from(pk_string as &str)
-    }
-}
-
 // From vector of bytes.
 impl TryFrom<Vec<u8>> for SignatureBytes {
     type Error = CryptoError;
@@ -55,35 +29,6 @@ impl TryFrom<Vec<u8>> for SignatureBytes {
             bytes.copy_from_slice(&sig);
             Ok(Self(bytes))
         }
-    }
-}
-
-impl From<SignatureBytes> for String {
-    fn from(val: SignatureBytes) -> Self {
-        base64::encode(&val.0)
-    }
-}
-
-impl TryFrom<&str> for SignatureBytes {
-    type Error = CryptoError;
-
-    fn try_from(signature: &str) -> Result<Self, CryptoError> {
-        let signature = base64::decode(signature).map_err(|e| CryptoError::MalformedSignature {
-            algorithm: AlgorithmId::EcdsaP256,
-            sig_bytes: Vec::new(),
-            internal_error: format!(
-                "Signature {} is not a valid base64 encoded string: {}",
-                signature, e
-            ),
-        })?;
-        SignatureBytes::try_from(signature)
-    }
-}
-
-impl TryFrom<&String> for SignatureBytes {
-    type Error = CryptoError;
-    fn try_from(signature: &String) -> Result<Self, CryptoError> {
-        Self::try_from(signature as &str)
     }
 }
 

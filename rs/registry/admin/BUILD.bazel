@@ -1,26 +1,27 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/sha",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/http_utils",
     "//rs/interfaces/registry",
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/humanize",
     "//rs/nervous_system/root",
+    "//rs/nervous_system/proto",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
-    "//rs/nns/handlers/root",
+    "//rs/nns/handlers/lifeline/interface",
     "//rs/nns/init",
-    "//rs/nns/sns-wasm",
-    "//rs/nns/test_utils",
     "//rs/prep",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -36,7 +37,6 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/swap",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
@@ -48,10 +48,12 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:humantime",
     "@crate_index//:ic-btc-interface",
-    "@crate_index//:lazy_static",
+    "@crate_index//:itertools",
+    "@crate_index//:maplit",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:prost",
-    "@crate_index//:regex",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde-bytes-repr",
@@ -64,18 +66,52 @@ DEPENDENCIES = [
     "@crate_index//:walkdir",
 ]
 
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/sns/init",
+    "//rs/nns/governance",
+    "//rs/nns/sns-wasm",
+    "//rs/nns/handlers/root/impl:root",
+    "//rs/sns/swap",
+    "//rs/nns/test_utils",
+]
+
+# (Currently not used)
+# DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+#     "//rs/sns/init:init--test_feature",
+#     "//rs/nns/governance:governance--test_feature",
+#     "//rs/nns/sns-wasm:sns-wasm--test_feature",
+#     "//rs/nns/handlers/root/impl:root--test_feature",
+#     "//rs/sns/swap:swap--test_feature",
+#     "//rs/nns/test_utils:test_utils--test_feature",
+# ]
+
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
     "@crate_index//:strum_macros",
     "//rs/registry/admin-derive",
 ]
 
+DEV_DEPENDENCIES = []
+
 ALIASES = {}
 
 rust_binary(
     name = "ic-admin",
-    srcs = glob(["src/*.rs"]),
+    srcs = glob(
+        ["src/*.rs"],
+        exclude = ["**/*_tests.rs"],
+    ),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "ic-admin_unit_test",
+    srcs = glob(["src/*.rs"]),
+    crate = ":ic-admin",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

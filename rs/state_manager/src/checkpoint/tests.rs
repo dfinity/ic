@@ -5,12 +5,14 @@ use ic_ic00_types::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{WasmBinary, WasmMetadata},
+    canister_state::execution_state::{NextScheduledMethod, WasmBinary, WasmMetadata},
     page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
     testing::ReplicatedStateTesting,
     CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
 };
-use ic_state_layout::StateLayout;
+use ic_state_layout::{
+    StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, SYSTEM_METADATA_FILE,
+};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     state::{canister_ids, new_canister_state},
@@ -26,7 +28,7 @@ use ic_types::{
     ExecutionRound, Height,
 };
 use ic_wasm_types::CanisterModule;
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fs::OpenOptions};
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -64,7 +66,6 @@ fn make_checkpoint_and_get_state_impl(
     state: &ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
-    separate_ingress_history: bool,
 ) -> ReplicatedState {
     make_checkpoint(
         state,
@@ -73,7 +74,6 @@ fn make_checkpoint_and_get_state_impl(
         &state_manager_metrics().checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        separate_ingress_history,
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1
@@ -84,7 +84,7 @@ fn make_checkpoint_and_get_state(
     height: Height,
     tip_channel: &Sender<TipRequest>,
 ) -> ReplicatedState {
-    make_checkpoint_and_get_state_impl(state, height, tip_channel, SEPARATE_INGRESS_HISTORY)
+    make_checkpoint_and_get_state_impl(state, height, tip_channel)
 }
 
 #[test]
@@ -128,20 +128,15 @@ fn can_make_a_checkpoint() {
             .is_ok());
 
         // Ensure the expected paths actually exist.
-        let checkpoint_path = root.join("checkpoints").join("000000000000002a");
+        let checkpoint_path = root.join(CHECKPOINTS_DIR).join("000000000000002a");
         let canister_path = checkpoint_path
-            .join("canister_states")
+            .join(CANISTER_STATES_DIR)
             .join("000000000000000a0101");
 
-        let mut expected_paths = vec![
-            checkpoint_path.join("subnet_queues.pbuf"),
-            checkpoint_path.join("system_metadata.pbuf"),
-            canister_path.join("queues.pbuf"),
-            canister_path.join("canister.pbuf"),
+        let expected_paths = vec![
+            checkpoint_path.join(SYSTEM_METADATA_FILE),
+            canister_path.join(CANISTER_FILE),
         ];
-        if SEPARATE_INGRESS_HISTORY {
-            expected_paths.push(checkpoint_path.join("ingress_history.pbuf"));
-        }
 
         for path in expected_paths {
             assert!(path.exists(), "Expected path {} to exist", path.display());
@@ -159,7 +154,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
         let root = tmp.path().to_path_buf();
-        let checkpoints_dir = root.join("checkpoints");
+        let checkpoints_dir = root.join(CHECKPOINTS_DIR);
         let layout =
             StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();
@@ -194,7 +189,6 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             &state_manager_metrics.checkpoint_metrics,
             &mut thread_pool(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            SEPARATE_INGRESS_HISTORY,
         );
 
         match replicated_state {
@@ -247,7 +241,9 @@ fn can_recover_from_a_checkpoint() {
             exports: ExportedFunctions::new(BTreeSet::new()),
             metadata: WasmMetadata::default(),
             last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
         };
+
         canister_state.execution_state = Some(execution_state);
 
         let own_subnet_type = SubnetType::Application;
@@ -608,5 +604,79 @@ fn can_recover_subnet_queues() {
             original_state.subnet_queues(),
             recovered_state.subnet_queues()
         );
+    });
+}
+
+#[test]
+fn empty_protobufs_are_loaded_correctly() {
+    with_test_replica_logger(|log| {
+        let tmp = tmpdir("checkpoint");
+        let root = tmp.path().to_path_buf();
+        let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
+        let tip_handler = layout.capture_tip_handler();
+        let state_manager_metrics = state_manager_metrics();
+        let (_tip_thread, tip_channel) = spawn_tip_thread(
+            log,
+            tip_handler,
+            layout.clone(),
+            state_manager_metrics.clone(),
+            MaliciousFlags::default(),
+        );
+
+        const HEIGHT: Height = Height::new(42);
+        let canister_id = canister_test_id(1);
+
+        let own_subnet_type = SubnetType::Application;
+        let subnet_id = subnet_test_id(1);
+        let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
+        let canister_state = new_canister_state(
+            canister_id,
+            user_test_id(24).get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        state.put_canister_state(canister_state);
+
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+
+        let recovered_state = load_checkpoint(
+            &layout.checkpoint(HEIGHT).unwrap(),
+            own_subnet_type,
+            &state_manager_metrics.checkpoint_metrics,
+            Some(&mut thread_pool()),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        )
+        .unwrap();
+
+        let checkpoint_layout = layout.checkpoint(HEIGHT).unwrap();
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+
+        let empty_protobufs = vec![
+            checkpoint_layout.subnet_queues().raw_path().to_owned(),
+            checkpoint_layout.ingress_history().raw_path().to_owned(),
+            canister_layout.queues().raw_path().to_owned(),
+        ];
+
+        for path in empty_protobufs {
+            assert!(!path.exists());
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&path)
+                .unwrap();
+            assert!(path.exists());
+        }
+
+        let recovered_state_altered = load_checkpoint(
+            &layout.checkpoint(HEIGHT).unwrap(),
+            own_subnet_type,
+            &state_manager_metrics.checkpoint_metrics,
+            Some(&mut thread_pool()),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        )
+        .unwrap();
+
+        assert_eq!(recovered_state, recovered_state_altered);
     });
 }

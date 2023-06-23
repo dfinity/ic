@@ -128,7 +128,7 @@ pub struct NeuronStakeTransfer {
     /// The subaccount to which the transfer was made.
     #[prost(bytes = "vec", tag = "4")]
     pub to_subaccount: ::prost::alloc::vec::Vec<u8>,
-    /// The amount of stake that was transfered.
+    /// The amount of stake that was transferred.
     #[prost(uint64, tag = "5")]
     pub neuron_stake_e8s: u64,
     /// The block height at which the transfer occurred.
@@ -249,10 +249,9 @@ pub struct Neuron {
     /// by voting.
     #[prost(bool, tag = "16")]
     pub not_for_profit: bool,
-    /// If set, this neuron participates with all of its stake in the
-    /// Internet Computer's community fund. Setting this value is an
-    /// irreversible decision that can only be made by the neuron's
-    /// controller.
+    /// If set, this neuron is a member of the Community Fund. This means that when
+    /// a proposal to open an SNS token swap is executed, maturity from this neuron
+    /// will be used to participate in the SNS token swap.
     #[prost(uint64, optional, tag = "17")]
     pub joined_community_fund_timestamp_seconds: ::core::option::Option<u64>,
     /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
@@ -502,7 +501,7 @@ pub mod reward_node_provider {
         /// account.
         #[prost(message, tag = "4")]
         RewardToNeuron(RewardToNeuron),
-        /// If this is specificed, executing this proposal will mint to the
+        /// If this is specified, executing this proposal will mint to the
         /// specified account.
         #[prost(message, tag = "5")]
         RewardToAccount(RewardToAccount),
@@ -1152,7 +1151,7 @@ pub mod manage_neuron {
             #[prost(uint64, tag = "1")]
             Memo(u64),
             /// Claim or refresh a neuron, by providing the memo used in the
-            /// staking stransfer and 'controller' as the principal id used to
+            /// staking transfer and 'controller' as the principal id used to
             /// calculate the subaccount to which the transfer was made. If
             /// 'controller' is omitted, the principal id of the caller is
             /// used.
@@ -1354,6 +1353,7 @@ pub mod manage_neuron_response {
         #[prost(message, optional, tag = "1")]
         pub created_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     }
+    /// A response for merging or simulating merge neurons
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1363,7 +1363,20 @@ pub mod manage_neuron_response {
         PartialEq,
         ::prost::Message,
     )]
-    pub struct MergeResponse {}
+    pub struct MergeResponse {
+        /// The resulting state of the source neuron
+        #[prost(message, optional, tag = "1")]
+        pub source_neuron: ::core::option::Option<super::Neuron>,
+        /// The resulting state of the target neuron
+        #[prost(message, optional, tag = "2")]
+        pub target_neuron: ::core::option::Option<super::Neuron>,
+        /// The NeuronInfo of the source neuron
+        #[prost(message, optional, tag = "3")]
+        pub source_neuron_info: ::core::option::Option<super::NeuronInfo>,
+        /// The NeuronInfo of the target neuron
+        #[prost(message, optional, tag = "4")]
+        pub target_neuron_info: ::core::option::Option<super::NeuronInfo>,
+    }
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1489,9 +1502,9 @@ pub mod governance_error {
         /// performed.
         ResourceExhausted = 10,
         /// Some precondition for executing this method was not met (e.g. the
-        /// neuron's desolve time is too short). There could be a change in the
+        /// neuron's dissolve time is too short). There could be a change in the
         /// state of the system such that the operation becomes allowed (e.g. the
-        /// owner of the neuron increases its desolve delay).
+        /// owner of the neuron increases its dissolve delay).
         PreconditionFailed = 11,
         /// Executing this method failed for some reason external to the
         /// governance canister.
@@ -1604,10 +1617,9 @@ pub struct ProposalData {
     /// respect to rewards.
     #[prost(map = "fixed64, message", tag = "6")]
     pub ballots: ::std::collections::HashMap<u64, Ballot>,
-    /// Latest tally. Recomputed for open proposals, when proposals are
-    /// processed. If the proposal is decided (not open), then the tally
-    /// will never change again. (But the ballots may still change as
-    /// neurons may vote after the proposal has been decided.)
+    /// Latest tally. Recomputed for every vote. Even after the proposal has been
+    /// decided, the latest_tally will still be updated based on the recent vote,
+    /// until the voting deadline.
     #[prost(message, optional, tag = "7")]
     pub latest_tally: ::core::option::Option<Tally>,
     /// If specified: the timestamp when this proposal was adopted or
@@ -2099,7 +2111,7 @@ pub struct CreateServiceNervousSystem {
     #[prost(message, repeated, tag = "5")]
     pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(message, repeated, tag = "6")]
-    pub dapp_canisters: ::prost::alloc::vec::Vec<create_service_nervous_system::Canister>,
+    pub dapp_canisters: ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
     #[prost(message, optional, tag = "7")]
     pub initial_token_distribution:
         ::core::option::Option<create_service_nervous_system::InitialTokenDistribution>,
@@ -2113,19 +2125,6 @@ pub struct CreateServiceNervousSystem {
 }
 /// Nested message and enum types in `CreateServiceNervousSystem`.
 pub mod create_service_nervous_system {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Canister {
-        #[prost(message, optional, tag = "1")]
-        pub id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    }
     // Initial SNS Tokens and Neurons
     // ------------------------------
 
@@ -2217,7 +2216,7 @@ pub mod create_service_nervous_system {
             pub total: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
         }
     }
-    // Canistser Initialization
+    // Canister Initialization
     // ------------------------
 
     #[derive(
@@ -2232,17 +2231,31 @@ pub mod create_service_nervous_system {
     pub struct SwapParameters {
         #[prost(uint64, optional, tag = "1")]
         pub minimum_participants: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "2")]
-        pub minimum_icp: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "3")]
-        pub maximum_icp: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "4")]
-        pub minimum_participant_icp: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "5")]
-        pub maximum_participant_icp: ::core::option::Option<u64>,
+        #[prost(message, optional, tag = "2")]
+        pub minimum_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "3")]
+        pub maximum_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "4")]
+        pub minimum_participant_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "5")]
+        pub maximum_participant_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
         #[prost(message, optional, tag = "6")]
         pub neuron_basket_construction_parameters:
             ::core::option::Option<swap_parameters::NeuronBasketConstructionParameters>,
+        #[prost(string, optional, tag = "7")]
+        pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
+        #[prost(message, optional, tag = "8")]
+        pub restricted_countries:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Countries>,
+        /// The swap occurs at a specific time of day, in UTC.
+        /// It will happen the first time start_time occurs that's at least 24h after
+        /// the proposal is adopted.
+        #[prost(message, optional, tag = "9")]
+        pub start_time: ::core::option::Option<::ic_nervous_system_proto::pb::v1::GlobalTimeOfDay>,
+        #[prost(message, optional, tag = "10")]
+        pub duration: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
     }
     /// Nested message and enum types in `SwapParameters`.
     pub mod swap_parameters {
@@ -2398,7 +2411,7 @@ pub struct Governance {
     /// If there are no ongoing requests, this map should be empty.
     ///
     /// If something goes fundamentally wrong (say we trap at some point
-    /// after issueing a transfer call) the neuron(s) involved are left in a
+    /// after issuing a transfer call) the neuron(s) involved are left in a
     /// "locked" state, meaning new operations can't be applied without
     /// reconciling the state.
     ///
@@ -2474,8 +2487,8 @@ pub mod governance {
     /// Nested message and enum types in `NeuronInFlightCommand`.
     pub mod neuron_in_flight_command {
         /// A general place holder for sync commands. The neuron lock is
-        /// never left holding a sync command (as it either suceeds to
-        /// aquire the lock and releases it in the same call, or never
+        /// never left holding a sync command (as it either succeeds to
+        /// acquire the lock and releases it in the same call, or never
         /// acquires it in the first place), but it still must be acquired
         /// to prevent interleaving with another async command. Thus there's
         /// no value in actually storing the command itself, and this placeholder
@@ -2584,7 +2597,7 @@ pub struct ListProposalInfo {
     /// will be used.
     #[prost(uint32, tag = "1")]
     pub limit: u32,
-    /// If specified, only return proposals that are stricty earlier than
+    /// If specified, only return proposals that are strictly earlier than
     /// the specified proposal according to the proposal ID. If not
     /// specified, start with the most recent proposal.
     #[prost(message, optional, tag = "2")]
@@ -2608,6 +2621,11 @@ pub struct ListProposalInfo {
     /// restriction is applied.
     #[prost(enumeration = "ProposalStatus", repeated, tag = "5")]
     pub include_status: ::prost::alloc::vec::Vec<i32>,
+    /// Include all ManageNeuron proposals regardless of the visibility of the
+    /// proposal to the caller principal. Note that exclude_topic is still
+    /// respected even when this option is set to true.
+    #[prost(bool, optional, tag = "6")]
+    pub include_all_manage_neuron_proposals: ::core::option::Option<bool>,
 }
 #[derive(
     candid::CandidType,
@@ -2966,7 +2984,7 @@ impl Topic {
 /// Every neuron is in one of three states.
 ///
 /// Note that `Disbursed` is not a state of a neuron, as the neuron is
-/// consumed throught the act disbursement (using the method
+/// consumed through the act of disbursement (using the method
 /// \[Governance::disburse\]).
 ///
 /// See \[neuron::DissolveState\] for detail on how the different states
@@ -2991,7 +3009,7 @@ pub enum NeuronState {
     /// Not a valid state. Required by Protobufs.
     Unspecified = 0,
     /// In this state, the neuron is not dissolving and has a specific
-    /// `dissolve_delay`. It accrues `age` by the passge of time and it
+    /// `dissolve_delay`. It accrues `age` by the passage of time and it
     /// can vote if `dissolve_delay` is at least six months. The method
     /// \[Neuron::start_dissolving\] can be called to transfer the neuron
     /// to the `Dissolving` state. The method
@@ -3249,6 +3267,21 @@ pub enum NnsFunction {
     /// This ensures that the replica cannot upgrade to these versions anymore.
     UpdateElectedReplicaVersions = 38,
     BitcoinSetConfig = 39,
+    /// A proposal to add a new version to which the HostOS can be
+    /// upgraded.
+    /// The proposal registers a HostOS version (identified by the hash of the
+    /// installation image) in the registry. By itself, this proposal
+    /// does not effect any upgrade.
+    AddHostOsVersion = 40,
+    /// Update the HostOS version running on a given list of nodes.
+    /// The proposal changes the HostOS version that is used on the specified
+    /// nodes. The version must be contained in the list of HostOS versions.
+    UpdateNodesHostOsVersion = 41,
+    /// Uninstall and Install Root with the WASM provided in the function.  If InitArgs are provided
+    /// They will be passed to the canister_init function of the WASM provided.
+    /// This function is meant as a Break Glass mechanism for when an open call context in
+    /// the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
+    HardResetNnsRootToVersion = 42,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3303,6 +3336,9 @@ impl NnsFunction {
                 "NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS"
             }
             NnsFunction::BitcoinSetConfig => "NNS_FUNCTION_BITCOIN_SET_CONFIG",
+            NnsFunction::AddHostOsVersion => "NNS_FUNCTION_ADD_HOST_OS_VERSION",
+            NnsFunction::UpdateNodesHostOsVersion => "NNS_FUNCTION_UPDATE_NODES_HOST_OS_VERSION",
+            NnsFunction::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
         }
     }
 }

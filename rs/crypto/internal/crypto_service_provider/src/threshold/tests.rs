@@ -47,9 +47,9 @@ pub mod util {
         let signature_selection_seed =
             seed.derive("test_threshold_signatures::signature_selection");
         let mut rng = seed.into_rng();
-        let verifier = Csp::builder()
+        let verifier = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_rng(ChaChaRng::from_seed(rng.gen::<[u8; 32]>()))
                     .build(),
             )
@@ -248,13 +248,13 @@ pub mod util {
         let threshold = NumberOfNodes::from(rng.gen_range(0..10));
         let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
 
-        let vault = LocalCspVault::builder().with_rng(rng).build();
+        let vault = LocalCspVault::builder_for_test().with_rng(rng).build();
         let threshold_keygen = vault.threshold_keygen_for_test(
             AlgorithmId::ThresBls12_381,
             threshold,
             number_of_signers,
         );
-        let csp = Csp::builder().with_vault(vault).build();
+        let csp = Csp::builder_for_test().with_vault(vault).build();
 
         match threshold_keygen {
             Ok((public_coefficients, key_ids)) => {

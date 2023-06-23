@@ -16,6 +16,9 @@ mod clib {
 }
 use super::*;
 use crate::ni_dkg::fs_ni_dkg::forward_secure::{PublicKeyWithPop, SecretKey};
+use crate::ni_dkg::groth20_bls12_381::encryption::tests::ForwardSecureKeyVerificationError::{
+    Deserialization, PopVerificationFailed,
+};
 use ic_crypto_internal_bls12_381_type::Scalar;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPop;
 use internal_types::Epoch;
@@ -96,7 +99,7 @@ fn wrong_pop_should_not_verify() {
     let FsEncryptionKeySetWithPop { pop, .. } =
         create_forward_secure_key_pair(different_seed, KEY_GEN_ASSOCIATED_DATA);
     let verification = verify_forward_secure_key(&public_key, &pop, KEY_GEN_ASSOCIATED_DATA);
-    assert_eq!(verification, Err(()));
+    assert_eq!(verification, Err(PopVerificationFailed));
 }
 
 /// Generates valid threshold keys and the corresponding public coefficients
@@ -444,25 +447,30 @@ fn zk_proofs_should_not_verify_with_wrong_epoch() {
     );
 }
 
-// TODO(IDX-1866)
-#[allow(clippy::result_unit_err)]
 /// Verifies that a public key is a point on the curve and that the proof of
 /// possession holds.
 ///
 /// # Errors
-/// * `Err(())` if
+/// * `Err(String)` if
 ///   - Any of the components of `public_key` is not a correct group element.
 ///   - The proof of possession doesn't verify.
 fn verify_forward_secure_key(
     public_key: &FsEncryptionPublicKey,
     pop: &FsEncryptionPop,
     associated_data: &[u8],
-) -> Result<(), ()> {
-    let crypto_public_key_with_pop = PublicKeyWithPop::deserialize(public_key, pop).ok_or(())?;
+) -> Result<(), ForwardSecureKeyVerificationError> {
+    let crypto_public_key_with_pop =
+        PublicKeyWithPop::deserialize(public_key, pop).ok_or(Deserialization)?;
 
     if crypto_public_key_with_pop.verify(associated_data) {
         Ok(())
     } else {
-        Err(())
+        Err(PopVerificationFailed)
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ForwardSecureKeyVerificationError {
+    Deserialization,
+    PopVerificationFailed,
 }

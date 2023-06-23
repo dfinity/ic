@@ -2,7 +2,7 @@ use crate::ckbtc::minter::utils::{
     assert_account_balance, assert_burn_transaction, assert_mint_transaction, assert_no_new_utxo,
     assert_no_transaction, ensure_wallet, generate_blocks, get_btc_address, get_btc_client,
     send_to_btc_address, start_canister, stop_canister, upgrade_canister, wait_for_bitcoin_balance,
-    wait_for_mempool_change, BTC_BLOCK_REWARD,
+    wait_for_ledger_balance, wait_for_mempool_change, BTC_BLOCK_REWARD,
 };
 use crate::{
     ckbtc::lib::{
@@ -25,7 +25,7 @@ use ic_ckbtc_kyt::KytMode;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
-use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use slog::debug;
@@ -216,6 +216,7 @@ pub fn test_kyt(env: TestEnv) {
             &btc_address0,
         )
         .await;
+
         let update_balance_new_utxos = minter_agent
             .update_balance(UpdateBalanceArgs {
                 owner: None,
@@ -230,12 +231,6 @@ pub fn test_kyt(env: TestEnv) {
         } else {
             panic!("Expected to have checked the utxos but not minted");
         }
-
-        let metrics = minter_agent.get_metrics_map().await;
-        let owed_kyt_amount = metrics
-            .get(&"ckbtc_minter_owed_kyt_amount".to_string())
-            .unwrap()
-            .value;
 
         start_canister(&ledger_canister).await;
         let update_balance_new_utxos = minter_agent
@@ -259,13 +254,26 @@ pub fn test_kyt(env: TestEnv) {
         } else {
             panic!("expected the minter to see one clean utxo");
         }
+
+        let _ = minter_agent.distribute_kyt_fee().await;
+
+        wait_for_ledger_balance(
+            &ledger_agent,
+            &logger,
+            Nat::from(2 * KYT_FEE),
+            Account {
+                owner: agent_principal,
+                subaccount: None,
+            },
+        )
+        .await;
+
         let metrics = minter_agent.get_metrics_map().await;
         let owed_kyt_amount_after_update_balance = metrics
             .get(&"ckbtc_minter_owed_kyt_amount".to_string())
             .unwrap()
             .value;
-        assert_eq!(owed_kyt_amount as u64, 2 * KYT_FEE);
-        assert_eq!(owed_kyt_amount, owed_kyt_amount_after_update_balance);
+        assert_eq!(owed_kyt_amount_after_update_balance as u64, 0);
 
         // Now let's send ckBTC back to the BTC network
         let withdrawal_account = minter_agent
@@ -316,10 +324,22 @@ pub fn test_kyt(env: TestEnv) {
         } else {
             panic!("Expected to see a tainted destination address.")
         }
-
-        assert_burn_transaction(&ledger_agent, &logger, 3, &withdrawal_account, KYT_FEE).await;
+        assert_burn_transaction(&ledger_agent, &logger, 4, &withdrawal_account, KYT_FEE).await;
 
         upgrade_kyt(&mut kyt_canister, KytMode::AcceptAll).await;
+        let _ = minter_agent.distribute_kyt_fee().await;
+
+        assert_mint_transaction(
+            &ledger_agent,
+            &logger,
+            5,
+            &Account {
+                owner: agent_principal,
+                subaccount: None,
+            },
+            KYT_FEE,
+        )
+        .await;
 
         let retrieve_result = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
@@ -329,8 +349,7 @@ pub fn test_kyt(env: TestEnv) {
             .await
             .expect("Error while calling retrieve_btc")
             .expect("Error in retrieve_btc");
-
-        assert_eq!(4, retrieve_result.block_index);
+        assert_eq!(6, retrieve_result.block_index);
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
@@ -354,13 +373,26 @@ pub fn test_kyt(env: TestEnv) {
         let expected_change_amount = transfer_amount - retireve_amount - KYT_FEE;
         assert_account_balance(&ledger_agent, &withdrawal_account, expected_change_amount).await;
 
+        let _ = minter_agent.distribute_kyt_fee().await;
+
+        // In total we did 4 KYT checks: 2 address and 2 UTXOs
+        let balance_kyt_provider = ledger_agent
+            .balance_of(
+                Account {
+                    owner: agent_principal,
+                    subaccount: None,
+                },
+                CallMode::Query,
+            )
+            .await
+            .expect("Error while calling balance_of");
+        assert_eq!(balance_kyt_provider, 4 * KYT_FEE);
+
         let metrics = minter_agent.get_metrics_map().await;
         let owed_kyt_amount = metrics
             .get(&"ckbtc_minter_owed_kyt_amount".to_string())
             .unwrap()
             .value;
-
-        // In total we did 4 KYT checks: 2 address and 2 UTXOs
-        assert_eq!(owed_kyt_amount as u64, 4 * KYT_FEE);
+        assert_eq!(owed_kyt_amount, 0_f64);
     });
 }

@@ -17,6 +17,9 @@ use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
 };
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
 
+use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
+    CrszVectorsLengthMismatch, InvalidNidkgCiphertext,
+};
 use crate::ni_dkg::groth20_bls12_381::types::{BTENodeBytes, FsEncryptionSecretKey};
 use ic_crypto_internal_bls12_381_type::{
     G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
@@ -154,10 +157,10 @@ impl From<Epoch> for Tau {
 /// Notation from section 7.2.
 pub(crate) struct BTENode {
     // Bit-vector, indicating a path in a binary tree.
-    pub tau: Tau,
+    tau: Tau,
 
-    pub a: G1Affine,
-    pub b: G2Affine,
+    a: G1Affine,
+    b: G2Affine,
 
     // We split the d's into two groups.
     // The vector `d_h` always contains the last LAMBDA_H points
@@ -165,10 +168,10 @@ pub(crate) struct BTENode {
     // The list `d_t` contains the other elements. There are at most LAMBDA_T of them.
     // The longer this list, the higher up we are in the binary tree,
     // and the more leaf node keys we are able to derive.
-    pub d_t: LinkedList<G2Affine>,
-    pub d_h: Vec<G2Affine>,
+    d_t: LinkedList<G2Affine>,
+    d_h: Vec<G2Affine>,
 
-    pub e: G2Affine,
+    e: G2Affine,
 }
 
 // must implement explicitly as zeroize does not support LinkedList
@@ -251,18 +254,22 @@ pub struct SecretKey {
 /// A public key and its associated proof of possession
 #[derive(Clone, Debug)]
 pub struct PublicKeyWithPop {
-    pub key_value: G1Affine,
-    pub proof_data: EncryptionKeyPop,
+    key_value: G1Affine,
+    proof_data: EncryptionKeyPop,
 }
 
 impl PublicKeyWithPop {
     pub fn verify(&self, associated_data: &[u8]) -> bool {
-        let instance = EncryptionKeyInstance {
-            g1_gen: G1Affine::generator().clone(),
-            public_key: self.key_value.clone(),
-            associated_data: associated_data.to_vec(),
-        };
+        let instance = EncryptionKeyInstance::new(&self.key_value, associated_data);
         verify_pop(&instance, &self.proof_data).is_ok()
+    }
+
+    pub fn public_key(&self) -> &G1Affine {
+        &self.key_value
+    }
+
+    pub fn proof(&self) -> &EncryptionKeyPop {
+        &self.proof_data
     }
 
     /// Parse a serialized public key and PoP
@@ -275,11 +282,7 @@ impl PublicKeyWithPop {
         match (key_value, pop_key, challenge, response) {
             (Ok(key_value), Ok(pop_key), Ok(challenge), Ok(response)) => Some(Self {
                 key_value,
-                proof_data: EncryptionKeyPop {
-                    pop_key,
-                    challenge,
-                    response,
-                },
+                proof_data: EncryptionKeyPop::new(pop_key, challenge, response),
             }),
             (_, _, _, _) => None,
         }
@@ -288,23 +291,36 @@ impl PublicKeyWithPop {
     /// Serialize the public key and PoP
     pub(crate) fn serialize(&self) -> (FsEncryptionPublicKey, FsEncryptionPop) {
         let public_key = FsEncryptionPublicKey(self.key_value.serialize_to::<G1Bytes>());
-
-        let pop = FsEncryptionPop {
-            pop_key: G1Bytes(self.proof_data.pop_key.serialize()),
-            challenge: FrBytes(self.proof_data.challenge.serialize()),
-            response: FrBytes(self.proof_data.response.serialize()),
-        };
+        let pop = self.proof_data.serialize();
         (public_key, pop)
     }
 }
 
 /// NI-DKG system parameters
 pub struct SysParam {
-    pub f0: G2Affine,       // f_0 in the paper.
-    pub f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
-    pub f_h: Vec<G2Affine>, // The remaining LAMBDA_H f_i's in the paper.
-    pub h: G2Affine,
+    f0: G2Affine,       // f_0 in the paper.
+    f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
+    f_h: Vec<G2Affine>, // The remaining LAMBDA_H f_i's in the paper.
+    h: G2Affine,
     h_prep: G2Prepared,
+}
+
+impl SysParam {
+    pub fn f0(&self) -> &G2Affine {
+        &self.f0
+    }
+
+    pub fn h(&self) -> &G2Affine {
+        &self.h
+    }
+
+    pub fn f(&self) -> &[G2Affine] {
+        &self.f
+    }
+
+    pub fn f_h(&self) -> &[G2Affine] {
+        &self.f_h
+    }
 }
 
 /// Generates a (public key, secret key) pair for of forward-secure
@@ -357,11 +373,7 @@ pub fn kgen<R: RngCore + CryptoRng>(
 
     let y = G1Affine::from(g1 * &x);
 
-    let pop_instance = EncryptionKeyInstance {
-        g1_gen: G1Affine::generator().clone(),
-        public_key: y.clone(),
-        associated_data: associated_data.to_vec(),
-    };
+    let pop_instance = EncryptionKeyInstance::new(&y, associated_data);
 
     let pop = prove_pop(&pop_instance, &x, rng).expect("Implementation bug: Pop generation failed");
 
@@ -615,58 +627,23 @@ impl SecretKey {
 /// one for each recipent.
 #[derive(Debug)]
 pub struct FsEncryptionCiphertext {
-    pub cc: Vec<Vec<G1Affine>>,
-    pub rr: Vec<G1Affine>,
-    pub ss: Vec<G1Affine>,
-    pub zz: Vec<G2Affine>,
+    cc: Vec<[G1Affine; NUM_CHUNKS]>,
+    rr: [G1Affine; NUM_CHUNKS],
+    ss: [G1Affine; NUM_CHUNKS],
+    zz: [G2Affine; NUM_CHUNKS],
 }
 
 impl FsEncryptionCiphertext {
     /// Serialises a ciphertext from the internal representation into the standard
     /// form.
-    ///
-    /// # Panics
-    /// This will panic if the internal representation is invalid.  Given that the
-    /// internal representation is generated internally, this can happen only if there
-    /// is an error in our code.
     pub fn serialize(&self) -> FsEncryptionCiphertextBytes {
-        assert_eq!(self.rr.len(), NUM_CHUNKS);
-        assert_eq!(self.ss.len(), NUM_CHUNKS);
-        assert_eq!(self.zz.len(), NUM_CHUNKS);
-
-        let rand_r = {
-            let mut rand_r = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_r[..].iter_mut().zip(&self.rr) {
-                *dst = src.serialize_to::<G1Bytes>();
-            }
-            rand_r
-        };
-        let rand_s = {
-            let mut rand_s = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_s[..].iter_mut().zip(&self.ss) {
-                *dst = src.serialize_to::<G1Bytes>();
-            }
-            rand_s
-        };
-        let rand_z = {
-            let mut rand_z = [G2Bytes([0u8; G2Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_z[..].iter_mut().zip(&self.zz) {
-                *dst = src.serialize_to::<G2Bytes>();
-            }
-            rand_z
-        };
+        let rand_r = G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(&self.rr);
+        let rand_s = G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(&self.ss);
+        let rand_z = G2Affine::serialize_array_to::<G2Bytes, NUM_CHUNKS>(&self.zz);
         let ciphertext_chunks = self
             .cc
             .iter()
-            .map(|cj| {
-                assert_eq!(cj.len(), NUM_CHUNKS);
-
-                let mut cc = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-                for (dst, src) in cc[..].iter_mut().zip(cj) {
-                    *dst = src.serialize_to::<G1Bytes>();
-                }
-                cc
-            })
+            .map(|cj| G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(cj))
             .collect();
 
         FsEncryptionCiphertextBytes {
@@ -683,24 +660,41 @@ impl FsEncryptionCiphertext {
     /// This will return an error if any of the constituent group elements is
     /// invalid.
     pub fn deserialize(ciphertext: &FsEncryptionCiphertextBytes) -> Result<Self, &'static str> {
-        let rr = G1Affine::batch_deserialize(&ciphertext.rand_r).or(Err("Malformed rand_r"))?;
-        let ss = G1Affine::batch_deserialize(&ciphertext.rand_s).or(Err("Malformed rand_s"))?;
-        let zz = G2Affine::batch_deserialize(&ciphertext.rand_z).or(Err("Malformed rand_z"))?;
+        let rr =
+            G1Affine::batch_deserialize_array(&ciphertext.rand_r).or(Err("Malformed rand_r"))?;
+        let ss =
+            G1Affine::batch_deserialize_array(&ciphertext.rand_s).or(Err("Malformed rand_s"))?;
+        let zz =
+            G2Affine::batch_deserialize_array(&ciphertext.rand_z).or(Err("Malformed rand_z"))?;
 
-        let cc: Vec<Vec<G1Affine>> = ciphertext
+        let cc: Vec<[G1Affine; NUM_CHUNKS]> = ciphertext
             .ciphertext_chunks
             .iter()
-            .map(|cj| G1Affine::batch_deserialize(&cj[..]).or(Err("Malformed ciphertext_chunk")))
+            .map(|cj| G1Affine::batch_deserialize_array(cj).or(Err("Malformed ciphertext_chunk")))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self { cc, rr, ss, zz })
+    }
+
+    pub fn ciphertext_chunks(&self) -> &[[G1Affine; NUM_CHUNKS]] {
+        &self.cc
+    }
+
+    pub fn randomizers_r(&self) -> &[G1Affine; NUM_CHUNKS] {
+        &self.rr
     }
 }
 
 /// Randomness needed for NIZK proofs.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct EncryptionWitness {
-    pub r: Vec<Scalar>,
+    r: [Scalar; NUM_CHUNKS],
+}
+
+impl EncryptionWitness {
+    pub fn witness(&self) -> &[Scalar; NUM_CHUNKS] {
+        &self.r
+    }
 }
 
 /// Encrypt chunks. Returns ciphertext as well as the witness for later use
@@ -716,14 +710,14 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
 
     let g1 = G1Affine::generator();
 
-    let s = Scalar::batch_random(rng, NUM_CHUNKS);
-    let ss = g1.batch_mul(&s);
+    let s = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
+    let ss = g1.batch_mul_array(&s);
 
-    let r = Scalar::batch_random(rng, NUM_CHUNKS);
-    let rr = g1.batch_mul(&r);
+    let r = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
+    let rr = g1.batch_mul_array(&r);
 
     let cc = {
-        let mut cc: Vec<Vec<G1Affine>> = Vec::with_capacity(receivers);
+        let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
 
         let g1 = G1Projective::from(g1);
 
@@ -733,29 +727,22 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
 
             let chunks = ptext.chunks_as_scalars();
 
-            let mut enc_chunks = Vec::with_capacity(NUM_CHUNKS);
+            let enc_chunks =
+                G1Projective::batch_normalize_array(&pk_g1_tbl.mul2_array(&r, &chunks));
 
-            for j in 0..NUM_CHUNKS {
-                enc_chunks.push(pk_g1_tbl.mul2(&r[j], &chunks[j]));
-            }
-
-            cc.push(G1Projective::batch_normalize(&enc_chunks));
+            cc.push(enc_chunks);
         }
 
         cc
     };
 
     let id = ftau_extended(&cc, &rr, &ss, sys, epoch, associated_data);
-    let mut zz = Vec::with_capacity(NUM_CHUNKS);
-
     let id_h_tbl = G2Projective::compute_mul2_tbl(&id, &G2Projective::from(&sys.h));
-    for j in 0..NUM_CHUNKS {
-        zz.push(id_h_tbl.mul2(&r[j], &s[j]));
-    }
 
-    let zz = G2Projective::batch_normalize(&zz);
+    let zz = G2Projective::batch_normalize_array(&id_h_tbl.mul2_array(&r, &s));
 
     let witness = EncryptionWitness { r };
+
     let crsz = FsEncryptionCiphertext { cc, rr, ss, zz };
 
     (crsz, witness)
@@ -872,8 +859,6 @@ pub fn dec_chunks(
     Ok(PlaintextChunks::from_dlogs(&dlogs).recombine_to_scalar())
 }
 
-// TODO(IDX-1866)
-#[allow(clippy::result_unit_err)]
 /// Verify ciphertext integrity
 ///
 /// Part of DVfy of Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
@@ -885,7 +870,7 @@ pub fn verify_ciphertext_integrity(
     epoch: Epoch,
     associated_data: &[u8],
     sys: &SysParam,
-) -> Result<(), ()> {
+) -> Result<(), CiphertextIntegrityError> {
     let n = if crsz.cc.is_empty() {
         0
     } else {
@@ -895,7 +880,7 @@ pub fn verify_ciphertext_integrity(
         // In theory, this is unreachable fail because deserialization only succeeds
         // when the vectors of a CRSZ have the same length. (In practice, it's
         // surprising how often "unreachable" code is reached!)
-        return Err(());
+        return Err(CrszVectorsLengthMismatch);
     }
 
     let id = ftau_extended(&crsz.cc, &crsz.rr, &crsz.ss, sys, epoch, associated_data);
@@ -903,29 +888,31 @@ pub fn verify_ciphertext_integrity(
     let g1_neg = G1Affine::generator().neg();
     let precomp_id = G2Prepared::from(&id);
 
-    let checks: Result<(), ()> = crsz
-        .rr
-        .iter()
-        .zip(crsz.ss.iter().zip(crsz.zz.iter()))
-        .try_for_each(|(r, (s, z))| {
-            let z = G2Prepared::from(z);
+    for i in 0..NUM_CHUNKS {
+        let r = &crsz.rr[i];
+        let s = &crsz.ss[i];
+        let z = G2Prepared::from(&crsz.zz[i]);
 
-            let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
+        let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
 
-            if v.is_identity() {
-                Ok(())
-            } else {
-                Err(())
-            }
-        });
-    checks
+        if !v.is_identity() {
+            return Err(InvalidNidkgCiphertext);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CiphertextIntegrityError {
+    CrszVectorsLengthMismatch,
+    InvalidNidkgCiphertext,
 }
 
 /// Returns (tau || RO(cc, rr, ss, tau, associated_data)).
 ///
 /// See the description of Deal in Section 7.1.
 pub(crate) fn extend_tau(
-    cc: &[Vec<G1Affine>],
+    cc: &[[G1Affine; NUM_CHUNKS]],
     rr: &[G1Affine],
     ss: &[G1Affine],
     epoch: Epoch,
@@ -955,7 +942,7 @@ pub(crate) fn extend_tau(
 ///
 /// See the description of Deal in Section 7.1.
 pub fn ftau_extended(
-    cc: &[Vec<G1Affine>],
+    cc: &[[G1Affine; NUM_CHUNKS]],
     rr: &[G1Affine],
     ss: &[G1Affine],
     sys: &SysParam,

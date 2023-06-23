@@ -1,0 +1,27 @@
+[package]
+name = "ic-peer-manager"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-types = { path = "../../types/types" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+prometheus = { version = "0.12.0", features = [ "process" ] }
+serde = { version = "1.0.99", features = [ "derive" ] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+tokio = { version = "1.15.0", features = ["full"] }
+
+[dev-dependencies]
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }

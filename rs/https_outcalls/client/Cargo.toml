@@ -15,7 +15,7 @@ ic-error-types = { path = "../../types/error_types" }
 ic-https-outcalls-service = { path = "../service" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-https-outcalls-adapter-client = { path = "../../interfaces/https_outcalls_adapter_client" }
+ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }

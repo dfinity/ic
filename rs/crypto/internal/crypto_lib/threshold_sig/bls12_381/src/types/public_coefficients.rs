@@ -3,8 +3,6 @@
 use crate::types::PublicKey;
 
 mod advanced_ops;
-#[cfg(test)]
-mod arbitrary;
 mod constructors;
 pub mod conversions;
 mod ops;

@@ -100,8 +100,8 @@ impl Registry {
                         }
                     };
 
-                    let dc_reward = match node_type.as_str() {
-                        "type3" => {
+                    let dc_reward = match &node_type {
+                        t if t.starts_with("type3") => {
                             // For type3 nodes, the rewards are progressively reduced for each additional node owned by a NP.
                             // This helps to improve network decentralization. The first node gets the full reward.
                             // After the first node, the rewards are progressively reduced by multiplying them with reward_coefficient_percent.
@@ -211,7 +211,7 @@ mod tests {
     #[test]
     fn test_get_node_providers_monthly_xdr_rewards_ignores_deleted_keys() {
         let mut registry = Registry::new();
-        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
         // Add empty Node Rewards table to test failure cases
         let node_rewards_payload = UpdateNodeRewardsTableProposalPayload::default();
@@ -248,7 +248,7 @@ mod tests {
 
     fn registry_init_empty() -> Registry {
         let mut registry = Registry::new();
-        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
         // Assert get_node_providers_monthly_xdr_rewards fails because no rewards table
         // exists in the Registry

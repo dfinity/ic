@@ -2,7 +2,6 @@
 Common dependencies for system-tests.
 """
 
-load(":system_tests.bzl", "symlink_dir")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 DEPENDENCIES = [
@@ -29,14 +28,15 @@ DEPENDENCIES = [
     "//rs/interfaces/registry",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance",
     "//rs/nns/gtc",
-    "//rs/nns/handlers/lifeline",
-    "//rs/nns/handlers/root",
+    "//rs/nns/handlers/lifeline/impl:lifeline",
+    "//rs/nns/handlers/root/impl:root",
     "//rs/nns/init",
     "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
@@ -100,7 +100,6 @@ DEPENDENCIES = [
     "@crate_index//:crossbeam-utils",
     "@crate_index//:flate2",
     "@crate_index//:futures",
-    "@crate_index//:garcon",
     "@crate_index//:hex",
     "@crate_index//:humantime",
     "@crate_index//:hyper",
@@ -130,6 +129,7 @@ DEPENDENCIES = [
     "@crate_index//:regex",
     "@crate_index//:reqwest",
     "@crate_index//:ring",
+    "@crate_index//:rust_decimal",
     "@crate_index//:rustls",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
@@ -142,6 +142,7 @@ DEPENDENCIES = [
     "@crate_index//:ssh2",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
+    "@crate_index//:time",
     "@crate_index//:tokio",
     "@crate_index//:url",
     "@crate_index//:walkdir",
@@ -153,10 +154,11 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
+GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev-fixed-version:version.txt"
+
+# TODO(IDX-2538): Delete completely when all tests will properly work with synthetic stable ic version.
 GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/guestos/envs/dev:hash_and_upload_disk-img",
-    "//ic-os/guestos/envs/dev:hash_and_upload_update-img",
-    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+    GUESTOS_DEV_VERSION,
 ]
 
 NNS_CANISTER_WASM_PROVIDERS = {
@@ -173,7 +175,7 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "mainnet": "@mainnet_icp_ledger_canister//file",
     },
     "root-canister": {
-        "tip-of-branch": "//rs/nns/handlers/root:root-canister",
+        "tip-of-branch": "//rs/nns/handlers/root/impl:root-canister",
         "mainnet": "@mainnet_nns_root-canister//file",
     },
     "cycles-minting-canister": {
@@ -181,7 +183,7 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "mainnet": "@mainnet_nns_cycles-minting-canister//file",
     },
     "lifeline_canister": {
-        "tip-of-branch": "//rs/nns/handlers/lifeline:lifeline_canister",
+        "tip-of-branch": "//rs/nns/handlers/lifeline/impl:lifeline_canister",
         "mainnet": "@mainnet_nns_lifeline_canister//file",
     },
     "genesis-token-canister": {
@@ -318,21 +320,30 @@ GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
     "//rs/tests:grafana_dashboards",
 ]
 
+API_BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
+    "//ic-os/boundary-api-guestos/envs/dev:hash_and_upload_disk-img",
+    "//ic-os/boundary-api-guestos:scripts/build-bootstrap-config-image.sh",
+]
+
 BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos/envs/dev:hash_and_upload_disk-img",
+    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.cas-url",
+    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.sha256",
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
 BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos/envs/dev-sev:hash_and_upload_disk-img",
+    "//ic-os/boundary-guestos/envs/dev-sev:disk-img.tar.zst.cas-url",
+    "//ic-os/boundary-guestos/envs/dev-sev:disk-img.tar.zst.sha256",
 ]
 
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
 GUESTOS_MALICIOUS_RUNTIME_DEPS = [
-    "//ic-os/guestos/envs/dev-malicious:hash_and_upload_disk-img",
-    "//ic-os/guestos/envs/dev-malicious:hash_and_upload_update-img",
-    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.cas-url",
+    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.sha256",
+    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.cas-url",
+    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.sha256",
+    "//ic-os:scripts/build-bootstrap-config-image.sh",
 ]
 
 CANISTER_HTTP_RUNTIME_DEPS = [
@@ -340,3 +351,23 @@ CANISTER_HTTP_RUNTIME_DEPS = [
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
+
+def _symlink_dir(ctx):
+    dirname = ctx.attr.name
+    lns = []
+    for target, canister_name in ctx.attr.targets.items():
+        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
+        file = target[DefaultInfo].files.to_list()[0]
+        ctx.actions.symlink(
+            output = ln,
+            target_file = file,
+        )
+        lns.append(ln)
+    return [DefaultInfo(files = depset(direct = lns))]
+
+symlink_dir = rule(
+    implementation = _symlink_dir,
+    attrs = {
+        "targets": attr.label_keyed_string_dict(allow_files = True),
+    },
+)

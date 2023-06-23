@@ -2,11 +2,14 @@ use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto::{CryptoComponent, CryptoComponentImpl};
+use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
 use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
+use ic_crypto_internal_csp::LocalCspVault;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_generation::{
-    derive_node_id, generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
+    generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
     generate_idkg_dealing_encryption_keys, generate_node_signing_keys, generate_tls_keys,
 };
 use ic_crypto_temp_crypto_vault::{
@@ -16,6 +19,7 @@ use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake, TlsPublicKeyCert,
     TlsServerHandshakeError, TlsStream,
 };
+use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
@@ -45,7 +49,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaVerifySigShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
+    BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
     InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
@@ -65,6 +69,8 @@ use ic_types::crypto::{
 };
 use ic_types::signature::BasicSignatureBatch;
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use rand::rngs::OsRng;
+use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
@@ -75,7 +81,11 @@ use tokio::net::TcpStream;
 
 /// A crypto component set up in a temporary directory. The directory is
 /// automatically deleted when this component goes out of scope.
-pub type TempCryptoComponent = TempCryptoComponentGeneric<Csp>;
+pub type TempCryptoComponent = TempCryptoComponentGeneric<Csp, OsRng>;
+
+/// A supertrait collecting traits required for an RNG used in the [`CryptoComponent`].
+pub trait CryptoComponentRng: Rng + CryptoRng + 'static + Send + Sync {}
+impl<T: Rng + CryptoRng + 'static + Send + Sync> CryptoComponentRng for T {}
 
 /// This struct combines the following two items:
 /// * a crypto component whose state lives in a temporary directory
@@ -84,13 +94,21 @@ pub type TempCryptoComponent = TempCryptoComponentGeneric<Csp>;
 /// Combining these two items is useful for testing because the temporary
 /// directory will exist for as long as the struct exists and is automatically
 /// deleted once the struct goes out of scope.
-pub struct TempCryptoComponentGeneric<C: CryptoServiceProvider> {
+pub struct TempCryptoComponentGeneric<C, R>
+where
+    C: CryptoServiceProvider,
+    R: CryptoComponentRng,
+{
     crypto_component: CryptoComponentImpl<C>,
-    remote_vault_environment: Option<RemoteVaultEnvironment<ProdLocalCspVault>>,
+    remote_vault_environment: Option<
+        RemoteVaultEnvironment<
+            LocalCspVault<R, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>,
+        >,
+    >,
     temp_dir: TempDir,
 }
 
-impl<C: CryptoServiceProvider> Deref for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> Deref for TempCryptoComponentGeneric<C, R> {
     type Target = CryptoComponentImpl<C>;
 
     fn deref(&self) -> &Self::Target {
@@ -98,7 +116,7 @@ impl<C: CryptoServiceProvider> Deref for TempCryptoComponentGeneric<C> {
     }
 }
 
-pub struct TempCryptoBuilder {
+pub struct TempCryptoBuilder<R: CryptoComponentRng> {
     node_keys_to_generate: Option<NodeKeysToGenerate>,
     registry_client: Option<Arc<dyn RegistryClient>>,
     registry_data: Option<Arc<ProtoRegistryDataProvider>>,
@@ -108,11 +126,13 @@ pub struct TempCryptoBuilder {
     vault_client_runtime_handle: Option<tokio::runtime::Handle>,
     temp_dir_source: Option<PathBuf>,
     logger: Option<ReplicaLogger>,
+    metrics: Option<Arc<CryptoMetrics>>,
     time_source: Option<Arc<dyn TimeSource>>,
     ecdsa_subnet_config: Option<EcdsaSubnetConfig>,
+    rng: R,
 }
 
-impl TempCryptoBuilder {
+impl<R: CryptoComponentRng> TempCryptoBuilder<R> {
     const DEFAULT_NODE_ID: u64 = 1;
     const DEFAULT_REGISTRY_VERSION: u64 = 1;
 
@@ -140,6 +160,11 @@ impl TempCryptoBuilder {
 
     pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
         self.logger = Some(logger);
+        self
+    }
+
+    pub fn with_metrics(mut self, metrics: Arc<CryptoMetrics>) -> Self {
+        self.metrics = Some(metrics);
         self
     }
 
@@ -183,24 +208,93 @@ impl TempCryptoBuilder {
         self
     }
 
-    pub fn build(self) -> TempCryptoComponent {
+    pub fn with_rng<OtherRng: CryptoComponentRng>(
+        self,
+        rng: OtherRng,
+    ) -> TempCryptoBuilder<OtherRng> {
+        TempCryptoBuilder {
+            node_keys_to_generate: self.node_keys_to_generate,
+            registry_client: self.registry_client,
+            registry_data: self.registry_data,
+            registry_version: self.registry_version,
+            node_id: self.node_id,
+            start_remote_vault: self.start_remote_vault,
+            vault_client_runtime_handle: self.vault_client_runtime_handle,
+            temp_dir_source: self.temp_dir_source,
+            logger: self.logger,
+            metrics: self.metrics,
+            time_source: self.time_source,
+            ecdsa_subnet_config: self.ecdsa_subnet_config,
+            rng,
+        }
+    }
+
+    pub fn build(self) -> TempCryptoComponentGeneric<Csp, R> {
+        let logger = self.logger.unwrap_or_else(no_op_logger);
+        let metrics = self
+            .metrics
+            .unwrap_or_else(|| Arc::new(CryptoMetrics::none()));
+        let time_source = self
+            .time_source
+            .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))));
+
         let (mut config, temp_dir) = CryptoConfig::new_in_temp_dir();
         if let Some(source) = self.temp_dir_source {
             copy_crypto_root(&source, temp_dir.path());
         }
-        let csp = csp_for_config(&config, None);
+        let local_vault = Arc::new(
+            ProdLocalCspVault::builder_in_dir(
+                &config.crypto_root,
+                Arc::clone(&metrics),
+                new_logger!(logger),
+            )
+            .with_rng(self.rng)
+            .with_time_source(Arc::clone(&time_source))
+            .build(),
+        );
+        let opt_remote_vault_environment = self.start_remote_vault.then(|| {
+            let vault_server =
+                TempCspVaultServer::start_with_local_csp_vault(Arc::clone(&local_vault));
+            config.csp_vault_type = CspVaultType::UnixSocket(vault_server.vault_socket_path());
+            RemoteVaultEnvironment {
+                vault_server,
+                vault_client_runtime: TokioRuntimeOrHandle::new(self.vault_client_runtime_handle),
+            }
+        });
+
+        let csp = if let Some(env) = &opt_remote_vault_environment {
+            Csp::builder(
+                env.new_vault_client_builder()
+                    .with_logger(new_logger!(logger))
+                    .with_metrics(Arc::clone(&metrics))
+                    .build()
+                    .expect("Failed to build a vault client"),
+                new_logger!(logger),
+                Arc::clone(&metrics),
+            )
+            .build()
+        } else {
+            Csp::builder(
+                Arc::clone(&local_vault),
+                new_logger!(logger),
+                Arc::clone(&metrics),
+            )
+            .build()
+        };
+
         let node_keys_to_generate = self
             .node_keys_to_generate
             .unwrap_or_else(NodeKeysToGenerate::none);
         let node_signing_pk = node_keys_to_generate
             .generate_node_signing_keys
             .then(|| generate_node_signing_keys(&csp));
-        let node_id = self.node_id.unwrap_or_else(|| {
-            node_signing_pk.as_ref().map_or(
-                NodeId::from(PrincipalId::new_node_test_id(Self::DEFAULT_NODE_ID)),
-                derive_node_id,
-            )
-        });
+        let node_id = self
+            .node_id
+            .unwrap_or_else(|| match node_signing_pk.as_ref() {
+                None => NodeId::from(PrincipalId::new_node_test_id(Self::DEFAULT_NODE_ID)),
+                Some(node_signing_pk) => derive_node_id(node_signing_pk)
+                    .expect("Node signing public key should be valid"),
+            });
         let committee_signing_pk = node_keys_to_generate
             .generate_committee_signing_keys
             .then(|| generate_committee_signing_keys(&csp));
@@ -299,48 +393,29 @@ impl TempCryptoBuilder {
             fake_registry_client as Arc<dyn RegistryClient>
         });
 
-        let opt_remote_vault_environment = if self.start_remote_vault {
-            let vault_server =
-                TempCspVaultServer::start_from_crypto_root(config.crypto_root.clone());
-            config.csp_vault_type = CspVaultType::UnixSocket(vault_server.vault_socket_path());
-            Some(RemoteVaultEnvironment {
-                vault_server,
-                vault_client_runtime: TokioRuntimeOrHandle::new(self.vault_client_runtime_handle),
-            })
-        } else {
-            None
-        };
-
-        let opt_vault_client_runtime_handle = opt_remote_vault_environment
-            .as_ref()
-            .map(|data| data.vault_client_runtime.handle().clone());
-        let logger = self.logger.unwrap_or_else(no_op_logger);
-        let time_source = self
-            .time_source
-            .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))));
-        let crypto_component = CryptoComponent::new_with_fake_node_id(
-            &config,
-            opt_vault_client_runtime_handle,
+        let crypto_component = CryptoComponent::new_with_csp_and_fake_node_id(
+            csp,
+            logger,
             registry_client,
             node_id,
-            logger,
-            time_source,
+            metrics,
+            Some(time_source),
         );
 
-        TempCryptoComponent {
+        TempCryptoComponentGeneric {
             crypto_component,
             remote_vault_environment: opt_remote_vault_environment,
             temp_dir,
         }
     }
 
-    pub fn build_arc(self) -> Arc<TempCryptoComponent> {
+    pub fn build_arc(self) -> Arc<TempCryptoComponentGeneric<Csp, R>> {
         Arc::new(self.build())
     }
 }
 
-impl TempCryptoComponent {
-    pub fn builder() -> TempCryptoBuilder {
+impl<R: CryptoComponentRng> TempCryptoComponentGeneric<Csp, R> {
+    pub fn builder() -> TempCryptoBuilder<OsRng> {
         TempCryptoBuilder {
             node_id: None,
             start_remote_vault: false,
@@ -351,8 +426,10 @@ impl TempCryptoComponent {
             registry_version: None,
             temp_dir_source: None,
             logger: None,
+            metrics: None,
             time_source: None,
             ecdsa_subnet_config: None,
+            rng: OsRng,
         }
     }
 
@@ -412,6 +489,7 @@ impl EcdsaSubnetConfig {
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
+                halt_at_cup_height: false,
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 7_000_000_000,
                 max_instructions_per_install_code: 200_000_000_000,
@@ -537,7 +615,9 @@ impl NodeKeysToGenerate {
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> BasicSigner<T> for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> BasicSigner<T>
+    for TempCryptoComponentGeneric<C, R>
+{
     fn sign_basic(
         &self,
         message: &T,
@@ -549,8 +629,8 @@ impl<C: CryptoServiceProvider, T: Signable> BasicSigner<T> for TempCryptoCompone
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> BasicSigVerifierByPublicKey<T>
-    for TempCryptoComponentGeneric<C>
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> BasicSigVerifierByPublicKey<T>
+    for TempCryptoComponentGeneric<C, R>
 {
     fn verify_basic_sig_by_public_key(
         &self,
@@ -563,8 +643,8 @@ impl<C: CryptoServiceProvider, T: Signable> BasicSigVerifierByPublicKey<T>
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> CanisterSigVerifier<T>
-    for TempCryptoComponentGeneric<C>
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> CanisterSigVerifier<T>
+    for TempCryptoComponentGeneric<C, R>
 {
     fn verify_canister_sig(
         &self,
@@ -582,7 +662,9 @@ impl<C: CryptoServiceProvider, T: Signable> CanisterSigVerifier<T>
     }
 }
 
-impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> IDkgProtocol
+    for TempCryptoComponentGeneric<C, R>
+{
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,
@@ -620,7 +702,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+        dealings: &BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         IDkgProtocol::create_transcript(&self.crypto_component, params, dealings)
     }
@@ -689,7 +771,9 @@ impl<C: CryptoServiceProvider> IDkgProtocol for TempCryptoComponentGeneric<C> {
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdEcdsaSigner
+    for TempCryptoComponentGeneric<C, R>
+{
     fn sign_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
@@ -698,7 +782,9 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for TempCryptoComponentGener
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> ThresholdEcdsaSigVerifier
+    for TempCryptoComponentGeneric<C, R>
+{
     fn verify_sig_share(
         &self,
         signer: NodeId,
@@ -727,7 +813,9 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for TempCryptoComponent
 }
 
 #[async_trait]
-impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> TlsHandshake
+    for TempCryptoComponentGeneric<C, R>
+{
     async fn perform_tls_server_handshake(
         &self,
         tcp_stream: TcpStream,
@@ -761,7 +849,9 @@ impl<C: CryptoServiceProvider + Send + Sync> TlsHandshake for TempCryptoComponen
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> BasicSigVerifier<T> for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> BasicSigVerifier<T>
+    for TempCryptoComponentGeneric<C, R>
+{
     fn verify_basic_sig(
         &self,
         signature: &BasicSigOf<T>,
@@ -793,7 +883,9 @@ impl<C: CryptoServiceProvider, T: Signable> BasicSigVerifier<T> for TempCryptoCo
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> MultiSigVerifier<T> for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, T: Signable, R: CryptoComponentRng> MultiSigVerifier<T>
+    for TempCryptoComponentGeneric<C, R>
+{
     fn verify_multi_sig_individual(
         &self,
         signature: &IndividualMultiSigOf<T>,
@@ -834,8 +926,8 @@ impl<C: CryptoServiceProvider, T: Signable> MultiSigVerifier<T> for TempCryptoCo
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
-    for TempCryptoComponentGeneric<C>
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> ThresholdSigVerifier<T>
+    for TempCryptoComponentGeneric<C, R>
 {
     fn verify_threshold_sig_share(
         &self,
@@ -868,8 +960,8 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
-    for TempCryptoComponentGeneric<C>
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable>
+    ThresholdSigVerifierByPublicKey<T> for TempCryptoComponentGeneric<C, R>
 {
     fn verify_combined_threshold_sig_by_public_key(
         &self,
@@ -888,7 +980,9 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
     }
 }
 
-impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> KeyManager
+    for TempCryptoComponentGeneric<C, R>
+{
     fn check_keys_with_registry(
         &self,
         registry_version: RegistryVersion,
@@ -912,7 +1006,9 @@ impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
     }
 }
 
-impl<C: CryptoServiceProvider> NiDkgAlgorithm for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng> NiDkgAlgorithm
+    for TempCryptoComponentGeneric<C, R>
+{
     fn create_dealing(&self, config: &NiDkgConfig) -> Result<NiDkgDealing, DkgCreateDealingError> {
         NiDkgAlgorithm::create_dealing(&self.crypto_component, config)
     }
@@ -950,13 +1046,17 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for TempCryptoComponentGeneric<C> 
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> ThresholdSigner<T>
+    for TempCryptoComponentGeneric<C, R>
+{
     fn sign_threshold(&self, message: &T, dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
         self.crypto_component.sign_threshold(message, dkg_id)
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> MultiSigner<T> for TempCryptoComponentGeneric<C> {
+impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> MultiSigner<T>
+    for TempCryptoComponentGeneric<C, R>
+{
     fn sign_multi(
         &self,
         message: &T,
@@ -988,16 +1088,4 @@ fn copy_crypto_root(src: &Path, dest: &Path) {
             std::fs::copy(&path, dest_path).expect("failed to copy file");
         }
     }
-}
-
-fn csp_for_config(
-    config: &CryptoConfig,
-    tokio_runtime_handle: Option<tokio::runtime::Handle>,
-) -> Csp {
-    Csp::new(
-        config,
-        tokio_runtime_handle,
-        None,
-        Arc::new(CryptoMetrics::none()),
-    )
 }

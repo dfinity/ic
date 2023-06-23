@@ -4,7 +4,7 @@ use super::*;
 use ic_base_types::PrincipalId;
 use ic_interfaces_state_manager::CertificationScope;
 use ic_protobuf::registry::{
-    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
     subnet::v1::SubnetListRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
@@ -288,7 +288,6 @@ pub(crate) fn get_registry_and_urls_for_test(
                 REGISTRY_VERSION,
                 Some(NodeRecord {
                     xnet: Some(xnet_endpoint.clone()),
-                    xnet_api: vec![xnet_endpoint.clone()],
                     ..Default::default()
                 }),
             )
@@ -354,8 +353,7 @@ fn add_node_record_with_node_operator_id(
             &make_node_record_key(node_id),
             REGISTRY_VERSION,
             Some(NodeRecord {
-                xnet: Some(xnet_endpoint.clone()),
-                xnet_api: vec![xnet_endpoint],
+                xnet: Some(xnet_endpoint),
                 node_operator_id: node_operator_id.to_vec(),
                 ..Default::default()
             }),

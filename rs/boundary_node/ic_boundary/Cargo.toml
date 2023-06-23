@@ -1,0 +1,46 @@
+[package]
+name = "ic-boundary"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ic-boundary"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.56"
+arc-swap = "1"
+async-scoped = { version = "0.7", features = ["use-tokio"] }
+async-trait = "0.1.56"
+axum = "0.6.1"
+axum-server = { version = "0.5.1", features = ["tls-rustls"] }
+clap = { version = "4", features = ["derive"] }
+futures = "0.3.21"
+futures-util = "0.3.28"
+hyper = "0.14.18"
+hyper-rustls = "0.24.0"
+ic-config = { path = "../../config" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-registry-client = { path = "../../registry/client" }
+ic-registry-local-store = { path = "../../registry/local_store" }
+ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
+instant-acme = "0.3.2"
+lazy_static = "1.4.0"
+mockall = "0.11.4"
+prometheus = "0.13"
+rcgen = "0.10.0"
+serde = "1.0.163"
+serde_json = "1.0.96"
+slog = "2.5.2"
+tempfile = "3.6.0"
+thiserror = "1.0.40"
+tokio = { version = "1.19.2", features = ["full"] }
+tokio-rustls = "0.24.0"
+tracing = "0.1.35"
+tracing-subscriber = { version = "0.3.11", features = ["json"] }
+url = "2.1.1"
+x509-parser = "0.12.0"
+
+[dev-dependencies]
+wiremock = "=0.5.18"

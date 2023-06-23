@@ -4,7 +4,6 @@ load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 LINUX_ONLY = [
     "sevctl",
-    "vsock_agent",
     "vsock_guest",
     "vsock_host",
 ]
@@ -30,6 +29,7 @@ BINARIES = {
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
+    "ic-boundary": "//rs/boundary_node/ic_boundary:ic-boundary",
     "ic-starter": "//rs/starter:ic-starter",
     "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
@@ -54,7 +54,6 @@ BINARIES = {
     "sns": "//rs/sns/cli:sns",
     "state-tool": "//rs/state_tool:state-tool",
     "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
-    "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
 }
@@ -63,11 +62,8 @@ BINARIES = {
     name = name,
     binary = BINARIES[name],
     visibility = [
-        "//ic-os/guestos/envs/dev:__pkg__",
-        "//ic-os/guestos/envs/dev-malicious:__pkg__",
-        "//ic-os/guestos/envs/prod:__pkg__",
-        "//ic-os/hostos/envs/dev:__pkg__",
-        "//ic-os/hostos/envs/prod:__pkg__",
+        "//ic-os/guestos/envs:__subpackages__",
+        "//ic-os/hostos/envs:__subpackages__",
     ],
 ) for name in BINARIES if name in NO_STRIP]
 
@@ -81,11 +77,8 @@ BINARIES = {
         "//ic-os/boundary-guestos/envs/dev-sev:__pkg__",
         "//ic-os/boundary-guestos/envs/prod:__pkg__",
         "//ic-os/boundary-guestos/envs/prod-sev:__pkg__",
-        "//ic-os/guestos/envs/dev:__pkg__",
-        "//ic-os/guestos/envs/dev-malicious:__pkg__",
-        "//ic-os/guestos/envs/prod:__pkg__",
-        "//ic-os/hostos/envs/dev:__pkg__",
-        "//ic-os/hostos/envs/prod:__pkg__",
+        "//ic-os/guestos/envs:__subpackages__",
+        "//ic-os/hostos/envs:__subpackages__",
     ],
 ) for name in BINARIES if name not in NO_STRIP]
 

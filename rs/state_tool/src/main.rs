@@ -5,6 +5,9 @@
 //! checkpoint manifests, import state trees).
 
 use clap::Parser;
+use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_subnet_type::SubnetType;
+use ic_types::PrincipalId;
 use std::path::PathBuf;
 
 mod commands;
@@ -56,9 +59,6 @@ enum Opt {
         /// Path to a manifest.
         #[clap(long = "file")]
         file: PathBuf,
-        /// Manifest version; defaults to `CURRENT_STATE_SYNC_VERSION`
-        #[clap(long = "version", default_value_t=ic_state_manager::manifest::CURRENT_STATE_SYNC_VERSION)]
-        version: u32,
     },
 
     /// Computes a hash of a canister that is independent
@@ -74,7 +74,7 @@ enum Opt {
         ///
         /// Say we have a manifest corresponding to a state thats
         /// structured as follows:
-        ///  
+        ///
         /// ```text
         /// 0000000000001c20/
         /// ├── bitcoin
@@ -83,7 +83,7 @@ enum Opt {
         /// │   ├── 00000000000000000101
         /// │   │   ├── ...
         /// .   .
-        /// .   .  
+        /// .   .
         /// │   ├── 00000000000000070101
         /// │   │   ├── canister.pbuf
         /// │   │   ├── queues.pbuf
@@ -99,7 +99,7 @@ enum Opt {
         /// their path.
         ///
         /// To make sure that accidentally passing something that matches
-        /// unwanted file paths, the list of processed files is explititly
+        /// unwanted file paths, the list of processed files is explicitly
         /// printed.
         #[clap(long = "canister")]
         canister: String,
@@ -142,6 +142,48 @@ enum Opt {
         #[clap(long = "bytes")]
         bytes: String,
     },
+
+    /// Prunes a replicated state, as part of a subnet split.
+    #[clap(name = "split")]
+    #[clap(group(
+        clap::ArgGroup::new("ranges")
+            .required(true)
+            .args(&["retain", "drop"]),
+    ))]
+    Split {
+        /// Path to the state layout.
+        #[clap(long, required = true)]
+        root: PathBuf,
+        /// The ID of the subnet being split off.
+        #[clap(long, required = true)]
+        subnet_id: PrincipalId,
+        /// Canister ID ranges to retain (assigned to the subnet in the routing table).
+        #[clap(long, multiple_values(true))]
+        retain: Vec<CanisterIdRange>,
+        /// Canister ID ranges to drop (assigned to other subnet in the routing table).
+        #[clap(long, multiple_values(true))]
+        drop: Vec<CanisterIdRange>,
+    },
+
+    /// Splits a manifest, to verify the manifests resulting from a subnet split.
+    #[clap(name = "split_manifest")]
+    SplitManifest {
+        /// Path to the manifest dump.
+        #[clap(long, required = true)]
+        path: PathBuf,
+        /// ID of the subnet being split.
+        #[clap(long, required = true)]
+        from_subnet: PrincipalId,
+        /// ID of the new subnet resulting from the split.
+        #[clap(long, required = true)]
+        to_subnet: PrincipalId,
+        /// Type of the original subnet (to also be applied to `to_subnet`).
+        #[clap(long, required = true)]
+        subnet_type: SubnetType,
+        /// Canister ID ranges migrated to the new subnet.
+        #[clap(long, required = true, multiple_values(true))]
+        migrated_ranges: Vec<CanisterIdRange>,
+    },
 }
 
 fn main() {
@@ -155,9 +197,7 @@ fn main() {
             height,
         } => commands::import_state::do_import(state, config, height),
         Opt::Manifest { path } => commands::manifest::do_compute_manifest(path),
-        Opt::VerifyManifest { file, version } => {
-            commands::verify_manifest::do_verify_manifest(&file, version)
-        }
+        Opt::VerifyManifest { file } => commands::verify_manifest::do_verify_manifest(&file),
         Opt::CanisterHash { file, canister } => {
             commands::verify_manifest::do_canister_hash(&file, &canister)
         }
@@ -172,6 +212,25 @@ fn main() {
         Opt::PrincipalFromBytes { bytes } => {
             commands::convert_ids::do_principal_from_byte_string(bytes)
         }
+        Opt::Split {
+            root,
+            subnet_id,
+            retain,
+            drop,
+        } => commands::split::do_split(root, subnet_id, retain, drop),
+        Opt::SplitManifest {
+            path,
+            from_subnet,
+            to_subnet,
+            subnet_type,
+            migrated_ranges,
+        } => commands::split_manifest::do_split_manifest(
+            path,
+            from_subnet.into(),
+            to_subnet.into(),
+            subnet_type,
+            migrated_ranges,
+        ),
     };
 
     if let Err(e) = result {

@@ -42,13 +42,14 @@ use crate::{
     },
     util::{block_on, get_nns_node},
 };
+use ic_backup::backup_helper::{last_checkpoint, ls_path};
 use ic_backup::config::{ColdStorage, Config, SubnetConfig};
 use ic_backup::util::sleep_secs;
 use ic_base_types::SubnetId;
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
-use slog::{error, info, Logger};
+use slog::{debug, error, info, Logger};
 use std::ffi::OsStr;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -76,7 +77,7 @@ pub fn config(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let log = env.logger();
 
-    // Create all directories
+    info!(log, "Create all directories");
     let root_dir = tempfile::TempDir::new()
         .expect("failed to create a temporary directory")
         .path()
@@ -90,6 +91,7 @@ pub fn test(env: TestEnv) {
         .path()
         .to_path_buf();
 
+    info!(log, "Fetch the replica version");
     let nns_node = get_nns_node(&env.topology_snapshot());
     let node_ip: IpAddr = nns_node.get_ip_addr();
     let subnet_id = env.topology_snapshot().root_subnet_id();
@@ -98,6 +100,10 @@ pub fn test(env: TestEnv) {
     let initial_replica_version = ReplicaVersion::try_from(replica_version.clone())
         .expect("Assigned replica version should be valid");
 
+    info!(
+        log,
+        "Copy the binaries needed for replay of the current version"
+    );
     let backup_binaries_dir = backup_dir.join("binaries").join(&replica_version);
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
 
@@ -108,6 +114,10 @@ pub fn test(env: TestEnv) {
     copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
     copy_file(&binaries_path, &backup_binaries_dir, "canister_sandbox");
 
+    info!(
+        log,
+        "Download the binaries needed for replay of the mainnet version"
+    );
     let mainnet_version = env
         .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .expect("could not read mainnet version!");
@@ -129,6 +139,7 @@ pub fn test(env: TestEnv) {
         .expect("chmod command failed");
     chmod.wait_with_output().expect("chmod execution failed");
 
+    info!(log, "Run ECDSA signature test");
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let agent = nns_node.build_default_agent();
     let nns_canister = block_on(MessageCanister::new(
@@ -145,6 +156,7 @@ pub fn test(env: TestEnv) {
     );
     run_ecdsa_signature_test(&nns_canister, &log, key);
 
+    info!(log, "Install universal canister");
     let log2 = log.clone();
     let id = nns_node.effective_canister_id();
     let canister_id_hex: String = block_on({
@@ -154,13 +166,13 @@ pub fn test(env: TestEnv) {
         }
     });
 
-    // Update the registry with the backup key
+    info!(log, "Update the registry with the backup key");
     let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
     wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
 
-    // Fetch NNS public key
+    info!(log, "Fetch NNS public key");
     let nns_public_key = env
         .prep_dir("")
         .expect("missing NNS public key")
@@ -206,7 +218,10 @@ pub fn test(env: TestEnv) {
     info!(log, "Start the backup process in a separate thread");
     let ic_backup_path = binaries_path.join("ic-backup");
     let mut command = Command::new(&ic_backup_path);
-    command.arg("--config-file").arg(&config_file);
+    command
+        .arg("--config-file")
+        .arg(&config_file)
+        .arg("--debug");
     info!(log, "Will execute: {:?}", command);
 
     let mut child = command
@@ -224,6 +239,17 @@ pub fn test(env: TestEnv) {
         UpdateImageType::Image,
         &log,
     ));
+
+    info!(log, "Wait for archived checkpoint");
+    let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
+    // make sure we have some archive of the old version before upgrading to the new one
+    loop {
+        if highest_dir_entry(&archive_dir, 10) > 0 {
+            info!(log, "A checkpoint has been archived");
+            break;
+        }
+        sleep_secs(5);
+    }
 
     info!(log, "Proposal to upgrade the subnet replica version");
     block_on(update_subnet_replica_version(
@@ -249,7 +275,6 @@ pub fn test(env: TestEnv) {
         .join(subnet_id.to_string())
         .join(mainnet_version)
         .join("0");
-    let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
 
     info!(
         log,
@@ -263,7 +288,7 @@ pub fn test(env: TestEnv) {
         let archive_height = highest_dir_entry(&archive_dir, 10);
         info!(
             log,
-            "New version: {}  Checkpoint: {}  Archive: {} Progress: {} ",
+            "New version: {}  Checkpoint: {}  Archive: {} Target: {} ",
             new_height,
             checkpoint,
             archive_height,
@@ -289,11 +314,15 @@ pub fn test(env: TestEnv) {
         .join(canister_id_hex)
         .join("vmemory_0.bin");
     assert!(memory_artifact_path.exists());
+    info!(log, "Modify memory file: {:?}", memory_artifact_path);
     modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
-    info!(log, "Modified memory file");
 
+    info!(log, "Start again the backup process in a separate thread");
     let mut command = Command::new(&ic_backup_path);
-    command.arg("--config-file").arg(&config_file);
+    command
+        .arg("--config-file")
+        .arg(&config_file)
+        .arg("--debug");
     info!(log, "Will execute: {:?}", command);
     let mut child = command
         .stdout(Stdio::piped())
@@ -301,20 +330,27 @@ pub fn test(env: TestEnv) {
         .expect("Failed to start backup process");
     info!(log, "Started process: {}", child.id());
 
-    assert!(cold_storage_exists(
-        cold_storage_dir.join(subnet_id.to_string())
-    ));
+    if !cold_storage_exists(&log, cold_storage_dir.join(subnet_id.to_string())) {
+        info!(log, "Kill child process");
+        child.kill().expect("Error killing backup process");
+        panic!("No cold storage");
+    }
+
     info!(log, "Artifacts and states are moved to cold storage");
 
     let mut hash_mismatch = false;
-    for _ in 0..12 {
+    for i in 0..60 {
         info!(log, "Checking logs for hash mismatch...");
         if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
             for en in dirs {
+                info!(log, "DirEntry in logs: {:?}", en);
                 match en {
                     Ok(d) => {
                         let contents = fs::read_to_string(d.path())
                             .expect("Should have been able to read the log file");
+                        if i == 15 {
+                            println!("{}", contents);
+                        }
 
                         if contents.contains(DIVERGENCE_LOG_STR) {
                             hash_mismatch = true;
@@ -332,28 +368,27 @@ pub fn test(env: TestEnv) {
         }
         sleep_secs(10);
     }
-    assert!(hash_mismatch);
-    info!(log, "There was a divergence of the state");
 
     info!(log, "Kill child process");
     child.kill().expect("Error killing backup process");
+
+    assert!(hash_mismatch);
+    info!(log, "There was a divergence of the state");
 }
 
 fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBuf> {
     let dir = backup_dir
         .join("data")
         .join(subnet_id.to_string())
-        .join("ic_state")
-        .join("checkpoints");
+        .join("ic_state");
     if !dir.exists() {
         return None;
     }
-    if let Ok(mut cps) = fs::read_dir(dir) {
-        if let Some(Ok(cp)) = cps.next() {
-            return Some(cp.path());
-        }
+    let lcp = last_checkpoint(&dir);
+    if lcp == 0 {
+        return None;
     }
-    None
+    Some(dir.join(format!("checkpoints/{:016x}", lcp)))
 }
 
 fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
@@ -373,10 +408,11 @@ fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
     file.write_all(&byte)
 }
 
-fn cold_storage_exists(cold_storage_dir: PathBuf) -> bool {
+fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {
     for _ in 0..12 {
-        if dir_exists_and_have_file(&cold_storage_dir.join("states"))
-            && dir_exists_and_have_file(&cold_storage_dir.join("artifacts"))
+        _ = ls_path(log, &cold_storage_dir);
+        if dir_exists_and_have_file(log, &cold_storage_dir.join("states"))
+            && dir_exists_and_have_file(log, &cold_storage_dir.join("artifacts"))
         {
             return true;
         }
@@ -385,14 +421,20 @@ fn cold_storage_exists(cold_storage_dir: PathBuf) -> bool {
     false
 }
 
-fn dir_exists_and_have_file(dir: &PathBuf) -> bool {
+fn dir_exists_and_have_file(log: &Logger, dir: &PathBuf) -> bool {
+    debug!(log, "Check directory: {:?}", dir);
     if !dir.exists() {
+        debug!(log, "Doesn't exists!");
         return false;
     }
-    fs::read_dir(dir)
+    debug!(log, "Directory exists!");
+    _ = ls_path(log, dir);
+    let have_file = fs::read_dir(dir)
         .expect("Should be able to read existing directory")
         .next()
-        .is_some()
+        .is_some();
+    debug!(log, "Check does it contain file(s): {}", have_file);
+    have_file
 }
 
 fn copy_file(binaries_path: &Path, backup_binaries_dir: &Path, file_name: &str) {

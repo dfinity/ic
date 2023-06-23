@@ -2,7 +2,7 @@ use crate::{Digest, Label, MixedHashTree as T};
 use proptest::prelude::*;
 
 pub(crate) fn arbitrary_leaf() -> impl Strategy<Value = T> {
-    prop::collection::vec(any::<u8>(), 1..100).prop_map(T::Leaf)
+    prop::collection::vec(any::<u8>(), 0..100).prop_map(T::Leaf)
 }
 
 /// Changes labels in the tree without changing the tree structure.
@@ -44,7 +44,7 @@ pub(crate) fn arbitrary_mixed_hash_tree() -> impl Strategy<Value = T> {
     leaf.prop_recursive(
         /* depth= */ 8,
         /* max_size= */ 256,
-        /* items_per_collection= */ 10,
+        /* items_per_collection= */ 1,
         |inner| {
             prop_oneof![
                 (inner.clone(), inner.clone()).prop_map(|(l, r)| T::Fork(Box::new((l, r)))),
@@ -56,16 +56,24 @@ pub(crate) fn arbitrary_mixed_hash_tree() -> impl Strategy<Value = T> {
 }
 
 pub(crate) fn arbitrary_well_formed_mixed_hash_tree() -> impl Strategy<Value = T> {
-    let labeled_leaf = (".*", arbitrary_leaf())
+    arbitrary_well_formed_mixed_hash_tree_with_params(8, 256, 1)
+}
+
+pub(crate) fn arbitrary_well_formed_mixed_hash_tree_with_params(
+    max_depth: u32,
+    expected_size: u32,
+    expected_iterms_per_collection: u32,
+) -> impl Strategy<Value = T> {
+    let labeled_leaf = (".*", prop_oneof!(arbitrary_leaf(), Just(T::Empty)))
         .prop_map(|(label, leaf)| T::Labeled(Label::from(label), Box::new(leaf)));
     let tree = labeled_leaf.prop_recursive(
-        /* depth= */ 5,
-        /* max_size= */ 64,
-        /* items_per_collection */ 5,
+        max_depth,
+        expected_size,
+        expected_iterms_per_collection,
         |inner| {
             prop_oneof![
-                (inner.clone(), inner.clone()).prop_map(|(l, r)| T::Fork(Box::new((l, r)))),
-                (".*", inner).prop_map(|(label, t)| T::Labeled(Label::from(label), Box::new(t))),
+                3 => (inner.clone(), inner.clone()).prop_map(|(l, r)| T::Fork(Box::new((l, r)))),
+                1 => (".*", inner).prop_map(|(label, t)| T::Labeled(Label::from(label), Box::new(t))),
             ]
         },
     );

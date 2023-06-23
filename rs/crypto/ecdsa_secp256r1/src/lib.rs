@@ -5,6 +5,13 @@
 
 //! A crate with handling of ECDSA keys over the secp256r1 curve
 
+use p256::{
+    elliptic_curve::{
+        generic_array::{typenum::Unsigned, GenericArray},
+        Curve,
+    },
+    NistP256,
+};
 use rand::{CryptoRng, RngCore};
 use zeroize::ZeroizeOnDrop;
 
@@ -120,7 +127,12 @@ impl PrivateKey {
 
     /// Deserialize a private key encoded in SEC1 format
     pub fn deserialize_sec1(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
-        let key = p256::ecdsa::SigningKey::from_bytes(bytes)
+        let byte_array: [u8; <NistP256 as Curve>::FieldBytesSize::USIZE] =
+            bytes.try_into().map_err(|_e| {
+                KeyDecodingError::InvalidKeyEncoding(format!("invalid key size = {}.", bytes.len()))
+            })?;
+
+        let key = p256::ecdsa::SigningKey::from_bytes(&GenericArray::from(byte_array))
             .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
         Ok(Self { key })
     }

@@ -4,6 +4,7 @@ package ic_sns_wasm.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
 import "ic_sns_init/pb/v1/sns_init.proto";
+import "ic_nervous_system/pb/v1/nervous_system.proto";
 
 // The type of canister a particular WASM is intended to be installed on.
 enum SnsCanisterType {
@@ -161,6 +162,8 @@ message DeployNewSnsResponse {
   SnsCanisterIds canisters = 2;
   // Error when the request fails.
   SnsWasmError error = 3;
+  // The status of the dapp canisters being transferred to an SNS.
+  DappCanistersTransferResult dapp_canisters_transfer_result = 4;
 }
 
 // The CanisterIds of the SNS canisters that are created.
@@ -175,6 +178,24 @@ message SnsCanisterIds {
   ic_base_types.pb.v1.PrincipalId swap = 4;
   // PrincipalId of the index canister.
   ic_base_types.pb.v1.PrincipalId index = 5;
+}
+
+// The status of the dapp canisters that are being transferred to an SNS.
+message DappCanistersTransferResult {
+  // Dapp canisters that were restored to their original controllers due to some error
+  // encountered in the SNS deployment process.
+  repeated ic_nervous_system.pb.v1.Canister restored_dapp_canisters = 1;
+
+  // Dapp canisters that were transferred to an SNS. This can either be as a result of
+  // a completely successful SNS deployment where all dapps were transferred to the SNS,
+  // or a result of a partially failed SNS deployment, where only some of the dapps
+  // were fully transferred to the SNS, and can not be restored by the SNS-W canister.
+  repeated ic_nervous_system.pb.v1.Canister sns_controlled_dapp_canisters = 2;
+
+  // Dapp canisters that are still under the control of the NNS. This is a result of an
+  // error when restoring dapps to their original controller and requires additional work
+  // to fully restore them.
+  repeated ic_nervous_system.pb.v1.Canister nns_controlled_dapp_canisters = 3;
 }
 
 // Message to list deployed sns instances.

@@ -1,40 +1,39 @@
 use crate::protocol::{Payload, Response};
+use std::io::Error;
+use std::process::Output;
 
-pub fn handle_command_output(
-    command_output: Result<std::process::Output, std::io::Error>,
-) -> Response {
-    match command_output {
-        Ok(command_output) => {
-            if command_output.status.success() {
-                match String::from_utf8(command_output.stdout) {
-                    Ok(str) => {
-                        println!("Command output: {}", str);
-                        Ok(Payload::NoPayload)
-                    }
-                    Err(err) => {
-                        let error_string = format!("Unable to read command stdout: {}", err);
-                        println!("Error: {}", error_string);
-                        Err(error_string)
-                    }
-                }
-            } else {
-                match String::from_utf8(command_output.stderr) {
-                    Ok(str) => {
-                        println!("Command stderr output: {}", str);
-                        Err(str)
-                    }
-                    Err(err) => {
-                        let error_string = format!("Unable to read command stderr: {}", err);
-                        println!("Error: {}", error_string);
-                        Err(error_string)
-                    }
-                }
-            }
-        }
-        Err(err) => {
+pub fn handle_command_output(command_output: Result<Output, Error>) -> Response {
+    command_output
+        .map_err(|err| {
             let error_string = format!("Unable to read command output: {}", err);
             println!("Error: {}", error_string);
-            Err(error_string)
-        }
-    }
+            error_string
+        })
+        .and_then(|output| {
+            if output.status.success() {
+                handle_output_string(String::from_utf8(output.stdout), "stdout")
+            } else {
+                handle_output_string(String::from_utf8(output.stderr), "stderr")
+            }
+        })
+}
+
+fn handle_output_string(
+    output_string: Result<String, std::string::FromUtf8Error>,
+    label: &str,
+) -> Response {
+    output_string
+        .map_err(|err| {
+            let error_string = format!("Unable to read command {}: {}", label, err);
+            println!("Error: {}", error_string);
+            error_string
+        })
+        .and_then(|output| {
+            println!("Command {} output: {}", label, output);
+            if label == "stdout" {
+                Ok(Payload::NoPayload)
+            } else {
+                Err(output)
+            }
+        })
 }

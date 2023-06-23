@@ -1,16 +1,19 @@
 use by_address::ByAddress;
 use candid::{CandidType, Deserialize};
-use dfn_core::api::{call, time_nanos, CanisterId};
-use maplit::hashmap;
-use priority_queue::priority_queue::PriorityQueue;
-use rust_decimal::Decimal;
-use serde::Serialize;
-
 use core::{
     cmp::Reverse,
     fmt::Debug,
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
+use dfn_core::api::{time_nanos, CanisterId};
+use ic_base_types::PrincipalId;
+use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_ledger_core::Tokens;
+use maplit::hashmap;
+use priority_queue::priority_queue::PriorityQueue;
+use rust_decimal::Decimal;
+use serde::Serialize;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -19,14 +22,11 @@ use std::{
     str::FromStr,
 };
 
-use ic_base_types::PrincipalId;
-use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
-use ic_ledger_core::Tokens;
-
+pub mod cmc;
+pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
-pub mod stable_mem_utils;
+
+pub const BASIS_POINTS_PER_UNITY: u64 = 10_000;
 
 // 10^8
 pub const E8: u64 = 100_000_000;
@@ -35,6 +35,11 @@ pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
 // Useful as a piece of realistic test data.
 pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1641016800;
+
+pub const ONE_TRILLION: u64 = 1_000_000_000_000;
+
+/// The number of cycles required to create an SNS, charged by the SNS-W canister.
+pub const SNS_CREATION_FEE: u64 = 180 * ONE_TRILLION;
 
 // The size of a WASM page in bytes, as defined by the WASM specification
 #[cfg(any(target_arch = "wasm32"))]
@@ -133,21 +138,6 @@ pub enum AuthzChangeOp {
     /// 'canister' must remove 'principal' from the authorized list of
     /// 'method_name'. 'principal' must always be Some.
     Deauthorize,
-}
-
-/// Return the status of the given canister. The caller must control the given canister.
-pub async fn get_canister_status(
-    canister_id: PrincipalId,
-) -> Result<CanisterStatusResultV2, (Option<i32>, String)> {
-    let canister_id_record: CanisterIdRecord = CanisterId::new(canister_id).unwrap().into();
-
-    call(
-        IC_00,
-        "canister_status",
-        dfn_candid::candid,
-        (canister_id_record,),
-    )
-    .await
 }
 
 /// A more convenient (but explosive) way to do token math. Not suitable for

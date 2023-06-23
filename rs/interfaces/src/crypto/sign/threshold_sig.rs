@@ -24,6 +24,8 @@ pub trait ThresholdSigner<T: Signable> {
     ///   calling this method.
     /// * `CryptoError::SecretKeyNotFound` if the secret key is not present in
     ///   the secret key store.
+    /// * `CryptoError::TransientInternalError` if there is a transient
+    ///   internal error, e.g., an RPC error when calling the CSP vault.
     // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
     // ThresholdSigDataNotFoundError>
     fn sign_threshold(&self, message: &T, dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>>;

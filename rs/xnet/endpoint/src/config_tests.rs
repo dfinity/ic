@@ -1,9 +1,7 @@
 use super::*;
 use ic_interfaces_registry::RegistryClientResult;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_protobuf::registry::node::v1::{
-    connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord,
-};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord, Protocol};
 use ic_registry_keys::make_node_record_key;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -83,11 +81,11 @@ fn config_node_not_found() {
 fn config_invalid_xnet_ip_addr() {
     with_test_replica_logger(|log| {
         let invalid_node_record = NodeRecord {
-            xnet_api: vec![ConnectionEndpoint {
+            xnet: Some(ConnectionEndpoint {
                 ip_addr: "dfinity.org".into(),
                 port: 2197,
                 protocol: Protocol::Http1 as i32,
-            }],
+            }),
             ..Default::default()
         };
         let registry = registry_returning(
@@ -119,11 +117,11 @@ fn config_node_record_xnet_is_none() {
 fn config_ipv4_success() {
     with_test_replica_logger(|log| {
         let invalid_node_record = NodeRecord {
-            xnet_api: vec![ConnectionEndpoint {
+            xnet: Some(ConnectionEndpoint {
                 ip_addr: "192.168.0.4".into(),
                 port: 2197,
                 protocol: Protocol::Http1 as i32,
-            }],
+            }),
             ..Default::default()
         };
         let registry = registry_returning(
@@ -144,11 +142,11 @@ fn config_ipv4_success() {
 fn config_ipv6_success() {
     with_test_replica_logger(|log| {
         let invalid_node_record = NodeRecord {
-            xnet_api: vec![ConnectionEndpoint {
+            xnet: Some(ConnectionEndpoint {
                 ip_addr: "fde4:8dba:82e1::c4".into(),
                 port: 2197,
                 protocol: Protocol::Http1 as i32,
-            }],
+            }),
             ..Default::default()
         };
         let registry = registry_returning(

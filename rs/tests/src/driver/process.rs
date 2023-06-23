@@ -7,6 +7,8 @@ use std::process::{Command, ExitStatus, Stdio};
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command as AsyncCommand},
+    select,
+    sync::watch::{channel, Receiver},
     task::{self, JoinHandle},
 };
 
@@ -31,12 +33,13 @@ impl Process {
         // signal.
         cmd.kill_on_drop(true);
 
-        // println!("AsyncCommand: {:?}", cmd);
         let mut child = cmd.spawn().expect("Spawning subprocess should succeed");
-        // println!("Child: {:?}", child);
 
         let stdout = child.stdout.take().unwrap();
+        let (kill_tx, kill_watch) = channel::<bool>(false);
+
         let stdout_jh = task::spawn(Self::listen_on_channel(
+            kill_watch.clone(),
             task_id.clone(),
             log.clone(),
             ChannelName::StdOut,
@@ -44,6 +47,7 @@ impl Process {
         ));
         let stderr = child.stderr.take().unwrap();
         let stderr_jh = task::spawn(Self::listen_on_channel(
+            kill_watch,
             task_id,
             log.clone(),
             ChannelName::StdErr,
@@ -60,6 +64,7 @@ impl Process {
             let pid = Pid::from_raw(self_.child.id().unwrap() as i32);
             move || {
                 let _ = kill(pid, Signal::SIGKILL);
+                let _ = kill_tx.send(true);
             }
         };
 
@@ -77,17 +82,34 @@ impl Process {
         child.wait().await
     }
 
-    async fn listen_on_channel<R>(task_id: TaskId, log: Logger, channel_tag: ChannelName, src: R)
-    where
+    async fn listen_on_channel<R>(
+        mut kill_watch: Receiver<bool>,
+        task_id: TaskId,
+        log: Logger,
+        channel_tag: ChannelName,
+        src: R,
+    ) where
         R: AsyncRead + Unpin,
     {
         let buffered_reader = BufReader::new(src);
         let mut lines = buffered_reader.lines();
         loop {
-            match lines.next_line().await {
-                Ok(Some(line)) => info!(log, "({}|{:?}): {}", task_id, channel_tag, line),
-                Ok(None) => break,
-                Err(e) => eprintln!("listen_on_channel(): {:?}", e),
+            select! {
+                line_res = lines.next_line() => {
+                    match line_res {
+                        Ok(Some(line)) => {
+                            let task_id: String = format!("{}", task_id);
+                            let output_channel: String = format!("{:?}", channel_tag);
+                            info!(log, "{}", line; "task_id" => task_id, "output_channel" => output_channel)
+                        }
+                        Ok(None) => break,
+                        Err(e) => eprintln!("listen_on_channel(): {:?}", e),
+                    }
+                }
+                _ = kill_watch.changed() => {
+                    info!(log, "({}|{:?}): Kill received.", task_id, channel_tag);
+                    return;
+                }
             }
         }
         info!(log, "({}|{:?}): Channel has closed.", task_id, channel_tag);

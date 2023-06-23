@@ -89,6 +89,29 @@ impl Drop for TimerLogicGuard {
     }
 }
 
+#[must_use]
+pub struct DistributeKytFeeGuard(());
+
+impl DistributeKytFeeGuard {
+    pub fn new() -> Option<Self> {
+        mutate_state(|s| {
+            if s.is_distributing_fee {
+                return None;
+            }
+            s.is_distributing_fee = true;
+            Some(DistributeKytFeeGuard(()))
+        })
+    }
+}
+
+impl Drop for DistributeKytFeeGuard {
+    fn drop(&mut self) {
+        mutate_state(|s| {
+            s.is_distributing_fee = false;
+        });
+    }
+}
+
 pub fn balance_update_guard(p: Principal) -> Result<Guard<PendingBalanceUpdates>, GuardError> {
     Guard::new(p)
 }

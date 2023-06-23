@@ -354,7 +354,7 @@ impl IngressManager {
                     if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
                         &canister.system_state,
                         *cumulative_ingress_cost + ingress_cost,
-                        canister.memory_usage(state.metadata.own_subnet_type),
+                        canister.memory_usage(),
                         canister.scheduler_state.compute_allocation,
                         subnet_size,
                     ) {

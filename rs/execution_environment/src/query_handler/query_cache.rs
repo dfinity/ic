@@ -1,10 +1,84 @@
 use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
 use ic_utils_lru_cache::LruCache;
+use prometheus::{Histogram, IntCounter, IntGauge};
 use std::{mem::size_of_val, sync::Mutex};
 
+use crate::metrics::duration_histogram;
+
+////////////////////////////////////////////////////////////////////////
+/// Query Cache metrics.
+pub(crate) struct QueryCacheMetrics {
+    pub hits: IntCounter,
+    pub misses: IntCounter,
+    pub evicted_entries: IntCounter,
+    pub evicted_entries_duration: Histogram,
+    pub invalidated_entries: IntCounter,
+    pub invalidated_entries_by_time: IntCounter,
+    pub invalidated_entries_by_canister_version: IntCounter,
+    pub invalidated_entries_by_canister_balance: IntCounter,
+    pub invalidated_entries_duration: Histogram,
+    pub count_bytes: IntGauge,
+    pub len: IntGauge,
+}
+
+impl QueryCacheMetrics {
+    fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            hits: metrics_registry.int_counter(
+                "execution_query_cache_hits_total",
+                "The total number of replica side query cache hits",
+            ),
+            misses: metrics_registry.int_counter(
+                "execution_query_cache_misses_total",
+                "The total number of replica side query cache misses",
+            ),
+            evicted_entries: metrics_registry.int_counter(
+                "execution_query_cache_evicted_entries_total",
+                "The total number of evicted entries in the replica side query cache",
+            ),
+            evicted_entries_duration: duration_histogram(
+                "execution_query_cache_evicted_entries_duration_seconds",
+                "The duration of evicted cache entries in seconds",
+                metrics_registry,
+            ),
+            invalidated_entries: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_total",
+                "The total number of invalidated entries in the replica side query cache",
+            ),
+            invalidated_entries_by_time: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_time_total",
+                "The total number of invalidated entries due to the changed time",
+            ),
+            invalidated_entries_by_canister_version: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_canister_version_total",
+                "The total number of invalidated entries due to the changed canister version",
+            ),
+            invalidated_entries_by_canister_balance: metrics_registry.int_counter(
+                "execution_query_cache_invalidated_entries_by_canister_balance_total",
+                "The total number of invalidated entries due to the changed canister balance",
+            ),
+            invalidated_entries_duration: duration_histogram(
+                "execution_query_cache_invalidated_entries_duration_seconds",
+                "The duration of invalidated cache entries in seconds",
+                metrics_registry,
+            ),
+            count_bytes: metrics_registry.int_gauge(
+                "execution_query_cache_count_bytes",
+                "The current replica side query cache size in bytes",
+            ),
+            len: metrics_registry.int_gauge(
+                "execution_query_cache_len",
+                "The current replica side query cache len in elements",
+            ),
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////
 /// Query Cache entry key.
 ///
 /// The key is to distinguish query cache entries, i.e. entries with different
@@ -38,10 +112,12 @@ impl From<&UserQuery> for EntryKey {
     }
 }
 
+////////////////////////////////////////////////////////////////////////
 /// Query Cache entry environment metadata.
 ///
 /// The structure captures the environment metadata. The cache entry is valid
 /// only when its environment metadata matches the current state environment.
+#[derive(PartialEq)]
 pub(crate) struct EntryEnv {
     /// The Consensus-determined time when the cache entry was created.
     pub batch_time: Time,
@@ -70,6 +146,7 @@ impl TryFrom<(&EntryKey, &ReplicatedState)> for EntryEnv {
     }
 }
 
+////////////////////////////////////////////////////////////////////////
 /// Query Cache entry value.
 pub(crate) struct EntryValue {
     env: EntryEnv,
@@ -87,22 +164,39 @@ impl EntryValue {
         Self { env, result }
     }
 
-    pub(crate) fn is_valid(&self, env: &EntryEnv) -> bool {
-        self.env.batch_time == env.batch_time
-            && self.env.canister_version == env.canister_version
-            && self.env.canister_balance == env.canister_balance
+    fn is_valid(&self, env: &EntryEnv) -> bool {
+        self.env == *env
     }
 
-    pub(crate) fn result(&self) -> Result<WasmResult, UserError> {
+    fn is_valid_time(&self, env: &EntryEnv) -> bool {
+        self.env.batch_time == env.batch_time
+    }
+
+    fn is_valid_canister_version(&self, env: &EntryEnv) -> bool {
+        self.env.canister_version == env.canister_version
+    }
+
+    fn is_valid_canister_balance(&self, env: &EntryEnv) -> bool {
+        self.env.canister_balance == env.canister_balance
+    }
+
+    fn result(&self) -> Result<WasmResult, UserError> {
         self.result.clone()
+    }
+
+    fn elapsed_seconds(&self, now: Time) -> f64 {
+        now.saturating_sub(self.env.batch_time).as_secs_f64()
     }
 }
 
-/// Replica Query Cache Implementation.
+////////////////////////////////////////////////////////////////////////
+/// Replica Side Query Cache.
 pub(crate) struct QueryCache {
     // We can't use `RwLock`, as the `LruCache::get()` requires mutable reference
     // to update the LRU.
     cache: Mutex<LruCache<EntryKey, EntryValue>>,
+    // Query cache metrics (public for tests)
+    pub(crate) metrics: QueryCacheMetrics,
 }
 
 impl CountBytes for QueryCache {
@@ -111,18 +205,11 @@ impl CountBytes for QueryCache {
     }
 }
 
-impl Default for QueryCache {
-    fn default() -> Self {
-        QueryCache {
-            cache: Mutex::new(LruCache::unbounded()),
-        }
-    }
-}
-
 impl QueryCache {
-    pub(crate) fn new(capacity: NumBytes) -> Self {
+    pub(crate) fn new(metrics_registry: &MetricsRegistry, capacity: NumBytes) -> Self {
         QueryCache {
             cache: Mutex::new(LruCache::new(capacity)),
+            metrics: QueryCacheMetrics::new(metrics_registry),
         }
     }
 
@@ -132,18 +219,85 @@ impl QueryCache {
         env: &EntryEnv,
     ) -> Option<Result<WasmResult, UserError>> {
         let mut cache = self.cache.lock().unwrap();
+        let now = env.batch_time;
+
         if let Some(value) = cache.get(key) {
             if value.is_valid(env) {
-                return Some(value.result());
+                let res = value.result();
+                // Update the metrics.
+                self.metrics.hits.inc();
+                let count_bytes = cache.count_bytes() as i64;
+                self.metrics.count_bytes.set(count_bytes);
+                // The cache entry is valid, return it.
+                return Some(res);
             } else {
-                // Remove the invalid entry.
+                // Update the metrics.
+                self.metrics.invalidated_entries.inc();
+                self.metrics
+                    .invalidated_entries_duration
+                    .observe(value.elapsed_seconds(now));
+                // For the sake of correctness, we need a fall-through logic here.
+                if !value.is_valid_time(env) {
+                    self.metrics.invalidated_entries_by_time.inc();
+                }
+                if !value.is_valid_canister_version(env) {
+                    self.metrics.invalidated_entries_by_canister_version.inc();
+                }
+                if !value.is_valid_canister_balance(env) {
+                    self.metrics.invalidated_entries_by_canister_balance.inc();
+                }
+                // The cache entry is no longer valid, remove it.
                 cache.pop(key);
             }
         }
         None
     }
 
-    pub(crate) fn insert(&self, key: EntryKey, value: EntryValue) {
-        self.cache.lock().unwrap().push(key, value);
+    pub(crate) fn push(&self, key: EntryKey, value: EntryValue) -> Vec<(EntryKey, EntryValue)> {
+        let now = value.env.batch_time;
+        let mut cache = self.cache.lock().unwrap();
+        let evicted_entries = cache.push(key, value);
+
+        // Update the metrics.
+        self.metrics
+            .evicted_entries
+            .inc_by(evicted_entries.len() as u64);
+        for (_evited_key, evicted_value) in &evicted_entries {
+            let d = evicted_value.elapsed_seconds(now);
+            self.metrics.evicted_entries_duration.observe(d);
+        }
+        self.metrics.misses.inc();
+        let count_bytes = cache.count_bytes() as i64;
+        self.metrics.count_bytes.set(count_bytes);
+        self.metrics.len.set(cache.len() as i64);
+
+        evicted_entries
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use ic_state_machine_tests::WasmResult;
+    use ic_types::{time, Cycles};
+
+    use super::{EntryEnv, EntryValue};
+
+    #[test]
+    fn query_cache_entry_value_elapsed_seconds() {
+        let current_time = time::GENESIS;
+        let entry_env = EntryEnv {
+            batch_time: current_time,
+            canister_version: 1,
+            canister_balance: Cycles::new(0),
+        };
+        let entry_value = EntryValue::new(entry_env, Result::Ok(WasmResult::Reply(vec![])));
+        let forward_time = current_time + Duration::from_secs(2);
+        assert_eq!(2.0, entry_value.elapsed_seconds(forward_time));
+
+        // Negative time differences should give just 0.
+        let backward_time = current_time.saturating_sub_duration(Duration::from_secs(2));
+        assert_eq!(0.0, entry_value.elapsed_seconds(backward_time));
     }
 }

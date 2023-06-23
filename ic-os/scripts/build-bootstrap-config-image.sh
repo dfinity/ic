@@ -50,9 +50,9 @@ options may be specified:
     script, e.g. --journalbeat_hosts "h1.domain.tld h2.domain.tld").
 
   --journalbeat_tags tags
-    Tags to be used by journalbeat. (make sure
-    to quote the argument string so it appears as a single argument to the
-    script, e.g. --journalbeat_tags "testnet1 slo")
+    Tags to be used by Journalbeat. Can be multiple tags separated by space
+    (make sure to quote the argument string so it appears as a single argument
+    to the script, e.g. --journalbeat_tags "testnet1 slo")
 
   --nns_url url
     URL of NNS nodes for sign up or registry access. Can be multiple nodes
@@ -69,6 +69,9 @@ options may be specified:
     "PATH/admin" then it is transferred to "~admin/.ssh/authorized_keys" on
     the target). The presently recognized accounts are: backup, readonly,
     admin and root (the latter one for testing purposes only!)
+
+  --node_operator_private_key path
+    Should point to a file containing a Node Provider private key PEM.
 
   --backup_retention_time seconds
     How long the backed up consensus artifacts should stay on the spool
@@ -96,7 +99,23 @@ options may be specified:
     The Json-object corresponds to this Rust-structure:
       ic_types::malicious_behaviour::MaliciousBehaviour
 
+  --bitcoind_addr address
+    The IP address of a running bitcoind instance. To be used in
+    systems tests only.
+
+  --socks_proxy url
+    The URL of the socks proxy to use. To be used in
+    systems tests only.
+
+  --onchain_observability_overrides overrides
+    The overrides struct (report length, sampling interval) for the onchain observability config. To be used by system tests
+
     Be sure to properly quote the string.
+
+  --get_sev_certs
+    If on an SEV-SNP enabled machine, include the ark, ask, and vcek
+    certificates in the config image.  Note: this requires that this
+    script is executed on the host which will be running the SEV-SNP VM.
 EOF
 }
 
@@ -109,13 +128,16 @@ function build_ic_bootstrap_tar() {
 
     local IPV6_ADDRESS IPV6_GATEWAY NAME_SERVERS HOSTNAME
     local IC_CRYPTO IC_REGISTRY_LOCAL_STORE
-    local NNS_URL NNS_PUBLIC_KEY
+    local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
-    local JOURNALBEAT_HOSTS
-    local JOURNALBEAT_TAGS
+    local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
     local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
+    local BITCOIND_ADDR
+    local ONCHAIN_OBSERVABILITY_OVERRIDES
+    local GET_SEV_CERTS=false
+
     while true; do
         if [ $# == 0 ]; then
             break
@@ -154,6 +176,9 @@ function build_ic_bootstrap_tar() {
             --accounts_ssh_authorized_keys)
                 ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
                 ;;
+            --node_operator_private_key)
+                NODE_OPERATOR_PRIVATE_KEY="$2"
+                ;;
             --backup_retention_time)
                 BACKUP_RETENTION_TIME_SECS="$2"
                 ;;
@@ -165,6 +190,20 @@ function build_ic_bootstrap_tar() {
                 ;;
             --malicious_behavior)
                 MALICIOUS_BEHAVIOR="$2"
+                ;;
+            --bitcoind_addr)
+                BITCOIND_ADDR="$2"
+                ;;
+            --socks_proxy)
+                SOCKS_PROXY="$2"
+                ;;
+            --onchain_observability_overrides)
+                ONCHAIN_OBSERVABILITY_OVERRIDES="$2"
+                ;;
+            --get_sev_certs)
+                GET_SEV_CERTS=true
+                shift 1
+                continue
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -191,9 +230,9 @@ hostname=$HOSTNAME
 EOF
     if [ "${JOURNALBEAT_HOSTS}" != "" ]; then
         echo "journalbeat_hosts=$JOURNALBEAT_HOSTS" >"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
-        if [ "${JOURNALBEAT_TAGS}" != "" ]; then
-            echo "journalbeat_tags=$JOURNALBEAT_TAGS" >>"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
-        fi
+    fi
+    if [ "${JOURNALBEAT_TAGS}" != "" ]; then
+        echo "journalbeat_tags=$JOURNALBEAT_TAGS" >>"${BOOTSTRAP_TMPDIR}/journalbeat.conf"
     fi
     if [ "${NNS_PUBLIC_KEY}" != "" ]; then
         cp "${NNS_PUBLIC_KEY}" "${BOOTSTRAP_TMPDIR}/nns_public_key.pem"
@@ -205,11 +244,20 @@ EOF
         echo "backup_retention_time_secs=${BACKUP_RETENTION_TIME_SECS}" >"${BOOTSTRAP_TMPDIR}/backup.conf"
         echo "backup_puging_interval_secs=${BACKUP_PURGING_INTERVAL_SECS}" >>"${BOOTSTRAP_TMPDIR}/backup.conf"
     fi
-    if [ "${LOG_DEBUG_OVERRIDES}" != "" ]; then
+    if [ "${REPLICA_LOG_DEBUG_OVERRIDES}" != "" ]; then
         echo "replica_log_debug_overrides=${REPLICA_LOG_DEBUG_OVERRIDES}" >"${BOOTSTRAP_TMPDIR}/log.conf"
     fi
     if [ "${MALICIOUS_BEHAVIOR}" != "" ]; then
         echo "malicious_behavior=${MALICIOUS_BEHAVIOR}" >"${BOOTSTRAP_TMPDIR}/malicious_behavior.conf"
+    fi
+    if [ "${BITCOIND_ADDR}" != "" ]; then
+        echo "bitcoind_addr=${BITCOIND_ADDR}" >"${BOOTSTRAP_TMPDIR}/bitcoind_addr.conf"
+    fi
+    if [ "${SOCKS_PROXY}" != "" ]; then
+        echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
+    fi
+    if [ "${ONCHAIN_OBSERVABILITY_OVERRIDES}" != "" ]; then
+        echo ${ONCHAIN_OBSERVABILITY_OVERRIDES} >"${BOOTSTRAP_TMPDIR}/onchain_observability_overrides.json"
     fi
     if [ "${IC_CRYPTO}" != "" ]; then
         cp -r "${IC_CRYPTO}" "${BOOTSTRAP_TMPDIR}/ic_crypto"
@@ -219,6 +267,15 @@ EOF
     fi
     if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
+    fi
+    if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
+        cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
+    fi
+    if [[ "${GET_SEV_CERTS}" == true && ! -e "/dev/sev" ]]; then
+        echo "--get_sev_certs is true but /dev/sev is not available, unable to get SEV certs"
+    fi
+    if [[ "${GET_SEV_CERTS}" == true && -e "/dev/sev" ]]; then
+        /opt/ic/bin/get-sev-certs.sh
     fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .

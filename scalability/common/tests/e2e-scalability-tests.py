@@ -20,6 +20,8 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_string("ic_os_version", None, "Version of the guest OS to boot")
 gflags.MarkFlagAsRequired("ic_os_version")
 gflags.DEFINE_string("artifacts_path", "", "Path to the artifacts directory")
+gflags.DEFINE_string("image_url", "", "url of ic-os guestos dev disk image. Constructed from ic_os version if not set.")
+gflags.DEFINE_string("image_sha256sum", "", "sha256 sum of ic-os guestos dev disk image. Constructed from ic_os version if not set.")
 
 
 def run(args):
@@ -41,11 +43,11 @@ def main(argv):
 
     version = farm.Farm.latest_with_disk_image() if FLAGS.ic_os_version == "latest" else FLAGS.ic_os_version
     farm_instance = farm.Farm(FLAGS.artifacts_path, [1, 1], version)
+    image_url = farm.image_url_from_git_commit(version) if FLAGS.image_url is None else FLAGS.image_url
+    image_sha256sum = farm.sha256_for_image(version) if FLAGS.image_sha256sum is None else FLAGS.image_sha256sum
     try:
         farm_instance.create_farm_group()
-        farm_instance.create_vms_from_ic_os_image_via_url(
-            farm.image_url_from_git_commit(version), farm.sha256_for_image(version)
-        )
+        farm_instance.create_vms_from_ic_os_image_via_url(image_url, image_sha256sum)
         farm_instance.prepare_and_register_config_image()
 
         farm_instance.create_prometheus_vm()

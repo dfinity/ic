@@ -10,17 +10,18 @@ fi
 
 ##: propose_upgrade_canister_to_version_pem
 ## Upgrades an NNS canister by name using a neuron_id and a pem to a specified version on a given NNS
-## Usage: $1 <NNS_URL> <NEURON_ID> <PEM> <CANISTER_NAME> <VERSION>
+## Usage: $1 <NNS_URL> <NEURON_ID> <PEM> <CANISTER_NAME> <VERSION> (<ENCODED_ARGS_FILE>)
 propose_upgrade_canister_to_version_pem() {
     local NNS_URL=$1
     local NEURON_ID=$2
     local PEM=$3
     local CANISTER_NAME=$4
     local VERSION=$5
+    local ENCODED_ARGS_FILE=${6:-}
 
     WASM_FILE=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
 
-    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE"
+    propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
 }
 
 build_canister_and_propose_upgrade_pem() {
@@ -28,13 +29,14 @@ build_canister_and_propose_upgrade_pem() {
     local NEURON_ID=$2
     local PEM=$3
     local CANISTER_NAME=$4
+    local ENCODED_ARGS_FILE=${5:-}
 
     # TODO: Figure out a way to require that the result already be cached.
     bazel build "$(canister_bazel_label "${CANISTER_NAME}")"
 
-    WASM_FILE="$(repo_root)/bazel-bin/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
+    WASM_FILE="$(repo_root)/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
 
-    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE"
+    propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
 }
 
 canister_bazel_label() {
@@ -43,14 +45,20 @@ canister_bazel_label() {
     # A more authoritative place where these values are listed is the following:
     # https://sourcegraph.com/github.com/dfinity/ic@7f7f77e025ed16b58b4bae564eb27bc429d8063d/-/blob/publish/canisters/BUILD.bazel?L5&subtree=true
     case "$CANISTER_NAME" in
+        "registry")
+            echo "//rs/registry/canister:registry-canister"
+            ;;
         "governance")
             echo "//rs/nns/governance:governance-canister"
             ;;
         "root")
-            echo "//rs/nns/handlers/root:root-canister"
+            echo "//rs/nns/handlers/root/impl:root-canister"
             ;;
         "sns-wasm")
             echo "//rs/nns/sns-wasm:sns-wasm-canister"
+            ;;
+        "xrc-mock-canister")
+            echo "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister"
             ;;
         # TODO cycles-minting, genesis-token, identity, ledger, lifeline, nns-ui, registry
         *)
@@ -63,10 +71,22 @@ canister_bazel_label() {
 canister_bazel_artifact_path() {
     local CANISTER_NAME=$1
 
-    canister_bazel_label "${CANISTER_NAME}" \
-        | sed 's!^//!!' \
-        | sed 's!:!/!' \
-        | sed 's/$/.wasm/'
+    bazel cquery --output=files $(canister_bazel_label "$CANISTER_NAME") 2>/dev/null
+}
+
+propose_upgrade_nns_canister_wasm_file_pem() {
+    ensure_variable_set IC_ADMIN
+
+    local NNS_URL=$1
+    local NEURON_ID=$2
+    local PEM=$3
+    local CANISTER_NAME=$4
+    local WASM_FILE=$5
+    local ENCODED_ARGS_FILE=${6:-}
+
+    CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
+
+    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_ID" "$WASM_FILE" "$ENCODED_ARGS_FILE"
 }
 
 propose_upgrade_canister_wasm_file_pem() {
@@ -75,14 +95,13 @@ propose_upgrade_canister_wasm_file_pem() {
     local NNS_URL=$1
     local NEURON_ID=$2
     local PEM=$3
-    local CANISTER_NAME=$4
+    local CANISTER_ID=$4
     local WASM_FILE=$5
-
-    CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
+    local ENCODED_ARGS_FILE=${6:-}
 
     # See note at variable declaration
     PROPOSAL="$MY_DOWNLOAD_DIR"/testnet_upgrade_proposal.txt
-    echo "Testnet $CANISTER_NAME upgrade" >$PROPOSAL
+    echo "Testnet $CANISTER_ID upgrade" >$PROPOSAL
 
     local WASM_SHA=$(sha_256 "$WASM_FILE")
 
@@ -92,7 +111,9 @@ propose_upgrade_canister_wasm_file_pem() {
         --wasm-module-path "$WASM_FILE" \
         --wasm-module-sha256 "$WASM_SHA" \
         --summary-file $PROPOSAL \
-        --proposer "$NEURON_ID"
+        --proposer "$NEURON_ID" \
+        $([ "${SKIP_STOPPING:-no}" == "yes" ] && echo "--skip-stopping-before-installing") \
+        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE")
 
     rm -rf $PROPOSAL
 }
@@ -106,7 +127,7 @@ get_nns_canister_code_location() {
     code_location__registry="$RUST_DIR/registry/canister"
     code_location__governance="$RUST_DIR/nns/governance"
     code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister $RUST_DIR/rosetta-api/icp_ledger"
-    code_location__root="$RUST_DIR/nns/handlers/root"
+    code_location__root="$RUST_DIR/nns/handlers/root/impl"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
     code_location__genesis_token="$RUST_DIR/nns/gtc"
@@ -198,49 +219,6 @@ set_default_subnets() {
         --subnets "$SUBNET_ID"
 }
 
-upload_canister_wasm_to_sns_wasm() {
-    ensure_variable_set IC_ADMIN
-
-    local NNS_URL=$1 # with protocol and port (http://...:8080)
-    local NEURON_ID=$2
-    local PEM=$3
-    local CANISTER_TYPE=$4
-    local VERSION=$5
-
-    WASM_GZ=$(get_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION")
-
-    WASM_SHA=$(sha_256 "$WASM_GZ")
-
-    SUMMARY_FILE=$(mktemp)
-    echo "Proposal to add a WASM" >$SUMMARY_FILE
-
-    $IC_ADMIN -s "$PEM" --nns-url "$NNS_URL" \
-        propose-to-add-wasm-to-sns-wasm \
-        --wasm-module-path "$WASM_GZ" \
-        --wasm-module-sha256 "$WASM_SHA" \
-        --canister-type "$CANISTER_TYPE" \
-        --summary-file "$SUMMARY_FILE" \
-        --proposer "$NEURON_ID"
-}
-
-deploy_new_sns() {
-    ensure_variable_set SNS_CLI
-
-    local SUBNET_WITH_WALLET_URL=$1
-    local WALLET_CANISTER=$2
-    local CONFIG_FILE=${3:-}
-
-    if [ -z "$CONFIG_FILE" ]; then
-        CONFIG_FILE=$NNS_TOOLS_DIR/sns_default_test_init_params.yml
-    fi
-
-    set +e
-    $SNS_CLI deploy --network "$SUBNET_WITH_WALLET_URL" \
-        --wallet-canister-override "$WALLET_CANISTER" \
-        --init-config-file "$CONFIG_FILE"
-    set -e
-}
-
 ##: test_propose_to_open_sns_token_swap_pem
 ## Decentralize an SNS with test parameters
 ## Usage: $1 <NNS_URL> <NEURON_ID> <PEM> <SWAP_CANISTER_ID>
@@ -290,7 +268,7 @@ nns_proposal_info() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/nns/governance/canister/governance.did"
 
-    dfx canister --network $NNS_URL \
+    dfx -q canister --network $NNS_URL \
         call --candid "$GOV_DID" \
         $(nns_canister_id governance) get_proposal_info "( $PROPOSAL_ID : nat64 )"
 }
@@ -358,7 +336,7 @@ nns_neuron_info() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/nns/governance/canister/governance.did"
 
-    dfx canister --network $NNS_URL \
+    dfx -q canister --network $NNS_URL \
         call --candid "$GOV_DID" \
         $(nns_canister_id governance) get_neuron_info "( $NEURON_ID : nat64 )"
 }
@@ -370,7 +348,7 @@ top_up_wallet() {
     local WALLET_CANISTER=$2
     local AMOUNT=$3
 
-    dfx ledger top-up --network "$SUBNET_URL" \
+    dfx -q ledger top-up --network "$SUBNET_URL" \
         --amount "$AMOUNT" "$WALLET_CANISTER"
 }
 
@@ -383,7 +361,7 @@ call_swap() {
     local IC=$(repo_root)
     local SWAP_DID="$IC/rs/sns/swap/canister/swap.did"
 
-    dfx canister --network $NNS_URL \
+    dfx -q canister --network $NNS_URL \
         call --candid $SWAP_DID \
         $SWAP_CANISTER_ID $METHOD '(record {})'
 }
@@ -434,7 +412,7 @@ sns_list_sns_canisters() {
     local IC=$(repo_root)
     local ROOT_DID="$IC/rs/sns/root/canister/root.did"
 
-    dfx canister --network "$SNS_URL" \
+    dfx -q canister --network "$SNS_URL" \
         call --candid "$ROOT_DID" \
         "$SNS_ROOT_CANISTER_ID" list_sns_canisters '(record {})'
 }
@@ -446,7 +424,7 @@ sns_get_sns_canisters_summary() {
     local IC=$(repo_root)
     local ROOT_DID="$IC/rs/sns/root/canister/root.did"
 
-    dfx canister --network "$SNS_URL" \
+    dfx -q canister --network "$SNS_URL" \
         call --candid "$ROOT_DID" \
         "$SNS_ROOT_CANISTER_ID" get_sns_canisters_summary '(record {})'
 }
@@ -458,7 +436,7 @@ sns_finalize_sale() {
     local IC=$(repo_root)
     local SWAP_DID="$IC/rs/sns/swap/canister/swap.did"
 
-    dfx canister --network "$SNS_URL" \
+    dfx -q canister --network "$SNS_URL" \
         call --candid "$SWAP_DID" \
         "$SWAP_CANISTER_ID" finalize_swap '(record {})'
 }
@@ -477,7 +455,7 @@ sns_w_list_upgrade_steps() {
         && echo "null" \
         || echo "opt principal \"$SNS_GOVERNANCE_CANISTER_ID\"")
 
-    dfx canister --network $NNS_URL \
+    dfx -q canister --network "$NNS_URL" \
         call --candid "$SNS_W_DID" \
         qaa6y-5yaaa-aaaaa-aaafa-cai list_upgrade_steps "(record {limit = 0: nat32; sns_governance_canister_id = $SNS_GOVERNANCE_CANISTER_ID})"
 }
@@ -491,7 +469,7 @@ list_deployed_snses() {
     local IC=$(repo_root)
     local SNS_W_DID="$IC/rs/nns/sns-wasm/canister/sns-wasm.did"
 
-    dfx canister --network $NNS_URL \
+    dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
         qaa6y-5yaaa-aaaaa-aaafa-cai list_deployed_snses '(record {})'
 }
@@ -502,7 +480,7 @@ sns_w_latest_version() {
     local IC=$(repo_root)
     local SNS_W_DID="$IC/rs/nns/sns-wasm/canister/sns-wasm.did"
 
-    dfx canister --network $NNS_URL \
+    dfx -q canister --network $NNS_URL \
         call --candid "$SNS_W_DID" \
         qaa6y-5yaaa-aaaaa-aaafa-cai get_latest_sns_version_pretty '(null)'
 }
@@ -518,10 +496,10 @@ sns_list_my_neurons() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx canister --network $SNS_URL call \
+    dfx -q canister --network $SNS_URL call \
         --candid $GOV_DID \
         $SNS_GOVERNANCE_CANISTER_ID list_neurons \
-        "( record { of_principal = opt principal \"$(dfx identity get-principal)\"; limit = 100: nat32})"
+        "( record { of_principal = opt principal \"$(dfx -q identity get-principal)\"; limit = 100: nat32})"
 
 }
 
@@ -537,7 +515,7 @@ sns_w_get_next_sns_version() {
     local IC=$(repo_root)
     local SNS_W_DID="$IC/rs/nns/sns-wasm/canister/sns-wasm.did"
 
-    dfx canister --network $NNS_URL call \
+    dfx -q canister --network $NNS_URL call \
         --candid $SNS_W_DID \
         qaa6y-5yaaa-aaaaa-aaafa-cai get_next_sns_version \
         "(record {
@@ -554,7 +532,7 @@ sns_get_running_version() {
     local IC=$(repo_root)
     local SNS_GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx canister --network "$SNS_URL" \
+    dfx -q canister --network "$SNS_URL" \
         call --candid $SNS_GOV_DID \
         "$SNS_GOVERNANCE_CANISTER_ID" get_running_sns_version "(record{})"
 }
@@ -567,7 +545,7 @@ sns_upgrade_to_next_version() {
     local SNS_GOVERNANCE_CANISTER_ID=$3
     local MEMO=$4
 
-    SNS_DEV_NEURON_ID=$($SNS_QUILL public-ids --principal-id $(dfx identity get-principal) --memo $MEMO \
+    SNS_DEV_NEURON_ID=$($SNS_QUILL public-ids --principal-id $(dfx -q identity get-principal) --memo $MEMO \
         | grep "SNS neuron id" \
         | cut -f2 -d: | awk '{$1=$1};1')
 
@@ -592,7 +570,7 @@ sns_upgrade_to_next_version() {
 )
 EOF
     )
-    dfx canister --network "$SNS_URL" call "$SNS_GOVERNANCE_CANISTER_ID" manage_neuron "$PAYLOAD"
+    dfx -q canister --network "$SNS_URL" call "$SNS_GOVERNANCE_CANISTER_ID" manage_neuron "$PAYLOAD"
 
 }
 
@@ -609,11 +587,13 @@ sns_list_proposals() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx canister --network $SNS_URL \
+    dfx -q canister --network $SNS_URL \
         call --candid "$GOV_DID" \
         $SNS_GOVERNANCE_CANISTER_ID list_proposals "( record { include_reward_status = vec {}; limit = 0; exclude_type = vec {}; include_status = vec {}; })"
 }
 
+##: sns_get_proposal
+## Usage: $1 <SNS_URL> <SNS_GOVERNANCE_CANISTER_ID> <PROPOSAL_ID>
 sns_get_proposal() {
     local SNS_URL=$1
     local SNS_GOVERNANCE_CANISTER_ID=$2
@@ -622,7 +602,7 @@ sns_get_proposal() {
     local IC=$(repo_root)
     local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
 
-    dfx canister --network $SNS_URL \
+    dfx -q canister --network $SNS_URL \
         call --candid "$GOV_DID" \
-        $SNS_GOVERNANCE_CANISTER_ID get_proposal "( record { proposal_id = opt record { id = $PROPOSAL_ID : nat64 }})"
+        "$SNS_GOVERNANCE_CANISTER_ID" get_proposal "( record { proposal_id = opt record { id = $PROPOSAL_ID : nat64 }})"
 }

@@ -1,6 +1,3 @@
-pub mod distributions;
-pub mod pb;
-
 use crate::pb::v1::{
     sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
     FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload,
@@ -15,23 +12,29 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
-use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_sns_governance::pb::v1::governance::{SnsMetadata, Version};
-use ic_sns_governance::pb::v1::{
-    Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
-    VotingRewardsParameters,
+use ic_sns_governance::{
+    init::GovernanceCanisterInitPayloadBuilder,
+    pb::v1::{
+        governance::{SnsMetadata, Version},
+        Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
+        VotingRewardsParameters,
+    },
+    types::DEFAULT_TRANSFER_FEE,
 };
-use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use icrc_ledger_types::icrc1::account::Account;
+use isocountry::CountryCode;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashSet},
+    str::FromStr,
+};
 
-#[cfg(feature = "test")]
-use std::str::FromStr;
+pub mod distributions;
+pub mod pb;
 
 /// The maximum number of characters allowed for token symbol.
 pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
@@ -44,6 +47,64 @@ pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
 
 /// The minimum number of characters allowed for token name.
 pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
+
+/// The maximum count of dapp canisters that can be initially decentralized.
+pub const MAX_DAPP_CANISTERS_COUNT: usize = 25;
+
+/// The maximum number of characters allowed for confirmation text.
+pub const MAX_CONFIRMATION_TEXT_LENGTH: usize = 1_000;
+
+/// The maximum number of bytes allowed for confirmation text.
+pub const MAX_CONFIRMATION_TEXT_BYTES: usize = 8 * MAX_CONFIRMATION_TEXT_LENGTH;
+
+/// The minimum number of characters allowed for confirmation text.
+pub const MIN_CONFIRMATION_TEXT_LENGTH: usize = 1;
+
+/// The maximum number of fallback controllers can be included in the SnsInitPayload.
+pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
+
+pub enum RestrictedCountriesValidationError {
+    EmptyList,
+    TooManyItems(usize),
+    NotIsoComplient(String),
+    ContainsDuplicates(String),
+}
+
+impl RestrictedCountriesValidationError {
+    fn field_name() -> String {
+        "SnsInitPayload.restricted_countries".to_string()
+    }
+}
+
+impl ToString for RestrictedCountriesValidationError {
+    fn to_string(&self) -> String {
+        let msg = match self {
+            Self::EmptyList => {
+                "must either be None or include at least one country code".to_string()
+            }
+            Self::TooManyItems(num_items) => {
+                format!(
+                    "must include fewer than {} country codes, given country code count: {}",
+                    CountryCode::num_country_codes(),
+                    num_items,
+                )
+            }
+            Self::NotIsoComplient(item) => {
+                format!("must include only ISO 3166-1 alpha-2 country codes, found '{item}'",)
+            }
+            Self::ContainsDuplicates(item) => {
+                format!("must not contain duplicates, found '{item}'")
+            }
+        };
+        format!("{} {msg}", Self::field_name())
+    }
+}
+
+impl From<RestrictedCountriesValidationError> for Result<(), String> {
+    fn from(val: RestrictedCountriesValidationError) -> Self {
+        Err(val.to_string())
+    }
+}
 
 // Token Symbols that can not be used.
 lazy_static! {
@@ -120,6 +181,9 @@ impl SnsInitPayload {
                 .initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: nervous_system_parameters_default
                 .wait_for_quiet_deadline_increase_seconds,
+            dapp_canisters: None,
+            confirmation_text: None,
+            restricted_countries: None,
         }
     }
 
@@ -256,6 +320,7 @@ impl SnsInitPayload {
                 max_transactions_per_response: None,
             },
             fee_collector_account: None,
+            max_memo_length: None,
         };
 
         Ok(LedgerArgument::Init(payload))
@@ -274,11 +339,20 @@ impl SnsInitPayload {
         sns_canister_ids: &SnsCanisterIds,
         testflight: bool,
     ) -> SnsRootCanister {
+        let dapp_canister_ids = match self.dapp_canisters.as_ref() {
+            None => vec![],
+            Some(dapp_canisters) => dapp_canisters
+                .canisters
+                .iter()
+                .map(|canister| canister.id.unwrap())
+                .collect(),
+        };
+
         SnsRootCanister {
             governance_canister_id: Some(sns_canister_ids.governance),
             ledger_canister_id: Some(sns_canister_ids.ledger),
             swap_canister_id: Some(sns_canister_ids.swap),
-            dapp_canister_ids: vec![],
+            dapp_canister_ids,
             archive_canister_ids: vec![],
             latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(sns_canister_ids.index),
@@ -302,6 +376,8 @@ impl SnsInitPayload {
 
             transaction_fee_e8s: self.transaction_fee_e8s,
             neuron_minimum_stake_e8s: self.neuron_minimum_stake_e8s,
+            confirmation_text: self.confirmation_text.clone(),
+            restricted_countries: self.restricted_countries.clone(),
         }
     }
 
@@ -362,6 +438,9 @@ impl SnsInitPayload {
             max_age_bonus_percentage,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
+            dapp_canisters: _,
+            confirmation_text: _,
+            restricted_countries: _,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
@@ -424,6 +503,9 @@ impl SnsInitPayload {
             self.validate_max_age_bonus_percentage(),
             self.validate_initial_voting_period_seconds(),
             self.validate_wait_for_quiet_deadline_increase_seconds(),
+            self.validate_dapp_canisters(),
+            self.validate_confirmation_text(),
+            self.validate_restricted_countries(),
         ];
 
         let defect_msg = validation_fns
@@ -656,6 +738,37 @@ impl SnsInitPayload {
             );
         }
 
+        if self.fallback_controller_principal_ids.len()
+            > MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT
+        {
+            return Err(format!(
+                "Error: The number of fallback_controller_principal_ids \
+                must be less than {}. Current count is {}",
+                MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT,
+                self.fallback_controller_principal_ids.len()
+            ));
+        }
+
+        let invalid_principals: Vec<_> = self
+            .fallback_controller_principal_ids
+            .iter()
+            .map(|principal_id_string| {
+                (
+                    principal_id_string,
+                    PrincipalId::from_str(principal_id_string),
+                )
+            })
+            .filter(|pair| pair.1.is_err())
+            .map(|pair| pair.0)
+            .collect();
+
+        if !invalid_principals.is_empty() {
+            return Err(format!(
+                "Error: One or more fallback_controller_principal_ids is not a valid principal id. \
+                The follow principals are invalid: {:?}", invalid_principals
+            ));
+        }
+
         Ok(())
     }
 
@@ -832,26 +945,125 @@ impl SnsInitPayload {
             Ok(())
         }
     }
+
+    fn validate_dapp_canisters(&self) -> Result<(), String> {
+        let dapp_canisters = match &self.dapp_canisters {
+            None => return Ok(()),
+            Some(dapp_canisters) => dapp_canisters,
+        };
+
+        if dapp_canisters.canisters.len() > MAX_DAPP_CANISTERS_COUNT {
+            return Err(format!(
+                "Error: The number of dapp_canisters exceeded the maximum allowed canisters at \
+                initialization. Count is {}. Maximum allowed is {}.",
+                dapp_canisters.canisters.len(),
+                MAX_DAPP_CANISTERS_COUNT,
+            ));
+        }
+
+        for (index, canister) in dapp_canisters.canisters.iter().enumerate() {
+            if canister.id.is_none() {
+                return Err(format!("Error: dapp_canisters[{}] id field is None", index));
+            }
+        }
+
+        // Disallow duplicate dapp canisters, because it indicates that
+        // the user probably made a mistake (e.g. copy n' paste).
+        let unique_dapp_canisters: BTreeSet<_> = dapp_canisters
+            .canisters
+            .iter()
+            .map(|canister| canister.id)
+            .collect();
+        if unique_dapp_canisters.len() != dapp_canisters.canisters.len() {
+            return Err("Error: Duplicate ids found in dapp_canisters".to_string());
+        }
+
+        Ok(())
+    }
+
+    fn validate_confirmation_text(&self) -> Result<(), String> {
+        if let Some(confirmation_text) = &self.confirmation_text {
+            if MAX_CONFIRMATION_TEXT_BYTES < confirmation_text.len() {
+                return Err(
+                    format!(
+                        "NervousSystemParameters.confirmation_text must be fewer than {} bytes, given bytes: {}",
+                        MAX_CONFIRMATION_TEXT_BYTES,
+                        confirmation_text.len(),
+                    )
+                );
+            }
+            let confirmation_text_length = confirmation_text.chars().count();
+            if confirmation_text_length < MIN_CONFIRMATION_TEXT_LENGTH {
+                return Err(
+                    format!(
+                        "NervousSystemParameters.confirmation_text must be greater than {} characters, given character count: {}",
+                        MIN_CONFIRMATION_TEXT_LENGTH,
+                        confirmation_text_length,
+                    )
+                );
+            }
+            if MAX_CONFIRMATION_TEXT_LENGTH < confirmation_text_length {
+                return Err(
+                    format!(
+                        "NervousSystemParameters.confirmation_text must be fewer than {} characters, given character count: {}",
+                        MAX_CONFIRMATION_TEXT_LENGTH,
+                        confirmation_text_length,
+                    )
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_restricted_countries(&self) -> Result<(), String> {
+        if let Some(restricted_countries) = &self.restricted_countries {
+            if restricted_countries.iso_codes.is_empty() {
+                return RestrictedCountriesValidationError::EmptyList.into();
+            }
+            let num_items = restricted_countries.iso_codes.len();
+            if CountryCode::num_country_codes() < num_items {
+                return RestrictedCountriesValidationError::TooManyItems(
+                    restricted_countries.iso_codes.len(),
+                )
+                .into();
+            }
+            let mut unique_iso_codes = BTreeSet::<String>::new();
+            for item in &restricted_countries.iso_codes {
+                if CountryCode::for_alpha2(item).is_err() {
+                    return RestrictedCountriesValidationError::NotIsoComplient(item.clone())
+                        .into();
+                }
+                if !unique_iso_codes.insert(item.clone()) {
+                    return RestrictedCountriesValidationError::ContainsDuplicates(item.clone())
+                        .into();
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::pb::v1::{
-        AirdropDistribution, DeveloperDistribution,
-        FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
-    };
     use crate::{
-        FractionalDeveloperVotingPower, SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH,
+        pb::v1::{
+            AirdropDistribution, DappCanisters, DeveloperDistribution,
+            FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
+        },
+        FractionalDeveloperVotingPower, RestrictedCountriesValidationError, SnsCanisterIds,
+        SnsInitPayload, MAX_CONFIRMATION_TEXT_LENGTH, MAX_DAPP_CANISTERS_COUNT,
+        MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MAX_TOKEN_NAME_LENGTH,
         MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
-    use ic_sns_governance::governance::ValidGovernanceProto;
-    use ic_sns_governance::pb::v1::governance::SnsMetadata;
-    use ic_sns_governance::types::ONE_MONTH_SECONDS;
+    use ic_nervous_system_proto::pb::v1::{Canister, Countries};
+    use ic_sns_governance::{
+        governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
+    };
     use icrc_ledger_types::icrc1::account::Account;
-    use std::collections::BTreeMap;
-    use std::convert::TryInto;
+    use isocountry::CountryCode;
+    use std::{collections::BTreeMap, convert::TryInto};
 
     fn create_canister_ids() -> SnsCanisterIds {
         SnsCanisterIds {
@@ -861,6 +1073,17 @@ mod test {
             swap: CanisterId::from_u64(4).into(),
             index: CanisterId::from_u64(5).into(),
         }
+    }
+
+    fn generate_unique_dapp_canisters(count: usize) -> DappCanisters {
+        let canisters = (0..count)
+            .into_iter()
+            .map(|i| Canister {
+                id: Some(CanisterId::from_u64(i as u64).get()),
+            })
+            .collect();
+
+        DappCanisters { canisters }
     }
 
     #[test]
@@ -1113,6 +1336,187 @@ mod test {
     }
 
     #[test]
+    fn test_confirmation_text_is_valid() {
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+        // Test that `confirmation_text` is indeed optional.
+        {
+            let sns_init_payload = SnsInitPayload {
+                confirmation_text: None,
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that some non-trivial value of `confirmation_text` validates.
+        {
+            let sns_init_payload: SnsInitPayload = SnsInitPayload {
+                confirmation_text: Some("Please confirm that 2+2=4".to_string()),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that `confirmation_text` set to an empty string is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                confirmation_text: Some("".to_string()),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
+        // Test that `confirmation_text` set to a very long string is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                confirmation_text: Some(
+                    (0..MAX_CONFIRMATION_TEXT_LENGTH + 1)
+                        .map(|x| x.to_string())
+                        .collect(),
+                ),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
+    }
+
+    fn assert_error<T, E>(result: anyhow::Result<T>, expected_error: E)
+    where
+        T: std::fmt::Debug,
+        E: ToString,
+    {
+        assert_eq!(result.unwrap_err().to_string(), expected_error.to_string())
+    }
+
+    #[test]
+    fn test_restricted_countries() {
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+        // Test that `restricted_countries` is indeed optional.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: None,
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that some non-trivial value of `restricted_countries` validates.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec!["CH".to_string()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that multiple countries can be validated.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: CountryCode::as_array_alpha2()
+                        .map(|x| x.alpha2().to_string())
+                        .to_vec(),
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Check that item count is checked before duplicate analysis.
+        {
+            let num_items = CountryCode::num_country_codes() + 1;
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: (0..num_items).map(|x| x.to_string()).collect(),
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::TooManyItems(num_items),
+            );
+        }
+        // Test that empty `iso_codes` list is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries { iso_codes: vec![] }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::EmptyList,
+            );
+        }
+        // Test that a lowercase country code is rejected.
+        {
+            let item = "ch".to_string();
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec![item.clone()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::NotIsoComplient(item),
+            );
+        }
+        // Test that alpha3 is rejected.
+        {
+            let item = "CHE".to_string();
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec![item.clone()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::NotIsoComplient(item),
+            );
+        }
+        // Test that a non-existing country code is rejected.
+        {
+            let item = "QQ".to_string();
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec![item.clone()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::NotIsoComplient(item),
+            );
+        }
+        // Test that duplicate country codes are rejected.
+        {
+            let item = "CH".to_string();
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec![item.clone(), item.clone()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::ContainsDuplicates(item),
+            );
+        }
+    }
+
+    #[test]
     fn test_ledger_init_args_is_valid() {
         // Build an sns_init_payload with defaults for non-ledger related configuration.
         let transaction_fee = 10_000;
@@ -1202,6 +1606,41 @@ mod test {
         );
     }
 
+    #[test]
+    fn test_dapp_canisters_validation() {
+        // Build a payload that passes validation, then test the parts that wouldn't
+        let get_sns_init_payload = || {
+            SnsInitPayload::with_valid_values_for_testing()
+                .validate()
+                .expect("Payload did not pass validation.")
+        };
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.dapp_canisters =
+            Some(generate_unique_dapp_canisters(MAX_DAPP_CANISTERS_COUNT + 1));
+        assert!(sns_init_payload.validate().is_err());
+
+        sns_init_payload.dapp_canisters =
+            Some(generate_unique_dapp_canisters(MAX_DAPP_CANISTERS_COUNT));
+        assert!(sns_init_payload.validate().is_ok());
+
+        sns_init_payload.dapp_canisters = None;
+        assert!(sns_init_payload.validate().is_ok());
+
+        sns_init_payload.dapp_canisters = Some(DappCanisters {
+            canisters: vec![Canister { id: None }],
+        });
+        assert!(sns_init_payload.validate().is_err());
+
+        let duplicate_dapp_canister = Canister {
+            id: Some(CanisterId::from_u64(1).get()),
+        };
+        sns_init_payload.dapp_canisters = Some(DappCanisters {
+            canisters: vec![duplicate_dapp_canister, duplicate_dapp_canister],
+        });
+        assert!(sns_init_payload.validate().is_err());
+    }
+
     // Create an initial SNS payload that includes Governance and Ledger init payloads. Then
     // iterate over each neuron in the Governance init payload and assert that each neuron's
     // account is present in the Ledger init payload's `initial_balances`.
@@ -1288,5 +1727,42 @@ mod test {
                 .expect("Neuron must have an account on the Ledger");
             assert_eq!(account_balance, neuron.cached_neuron_stake_e8s);
         }
+    }
+
+    #[test]
+    fn test_fallback_controller_principal_ids_validation() {
+        let generate_pids = |count| -> Vec<String> {
+            (0..count)
+                .map(|i| PrincipalId::new_user_test_id(i as u64).to_string())
+                .collect()
+        };
+
+        // Build a payload that passes validation, then test the parts that wouldn't
+        let get_sns_init_payload = || {
+            SnsInitPayload::with_valid_values_for_testing()
+                .validate()
+                .expect("Payload did not pass validation.")
+        };
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = generate_pids(0);
+        assert!(sns_init_payload.validate().is_err());
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids =
+            generate_pids(MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT + 1);
+        assert!(sns_init_payload.validate().is_err());
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = vec![
+            "not a valid pid".to_string(),
+            "definitely not a valid pid".to_string(),
+        ];
+        assert!(sns_init_payload.validate().is_err());
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids =
+            vec![PrincipalId::new_user_test_id(1).to_string()];
+        assert!(sns_init_payload.validate().is_ok());
     }
 }

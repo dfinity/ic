@@ -28,7 +28,6 @@ drun/src/message.rs:    fmt,
 drun/src/message.rs:    fs::File,
 drun/src/message.rs:use std::{
 embedders/tests/instrumentation.rs:use std::fs;
-guestos_vsock_agent/src/agent.rs:use std::fs::File;
 http_handler/build.rs:use std::fs::File;
 http_utils/src/file_downloader.rs:use std::fs::{self, File};
 ic_os/vsock/vsock_lib/src/host/agent.rs:use std::fs::{File, OpenOptions, read_to_string};

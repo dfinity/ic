@@ -6,7 +6,10 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use candid::{Decode, Encode, Principal};
-use ic_agent::AgentError;
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    AgentError,
+};
 use ic_base_types::RegistryVersion;
 use ic_ic00_types::SetupInitialDKGArgs;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -46,14 +49,17 @@ const MINT_CYCLES: &str = r#"(module
                   (export "memory" (memory $memory))
               )"#;
 
-pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
+pub fn mint_cycles_supported_only_on_cycles_minting_canister(env: TestEnv) {
     let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let specified_id = nns_node.get_last_canister_id_in_allocation_ranges();
+    // Check that 'specified_id' is not 'CYCLES_MINTING_CANISTER_ID'.
+    assert_ne!(specified_id, CYCLES_MINTING_CANISTER_ID.into());
     let nns_agent = nns_node.build_default_agent();
     block_on(async move {
         let wasm = wat::parse_str(MINT_CYCLES).unwrap();
-        let nns_canister_id: Principal = create_and_install_with_cycles(
+        let nns_canister_id: Principal = create_and_install_with_cycles_and_specified_id(
             &nns_agent,
-            nns_node.effective_canister_id(),
+            specified_id,
             wasm.as_slice(),
             *INITIAL_CYCLES,
         )
@@ -68,13 +74,20 @@ pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
 
         let res = nns_agent
             .update(&nns_canister_id, "test")
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect_err("should not succeed");
 
         assert_eq!(
             res,
-            AgentError::ReplicaError { reject_code: 5, reject_message: format!("Canister {} violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}", nns_canister_id, nns_canister_id, CYCLES_MINTING_CANISTER_ID) }
+            AgentError::ReplicaError(
+                RejectResponse {
+                    reject_code: RejectCode::CanisterError,
+                    reject_message: format!(
+                        "Canister {} violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
+                        nns_canister_id, nns_canister_id,
+                        CYCLES_MINTING_CANISTER_ID),
+                    error_code: None})
         );
 
         let after_balance = get_balance(&nns_canister_id, &nns_agent).await;
@@ -117,10 +130,7 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
 
         // The test function on the wasm module will call the mint_cycles system
         // call.
-        let res = agent
-            .update(&canister_id, "test")
-            .call_and_wait(delay())
-            .await;
+        let res = agent.update(&canister_id, "test").call_and_wait().await;
 
         assert_reject(res, RejectCode::CanisterError);
         let after_balance = get_balance(&canister_id, &agent).await;

@@ -4,7 +4,10 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/crypto/sha",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/proxied_canister_calls_tracker",
+    "//rs/nns/constants",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/types/base_types",
@@ -12,11 +15,14 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-cdk",
     "@crate_index//:lazy_static",
+    "@crate_index//:num-traits",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 DEV_DEPENDENCIES = []
 

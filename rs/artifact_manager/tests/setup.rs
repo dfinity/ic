@@ -7,6 +7,7 @@ use ic_interfaces::consensus_pool::ChangeSet;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::{no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::types::v1 as pb;
 use ic_test_utilities::{
     consensus::{fake::*, make_genesis},
     types::ids::subnet_test_id,
@@ -40,15 +41,16 @@ impl ChangeSetProducer<ConsensusPoolImpl> for MockConsensus {
     }
 }
 
-fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactManager> {
+fn setup_manager(
+    artifact_pool_config: ArtifactPoolConfig,
+) -> (Arc<dyn ArtifactManager>, Box<dyn JoinGuard>) {
     let time_source = Arc::new(SysTimeSource::new());
     let metrics_registry = MetricsRegistry::new();
-    let replica_logger = no_op_logger();
 
     let consensus_pool = init_artifact_pools(
         artifact_pool_config,
         metrics_registry.clone(),
-        replica_logger.clone(),
+        no_op_logger(),
     );
 
     let consensus = MockConsensus {};
@@ -56,21 +58,21 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
     let mut backends: HashMap<ArtifactTag, Box<dyn manager::ArtifactManagerBackend>> =
         HashMap::new();
 
-    backends.insert(
-        ConsensusArtifact::TAG,
-        Box::new(ic_artifact_manager::create_consensus_handlers(
-            |_| {},
-            (consensus, consensus_gossip),
-            Arc::clone(&time_source) as Arc<_>,
-            Arc::clone(&consensus_pool),
-            replica_logger,
-            metrics_registry,
-        )),
+    let (client, jh) = ic_artifact_manager::create_consensus_handlers(
+        |_| {},
+        (consensus, consensus_gossip),
+        Arc::clone(&time_source) as Arc<_>,
+        Arc::clone(&consensus_pool),
+        metrics_registry,
     );
+    backends.insert(ConsensusArtifact::TAG, Box::new(client));
 
-    Arc::new(manager::ArtifactManagerImpl::new_with_default_priority_fn(
-        backends,
-    ))
+    (
+        Arc::new(manager::ArtifactManagerImpl::new_with_default_priority_fn(
+            backends,
+        )),
+        jh,
+    )
 }
 
 fn init_artifact_pools(
@@ -82,7 +84,7 @@ fn init_artifact_pools(
 
     Arc::new(RwLock::new(ConsensusPoolImpl::new(
         subnet_test_id(0),
-        ic_types::consensus::catchup::CUPWithOriginalProtobuf::from_cup(cup),
+        pb::CatchUpPackage::from(cup),
         config,
         registry,
         log,
@@ -94,7 +96,7 @@ fn init_artifact_pools(
 /// ingress pool, consensus pool and consensus client (using MockConsensus).
 pub fn run_test<F: Fn(Arc<dyn ArtifactManager>)>(test: F) {
     ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
-        let manager = setup_manager(pool_config);
+        let (manager, _jh) = setup_manager(pool_config);
         test(manager)
     })
 }

@@ -1,35 +1,133 @@
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_types::crypto::AlgorithmId;
+use paste::paste;
 use proptest::array::uniform32;
 use proptest::collection::vec;
 use proptest::prelude::any;
-use proptest::prelude::BoxedStrategy;
-use proptest::strategy::Strategy;
-use proptest::{prop_compose, prop_oneof};
+use proptest::prop_compose;
 
 #[cfg(test)]
 mod tests;
 
 pub use common::arb_algorithm_id;
 pub use common::arb_key_id;
+pub use crypto_error::arb_crypto_error;
 pub use csp_basic_signature_error::arb_csp_basic_signature_error;
 pub use csp_basic_signature_keygen_error::arb_csp_basic_signature_keygen_error;
 pub use csp_multi_signature_error::arb_csp_multi_signature_error;
 pub use csp_multi_signature_keygen_error::arb_csp_multi_signature_keygen_error;
 pub use csp_pop::arb_csp_pop;
 pub use csp_public_key::arb_csp_public_key;
+pub use csp_public_key_store_error::arb_csp_public_key_store_error;
+pub use csp_secret_key_store_contains_error::arb_csp_secret_key_store_contains_error;
 pub use csp_signature::arb_csp_signature;
 pub use csp_threshold_sign_error::arb_csp_threshold_sign_error;
+pub use current_node_public_keys::arb_current_node_public_keys;
+
+/// Creates a proptest strategy for a given enum variant.
+macro_rules! proptest_strategy_for_enum_variant {
+    // Match simple enum variant struct without any fields,
+    // like CspThresholdSignError::WrongSecretKeyType {}
+    ($enum_name:ty, $variant:ident => {}) => {
+        paste! {
+            pub(super) fn [<arb_ $variant:snake _variant>]() -> impl proptest::strategy::Strategy<Value=$enum_name> {
+                proptest::prelude::Just($enum_name::$variant {})
+            }
+        }
+    };
+    // Match enum variant struct with fields,
+    // like CspThresholdSignError::SecretKeyNotFound{ algorithm, key_id }
+    ($enum_name:ty, $variant:ident => {$($field:pat in $strategy:expr),+ $(,)?}) => {
+        paste! {
+            proptest::prop_compose! {
+                pub(super) fn [<arb_ $variant:snake _variant>]()($($field in $strategy),+) -> $enum_name {
+                    $enum_name::$variant { $($field),+ }
+                }
+            }
+        }
+    };
+    // Match enum variant tuple structs,
+    // like CspSignature::RsaSha256(Vec<u8>)
+    ($enum_name:ty, $variant:ident => ($($field:pat in $strategy:expr),+ $(,)?)) => {
+        paste! {
+            proptest::prop_compose! {
+                pub(super) fn [<arb_ $variant:snake _variant>]()($($field in $strategy),+) -> $enum_name {
+                    $enum_name::$variant ( $($field),+ )
+                }
+            }
+        }
+    };
+    // Match enum variant tuple structs wrapping a type,
+    // like CspSignature::EcdsaP256(ecdsa_secp256r1_types::SignatureBytes)
+    ($enum_name:ty, $variant:ident => ($tuple_type:ty: $($field:pat in $strategy:expr),+ $(,)?)) => {
+        paste! {
+            proptest::prop_compose! {
+                pub(super) fn [<arb_ $variant:snake _variant>]()($($field in $strategy),+) -> $enum_name {
+                    $enum_name::$variant ( $tuple_type ($($field),+ ) )
+                }
+            }
+        }
+    };
+}
+/// Creates a proptest strategy for a whole enum:
+/// * Creates a strategy per enum variant. This strategy will only produce the given enum variant.
+/// * Creates a wrapper strategy for the whole enum, where one of the strategies for a variant will be chosen.
+macro_rules! proptest_strategy_for_enum {
+    ($enum_name:ty;
+    $($variant:ident => $args:tt),+ $(,)?) => {
+        $(
+           proptest_strategy_for_enum_variant!($enum_name, $variant => $args);
+        )*
+        paste! {
+           pub fn [<arb_ $enum_name:snake >]() -> proptest::prelude::BoxedStrategy<$enum_name> {
+               proptest::strategy::Strategy::boxed(
+                   proptest::prop_oneof![
+                       $([<arb_ $variant:snake _variant>](),)*
+                   ]
+               )
+           }
+        }
+    };
+}
 
 mod common {
     use super::*;
+    use ic_types::crypto::KeyPurpose;
+    use ic_types::NodeId;
+    use ic_types::PrincipalId;
+    use ic_types::RegistryVersion;
+    use ic_types::SubnetId;
     use proptest::array::uniform24;
+    use proptest::prelude::{prop, Strategy};
+    use strum::IntoEnumIterator;
 
     pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 16;
 
     prop_compose! {
         pub fn arb_key_id()(id in uniform32(any::<u8>())) -> KeyId {
             KeyId::from(id)
+        }
+    }
+
+    pub fn arb_key_purpose() -> impl Strategy<Value = KeyPurpose> {
+        prop::sample::select(KeyPurpose::iter().collect::<Vec<_>>())
+    }
+
+    prop_compose! {
+        pub fn arb_node_id()(id in any::<u64>()) -> NodeId {
+            NodeId::from(PrincipalId::new_node_test_id(id))
+        }
+    }
+
+    prop_compose! {
+        pub fn arb_subnet_id()(id in any::<u64>()) -> SubnetId {
+            SubnetId::from(PrincipalId::new_subnet_test_id(id))
+        }
+    }
+
+    prop_compose! {
+        pub fn arb_registry_version()(version in any::<u64>()) -> RegistryVersion {
+            RegistryVersion::from(version)
         }
     }
 
@@ -64,46 +162,13 @@ mod csp_basic_signature_error {
     use crate::common::arb_key_id;
     use ic_crypto_internal_csp::vault::api::CspBasicSignatureError;
 
-    prop_compose! {
-        pub(super) fn arb_secret_key_not_found_error()(algorithm in arb_algorithm_id(), key_id in arb_key_id()) -> CspBasicSignatureError {
-            CspBasicSignatureError::SecretKeyNotFound { algorithm, key_id }
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_unsupported_algorithm_error()(algorithm in arb_algorithm_id()) -> CspBasicSignatureError {
-            CspBasicSignatureError::UnsupportedAlgorithm { algorithm }
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_wrong_secret_key_type_error()(algorithm in arb_algorithm_id(), secret_key_variant in ".*") -> CspBasicSignatureError {
-            CspBasicSignatureError::WrongSecretKeyType { algorithm, secret_key_variant }
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_malformed_secret_key_error()(algorithm in arb_algorithm_id()) -> CspBasicSignatureError {
-            CspBasicSignatureError::MalformedSecretKey { algorithm }
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_internal_error()(internal_error in ".*") -> CspBasicSignatureError {
-            CspBasicSignatureError::InternalError { internal_error }
-        }
-    }
-
-    pub fn arb_csp_basic_signature_error() -> BoxedStrategy<CspBasicSignatureError> {
-        prop_oneof![
-            arb_secret_key_not_found_error(),
-            arb_unsupported_algorithm_error(),
-            arb_wrong_secret_key_type_error(),
-            arb_malformed_secret_key_error(),
-            arb_internal_error()
-        ]
-        .boxed()
-    }
+    proptest_strategy_for_enum!(CspBasicSignatureError;
+        SecretKeyNotFound => {algorithm in arb_algorithm_id(), key_id in arb_key_id()},
+        UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
+        WrongSecretKeyType => {algorithm in arb_algorithm_id(), secret_key_variant in ".*"},
+        MalformedSecretKey => {algorithm in arb_algorithm_id()},
+        TransientInternalError => {internal_error in ".*"}
+    );
 }
 
 mod csp_signature {
@@ -116,101 +181,38 @@ mod csp_signature {
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
     use ic_crypto_internal_csp::types::CspSignature;
 
-    prop_compose! {
-       pub(super) fn arb_ecdsa_p256_signature()(bytes in arb_64_bytes()) -> CspSignature {
-            CspSignature::EcdsaP256(ecdsa_secp256r1_types::SignatureBytes(bytes))
-       }
-    }
+    proptest_strategy_for_enum!(CspSignature;
+        EcdsaP256 => (ecdsa_secp256r1_types::SignatureBytes: bytes in arb_64_bytes()),
+        EcdsaSecp256k1 => (ecdsa_secp256k1_types::SignatureBytes: bytes in arb_64_bytes()),
+        Ed25519 => (ed25519_types::SignatureBytes: bytes in arb_64_bytes()),
+        MultiBls12_381 => (signature in arb_multi_bls12_381_signature()),
+        ThresBls12_381 => (signature in arb_thres_bls12_381_signature()),
+        RsaSha256 => (bytes in vec(any::<u8>(), 0..100))
+    );
+}
 
-    prop_compose! {
-       pub(super) fn arb_ecdsa_secp_256k1_signature()(bytes in arb_64_bytes()) -> CspSignature {
-            CspSignature::EcdsaSecp256k1(ecdsa_secp256k1_types::SignatureBytes(bytes))
-       }
-    }
+mod multi_bls12_381_signature {
+    use super::*;
+    use crate::common::arb_48_bytes;
+    use ic_crypto_internal_csp::types::MultiBls12_381_Signature;
+    use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 
-    prop_compose! {
-       pub(super) fn arb_ed25519_signature()(bytes in arb_64_bytes()) -> CspSignature {
-            CspSignature::Ed25519(ed25519_types::SignatureBytes(bytes))
-       }
-    }
+    proptest_strategy_for_enum!(MultiBls12_381_Signature;
+        Individual => (multi_types::IndividualSignatureBytes: bytes in arb_48_bytes()),
+        Combined => (multi_types::CombinedSignatureBytes: bytes in arb_48_bytes()),
+    );
+}
 
-    prop_compose! {
-         pub(super) fn arb_multi_bls12_381_csp_signature()(signature in arb_multi_bls12_381_signature()) -> CspSignature {
-            CspSignature::MultiBls12_381(signature)
-         }
-    }
+mod thres_bls12_381_signature {
+    use super::*;
+    use crate::common::arb_48_bytes;
+    use ic_crypto_internal_csp::types::ThresBls12_381_Signature;
+    use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 
-    prop_compose! {
-         pub(super) fn arb_thres_bls12_381_csp_signature()(signature in arb_thres_bls12_381_signature()) -> CspSignature {
-            CspSignature::ThresBls12_381(signature)
-         }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_rsa_sha256_signature()(bytes in vec(any::<u8>(), 0..100)) -> CspSignature {
-            CspSignature::RsaSha256(bytes)
-        }
-    }
-
-    pub fn arb_csp_signature() -> BoxedStrategy<CspSignature> {
-        prop_oneof![
-            arb_ecdsa_p256_signature(),
-            arb_ecdsa_secp_256k1_signature(),
-            arb_ed25519_signature(),
-            arb_multi_bls12_381_csp_signature(),
-            arb_thres_bls12_381_csp_signature(),
-            arb_rsa_sha256_signature()
-        ]
-        .boxed()
-    }
-
-    pub(super) mod multi_bls12_381_signature {
-        use super::*;
-        use crate::common::arb_48_bytes;
-        use ic_crypto_internal_csp::types::MultiBls12_381_Signature;
-        use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
-        use proptest::prelude::BoxedStrategy;
-        use proptest::{prop_compose, prop_oneof};
-
-        prop_compose! {
-            pub(crate)  fn arb_individual()(bytes in arb_48_bytes()) -> MultiBls12_381_Signature {
-               MultiBls12_381_Signature::Individual(multi_types::IndividualSignatureBytes(bytes))
-            }
-        }
-
-        prop_compose! {
-            pub(crate) fn arb_combined()(bytes in arb_48_bytes()) -> MultiBls12_381_Signature {
-               MultiBls12_381_Signature::Combined(multi_types::CombinedSignatureBytes(bytes))
-            }
-        }
-
-        pub fn arb_multi_bls12_381_signature() -> BoxedStrategy<MultiBls12_381_Signature> {
-            prop_oneof![arb_individual(), arb_combined()].boxed()
-        }
-    }
-
-    pub(super) mod thres_bls12_381_signature {
-        use super::*;
-        use crate::common::arb_48_bytes;
-        use ic_crypto_internal_csp::types::ThresBls12_381_Signature;
-        use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
-
-        prop_compose! {
-            pub(crate) fn arb_individual()(bytes in arb_48_bytes()) -> ThresBls12_381_Signature {
-               ThresBls12_381_Signature::Individual(threshold_types::IndividualSignatureBytes(bytes))
-            }
-        }
-
-        prop_compose! {
-            pub(crate)  fn arb_combined()(bytes in arb_48_bytes()) -> ThresBls12_381_Signature {
-               ThresBls12_381_Signature::Combined(threshold_types::CombinedSignatureBytes(bytes))
-            }
-        }
-
-        pub fn arb_thres_bls12_381_signature() -> BoxedStrategy<ThresBls12_381_Signature> {
-            prop_oneof![arb_individual(), arb_combined()].boxed()
-        }
-    }
+    proptest_strategy_for_enum!(ThresBls12_381_Signature;
+        Individual => (threshold_types::IndividualSignatureBytes: bytes in arb_48_bytes()),
+        Combined => (threshold_types::CombinedSignatureBytes: bytes in arb_48_bytes()),
+    );
 }
 
 mod csp_public_key {
@@ -223,51 +225,24 @@ mod csp_public_key {
     use ic_crypto_internal_csp::types::CspPublicKey;
     use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 
-    prop_compose! {
-        pub(super)  fn arb_ecdsa_p256_public_key()(bytes in vec(any::<u8>(), 0..100)) -> CspPublicKey {
-            CspPublicKey::EcdsaP256(ecdsa_secp256r1_types::PublicKeyBytes(bytes))
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_ecdsa_secp_256k1_public_key()(bytes in vec(any::<u8>(), 0..100)) -> CspPublicKey {
-            CspPublicKey::EcdsaSecp256k1(ecdsa_secp256k1_types::PublicKeyBytes(bytes))
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_ed25519_public_key()(bytes in uniform32(any::<u8>())) -> CspPublicKey {
-            CspPublicKey::Ed25519(ed25519_types::PublicKeyBytes(bytes))
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_multi_bls12_381_public_key()(bytes in arb_96_bytes()) -> CspPublicKey {
-            CspPublicKey::MultiBls12_381(multi_types::PublicKeyBytes(bytes))
-        }
-    }
+    proptest_strategy_for_enum!(CspPublicKey;
+        EcdsaP256 => (ecdsa_secp256r1_types::PublicKeyBytes: bytes in vec(any::<u8>(), 0..100)),
+        EcdsaSecp256k1 => (ecdsa_secp256k1_types::PublicKeyBytes: bytes in vec(any::<u8>(), 0..100)),
+        Ed25519 => (ed25519_types::PublicKeyBytes: bytes in uniform32(any::<u8>())),
+        MultiBls12_381 => (multi_types::PublicKeyBytes: bytes in arb_96_bytes()),
+        RsaSha256 => (public_key in arb_rsa_public_key())
+    );
 
     prop_compose! {
         //minimal size of RSA public key is 2048 bits, corresponding to 512 hexadecimal characters
         //the first character must be such that its binary representation does not have any leading zeroes,
         //to ensure that the key will contain 2048 bits.
         //the last character must correspond to an odd number to ensure the modulus being odd
-        pub(super) fn arb_rsa_sha_256_public_key()(modulus_in_hex in "[8-9a-f]{1}[0-9a-f]{510}[13579bdf]{1}") -> CspPublicKey {
+        pub(super) fn arb_rsa_public_key()(modulus_in_hex in "[8-9a-f]{1}[0-9a-f]{510}[13579bdf]{1}") -> RsaPublicKey {
             let n = hex::decode(modulus_in_hex).expect("invalid hexadecimal");
             let e = [1,0,1];
-            let rsa_public_key = RsaPublicKey::from_components(&e, &n).expect("invalid RSA public key");
-            CspPublicKey::RsaSha256(rsa_public_key)
+            RsaPublicKey::from_components(&e, &n).expect("valid RSA public key")
         }
-    }
-
-    pub fn arb_csp_public_key() -> BoxedStrategy<CspPublicKey> {
-        prop_oneof![
-            arb_ecdsa_p256_public_key(),
-            arb_ecdsa_secp_256k1_public_key(),
-            arb_multi_bls12_381_public_key(),
-            arb_rsa_sha_256_public_key()
-        ]
-        .boxed()
     }
 }
 
@@ -277,15 +252,9 @@ mod csp_pop {
     use ic_crypto_internal_csp::types::CspPop;
     use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 
-    prop_compose! {
-        pub(super)  fn arb_multi_bls12_381()(bytes in arb_48_bytes()) -> CspPop {
-           CspPop::MultiBls12_381(multi_types::PopBytes(bytes))
-        }
-    }
-
-    pub fn arb_csp_pop() -> BoxedStrategy<CspPop> {
-        arb_multi_bls12_381().boxed()
-    }
+    proptest_strategy_for_enum!(CspPop;
+        MultiBls12_381 => (multi_types::PopBytes: bytes in arb_48_bytes())
+    );
 }
 
 mod csp_basic_signature_keygen_error {
@@ -293,154 +262,216 @@ mod csp_basic_signature_keygen_error {
     use crate::common::arb_key_id;
     use ic_crypto_internal_csp::vault::api::CspBasicSignatureKeygenError;
 
-    prop_compose! {
-        pub(super) fn arb_internal_error()(internal_error in ".*") -> CspBasicSignatureKeygenError {
-            CspBasicSignatureKeygenError::InternalError { internal_error }
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_duplicated_key_id_error()(key_id in arb_key_id()) -> CspBasicSignatureKeygenError {
-            CspBasicSignatureKeygenError::DuplicateKeyId {key_id}
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_transient_internal_error()(internal_error in ".*") -> CspBasicSignatureKeygenError {
-            CspBasicSignatureKeygenError::TransientInternalError { internal_error }
-        }
-    }
-
-    pub fn arb_csp_basic_signature_keygen_error() -> BoxedStrategy<CspBasicSignatureKeygenError> {
-        prop_oneof![
-            arb_internal_error(),
-            arb_duplicated_key_id_error(),
-            arb_transient_internal_error()
-        ]
-        .boxed()
-    }
+    proptest_strategy_for_enum!(CspBasicSignatureKeygenError;
+        InternalError => {internal_error in ".*"},
+        DuplicateKeyId => {key_id in arb_key_id()},
+        TransientInternalError => {internal_error in ".*"}
+    );
 }
 
 mod csp_multi_signature_error {
     use super::*;
     use ic_crypto_internal_csp::vault::api::CspMultiSignatureError;
 
-    prop_compose! {
-        pub(super)fn arb_secret_key_not_found_error()(algorithm in arb_algorithm_id(), key_id in arb_key_id()) -> CspMultiSignatureError {
-            CspMultiSignatureError::SecretKeyNotFound { algorithm, key_id }
-        }
-    }
-
-    prop_compose! {
-       pub(super) fn arb_unsupported_algorithm_error()(algorithm in arb_algorithm_id()) -> CspMultiSignatureError {
-            CspMultiSignatureError::UnsupportedAlgorithm { algorithm }
-        }
-    }
-
-    prop_compose! {
-       pub(super) fn arb_wrong_secret_key_type_error()(algorithm in arb_algorithm_id(), secret_key_variant in ".*") -> CspMultiSignatureError {
-            CspMultiSignatureError::WrongSecretKeyType { algorithm, secret_key_variant }
-        }
-    }
-
-    prop_compose! {
-       pub(super) fn arb_internal_error()(internal_error in ".*") -> CspMultiSignatureError {
-            CspMultiSignatureError::InternalError { internal_error }
-        }
-    }
-
-    pub fn arb_csp_multi_signature_error() -> BoxedStrategy<CspMultiSignatureError> {
-        prop_oneof![
-            arb_secret_key_not_found_error(),
-            arb_unsupported_algorithm_error(),
-            arb_wrong_secret_key_type_error(),
-            arb_internal_error(),
-        ]
-        .boxed()
-    }
+    proptest_strategy_for_enum!(CspMultiSignatureError;
+        SecretKeyNotFound => {algorithm in arb_algorithm_id(), key_id in arb_key_id()},
+        UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
+        WrongSecretKeyType => {algorithm in arb_algorithm_id(), secret_key_variant in ".*"},
+        TransientInternalError => {internal_error in ".*"}
+    );
 }
 
 mod csp_multi_signature_keygen_error {
     use super::*;
     use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
 
-    prop_compose! {
-        pub(super) fn arb_malformed_public_key_error()(algorithm in arb_algorithm_id(), key_bytes in proptest::option::of(vec(any::<u8>(), 0..100)), internal_error in ".*") -> CspMultiSignatureKeygenError {
-            CspMultiSignatureKeygenError::MalformedPublicKey { algorithm, key_bytes, internal_error }
-        }
-    }
-
-    prop_compose! {
-       pub(super) fn arb_internal_error()(internal_error in ".*") -> CspMultiSignatureKeygenError {
-            CspMultiSignatureKeygenError::InternalError { internal_error }
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_duplicated_key_id_error()(key_id in arb_key_id()) -> CspMultiSignatureKeygenError {
-            CspMultiSignatureKeygenError::DuplicateKeyId {key_id}
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_transient_internal_error()(internal_error in ".*") -> CspMultiSignatureKeygenError {
-            CspMultiSignatureKeygenError::TransientInternalError { internal_error }
-        }
-    }
-
-    pub fn arb_csp_multi_signature_keygen_error() -> BoxedStrategy<CspMultiSignatureKeygenError> {
-        prop_oneof![
-            arb_malformed_public_key_error(),
-            arb_internal_error(),
-            arb_duplicated_key_id_error(),
-            arb_transient_internal_error()
-        ]
-        .boxed()
-    }
+    proptest_strategy_for_enum!(CspMultiSignatureKeygenError;
+        MalformedPublicKey => {algorithm in arb_algorithm_id(), key_bytes in proptest::option::of(vec(any::<u8>(), 0..100)), internal_error in ".*"},
+        InternalError => {internal_error in ".*"},
+        DuplicateKeyId => {key_id in arb_key_id()},
+        TransientInternalError => {internal_error in ".*"}
+    );
 }
 
 mod csp_threshold_sign_error {
     use super::*;
     use ic_crypto_internal_csp::api::CspThresholdSignError;
+
+    proptest_strategy_for_enum!(CspThresholdSignError;
+        SecretKeyNotFound => {algorithm in arb_algorithm_id(), key_id in arb_key_id()},
+        UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
+        WrongSecretKeyType => {},
+        MalformedSecretKey => {algorithm in arb_algorithm_id()},
+        TransientInternalError => {internal_error in ".*"}
+    );
+}
+
+mod csp_secret_key_store_contains_error {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::CspSecretKeyStoreContainsError;
+
+    proptest_strategy_for_enum!(CspSecretKeyStoreContainsError;
+        TransientInternalError => {internal_error in ".*"}
+    );
+}
+
+pub mod registry_client_error {
+    use super::*;
+    use crate::common::arb_registry_version;
+    use ic_types::registry::{RegistryClientError, RegistryDataProviderError};
     use proptest::prelude::Just;
+    use proptest::prelude::{BoxedStrategy, Strategy};
+    use proptest::prop_oneof;
 
-    prop_compose! {
-        pub(super) fn arb_secret_key_not_found_error()(algorithm in arb_algorithm_id(), key_id in arb_key_id()) -> CspThresholdSignError {
-            CspThresholdSignError::SecretKeyNotFound { algorithm, key_id }
-        }
-    }
+    proptest_strategy_for_enum!(RegistryClientError;
+        VersionNotAvailable => {version in arb_registry_version()},
+        DataProviderQueryFailed => {source in  arb_registry_data_provider_error()},
+        PollLockFailed => {error in ".*"},
+        PollingLatestVersionFailed => {retries in any::<usize>()},
+        DecodeError => {error in ".*"},
+    );
 
-    prop_compose! {
-        pub(super) fn arb_unsupported_algorithm_error()(algorithm in arb_algorithm_id()) -> CspThresholdSignError {
-            CspThresholdSignError::UnsupportedAlgorithm { algorithm }
-        }
-    }
-
-    pub(super) fn arb_wrong_secret_key_type_error() -> impl Strategy<Value = CspThresholdSignError>
-    {
-        Just(CspThresholdSignError::WrongSecretKeyType {})
-    }
-
-    prop_compose! {
-        pub(super) fn arb_malformed_secret_key_error()(algorithm in arb_algorithm_id()) -> CspThresholdSignError {
-            CspThresholdSignError::MalformedSecretKey { algorithm }
-        }
-    }
-
-    prop_compose! {
-        pub(super) fn arb_internal_error()(internal_error in ".*") -> CspThresholdSignError {
-            CspThresholdSignError::InternalError { internal_error }
-        }
-    }
-
-    pub fn arb_csp_threshold_sign_error() -> BoxedStrategy<CspThresholdSignError> {
+    fn arb_registry_data_provider_error() -> BoxedStrategy<RegistryDataProviderError> {
         prop_oneof![
-            arb_secret_key_not_found_error(),
-            arb_unsupported_algorithm_error(),
-            arb_wrong_secret_key_type_error(),
-            arb_malformed_secret_key_error(),
-            arb_internal_error()
+            Just(RegistryDataProviderError::Timeout),
+            ".*".prop_map(|source| RegistryDataProviderError::Transfer { source })
         ]
         .boxed()
+    }
+}
+
+mod crypto_error {
+    use super::*;
+    use crate::common::{arb_key_purpose, arb_node_id, arb_registry_version, arb_subnet_id};
+    use crate::registry_client_error::arb_registry_client_error;
+    use ic_types::crypto::threshold_sig::ni_dkg::{
+        DkgId, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+    };
+    use ic_types::crypto::CryptoError;
+    use ic_types::{Height, IDkgId};
+    use proptest::collection::btree_set;
+    use proptest::prelude::{BoxedStrategy, Just, Strategy};
+    use proptest::prop_oneof;
+
+    proptest_strategy_for_enum!(CryptoError;
+        InvalidArgument => {message in ".*"},
+        PublicKeyNotFound => {node_id in arb_node_id(), key_purpose in arb_key_purpose(), registry_version in arb_registry_version()},
+        TlsCertNotFound => {node_id in arb_node_id(), registry_version in arb_registry_version()},
+        SecretKeyNotFound => {algorithm in arb_algorithm_id(), key_id in ".*"},
+        TlsSecretKeyNotFound => {certificate_der in vec(any::<u8>(), 0..100)},
+        MalformedSecretKey => {algorithm in arb_algorithm_id(), internal_error in ".*"},
+        MalformedPublicKey => {algorithm in arb_algorithm_id(), key_bytes in proptest::option::of(vec(any::<u8>(), 0..100)), internal_error in ".*"},
+        MalformedSignature => {algorithm in arb_algorithm_id(), sig_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        MalformedPop => {algorithm in arb_algorithm_id(), pop_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        SignatureVerification => {algorithm in arb_algorithm_id(), public_key_bytes in vec(any::<u8>(), 0..100), sig_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        PopVerification => {algorithm in arb_algorithm_id(), public_key_bytes in vec(any::<u8>(), 0..100), pop_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        InconsistentAlgorithms => {algorithms in btree_set(arb_algorithm_id(), 0..10), key_purpose in arb_key_purpose(), registry_version in arb_registry_version()},
+        AlgorithmNotSupported => {algorithm in arb_algorithm_id(), reason in ".*"},
+        RegistryClient => (error in arb_registry_client_error()),
+        ThresholdSigDataNotFound => {dkg_id in arb_dkg_id()},
+        DkgTranscriptNotFound => {subnet_id in arb_subnet_id(), registry_version in arb_registry_version()},
+        RootSubnetPublicKeyNotFound => {registry_version in arb_registry_version()},
+        InternalError => {internal_error in ".*"},
+        TransientInternalError => {internal_error in ".*"},
+    );
+
+    fn arb_dkg_id() -> BoxedStrategy<DkgId> {
+        prop_oneof![
+            arb_idkg_id().prop_map(DkgId::IDkgId),
+            arb_nidkg_id().prop_map(DkgId::NiDkgId)
+        ]
+        .boxed()
+    }
+
+    prop_compose! {
+        fn arb_idkg_id()(height in any::<u64>(), subnet_id in arb_subnet_id()) -> IDkgId {
+            IDkgId {
+                instance_id: Height::new(height),
+                subnet_id
+            }
+        }
+    }
+
+    prop_compose! {
+        fn arb_nidkg_id()(height in any::<u64>(), dealer_subnet in arb_subnet_id(), dkg_tag in arb_nidkg_tag(), target_subnet in arb_nidkg_target_subnet()) -> NiDkgId {
+            NiDkgId {
+                start_block_height: Height::new(height),
+                dealer_subnet,
+                dkg_tag,
+                target_subnet
+            }
+        }
+    }
+
+    fn arb_nidkg_tag() -> BoxedStrategy<NiDkgTag> {
+        prop_oneof![Just(NiDkgTag::LowThreshold), Just(NiDkgTag::HighThreshold)].boxed()
+    }
+
+    fn arb_nidkg_target_subnet() -> BoxedStrategy<NiDkgTargetSubnet> {
+        prop_oneof![
+            Just(NiDkgTargetSubnet::Local),
+            uniform32(any::<u8>()).prop_map(|id| NiDkgTargetSubnet::Remote(NiDkgTargetId::new(id)))
+        ]
+        .boxed()
+    }
+}
+
+mod csp_public_key_store_error {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
+
+    proptest_strategy_for_enum!(CspPublicKeyStoreError;
+        TransientInternalError => (error in ".*")
+    );
+}
+
+mod current_node_public_keys {
+    use super::*;
+    use ic_protobuf::registry::crypto::v1::{
+        PublicKey as PublicKeyProto, X509PublicKeyCert as X509PublicKeyCertProto,
+    };
+    use ic_types::crypto::CurrentNodePublicKeys;
+
+    prop_compose! {
+        fn arb_public_key_proto()(
+            version in any::<u32>(),
+            algorithm in any::<i32>(),
+            key_value in vec(any::<u8>(), 0..100),
+            proof_data in proptest::option::of(vec(any::<u8>(), 0..100)),
+            timestamp in proptest::option::of(any::<u64>())
+        ) -> PublicKeyProto {
+            PublicKeyProto {
+                version,
+                algorithm,
+                key_value,
+                proof_data,
+                timestamp
+            }
+        }
+    }
+    prop_compose! {
+        fn arb_x509_public_key_cert_proto()(certificate_der in vec(any::<u8>(), 0..100)) -> X509PublicKeyCertProto {
+            X509PublicKeyCertProto {
+                certificate_der
+            }
+        }
+    }
+
+    prop_compose! {
+        pub fn arb_current_node_public_keys()(
+            node_signing_public_key in proptest::option::of(arb_public_key_proto()),
+            committee_signing_public_key in proptest::option::of(arb_public_key_proto()),
+            tls_certificate in proptest::option::of(arb_x509_public_key_cert_proto()),
+            dkg_dealing_encryption_public_key in proptest::option::of(arb_public_key_proto()),
+            idkg_dealing_encryption_public_key in proptest::option::of(arb_public_key_proto())
+        ) -> CurrentNodePublicKeys {
+            CurrentNodePublicKeys {
+                node_signing_public_key,
+                committee_signing_public_key,
+                tls_certificate,
+                dkg_dealing_encryption_public_key,
+                idkg_dealing_encryption_public_key
+            }
+        }
     }
 }

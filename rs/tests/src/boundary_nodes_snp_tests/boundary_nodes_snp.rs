@@ -9,7 +9,7 @@ use crate::driver::{
     ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResources},
     test_env::TestEnv,
     test_env_api::{
-        retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+        retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
         RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
     },
 };
@@ -47,12 +47,14 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    env.topology_snapshot()
+    let nns_node = env
+        .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
-        .unwrap()
-        .install_nns_canisters()
+        .unwrap();
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
 
     let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_SNP_NAME))

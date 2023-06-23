@@ -122,7 +122,7 @@ mod metrics;
 mod peer_context;
 
 pub use advert_broadcaster::AdvertBroadcasterImpl;
-pub use event_handler::{P2PThreadJoiner, MAX_ADVERT_BUFFER};
+pub use event_handler::MAX_ADVERT_BUFFER;
 
 /// Custom P2P result type returning a P2P error in case of error.
 pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;
@@ -157,6 +157,7 @@ pub(crate) mod utils {
 pub fn start_p2p(
     metrics_registry: MetricsRegistry,
     log: ReplicaLogger,
+    rt_handle: tokio::runtime::Handle,
     node_id: NodeId,
     subnet_id: SubnetId,
     _transport_config: TransportConfig,
@@ -165,7 +166,7 @@ pub fn start_p2p(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
     advert_receiver: Receiver<GossipAdvert>,
-) -> P2PThreadJoiner {
+) {
     let p2p_transport_channels = vec![TransportChannelId::from(0)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
         node_id,
@@ -187,10 +188,15 @@ pub fn start_p2p(
         gossip.clone(),
     );
     transport.set_event_handler(BoxCloneService::new(event_handler));
-    let _ =
-        advert_broadcaster::start_advert_send_thread(log.clone(), advert_receiver, gossip.clone());
 
-    P2PThreadJoiner::new(log, gossip)
+    crate::advert_broadcaster::start_advert_broadcast_task(
+        rt_handle.clone(),
+        log,
+        advert_receiver,
+        gossip.clone(),
+    );
+
+    crate::event_handler::start_ticker_task(rt_handle, gossip);
 }
 
 /// Generic P2P Error codes.

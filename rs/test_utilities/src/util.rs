@@ -86,6 +86,14 @@ impl TimeSource for FastForwardTimeSource {
     }
 }
 
+// A mock for [`TimeSource`]. The created mock struct's name is [`MockTimeSource`].
+mockall::mock! {
+    pub TimeSource {}
+    trait TimeSource: Send + Sync {
+        fn get_relative_time(&self) -> Time;
+    }
+}
+
 /// Execute the provided closure on a separate thread, but with a timeout.
 /// Return true if the action completed successfully and false otherwise.
 pub fn with_timeout<T>(timeout: Duration, action: T) -> bool

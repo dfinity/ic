@@ -1,18 +1,20 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
-use candid::{Decode, Encode, Principal};
-use certificate_orchestrator_interface::{self as ifc, EncryptedPair, Id};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use certificate_orchestrator_interface::{self as ifc, EncryptedPair, IcCertificate, Id};
 use futures::{stream, StreamExt, TryStreamExt};
-use garcon::Delay;
-use ic_agent::Agent;
+use ic_agent::{hash_tree::HashTree, Agent, Certificate};
 use mockall::automock;
 use serde::Serialize;
 
-use crate::encode::{Decode, Encode};
+use crate::{
+    encode::{Decode, Encode},
+    verification::Verify,
+};
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, CandidType, Clone, Deserialize, PartialEq, Serialize)]
 pub struct Pair(
     pub Vec<u8>, // Private Key
     pub Vec<u8>, // Certificate Chain
@@ -32,12 +34,12 @@ pub trait Upload: Sync + Send {
     async fn upload(&self, id: &Id, pair: Pair) -> Result<(), UploadError>;
 }
 
-#[derive(Serialize)]
+#[derive(Debug, CandidType, Clone, Deserialize, Serialize)]
 pub struct Package {
-    id: String,
-    name: String,
-    canister: Principal,
-    pair: Pair,
+    pub id: String,
+    pub name: String,
+    pub canister: Principal,
+    pub pair: Pair,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -48,7 +50,11 @@ pub enum ExportError {
 
 #[async_trait]
 pub trait Export: Sync + Send {
-    async fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<Package>, ExportError>;
+    async fn export(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<(Vec<Package>, IcCertificate), ExportError>;
 }
 
 pub struct CanisterUploader {
@@ -72,11 +78,6 @@ impl Upload for CanisterUploader {
     async fn upload(&self, id: &Id, pair: Pair) -> Result<(), UploadError> {
         use ifc::{UploadCertificateError as Error, UploadCertificateResponse as Response};
 
-        let waiter = Delay::builder()
-            .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(10000))
-            .build();
-
         let pair = EncryptedPair(
             self.encoder.encode(&pair.0).await?,
             self.encoder.encode(&pair.1).await?,
@@ -88,7 +89,7 @@ impl Upload for CanisterUploader {
             .agent
             .update(&self.canister_id, "uploadCertificate")
             .with_arg(args)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to query canister")?;
 
@@ -108,29 +109,30 @@ impl Upload for CanisterUploader {
 pub struct CanisterExporter {
     agent: Arc<Agent>,
     canister_id: Principal,
-    decoder: Arc<dyn Decode>,
 }
 
 impl CanisterExporter {
-    pub fn new(agent: Arc<Agent>, canister_id: Principal, decoder: Arc<dyn Decode>) -> Self {
-        Self {
-            agent,
-            canister_id,
-            decoder,
-        }
+    pub fn new(agent: Arc<Agent>, canister_id: Principal) -> Self {
+        Self { agent, canister_id }
     }
 }
 
 #[async_trait]
 impl Export for CanisterExporter {
-    async fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<Package>, ExportError> {
-        use ifc::{ExportCertificatesError as Error, ExportCertificatesResponse as Response};
+    async fn export(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<(Vec<Package>, IcCertificate), ExportError> {
+        use ifc::{
+            ExportCertificatesCertifiedResponse as Response, ExportCertificatesError as Error,
+        };
 
         let args = Encode!(&key, &limit).context("failed to encode arg")?;
 
         let resp = self
             .agent
-            .query(&self.canister_id, "exportCertificatesPaginated")
+            .query(&self.canister_id, "exportCertificatesCertified")
             .with_arg(args)
             .call()
             .await
@@ -138,31 +140,102 @@ impl Export for CanisterExporter {
 
         let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
 
-        let pkgs = match resp {
-            Response::Ok(pkgs) => pkgs,
+        match resp {
+            Response::Ok((pkgs, iccert)) => Ok((
+                pkgs.iter()
+                    .map(|p| Package {
+                        id: p.id.clone(),
+                        name: p.name.clone().into(),
+                        canister: p.canister,
+                        pair: Pair(p.pair.0.clone(), p.pair.1.clone()),
+                    })
+                    .collect(),
+                iccert,
+            )),
             Response::Err(err) => {
                 return Err(match err {
                     Error::Unauthorized => ExportError::UnexpectedError(anyhow!("unauthorized")),
                     Error::UnexpectedError(err) => ExportError::UnexpectedError(anyhow!(err)),
                 })
             }
-        };
+        }
+    }
+}
+
+pub struct WithDecode<T>(pub T, pub Arc<dyn Decode>);
+
+#[async_trait]
+impl<T: Export> Export for WithDecode<T> {
+    async fn export(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<(Vec<Package>, IcCertificate), ExportError> {
+        let (pkgs, iccert) = self.0.export(key, limit).await?;
 
         // Decode certificate
-        stream::iter(pkgs.into_iter())
+        let pkgs: Vec<Package> = stream::iter(pkgs.into_iter())
             .then(|pkg| async move {
-                Ok(Package {
+                Ok::<_, ExportError>(Package {
                     id: pkg.id,
-                    name: pkg.name.into(),
+                    name: pkg.name,
                     canister: pkg.canister,
                     pair: Pair(
-                        self.decoder.decode(&pkg.pair.0).await?,
-                        self.decoder.decode(&pkg.pair.1).await?,
+                        self.1.decode(&pkg.pair.0).await?,
+                        self.1.decode(&pkg.pair.1).await?,
                     ),
                 })
             })
             .try_collect()
             .await
+            .context("failed to decode certificates")?;
+
+        Ok((pkgs, iccert))
+    }
+}
+
+pub struct WithVerify<T>(pub T, pub Arc<dyn Verify>);
+
+#[async_trait]
+impl<T: Export> Export for WithVerify<T> {
+    async fn export(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<(Vec<Package>, IcCertificate), ExportError> {
+        let (pkgs, iccert) = self.0.export(key.clone(), limit).await?;
+
+        let (cert, tree): (Certificate, HashTree<Vec<u8>>) = (
+            serde_cbor::from_slice(&iccert.cert).context("failed to cbor-decode ic certificate")?,
+            serde_cbor::from_slice(&iccert.tree).context("failed to cbor-decode tree")?,
+        );
+
+        self.1
+            .verify(key, limit, &pkgs, &cert, &tree)
+            .await
+            .context("failed to verify certificate")?;
+
+        Ok((pkgs, iccert))
+    }
+}
+
+pub struct WithRetries<T>(pub T, pub u64);
+
+#[async_trait]
+impl<T: Export> Export for WithRetries<T> {
+    async fn export(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<(Vec<Package>, IcCertificate), ExportError> {
+        let mut counter = 0;
+        while counter < self.1 {
+            if let Ok(pkgs) = self.0.export(key.clone(), limit).await {
+                return Ok(pkgs);
+            }
+            counter += 1;
+        }
+        self.0.export(key.clone(), limit).await
     }
 }
 
@@ -170,14 +243,18 @@ pub struct WithPagination<T>(pub T, pub u64);
 
 #[async_trait]
 impl<T: Export> Export for WithPagination<T> {
-    async fn export(&self, _: Option<String>, _: u64) -> Result<Vec<Package>, ExportError> {
+    async fn export(
+        &self,
+        _: Option<String>,
+        _: u64,
+    ) -> Result<(Vec<Package>, IcCertificate), ExportError> {
         let mut out = Vec::new();
 
         // Disregard given `key` and `limit`, pagination will just process the entire dataset
         let mut key: Option<String> = None;
 
         loop {
-            let mut pkgs = self
+            let (mut pkgs, _) = self
                 .0
                 .export(
                     key,    // key
@@ -197,9 +274,19 @@ impl<T: Export> Export for WithPagination<T> {
                     .to_owned(),
             );
 
+            // For every page but the last, remove the last entry
+            // This is because the next page will include that entry as well (for certification purposes)
+            pkgs.truncate(self.1 as usize - 1);
+
             out.append(&mut pkgs);
         }
 
-        Ok(out)
+        Ok((
+            out,
+            IcCertificate {
+                cert: Vec::new(),
+                tree: Vec::new(),
+            },
+        ))
     }
 }

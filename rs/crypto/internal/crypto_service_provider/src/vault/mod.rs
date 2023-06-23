@@ -1,5 +1,4 @@
 use crate::key_id::KeyIdInstantiationError;
-use crate::secret_key_store::panic_due_to_duplicated_key_id;
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
@@ -41,26 +40,7 @@ impl From<CspBasicSignatureError> for CryptoError {
                     internal_error: "Malformed secret key".to_string(),
                 }
             }
-            // TODO(CRP-1262): using InvalidArgument here is not ideal.
-            CspBasicSignatureError::InternalError { internal_error } => {
-                CryptoError::InvalidArgument {
-                    message: format!("Internal error: {}", internal_error),
-                }
-            }
-        }
-    }
-}
-
-impl From<CspBasicSignatureKeygenError> for CryptoError {
-    fn from(e: CspBasicSignatureKeygenError) -> CryptoError {
-        match e {
-            CspBasicSignatureKeygenError::InternalError { internal_error } => {
-                CryptoError::InternalError { internal_error }
-            }
-            CspBasicSignatureKeygenError::DuplicateKeyId { key_id } => {
-                panic_due_to_duplicated_key_id(key_id)
-            }
-            CspBasicSignatureKeygenError::TransientInternalError { internal_error } => {
+            CspBasicSignatureError::TransientInternalError { internal_error } => {
                 CryptoError::TransientInternalError { internal_error }
             }
         }
@@ -90,36 +70,7 @@ impl From<CspMultiSignatureError> for CryptoError {
                     "Wrong secret key type: expected {algorithm:?} but found {secret_key_variant}"
                 ),
             },
-            CspMultiSignatureError::InternalError { internal_error } => {
-                CryptoError::InvalidArgument {
-                    message: internal_error,
-                }
-            }
-        }
-    }
-}
-
-impl From<CspMultiSignatureKeygenError> for CryptoError {
-    fn from(e: CspMultiSignatureKeygenError) -> CryptoError {
-        match e {
-            CspMultiSignatureKeygenError::MalformedPublicKey {
-                algorithm,
-                key_bytes,
-                internal_error,
-            } => CryptoError::MalformedPublicKey {
-                algorithm,
-                key_bytes,
-                internal_error,
-            },
-            CspMultiSignatureKeygenError::InternalError { internal_error } => {
-                CryptoError::InvalidArgument {
-                    message: internal_error,
-                }
-            }
-            CspMultiSignatureKeygenError::DuplicateKeyId { key_id } => {
-                panic_due_to_duplicated_key_id(key_id)
-            }
-            CspMultiSignatureKeygenError::TransientInternalError { internal_error } => {
+            CspMultiSignatureError::TransientInternalError { internal_error } => {
                 CryptoError::TransientInternalError { internal_error }
             }
         }
@@ -129,8 +80,8 @@ impl From<CspMultiSignatureKeygenError> for CryptoError {
 impl From<CspSecretKeyStoreContainsError> for CryptoError {
     fn from(e: CspSecretKeyStoreContainsError) -> Self {
         match e {
-            CspSecretKeyStoreContainsError::InternalError { internal_error } => {
-                CryptoError::InternalError { internal_error }
+            CspSecretKeyStoreContainsError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
             }
         }
     }

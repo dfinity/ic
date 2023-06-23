@@ -11,6 +11,8 @@ futures = "0.3.25"
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-base-types = { path = "../types/base_types/" }
+ic-canister-sandbox-backend-lib = { path = "../canister_sandbox/backend_lib" }
+ic-canister-sandbox-launcher = { path = "../canister_sandbox/sandbox_launcher" }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cup-explorer = { path = "../cup_explorer" }
@@ -27,6 +29,7 @@ ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
 ic-registry-replicator = { path = "../orchestrator/registry_replicator" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-replay = { path = "../replay" }
+ic-state-manager = { path = "../state_manager" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-types = { path = "../types/types" }
 prost = "0.11.0"
@@ -45,6 +48,7 @@ url = { version = "2.1.1", features = ["serde"] }
 [dev-dependencies]
 tempfile = "3.1.0"
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-tmpdir = { path = "../test_utilities/tmpdir" }
 
 [[bin]]
 name = "ic-recovery"

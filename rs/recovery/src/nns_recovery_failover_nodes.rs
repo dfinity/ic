@@ -1,26 +1,20 @@
-use crate::admin_helper::RegistryParams;
-use crate::cli::{
-    print_height_info, read_optional, read_optional_ip, read_optional_node_ids, read_optional_url,
-    read_optional_version,
+use crate::{
+    admin_helper::RegistryParams,
+    cli::{print_height_info, read_optional, read_optional_node_ids, read_optional_version},
+    command_helper::pipe_all,
+    error::RecoveryError,
+    recovery_iterator::RecoveryIterator,
+    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
-use crate::command_helper::pipe_all;
-use crate::recovery_iterator::RecoveryIterator;
-use crate::{error::RecoveryError, RecoveryArgs};
-use crate::{NeuronArgs, RecoveryResult, IC_REGISTRY_LOCAL_STORE};
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_types::{NodeId, ReplicaVersion};
 use serde::{Deserialize, Serialize};
 use slog::Logger;
-use std::iter::Peekable;
-use std::net::IpAddr;
-use std::path::PathBuf;
-use std::process::Command;
+use std::{iter::Peekable, net::IpAddr, path::PathBuf, process::Command};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumMessage, EnumString};
 use url::Url;
-
-use crate::{Recovery, Step};
 
 /// Caller id that will be used to mutate the registry canister.
 pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
@@ -167,8 +161,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 );
 
                 if self.params.download_node.is_none() {
-                    self.params.download_node =
-                        read_optional_ip(&self.logger, "Enter download IP:");
+                    self.params.download_node = read_optional(&self.logger, "Enter download IP:");
                 }
             }
 
@@ -189,7 +182,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::DownloadParentNNSStore => {
                 if self.params.parent_nns_host_ip.is_none() {
-                    self.params.parent_nns_host_ip = read_optional_ip(
+                    self.params.parent_nns_host_ip = read_optional(
                         &self.logger,
                         "Enter parent NNS IP to download the registry store from:",
                     );
@@ -201,12 +194,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.params.aux_user = read_optional(&self.logger, "Enter aux user:");
                 }
                 if self.params.aux_ip.is_none() {
-                    self.params.aux_ip = read_optional_ip(&self.logger, "Enter aux IP:");
+                    self.params.aux_ip = read_optional(&self.logger, "Enter aux IP:");
                 }
                 if (self.params.aux_user.is_none() || self.params.aux_ip.is_none())
                     && self.params.registry_url.is_none()
                 {
-                    self.params.registry_url = read_optional_url(
+                    self.params.registry_url = read_optional(
                         &self.logger,
                         "Enter URL of the hosted registry store tar file:",
                     );
@@ -216,7 +209,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::WaitForCUP => {
                 if self.params.upload_node.is_none() {
                     self.params.upload_node =
-                        read_optional_ip(&self.logger, "Enter IP of node with admin access: ");
+                        read_optional(&self.logger, "Enter IP of node with admin access: ");
                 }
             }
             _ => {}
@@ -244,9 +237,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::DownloadState => {
                 if let Some(node_ip) = self.params.download_node {
-                    Ok(Box::new(
-                        self.recovery.get_download_state_step(node_ip, false, false),
-                    ))
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        /*try_readonly=*/ false,
+                        /*keep_downloaded_state=*/ false,
+                        /*additional_excludes=*/ vec![CUPS_DIR],
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

@@ -27,16 +27,16 @@ rec {
       src = lib.noNixFiles (lib.gitOnlySource ../.);
       inherit (pkgs) lib;
     in
-      lib.cleanSourceWith {
-        name = "testnet";
-        inherit src;
-        filter = path: type:
-          let
-            relPath = lib.removePrefix (toString src.origSrc + "/") (toString path);
-            notDir = dir: !((relPath == dir && type == "directory") || lib.hasPrefix "${dir}/" relPath);
-          in
-            notDir "tests" && notDir "docs" && notDir "tools";
-      };
+    lib.cleanSourceWith {
+      name = "testnet";
+      inherit src;
+      filter = path: type:
+        let
+          relPath = lib.removePrefix (toString src.origSrc + "/") (toString path);
+          notDir = dir: !((relPath == dir && type == "directory") || lib.hasPrefix "${dir}/" relPath);
+        in
+        notDir "tests" && notDir "docs" && notDir "tools";
+    };
 
   IC_NNS_BUNDLE = jobset.dfinity.rs.ic-nns-bundle-release.x86_64-linux;
 }

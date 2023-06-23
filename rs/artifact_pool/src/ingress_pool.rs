@@ -6,8 +6,8 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     artifact_pool::{
-        HasTimestamp, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ChangeResult, HasTimestamp, MutablePool, PriorityFnAndFilterProducer, ProcessingResult,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
@@ -19,10 +19,10 @@ use ic_interfaces::{
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::{IngressMessageAttribute, IngressMessageId, Priority, PriorityFn},
+    artifact::{Advert, IngressMessageAttribute, IngressMessageId, Priority, PriorityFn},
     artifact_kind::IngressArtifact,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
-    CountBytes, Time,
+    CountBytes, NodeId, Time,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
@@ -190,6 +190,7 @@ pub struct IngressPoolImpl {
     ingress_pool_max_count: usize,
     ingress_pool_max_bytes: usize,
     ingress_messages_throttled: IntCounter,
+    node_id: NodeId,
     log: ReplicaLogger,
 }
 
@@ -197,6 +198,7 @@ const POOL_INGRESS: &str = "ingress";
 
 impl IngressPoolImpl {
     pub fn new(
+        node_id: NodeId,
         config: ArtifactPoolConfig,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
@@ -218,6 +220,7 @@ impl IngressPoolImpl {
                 POOL_INGRESS,
                 POOL_TYPE_UNVALIDATED,
             )),
+            node_id,
             log,
         }
     }
@@ -283,10 +286,35 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
     }
 
     /// Apply changeset to the Ingress Pool
-    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: ChangeSet) {
+    fn apply_changes(
+        &mut self,
+        _time_source: &dyn TimeSource,
+        change_set: ChangeSet,
+    ) -> ChangeResult<IngressArtifact> {
+        let changed = if !change_set.is_empty() {
+            ProcessingResult::StateChanged
+        } else {
+            ProcessingResult::StateUnchanged
+        };
+        let mut adverts = Vec::new();
+        let mut purged = Vec::new();
         for change_action in change_set {
             match change_action {
-                ChangeAction::MoveToValidated((message_id, _, _, _, _)) => {
+                ChangeAction::MoveToValidated((
+                    message_id,
+                    source_node_id,
+                    size,
+                    attribute,
+                    integrity_hash,
+                )) => {
+                    if source_node_id == self.node_id {
+                        adverts.push(Advert {
+                            size,
+                            id: message_id.clone(),
+                            attribute: attribute.clone(),
+                            integrity_hash: integrity_hash.clone(),
+                        });
+                    }
                     // remove it from unvalidated pool and remove it from peer_index, move it
                     // to the validated pool
                     match self.remove_unvalidated(&message_id) {
@@ -331,6 +359,7 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
                 ChangeAction::RemoveFromValidated(message_id) => {
                     match self.validated.remove(&message_id) {
                         Some(artifact) => {
+                            purged.push(message_id);
                             let size = artifact.msg.signed_ingress.count_bytes();
                             debug!(
                                 self.log,
@@ -347,10 +376,19 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
                     }
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
-                    let _unused = self.validated.purge_below(expiry);
+                    purged.extend(
+                        self.validated
+                            .purge_below(expiry)
+                            .map(|i| (&i.msg.signed_ingress).into()),
+                    );
                     let _unused = self.unvalidated.purge_below(expiry);
                 }
             }
+        }
+        ChangeResult {
+            purged,
+            adverts,
+            changed,
         }
     }
 }
@@ -498,7 +536,8 @@ mod tests {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 let ingress_msg = SignedIngressBuilder::new().nonce(1).build();
                 ingress_pool.insert(UnvalidatedArtifact {
                     message: ingress_msg,
@@ -526,7 +565,8 @@ mod tests {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 let ingress_msg = SignedIngressBuilder::new().nonce(1).build();
                 ingress_pool.insert(UnvalidatedArtifact {
                     message: ingress_msg,
@@ -558,7 +598,8 @@ mod tests {
                 let time_source = FastForwardTimeSource::new();
                 let time = time_source.get_relative_time();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
 
                 let max_seconds = 10;
                 let range_min = 3;
@@ -597,7 +638,8 @@ mod tests {
                 let time_source = FastForwardTimeSource::new();
                 let time_0 = time_source.get_relative_time();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 let ingress_msg_0 = SignedIngressBuilder::new().nonce(1).build();
                 let message_id0 = IngressMessageId::from(&ingress_msg_0);
                 let attribute_0 = IngressMessageAttribute::new(&ingress_msg_0);
@@ -641,8 +683,13 @@ mod tests {
                     )),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
-                ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
 
+                // Check moved message is returned as an advert
+                assert!(result.purged.is_empty());
+                assert_eq!(result.adverts.len(), 1);
+                assert_eq!(result.adverts[0].id, message_id0);
+                assert_eq!(result.changed, ProcessingResult::StateChanged);
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
                 assert_eq!(
@@ -662,7 +709,9 @@ mod tests {
             ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
+                let nodes = 10;
                 let mut changeset = ChangeSet::new();
                 let ingress_size = 10;
                 let mut rng = rand::thread_rng();
@@ -685,7 +734,7 @@ mod tests {
                     let message_id = IngressMessageId::from(&ingress);
                     let attribute = IngressMessageAttribute::new(&ingress);
                     let integrity_hash = ic_types::crypto::crypto_hash(ingress.binary()).get();
-                    let peer_id = (i % 10) as u64;
+                    let peer_id = (i % nodes) as u64;
                     ingress_pool.insert(UnvalidatedArtifact {
                         message: ingress,
                         peer_id: node_test_id(peer_id),
@@ -700,13 +749,19 @@ mod tests {
                     )));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
-                ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
-
+                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                assert!(result.purged.is_empty());
+                // adverts are only created for own node id
+                assert_eq!(result.adverts.len(), initial_count / nodes);
+                assert_eq!(result.changed, ProcessingResult::StateChanged);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
-                ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
+                assert!(result.adverts.is_empty());
+                assert_eq!(result.purged.len(), initial_count - non_expired_count);
+                assert_eq!(result.changed, ProcessingResult::StateChanged);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
             })
         })
@@ -721,7 +776,8 @@ mod tests {
                 pool_config.ingress_pool_max_count = 3;
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 assert!(!ingress_pool.exceeds_threshold());
 
                 // MESSAGE #1
@@ -749,7 +805,8 @@ mod tests {
                 pool_config.ingress_pool_max_count = 5;
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
                 assert!(!ingress_pool.exceeds_threshold());
 
                 // MESSAGE #1
@@ -776,7 +833,8 @@ mod tests {
                 pool_config.ingress_pool_max_bytes = usize::MAX;
                 let time_source = FastForwardTimeSource::new();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
 
                 assert!(!ingress_pool.exceeds_threshold());
 
@@ -798,7 +856,8 @@ mod tests {
                 let time = |millis: u64| Time::from_millis_since_unix_epoch(millis).unwrap();
                 let nonce = |nonce: u64| nonce.to_le_bytes().to_vec();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
 
                 insert_validated_artifact_with_timestamps(&mut ingress_pool, 0, time(1), time(30));
                 insert_validated_artifact_with_timestamps(&mut ingress_pool, 1, time(3), time(40));
@@ -834,7 +893,8 @@ mod tests {
                 let time = |millis: u64| Time::from_millis_since_unix_epoch(millis).unwrap();
                 let nonce = |nonce: u64| nonce.to_le_bytes().to_vec();
                 let metrics_registry = MetricsRegistry::new();
-                let mut ingress_pool = IngressPoolImpl::new(pool_config, metrics_registry, log);
+                let mut ingress_pool =
+                    IngressPoolImpl::new(node_test_id(0), pool_config, metrics_registry, log);
 
                 insert_validated_artifact_with_timestamps(&mut ingress_pool, 0, time(0), time(10));
                 insert_validated_artifact_with_timestamps(&mut ingress_pool, 1, time(1), time(10));

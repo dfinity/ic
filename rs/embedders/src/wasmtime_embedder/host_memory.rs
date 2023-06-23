@@ -92,7 +92,15 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         match self.created_memories.lock() {
             Err(err) => Err(format!("Error locking map of created memories: {:?}", err)),
             Ok(mut created_memories) => {
-                let new_memory = WasmtimeMemory::new(mem, min, max);
+                let prologue_guard_size_in_bytes = mem.prologue_guard_size_in_bytes;
+                let epilogue_guard_size_in_bytes = mem.epilogue_guard_size_in_bytes;
+                let new_memory = WasmtimeMemory::new(
+                    mem,
+                    min,
+                    max,
+                    prologue_guard_size_in_bytes,
+                    epilogue_guard_size_in_bytes,
+                );
                 created_memories.insert(
                     MemoryStart(wasmtime::LinearMemory::as_ptr(&new_memory) as usize),
                     MemoryPageSize(Arc::clone(&new_memory.used)),
@@ -115,6 +123,8 @@ pub struct MmapMemory {
     size_in_bytes: usize,
     // The start of the actual memory exposed to Wasm.
     wasm_memory: *mut c_void,
+    prologue_guard_size_in_bytes: usize,
+    epilogue_guard_size_in_bytes: usize,
 }
 
 /// SAFETY: This type is not actually Send/Sync but this it is only used
@@ -171,6 +181,8 @@ impl MmapMemory {
             start,
             size_in_bytes,
             wasm_memory,
+            prologue_guard_size_in_bytes,
+            epilogue_guard_size_in_bytes,
         }
     }
 }
@@ -190,16 +202,26 @@ impl Drop for MmapMemory {
 
 pub struct WasmtimeMemory<M: LinearMemory> {
     mem: M,
-    maximum: usize,
+    max_size_in_pages: usize,
     used: MemoryPageSize,
+    prologue_guard_size_in_bytes: usize,
+    epilogue_guard_size_in_bytes: usize,
 }
 
 impl<M: LinearMemory + Send> WasmtimeMemory<M> {
-    fn new(mem: M, min: usize, maximum: usize) -> Self {
+    fn new(
+        mem: M,
+        min_size_in_pages: usize,
+        max_size_in_pages: usize,
+        prologue_guard_size_in_bytes: usize,
+        epilogue_guard_size_in_bytes: usize,
+    ) -> Self {
         Self {
             mem,
-            maximum,
-            used: MemoryPageSize(Arc::new(AtomicUsize::new(min))),
+            max_size_in_pages,
+            used: MemoryPageSize(Arc::new(AtomicUsize::new(min_size_in_pages))),
+            prologue_guard_size_in_bytes,
+            epilogue_guard_size_in_bytes,
         }
     }
 }
@@ -219,7 +241,7 @@ unsafe impl<M: LinearMemory + Send + Sync + 'static> wasmtime::LinearMemory for 
     }
 
     fn maximum_byte_size(&self) -> Option<usize> {
-        Some(convert_pages_to_bytes(self.maximum))
+        Some(convert_pages_to_bytes(self.max_size_in_pages))
     }
 
     fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
@@ -233,7 +255,7 @@ unsafe impl<M: LinearMemory + Send + Sync + 'static> wasmtime::LinearMemory for 
         match self
             .used
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |prev_pages| {
-                if new_pages <= prev_pages || new_pages > self.maximum {
+                if new_pages <= prev_pages || new_pages > self.max_size_in_pages {
                     None
                 } else {
                     Some(new_pages)
@@ -250,5 +272,14 @@ unsafe impl<M: LinearMemory + Send + Sync + 'static> wasmtime::LinearMemory for 
 
     fn as_ptr(&self) -> *mut u8 {
         self.mem.as_ptr() as *mut _
+    }
+
+    fn wasm_accessible(&self) -> std::ops::Range<usize> {
+        let wasm_memory_start = self.mem.as_ptr() as usize;
+        let prologue_start = wasm_memory_start.saturating_sub(self.prologue_guard_size_in_bytes);
+        let epilogue_end = wasm_memory_start
+            .saturating_add(convert_pages_to_bytes(self.max_size_in_pages))
+            .saturating_add(self.epilogue_guard_size_in_bytes);
+        prologue_start..epilogue_end
     }
 }

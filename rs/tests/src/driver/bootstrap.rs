@@ -263,8 +263,7 @@ pub fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let script_path =
-        test_env.get_dependency_path("ic-os/guestos/scripts/build-bootstrap-config-image.sh");
+    let script_path = test_env.get_dependency_path("ic-os/scripts/build-bootstrap-config-image.sh");
     let mut cmd = Command::new(script_path);
     let local_store_path = test_env
         .prep_dir(ic_name)
@@ -388,17 +387,15 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
     let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());
-    let prometheus_addr = SocketAddr::new(ipv6_addr, AddrType::Prometheus.into());
     NodeConfiguration {
-        xnet_api: vec![xnet_api.into()],
-        public_api: vec![public_api.into()],
-        private_api: vec![],
+        xnet_api: xnet_api.into(),
+        public_api: public_api.into(),
         p2p_addr: format!("org.internetcomputer.p2p1://{}", p2p_addr)
             .parse()
             .expect("can't fail"),
-        prometheus_metrics: vec![prometheus_addr.into()],
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),
+        chip_id: vec![],
     }
 }

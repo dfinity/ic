@@ -1,8 +1,7 @@
 //! Tests that rely on interleaving two method calls on the governance canister
 //! (in particular, when one method is suspended when it calls out to the ledger
 //! canister).
-use crate::fixtures::TargetLedger;
-use crate::fixtures::{neuron_id, GovernanceCanisterFixtureBuilder, NeuronBuilder};
+use crate::fixtures::{neuron_id, GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger};
 use futures::{channel::mpsc, FutureExt, StreamExt};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::E8;

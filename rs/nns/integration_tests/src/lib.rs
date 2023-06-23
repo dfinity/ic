@@ -22,6 +22,9 @@ mod bad_input;
 mod cycles_minting_canister;
 
 #[cfg(test)]
+mod cycles_minting_canister_with_exchange_rate_canister;
+
+#[cfg(test)]
 mod node_provider_remuneration;
 
 #[cfg(test)]
@@ -46,7 +49,13 @@ mod node_assignment;
 mod reinstall_and_upgrade;
 
 #[cfg(test)]
+mod reset_root;
+
+#[cfg(test)]
 mod root;
+
+#[cfg(test)]
+mod rewards;
 
 #[cfg(test)]
 mod add_canister;
@@ -59,9 +68,6 @@ mod subnet_handler;
 
 #[cfg(test)]
 mod upgrades_handler;
-
-#[cfg(test)]
-mod rewards;
 
 #[cfg(test)]
 mod node_operator_handler;

@@ -1,0 +1,10 @@
+[package]
+name = "ic-crypto-utils-tls"
+version = "0.8.0"
+edition = "2021"
+
+[dependencies]
+ic-base-types = { path = "../../../types/base_types" }
+ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
+tokio-rustls = "0.24.0"
+openssl = "0.10.55"

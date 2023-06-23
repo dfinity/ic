@@ -100,6 +100,7 @@ impl EcdsaComplaintHandlerImpl {
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
+        let requested_transcripts = self.requested_transcripts(block_reader);
 
         // Collection of validated complaints <complainer Id, transcript Id, dealer Id>
         let mut validated_complaints = BTreeSet::new();
@@ -125,6 +126,7 @@ impl EcdsaComplaintHandlerImpl {
             match Action::action(
                 block_reader,
                 &active_transcripts,
+                &requested_transcripts,
                 complaint.idkg_complaint.transcript_id.source_height(),
                 &complaint.idkg_complaint.transcript_id,
             ) {
@@ -182,6 +184,10 @@ impl EcdsaComplaintHandlerImpl {
             .validated()
             .complaints()
             .filter(|(_, signed_complaint)| {
+                // Do not try to create openings for own complaints.
+                if signed_complaint.signature.signer == self.node_id {
+                    return false;
+                }
                 let complaint = signed_complaint.get();
                 !self.has_node_issued_opening(
                     ecdsa_pool,
@@ -217,6 +223,7 @@ impl EcdsaComplaintHandlerImpl {
         block_reader: &dyn EcdsaBlockReader,
     ) -> EcdsaChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
+        let requested_transcripts = self.requested_transcripts(block_reader);
 
         // Collection of validated openings <opener Id, transcript Id, dealer Id>
         let mut validated_openings = BTreeSet::new();
@@ -240,6 +247,7 @@ impl EcdsaComplaintHandlerImpl {
             match Action::action(
                 block_reader,
                 &active_transcripts,
+                &requested_transcripts,
                 opening.idkg_opening.transcript_id.source_height(),
                 &opening.idkg_opening.transcript_id,
             ) {
@@ -749,6 +757,17 @@ impl EcdsaComplaintHandlerImpl {
             .map(|transcript_ref| (transcript_ref.transcript_id, *transcript_ref))
             .collect::<BTreeMap<_, _>>()
     }
+
+    /// Returns the requested transcript map.
+    fn requested_transcripts(
+        &self,
+        block_reader: &dyn EcdsaBlockReader,
+    ) -> BTreeSet<IDkgTranscriptId> {
+        block_reader
+            .requested_transcripts()
+            .map(|transcript_ref| transcript_ref.transcript_id)
+            .collect::<BTreeSet<_>>()
+    }
 }
 
 impl EcdsaComplaintHandler for EcdsaComplaintHandlerImpl {
@@ -922,6 +941,7 @@ impl<'a> Action<'a> {
     fn action(
         block_reader: &'a dyn EcdsaBlockReader,
         active_transcripts: &'a BTreeMap<IDkgTranscriptId, TranscriptRef>,
+        requested_transcripts: &'a BTreeSet<IDkgTranscriptId>,
         msg_height: Height,
         msg_transcript_id: &IDkgTranscriptId,
     ) -> Action<'a> {
@@ -931,10 +951,17 @@ impl<'a> Action<'a> {
             return Action::Defer;
         }
 
-        match active_transcripts.get(msg_transcript_id) {
-            Some(transcript_ref) => Action::Process(transcript_ref),
-            None => Action::Drop,
+        if let Some(transcript_ref) = active_transcripts.get(msg_transcript_id) {
+            return Action::Process(transcript_ref);
         }
+
+        // The transcript is not yet completed on this node, process
+        // the message later when it is.
+        if requested_transcripts.contains(msg_transcript_id) {
+            return Action::Defer;
+        }
+
+        Action::Drop
     }
 }
 
@@ -955,44 +982,53 @@ mod tests {
     // Tests the Action logic
     #[test]
     fn test_ecdsa_complaint_action() {
-        let (id_1, id_2, id_3, id_4) = (
+        let (id_1, id_2, id_3, id_4, id_5) = (
             create_transcript_id(1),
             create_transcript_id(2),
             create_transcript_id(3),
             create_transcript_id(4),
+            create_transcript_id(5),
         );
 
         let ref_1 = TranscriptRef::new(Height::new(10), id_1);
         let ref_2 = TranscriptRef::new(Height::new(20), id_2);
         let block_reader =
             TestEcdsaBlockReader::for_complainer_test(Height::new(100), vec![ref_1, ref_2]);
-        let mut active_transcripts = BTreeMap::new();
-        active_transcripts.insert(id_1, ref_1);
-        active_transcripts.insert(id_2, ref_2);
+        let mut active = BTreeMap::new();
+        active.insert(id_1, ref_1);
+        active.insert(id_2, ref_2);
+        let mut requested = BTreeSet::new();
+        requested.insert(id_5);
 
         // Message from a node ahead of us
         assert_eq!(
-            Action::action(&block_reader, &active_transcripts, Height::from(200), &id_3),
+            Action::action(&block_reader, &active, &requested, Height::from(200), &id_3),
             Action::Defer
         );
 
         // Messages for transcripts not currently active
         assert_eq!(
-            Action::action(&block_reader, &active_transcripts, Height::from(10), &id_3),
+            Action::action(&block_reader, &active, &requested, Height::from(10), &id_3),
             Action::Drop
         );
         assert_eq!(
-            Action::action(&block_reader, &active_transcripts, Height::from(20), &id_4),
+            Action::action(&block_reader, &active, &requested, Height::from(20), &id_4),
             Action::Drop
+        );
+
+        // Messages for transcripts not currently active but requested
+        assert_eq!(
+            Action::action(&block_reader, &active, &requested, Height::from(10), &id_5),
+            Action::Defer
         );
 
         // Messages for transcripts currently active
         assert!(matches!(
-            Action::action(&block_reader, &active_transcripts, Height::from(10), &id_1),
+            Action::action(&block_reader, &active, &requested, Height::from(10), &id_1),
             Action::Process(_)
         ));
         assert!(matches!(
-            Action::action(&block_reader, &active_transcripts, Height::from(20), &id_2),
+            Action::action(&block_reader, &active, &requested, Height::from(20), &id_2),
             Action::Process(_)
         ));
     }

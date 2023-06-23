@@ -25,33 +25,35 @@ build --compilation_mode=opt
 #
 # build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on,-Cdebuginfo=2,-Cforce-frame-pointers=on
 build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
+build --@rules_rust//:extra_rustc_flag=-Dbindings_with_variant_name
 build --strip=never
 
 build --strategy_regexp=ic-os/.*=local
 
-build --incompatible_remote_results_ignore_disk # Do not apply `--noremote_upload_local_results` to the disk cache.
 build --remote_cache=bazel-remote.idx.dfinity.network
 build --experimental_remote_cache_async
 build --incompatible_remote_build_event_upload_respect_no_cache
-build --noremote_upload_local_results # Whether to upload locally executed action results to the remote cache.
-build --remote_timeout=30s # Defauilt is 60s.
-build:ci --remote_timeout=5m # Defauilt is 60s.
-
+build --remote_timeout=30s # Default is 60s.
+build:ci --remote_timeout=5m # Default is 60s.
+# TODO: re-enable after fixing the error like this:
+# `Failed to fetch file with hash 'xxx' because it does not exist remotely. --remote_download_outputs=minimal does not work if your remote cache evicts files during builds.`
+# Probably disabling `--experimental_remote_cache_async` will help
+#build --remote_download_minimal # https://bazel.build/reference/command-line-reference#flag--remote_download_minimal
+#build --remote_download_outputs=toplevel # Still download outputs from top level targets.
 
 # Does not produce valid JSON. See https://github.com/bazelbuild/bazel/issues/14209
 build --execution_log_json_file=bazel-build-log.json
-build --build_event_binary_file=bazel-bep.pb
+build:ci --build_event_binary_file=bazel-bep.pb
 
 build --bes_results_url=https://dash.idx.dfinity.network/invocation/
 build --bes_backend=bes.idx.dfinity.network
-build --bes_timeout=30s # Defauilt is no timeout.
-build --bes_upload_mode=fully_async
-# TODO(IDX-2718): Uncomment when bes service will be stable.
-#build:ci --bes_timeout=180s # Defauilt is no timeout.
-#build:ci --bes_upload_mode=wait_for_upload_complete
+build --bes_timeout=30s # Default is no timeout.
+build:ci --bes_timeout=180s # Default is no timeout.
 
 build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
+
+build --experimental_repository_downloader_retries=3 # https://bazel.build/reference/command-line-reference#flag--experimental_repository_downloader_retries
 
 build --cxxopt='-std=c++17'
 
@@ -96,7 +98,6 @@ test --test_timeout=-1,-1,1800,9000 # timeout in seconds for short, moderate(def
 
 build:ci --noremote_local_fallback
 build:ci --build_tag_filters="-system_test,-fuzz_test"
-build:ci --remote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
@@ -122,9 +123,11 @@ build:check --output_groups=build_metadata
 # Fuzzing configuration
 build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
 build:fuzzing --build_tag_filters=fuzz_test
-# TODO(PSEC-1167) Move from define to transition in fuzz_testing.bzl
+# Ignoring transitions for now since it doesn't add any additional improvement to current setup.
 build:fuzzing --//bazel:enable_fuzzing_code=True
 
-
+# Suppress all additional output to make it more convenient in scripts
+query --ui_event_filters=-info,-debug --noshow_progress
+cquery --ui_event_filters=-info,-debug --noshow_progress
 
 try-import %workspace%/user.bazelrc

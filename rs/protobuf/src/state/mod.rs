@@ -1,4 +1,3 @@
-pub mod canister_metadata;
 pub mod canister_state_bits;
 pub mod ingress;
 pub mod queues;

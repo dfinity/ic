@@ -1,6 +1,6 @@
 = Boundary Node Guest OS
 
-This contains the instructions to build the system images for a Boundary Node. More detailed information can be found link:doc/README.adoc[here].
+This contains the instructions to build the system images for a Boundary Node. More detailed information can be found link:docs/README.adoc[here].
 
 == Build a Boundary Node image
 
@@ -118,7 +118,7 @@ make changes to the OS and the included components.
 == Directory organization
 
 The directory `rootfs/` contains everything related to building a bootable Ubuntu system. It uses various template
-directories (e.g., `opt/`) that are simply copied verbatim to the target system -- you can just drop files there to
+directories (e.g., `opt/`) that are copied verbatim to the target system -- you can just drop files there to
 include them into the image.
 
 The directory `../bootloader/` contains everything related to building EFI firmware and the grub bootloader image.

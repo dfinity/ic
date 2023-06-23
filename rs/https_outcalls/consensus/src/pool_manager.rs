@@ -9,7 +9,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     artifact_pool::ChangeSetProducer, canister_http::*, consensus_pool::ConsensusPoolCache,
 };
-use ic_interfaces_https_outcalls_adapter_client::*;
+use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
@@ -27,6 +27,9 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+pub type CanisterHttpAdapterClient =
+    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
@@ -403,6 +406,7 @@ pub mod test {
     use ic_interfaces::artifact_pool::MutablePool;
     use ic_interfaces::time_source::SysTimeSource;
     use ic_interfaces_state_manager::Labeled;
+    use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
@@ -513,7 +517,8 @@ pub mod test {
                     signature,
                 };
 
-                let mut canister_http_pool = CanisterHttpPoolImpl::new(MetricsRegistry::new());
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
                 canister_http_pool.apply_changes(
                     &SysTimeSource::new(),
                     vec![CanisterHttpChangeAction::AddToValidated(share, content)],
@@ -581,7 +586,8 @@ pub mod test {
                 let shim: Arc<Mutex<CanisterHttpAdapterClient>> =
                     Arc::new(Mutex::new(Box::new(shim_mock)));
 
-                let canister_http_pool = CanisterHttpPoolImpl::new(MetricsRegistry::new());
+                let canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager,
                     shim,
@@ -666,7 +672,8 @@ pub mod test {
                     MetricsRegistry::new(),
                     log,
                 );
-                let mut canister_http_pool = CanisterHttpPoolImpl::new(MetricsRegistry::new());
+                let mut canister_http_pool =
+                    CanisterHttpPoolImpl::new(MetricsRegistry::new(), no_op_logger());
                 let change_set = pool_manager.generate_change_set(&canister_http_pool);
                 assert_eq!(change_set.len(), 0);
 

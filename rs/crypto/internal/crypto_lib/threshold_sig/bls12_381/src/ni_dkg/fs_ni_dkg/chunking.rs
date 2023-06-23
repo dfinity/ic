@@ -71,12 +71,8 @@ impl PlaintextChunks {
     }
 
     /// Return the chunk elements encoded as Scalars
-    pub fn chunks_as_scalars(&self) -> Vec<Scalar> {
-        let mut scalars = Vec::with_capacity(NUM_CHUNKS);
-        for i in 0..NUM_CHUNKS {
-            scalars.push(Scalar::from_isize(self.chunks[i]));
-        }
-        scalars
+    pub fn chunks_as_scalars(&self) -> [Scalar; NUM_CHUNKS] {
+        self.chunks.map(|c| Scalar::from_isize(c))
     }
 
     pub fn recombine_to_scalar(&self) -> Scalar {

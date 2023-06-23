@@ -3,6 +3,7 @@
 use crate::crypto::{AlgorithmId, CryptoError};
 use crate::registry::RegistryClientError;
 use crate::{Height, NodeId, RegistryVersion};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use serde::{Deserialize, Serialize};
 
@@ -71,12 +72,11 @@ pub enum InitialIDkgDealingsValidationError {
 }
 impl_display_using_debug!(InitialIDkgDealingsValidationError);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ExtendedDerivationPathSerializationError {
-    MissingCaller,
-    InvalidCaller { error: String },
+impl From<InitialIDkgDealingsValidationError> for ProxyDecodeError {
+    fn from(init: InitialIDkgDealingsValidationError) -> Self {
+        ProxyDecodeError::Other(init.to_string())
+    }
 }
-impl_display_using_debug!(ExtendedDerivationPathSerializationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaGetPublicKeyError {
@@ -128,9 +128,23 @@ impl_display_using_debug!(IDkgVerifyTranscriptError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgOpenTranscriptError {
-    PrivateKeyNotFound { key_id: String },
-    MissingDealingInTranscript { dealer_id: NodeId },
-    InternalError { internal_error: String },
+    PrivateKeyNotFound {
+        key_id: String,
+    },
+    PublicKeyNotFound {
+        node_id: NodeId,
+        registry_version: RegistryVersion,
+    },
+    MissingDealingInTranscript {
+        dealer_id: NodeId,
+    },
+    RegistryError(RegistryClientError),
+    InternalError {
+        internal_error: String,
+    },
+    TransientInternalError {
+        internal_error: String,
+    },
 }
 impl_display_using_debug!(IDkgOpenTranscriptError);
 
@@ -209,6 +223,9 @@ pub enum IDkgCreateDealingError {
     AlgorithmMismatchWithSKS {
         algorithm_id: AlgorithmId,
     },
+    TransientInternalError {
+        internal_error: String,
+    },
 }
 impl_display_using_debug!(IDkgCreateDealingError);
 
@@ -245,7 +262,9 @@ pub enum IDkgVerifyDealingPrivateError {
         algorithm_id: Option<AlgorithmIdProto>,
     },
     InternalError(String),
-    CspVaultRpcError(String),
+    TransientInternalError {
+        internal_error: String,
+    },
 }
 impl_display_using_debug!(IDkgVerifyDealingPrivateError);
 
@@ -320,6 +339,7 @@ pub enum ThresholdEcdsaSignShareError {
     NotAReceiver,
     SerializationError { internal_error: String },
     SecretSharesNotFound { commitment_string: String },
+    TransientInternalError { internal_error: String },
 }
 impl_display_using_debug!(ThresholdEcdsaSignShareError);
 

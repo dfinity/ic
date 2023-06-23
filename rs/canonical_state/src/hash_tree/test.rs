@@ -89,29 +89,30 @@ fn build_witness_gen(t: &LabeledTree<Vec<u8>>) -> WitnessGeneratorImpl {
     builder.witness_generator().unwrap()
 }
 
-fn enumerate_leaves(t: &LabeledTree<Vec<u8>>, mut f: impl FnMut(LabeledTree<Vec<u8>>)) {
+fn enumerate_leaves_and_empty_subtrees(
+    t: &LabeledTree<Vec<u8>>,
+    mut f: impl FnMut(LabeledTree<Vec<u8>>),
+) {
     fn go<'a>(
         t: &'a LabeledTree<Vec<u8>>,
         path: &mut Vec<&'a Label>,
         f: &mut impl FnMut(LabeledTree<Vec<u8>>),
     ) {
         match t {
-            LabeledTree::Leaf(_) => {
-                let mut subtree = t.clone();
-                #[allow(clippy::unnecessary_to_owned)]
-                for label in path.iter().rev().cloned() {
-                    subtree = LabeledTree::SubTree(flatmap! {
-                        label.clone() => subtree,
-                    });
-                }
-                f(subtree)
-            }
-            LabeledTree::SubTree(children) => {
+            LabeledTree::SubTree(children) if !children.is_empty() => {
                 for (k, v) in children.iter() {
                     path.push(k);
                     go(v, path, f);
                     path.pop();
                 }
+            }
+            LabeledTree::Leaf(_) | LabeledTree::SubTree(_) => {
+                let subtree = path.iter().rev().fold(t.clone(), |acc, &label| {
+                    LabeledTree::SubTree(flatmap! {
+                        label.clone() => acc,
+                    })
+                });
+                f(subtree)
             }
         }
     }
@@ -124,29 +125,39 @@ fn assert_same_witness(ht: &HashTree, wg: &WitnessGeneratorImpl, data: &LabeledT
     let wg_witness = wg.witness(data).expect("failed to construct a witness");
 
     assert_eq!(
-        recompute_digest(data, &wg_witness).unwrap(),
-        recompute_digest(data, &ht_witness).unwrap()
-    );
-    assert_eq!(
         wg_witness, ht_witness,
         "labeled tree: {:?}, hash_tree: {:?}",
         data, ht
-    )
+    );
+
+    assert_eq!(
+        recompute_digest(data, &wg_witness).unwrap(),
+        recompute_digest(data, &ht_witness).unwrap()
+    );
 }
 
-/// Check that for each leaf, the witness looks the same as with the
-/// old way of generating witnesses
-/// Also check that the new and old way of computing hash trees are equivalent
+/// Check that for each leaf or empty subtree, and the tree as a whole, the
+/// witness looks the same as with the old way of generating witnesses.
+///
+/// Also check that the new and old way of computing hash trees are equivalent.
 fn test_tree(t: &LabeledTree<Vec<u8>>) {
     let hash_tree = hash_lazy_tree(&as_lazy(t));
     let witness_gen = build_witness_gen(t);
-    enumerate_leaves(t, |subtree| {
+    enumerate_leaves_and_empty_subtrees(t, |subtree| {
         assert_same_witness(&hash_tree, &witness_gen, &subtree);
     });
 
-    let crypto_tree = crypto_hash_lazy_tree(&as_lazy(t));
+    assert_same_witness(&hash_tree, &witness_gen, t);
 
+    let crypto_tree = crypto_hash_lazy_tree(&as_lazy(t));
     assert_eq!(hash_tree, crypto_tree);
+}
+
+#[test]
+fn test_empty_subtree() {
+    let t = LabeledTree::SubTree(flatmap! {});
+
+    test_tree(&t);
 }
 
 #[test]
@@ -272,7 +283,7 @@ fn test_non_existence_proof() {
 
 proptest! {
     #[test]
-    fn same_witness_on_all_leaves(t in arbitrary_labeled_tree()) {
+    fn same_witness(t in arbitrary_labeled_tree()) {
         test_tree(&t);
     }
 }

@@ -1,5 +1,5 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::SubnetConfigs;
+use ic_config::subnet_config::SubnetConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::IngressInductionCost;
 use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
@@ -57,7 +57,7 @@ fn test_can_charge_application_subnets() {
                     let duration = Duration::from_secs(1);
 
                     let memory = match memory_allocation {
-                        MemoryAllocation::BestEffort => canister.memory_usage(*subnet_type),
+                        MemoryAllocation::BestEffort => canister.memory_usage(),
                         MemoryAllocation::Reserved(bytes) => *bytes,
                     };
                     let expected_fee =
@@ -296,9 +296,7 @@ fn canister_charge_for_memory_until_zero_works() {
     let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
     let mut system_state = SystemStateBuilder::new().build();
     let subnet_type = SubnetType::Application;
-    let config = SubnetConfigs::default()
-        .own_subnet_config(subnet_type)
-        .cycles_account_manager_config;
+    let config = SubnetConfig::new(subnet_type).cycles_account_manager_config;
     let gib_stored_per_second_fee = config.gib_storage_per_second_fee;
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(subnet_type)

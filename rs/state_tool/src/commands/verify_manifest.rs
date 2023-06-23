@@ -1,8 +1,10 @@
 use ic_crypto_sha::Sha256;
-use ic_state_manager::manifest::{
-    hash::file_hasher, manifest_hash, MAX_SUPPORTED_STATE_SYNC_VERSION,
+use ic_state_manager::manifest::validate_manifest;
+use ic_types::crypto::CryptoHash;
+use ic_types::state_sync::{
+    ChunkInfo, FileInfo, Manifest, StateSyncVersion, MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
-use ic_types::state_sync::{ChunkInfo, FileInfo, Manifest};
+use ic_types::CryptoHashOfState;
 use std::{
     collections::BTreeMap,
     convert::TryInto,
@@ -11,61 +13,11 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-fn write_chunk_hash(chunk: &ChunkInfo, hasher: &mut Sha256) {
-    hasher.write(&chunk.file_index.to_be_bytes());
-    hasher.write(&chunk.size_bytes.to_be_bytes());
-    hasher.write(&chunk.offset.to_be_bytes());
-    hasher.write(&chunk.hash)
-}
-
-trait FileHasher {
-    fn compute_file_hash(&self, chunk_entries: Vec<&ChunkInfo>) -> [u8; 32];
-}
-
-impl FileHasher for FileInfo {
-    fn compute_file_hash(&self, chunk_entries: Vec<&ChunkInfo>) -> [u8; 32] {
-        let mut hasher = file_hasher();
-        hasher.write(&(chunk_entries.len() as u32).to_be_bytes());
-
-        for entry in chunk_entries {
-            write_chunk_hash(entry, &mut hasher);
-        }
-        hasher.finish()
-    }
-}
 
 fn parse_hash(hash: &str) -> [u8; 32] {
     let hash = hex::decode(hash).unwrap();
     assert_eq!(hash.len(), 32);
     hash.try_into().unwrap()
-}
-
-fn compute_root_hash(
-    file_table: BTreeMap<u32, FileInfo>,
-    chunk_table: Vec<ChunkInfo>,
-    state_sync_version: u32,
-) -> [u8; 32] {
-    // verify the file hash in file info
-    for (idx, f) in &file_table {
-        let hash_recomputed = f.compute_file_hash(
-            chunk_table
-                .iter()
-                .filter(|chunk| chunk.file_index == *idx)
-                .collect(),
-        );
-        assert_eq!(
-            hash_recomputed, f.hash,
-            "File hash mismatch in file with index {}",
-            idx
-        );
-    }
-
-    let manifest = Manifest::new(
-        state_sync_version,
-        file_table.values().cloned().collect(),
-        chunk_table,
-    );
-    manifest_hash(&manifest)
 }
 
 /// A canister hash enables comparing canisters across states.
@@ -102,11 +54,7 @@ fn compute_root_hash(
 ///                    · offset as u64
 ///                    · chunk_hash
 /// ```
-fn canister_hash(
-    file_table: BTreeMap<u32, FileInfo>,
-    chunk_table: Vec<ChunkInfo>,
-    canister: &str,
-) -> String {
+fn canister_hash(file_table: Vec<FileInfo>, chunk_table: Vec<ChunkInfo>, canister: &str) -> String {
     fn canister_hasher() -> Sha256 {
         let mut h = Sha256::new();
         let sep = "ic-canister-hash";
@@ -124,6 +72,7 @@ fn canister_hash(
 
     let file_table = file_table
         .into_iter()
+        .enumerate()
         .filter(|(_, f)| path(f).contains(&format!("canister_states/{}/", canister)))
         .collect::<BTreeMap<_, _>>();
 
@@ -151,7 +100,7 @@ fn canister_hash(
 
         let chunks = chunk_table
             .iter()
-            .filter(|chunk| chunk.file_index == *idx)
+            .filter(|chunk| chunk.file_index == *idx as u32)
             .collect::<Vec<_>>();
         assert_eq!(
             expected_chunks,
@@ -182,16 +131,18 @@ fn canister_hash(
     canister_hash
 }
 
-fn extract_manifest_version(lines: &[String]) -> Option<u32> {
-    lines
+fn extract_manifest_version(lines: &[String]) -> StateSyncVersion {
+    let version = lines
         .iter()
-        .find(|line| line.starts_with("MANIFEST VERSION: "))?
-        .replace("MANIFEST VERSION: ", "")
+        .find(|line| line.starts_with("MANIFEST VERSION: V"))
+        .unwrap()
+        .replace("MANIFEST VERSION: V", "")
         .parse::<u32>()
-        .ok()
+        .unwrap();
+    StateSyncVersion::try_from(version).unwrap()
 }
 
-fn extract_file_table(lines: &[String]) -> BTreeMap<u32, FileInfo> {
+fn extract_file_table(lines: &[String]) -> Vec<FileInfo> {
     lines
         .iter()
         // Skip until the beginning of the file table is reached.
@@ -200,18 +151,22 @@ fn extract_file_table(lines: &[String]) -> BTreeMap<u32, FileInfo> {
         .take_while(|line| !line.starts_with("CHUNK TABLE"))
         // Skip the 3 header lines of the file table.
         .skip(3)
-        .map(|line| {
+        .enumerate()
+        .map(|(i, line)| {
             let mut columns = line.split('|').into_iter().map(|column| column.trim());
-            (
-                columns.next().unwrap().parse().unwrap(),
-                FileInfo {
-                    size_bytes: columns.next().unwrap().parse().unwrap(),
-                    hash: parse_hash(columns.next().unwrap()),
-                    relative_path: PathBuf::from_str(columns.next().unwrap()).unwrap(),
-                },
-            )
+            assert_eq!(
+                i,
+                columns.next().unwrap().parse::<usize>().unwrap(),
+                "Missing file index {}",
+                i
+            );
+            FileInfo {
+                size_bytes: columns.next().unwrap().parse().unwrap(),
+                hash: parse_hash(columns.next().unwrap()),
+                relative_path: PathBuf::from_str(columns.next().unwrap()).unwrap(),
+            }
         })
-        .collect::<BTreeMap<_, _>>()
+        .collect()
 }
 
 fn extract_chunk_table(lines: &[String]) -> Vec<ChunkInfo> {
@@ -251,14 +206,9 @@ fn extract_root_hash(lines: &[String]) -> [u8; 32] {
     .unwrap()
 }
 
-fn parse_manifest(
+pub(crate) fn parse_manifest(
     file: File,
-) -> (
-    Option<u32>,
-    BTreeMap<u32, FileInfo>,
-    Vec<ChunkInfo>,
-    [u8; 32],
-) {
+) -> (StateSyncVersion, Vec<FileInfo>, Vec<ChunkInfo>, [u8; 32]) {
     let manifest_lines: Vec<String> = BufReader::new(file)
         .lines()
         .into_iter()
@@ -275,33 +225,22 @@ fn parse_manifest(
     (manifest_version, file_table, chunk_table, root_hash)
 }
 
-fn verify_manifest(file: File, mut version: u32) -> Result<(), String> {
+fn verify_manifest(file: File) -> Result<(), String> {
+    let (version, file_table, chunk_table, root_hash) = parse_manifest(file);
     if version > MAX_SUPPORTED_STATE_SYNC_VERSION {
         panic!(
-            "Unsupported state sync version provided {}. Max supported version {}",
+            "Unsupported state sync version provided {:?}. Max supported version {:?}",
             version, MAX_SUPPORTED_STATE_SYNC_VERSION
         );
     }
 
-    let (manifest_version, file_table, chunk_table, root_hash) = parse_manifest(file);
-
-    // Use the manifest version in the file if present
-    if let Some(manifest_version) = manifest_version {
-        if version != manifest_version {
-            println!(
-                "WARNING: The manifest version {} provided in the arguments is overridden by the version {} in the file",
-                version,
-                manifest_version,
-            );
-            version = manifest_version;
-        }
-    }
-    let root_hash_recomputed = compute_root_hash(file_table, chunk_table, version);
-    assert_eq!(root_hash, root_hash_recomputed);
-    println!(
-        "Recomputed root hash: {}",
-        hex::encode(root_hash_recomputed)
-    );
+    let manifest = Manifest::new(version, file_table, chunk_table);
+    validate_manifest(
+        &manifest,
+        &CryptoHashOfState::from(CryptoHash(root_hash.to_vec())),
+    )
+    .unwrap();
+    println!("Root hash: {}", hex::encode(root_hash));
 
     Ok(())
 }
@@ -323,26 +262,26 @@ pub fn do_canister_hash(file: &Path, canister: &str) -> Result<(), String> {
 //
 // Note that this means that it doesn't recompute the chunk hashes as
 // recomputing these would require to have the respective files at hand.
-pub fn do_verify_manifest(file: &Path, version: u32) -> Result<(), String> {
-    verify_manifest(File::open(file).unwrap(), version)
+pub fn do_verify_manifest(file: &Path) -> Result<(), String> {
+    verify_manifest(File::open(file).unwrap())
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::BTreeMap,
-        io::{Seek, Write},
-    };
+    use std::io::{Seek, Write};
 
     use ic_state_manager::manifest::{
         hash::{chunk_hasher, file_hasher},
-        manifest_hash, CURRENT_STATE_SYNC_VERSION, STATE_SYNC_V1, STATE_SYNC_V2,
+        manifest_hash,
     };
-    use ic_types::state_sync::{ChunkInfo, FileInfo, Manifest};
+    use ic_types::state_sync::{
+        ChunkInfo, FileInfo, Manifest, StateSyncVersion, CURRENT_STATE_SYNC_VERSION,
+    };
 
     use super::{canister_hash, verify_manifest};
 
     fn test_manifest_entry(
+        version: StateSyncVersion,
         file_index: u32,
         relative_path: &str,
         data: u8,
@@ -353,7 +292,9 @@ mod tests {
 
         hasher = file_hasher();
         hasher.write(&1_u32.to_be_bytes());
-        hasher.write(&file_index.to_be_bytes());
+        if version < StateSyncVersion::V3 {
+            hasher.write(&file_index.to_be_bytes());
+        }
         hasher.write(&1024_u32.to_be_bytes());
         hasher.write(&0_u64.to_be_bytes());
         hasher.write(&chunk_0_hash[..]);
@@ -374,7 +315,10 @@ mod tests {
         )
     }
 
-    fn test_manifest(version: u32, file_infos: &[(FileInfo, ChunkInfo)]) -> (Manifest, String) {
+    fn test_manifest(
+        version: StateSyncVersion,
+        file_infos: &[(FileInfo, ChunkInfo)],
+    ) -> (Manifest, String) {
         let manifest = Manifest::new(
             version,
             file_infos.iter().map(|info| info.0.clone()).collect(),
@@ -384,81 +328,78 @@ mod tests {
         (manifest.clone(), hex::encode(manifest_hash(&manifest)))
     }
 
-    fn test_manifest_0() -> (Manifest, String) {
+    fn test_manifest_current_version() -> (Manifest, String) {
+        let version = CURRENT_STATE_SYNC_VERSION;
         test_manifest(
-            CURRENT_STATE_SYNC_VERSION,
+            version,
             &[
-                test_manifest_entry(0, "root.bin", 0),
-                test_manifest_entry(1, "canister_states/canister_0/test.bin", 1),
-                test_manifest_entry(2, "canister_states/canister_1/test.bin", 2),
+                test_manifest_entry(version, 0, "canister_states/canister_0/test.bin", 0),
+                test_manifest_entry(version, 1, "root.bin", 1),
             ],
         )
     }
 
-    fn test_manifest_1() -> (Manifest, String) {
+    fn test_manifest_2_current_version() -> (Manifest, String) {
+        let version = CURRENT_STATE_SYNC_VERSION;
         test_manifest(
-            CURRENT_STATE_SYNC_VERSION,
+            version,
             &[test_manifest_entry(
+                version,
                 0,
                 "canister_states/canister_0/test.bin",
-                1,
+                0,
             )],
         )
     }
 
-    fn test_manifest_2() -> (Manifest, String) {
+    fn test_manifest_v2() -> (Manifest, String) {
+        let version = StateSyncVersion::V2;
         test_manifest(
-            STATE_SYNC_V2,
+            version,
             &[
-                test_manifest_entry(0, "root.bin", 0),
-                test_manifest_entry(1, "canister_states/canister_0/test.bin", 1),
-                test_manifest_entry(2, "canister_states/canister_1/test.bin", 2),
+                test_manifest_entry(version, 0, "canister_states/canister_0/test.bin", 0),
+                test_manifest_entry(version, 1, "canister_states/canister_1/test.bin", 1),
+                test_manifest_entry(version, 2, "root.bin", 2),
             ],
         )
     }
 
     #[test]
     fn recompute_root_hash_with_current_version_succeeds() {
-        let (manifest, root_hash) = test_manifest_0();
+        let (manifest, root_hash) = test_manifest_current_version();
         let mut tmp_file = tempfile::tempfile().unwrap();
         writeln!(&mut tmp_file, "{}", manifest).unwrap();
         writeln!(&mut tmp_file, "ROOT HASH: {}", root_hash).unwrap();
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
-        verify_manifest(tmp_file, CURRENT_STATE_SYNC_VERSION).unwrap();
+        verify_manifest(tmp_file).unwrap();
     }
 
     #[test]
-    fn recompute_root_hash_using_version_from_file_succeeds() {
-        let (manifest, root_hash) = test_manifest_2();
+    fn recompute_root_hash_v2_succeeds() {
+        let (manifest, root_hash) = test_manifest_v2();
         let mut tmp_file = tempfile::tempfile().unwrap();
         writeln!(&mut tmp_file, "{}", manifest).unwrap();
         writeln!(&mut tmp_file, "ROOT HASH: {}", root_hash).unwrap();
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
-        // The manifest version is already written in the file and will override the one from the arguments.
-        verify_manifest(tmp_file, STATE_SYNC_V1).unwrap();
+        verify_manifest(tmp_file).unwrap();
     }
 
     #[test]
     fn canister_hashes_in_different_states_match() {
         fn compute_canister_hash(manifest: Manifest, canister: &str) -> String {
             canister_hash(
-                manifest
-                    .file_table
-                    .iter()
-                    .enumerate()
-                    .map(|(i, f)| (i as u32, f.clone()))
-                    .collect::<BTreeMap<_, _>>(),
+                manifest.file_table.clone(),
                 manifest.chunk_table.clone(),
                 canister,
             )
         }
 
-        let (manifest_0, root_hash_0) = test_manifest_0();
+        let (manifest_0, root_hash_0) = test_manifest_current_version();
         let canister_hash_0 = compute_canister_hash(manifest_0, "canister_0");
 
-        let (manifest_1, root_hash_1) = test_manifest_1();
+        let (manifest_1, root_hash_1) = test_manifest_2_current_version();
         let canister_hash_1 = compute_canister_hash(manifest_1, "canister_0");
 
         assert_eq!(canister_hash_0, canister_hash_1);

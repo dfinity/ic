@@ -1,6 +1,7 @@
 //! Threshold ECDSA transcript references related defines.
 
 use ic_base_types::NodeId;
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};
@@ -53,11 +54,13 @@ impl From<RequestId> for pb::RequestId {
 }
 
 impl TryFrom<&pb::RequestId> for RequestId {
-    type Error = &'static str;
+    type Error = ProxyDecodeError;
 
     fn try_from(request_id: &pb::RequestId) -> Result<Self, Self::Error> {
         if request_id.pseudo_random_id.len() != 32 {
-            Err("request_id.pseudo_random_id must be 32 bytes long")
+            Err(ProxyDecodeError::Other(String::from(
+                "request_id.pseudo_random_id must be 32 bytes long",
+            )))
         } else {
             let mut pseudo_random_id = [0; 32];
             pseudo_random_id.copy_from_slice(&request_id.pseudo_random_id);
@@ -119,13 +122,13 @@ impl From<&TranscriptRef> for pb::TranscriptRef {
 }
 
 impl TryFrom<&pb::TranscriptRef> for TranscriptRef {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(trancript_ref: &pb::TranscriptRef) -> Result<Self, Self::Error> {
         let transcript_id = (&trancript_ref.transcript_id).try_into().map_err(|err| {
-            format!(
-                "pb::TranscriptRef:: Failed to convert transcript id: {:?}",
+            ProxyDecodeError::Other(format!(
+                "TranscriptRef:: Failed to convert transcript id: {:?}",
                 err
-            )
+            ))
         })?;
         Ok(Self {
             height: Height::from(trancript_ref.height),
@@ -180,14 +183,12 @@ impl From<&MaskedTranscript> for pb::MaskedTranscript {
 }
 
 impl TryFrom<&pb::MaskedTranscript> for MaskedTranscript {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(transcript: &pb::MaskedTranscript) -> Result<Self, Self::Error> {
-        let transcript_ref_proto = transcript
-            .transcript_ref
-            .as_ref()
-            .ok_or("pb::MaskedTranscript:: Missing transcript ref")?;
-        let transcript_ref = transcript_ref_proto.try_into()?;
-        Ok(Self(transcript_ref))
+        Ok(Self(try_from_option_field(
+            transcript.transcript_ref.as_ref(),
+            "MaskedTranscript::transcript_ref",
+        )?))
     }
 }
 
@@ -230,14 +231,12 @@ impl From<&UnmaskedTranscript> for pb::UnmaskedTranscript {
 }
 
 impl TryFrom<&pb::UnmaskedTranscript> for UnmaskedTranscript {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(transcript: &pb::UnmaskedTranscript) -> Result<Self, Self::Error> {
-        let transcript_ref_proto = transcript
-            .transcript_ref
-            .as_ref()
-            .ok_or("pb::UnmaskedTranscript:: Missing transcript ref")?;
-        let transcript_ref = transcript_ref_proto.try_into()?;
-        Ok(Self(transcript_ref))
+        Ok(Self(try_from_option_field(
+            transcript.transcript_ref.as_ref(),
+            "UnmaskedTranscript::transcript_ref",
+        )?))
     }
 }
 
@@ -303,16 +302,11 @@ impl From<&IDkgTranscriptAttributes> for pb::IDkgTranscriptAttributes {
 }
 
 impl TryFrom<&pb::IDkgTranscriptAttributes> for IDkgTranscriptAttributes {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(attributes: &pb::IDkgTranscriptAttributes) -> Result<Self, Self::Error> {
         let mut receivers = BTreeSet::new();
         for pb_node_id in &attributes.receivers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id.clone()).map_err(|err| {
-                format!(
-                    "pb::IDkgTranscriptParamsRef:: Failed to convert receiver: {:?}",
-                    err
-                )
-            })?;
+            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
             receivers.insert(node_id);
         }
         Ok(IDkgTranscriptAttributes::new(
@@ -390,14 +384,12 @@ impl From<&RandomTranscriptParams> for pb::RandomTranscriptParams {
     }
 }
 impl TryFrom<&pb::RandomTranscriptParams> for RandomTranscriptParams {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(transcript: &pb::RandomTranscriptParams) -> Result<Self, Self::Error> {
-        let transcript_ref_proto = transcript
-            .transcript_ref
-            .as_ref()
-            .ok_or("pb::RandomTranscriptParams:: Missing transcript ref")?;
-        let transcript_ref = transcript_ref_proto.try_into()?;
-        Ok(Self(transcript_ref))
+        Ok(Self(try_from_option_field(
+            transcript.transcript_ref.as_ref(),
+            "RandomTranscriptParams::transcript_ref",
+        )?))
     }
 }
 
@@ -440,14 +432,12 @@ impl From<&ReshareOfMaskedParams> for pb::ReshareOfMaskedParams {
     }
 }
 impl TryFrom<&pb::ReshareOfMaskedParams> for ReshareOfMaskedParams {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(transcript: &pb::ReshareOfMaskedParams) -> Result<Self, Self::Error> {
-        let transcript_ref_proto = transcript
-            .transcript_ref
-            .as_ref()
-            .ok_or("pb::ReshareOfMaskedParams:: Missing transcript ref")?;
-        let transcript_ref = transcript_ref_proto.try_into()?;
-        Ok(Self(transcript_ref))
+        Ok(Self(try_from_option_field(
+            transcript.transcript_ref.as_ref(),
+            "ReshareOfMaskedParams::transcript_ref",
+        )?))
     }
 }
 
@@ -521,14 +511,12 @@ impl From<&ReshareOfUnmaskedParams> for pb::ReshareOfUnmaskedParams {
     }
 }
 impl TryFrom<&pb::ReshareOfUnmaskedParams> for ReshareOfUnmaskedParams {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(transcript: &pb::ReshareOfUnmaskedParams) -> Result<Self, Self::Error> {
-        let transcript_ref_proto = transcript
-            .transcript_ref
-            .as_ref()
-            .ok_or("pb::ReshareOfUnmaskedParams:: Missing transcript ref")?;
-        let transcript_ref = transcript_ref_proto.try_into()?;
-        Ok(Self(transcript_ref))
+        Ok(Self(try_from_option_field(
+            transcript.transcript_ref.as_ref(),
+            "ReshareOfUnmaskedParams::transcript_ref",
+        )?))
     }
 }
 
@@ -578,14 +566,12 @@ impl From<&UnmaskedTimesMaskedParams> for pb::UnmaskedTimesMaskedParams {
     }
 }
 impl TryFrom<&pb::UnmaskedTimesMaskedParams> for UnmaskedTimesMaskedParams {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(transcript: &pb::UnmaskedTimesMaskedParams) -> Result<Self, Self::Error> {
-        let transcript_ref_proto = transcript
-            .transcript_ref
-            .as_ref()
-            .ok_or("pb::UnmaskedTimesMaskedParams:: Missing transcript ref")?;
-        let transcript_ref = transcript_ref_proto.try_into()?;
-        Ok(Self(transcript_ref))
+        Ok(Self(try_from_option_field(
+            transcript.transcript_ref.as_ref(),
+            "UnmaskedTimesMaskedParams::transcript_ref",
+        )?))
     }
 }
 
@@ -809,24 +795,24 @@ impl From<&QuadrupleInCreation> for pb::QuadrupleInCreation {
 }
 
 impl TryFrom<&pb::QuadrupleInCreation> for QuadrupleInCreation {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(quadruple: &pb::QuadrupleInCreation) -> Result<Self, Self::Error> {
-        let kappa_config: RandomTranscriptParams = quadruple
-            .kappa_config
-            .as_ref()
-            .ok_or("pb::QuadrupleInCreation:: Missing kappa config")?
-            .try_into()?;
+        let kappa_config: RandomTranscriptParams = try_from_option_field(
+            quadruple.kappa_config.as_ref(),
+            "QuadrupleInCreation::kappa_config",
+        )?;
+
         let kappa_masked: Option<MaskedTranscript> = quadruple
             .kappa_masked
             .as_ref()
             .map(|transcript| transcript.try_into())
             .transpose()?;
 
-        let lambda_config: RandomTranscriptParams = quadruple
-            .lambda_config
-            .as_ref()
-            .ok_or("pb::QuadrupleInCreation:: Missing lambda config")?
-            .try_into()?;
+        let lambda_config: RandomTranscriptParams = try_from_option_field(
+            quadruple.lambda_config.as_ref(),
+            "QuadrupleInCreation::lamdba_config",
+        )?;
+
         let lambda_masked: Option<MaskedTranscript> = quadruple
             .lambda_masked
             .as_ref()
@@ -1051,40 +1037,37 @@ impl From<&IDkgTranscriptOperationRef> for pb::IDkgTranscriptOperationRef {
 }
 
 impl TryFrom<&pb::IDkgTranscriptOperationRef> for IDkgTranscriptOperationRef {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(op_ref: &pb::IDkgTranscriptOperationRef) -> Result<Self, Self::Error> {
         if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::Random as i32) {
             Ok(Self::Random)
         } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::ReshareOfMasked as i32) {
-            let proto = op_ref
-                .masked
-                .as_ref()
-                .ok_or("pb::IDkgTranscriptOperationRef:: Missing masked transcript")?;
-            let masked: MaskedTranscript = proto.try_into()?;
-            Ok(Self::ReshareOfMasked(masked))
+            Ok(Self::ReshareOfMasked(try_from_option_field(
+                op_ref.masked.as_ref(),
+                "IDkgTranscriptOperationRef::masked",
+            )?))
         } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::ReshareOfUnmasked as i32) {
-            let proto = op_ref
-                .unmasked
-                .as_ref()
-                .ok_or("pb::IDkgTranscriptOperationRef:: Missing unmasked transcript")?;
-            let unmasked: UnmaskedTranscript = proto.try_into()?;
-            Ok(Self::ReshareOfUnmasked(unmasked))
+            Ok(Self::ReshareOfUnmasked(try_from_option_field(
+                op_ref.unmasked.as_ref(),
+                "IDkgTranscriptOperationRef::unmasked",
+            )?))
         } else if op_ref.op_type == (subnet_pb::IDkgTranscriptOperation::UnmaskedTimesMasked as i32)
         {
-            let proto = op_ref
-                .unmasked
-                .as_ref()
-                .ok_or("pb::IDkgTranscriptOperationRef:: Missing unmasked transcript")?;
-            let unmasked: UnmaskedTranscript = proto.try_into()?;
-
-            let proto = op_ref.masked.as_ref().ok_or("Missing masked transcript")?;
-            let masked: MaskedTranscript = proto.try_into()?;
-            Ok(Self::UnmaskedTimesMasked(unmasked, masked))
-        } else {
-            Err(format!(
-                "pb::IDkgTranscriptOperationRef:: Unknown operation type: {:?}",
-                op_ref.op_type
+            Ok(Self::UnmaskedTimesMasked(
+                try_from_option_field(
+                    op_ref.unmasked.as_ref(),
+                    "IDkgTranscriptOperationRef::unmasked",
+                )?,
+                try_from_option_field(
+                    op_ref.masked.as_ref(),
+                    "IDkgTranscriptOperationRef::masked",
+                )?,
             ))
+        } else {
+            Err(ProxyDecodeError::Other(format!(
+                "IDkgTranscriptOperationRef:: Unknown operation type: {:?}",
+                op_ref.op_type
+            )))
         }
     }
 }
@@ -1124,43 +1107,32 @@ impl From<&IDkgTranscriptParamsRef> for pb::IDkgTranscriptParamsRef {
 }
 
 impl TryFrom<&pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(params: &pb::IDkgTranscriptParamsRef) -> Result<Self, Self::Error> {
         let transcript_id: IDkgTranscriptId =
             (&params.transcript_id).try_into().map_err(|err| {
-                format!(
-                    "pb::IDkgTranscriptParamsRef:: Failed to convert transcript Id: {:?}",
+                ProxyDecodeError::Other(format!(
+                    "IDkgTranscriptParamsRef:: Failed to convert transcript Id: {:?}",
                     err
-                )
+                ))
             })?;
 
         let mut dealers = BTreeSet::new();
         for pb_node_id in &params.dealers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id.clone()).map_err(|err| {
-                format!(
-                    "pb::IDkgTranscriptParamsRef:: Failed to convert dealer: {:?}",
-                    err
-                )
-            })?;
+            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
             dealers.insert(node_id);
         }
 
         let mut receivers = BTreeSet::new();
         for pb_node_id in &params.receivers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id.clone()).map_err(|err| {
-                format!(
-                    "pb::IDkgTranscriptParamsRef:: Failed to convert receiver: {:?}",
-                    err
-                )
-            })?;
+            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
             receivers.insert(node_id);
         }
 
-        let proto = params
-            .operation_type_ref
-            .as_ref()
-            .ok_or("pb::IDkgTranscriptParamsRef:: Missing operation_type_ref")?;
-        let operation_ref: IDkgTranscriptOperationRef = proto.try_into()?;
+        let operation_ref = try_from_option_field(
+            params.operation_type_ref.as_ref(),
+            "IDkgTranscriptParamsRef::operation_type_ref",
+        )?;
 
         Ok(Self::new(
             transcript_id,
@@ -1335,51 +1307,27 @@ impl From<&PreSignatureQuadrupleRef> for pb::PreSignatureQuadrupleRef {
 }
 
 impl TryFrom<&pb::PreSignatureQuadrupleRef> for PreSignatureQuadrupleRef {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(quadruple: &pb::PreSignatureQuadrupleRef) -> Result<Self, Self::Error> {
-        let proto = quadruple
-            .kappa_unmasked_ref
-            .as_ref()
-            .ok_or("pb::PreSignatureQuadrupleRef:: Missing kappa unmasked")?;
-        let kappa_unmasked_ref: UnmaskedTranscript = proto.try_into().map_err(|err| {
-            format!(
-                "pb::PreSignatureQuadrupleRef:: Failed to convert kappa_unmasked_ref : {:?}",
-                err
-            )
-        })?;
+        let kappa_unmasked_ref: UnmaskedTranscript = try_from_option_field(
+            quadruple.kappa_unmasked_ref.as_ref(),
+            "PreSignatureQuadrupleRef::quadruple::kappa_unmasked_ref",
+        )?;
 
-        let proto = quadruple
-            .lambda_masked_ref
-            .as_ref()
-            .ok_or("pb::PreSignatureQuadrupleRef:: Missing lambda masked")?;
-        let lambda_masked_ref: MaskedTranscript = proto.try_into().map_err(|err| {
-            format!(
-                "pb::PreSignatureQuadrupleRef:: Failed to convert lambda_masked_ref : {:?}",
-                err
-            )
-        })?;
+        let lambda_masked_ref: MaskedTranscript = try_from_option_field(
+            quadruple.lambda_masked_ref.as_ref(),
+            "PreSignatureQuadrupleRef::quadruple::lamdba_masked_ref",
+        )?;
 
-        let proto = quadruple
-            .kappa_times_lambda_ref
-            .as_ref()
-            .ok_or("Missing kappa times lambda masked")?;
-        let kappa_times_lambda_ref: MaskedTranscript = proto.try_into().map_err(|err| {
-            format!(
-                "pb::PreSignatureQuadrupleRef:: Failed to convert kappa_times_lambda_ref : {:?}",
-                err
-            )
-        })?;
+        let kappa_times_lambda_ref: MaskedTranscript = try_from_option_field(
+            quadruple.kappa_times_lambda_ref.as_ref(),
+            "PreSignatureQuadrupleRef::quadruple::kappa_times_lamdba_ref",
+        )?;
 
-        let proto = quadruple
-            .key_times_lambda_ref
-            .as_ref()
-            .ok_or("pb::PreSignatureQuadrupleRef:: Missing key times lambda masked")?;
-        let key_times_lambda_ref: MaskedTranscript = proto.try_into().map_err(|err| {
-            format!(
-                "pb::PreSignatureQuadrupleRef:: Failed to convert key_times_lambda_ref : {:?}",
-                err
-            )
-        })?;
+        let key_times_lambda_ref: MaskedTranscript = try_from_option_field(
+            quadruple.key_times_lambda_ref.as_ref(),
+            "PreSignatureQuadrupleRef::quadruple::key_times_lamdba_ref",
+        )?;
 
         Ok(Self::new(
             kappa_unmasked_ref,
@@ -1481,49 +1429,41 @@ impl From<&ThresholdEcdsaSigInputsRef> for pb::ThresholdEcdsaSigInputsRef {
 }
 
 impl TryFrom<&pb::ThresholdEcdsaSigInputsRef> for ThresholdEcdsaSigInputsRef {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(sig_inputs: &pb::ThresholdEcdsaSigInputsRef) -> Result<Self, Self::Error> {
-        let proto = sig_inputs
-            .derivation_path
-            .as_ref()
-            .ok_or("pb::ThresholdEcdsaSigInputsRef:: Missing derivation_path")?;
-        let derivation_path: ExtendedDerivationPath = proto.clone().try_into().map_err(|err| {
-            format!(
-                "pb::ThresholdEcdsaSigInputsRef:: Failed to convert derivation_path : {:?}",
-                err
-            )
-        })?;
+        let derivation_path: ExtendedDerivationPath = try_from_option_field(
+            sig_inputs.derivation_path.clone(),
+            "ThresholdEcdsaSigInputsRef::derivation_path",
+        )?;
 
         if sig_inputs.hashed_message.len() != 32 {
-            return Err(format!(
-                "pb::ThresholdEcdsaSigInputsRef:: Invalid hashed_message length: {:?}",
+            return Err(ProxyDecodeError::Other(format!(
+                "ThresholdEcdsaSigInputsRef:: Invalid hashed_message length: {:?}",
                 sig_inputs.nonce.len()
-            ));
+            )));
         }
         let mut hashed_message = [0; 32];
         hashed_message.copy_from_slice(&sig_inputs.hashed_message[0..32]);
 
         if sig_inputs.nonce.len() != 32 {
-            return Err(format!(
-                "pb::ThresholdEcdsaSigInputsRef:: Invalid nonce length: {:?}",
+            return Err(ProxyDecodeError::Other(format!(
+                "ThresholdEcdsaSigInputsRef:: Invalid nonce length: {:?}",
                 sig_inputs.nonce.len()
-            ));
+            )));
         }
         let mut nonce = [0; 32];
         nonce.copy_from_slice(&sig_inputs.nonce[0..32]);
         let nonce = Randomness::from(nonce);
 
-        let proto = sig_inputs
-            .presig_quadruple_ref
-            .as_ref()
-            .ok_or("pb::ThresholdEcdsaSigInputsRef:: Missing presig_quadruple_ref")?;
-        let presig_quadruple_ref: PreSignatureQuadrupleRef = proto.try_into()?;
+        let presig_quadruple_ref: PreSignatureQuadrupleRef = try_from_option_field(
+            sig_inputs.presig_quadruple_ref.as_ref(),
+            "ThresholdEcdsaSigInputsRef::presig_quadruple_ref",
+        )?;
 
-        let proto = sig_inputs
-            .key_transcript_ref
-            .as_ref()
-            .ok_or("pb::ThresholdEcdsaSigInputsRef:: Missing key_transcript_ref")?;
-        let key_transcript_ref: UnmaskedTranscript = proto.try_into()?;
+        let key_transcript_ref: UnmaskedTranscript = try_from_option_field(
+            sig_inputs.key_transcript_ref.as_ref(),
+            "ThresholdEcdsaSigInputsRef::key_transcript_ref",
+        )?;
 
         Ok(Self::new(
             derivation_path,

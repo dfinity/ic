@@ -37,6 +37,7 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: usize = 15_000;
 const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
+const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
 
 // Represents the expected function signature for any System APIs the Internet
 // Computer provides or any special exported user functions.
@@ -201,26 +202,6 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
         ),
         (
             "canister_self_copy",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
-        (
-            "controller_size",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "controller_copy",
             vec![(
                 API_VERSION_IC0,
                 FunctionSignature {
@@ -724,8 +705,6 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
         return;
     }
     match field {
-        "controller_size" => import_details.imports_controller_size = true,
-        "controller_copy" => import_details.imports_controller_copy = true,
         "call_cycles_add" => import_details.imports_call_cycles_add = true,
         "canister_cycle_balance" => import_details.imports_canister_cycle_balance = true,
         "msg_cycles_available" => import_details.imports_msg_cycles_available = true,
@@ -1170,6 +1149,30 @@ fn can_compile(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
     })
 }
 
+fn check_code_section_size(wasm: &BinaryEncodedWasm) -> Result<(), WasmValidationError> {
+    let parser = wasmparser::Parser::new(0);
+    let payloads = parser.parse_all(wasm.as_slice());
+    for payload in payloads {
+        if let wasmparser::Payload::CodeSectionStart {
+            count: _,
+            range: _,
+            size,
+        } = payload.map_err(|e| {
+            WasmValidationError::DecodingError(format!("Error finding code section: {}", e))
+        })? {
+            if size > MAX_CODE_SECTION_SIZE_IN_BYTES {
+                return Err(WasmValidationError::CodeSectionTooLarge {
+                    size,
+                    allowed: MAX_CODE_SECTION_SIZE_IN_BYTES,
+                });
+            } else {
+                return Ok(());
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Validates a Wasm binary against the requirements of the interface spec
 /// defined in https://sdk.dfinity.org/docs/interface-spec/index.html.
 ///
@@ -1189,6 +1192,7 @@ pub(super) fn validate_wasm_binary<'a>(
     wasm: &'a BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<(WasmValidationDetails, Module<'a>), WasmValidationError> {
+    check_code_section_size(wasm)?;
     can_compile(wasm)?;
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;

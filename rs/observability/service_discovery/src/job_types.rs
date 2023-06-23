@@ -1,4 +1,4 @@
-use std::{fmt, str::FromStr};
+use std::{collections::HashMap, fmt, str::FromStr};
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum NodeOS {
@@ -41,6 +41,15 @@ impl FromStr for JobType {
     }
 }
 
+impl From<String> for JobType {
+    fn from(value: String) -> Self {
+        match JobType::from_str(&value) {
+            Ok(val) => val,
+            Err(_) => panic!("Couldn't parse JobType"),
+        }
+    }
+}
+
 impl fmt::Display for JobType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -50,4 +59,36 @@ impl fmt::Display for JobType {
             JobType::Orchestrator => write!(f, "orchestrator"),
         }
     }
+}
+
+#[derive(Clone)]
+pub struct JobAndPort {
+    pub job_type: JobType,
+    pub port: u16,
+}
+
+impl FromStr for JobAndPort {
+    type Err = JobTypeParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let elements = s.split(':').collect::<Vec<&str>>();
+
+        Ok(JobAndPort {
+            job_type: elements.first().unwrap().to_string().into(),
+            port: elements.get(1).unwrap().parse().unwrap(),
+        })
+    }
+}
+
+impl fmt::Debug for JobAndPort {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{}, {}>", self.job_type, self.port)
+    }
+}
+
+pub fn map_jobs(jobs_and_ports: &[JobAndPort]) -> HashMap<JobType, u16> {
+    jobs_and_ports
+        .iter()
+        .map(|job| (job.job_type, job.port))
+        .collect()
 }

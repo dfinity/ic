@@ -4,8 +4,8 @@ end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::types::*;
 use crate::util::*;
+use ic_agent::agent::RejectCode;
 use ic_utils::interfaces::ManagementCanister;
 
 /// Tests that query replies can be larger than update replies.
@@ -36,12 +36,12 @@ pub fn query_reply_sizes(env: TestEnv) {
                 .create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(app_node.effective_canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("Couldn't create canister with provisional API.")
                 .0;
             mgr.install_code(&canister_id, &wasm)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
@@ -49,10 +49,7 @@ pub fn query_reply_sizes(env: TestEnv) {
             agent.query(&canister_id, "hi").call().await.unwrap();
             // Calling the query function as an update fails because the reply
             // is too big.
-            let res = agent
-                .update(&canister_id, "hi")
-                .call_and_wait(delay())
-                .await;
+            let res = agent.update(&canister_id, "hi").call_and_wait().await;
             assert_reject(res, RejectCode::CanisterError);
         }
     })

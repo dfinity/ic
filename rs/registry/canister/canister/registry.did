@@ -4,6 +4,11 @@ type AddFirewallRulesPayload = record {
   positions : vec int32;
   rules : vec FirewallRule;
 };
+type AddHostOsVersionPayload = record {
+  release_package_urls : vec text;
+  hostos_version_id : text;
+  release_package_sha256_hex : text;
+};
 type AddNodeOperatorPayload = record {
   ipv6 : opt text;
   node_operator_principal_id : opt principal;
@@ -196,6 +201,7 @@ type SubnetFeatures = record {
   canister_sandboxing : bool;
   sev_status : opt SevFeatureStatus;
   http_requests : bool;
+  onchain_observability : opt bool;
 };
 type SubnetType = variant { application; verified_application; system };
 type UpdateElectedReplicaVersionsPayload = record {
@@ -224,6 +230,10 @@ type UpdateNodeOperatorConfigPayload = record {
 type UpdateNodeRewardsTableProposalPayload = record {
   new_entries : vec record { text; NodeRewardRates };
 };
+type UpdateNodesHostOsVersionPayload = record {
+  hostos_version_id : opt text;
+  node_ids : vec principal;
+};
 type UpdateSubnetPayload = record {
   unit_delay_millis : opt nat64;
   max_duplicity : opt nat32;
@@ -231,6 +241,7 @@ type UpdateSubnetPayload = record {
   features : opt SubnetFeatures;
   set_gossip_config_to_default : bool;
   max_instructions_per_message : opt nat64;
+  halt_at_cup_height : opt bool;
   pfn_evaluation_period_ms : opt nat32;
   subnet_id : principal;
   max_ingress_bytes_per_message : opt nat64;
@@ -266,6 +277,7 @@ type UpdateUnassignedNodesConfigPayload = record {
 };
 service : {
   add_firewall_rules : (AddFirewallRulesPayload) -> ();
+  add_hostos_version : (AddHostOsVersionPayload) -> ();
   add_node : (AddNodePayload) -> (Result);
   add_node_operator : (AddNodeOperatorPayload) -> ();
   add_nodes_to_subnet : (AddNodesToSubnetPayload) -> ();
@@ -299,6 +311,7 @@ service : {
       UpdateNodeOperatorConfigDirectlyPayload,
     ) -> ();
   update_node_rewards_table : (UpdateNodeRewardsTableProposalPayload) -> ();
+  update_nodes_hostos_version : (UpdateNodesHostOsVersionPayload) -> ();
   update_subnet : (UpdateSubnetPayload) -> ();
   update_subnet_replica_version : (UpdateSubnetReplicaVersionPayload) -> ();
   update_unassigned_nodes_config : (UpdateUnassignedNodesConfigPayload) -> ();

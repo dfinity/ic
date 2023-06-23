@@ -30,7 +30,8 @@ impl IngressHistoryReader for IngressHistoryReaderImpl {
             .state_reader
             .get_latest_state()
             .take()
-            .get_ingress_history();
+            .get_ingress_history()
+            .clone();
         Box::new(move |message_id| {
             history
                 .get(message_id)
@@ -52,7 +53,7 @@ impl IngressHistoryReader for IngressHistoryReaderImpl {
                     IngressHistoryError::StateNotAvailableYet(h)
                 }
             })?;
-        let history = labeled_state.take().get_ingress_history();
+        let history = labeled_state.take().get_ingress_history().clone();
         Ok(Box::new(move |message_id| {
             history
                 .get(message_id)
@@ -233,7 +234,7 @@ impl IngressHistoryWriterImpl {
         }
         if let Some(timer) = timer {
             Some((
-                (time - timer.ic_time).as_secs_f64(),
+                (time.saturating_sub(timer.ic_time)).as_secs_f64(),
                 timer.system_time.elapsed(),
             ))
         } else {
@@ -295,6 +296,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         QueryCallGraphTotalInstructionLimitExceeded => "Total instructions limit exceeded for query call graph",
         CompositeQueryCalledInReplicatedMode => "Composite query cannot be called in replicated mode",
         CanisterNotHostedBySubnet => "Canister is not hosted by subnet",
-        QueryTimeLimitExceeded => "Canister exceeded the time limit for composite query execution"
+        QueryTimeLimitExceeded => "Canister exceeded the time limit for composite query execution",
+        QueryCallGraphInternal => "System error while executing a composite query",
     }
 }

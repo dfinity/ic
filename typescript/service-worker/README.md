@@ -160,6 +160,26 @@ export type Token = { type: <T>() => IDL.Type<T> };
       /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --user-data-dir=/tmp/no-ssl --ignore-certificate-errors
       ```
 
+## e2e Tests
+
+Start e2e testing env:
+
+```shell
+./e2e/start-e2e-env.sh
+```
+
+Run e2e tests:
+
+```shell
+./e2e/run-e2e-tests.sh
+```
+
+Stop e2e testing env:
+
+```shell
+./e2e/stop-e2e-env.sh
+```
+
 ## Release
 
 1. Make an MR to bump the service worker version

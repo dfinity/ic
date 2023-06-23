@@ -5,7 +5,10 @@ use crate::{
 };
 use crate::{
     lifecycle::init::InitArgs,
-    state::{ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus},
+    state::{
+        ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus,
+        SubmittedBtcTransaction,
+    },
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
@@ -23,7 +26,7 @@ use proptest::{
 };
 use proptest::{prop_assert, prop_assert_eq, prop_assume, prop_oneof};
 use serde_bytes::ByteBuf;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
 
 fn dummy_utxo_from_value(v: u64) -> Utxo {
@@ -71,6 +74,13 @@ fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin
             payload: Payload::ScriptHash(bitcoin::ScriptHash::from_hash(
                 bitcoin::hashes::Hash::from_slice(script_hash).unwrap(),
             )),
+            network: network_to_btc_network(network),
+        },
+        BitcoinAddress::P2tr(pkhash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V1,
+                program: pkhash.to_vec(),
+            },
             network: network_to_btc_network(network),
         },
     }
@@ -231,7 +241,7 @@ fn test_min_change_amount() {
 }
 
 #[test]
-fn test_no_zero_outputs() {
+fn test_no_dust_outputs() {
     let mut available_utxos = BTreeSet::new();
     available_utxos.insert(Utxo {
         outpoint: OutPoint {
@@ -250,13 +260,28 @@ fn test_no_zero_outputs() {
     assert_eq!(
         build_unsigned_transaction(
             &mut available_utxos,
-            vec![(out1_addr, 99_900), (out2_addr.clone(), 100)],
+            vec![(out1_addr.clone(), 99_900), (out2_addr.clone(), 100)],
+            minter_addr.clone(),
+            fee_per_vbyte,
+        ),
+        Err(BuildTxError::DustOutput {
+            address: out2_addr.clone(),
+            amount: 100
+        })
+    );
+
+    let fee_per_vbyte = 4000;
+
+    assert_eq!(
+        build_unsigned_transaction(
+            &mut available_utxos,
+            vec![(out1_addr, 99_000), (out2_addr.clone(), 1000)],
             minter_addr,
             fee_per_vbyte,
         ),
-        Err(BuildTxError::ZeroOutput {
+        Err(BuildTxError::DustOutput {
             address: out2_addr,
-            amount: 100
+            amount: 1000
         })
     );
 
@@ -594,7 +619,7 @@ proptest! {
         mut utxos in btree_set(arb_utxo(1_000_000u64..1_000_000_000), 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        target in 10000..50000u64,
+        target in 50000..100000u64,
         fee_per_vbyte in 1000..2000u64,
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
@@ -616,7 +641,7 @@ proptest! {
         mut utxos in btree_set(arb_utxo(1_000_000u64..1_000_000_000), 1..20),
         dst_pkhash in uniform20(any::<u8>()),
         main_pkhash in uniform20(any::<u8>()),
-        target in 10000..50000u64,
+        target in 50000..100000u64,
         fee_per_vbyte in 1000..2000u64,
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
@@ -758,6 +783,96 @@ proptest! {
         prop_assert!(batch.len() <= limit);
 
         state.check_invariants().expect("invariant check failed");
+    }
+
+    #[test]
+    fn tx_replacement_preserves_invariants(
+        accounts in pvec(arb_account(), 5),
+        utxos_acc_idx in pvec((arb_utxo(5_000_000u64..1_000_000_000), 0..5usize), 10..=10),
+        requests in arb_retrieve_btc_requests(5_000_000u64..10_000_000, 1..5),
+        main_pkhash in uniform20(any::<u8>()),
+        resubmission_chain_length in 1..=5,
+    ) {
+        let mut state = CkBtcMinterState::from(InitArgs {
+            btc_network: Network::Regtest,
+            ecdsa_key_name: "".to_string(),
+            retrieve_btc_min_amount: 100_000,
+            ledger_id: CanisterId::from_u64(42),
+            max_time_in_queue_nanos: 0,
+            min_confirmations: None,
+            mode: Mode::GeneralAvailability,
+            kyt_fee: None,
+            kyt_principal: None
+        });
+
+        for (utxo, acc_idx) in utxos_acc_idx {
+            state.add_utxos(accounts[acc_idx], vec![utxo]);
+        }
+        let fee_per_vbyte = 100_000u64;
+
+        let (tx, change_output, used_utxos) = build_unsigned_transaction(
+            &mut state.available_utxos,
+            requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
+            BitcoinAddress::P2wpkhV0(main_pkhash),
+            fee_per_vbyte
+        )
+        .expect("failed to build transaction");
+        let mut txids = vec![tx.txid()];
+        let submitted_at = 1_234_567_890;
+
+        state.push_submitted_transaction(SubmittedBtcTransaction {
+            requests: requests.clone(),
+            txid: txids[0],
+            used_utxos: used_utxos.clone(),
+            submitted_at,
+            change_output: Some(change_output),
+            fee_per_vbyte: Some(fee_per_vbyte),
+        });
+
+        state.check_invariants().expect("violated invariants");
+
+        for i in 1..=resubmission_chain_length {
+            let prev_txid = txids.last().unwrap();
+            // Build a replacement transaction
+            let (tx, change_output, _used_utxos) = build_unsigned_transaction(
+                &mut used_utxos.clone().into_iter().collect(),
+                requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
+                BitcoinAddress::P2wpkhV0(main_pkhash),
+                fee_per_vbyte + 1000 * i as u64,
+            )
+            .expect("failed to build transaction");
+
+            let new_txid = tx.txid();
+
+            state.replace_transaction(prev_txid, SubmittedBtcTransaction {
+                requests: requests.clone(),
+                txid: new_txid,
+                used_utxos: used_utxos.clone(),
+                submitted_at,
+                change_output: Some(change_output),
+                fee_per_vbyte: Some(fee_per_vbyte),
+            });
+
+            for txid in &txids {
+                prop_assert_eq!(state.find_last_replacement_tx(txid), Some(&new_txid));
+            }
+
+            txids.push(new_txid);
+
+            assert_eq!(i as usize, state.longest_resubmission_chain_size());
+            state.check_invariants().expect("violated invariants after transaction resubmission");
+        }
+
+        for txid in &txids {
+            // Ensure that finalizing any transaction in the chain removes the entire chain.
+            let mut state = state.clone();
+            state.finalize_transaction(txid);
+            prop_assert_eq!(&state.submitted_transactions, &vec![]);
+            prop_assert_eq!(&state.stuck_transactions, &vec![]);
+            prop_assert_eq!(&state.replacement_txid, &BTreeMap::new());
+            prop_assert_eq!(&state.rev_replacement_txid, &BTreeMap::new());
+            state.check_invariants().expect("violated invariants after transaction finalization");
+        }
     }
 
     #[test]

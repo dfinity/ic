@@ -214,6 +214,8 @@ pub(crate) mod test_utils {
     use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_consensus_utils::crypto::ConsensusCrypto;
     use ic_crypto_temp_crypto::TempCryptoComponent;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         batch_sign_signed_dealings, create_and_verify_signed_dealings, create_signed_dealing,
         create_transcript as crypto_create_transcript, CanisterThresholdSigTestEnvironment,
@@ -225,10 +227,6 @@ pub(crate) mod test_utils {
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_test_utilities::consensus::fake::*;
-    use ic_test_utilities::crypto::{
-        dummy_idkg_dealing_for_tests, dummy_idkg_transcript_id_for_tests,
-        dummy_initial_idkg_dealing_for_tests,
-    };
     use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
     use ic_types::artifact::EcdsaMessageId;
     use ic_types::consensus::ecdsa::{
@@ -783,6 +781,7 @@ pub(crate) mod test_utils {
 
     // Creates a TranscriptID for tests
     pub(crate) fn create_transcript_id(id: u64) -> IDkgTranscriptId {
+        use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
         dummy_idkg_transcript_id_for_tests(id)
     }
 

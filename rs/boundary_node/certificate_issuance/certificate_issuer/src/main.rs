@@ -3,7 +3,6 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
-    thread::sleep,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -38,7 +37,7 @@ use opentelemetry::{
 };
 use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
 use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
-use tokio::{sync::Semaphore, task};
+use tokio::{sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
@@ -49,14 +48,18 @@ use trust_dns_resolver::{
 use crate::{
     acme::Acme,
     acme_idna::WithIDNA,
-    certificate::{CanisterExporter, CanisterUploader, Export, WithPagination},
+    certificate::{
+        CanisterExporter, CanisterUploader, Export, WithDecode, WithPagination, WithRetries,
+        WithVerify,
+    },
     check::{Check, Checker},
     cloudflare::Cloudflare,
     dns::Resolver,
     encode::{Decoder, Encoder},
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, Remove, State, Update, UpdateType},
-    work::{Dispense, DispenseError, Peek, PeekError, Process, Queue},
+    verification::CertificateVerifier,
+    work::{Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue},
 };
 
 mod acme;
@@ -69,6 +72,7 @@ mod dns;
 mod encode;
 mod metrics;
 mod registration;
+mod verification;
 mod work;
 
 const SERVICE_NAME: &str = "certificate-issuer";
@@ -111,6 +115,9 @@ struct Cli {
 
     #[arg(long)]
     cloudflare_api_key: String,
+
+    #[arg(long, default_value = "60")]
+    peek_sleep_sec: u64,
 
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
@@ -173,9 +180,7 @@ async fn main() -> Result<(), Error> {
             .context("failed to open root key")?;
 
         if let Some(root_key) = &root_key {
-            agent
-                .set_root_key(root_key.clone())
-                .context("failed to set root key")?;
+            agent.set_root_key(root_key.clone());
         }
 
         Arc::new(agent)
@@ -248,13 +253,28 @@ async fn main() -> Result<(), Error> {
     );
     let registration_getter = Arc::new(registration_getter);
 
+    // Verifier
+    let certificate_verifier =
+        CertificateVerifier::new(agent.clone(), cli.orchestrator_canister_id);
+    let certificate_verifier = WithMetrics(
+        certificate_verifier,
+        MetricParams::new(&meter, SERVICE_NAME, "verify_certificates"),
+    );
+    let certificate_verifier = Arc::new(certificate_verifier);
+
     // Certificates
-    let certificate_exporter =
-        CanisterExporter::new(agent.clone(), cli.orchestrator_canister_id, decoder);
+    let certificate_exporter = CanisterExporter::new(agent.clone(), cli.orchestrator_canister_id);
+    let certificate_exporter = WithVerify(certificate_exporter, certificate_verifier);
+    let certificate_exporter = WithRetries(
+        certificate_exporter,
+        20, // Number of retries
+    );
+    let certificate_exporter = WithDecode(certificate_exporter, decoder);
     let certificate_exporter = WithMetrics(
         certificate_exporter,
         MetricParams::new(&meter, SERVICE_NAME, "export_certificates"),
     );
+
     let certificate_exporter = WithPagination(
         certificate_exporter,
         50, // Page Size
@@ -402,6 +422,7 @@ async fn main() -> Result<(), Error> {
 
     let processor = work::Processor::new(
         cli.delegation_domain,
+        registration_checker.clone(),
         Box::new(resolver),
         Box::new(acme_order),
         Box::new(acme_ready),
@@ -432,16 +453,17 @@ async fn main() -> Result<(), Error> {
                 let processor = processor.clone();
                 let queuer = queuer.clone();
                 let registration_updater = registration_updater.clone();
+                let registration_remover = registration_remover.clone();
 
                 // First check with a query call if there's anything to dispense
                 if let Err(err) = peeker.peek().await {
                     match err {
                         PeekError::NoTasksAvailable => {
-                            sleep(Duration::from_secs(1));
+                            sleep(Duration::from_secs(cli.peek_sleep_sec)).await;
                             continue;
                         }
                         PeekError::UnexpectedError(_) => {
-                            sleep(Duration::from_secs(1));
+                            sleep(Duration::from_secs(10)).await;
                             continue;
                         }
                     }
@@ -450,11 +472,11 @@ async fn main() -> Result<(), Error> {
                 let (id, task) = match dispenser.dispense().await {
                     Ok((id, task)) => (id, task),
                     Err(DispenseError::NoTasksAvailable) => {
-                        sleep(Duration::from_secs(1));
+                        sleep(Duration::from_secs(cli.peek_sleep_sec)).await;
                         continue;
                     }
                     Err(DispenseError::UnexpectedError(_)) => {
-                        sleep(Duration::from_secs(1));
+                        sleep(Duration::from_secs(10)).await;
                         continue;
                     }
                 };
@@ -478,6 +500,15 @@ async fn main() -> Result<(), Error> {
                                 .update(&id, &UpdateType::State(State::Available))
                                 .await
                                 .context("failed to update registration {id}")?;
+                        }
+                        Err(ProcessError::FailedUserConfigurationCheck) => {
+                            // Attempted a renewal, but the domain is not configured properly
+                            // (missing or wrong DNS configuration, missing well-known domains).
+                            // The custom domain and its certificate are removed.
+                            registration_remover
+                                .remove(&id)
+                                .await
+                                .context("failed to delete existing registration {id}")?;
                         }
                         Err(err) => {
                             let d: Duration = (&err).into();

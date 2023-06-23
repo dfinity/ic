@@ -1,6 +1,7 @@
 use std::str::FromStr;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
+use anyhow::{bail, Context};
 use candid::{Decode, Encode, Principal};
 use canister_test::{Project, Runtime};
 use dfn_candid::candid_one;
@@ -12,23 +13,28 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
+use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nns_governance::pb::v1::create_service_nervous_system::governance_parameters::VotingRewardParameters;
+use ic_nns_governance::pb::v1::create_service_nervous_system::{
+    initial_token_distribution::{
+        developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+        TreasuryDistribution,
+    },
+    swap_parameters::NeuronBasketConstructionParameters,
+    GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
+};
 use ic_nns_governance::pb::v1::proposal::Action;
+use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_nns_governance::pb::v1::{
     manage_neuron::Command, manage_neuron_response::Command as CommandResp, ManageNeuron,
     ManageNeuronResponse, NnsFunction, OpenSnsTokenSwap, Proposal,
 };
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_sns_init::pb::v1::{
-    sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
-    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
-    TreasuryDistribution,
-};
-use ic_sns_swap::pb::v1::{
-    params::NeuronBasketConstructionParameters, GetStateRequest, GetStateResponse, Lifecycle,
-    Params,
-};
+use ic_sns_governance::pb::v1::governance::Mode;
+use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Init, Lifecycle};
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
     SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
@@ -37,8 +43,11 @@ use ic_types::Cycles;
 use serde::{Deserialize, Serialize};
 use slog::info;
 
+use crate::canister_agent::HasCanisterAgentCapability;
+use crate::canister_api::{CallMode, ListDeployedSnsesRequest, SnsRequestProvider};
 use crate::driver::test_env::TestEnvAttribute;
 use crate::driver::test_env_api::{HasDependencies, NnsCanisterWasmStrategy};
+use crate::util::deposit_cycles;
 use crate::{
     driver::{
         test_env::TestEnv,
@@ -48,7 +57,10 @@ use crate::{
         get_governance_canister, submit_external_proposal_with_test_id,
         vote_execute_proposal_assert_executed,
     },
-    util::{block_on, runtime_from_url, to_principal_id, UniversalCanister},
+    util::{
+        block_on, create_service_nervous_system_into_params, runtime_from_url, to_principal_id,
+        UniversalCanister,
+    },
 };
 
 pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
@@ -76,34 +88,142 @@ impl SnsClient {
         UniversalCanister::from_canister_id(agent, self.get_wallet_canister_principal())
     }
 
-    pub fn assert_state(&self, env: &TestEnv, state: Lifecycle) {
+    pub async fn assert_state(&self, env: &TestEnv, swap_state: Lifecycle, governance_mode: Mode) {
         let log = env.logger();
         let swap_id = self.sns_canisters.swap();
         let app_node = env.get_first_healthy_application_node_snapshot();
-        let agent = app_node.build_default_agent();
-        let wallet_canister = self.get_wallet_canister(&agent);
+        let sns_agent = app_node.build_canister_agent().await;
+        let wallet_canister = self.get_wallet_canister(&sns_agent.agent);
+
+        // Check Swap state
         info!(log, r#"Sending "get_state" to SNS swap"#);
-        let res = block_on(get_swap_state(&wallet_canister, swap_id))
+        let res = get_swap_state(&wallet_canister, swap_id)
+            .await
             .expect("get_state failed")
             .swap
             .expect("No swap");
         info!(log, "Received {res:?}");
-        assert_eq!(res.lifecycle(), state);
+        assert_eq!(res.lifecycle(), swap_state);
+
+        // Check Governance mode
+        info!(log, r#"Sending "get_mode" to SNS governance"#);
+        let sns_request_provider = SnsRequestProvider::from_sns_client(self);
+        let request = sns_request_provider.get_sns_governance_mode();
+        let res = sns_agent.call_and_parse(&request).await.result().unwrap();
+        info!(log, "Received {res:?}");
+        let actual_mode = Mode::from_i32(res.mode.unwrap()).unwrap();
+        assert_eq!(governance_mode, actual_mode);
     }
 
-    pub fn initiate_token_swap(&self, env: &TestEnv) {
+    /// Initiates the token swap with a payload that causes the swap to start
+    /// immediately. (Works by sending a OpenSnsTokenSwap proposal to the SNS g
+    /// overnance canister.)
+    pub fn initiate_token_swap_immediately(
+        &self,
+        env: &TestEnv,
+        create_service_nervous_system_proposal: CreateServiceNervousSystem,
+        community_fund_investment_e8s: u64,
+    ) {
         let log = env.logger();
         let swap_id = self.sns_canisters.swap();
         info!(log, "Sending open token swap proposal");
-        let payload = open_sns_token_swap_payload_for_tests(swap_id.get());
+        let payload = {
+            let mut payload = open_sns_token_swap_payload(
+                swap_id.get(),
+                create_service_nervous_system_proposal,
+                community_fund_investment_e8s,
+            );
+            // Make sure there's no delay. (Therefore, the sale will be opened immediately.)
+            payload.params.as_mut().unwrap().sale_delay_seconds = Some(0);
+            payload
+        };
+
         let nns_node = env.get_first_healthy_nns_node_snapshot();
         let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         block_on(open_sns_token_swap(&runtime, payload));
     }
 
+    /// Installs the SNS using the one-proposal flow
     pub fn install_sns_and_check_healthy(
         env: &TestEnv,
         canister_wasm_strategy: NnsCanisterWasmStrategy,
+        create_service_nervous_system_proposal: CreateServiceNervousSystem,
+    ) -> Self {
+        add_all_wasms_to_sns_wasm(env, canister_wasm_strategy);
+
+        let log = env.logger();
+        let nns_node = env.get_first_healthy_nns_node_snapshot();
+        let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+        let app_node = env.get_first_healthy_application_node_snapshot();
+        let subnet_id = app_node.subnet_id().unwrap();
+        let canister_agent = block_on(app_node.build_canister_agent());
+
+        info!(log, "Adding subnet {subnet_id} to SNS deploy whitelist");
+        block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
+
+        // TODO: Check cycles balance before depositing, after depositing, and
+        // after creating the SNS, to make sure it changes like we expect.
+        // Currently blocked on NNS1-2302.
+
+        info!(log, "Creating new canister with cycles");
+        let wallet_canister = block_on(UniversalCanister::new_with_cycles_with_retries(
+            &canister_agent.agent,
+            app_node.effective_canister_id(),
+            // Mint a very large amount of cycles, to make sure nothing fails
+            // because this canister doesn't have enough cycles.
+            900_000_000_000_000_000u64,
+            &log,
+        ));
+        block_on(deposit_cycles(
+            &wallet_canister,
+            &candid::Principal::from(SNS_WASM_CANISTER_ID.get()),
+            Cycles::new(200_000_000_000_000), // cost is 180T cycles, send 200T for a small buffer
+        ));
+
+        info!(
+            log,
+            "Submitting and executing CreateServiceNervousSystem proposal"
+        );
+        let sns_canisters = block_on(deploy_new_sns_via_proposal(
+            env,
+            create_service_nervous_system_proposal,
+        ))
+        .context("creating a new SNS")
+        .unwrap();
+
+        // Create SNS client and write it to the environment
+        let wallet_canister_id = to_principal_id(&wallet_canister.canister_id());
+        let sns_client = Self {
+            sns_canisters,
+            wallet_canister_id,
+            sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
+        };
+        block_on(sns_client.assert_state(env, Lifecycle::Pending, Mode::PreInitializationSwap));
+        sns_client.write_attribute(env);
+
+        info!(
+            log,
+            "Verifying that the SNS is healthy by calling `get_sns_canisters_summary`."
+        );
+        {
+            let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+            let request = sns_request_provider.get_sns_canisters_summary();
+            let actual_sns_canister_ids = SnsCanisterIds::from(
+                block_on(canister_agent.call_and_parse(&request))
+                    .result()
+                    .unwrap(),
+            );
+            assert_eq!(sns_canisters, actual_sns_canister_ids);
+        }
+
+        sns_client
+    }
+
+    /// Installs the SNS using the legacy, non-one-proposal flow
+    pub fn install_sns_legacy_and_check_healthy(
+        env: &TestEnv,
+        canister_wasm_strategy: NnsCanisterWasmStrategy,
+        create_service_nervous_system_proposal: CreateServiceNervousSystem,
     ) -> Self {
         add_all_wasms_to_sns_wasm(env, canister_wasm_strategy);
 
@@ -133,49 +253,10 @@ impl SnsClient {
         block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
 
         info!(log, "Sending deploy_new_sns to SNS WASM canister");
-        let mut init = SnsInitPayload::with_valid_values_for_testing();
-        // let mut init = SnsInitPayload::with_default_values();
-        // Taken from https://github.com/open-ic/open-chat/blob/master/sns.yml
-        init.transaction_fee_e8s = Some(100_000);
-        init.proposal_reject_cost_e8s = Some(1_000_000_000);
-        init.neuron_minimum_stake_e8s = Some(400_000_000);
-        init.neuron_minimum_dissolve_delay_to_vote_seconds = Some(2_629_800);
-        init.reward_rate_transition_duration_seconds = Some(0);
-        // init.initial_reward_rate_percentage = Some(2.5);
-        // init.final_reward_rate_percentage = Some(2.5);
-        init.max_dissolve_delay_seconds = Some(31_557_600);
-        init.max_neuron_age_seconds_for_age_bonus = Some(15_778_800);
-        // init.max_dissolve_delay_bonus_multiplier = Some(2.0);
-        // init.max_age_bonus_multiplier = Some(1.25);
-        init.fallback_controller_principal_ids = vec![TEST_NEURON_1_OWNER_PRINCIPAL.to_string()];
-        init.initial_voting_period_seconds = Some(345_600);
-        init.wait_for_quiet_deadline_increase_seconds = Some(86_400);
-        init.initial_token_distribution =
-            Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
-                FractionalDeveloperVotingPower {
-                    developer_distribution: Some(DeveloperDistribution {
-                        developer_neurons: vec![NeuronDistribution {
-                            controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                            stake_e8s: 230000000000000, // 23%
-                            memo: 0,
-                            dissolve_delay_seconds: 2629800,
-                            vesting_period_seconds: Some(0),
-                        }],
-                    }),
-                    treasury_distribution: Some(TreasuryDistribution {
-                        total_e8s: 5200000000000000, // 52%
-                    }),
-                    swap_distribution: Some(SwapDistribution {
-                        total_e8s: 2500000000000000, // 25%
-                        initial_swap_amount_e8s: 2500000000000000,
-                    }),
-                    airdrop_distribution: Some(AirdropDistribution {
-                        airdrop_neurons: Default::default(),
-                    }),
-                },
-            ));
-
-        let res = block_on(deploy_new_sns(&wallet_canister, init)).expect("Deploy new SNS failed");
+        let init = SnsInitPayload::try_from(create_service_nervous_system_proposal)
+            .expect("invalid init payload");
+        let res =
+            block_on(deploy_new_sns_legacy(&wallet_canister, init)).expect("Deploy new SNS failed");
         info!(log, "Received {res:?}");
         if let Some(error) = res.error {
             panic!("DeployNewSnsResponse returned error: {error:?}");
@@ -189,7 +270,7 @@ impl SnsClient {
             wallet_canister_id,
             sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };
-        sns_client.assert_state(env, Lifecycle::Pending);
+        block_on(sns_client.assert_state(env, Lifecycle::Pending, Mode::PreInitializationSwap));
         sns_client.write_attribute(env);
         sns_client
     }
@@ -221,8 +302,85 @@ impl SnsClient {
     }
 }
 
+/// An CreateServiceNervousSystem request with "openchat-ish" parameters.
+/// (Not guaranteed to be exactly the same as the actual parameters used by
+/// OpenChat, especially since OpenChat was launched before
+/// CreateServiceNervousSystem existed.)
+///
+/// These parameters should be the one used "by default" for most tests, to ensure
+/// that the tests are using realistic parameters.
+pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
+    let init: SnsInitPayload = SnsInitPayload::with_valid_values_for_testing();
+    CreateServiceNervousSystem {
+        name: init.name,
+        description: init.description,
+        url: init.url,
+        logo: Some(Image {
+            base64_encoding: init.logo,
+        }),
+        fallback_controller_principal_ids: vec![*TEST_NEURON_1_OWNER_PRINCIPAL],
+        dapp_canisters: vec![],
+        initial_token_distribution: Some(InitialTokenDistribution {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: vec![NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake: Some(Tokens::from_e8s(230_000_000_000_000)), // 23%
+                    memo: Some(0),
+                    dissolve_delay: Some(Duration::from_secs(2_629_800)),
+                    vesting_period: Some(Duration::from_secs(0)),
+                }],
+            }),
+            treasury_distribution: Some(TreasuryDistribution {
+                total: Some(Tokens::from_e8s(5_200_000_000_000_000)), // 52%
+            }),
+            swap_distribution: Some(SwapDistribution {
+                total: Some(Tokens::from_e8s(2_500_000_000_000_000)), // 25%
+            }),
+        }),
+        swap_parameters: Some(SwapParameters {
+            minimum_participants: Some(100),
+            minimum_icp: Some(Tokens::from_tokens(500_000)),
+            maximum_icp: Some(Tokens::from_tokens(1_000_000)),
+            minimum_participant_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S)),
+            maximum_participant_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S)),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: Some(5),
+                dissolve_delay_interval: Some(Duration::from_secs(7_889_400)),
+            }),
+            confirmation_text: None,
+            restricted_countries: None,
+            start_time: GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
+            duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
+        }),
+        ledger_parameters: Some(LedgerParameters {
+            transaction_fee: Some(Tokens::from_e8s(100_000)),
+            token_name: Some("MySnsToken".to_string()),
+            token_symbol: Some("MST".to_string()),
+            token_logo: Some(Image {
+                base64_encoding: Some("Base64-encoded PNG".to_string()),
+            }),
+        }),
+        governance_parameters: Some(GovernanceParameters {
+            proposal_rejection_fee: Some(Tokens::from_e8s(1_000_000_000)),
+            proposal_initial_voting_period: Some(Duration::from_secs(345_600)),
+            proposal_wait_for_quiet_deadline_increase: Some(Duration::from_secs(86_400)),
+            neuron_minimum_stake: Some(Tokens::from_e8s(400_000_000)),
+            neuron_minimum_dissolve_delay_to_vote: Some(Duration::from_secs(2_629_800)),
+            neuron_maximum_dissolve_delay: Some(Duration::from_secs(31_557_600)),
+            neuron_maximum_dissolve_delay_bonus: Some(Percentage::from_percentage(100.0)),
+            neuron_maximum_age_for_age_bonus: Some(Duration::from_secs(15_778_800)),
+            neuron_maximum_age_bonus: Some(Percentage::from_percentage(25.0)),
+            voting_reward_parameters: Some(VotingRewardParameters {
+                initial_reward_rate: Some(Percentage::from_percentage(2.5)),
+                final_reward_rate: Some(Percentage::from_percentage(2.5)),
+                reward_rate_transition_duration: Some(Duration::from_secs(0)),
+            }),
+        }),
+    }
+}
+
 /// Send and execute 6 proposals to add all SNS canister WASMs to the SNS WASM canister
-fn add_all_wasms_to_sns_wasm(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
+pub fn add_all_wasms_to_sns_wasm(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
     let logger = env.logger();
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -311,7 +469,7 @@ async fn add_principal_to_sns_deploy_whitelist(nns_api: &'_ Runtime, principal_i
 }
 
 /// Send and execute a proposal to add the given subnet ID to the SNS subnet list
-async fn add_subnet_to_sns_deploy_whitelist(nns_api: &'_ Runtime, subnet_id: SubnetId) {
+pub async fn add_subnet_to_sns_deploy_whitelist(nns_api: &'_ Runtime, subnet_id: SubnetId) {
     let governance_canister = get_governance_canister(nns_api);
     let proposal_payload = UpdateSnsSubnetListRequest {
         sns_subnet_ids_to_add: vec![subnet_id.get()],
@@ -328,9 +486,91 @@ async fn add_subnet_to_sns_deploy_whitelist(nns_api: &'_ Runtime, subnet_id: Sub
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
 }
 
+/// Create SNS with CreateServiceNervousSystem proposal.
+async fn deploy_new_sns_via_proposal(
+    env: &TestEnv,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+) -> anyhow::Result<SnsCanisterIds> {
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let nns_agent = nns_node.build_canister_agent().await;
+
+    // Sanity check that params is valid
+    SnsInitPayload::try_from(create_service_nervous_system_proposal.clone()).expect(
+        "create_service_nervous_system_proposal could not be converted to an SnsInitPayload - is probably invalid",
+    );
+
+    // Check that there are no SNSes
+    let sns_wasm_canister_id = SNS_WASM_CANISTER_ID.get();
+    let list_deployed_snses_request = {
+        let mode = CallMode::Query;
+        ListDeployedSnsesRequest::new(sns_wasm_canister_id.into(), mode)
+    };
+    {
+        let current_snses = nns_agent
+            .call_and_parse(&list_deployed_snses_request)
+            .await
+            .result()
+            .context(format!("Listing deployed SNSes (by calling {sns_wasm_canister_id}) to make sure none already exist"))?;
+        if current_snses.instances != vec![] {
+            bail!("cannot create an sns as one already exists: {current_snses:?}")
+        }
+    }
+
+    let governance_canister = get_governance_canister(&runtime);
+    let neuron_id = NeuronId {
+        id: TEST_NEURON_1_ID,
+    };
+    let manage_neuron_payload = ManageNeuron {
+        id: Some(neuron_id),
+        neuron_id_or_subaccount: None,
+        command: Some(Command::MakeProposal(Box::new(Proposal {
+            title: Some("title".to_string()),
+            summary: "summary".to_string(),
+            url: "https://forum.dfinity.org/t/x/".to_string(),
+            action: Some(Action::CreateServiceNervousSystem(
+                create_service_nervous_system_proposal,
+            )),
+        }))),
+    };
+    let proposer = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
+    let res: ManageNeuronResponse = governance_canister
+        .update_from_sender(
+            "manage_neuron",
+            candid_one,
+            manage_neuron_payload,
+            &proposer,
+        )
+        .await
+        .unwrap();
+
+    match res.command.unwrap() {
+        CommandResp::MakeProposal(resp) => {
+            vote_execute_proposal_assert_executed(
+                &governance_canister,
+                resp.proposal_id.unwrap().into(),
+            )
+            .await
+        }
+        other => panic!("Unexpected proposal response {other:?}"),
+    }
+
+    // Return the information about the deployed SNS
+    let current_snses = nns_agent
+            .call_and_parse(&list_deployed_snses_request)
+            .await
+            .result()
+            .context(format!("Listing deployed SNSes (by calling {sns_wasm_canister_id}) to make sure none already exist"))?;
+    if current_snses.instances.len() != 1 {
+        bail!("not exactly one sns exists: {current_snses:?}")
+    }
+    Ok(SnsCanisterIds::from(current_snses.instances[0].clone()))
+}
+
 /// Send a "deploy_new_sns" request to the SNS WASM canister by forwarding it
-/// with cycles through the given canister.
-async fn deploy_new_sns(
+/// with cycles through the given canister. (This is the legacy flow, not the
+/// one-proposal flow.)
+async fn deploy_new_sns_legacy(
     canister: &UniversalCanister<'_>,
     init: SnsInitPayload,
 ) -> Result<DeployNewSnsResponse, AgentError> {
@@ -364,39 +604,55 @@ async fn get_swap_state(
         .map(|res| Decode!(res.as_slice(), GetStateResponse).expect("failed to decode"))
 }
 
-fn two_days_from_now_in_secs() -> u64 {
+pub fn two_days_from_now_in_secs() -> u64 {
     SystemTime::now()
-        .checked_add(Duration::from_secs(2 * 24 * 60 * 60)) // two days
+        .checked_add(std::time::Duration::from_secs(2 * 24 * 60 * 60)) // two days
         .unwrap()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs()
 }
 
-fn open_sns_token_swap_payload_for_tests(sns_swap_canister_id: PrincipalId) -> OpenSnsTokenSwap {
+fn open_sns_token_swap_payload(
+    sns_swap_canister_id: PrincipalId,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+    community_fund_investment_e8s: u64,
+) -> OpenSnsTokenSwap {
+    let params = create_service_nervous_system_into_params(
+        create_service_nervous_system_proposal,
+        SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+    )
+    .unwrap();
     OpenSnsTokenSwap {
         target_swap_canister_id: Some(sns_swap_canister_id),
         // Taken (mostly) from https://github.com/open-ic/open-chat/blob/master/sns_proposal.sh
-        params: Some(Params {
-            min_participants: 100,
-            min_icp_e8s: 500_000 * E8,
-            max_icp_e8s: 1_000_000 * E8,
-            min_participant_icp_e8s: SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
-            max_participant_icp_e8s: SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
-            swap_due_timestamp_seconds: two_days_from_now_in_secs(),
-            sns_token_e8s: 25_000_000 * E8,
-            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                count: 5,
-                dissolve_delay_interval_seconds: 7_889_400,
-            }),
-            sale_delay_seconds: None,
-        }),
-        community_fund_investment_e8s: Some(333_333 * E8),
+        params: Some(params),
+        community_fund_investment_e8s: Some(community_fund_investment_e8s),
     }
 }
 
 /// Send open sns token swap proposal to governance and wait until it is executed.
 async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
+    // Sanity check that params is valid
+    let params = payload.params.as_ref().unwrap().clone();
+    let () = params
+        .validate(&Init {
+            nns_governance_canister_id: "".to_string(),
+            sns_governance_canister_id: "".to_string(),
+            sns_ledger_canister_id: "".to_string(),
+            icp_ledger_canister_id: "".to_string(),
+            sns_root_canister_id: "".to_string(),
+            fallback_controller_principal_ids: vec![],
+            transaction_fee_e8s: Some(0),
+            neuron_minimum_stake_e8s: Some(0),
+            confirmation_text: None,
+            restricted_countries: None,
+        })
+        .unwrap();
+
     let governance_canister = get_governance_canister(nns_api);
     let neuron_id = NeuronId {
         id: TEST_NEURON_1_ID,

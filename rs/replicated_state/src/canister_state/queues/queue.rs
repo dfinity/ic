@@ -851,8 +851,10 @@ impl IngressQueue {
         self.size() == 0
     }
 
-    /// Calls `filter` on each ingress message in the queue, retaining the
-    /// messages for which the filter returns `true` and returning the rest.
+    /// Calls `filter` on each ingress message in the queue, retaining only the
+    /// messages for which the filter returns `true` and dropping the rest.
+    ///
+    /// Returns all dropped ingress messages.
     pub(super) fn filter_messages<F>(&mut self, mut filter: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Arc<Ingress>) -> bool,

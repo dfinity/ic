@@ -2,14 +2,19 @@ use candid::Principal;
 use dfn_candid::candid_one;
 use ic_sns_cli::init_config_file::{
     SnsCliInitConfig, SnsGovernanceConfig, SnsInitialTokenDistributionConfig, SnsLedgerConfig,
+    SnsSwapConfig,
 };
-use ic_sns_governance::pb::v1::{
-    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+use ic_sns_governance::{
+    pb::v1::{GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse},
+    types::ONE_MONTH_SECONDS,
 };
-use ic_sns_governance::types::ONE_MONTH_SECONDS;
-use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower;
-use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload};
-use ic_sns_init::SnsCanisterIds;
+use ic_sns_init::{
+    pb::v1::{
+        sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
+        FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload,
+    },
+    SnsCanisterIds,
+};
 use ic_sns_test_utils::itest_helpers::{local_test_on_sns_subnet, SnsCanisters};
 use ic_types::PrincipalId;
 use std::convert::TryFrom;
@@ -47,6 +52,10 @@ fn get_test_sns_cli_init_config() -> SnsCliInitConfig {
             initial_token_distribution: Some(FractionalDeveloperVotingPower(
                 FractionalDVP::with_valid_values_for_testing(),
             )),
+        },
+        sns_swap: SnsSwapConfig {
+            confirmation_text: Some("Please confirm that 2+2=4".to_string()),
+            restricted_countries: Some(vec!["CH".to_string()]),
         },
     }
 }

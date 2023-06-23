@@ -13,6 +13,9 @@ pub enum ThresholdSignError {
         algorithm: AlgorithmId,
         key_id: String,
     },
+    TransientInternalError {
+        internal_error: String,
+    },
 }
 
 impl fmt::Display for ThresholdSignError {
@@ -30,6 +33,10 @@ impl fmt::Display for ThresholdSignError {
                 Reloading the transcript does not help since the transcript has been loaded already.",
                 prefix, algorithm, dkg_id, key_id
             ),
+            ThresholdSignError::TransientInternalError { internal_error } => write!(
+                f,
+                "Transient internal error in threshold signing: {}",
+                internal_error)
         }
     }
 }
@@ -48,6 +55,9 @@ impl From<ThresholdSignError> for CryptoError {
             } => {
                 // ThresholdSigDataNotFound must not be used here, see CRP-586.
                 CryptoError::SecretKeyNotFound { algorithm, key_id }
+            }
+            ThresholdSignError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
             }
         }
     }

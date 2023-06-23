@@ -10,11 +10,11 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet,
         set_up_cycles_minting_canister, set_up_registry_canister, set_up_universal_canister,
     },
-    registry::invariant_compliant_mutation_as_atomic_req,
+    registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
 };
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
     subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
@@ -39,23 +39,44 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         let application_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(997));
         let second_system_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(998));
         let replica_version_id = ReplicaVersion::default().to_string();
-
-        let connection_endpoint = ConnectionEndpoint {
-            ip_addr: "128.0.0.1".to_string(),
-            port: 12345,
-            protocol: Protocol::Http1 as i32,
+        let init_mutation = invariant_compliant_mutation_as_atomic_req(INITIAL_MUTATION_ID);
+        let node_2 = {
+            let effective_id = 1 + INITIAL_MUTATION_ID;
+            let xnet = Some(ConnectionEndpoint {
+                ip_addr: format!("128.0.{effective_id}.1"),
+                port: 1234,
+                protocol: Protocol::Http1 as i32,
+            });
+            let http = Some(ConnectionEndpoint {
+                ip_addr: format!("128.0.{effective_id}.1"),
+                port: 4321,
+                protocol: Protocol::Http1 as i32,
+            });
+            NodeRecord {
+                node_operator_id: node_operator_pid.get().to_vec(),
+                xnet,
+                http,
+                ..Default::default()
+            }
         };
-        let node_2 = NodeRecord {
-            node_operator_id: node_operator_pid.get().to_vec(),
-            xnet: Some(connection_endpoint.clone()),
-            http: Some(connection_endpoint.clone()),
-            ..Default::default()
-        };
-        let node_3 = NodeRecord {
-            node_operator_id: node_operator_pid.get().to_vec(),
-            xnet: Some(connection_endpoint.clone()),
-            http: Some(connection_endpoint),
-            ..Default::default()
+        let node_3 = {
+            let effective_id = 2 + INITIAL_MUTATION_ID;
+            let xnet = Some(ConnectionEndpoint {
+                ip_addr: format!("128.0.{effective_id}.1"),
+                port: 1234,
+                protocol: Protocol::Http1 as i32,
+            });
+            let http = Some(ConnectionEndpoint {
+                ip_addr: format!("128.0.{effective_id}.1"),
+                port: 4321,
+                protocol: Protocol::Http1 as i32,
+            });
+            NodeRecord {
+                node_operator_id: node_operator_pid.get().to_vec(),
+                xnet,
+                http,
+                ..Default::default()
+            }
         };
 
         let application_subnet_cup = CatchUpPackageContents::default();
@@ -90,7 +111,7 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(init_mutation)
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![
                         insert(
@@ -146,13 +167,13 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         // let fake_cmc = set_up_universal_canister(&runtime).await;
         let cmc = set_up_cycles_minting_canister(
             &runtime,
-            CyclesCanisterInitPayload {
-                ledger_canister_id: LEDGER_CANISTER_ID,
-                governance_canister_id: GOVERNANCE_CANISTER_ID,
+            Some(CyclesCanisterInitPayload {
+                ledger_canister_id: Some(LEDGER_CANISTER_ID),
+                governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
-            },
+            }),
         )
         .await;
         // Since it takes the id reserved for the governance canister, it can

@@ -45,11 +45,7 @@ RUN sed -e 's/ *systemd//' -i /etc/nsswitch.conf
 # Regenerate initramfs (config changed after copying in /etc)
 RUN RESUME=none update-initramfs -c -k all
 
-ARG ROOT_PASSWORD=
-RUN \
-    if [ "${ROOT_PASSWORD}" != "" ]; then \
-        echo "root:$(openssl passwd -6 -salt jE8zzDEHeRg/DuGq ${ROOT_PASSWORD})" | chpasswd -e ; \
-    fi
+RUN passwd -d root
 
 COPY prep /prep
 RUN cd /prep && ./prep.sh && cd / && rm -rf /prep

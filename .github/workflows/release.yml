@@ -1,0 +1,41 @@
+name: Make Release
+
+on:
+  push:
+    tags:
+      - 'release-*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Collect Release Artifacts
+        run: |
+          set -euxo pipefail
+
+          REVS_FILE="testnet/mainnet_revisions.json"
+          NNS_RELEASE="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' $REVS_FILE)"
+          DOWNLOAD_PREFIX="http://download.dfinity.systems/ic/${NNS_RELEASE}"
+
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/setup-os/disk-img/disk-img.tar.gz" -o setup-os-img.tar.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.gz" -o update-os-img.tar.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/ic-admin.gz" -o ic-admin-x86_64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/ic-admin.gz" -o ic-admin-x86_64-darwin.gz
+          sha256sum *.gz > sha256sums.txt
+
+      - name: Publish Release
+        # v0.1.15
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        with:
+          token: ${{secrets.RELEASE_TOKEN}}
+          body: "IC ${{github.ref_name}}"
+          files: |
+            setup-os-img.tar.gz
+            update-os-img.tar.gz
+            ic-admin-x86_64-linux.gz
+            ic-admin-x86_64-darwin.gz
+            sha256sums.txt

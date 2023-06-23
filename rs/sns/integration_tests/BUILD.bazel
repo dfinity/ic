@@ -4,7 +4,8 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
@@ -21,11 +22,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/canister_test",
     "//rs/state_machine_tests",
-    "//rs/sns/cli",
-    "//rs/sns/governance",
     "//rs/sns/root",
-    "//rs/sns/init",
-    "//rs/sns/test_utils",
     "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
@@ -43,22 +40,34 @@ DEPENDENCIES = [
     "@crate_index//:serde_yaml",
 ]
 
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/sns/cli",
+    "//rs/sns/init",
+    "//rs/sns/test_utils",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/sns/cli:cli--test_feature",
+    "//rs/sns/init:init--test_feature",
+    "//rs/sns/test_utils:test_utils--test_feature",
+]
+
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-DEV_DEPENDENCIES = [
+BASE_DEV_DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/crypto",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/root",
     "//rs/nns/common",
-    "//rs/nns/governance",
-    "//rs/nns/sns-wasm",
-    "//rs/nns/test_utils",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/swap",
+    "//rs/sns/governance:build_script",
     "@crate_index//:assert_matches",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
@@ -67,6 +76,25 @@ DEV_DEPENDENCIES = [
     "@crate_index//:rust_decimal",
     "@crate_index//:tokio",
     "@crate_index//:wat",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEV_DEPENDENCIES`), or `TEST_DEV_DEPENDENCIES` feature previews.
+# (Currently not used)
+# DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
+#     "//rs/nns/governance",
+#     "//rs/nns/sns-wasm",
+#     "//rs/nns/test_utils",
+#     "//rs/sns/governance",
+#     "//rs/sns/swap",
+# ]
+
+TEST_DEV_DEPENDENCIES = BASE_DEV_DEPENDENCIES + [
+    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/nns/test_utils:test_utils--test_feature",
+    "//rs/sns/governance:governance--test_feature",
+    "//rs/sns/swap:swap--test_feature",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
@@ -123,7 +151,7 @@ DATA_DEPS = [
     "//rs/nns/cmc:cycles-minting-canister",
     "//rs/nns/governance:governance-canister-test",
     "//rs/nns/gtc:genesis-token-canister",
-    "//rs/nns/handlers/root:root-canister",
+    "//rs/nns/handlers/root/impl:root-canister",
     "//rs/nns/sns-wasm:sns-wasm-canister",
     "//rs/registry/canister:registry-canister",
     "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
@@ -149,7 +177,7 @@ ENV = {
     "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
     "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
     "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
-    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:root-canister)",
+    "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
     "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister-test)",
     "SNS_GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/sns/integration_tests:sns-governance-mem-test-canister)",
@@ -179,10 +207,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = [],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["cpu:8"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
-        "//rs/sns/governance:governance_test_feature",
-        "//rs/sns/governance:build_script",
-    ],
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES,
 )
 
 rust_test_suite_with_extra_srcs(
@@ -200,9 +225,7 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = ["src/lib.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     tags = ["manual"],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
-        "//rs/sns/governance:governance_test_feature",
-        "//rs/sns/governance:build_script",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + TEST_DEV_DEPENDENCIES + [
         "@crate_index//:chrono",
     ],
 )

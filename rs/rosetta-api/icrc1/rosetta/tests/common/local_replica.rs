@@ -19,13 +19,6 @@ use icrc_ledger_types::icrc1::account::Account;
 use std::sync::Arc;
 use url::Url;
 
-fn delay() -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(500))
-        .timeout(std::time::Duration::from_secs(60 * 5))
-        .build()
-}
-
 pub fn test_identity() -> BasicIdentity {
     BasicIdentity::from_pem(
         &b"-----BEGIN PRIVATE KEY-----
@@ -120,6 +113,7 @@ pub async fn deploy_icrc_ledger_with_default_args(context: &ReplicaContext) -> C
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
+        max_memo_length: None,
     };
     deploy_icrc_ledger_with_custom_args(context, default_init_args).await
 }
@@ -154,7 +148,7 @@ async fn install_canister(context: &ReplicaContext, init_arg: Vec<u8>, canister_
             })
             .unwrap(),
         )
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap();
 }
@@ -168,7 +162,7 @@ async fn create_canister(context: &ReplicaContext) -> CanisterId {
             "provisional_create_canister_with_cycles",
         )
         .with_arg(&Encode!(&CreateCanisterArgs::default()).unwrap())
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap();
 

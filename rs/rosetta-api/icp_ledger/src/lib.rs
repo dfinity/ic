@@ -7,8 +7,10 @@ use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyE
 use ic_ledger_core::{
     approvals::Approvals,
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector, HashOf, HASH_LENGTH},
+    block::{BlockType, EncodedBlock, FeeCollector},
 };
+use ic_ledger_hash_of::HashOf;
+use ic_ledger_hash_of::HASH_LENGTH;
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
@@ -23,7 +25,7 @@ use strum_macros::IntoStaticStr;
 pub use ic_ledger_core::{
     block::BlockIndex,
     timestamp::TimeStamp,
-    tokens::{SignedTokens, Tokens, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
 };
 
 pub mod account_identifier;
@@ -40,6 +42,8 @@ pub use validate_endpoints::{tokens_from_proto, tokens_into_proto};
 pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
+
+pub const MEMO_SIZE_BYTES: usize = 32;
 
 pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
 
@@ -93,7 +97,7 @@ pub enum Operation {
     Approve {
         from: AccountIdentifier,
         spender: AccountIdentifier,
-        allowance: SignedTokens,
+        allowance: Tokens,
         expires_at: Option<TimeStamp>,
         fee: Tokens,
     },
@@ -112,7 +116,7 @@ pub fn apply_operation<C>(
     now: TimeStamp,
 ) -> Result<(), TxApplyError>
 where
-    C: LedgerContext<AccountId = AccountIdentifier, SpenderId = AccountIdentifier>,
+    C: LedgerContext<AccountId = AccountIdentifier>,
 {
     match operation {
         Operation::Transfer {
@@ -138,16 +142,10 @@ where
 
             context.balances_mut().burn(from, *fee)?;
 
-            let result = match allowance {
-                SignedTokens::Plus(amount) => context
-                    .approvals_mut()
-                    .approve(from, spender, *amount, *expires_at, now)
-                    .map_err(TxApplyError::from),
-                SignedTokens::Minus(amount) => context
-                    .approvals_mut()
-                    .decrease_allowance(from, spender, *amount, *expires_at, now)
-                    .map_err(TxApplyError::from),
-            };
+            let result = context
+                .approvals_mut()
+                .approve(from, spender, *allowance, *expires_at, now, None)
+                .map_err(TxApplyError::from);
             if let Err(e) = result {
                 context
                     .balances_mut()
@@ -211,7 +209,6 @@ pub struct Transaction {
 
 impl LedgerTransaction for Transaction {
     type AccountId = AccountIdentifier;
-    type SpenderId = AccountIdentifier;
 
     fn burn(
         from: Self::AccountId,
@@ -244,7 +241,7 @@ impl LedgerTransaction for Transaction {
         _effective_fee: Tokens,
     ) -> Result<(), TxApplyError>
     where
-        C: LedgerContext<AccountId = Self::AccountId, SpenderId = Self::SpenderId>,
+        C: LedgerContext<AccountId = Self::AccountId>,
     {
         apply_operation(context, &self.operation, now)
     }
@@ -390,9 +387,31 @@ impl Default for TransferFee {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum LedgerCanisterPayload {
+    Init(InitArgs),
+    Upgrade(Option<UpgradeArgs>),
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct LedgerCanisterInitPayload(pub LedgerCanisterPayload);
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct LedgerCanisterUpgradePayload(pub LedgerCanisterPayload);
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct UpgradeArgs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximum_number_of_accounts: Option<usize>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icrc1_minting_account: Option<Account>,
+}
+
 // This is how we pass arguments to 'init' in main.rs
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
-pub struct LedgerCanisterInitPayload {
+pub struct InitArgs {
     pub minting_account: AccountIdentifier,
     pub icrc1_minting_account: Option<Account>,
     pub initial_values: HashMap<AccountIdentifier, Tokens>,
@@ -408,6 +427,18 @@ pub struct LedgerCanisterInitPayload {
 impl LedgerCanisterInitPayload {
     pub fn builder() -> LedgerCanisterInitPayloadBuilder {
         LedgerCanisterInitPayloadBuilder::new()
+    }
+    pub fn init_args(&mut self) -> Option<&mut InitArgs> {
+        match &mut self.0 {
+            LedgerCanisterPayload::Init(args) => Some(args),
+            LedgerCanisterPayload::Upgrade(_) => None,
+        }
+    }
+}
+
+impl LedgerCanisterUpgradePayload {
+    pub fn builder() -> LedgerCanisterUpgradePayloadBuilder {
+        LedgerCanisterUpgradePayloadBuilder::new()
     }
 }
 
@@ -504,18 +535,53 @@ impl LedgerCanisterInitPayloadBuilder {
             );
         }
 
-        Ok(LedgerCanisterInitPayload {
-            minting_account,
-            icrc1_minting_account: self.icrc1_minting_account,
-            initial_values: self.initial_values,
-            max_message_size_bytes: self.max_message_size_bytes,
-            transaction_window: self.transaction_window,
-            archive_options: self.archive_options,
-            send_whitelist: self.send_whitelist,
-            transfer_fee: self.transfer_fee,
-            token_symbol: self.token_symbol,
-            token_name: self.token_name,
-        })
+        Ok(LedgerCanisterInitPayload(LedgerCanisterPayload::Init(
+            InitArgs {
+                minting_account,
+                icrc1_minting_account: self.icrc1_minting_account,
+                initial_values: self.initial_values,
+                max_message_size_bytes: self.max_message_size_bytes,
+                transaction_window: self.transaction_window,
+                archive_options: self.archive_options,
+                send_whitelist: self.send_whitelist,
+                transfer_fee: self.transfer_fee,
+                token_symbol: self.token_symbol,
+                token_name: self.token_name,
+            },
+        )))
+    }
+}
+
+pub struct LedgerCanisterUpgradePayloadBuilder {
+    maximum_number_of_accounts: Option<usize>,
+    icrc1_minting_account: Option<Account>,
+}
+
+impl LedgerCanisterUpgradePayloadBuilder {
+    fn new() -> Self {
+        Self {
+            maximum_number_of_accounts: None,
+            icrc1_minting_account: None,
+        }
+    }
+
+    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: usize) -> Self {
+        self.maximum_number_of_accounts = Some(maximum_number_of_accounts);
+        self
+    }
+
+    pub fn icrc1_minting_account(mut self, minting_account: Account) -> Self {
+        self.icrc1_minting_account = Some(minting_account);
+        self
+    }
+
+    pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
+        Ok(LedgerCanisterUpgradePayload(
+            LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+                maximum_number_of_accounts: self.maximum_number_of_accounts,
+                icrc1_minting_account: self.icrc1_minting_account,
+            })),
+        ))
     }
 }
 
@@ -697,7 +763,7 @@ pub enum CandidOperation {
     Approve {
         from: AccountIdBlob,
         spender: AccountIdBlob,
-        allowance_e8s: i128,
+        allowance_e8s: u64,
         fee: Tokens,
         expires_at: Option<TimeStamp>,
     },
@@ -741,7 +807,7 @@ impl From<Operation> for CandidOperation {
             } => Self::Approve {
                 from: from.to_address(),
                 spender: spender.to_address(),
-                allowance_e8s: allowance.to_i128(),
+                allowance_e8s: allowance.get_e8s(),
                 fee,
                 expires_at,
             },
@@ -762,6 +828,63 @@ impl From<Operation> for CandidOperation {
     }
 }
 
+impl TryFrom<CandidOperation> for Operation {
+    type Error = String;
+
+    fn try_from(value: CandidOperation) -> Result<Self, Self::Error> {
+        let address_to_accountidentifier = |acc| -> Result<AccountIdentifier, Self::Error> {
+            AccountIdentifier::from_address(acc).map_err(|err| err.to_string())
+        };
+        Ok(match value {
+            CandidOperation::Burn { from, amount } => Operation::Burn {
+                from: address_to_accountidentifier(from)?,
+                amount,
+            },
+            CandidOperation::Mint { to, amount } => Operation::Mint {
+                to: address_to_accountidentifier(to)?,
+                amount,
+            },
+            CandidOperation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => Operation::Transfer {
+                to: address_to_accountidentifier(to)?,
+                from: address_to_accountidentifier(from)?,
+                amount,
+                fee,
+            },
+            CandidOperation::Approve {
+                from,
+                spender,
+                allowance_e8s,
+                fee,
+                expires_at,
+            } => Operation::Approve {
+                spender: address_to_accountidentifier(spender)?,
+                from: address_to_accountidentifier(from)?,
+                allowance: Tokens::from_e8s(allowance_e8s),
+                fee,
+                expires_at,
+            },
+            CandidOperation::TransferFrom {
+                from,
+                to,
+                spender,
+                amount,
+                fee,
+            } => Operation::TransferFrom {
+                spender: address_to_accountidentifier(spender)?,
+                from: address_to_accountidentifier(from)?,
+                to: address_to_accountidentifier(to)?,
+                amount,
+                fee,
+            },
+        })
+    }
+}
+
 /// An operation with the metadata the client generated attached to it
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
@@ -771,6 +894,21 @@ pub struct CandidTransaction {
     pub memo: Memo,
     pub icrc1_memo: Option<ByteBuf>,
     pub created_at_time: TimeStamp,
+}
+
+impl TryFrom<CandidTransaction> for Transaction {
+    type Error = String;
+    fn try_from(value: CandidTransaction) -> Result<Self, Self::Error> {
+        Ok(Self {
+            operation: value.operation.map_or(
+                Err("Operation is None --> Cannot convert CandidOperation to icp_ledger Operation"),
+                |candid_block| Ok(Operation::try_from(candid_block)),
+            )??,
+            memo: value.memo,
+            created_at_time: Some(value.created_at_time),
+            icrc1_memo: value.icrc1_memo,
+        })
+    }
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -798,6 +936,17 @@ impl From<Block> for CandidBlock {
             },
             timestamp,
         }
+    }
+}
+
+impl TryFrom<CandidBlock> for Block {
+    type Error = String;
+    fn try_from(value: CandidBlock) -> Result<Self, Self::Error> {
+        Ok(Self {
+            parent_hash: value.parent_hash.map(HashOf::<EncodedBlock>::new),
+            transaction: Transaction::try_from(value.transaction)?,
+            timestamp: value.timestamp,
+        })
     }
 }
 

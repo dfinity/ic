@@ -86,9 +86,9 @@ pub fn test_threshold_signatures(
         }
     }
     // Verify each individual signature:
-    let verifier = Csp::builder()
+    let verifier = Csp::builder_for_test()
         .with_vault(
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_rng(Seed::from_rng(&mut rng).into_rng())
                 .build(),
         )

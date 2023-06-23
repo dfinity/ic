@@ -1,16 +1,22 @@
-use std::{cell::RefCell, cmp::Reverse, thread::LocalKey, time::Duration};
+use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, time::Duration};
 
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
-    DispenseTaskResponse, EncryptedPair, ExportCertificatesError, ExportCertificatesResponse,
-    GetRegistrationError, GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id,
-    InitArg, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse,
-    ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, PeekTaskError,
-    PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration, RemoveRegistrationError,
-    RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse,
-    UpdateType, UploadCertificateError, UploadCertificateResponse,
+    DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
+    ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetRegistrationError,
+    GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id, InitArg,
+    ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError,
+    ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError,
+    QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State,
+    UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
+    UploadCertificateResponse,
 };
-use ic_cdk::{api::time, caller, export::Principal, post_upgrade, pre_upgrade, trap};
+use ic_cdk::{
+    api::{id, time},
+    caller,
+    export::Principal,
+    post_upgrade, pre_upgrade, trap,
+};
 use ic_cdk_macros::{init, query, update};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{
@@ -23,8 +29,12 @@ use work::{Peek, PeekError};
 
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
-    certificate::{Export, ExportError, Exporter, Upload, UploadError, Uploader},
+    certificate::{
+        Export, ExportError, Exporter, Upload, UploadError, Uploader, WithIcCertification,
+    },
+    ic_certification::{add_cert, init_cert_tree, set_root_hash},
     id::{Generate, Generator},
+    rate_limiter::WithRateLimit,
     registration::{
         Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Remove, RemoveError,
         Remover, Update, UpdateError, Updater,
@@ -34,8 +44,10 @@ use crate::{
 
 mod acl;
 mod certificate;
+mod ic_certification;
 mod id;
 mod persistence;
+mod rate_limiter;
 mod registration;
 mod work;
 
@@ -53,8 +65,11 @@ type StableValue<T> = StableMap<(), T>;
 type StorablePrincipal = BoundedString<63>;
 type StorableId = BoundedString<64>;
 
-const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 Hour
-const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 Minutes
+const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 hour
+const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 minutes
+
+const REGISTRATION_RATE_LIMIT_RATE: u32 = 5; // 5 subdomain registrations per hour
+const REGISTRATION_RATE_LIMIT_PERIOD: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 // Memory
 thread_local! {
@@ -292,8 +307,12 @@ thread_local! {
 
     static RETRIES: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
+    // Rate limiting for CREATOR
+    static AVAILABLE_TOKENS: RefCell<BTreeMap<String, u32>> = RefCell::new(BTreeMap::new());
+
     static CREATOR: RefCell<Box<dyn Create>> = RefCell::new({
         let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
+        let c = WithRateLimit::new(c, REGISTRATION_RATE_LIMIT_RATE, &AVAILABLE_TOKENS);
         let c = WithAuthorize(c, &MAIN_AUTHORIZER);
         let c = WithMetrics(c, &COUNTER_CREATE_REGISTRATION_TOTAL);
         Box::new(c)
@@ -324,6 +343,7 @@ thread_local! {
 thread_local! {
     static UPLOADER: RefCell<Box<dyn Upload>> = RefCell::new({
         let u = Uploader::new(&ENCRYPTED_CERTIFICATES, &REGISTRATIONS);
+        let u = WithIcCertification::new(u, &REGISTRATIONS);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
         let u = WithMetrics(u, &COUNTER_UPLOAD_CERTIFICATE_TOTAL);
         Box::new(u)
@@ -400,6 +420,24 @@ fn init_timers_fn() {
             }
         },
     );
+
+    // update the available tokens for rate limiting
+    set_timer_interval(
+        REGISTRATION_RATE_LIMIT_PERIOD / REGISTRATION_RATE_LIMIT_RATE,
+        || {
+            AVAILABLE_TOKENS.with(|at| {
+                let mut at = at.borrow_mut();
+
+                // clean the items with no tokens used
+                at.retain(|_, tokens| *tokens < REGISTRATION_RATE_LIMIT_RATE);
+
+                // add a token to all items left
+                for (_, tokens) in at.iter_mut() {
+                    *tokens += 1;
+                }
+            });
+        },
+    );
 }
 
 // Init / Upgrade
@@ -423,7 +461,11 @@ fn init_fn(
         s.insert((), id_seed);
     });
 
+    // authorize the canister ID so that timer functions are authorized
+    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(id().to_text().into(), ()));
+
     init_timers_fn();
+    init_cert_tree();
 }
 
 #[pre_upgrade]
@@ -479,7 +521,32 @@ fn post_upgrade_fn() {
         });
     });
 
+    // authorize the canister ID so that timer functions are authorized
+    // this can be removed after we upgraded the canisters that didn't do it in init_fn()
+    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(id().to_text().into(), ()));
+
     init_timers_fn();
+
+    // rebuild the IC certification tree
+    init_cert_tree();
+    ENCRYPTED_CERTIFICATES.with(|pairs| {
+        REGISTRATIONS.with(|regs| {
+            let regs = regs.borrow();
+            for (id, pair) in pairs.borrow().iter() {
+                let package_to_certify = {
+                    let reg = regs.get(&id.clone()).unwrap();
+                    ExportPackage {
+                        id: id.clone().into(),
+                        name: reg.name,
+                        canister: reg.canister,
+                        pair,
+                    }
+                };
+                add_cert(id, &package_to_certify);
+            }
+            set_root_hash();
+        })
+    });
 }
 
 // Registration
@@ -491,6 +558,7 @@ fn create_registration(name: String, canister: Principal) -> CreateRegistrationR
         Err(err) => CreateRegistrationResponse::Err(match err {
             CreateError::Duplicate(id) => CreateRegistrationError::Duplicate(id),
             CreateError::NameError(err) => CreateRegistrationError::NameError(err.to_string()),
+            CreateError::RateLimited(domain) => CreateRegistrationError::RateLimited(domain),
             CreateError::Unauthorized => CreateRegistrationError::Unauthorized,
             CreateError::UnexpectedError(err) => {
                 CreateRegistrationError::UnexpectedError(err.to_string())
@@ -530,7 +598,10 @@ fn update_registration(id: Id, typ: UpdateType) -> UpdateRegistrationResponse {
 #[update(name = "removeRegistration")]
 fn remove_registration(id: Id) -> RemoveRegistrationResponse {
     match REMOVER.with(|r| r.borrow().remove(&id)) {
-        Ok(()) => RemoveRegistrationResponse::Ok(()),
+        Ok(()) => {
+            set_root_hash();
+            RemoveRegistrationResponse::Ok(())
+        }
         Err(err) => RemoveRegistrationResponse::Err(match err {
             RemoveError::NotFound => RemoveRegistrationError::NotFound,
             RemoveError::Unauthorized => RemoveRegistrationError::Unauthorized,
@@ -562,6 +633,22 @@ fn export_certificates_paginated(key: Option<String>, limit: u64) -> ExportCerti
     match EXPORTER.with(|e| e.borrow().export(key, limit)) {
         Ok(pkgs) => ExportCertificatesResponse::Ok(pkgs),
         Err(err) => ExportCertificatesResponse::Err(match err {
+            ExportError::Unauthorized => ExportCertificatesError::Unauthorized,
+            ExportError::UnexpectedError(_) => {
+                ExportCertificatesError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
+#[query(name = "exportCertificatesCertified")]
+fn export_certificates_certified(
+    key: Option<String>,
+    limit: u64,
+) -> ExportCertificatesCertifiedResponse {
+    match EXPORTER.with(|e| e.borrow().export_certified(key, limit)) {
+        Ok(pkgs) => ExportCertificatesCertifiedResponse::Ok(pkgs),
+        Err(err) => ExportCertificatesCertifiedResponse::Err(match err {
             ExportError::Unauthorized => ExportCertificatesError::Unauthorized,
             ExportError::UnexpectedError(_) => {
                 ExportCertificatesError::UnexpectedError(err.to_string())
@@ -705,10 +792,12 @@ fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
         });
     }
 
+    // filter out own canister ID from response
     ListAllowedPrincipalsResponse::Ok(ALLOWED_PRINCIPALS.with(|m| {
         m.borrow()
             .iter()
             .map(|(k, _)| Principal::from_text(k.as_str()).expect("failed to parse principal"))
+            .filter(|k| k != &id())
             .collect()
     }))
 }

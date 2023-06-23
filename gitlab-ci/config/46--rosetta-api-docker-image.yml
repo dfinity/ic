@@ -1,10 +1,13 @@
 rosetta-api-docker-image:
   extends:
-    - .ubuntu-docker-protected
-    - .rules-protected-branch-manual
+    - .bazel-build-k8s
   stage: guest-os-build
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"
+      when: manual
+      allow_failure: true
   needs:
-    - job: wait-for-bazel-test-all
+    - job: bazel-test-all
       artifacts: false
   script:
     - |

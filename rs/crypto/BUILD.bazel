@@ -15,12 +15,12 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/internal/logmon",
     "//rs/crypto/internal/test_vectors",
-    "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation/tls_cert_validation",
     "//rs/crypto/tecdsa",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/time",
+    "//rs/crypto/utils/tls",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
@@ -73,7 +73,9 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
     "//rs/crypto/internal/crypto_lib/tls",
+    "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "//rs/crypto/internal/csp_test_utils",
+    "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha",
     "//rs/crypto/temp_crypto",
@@ -86,8 +88,8 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/local_csp_vault",
     "//rs/crypto/test_utils/metrics",
     "//rs/crypto/test_utils/multi_sigs",
+    "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/crypto/test_utils/threshold_sigs",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry/mocks",
     "//rs/registry/client",
@@ -172,6 +174,7 @@ rust_test_suite_with_extra_srcs(
 rust_doc_test(
     name = "crypto_doc_test",
     crate = ":crypto",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_bench(
@@ -205,6 +208,24 @@ rust_bench(
     name = "ni_dkg_bench",
     testonly = True,
     srcs = ["benches/ni_dkg.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "idkg_bench",
+    testonly = True,
+    srcs = ["benches/idkg.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "tecdsa_bench",
+    testonly = True,
+    srcs = ["benches/tecdsa.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,

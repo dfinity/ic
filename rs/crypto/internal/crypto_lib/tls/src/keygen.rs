@@ -70,12 +70,13 @@ impl fmt::Debug for TlsEd25519SecretKeyDerBytes {
 pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
     csprng: &mut R,
     common_name: &str,
+    not_before: &Asn1Time,
     not_after: &Asn1Time,
 ) -> Result<
     (TlsEd25519CertificateDerBytes, TlsEd25519SecretKeyDerBytes),
     TlsKeyPairAndCertGenerationError,
 > {
-    let (x509_cert, key_pair) = generate_tls_key_pair(csprng, common_name, not_after)?;
+    let (x509_cert, key_pair) = generate_tls_key_pair(csprng, common_name, not_before, not_after)?;
     Ok(der_encode_cert_and_secret_key(&key_pair, x509_cert))
 }
 
@@ -83,6 +84,7 @@ pub fn generate_tls_key_pair_der<R: Rng + CryptoRng>(
 pub fn generate_tls_key_pair<R: Rng + CryptoRng>(
     csprng: &mut R,
     common_name: &str,
+    not_before: &Asn1Time,
     not_after: &Asn1Time,
 ) -> Result<(X509, PKey<Private>), TlsKeyPairAndCertGenerationError> {
     let serial: [u8; 19] = csprng.gen();
@@ -91,6 +93,7 @@ pub fn generate_tls_key_pair<R: Rng + CryptoRng>(
         common_name,
         serial,
         &key_pair,
+        not_before,
         not_after,
         // Digest must be null for Ed25519 (see https://www.openssl.org/docs/man1.1.1/man7/Ed25519.html)
         MessageDigest::null(),
@@ -115,13 +118,16 @@ fn x509_v3_certificate(
     common_name: &str,
     serial: [u8; 19],
     key_pair: &PKey<Private>,
+    not_before: &Asn1Time,
     not_after: &Asn1Time,
     message_digest: MessageDigest,
 ) -> Result<X509, TlsKeyPairAndCertGenerationError> {
-    let now = Asn1Time::days_from_now(0).expect("unable to create Asn1Time");
-    if not_after <= &now {
+    if not_after <= not_before {
         return Err(TlsKeyPairAndCertGenerationError::InvalidNotAfterDate {
-            message: "'not after' date must not be in the past".to_string(),
+            message: format!(
+                "'not after' date ({}) must be after 'not before' date ({})",
+                **not_after, **not_before,
+            ),
         });
     }
 
@@ -142,7 +148,7 @@ fn x509_v3_certificate(
         .set_pubkey(key_pair)
         .expect("unable to set public key");
     builder
-        .set_not_before(&now)
+        .set_not_before(not_before)
         .expect("unable to set 'not before'");
     builder
         .set_not_after(not_after)

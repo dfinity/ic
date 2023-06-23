@@ -3,6 +3,8 @@ use std::time::Instant;
 use anyhow::Error;
 use async_trait::async_trait;
 use candid::Principal;
+use certificate_orchestrator_interface::IcCertificate;
+use ic_agent::{hash_tree::HashTree, Certificate};
 use opentelemetry::{
     metrics::{Counter, Histogram, Meter},
     Context, KeyValue,
@@ -12,13 +14,14 @@ use trust_dns_resolver::{error::ResolveError, lookup::Lookup, proto::rr::RecordT
 
 use crate::{
     acme,
-    certificate::{self, ExportError, UploadError},
+    certificate::{self, ExportError, Package, UploadError},
     check::{Check, CheckError},
     dns::{self, Record, Resolve},
     registration::{
         Create, CreateError, Get, GetError, Id, Registration, Remove, RemoveError, Update,
         UpdateError, UpdateType,
     },
+    verification::{Verify, VerifyError},
     work::{
         Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue, QueueError, Task,
     },
@@ -61,6 +64,7 @@ impl<T: Create> Create for WithMetrics<T> {
             Ok(_) => "ok",
             Err(err) => match err {
                 CreateError::Duplicate(_) => "duplicate",
+                CreateError::RateLimited(_) => "rate-limited",
                 CreateError::UnexpectedError(_) => "fail",
             },
         };
@@ -321,8 +325,10 @@ impl<T: Process> Process for WithMetrics<T> {
         let status = match &out {
             Ok(_) => "ok",
             Err(err) => match err {
+                ProcessError::AwaitingAcmeOrderCreation => "awaiting-acme-order-creation",
                 ProcessError::AwaitingDnsPropagation => "awaiting-dns-propagation",
                 ProcessError::AwaitingAcmeOrderReady => "awaiting-acme-order-ready",
+                ProcessError::FailedUserConfigurationCheck => "failed-user-configuration-check",
                 ProcessError::UnexpectedError(_) => "fail",
             },
         };
@@ -565,12 +571,47 @@ impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
 }
 
 #[async_trait]
+impl<T: Verify> Verify for WithMetrics<T> {
+    async fn verify(
+        &self,
+        key: Option<String>,
+        limit: u64,
+        pkgs: &[Package],
+        cert: &Certificate,
+        tree: &HashTree<Vec<u8>>,
+    ) -> Result<(), VerifyError> {
+        let start_time = Instant::now();
+
+        let out = self.0.verify(key.clone(), limit, pkgs, cert, tree).await;
+
+        let status = if out.is_ok() { "ok" } else { "fail" };
+        let duration = start_time.elapsed().as_secs_f64();
+
+        let labels = &[KeyValue::new("status", status)];
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let cx = Context::current();
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
+
+        info!(action = action.as_str(), ?key, limit, status, duration, error = ?out.as_ref().err());
+
+        out
+    }
+}
+
+#[async_trait]
 impl<T: certificate::Export> certificate::Export for WithMetrics<T> {
     async fn export(
         &self,
         key: Option<String>,
         limit: u64,
-    ) -> Result<Vec<certificate::Package>, ExportError> {
+    ) -> Result<(Vec<certificate::Package>, IcCertificate), ExportError> {
         let start_time = Instant::now();
 
         let out = self.0.export(key.clone(), limit).await;
@@ -587,7 +628,6 @@ impl<T: certificate::Export> certificate::Export for WithMetrics<T> {
         } = &self.1;
 
         let cx = Context::current();
-
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 

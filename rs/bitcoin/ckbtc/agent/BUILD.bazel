@@ -8,7 +8,6 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1",
     "//rs/rust_canisters/http_types",
     "@crate_index//:candid",
-    "@crate_index//:garcon",
     "@crate_index//:ic-agent",
     "@crate_index//:num-traits",
 ]

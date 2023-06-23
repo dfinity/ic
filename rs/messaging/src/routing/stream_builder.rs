@@ -1,5 +1,4 @@
 use crate::message_routing::LatencyMetrics;
-use ic_base_types::NumBytes;
 use ic_constants::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
 use ic_error_types::RejectCode;
 use ic_logger::{error, warn, ReplicaLogger};
@@ -200,8 +199,7 @@ impl StreamBuilderImpl {
                     ),
                 }
                 .into(),
-                // Arbitrary large amounts, pushing a response always returns memory.
-                NumBytes::new(i64::MAX as u64 / 2),
+                // Arbitrary large amount, pushing a response always returns memory.
                 &mut (i64::MAX / 2),
             )
             // Enqueuing a response for a local request.

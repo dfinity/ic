@@ -57,6 +57,15 @@ pub async fn create_handler(
     let (id, is_duplicate) = match c.create(&name, &canister).await {
         Ok(id) => (id, false),
         Err(CreateError::Duplicate(id)) => (id, true),
+        Err(CreateError::RateLimited(domain)) => {
+            return Response::builder()
+                .status(429)
+                .body(Body::from(format!(
+                    "rate limit exceeded for domain {}",
+                    domain
+                )))
+                .unwrap()
+        }
         Err(CreateError::UnexpectedError(_)) => {
             return Response::builder()
                 .status(500)
@@ -234,6 +243,7 @@ pub async fn remove_handler(
     match ck.check(&reg.name).await {
         Err(CheckError::MissingDnsCname { .. }) => {}
         Err(CheckError::MissingDnsTxtCanisterId { .. }) => {}
+        Err(CheckError::MissingKnownDomains { .. }) => {}
         _ => {
             return Response::builder()
                 .status(400)
@@ -263,7 +273,6 @@ pub async fn remove_handler(
     Response::builder().status(200).body(Body::empty()).unwrap()
 }
 
-// TODO(or): wrap this export_handler with ttl-based caching and E-tag check
 pub async fn export_handler(
     Extension(e): Extension<Arc<dyn Export>>,
     _: Request<Body>,
@@ -275,7 +284,7 @@ pub async fn export_handler(
         )
         .await
     {
-        Ok(pkgs) => pkgs,
+        Ok((pkgs, _)) => pkgs,
         Err(_) => {
             return Response::builder()
                 .status(500)

@@ -22,7 +22,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -45,7 +45,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
         let payload = UpdateNodeRewardsTableProposalPayload { new_entries };
 
         // The anonymous end-user tries to update the node rewards table, bypassing
-        // the proposals canister. This should be rejected.
+        // the governance canister. This should be rejected.
         let response: Result<(), String> = registry
             .update_("update_node_rewards_table", candid_one, payload.clone())
             .await;
@@ -94,7 +94,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rew
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -142,7 +142,7 @@ fn test_the_governance_canister_can_update_the_node_rewards_table() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;

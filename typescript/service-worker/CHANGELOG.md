@@ -2,7 +2,14 @@
 
 ## Unreleased 
 
+## 1.8.1
+
+- Temporarily disable response verification v2 until asset canister v0.14.1 is sufficiently circulated
+
+## 1.8.0
+
 - Allow redirects for canisters implementing response verification v2
+- Show error details when an exception occurs to make error reporting easier for end users
 
 ## 1.7.2
 

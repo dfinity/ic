@@ -1,19 +1,23 @@
-use crate::logs::{ERROR, INFO};
-use crate::pb::v1::{
-    error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
-    set_mode_call_result::SetModeResult, settle_community_fund_participation_result,
-    sns_neuron_recipe::ClaimedStatus, sns_neuron_recipe::Investor, BuyerState, CfInvestment,
-    CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpResponse, FinalizeSwapResponse, Init,
-    Lifecycle, NeuronId as SaleNeuronId, OpenRequest, Params, SetDappControllersCallResult,
-    SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult,
-    TransferableAmount,
+use crate::{
+    clients::{RealNnsGovernanceClient, RealSnsGovernanceClient, RealSnsRootClient},
+    environment::{CanisterClients, CanisterEnvironment},
+    logs::{ERROR, INFO},
+    pb::v1::{
+        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
+        settle_community_fund_participation_result,
+        sns_neuron_recipe::{ClaimedStatus, Investor},
+        BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
+        ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SaleNeuronId,
+        OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
+        SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
+    },
+    swap::is_valid_principal,
 };
-use crate::swap::is_valid_principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::ledger::ICRC1Ledger;
-use ic_nervous_system_common::SECONDS_PER_DAY;
+use ic_nervous_system_common::{ledger::ICRC1Ledger, SECONDS_PER_DAY};
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -89,39 +93,105 @@ impl ErrorRefundIcpResponse {
     }
 }
 
+fn principal_string_to_canister_id(s: &str) -> Result<CanisterId, String> {
+    let principal_id = PrincipalId::from_str(s).map_err(|err| err.to_string())?;
+    let canister_id = CanisterId::new(principal_id).map_err(|err| err.to_string())?;
+    Ok(canister_id)
+}
+
 impl Init {
-    pub fn nns_governance_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.nns_governance_canister_id).unwrap()).unwrap()
+    pub fn nns_governance(&self) -> Result<CanisterId, String> {
+        principal_string_to_canister_id(&self.nns_governance_canister_id)
     }
 
-    pub fn nns_governance(&self) -> Result<CanisterId, String> {
-        let principal_id = PrincipalId::from_str(&self.nns_governance_canister_id)
-            .map_err(|err| err.to_string())?;
+    pub fn nns_governance_or_panic(&self) -> CanisterId {
+        self.nns_governance()
+            .expect("could not get canister id of nns governance")
+    }
 
-        CanisterId::new(principal_id).map_err(|err| err.to_string())
+    pub fn sns_root(&self) -> Result<CanisterId, String> {
+        principal_string_to_canister_id(&self.sns_root_canister_id)
     }
 
     pub fn sns_root_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.sns_root_canister_id).unwrap()).unwrap()
-    }
-
-    pub fn sns_governance_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.sns_governance_canister_id).unwrap()).unwrap()
+        self.sns_root()
+            .expect("could not get canister id of sns root")
     }
 
     pub fn sns_governance(&self) -> Result<CanisterId, String> {
-        let principal_id = PrincipalId::from_str(&self.sns_governance_canister_id)
-            .map_err(|err| err.to_string())?;
+        principal_string_to_canister_id(&self.sns_governance_canister_id)
+    }
 
-        CanisterId::new(principal_id).map_err(|err| err.to_string())
+    pub fn sns_governance_or_panic(&self) -> CanisterId {
+        self.sns_governance()
+            .expect("could not get canister id of sns governance")
+    }
+
+    pub fn sns_ledger(&self) -> Result<CanisterId, String> {
+        principal_string_to_canister_id(&self.sns_ledger_canister_id)
     }
 
     pub fn sns_ledger_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.sns_ledger_canister_id).unwrap()).unwrap()
+        self.sns_ledger()
+            .expect("could not get canister id of sns ledger")
+    }
+
+    pub fn icp_ledger(&self) -> Result<CanisterId, String> {
+        principal_string_to_canister_id(&self.icp_ledger_canister_id)
     }
 
     pub fn icp_ledger_or_panic(&self) -> CanisterId {
-        CanisterId::new(PrincipalId::from_str(&self.icp_ledger_canister_id).unwrap()).unwrap()
+        self.icp_ledger()
+            .expect("could not get canister id of icp ledger")
+    }
+
+    pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+        use ic_nervous_system_common::ledger::IcpLedgerCanister;
+        use ic_sns_governance::ledger::LedgerCanister;
+
+        let sns_root = {
+            let sns_root_canister_id = self
+                .sns_root()
+                .map_err(|s| format!("unable to get sns root canister id: {s}"))?;
+
+            RealSnsRootClient::new(sns_root_canister_id)
+        };
+
+        let sns_governance = {
+            let sns_governance_canister_id = self
+                .sns_governance()
+                .map_err(|s| format!("unable to get sns governance canister id: {s}"))?;
+            RealSnsGovernanceClient::new(sns_governance_canister_id)
+        };
+
+        let icp_ledger = {
+            let icp_ledger_canister_id = self
+                .icp_ledger()
+                .map_err(|s| format!("unable to get icp ledger canister id: {s}"))?;
+            IcpLedgerCanister::new(icp_ledger_canister_id)
+        };
+
+        let sns_ledger = {
+            let sns_ledger_canister_id = self
+                .sns_ledger()
+                .map_err(|s| format!("unable to get sns ledger canister id: {s}"))?;
+            LedgerCanister::new(sns_ledger_canister_id)
+        };
+
+        let nns_governance = {
+            let nns_governance_canister_id = self
+                .nns_governance()
+                .map_err(|s| format!("unable to get nns governance canister id: {s}"))?;
+            RealNnsGovernanceClient::new(nns_governance_canister_id)
+        };
+
+        Ok(CanisterClients {
+            sns_root,
+            sns_governance,
+            sns_ledger,
+            icp_ledger,
+            nns_governance,
+        })
     }
 
     pub fn transaction_fee_e8s_or_panic(&self) -> u64 {
@@ -303,11 +373,11 @@ impl Params {
             .swap_due_timestamp_seconds
             .saturating_sub(open_timestamp_seconds);
 
-        // Sale must be at least MIN_SALE_DURATION_SECONDS long
+        // Swap must be at least MIN_SALE_DURATION_SECONDS long
         if duration_seconds < Self::MIN_SALE_DURATION_SECONDS {
             return false;
         }
-        // Sale can be at most MAX_SALE_DURATION_SECONDS long
+        // Swap can be at most MAX_SALE_DURATION_SECONDS long
         if duration_seconds > Self::MAX_SALE_DURATION_SECONDS {
             return false;
         }
@@ -608,7 +678,7 @@ impl FinalizeSwapResponse {
     pub fn set_sweep_icp_result(&mut self, sweep_icp_result: SweepResult) {
         if !sweep_icp_result.is_successful_sweep() {
             self.set_error_message(
-                "Transferring ICP did not complete fully, some transfers were invalid or failed. Halting sale finalization".to_string()
+                "Transferring ICP did not complete fully, some transfers were invalid or failed. Halting swap finalization".to_string()
             );
         }
         self.sweep_icp_result = Some(sweep_icp_result);
@@ -620,7 +690,7 @@ impl FinalizeSwapResponse {
     ) {
         if !result.is_successful_settlement() {
             self.set_error_message(
-                "Settling the CommunityFund participation did not succeed. Halting sale finalization".to_string());
+                "Settling the CommunityFund participation did not succeed. Halting swap finalization".to_string());
         }
         self.settle_community_fund_participation_result = Some(result);
     }
@@ -628,7 +698,7 @@ impl FinalizeSwapResponse {
     pub fn set_set_dapp_controllers_result(&mut self, result: SetDappControllersCallResult) {
         if !result.is_successful_set_dapp_controllers() {
             self.set_error_message(
-                "Restoring the dapp canisters controllers did not succeed. Halting sale finalization".to_string());
+                "Restoring the dapp canisters controllers did not succeed. Halting swap finalization".to_string());
         }
         self.set_dapp_controllers_call_result = Some(result);
     }
@@ -636,7 +706,7 @@ impl FinalizeSwapResponse {
     pub fn set_sweep_sns_result(&mut self, sweep_sns_result: SweepResult) {
         if !sweep_sns_result.is_successful_sweep() {
             self.set_error_message(
-                "Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting sale finalization".to_string()
+                "Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting swap finalization".to_string()
             );
         }
         self.sweep_sns_result = Some(sweep_sns_result);
@@ -645,7 +715,7 @@ impl FinalizeSwapResponse {
     pub fn set_claim_neuron_result(&mut self, claim_neuron_result: SweepResult) {
         if !claim_neuron_result.is_successful_sweep() {
             self.set_error_message(
-                "Claiming SNS Neurons did not complete fully, some claims were invalid or failed. Halting sale finalization".to_string()
+                "Claiming SNS Neurons did not complete fully, some claims were invalid or failed. Halting swap finalization".to_string()
             );
         }
         self.claim_neuron_result = Some(claim_neuron_result);
@@ -654,7 +724,7 @@ impl FinalizeSwapResponse {
     pub fn set_set_mode_call_result(&mut self, set_mode_call_result: SetModeCallResult) {
         if !set_mode_call_result.is_successful_set_mode_call() {
             self.set_error_message(
-                "Setting the SNS Governance mode to normal did not complete fully. Halting sale finalization".to_string()
+                "Setting the SNS Governance mode to normal did not complete fully. Halting swap finalization".to_string()
             );
         }
         self.set_mode_call_result = Some(set_mode_call_result);
@@ -782,11 +852,13 @@ impl TryInto<NeuronId> for SaleNeuronId {
 
 #[cfg(test)]
 mod tests {
-    use crate::pb::v1::{
-        params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Init,
-        ListDirectParticipantsResponse, OpenRequest, Params, Participant,
+    use crate::{
+        pb::v1::{
+            params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Init,
+            ListDirectParticipantsResponse, OpenRequest, Params, Participant,
+        },
+        swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
-    use crate::swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT;
     use ic_base_types::PrincipalId;
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
@@ -1001,7 +1073,7 @@ mod tests {
 
     #[test]
     fn sale_cannot_be_open_more_than_90_days() {
-        // Should be valid with the sale deadline set to MAX_SALE_DURATION_SECONDS from now.
+        // Should be valid with the swap deadline set to MAX_SALE_DURATION_SECONDS from now.
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
@@ -1017,7 +1089,7 @@ mod tests {
         };
         assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
 
-        // Should be invalid with the sale deadline set MAX_SALE_DURATION_SECONDS + 1 second from now.
+        // Should be invalid with the swap deadline set MAX_SALE_DURATION_SECONDS + 1 second from now.
         let params = Params {
             swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS + 1,
             sale_delay_seconds: Some(0),
@@ -1058,7 +1130,7 @@ mod tests {
 
     #[test]
     fn sale_must_be_open_for_at_least_one_day() {
-        // Should be valid with the sale length set to MIN_SALE_DURATION_SECONDS.
+        // Should be valid with the swap length set to MIN_SALE_DURATION_SECONDS.
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(0),
@@ -1074,7 +1146,7 @@ mod tests {
         };
         assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
 
-        // Should fail with the sale length set to one second less than MIN_SALE_DURATION_SECONDS.
+        // Should fail with the swap length set to one second less than MIN_SALE_DURATION_SECONDS.
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS - 1,
             sale_delay_seconds: Some(0),
@@ -1094,8 +1166,8 @@ mod tests {
 
     #[test]
     fn sale_must_be_open_for_at_least_one_day_takes_into_account_delay() {
-        // Should be valid with the sale deadline set to MIN_SALE_DURATION_SECONDS + 1 second from now
-        // with a sale delay of 1 second.
+        // Should be valid with the swap deadline set to MIN_SALE_DURATION_SECONDS + 1 second from now
+        // with a swap delay of 1 second.
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS + 1,
             sale_delay_seconds: Some(1),
@@ -1112,8 +1184,8 @@ mod tests {
         };
         assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
 
-        // Should be invalid with the sale deadline set to MIN_SALE_DURATION_SECONDS from now
-        // with a sale delay of 1 second.
+        // Should be invalid with the swap deadline set to MIN_SALE_DURATION_SECONDS from now
+        // with a swap delay of 1 second.
         let params = Params {
             swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS,
             sale_delay_seconds: Some(1),

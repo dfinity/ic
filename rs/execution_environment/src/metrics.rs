@@ -8,13 +8,14 @@ use ic_types::{
 use prometheus::{Histogram, IntCounter};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
+pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
+
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
     pub query_retry_call: ScopedMetrics,
     pub query_spawned_calls: ScopedMetrics,
-    pub query_cache_hits: IntCounter,
-    pub query_cache_misses: IntCounter,
+    pub query_critical_error: IntCounter,
 }
 
 impl QueryHandlerMetrics {
@@ -118,14 +119,7 @@ impl QueryHandlerMetrics {
                     metrics_registry,
                 ),
             },
-            query_cache_hits: metrics_registry.int_counter(
-                "execution_query_cache_hits",
-                "The number of replica side query cache hits",
-            ),
-            query_cache_misses: metrics_registry.int_counter(
-                "execution_query_cache_misses",
-                "The number of replica side query cache misses",
-            ),
+            query_critical_error: metrics_registry.error_counter(QUERY_HANDLER_CRITICAL_ERROR),
         }
     }
 }

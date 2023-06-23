@@ -106,9 +106,7 @@ pub fn setup<C: HyperService<Body> + 'static>(
                 .context("fail to create agent")?;
 
             if !root_key.is_empty() {
-                agent
-                    .set_root_key(root_key.clone())
-                    .context("fail to set root key")?;
+                agent.set_root_key(root_key.clone());
             }
 
             Ok((agent, v.domain.clone()))

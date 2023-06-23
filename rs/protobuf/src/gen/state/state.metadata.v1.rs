@@ -6,19 +6,9 @@ pub struct Time {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeTopology {
-    #[prost(string, tag = "1")]
-    pub ip_address: ::prost::alloc::string::String,
-    #[prost(uint32, tag = "2")]
-    pub http_port: u32,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetTopologyEntry {
     #[prost(message, optional, tag = "1")]
     pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
-    #[prost(message, optional, tag = "2")]
-    pub node_topology: ::core::option::Option<NodeTopology>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -275,8 +265,6 @@ pub struct SystemMetadata {
     pub prev_state_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(uint64, tag = "3")]
     pub batch_time_nanos: u64,
-    #[prost(message, optional, tag = "4")]
-    pub ingress_history: ::core::option::Option<super::super::ingress::v1::IngressHistoryState>,
     #[prost(message, repeated, tag = "5")]
     pub streams: ::prost::alloc::vec::Vec<super::super::queues::v1::StreamEntry>,
     #[prost(message, optional, tag = "6")]
@@ -322,6 +310,14 @@ pub struct SystemMetadata {
 pub struct StableMemory {
     #[prost(bytes = "vec", tag = "1")]
     pub memory: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SplitFrom {
+    /// If present, the subnet is mid-way through a split. Identifies the original
+    /// subnet that this was split from.
+    #[prost(message, optional, tag = "1")]
+    pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

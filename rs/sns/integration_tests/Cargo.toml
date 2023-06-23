@@ -33,8 +33,9 @@ ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-ledger-canister-core = { path = "../../rosetta-api/ledger_canister_core" }
-ic-nervous-system-common = { path = "../../nervous_system/common/" }
-ic-nns-constants = { path = "../../nns/constants/" }
+ic-nervous-system-clients = { path = "../../nervous_system/clients" }
+ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }

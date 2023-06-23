@@ -1,8 +1,10 @@
-use candid::{candid_method, Nat};
+use candid::{candid_method, Decode, Nat};
 use dfn_candid::{candid, candid_one, CandidOne};
+#[allow(unused_imports)]
+use dfn_core::BytesS;
 use dfn_core::{
     api::{caller, data_certificate, print, set_certified_data, trap_with},
-    over, over_async, over_async_may_reject, over_init, printer, setup, stable, BytesS,
+    over, over_async, over_async_may_reject, over_init, printer, setup, stable,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
@@ -23,10 +25,10 @@ use ic_ledger_core::{
 use icp_ledger::{
     protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
     ArchivedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, GetBlocksArgs, IterBlocksArgs, LedgerCanisterInitPayload, Memo, Name,
-    Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount, Symbol,
-    TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
+    CandidBlock, Decimals, GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo,
+    Name, Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount,
+    Symbol, TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
+    TransferFeeArgs, MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -131,7 +133,7 @@ fn add_payment(
     memo: Memo,
     operation: Operation,
     created_at_time: Option<TimeStamp>,
-) -> (BlockIndex, ic_ledger_core::block::HashOf<EncodedBlock>) {
+) -> (BlockIndex, ic_ledger_hash_of::HashOf<EncodedBlock>) {
     let (height, hash) = ledger_canister::add_payment(memo, operation, created_at_time);
     set_certified_data(&hash.into_bytes());
     (height, hash)
@@ -615,43 +617,85 @@ fn icrc1_decimals() -> u8 {
 }
 
 #[candid_method(init)]
-fn canister_init(arg: LedgerCanisterInitPayload) {
-    init(
-        arg.minting_account,
-        arg.icrc1_minting_account,
-        arg.initial_values,
-        arg.max_message_size_bytes,
-        arg.transaction_window,
-        arg.archive_options,
-        arg.send_whitelist,
-        arg.transfer_fee,
-        arg.token_symbol,
-        arg.token_name,
-    )
+fn canister_init(arg: LedgerCanisterPayload) {
+    match arg {
+        LedgerCanisterPayload::Init(arg) => init(
+            arg.minting_account,
+            arg.icrc1_minting_account,
+            arg.initial_values,
+            arg.max_message_size_bytes,
+            arg.transaction_window,
+            arg.archive_options,
+            arg.send_whitelist,
+            arg.transfer_fee,
+            arg.token_symbol,
+            arg.token_name,
+        ),
+        LedgerCanisterPayload::Upgrade(_) => {
+            ic_cdk::trap("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
+        }
+    }
 }
 
 #[export_name = "canister_init"]
 fn main() {
-    over_init(|CandidOne(arg)| canister_init(arg))
+    over_init(|bytes: BytesS| {
+        // We support the old init argument for backward
+        // compatibility. If decoding the bytes as the new
+        // init arguments fails then we fallback to the old
+        // init arguments.
+        match Decode!(&bytes.0, LedgerCanisterPayload) {
+            Ok(arg) => canister_init(arg),
+            Err(new_err) => {
+                // fallback to old init
+                match Decode!(&bytes.0, InitArgs) {
+                    Ok(arg) => init(
+                        arg.minting_account,
+                        arg.icrc1_minting_account,
+                        arg.initial_values,
+                        arg.max_message_size_bytes,
+                        arg.transaction_window,
+                        arg.archive_options,
+                        arg.send_whitelist,
+                        arg.transfer_fee,
+                        arg.token_symbol,
+                        arg.token_name,
+                    ),
+                    Err(old_err) =>
+                        ic_cdk::trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
+                }
+            }
+        }
+    })
+}
+
+fn post_upgrade(args: Option<LedgerCanisterPayload>) {
+    let mut ledger = LEDGER.write().unwrap();
+    *ledger = ciborium::de::from_reader(stable::StableReader::new())
+        .expect("Decoding stable memory failed");
+
+    if let Some(args) = args {
+        match args {
+            LedgerCanisterPayload::Init(_) => ic_cdk::trap("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
+            LedgerCanisterPayload::Upgrade(upgrade_args) => {
+                if let Some(upgrade_args) = upgrade_args {
+                    ledger.upgrade(upgrade_args);
+                }
+        }
+    }
+    }
+    set_certified_data(
+        &ledger
+            .blockchain
+            .last_hash
+            .map(|h| h.into_bytes())
+            .unwrap_or([0u8; 32]),
+    );
 }
 
 #[export_name = "canister_post_upgrade"]
-fn post_upgrade() {
-    over_init(|_: BytesS| {
-        let mut ledger = LEDGER.write().unwrap();
-        *ledger = ciborium::de::from_reader(stable::StableReader::new())
-            .expect("Decoding stable memory failed");
-
-        ledger.maximum_number_of_accounts = 28_000_000;
-
-        set_certified_data(
-            &ledger
-                .blockchain
-                .last_hash
-                .map(|h| h.into_bytes())
-                .unwrap_or([0u8; 32]),
-        );
-    })
+fn post_upgrade_() {
+    over_init(|CandidOne(args)| post_upgrade(args));
 }
 
 #[export_name = "canister_pre_upgrade"]
@@ -776,6 +820,10 @@ async fn icrc1_transfer(
     let from_account = Account {
         owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
+    };
+    match arg.memo.as_ref() {
+        Some(memo) if memo.0.len() > MEMO_SIZE_BYTES => ic_cdk::trap("the memo field is too large"),
+        _ => {}
     };
     let amount = match arg.amount.0.to_u64() {
         Some(n) => Tokens::from_e8s(n),
@@ -1182,21 +1230,19 @@ mod tests {
     fn check_candid_interface_compatibility() {
         let new_interface = __export_service();
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        for candid_file in ["../ledger.did", "../../icrc1/ledger/icrc1.did"].iter() {
-            let old_interface = manifest_dir.join(candid_file);
+        let old_interface = manifest_dir.join("../ledger.did");
 
-            service_compatible(
-                CandidSource::Text(&new_interface),
-                CandidSource::File(old_interface.as_path()),
+        service_compatible(
+            CandidSource::Text(&new_interface),
+            CandidSource::File(old_interface.as_path()),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "the ledger interface is not compatible with {}: {:?}",
+                old_interface.display(),
+                e
             )
-            .unwrap_or_else(|e| {
-                panic!(
-                    "the ledger interface is not compatible with {}: {:?}",
-                    old_interface.display(),
-                    e
-                )
-            });
-        }
+        });
     }
     // FI-510 Backwards compatibility testing for Candid and Protobuf
     #[test]

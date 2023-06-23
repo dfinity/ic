@@ -8,8 +8,10 @@ use futures::{
     },
     StreamExt,
 };
-use ic_nervous_system_common::ledger::IcpLedger;
-use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
+use ic_nervous_system_common::{
+    ledger::{ICRC1Ledger, IcpLedger},
+    NervousSystemError,
+};
 use icp_ledger::{AccountIdentifier, Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};

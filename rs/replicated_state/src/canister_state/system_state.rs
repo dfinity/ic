@@ -11,7 +11,6 @@ use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTa
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    state::canister_metadata::v1 as pb_canister_metadata,
     state::canister_state_bits::v1 as pb,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -219,18 +218,16 @@ impl CanisterHistory {
         );
     }
 
-    /// Returns an iterator over the most recent canister changes: if `num_requested_changes` is None,
-    /// then all canister changes are returned; otherwise, the requested number of canister changes
-    /// or, if more changes are requested than available in the history, all canister changes are returned.
+    /// Returns an iterator over the requested number of most recent canister changes
+    /// or, if more changes are requested than available in the history,
+    /// an iterator over all canister changes.
     /// The changes are iterated in chronological order, i.e., from the oldest to the most recent.
     pub fn get_changes(
         &self,
-        num_requested_changes: Option<usize>,
+        num_requested_changes: usize,
     ) -> impl Iterator<Item = &Arc<CanisterChange>> {
         let num_all_changes = self.changes.len();
-        let num_changes = num_requested_changes
-            .unwrap_or(num_all_changes)
-            .min(num_all_changes);
+        let num_changes = num_requested_changes.min(num_all_changes);
         self.changes.range((num_all_changes - num_changes)..)
     }
 
@@ -585,23 +582,23 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
     }
 }
 
-impl From<&CanisterHistory> for pb_canister_metadata::CanisterHistory {
+impl From<&CanisterHistory> for pb::CanisterHistory {
     fn from(item: &CanisterHistory) -> Self {
         Self {
             changes: item
                 .changes
                 .iter()
                 .map(|e| (&(**e)).into())
-                .collect::<Vec<pb_canister_metadata::CanisterChange>>(),
+                .collect::<Vec<pb::CanisterChange>>(),
             total_num_changes: item.total_num_changes,
         }
     }
 }
 
-impl TryFrom<pb_canister_metadata::CanisterHistory> for CanisterHistory {
+impl TryFrom<pb::CanisterHistory> for CanisterHistory {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_metadata::CanisterHistory) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::CanisterHistory) -> Result<Self, Self::Error> {
         let changes = value
             .changes
             .into_iter()
@@ -949,8 +946,8 @@ impl SystemState {
     ///    full when pushing a `Request`; or when pushing a `Response` when none
     ///    is expected.
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
-    ///  * `OutOfMemory` if the necessary memory reservation is larger than the
-    ///    canister or subnet available memory.
+    ///  * `OutOfMemory` if the necessary memory reservation is larger than subnet
+    ///     available memory.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
@@ -959,7 +956,6 @@ impl SystemState {
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
-        canister_available_memory: i64,
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
@@ -1005,7 +1001,6 @@ impl SystemState {
                 push_input(
                     &mut self.queues,
                     msg,
-                    canister_available_memory,
                     subnet_available_memory,
                     own_subnet_type,
                     input_queue_type,
@@ -1052,7 +1047,10 @@ impl SystemState {
             CanisterStatus::Stopping {
                 call_context_manager,
                 ..
-            } => call_context_manager.canister_ready_to_stop(),
+            } => {
+                call_context_manager.callbacks().is_empty()
+                    && call_context_manager.call_contexts().is_empty()
+            }
             CanisterStatus::Stopped => true,
         }
     }
@@ -1110,8 +1108,8 @@ impl SystemState {
     }
 
     /// Inducts messages from the output queue to `self` into the input queue
-    /// from `self` while respecting queue capacity and the provided canister
-    /// and subnet available memory.
+    /// from `self` while respecting queue capacity and the provided subnet
+    /// available memory.
     ///
     /// `subnet_available_memory` is updated to reflect the change in
     /// `self.queues` memory usage.
@@ -1120,7 +1118,6 @@ impl SystemState {
     /// don't want to DoS system canisters due to lots of incoming requests.
     pub fn induct_messages_to_self(
         &mut self,
-        canister_available_memory: i64,
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
     ) {
@@ -1130,12 +1127,13 @@ impl SystemState {
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
         }
 
-        let mut available_memory = canister_available_memory.min(*subnet_available_memory);
         let mut memory_usage = self.queues.memory_usage() as i64;
 
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
             // Ensure that enough memory is available for inducting `msg`.
-            if own_subnet_type != SubnetType::System && can_push(msg, available_memory).is_err() {
+            if own_subnet_type != SubnetType::System
+                && can_push(msg, *subnet_available_memory).is_err()
+            {
                 // Bail out if not enough memory available for message.
                 return;
             }
@@ -1149,13 +1147,10 @@ impl SystemState {
                 return;
             }
 
-            // Adjust both `available_memory` and `subnet_available_memory` by
-            // `memory_usage_before - memory_usage_after`. Defer the accounting
-            // to `CanisterQueues`, to avoid duplication or divergence.
-            available_memory += memory_usage;
+            // Adjust `subnet_available_memory` by `memory_usage_before - memory_usage_after`.
+            // Defer the accounting to `CanisterQueues`, to avoid duplication or divergence.
             *subnet_available_memory += memory_usage;
             memory_usage = self.queues.memory_usage() as i64;
-            available_memory -= memory_usage;
             *subnet_available_memory -= memory_usage;
         }
     }
@@ -1189,7 +1184,6 @@ impl SystemState {
     /// following a canister migration, based on the updated set of local canisters.
     ///
     /// See [`CanisterQueues::split_input_schedules`] for further details.
-    #[allow(dead_code)]
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
@@ -1260,6 +1254,12 @@ impl SystemState {
         }
     }
 
+    /// Clears all canister changes and their memory usage,
+    /// but keeps the total number of changes recorded.
+    pub fn clear_canister_history(&mut self) {
+        self.canister_history.clear();
+    }
+
     /// Adds a canister change to canister history.
     /// The canister version of the newly added canister change is
     /// taken directly from the `SystemState`.
@@ -1287,7 +1287,7 @@ impl SystemState {
 /// message into the induction pool of `queues`.
 ///
 /// Returns `StateError::OutOfMemory` if pushing the message would require more
-/// memory than `queues_available_memory.min(subnet_available_memory)`.
+/// memory than `subnet_available_memory`.
 ///
 /// `subnet_available_memory` is updated to reflect the change in memory usage
 /// after a successful push; and left unmodified if the push failed.
@@ -1296,19 +1296,17 @@ impl SystemState {
 pub(crate) fn push_input(
     queues: &mut CanisterQueues,
     msg: RequestOrResponse,
-    queues_available_memory: i64,
     subnet_available_memory: &mut i64,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
 ) -> Result<(), (StateError, RequestOrResponse)> {
     // Do not enforce limits for local messages on system subnets.
     if own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet {
-        let available_memory = queues_available_memory.min(*subnet_available_memory);
-        if let Err(required_memory) = can_push(&msg, available_memory) {
+        if let Err(required_memory) = can_push(&msg, *subnet_available_memory) {
             return Err((
                 StateError::OutOfMemory {
                     requested: NumBytes::new(required_memory as u64),
-                    available: available_memory,
+                    available: *subnet_available_memory,
                 },
                 msg,
             ));
@@ -1325,10 +1323,7 @@ pub(crate) fn push_input(
 }
 
 pub mod testing {
-    use super::SystemState;
-    use crate::CanisterQueues;
-    use ic_interfaces::messages::CanisterMessage;
-    use ic_types::{CanisterId, Cycles};
+    use super::*;
 
     /// Exposes `SystemState` internals for use in other crates' unit tests.
     pub trait SystemStateTesting {
@@ -1344,8 +1339,16 @@ pub mod testing {
         /// Testing only: pops next input message
         fn pop_input(&mut self) -> Option<CanisterMessage>;
 
-        /// Set value of 'cycles_balance'.
+        /// Testing only: sets the value of 'cycles_balance'.
         fn set_balance(&mut self, balance: Cycles);
+
+        /// Testing only: repartitions the local and remote input schedules after a
+        /// subnet split.
+        fn split_input_schedules(
+            &mut self,
+            own_canister_id: &CanisterId,
+            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        );
     }
 
     impl SystemStateTesting for SystemState {
@@ -1367,6 +1370,14 @@ pub mod testing {
 
         fn set_balance(&mut self, balance: Cycles) {
             self.cycles_balance = balance;
+        }
+
+        fn split_input_schedules(
+            &mut self,
+            own_canister_id: &CanisterId,
+            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        ) {
+            self.split_input_schedules(own_canister_id, local_canisters)
         }
     }
 }

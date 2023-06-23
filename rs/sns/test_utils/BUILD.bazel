@@ -2,16 +2,17 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/sha",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",
     "//rs/nns/constants",
-    "//rs/nns/test_utils",
     "//rs/state_machine_tests",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
@@ -24,10 +25,7 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/governance",
-    "//rs/sns/init",
     "//rs/sns/root",
-    "//rs/sns/swap",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
@@ -39,6 +37,22 @@ DEPENDENCIES = [
     "@crate_index//:num-traits",
     "@crate_index//:prost",
     "@crate_index//:tokio",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/test_utils",
+    "//rs/sns/governance",
+    "//rs/sns/init",
+    "//rs/sns/swap",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/test_utils:test_utils--test_feature",
+    "//rs/sns/governance:governance--test_feature",
+    "//rs/sns/init:init--test_feature",
+    "//rs/sns/swap:swap--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -59,6 +73,17 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "test_utils--test_feature",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_test_utils",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )
 
 rust_test(

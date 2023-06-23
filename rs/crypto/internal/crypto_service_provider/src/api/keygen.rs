@@ -1,10 +1,13 @@
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 
 use super::super::types::{CspPop, CspPublicKey};
-use crate::vault::api::{CspPublicKeyStoreError, ValidatePksAndSksError};
+use crate::vault::api::{
+    CspBasicSignatureKeygenError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
+    CspTlsKeygenError, ValidatePksAndSksError,
+};
 use crate::{ExternalPublicKeys, PksAndSksContainsErrors};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::{CryptoError, CurrentNodePublicKeys};
+use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::NodeId;
 
 /// A trait that can be used to generate cryptographic key pairs
@@ -23,7 +26,7 @@ pub trait CspKeyGenerator {
     /// If there already exists a secret key in the store for the secret key ID
     /// derived from the public key. This error most likely indicates a bad
     /// randomness source.
-    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CryptoError>;
+    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
 
     /// Generates a committee signing public/private key pair.
     ///
@@ -41,7 +44,9 @@ pub trait CspKeyGenerator {
     /// If there already exists a secret key in the store for the secret key ID
     /// derived from the public key. This error most likely indicates a bad
     /// randomness source.
-    fn gen_committee_signing_key_pair(&self) -> Result<(CspPublicKey, CspPop), CryptoError>;
+    fn gen_committee_signing_key_pair(
+        &self,
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 
     /// Generates TLS key material for node with ID `node_id`.
     ///
@@ -66,7 +71,7 @@ pub trait CspKeyGenerator {
         &self,
         node_id: NodeId,
         not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CryptoError>;
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
 }
 
 /// A trait that allows simultaneously checking the public and secret key stores for the

@@ -2,11 +2,15 @@
 //! selections of ingress and xnet messages, and DKGs computed for other
 //! subnets.
 
-use crate::consensus::metrics::{BatchStats, BlockStats};
-use crate::ecdsa::utils::EcdsaBlockReaderImpl;
+use crate::{
+    consensus::{
+        metrics::{BatchStats, BlockStats},
+        status::{self, Status},
+    },
+    ecdsa::utils::EcdsaBlockReaderImpl,
+};
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
-use ic_consensus_utils::pool_reader::PoolReader;
-use ic_consensus_utils::{crypto_hashable_to_seed, get_block_hash_string, lookup_replica_version};
+use ic_consensus_utils::{crypto_hashable_to_seed, get_block_hash_string, pool_reader::PoolReader};
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGResponse};
 use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
@@ -80,29 +84,26 @@ pub fn deliver_batches(
                 if block.payload.is_summary() {
                     info!(log, "Delivering finalized batch at CUP height of {}", h);
                 }
-                // When we are not deliverying CUP block, we must check replica_version
+                // When we are not delivering CUP block, we must check if the subnet is halted.
                 else {
-                    match pool.registry_version(h).and_then(|registry_version| {
-                        lookup_replica_version(registry_client, subnet_id, log, registry_version)
-                    }) {
-                        Some(replica_version) if replica_version != current_replica_version => {
+                    match status::get_status(h, registry_client, subnet_id, pool, log) {
+                        Some(Status::Halting | Status::Halted) => {
                             debug!(
                                 every_n_seconds => 5,
                                 log,
-                                "Batch of height {} is not delivered before replica upgrades to new version {}",
+                                "Batch of height {} is not delivered because replica is halted",
                                 h,
-                                replica_version.as_ref()
                             );
                             return Ok(last_delivered_batch_height);
                         }
+                        Some(Status::Running) => {}
                         None => {
                             warn!(
                                 log,
-                                "Skipping batch delivery because replica version is unknown",
+                                "Skipping batch delivery because checking if replica is halted failed",
                             );
                             return Ok(last_delivered_batch_height);
                         }
-                        _ => {}
                     }
                 }
 

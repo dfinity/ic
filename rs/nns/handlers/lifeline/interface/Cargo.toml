@@ -1,0 +1,9 @@
+[package]
+name = "ic-nns-handler-lifeline-interface"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+candid = "0.8.1"
+ic-crypto-sha = {path = "../../../../crypto/sha" }
+serde = { version = "1.0.99", features = ["derive"] }

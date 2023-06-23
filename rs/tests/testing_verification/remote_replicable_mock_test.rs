@@ -24,7 +24,6 @@ pub fn setup(env: TestEnv) {
         .with_config_img(
             env.get_dependency_path("rs/tests/replicable_mock_test_uvm_config_image.zst"),
         )
-        .disable_ipv4()
         .start(&env)
         .expect("failed to setup universal VM");
 }

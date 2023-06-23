@@ -1,9 +1,7 @@
 //! Tests for PublicCoefficients conversions
 
-use super::super::arbitrary::arbitrary_public_coefficient_bytes;
 use super::*;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
-use proptest::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 
@@ -165,35 +163,4 @@ fn malformed_public_coefficients_bytes_should_fail_to_parse() {
         PublicCoefficients::try_from(&malformed_public_coefficients).is_err(),
         "Expected an error when parsing malformed public coefficients"
     );
-}
-
-/// Verifies that stringifying and parsing PublicCoefficientsBytes yields the
-/// original
-fn test_stringifying_and_parsing_public_coefficients_should_produce_original(
-    public_coefficients: PublicCoefficientsBytes,
-) {
-    let string = String::from(public_coefficients.clone());
-    let parsed = PublicCoefficientsBytes::try_from(string.as_str());
-    assert_eq!(
-        Ok(public_coefficients),
-        parsed,
-        "String form does not parse to original: '{}'",
-        string
-    );
-}
-
-/// Verifies that parsing an invalid PublicCoefficientsBytes string returns an
-/// error
-#[test]
-fn test_parsing_invalid_public_coefficients_string_should_produce_error() {
-    let string = "base 64 has no spaces";
-    let parsed = PublicCoefficientsBytes::try_from(string);
-    assert!(parsed.is_err(), "{}", string);
-}
-
-proptest! {
-    #[test]
-    fn proptest_stringifying_and_parsing_public_coefficients_should_produce_original_new (public_coefficients in arbitrary_public_coefficient_bytes(0,5)) {
-         test_stringifying_and_parsing_public_coefficients_should_produce_original(public_coefficients);
-    }
 }

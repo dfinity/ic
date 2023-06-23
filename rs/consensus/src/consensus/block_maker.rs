@@ -2,6 +2,7 @@
 use crate::{
     consensus::{
         metrics::{BlockMakerMetrics, EcdsaPayloadMetrics},
+        status::{self, Status},
         ConsensusCrypto,
     },
     dkg::create_payload as create_dkg_payload,
@@ -9,7 +10,7 @@ use crate::{
 };
 use ic_consensus_utils::{
     find_lowest_ranked_proposals, get_block_hash_string, get_subnet_record, is_time_to_make_block,
-    is_upgrade_finalized, is_upgrade_pending, membership::Membership, pool_reader::PoolReader,
+    membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource,
@@ -42,7 +43,7 @@ use std::{
 // the block validation path can skip the expensive crypto validation.
 const VALIDATED_DEALING_AGE_THRESHOLD_MSECS: u64 = 10;
 
-fn subnet_records_for_registry_version(
+pub(crate) fn subnet_records_for_registry_version(
     block_maker: &BlockMaker,
     membership_record: RegistryVersion,
     context_record: RegistryVersion,
@@ -68,17 +69,17 @@ fn subnet_records_for_registry_version(
 /// A consensus subcomponent that is responsible for creating block proposals.
 pub struct BlockMaker {
     time_source: Arc<dyn TimeSource>,
-    replica_config: ReplicaConfig,
+    pub(crate) replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
-    membership: Arc<Membership>,
-    crypto: Arc<dyn ConsensusCrypto>,
+    pub(crate) membership: Arc<Membership>,
+    pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     ecdsa_payload_metrics: EcdsaPayloadMetrics,
-    log: ReplicaLogger,
+    pub(crate) log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
     // available across the subnet.
@@ -186,7 +187,7 @@ impl BlockMaker {
     }
 
     /// Construct a block proposal
-    fn propose_block(
+    pub(crate) fn propose_block(
         &self,
         pool: &PoolReader<'_>,
         rank: Rank,
@@ -198,6 +199,11 @@ impl BlockMaker {
 
         // Note that we will skip blockmaking if registry versions or replica_versions
         // are missing or temporarily not retrievable.
+        //
+        // The current membership registry version (= stable registry version agreed on
+        // in the summary block initiating the previous DKG interval), determines subnet
+        // membership (in terms of the notarization committee) of the interval beginning
+        // with this block (inclusively).
         let registry_version = pool.registry_version(height).or_else(|| {
             warn!(
                 self.log,
@@ -206,8 +212,10 @@ impl BlockMaker {
             None
         })?;
 
-        // Get the subnet records that are relevant to making a block
+        // The stable registry version to be agreed on in this block. If this is a summary
+        // block, this version will be the new membership version of the next dkg interval.
         let stable_registry_version = self.get_stable_registry_version(&parent)?;
+        // Get the subnet records that are relevant to making a block
         let subnet_records =
             subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
 
@@ -261,7 +269,7 @@ impl BlockMaker {
     /// block, rank, and batch payload. This function completes the block by
     /// adding a DKG payload and signs the block to obtain a block proposal.
     #[allow(clippy::too_many_arguments)]
-    fn construct_block_proposal(
+    pub(crate) fn construct_block_proposal(
         &self,
         pool: &PoolReader<'_>,
         context: ValidationContext,
@@ -313,55 +321,60 @@ impl BlockMaker {
                     (summary, ecdsa_summary).into()
                 }
                 dkg::Payload::Dealings(dealings) => {
-                    let batch_payload = match self.build_batch_payload(
-                        pool,
-                        height,
-                        certified_height,
-                        &context,
-                        &parent,
-                        subnet_records,
-                    ) {
-                        None => return None,
-                        Some(payload) => payload,
-                    };
-                    if is_upgrade_pending(
+                    let (batch_payload, dealings, ecdsa_data) = match status::get_status(
                         height,
                         self.registry_client.as_ref(),
-                        &self.replica_config,
-                        &self.log,
+                        self.replica_config.subnet_id,
                         pool,
+                        &self.log,
                     )? {
-                        // Use empty DKG dealings if a replica upgrade is pending.
-                        let new_dealings = dkg::Dealings::new_empty(dealings.start_height);
-                        self.metrics.report_byte_estimate_metrics(
-                            batch_payload.xnet.size_bytes(),
-                            batch_payload.ingress.count_bytes(),
-                        );
-                        (batch_payload, new_dealings, None).into()
-                    } else {
-                        let ecdsa_data = ecdsa::create_data_payload(
-                            self.replica_config.subnet_id,
-                            &*self.registry_client,
-                            &*self.crypto,
-                            pool,
-                            self.ecdsa_pool.clone(),
-                            &*self.state_manager,
-                            &context,
-                            &parent,
-                            &self.ecdsa_payload_metrics,
-                            self.log.clone(),
-                        )
-                        .map_err(|err| {
-                            warn!(self.log, "Payload construction has failed: {:?}", err)
-                        })
-                        .ok()
-                        .flatten();
-                        self.metrics.report_byte_estimate_metrics(
-                            batch_payload.xnet.size_bytes(),
-                            batch_payload.ingress.count_bytes(),
-                        );
-                        (batch_payload, dealings, ecdsa_data).into()
-                    }
+                        // Don't propose any block if the replica is halted.
+                        Status::Halted => {
+                            return None;
+                        }
+                        // Use empty payload and empty DKG dealings if the replica is halting.
+                        Status::Halting => (
+                            BatchPayload::default(),
+                            dkg::Dealings::new_empty(dealings.start_height),
+                            /*ecdsa_data=*/ None,
+                        ),
+                        Status::Running => {
+                            let batch_payload = self.build_batch_payload(
+                                pool,
+                                height,
+                                certified_height,
+                                &context,
+                                &parent,
+                                subnet_records,
+                            );
+
+                            let ecdsa_data = ecdsa::create_data_payload(
+                                self.replica_config.subnet_id,
+                                &*self.registry_client,
+                                &*self.crypto,
+                                pool,
+                                self.ecdsa_pool.clone(),
+                                &*self.state_manager,
+                                &context,
+                                &parent,
+                                &self.ecdsa_payload_metrics,
+                                self.log.clone(),
+                            )
+                            .map_err(|err| {
+                                warn!(self.log, "Payload construction has failed: {:?}", err)
+                            })
+                            .ok()
+                            .flatten();
+
+                            (batch_payload, dealings, ecdsa_data)
+                        }
+                    };
+
+                    self.metrics.report_byte_estimate_metrics(
+                        batch_payload.xnet.size_bytes(),
+                        batch_payload.ingress.count_bytes(),
+                    );
+                    (batch_payload, dealings, ecdsa_data).into()
                 }
             },
         );
@@ -391,47 +404,19 @@ impl BlockMaker {
         context: &ValidationContext,
         parent: &Block,
         subnet_records: &SubnetRecords,
-    ) -> Option<BatchPayload> {
-        // Use empty payload if the (agreed) replica_version is not supported.
-        let upgrade_pending = is_upgrade_pending(
-            parent.height.increment(),
-            self.registry_client.as_ref(),
-            &self.replica_config,
-            &self.log,
-            pool,
-        );
-        if upgrade_pending.is_none() {
-            warn!(self.log, "Failed to check if upgrade is pending!");
-        }
-        if upgrade_pending? {
-            let upgrade_finalized = is_upgrade_finalized(
-                self.registry_client.as_ref(),
-                &self.replica_config,
-                &self.log,
-                pool,
-            );
-            if upgrade_finalized.is_none() {
-                warn!(self.log, "Failed to check if upgrade is finalized!");
-            }
-            if upgrade_finalized.unwrap_or(false) {
-                None
-            } else {
-                Some(BatchPayload::default())
-            }
-        } else {
-            let past_payloads =
-                pool.get_payloads_from_height(certified_height.increment(), parent.clone());
-            let payload =
-                self.payload_builder
-                    .get_payload(height, &past_payloads, context, subnet_records);
+    ) -> BatchPayload {
+        let past_payloads =
+            pool.get_payloads_from_height(certified_height.increment(), parent.clone());
+        let payload =
+            self.payload_builder
+                .get_payload(height, &past_payloads, context, subnet_records);
 
-            self.metrics
-                .get_payload_calls
-                .with_label_values(&["success"])
-                .inc();
+        self.metrics
+            .get_payload_calls
+            .with_label_values(&["success"])
+            .inc();
 
-            Some(payload)
-        }
+        payload
     }
 
     /// Log an entry for the proposed block and each of its ingress messages
@@ -462,8 +447,8 @@ impl BlockMaker {
 
     // Returns the registry version received from the NNS some specified amount of
     // time ago. If the parent's context references higher version which is already
-    // available localy, we use that version.
-    fn get_stable_registry_version(&self, parent: &Block) -> Option<RegistryVersion> {
+    // available locally, we use that version.
+    pub(crate) fn get_stable_registry_version(&self, parent: &Block) -> Option<RegistryVersion> {
         let parents_version = parent.context.registry_version;
         let latest_version = self.registry_client.get_latest_version();
         // Check if there is a stable version that we can bump up to.
@@ -480,152 +465,12 @@ impl BlockMaker {
         }
         None
     }
-
-    /// Maliciously propose blocks irrespective of the rank, based on the flags
-    /// received. If maliciously_propose_empty_blocks is set, propose only empty
-    /// blocks. If maliciously_equivocation_blockmaker is set, propose
-    /// multiple blocks at once.
-    #[cfg(feature = "malicious_code")]
-    pub(crate) fn maliciously_propose_blocks(
-        &self,
-        pool: &PoolReader<'_>,
-        maliciously_propose_empty_blocks: bool,
-        maliciously_equivocation_blockmaker: bool,
-    ) -> Vec<BlockProposal> {
-        use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-            MaliciousBehaviour, MaliciousBehaviourLogEntry,
-        };
-        trace!(self.log, "maliciously_propose_blocks");
-        let number_of_proposals = 5;
-
-        let my_node_id = self.replica_config.node_id;
-        let (beacon, parent) = match get_dependencies(pool) {
-            Some((b, p)) => (b, p),
-            None => {
-                return Vec::new();
-            }
-        };
-        let height = beacon.content.height.increment();
-        let registry_version = match pool.registry_version(height) {
-            Some(v) => v,
-            None => {
-                return Vec::new();
-            }
-        };
-
-        // If this node is a blockmaker, use its rank. If not, use rank 0.
-        // If the rank is not yet available, wait further.
-        let maybe_rank = match self
-            .membership
-            .get_block_maker_rank(height, &beacon, my_node_id)
-        {
-            Ok(Some(rank)) => Some(rank),
-            Ok(None) => Some(Rank(0)),
-            Err(_) => None,
-        };
-
-        if let Some(rank) = maybe_rank {
-            if !already_proposed(pool, height, my_node_id) {
-                // If maliciously_propose_empty_blocks is set, propose only empty blocks.
-                let maybe_proposal = match maliciously_propose_empty_blocks {
-                    true => self.maliciously_propose_empty_block(pool, rank, parent),
-                    false => self.propose_block(pool, rank, parent),
-                };
-
-                if let Some(proposal) = maybe_proposal {
-                    let mut proposals = vec![];
-
-                    match maliciously_equivocation_blockmaker {
-                        false => {}
-                        true => {
-                            let original_block = Block::from(proposal.clone());
-                            // Generate more valid proposals based on this proposal, by slightly
-                            // increasing the time in the context of
-                            // this block.
-                            for i in 1..(number_of_proposals - 1) {
-                                let mut new_block = original_block.clone();
-                                new_block.context.time += Duration::from_nanos(i);
-                                let hashed_block =
-                                    hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
-                                if let Ok(signature) = self.crypto.sign(
-                                    &hashed_block,
-                                    self.replica_config.node_id,
-                                    registry_version,
-                                ) {
-                                    proposals.push(BlockProposal {
-                                        signature,
-                                        content: hashed_block,
-                                    });
-                                }
-                            }
-                        }
-                    };
-                    proposals.push(proposal);
-
-                    if maliciously_propose_empty_blocks {
-                        ic_logger::info!(
-                            self.log,
-                            "[MALICIOUS] proposing empty blocks";
-                            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::ProposeEmptyBlocks as i32}
-                        );
-                    }
-                    if maliciously_equivocation_blockmaker {
-                        ic_logger::info!(
-                            self.log,
-                            "[MALICIOUS] proposing {} equivocation blocks",
-                            proposals.len();
-                            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::ProposeEquivocatingBlocks as i32}
-                        );
-                    }
-
-                    return proposals;
-                }
-            }
-        }
-        Vec::new()
-    }
-
-    /// Maliciously construct a block proposal with valid DKG, but with empty
-    /// batch payload.
-    #[cfg(feature = "malicious_code")]
-    fn maliciously_propose_empty_block(
-        &self,
-        pool: &PoolReader<'_>,
-        rank: Rank,
-        parent: Block,
-    ) -> Option<BlockProposal> {
-        let parent_hash = ic_types::crypto::crypto_hash(&parent);
-        let height = parent.height.increment();
-        let certified_height = self.state_manager.latest_certified_height();
-        let context = parent.context.clone();
-
-        // Note that we will skip blockmaking if registry versions or replica_versions
-        // are missing or temporarily not retrievable.
-        let registry_version = pool.registry_version(height)?;
-
-        // Get the subnet records that are relevant to making a block
-        let stable_registry_version = self.get_stable_registry_version(&parent)?;
-        let subnet_records =
-            subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
-
-        self.construct_block_proposal(
-            pool,
-            context,
-            parent,
-            parent_hash,
-            height,
-            certified_height,
-            rank,
-            registry_version,
-            &subnet_records,
-        )
-    }
 }
 
 /// Return the parent random beacon and block of the latest round for which
 /// this node might propose a block.
 /// Return None otherwise.
-fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, Block)> {
+pub(crate) fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, Block)> {
     let notarized_height = pool.get_notarized_height();
     let beacon = pool.get_random_beacon(notarized_height)?;
     let parent = pool
@@ -635,7 +480,7 @@ fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, Block)> {
 }
 
 /// Return true if this node has already made a proposal at the given height.
-fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: NodeId) -> bool {
+pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: NodeId) -> bool {
     pool.pool()
         .validated()
         .block_proposal()
@@ -653,10 +498,11 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_types::consensus::dkg;
-    use ic_types::consensus::{HasHeight, HasVersion};
-    use ic_types::crypto::CryptoHash;
-    use ic_types::*;
+    use ic_types::{
+        consensus::{dkg, HasHeight, HasVersion},
+        crypto::CryptoHash,
+        *,
+    };
     use std::sync::{Arc, RwLock};
 
     #[test]
@@ -844,10 +690,23 @@ mod tests {
         })
     }
 
-    // We expect block maker to correctly detect version change and start
+    // We expect block maker to correctly detect version change and start making only empty blocks.
+    #[test]
+    fn test_halting_due_to_protocol_upgrade() {
+        test_halting(
+            ReplicaVersion::try_from("0xBEEF").unwrap(),
+            /*halt_at_cup_height=*/ false,
+        )
+    }
+
+    // We expect block maker to correctly detect that the registry instructs it to halt and start
     // making only empty blocks.
     #[test]
-    fn test_protocol_upgrade() {
+    fn test_halting_due_to_registry_instruction() {
+        test_halting(ReplicaVersion::default(), /*halt_at_cup_height=*/ true)
+    }
+
+    fn test_halting(replica_version: ReplicaVersion, halt_at_cup_height: bool) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 3;
             let node_ids = [node_test_id(0)];
@@ -873,13 +732,15 @@ mod tests {
                         10,
                         SubnetRecordBuilder::from(&node_ids)
                             .with_dkg_interval_length(dkg_interval_length)
-                            .with_replica_version("0xBEEF")
+                            .with_replica_version(replica_version.as_ref())
+                            .with_halt_at_cup_height(halt_at_cup_height)
                             .build(),
                     ),
                 ],
             );
             let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
                 MetricsRegistry::new(),
+                no_op_logger(),
             )));
             let ecdsa_pool = Arc::new(RwLock::new(
                 ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl::new(
@@ -951,10 +812,7 @@ mod tests {
 
             // We do not anticipate payload builder to be called since we will be making
             // empty blocks (including the next CUP block).
-            let mut payload_builder = MockPayloadBuilder::new();
-            payload_builder
-                .expect_get_payload()
-                .return_const(BatchPayload::default());
+            let payload_builder = MockPayloadBuilder::new();
 
             let block_maker = BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,

@@ -4,7 +4,6 @@ use crate::pb::v1::{
 };
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
-use ic_ic00_types::CanisterStatusResultV2;
 use ic_sns_governance::pb::v1::{
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
     SetModeResponse,
@@ -147,30 +146,5 @@ impl NnsGovernanceClient for RealNnsGovernanceClient {
         )
         .await
         .map_err(CanisterCallError::from)
-    }
-}
-
-/// A trait that wraps calls to the IC's Management Canister. More details on the management
-/// canister can be found in the InternetComputer spec:
-///
-/// https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-management-canister
-#[async_trait]
-pub trait ManagementCanister {
-    async fn canister_status(&self, canister_id: &CanisterId) -> CanisterStatusResultV2;
-}
-
-#[derive(Default)]
-pub struct ProdManagementCanister {}
-
-#[async_trait]
-impl ManagementCanister for ProdManagementCanister {
-    async fn canister_status(&self, canister_id: &CanisterId) -> CanisterStatusResultV2 {
-        let result = ic_nervous_system_common::get_canister_status(canister_id.get()).await;
-        result.unwrap_or_else(|err| {
-            panic!(
-                "Couldn't get canister_status of {}. Err: {:#?}",
-                canister_id, err
-            )
-        })
     }
 }

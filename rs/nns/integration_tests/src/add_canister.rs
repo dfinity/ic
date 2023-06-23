@@ -1,12 +1,12 @@
 use candid::Nat;
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nervous_system_root::{
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResult, CanisterStatusType::Running},
-    change_canister::AddCanisterProposal,
-    CanisterIdRecord,
 };
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_root::change_canister::AddCanisterProposal;
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
@@ -34,7 +34,7 @@ fn add_nns_canister_via_governance_proposal() {
         let name = "add_nns_canister_via_governance_proposal".to_string();
 
         // Test adding a new canister to the NNS, and changing the authz of the
-        // registry and proposals canisters to add the new canister, i.e. so that
+        // registry and governance canisters to add the new canister, i.e. so that
         // the new canister can submit proposals and write to the registry.
         let proposal = AddCanisterProposal {
             name: name.clone(),

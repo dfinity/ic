@@ -5,6 +5,7 @@ use crate::sign::threshold_sig::store::TranscriptData;
 use ic_crypto_internal_csp::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use ic_crypto_internal_csp::types::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_interfaces::crypto::ErrorReproducibility;
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgTag, NiDkgTranscript};
@@ -96,11 +97,15 @@ fn map_threshold_sign_error_or_panic(
                 key_id: key_id.to_string(),
             }
         }
+        CspThresholdSignError::TransientInternalError { internal_error } => {
+            ThresholdSignError::TransientInternalError { internal_error }
+        }
         // Panic, since these would be implementation errors:
         CspThresholdSignError::UnsupportedAlgorithm { .. }
         | CspThresholdSignError::MalformedSecretKey { .. }
-        | CspThresholdSignError::WrongSecretKeyType { .. }
-        | CspThresholdSignError::InternalError { .. } => panic!("Illegal state: {}", error),
+        | CspThresholdSignError::WrongSecretKeyType { .. } => {
+            panic!("Illegal state: {}", error)
+        }
     }
 }
 
@@ -344,9 +349,17 @@ fn combined_threshold_sig_or_panic<H: Signable>(
 fn map_csp_combine_sigs_error(error: CryptoError) -> CryptoError {
     match error {
         CryptoError::MalformedSignature { .. } | CryptoError::InvalidArgument { .. } => error,
-        _ => CryptoError::InternalError {
-            internal_error: format!("Unexpected error from the CSP: {}", error),
-        },
+        _ => {
+            if error.is_reproducible() {
+                CryptoError::InternalError {
+                    internal_error: format!("Unexpected error from the CSP: {}", error),
+                }
+            } else {
+                CryptoError::TransientInternalError {
+                    internal_error: format!("Transient internal error: {}", error),
+                }
+            }
+        }
     }
 }
 
@@ -388,9 +401,17 @@ fn map_verify_combined_error(error: CryptoError) -> CryptoError {
         | CryptoError::MalformedSignature { .. }
         | CryptoError::InvalidArgument { .. }
         | CryptoError::MalformedPublicKey { .. } => error,
-        _ => CryptoError::InternalError {
-            internal_error: format!("Unexpected error from the CSP: {}", error),
-        },
+        _ => {
+            if error.is_reproducible() {
+                CryptoError::InternalError {
+                    internal_error: format!("Unexpected error from the CSP: {}", error),
+                }
+            } else {
+                CryptoError::TransientInternalError {
+                    internal_error: format!("Transient internal error: {}", error),
+                }
+            }
+        }
     }
 }
 

@@ -12,9 +12,10 @@ num-traits = { version= "0.2.9", default-features = false, features = ["libm"] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 simple_asn1 = "0.6.1"
 num-bigint = "~0.4.3"
+ic-crypto-getrandom-for-wasm = { path = "../../../../getrandom_for_wasm" }
 
 [dev-dependencies]
 hex = "0.4.2"
 serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.54"
-wycheproof = "0.4.0"
+wycheproof = "0.5"

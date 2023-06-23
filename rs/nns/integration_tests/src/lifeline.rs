@@ -1,19 +1,18 @@
 use dfn_candid::{candid, candid_one};
-
 use ic_canister_client_sender::Sender;
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
 };
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_common::types::ProposalId;
-use ic_nns_governance::pb::v1::manage_neuron::Command;
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_nns_governance::pb::v1::{
-    manage_neuron_response::Command as CommandResponse, ManageNeuron, ManageNeuronResponse,
-    NnsFunction, ProposalStatus, Vote,
+use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
+use ic_nns_governance::{
+    pb::v1::{
+        manage_neuron::{Command, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalStatus, Vote,
+    },
+    proposal_submission::create_external_update_proposal_candid,
 };
-use ic_nns_governance::proposal_submission::create_external_update_proposal_candid;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, wait_for_final_state, UpgradeRootProposal},

@@ -6,9 +6,9 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
     },
-    types::RejectCode,
     util::*,
 };
+use ic_agent::agent::RejectCode;
 use ic_types::Cycles;
 use ic_universal_canister::{call_args, wasm};
 

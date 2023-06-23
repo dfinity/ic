@@ -36,6 +36,7 @@ Arguments:
   -h,  --help                           show this help message and exit
   -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
   -o=, --output=                        removable media output directory (Default: ./build-out/)
+       --env=                           specify deployment environment (dev/prod/test)
        --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
        --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
        --nns_public_key=                specify NNS public key pem file
@@ -71,6 +72,10 @@ for argument in "${@}"; do
             ;;
         -o=* | --output=*)
             OUTPUT="${argument#*=}"
+            shift
+            ;;
+        --env=*)
+            ENV="${argument#*=}"
             shift
             ;;
         --ssh=*)
@@ -153,6 +158,14 @@ elif [ ! -f "${NNS_PUBLIC_KEY}" ]; then
     exit 1
 fi
 
+if [ -z ${ENV+x} ]; then
+    err "--env not set"
+    exit 1
+elif [[ ! "${ENV}" =~ ^(dev|prod|test)$ ]]; then
+    err "--env should be set to one of: dev/prod/test"
+    exit 1
+fi
+
 # Load INPUT
 CONFIG="$(cat ${INPUT})"
 
@@ -166,6 +179,9 @@ BN_VARS=$(
         )
     )[][] | join("=")'
 )
+
+# Add `env` variable on top
+BN_VARS="env=${ENV}"$'\n'"${BN_VARS}"
 
 # Read all the top-level values out in one swoop
 VALUES=$(echo ${CONFIG} | jq -r -c '[
@@ -469,14 +485,13 @@ function generate_certificate_issuer_config() {
             "certificate_orchestrator_uri") readonly CERTIFICATE_ORCHESTRATOR_URI="${value:-}" ;;
             "certificate_orchestrator_canister_id") readonly CERTIFICATE_ORCHESTRATOR_CANISTER_ID="${value:-}" ;;
             "certificate_issuer_delegation_domain") readonly CERTIFICATE_ISSUER_DELEGATION_DOMAIN="${value:-}" ;;
-            "certificate_issuer_application_domain") readonly CERTIFICATE_ISSUER_APPLICATION_DOMAIN="${value:-}" ;;
             "certificate_issuer_acme_id") readonly CERTIFICATE_ISSUER_ACME_ID="${value:-}" ;;
             "certificate_issuer_acme_key") readonly CERTIFICATE_ISSUER_ACME_KEY="${value:-}" ;;
             "certificate_issuer_cloudflare_api_key") readonly CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY="${value:-}" ;;
         esac
     done <"${CERTIFICATE_ISSUER_CREDENTIALS}"
 
-    if [[ -z "${CERTIFICATE_ORCHESTRATOR_URI}" || -z "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_APPLICATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_IDENTITY}" || -z "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z "${CERTIFICATE_ISSUER_ACME_ID}" || -z "${CERTIFICATE_ISSUER_ACME_KEY}" || -z "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]]; then
+    if [[ -z "${CERTIFICATE_ORCHESTRATOR_URI}" || -z "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_IDENTITY}" || -z "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z "${CERTIFICATE_ISSUER_ACME_ID}" || -z "${CERTIFICATE_ISSUER_ACME_KEY}" || -z "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]]; then
         err "ERROR: Missing certificate-issuer configuration."
         exit_usage
     fi
@@ -498,7 +513,6 @@ function generate_certificate_issuer_config() {
 certificate_orchestrator_uri=${CERTIFICATE_ORCHESTRATOR_URI}
 certificate_orchestrator_canister_id=${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}
 certificate_issuer_delegation_domain=${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}
-certificate_issuer_application_domain=${CERTIFICATE_ISSUER_APPLICATION_DOMAIN}
 certificate_issuer_acme_id=${CERTIFICATE_ISSUER_ACME_ID}
 certificate_issuer_acme_key=${CERTIFICATE_ISSUER_ACME_KEY}
 certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}

@@ -2,21 +2,23 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/humanize",
+    "//rs/nervous_system/proto",
+    "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/sns-wasm",
+    "//rs/nns/test_utils",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/governance",
-    "//rs/sns/init",
     "//rs/sns/root",
-    "//rs/sns/test_utils",
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:base64",
@@ -26,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:json-patch",
     "@crate_index//:maplit",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:regex",
@@ -34,6 +37,24 @@ DEPENDENCIES = [
     "@crate_index//:serde_yaml",
     "@crate_index//:tempfile",
     "@crate_index//:url",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance",
+    "//rs/nns/sns-wasm",
+    "//rs/sns/governance",
+    "//rs/sns/init",
+    "//rs/sns/test_utils",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/sns/governance:governance--test_feature",
+    "//rs/sns/init:init--test_feature",
+    "//rs/sns/test_utils:test_utils--test_feature",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -46,7 +67,13 @@ ALIASES = {}
 
 rust_library(
     name = "cli",
-    srcs = glob(["src/*.rs"]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "src/**/*_tests.rs",
+            "main.rs",
+        ],
+    ),
     aliases = ALIASES,
     crate_name = "ic_sns_cli",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -54,26 +81,68 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
+rust_library(
+    name = "cli--test_feature",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/**/*_tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_sns_cli",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "1.0.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
+)
+
 rust_binary(
     name = "sns",
-    srcs = glob(["src/*.rs"]),
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/**/*_tests.rs"],
+    ),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.0",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":cli"],
+)
+
+rust_binary(
+    name = "sns--test_feature",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/**/*_tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "sns",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "1.0.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":cli--test_feature"],
 )
 
 rust_test(
     name = "sns_test",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_root = "src/main.rs",
-    data = ["test.png"],
+    args = [
+        # This is needed because one of the tests changes directory (namely,
+        # test_convert_to_create_service_nervous_system), while other tests
+        # assume that the current working directory remains unchanged. This does
+        # not have a significant negative impact on test execution time, because
+        # this test is very fast.
+        "--test-threads=1",
+    ],
+    crate_root = "src/lib.rs",
+    data = [
+        "example_sns_init_v2.yaml",
+        "test.png",
+    ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/cli",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + DEV_DEPENDENCIES,
 )
 
 rust_doc_test(

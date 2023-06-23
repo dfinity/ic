@@ -1,8 +1,6 @@
 use dfn_protobuf::ToProto;
-use ic_ledger_core::block::HashOf;
-use icp_ledger::{
-    AccountIdentifier, Block, Memo, Operation, SignedTokens, TimeStamp, Tokens, Transaction,
-};
+use ic_ledger_hash_of::HashOf;
+use icp_ledger::{AccountIdentifier, Block, Memo, Operation, TimeStamp, Tokens, Transaction};
 use proptest::array::{uniform28, uniform32};
 use proptest::collection::vec as pvec;
 use proptest::prelude::*;
@@ -11,19 +9,6 @@ use serde_bytes::ByteBuf;
 prop_compose! {
     fn arb_tokens()(amount in any::<u64>()) -> Tokens {
         Tokens::from_e8s(amount)
-    }
-}
-
-prop_compose! {
-    fn arb_signed_tokens()(
-        amount in any::<u64>(),
-        negative in any::<bool>()
-    ) -> SignedTokens {
-        if negative {
-            SignedTokens::Minus(Tokens::from_e8s(amount))
-        } else {
-            SignedTokens::Plus(Tokens::from_e8s(amount))
-        }
     }
 }
 
@@ -76,7 +61,7 @@ prop_compose! {
     fn arb_approve()(
         from in arb_account_id(),
         spender in arb_account_id(),
-        allowance in arb_signed_tokens(),
+        allowance in arb_tokens(),
         expires_at in proptest::option::of(arb_ts()),
         fee in 0..100_000u64,
     ) -> Operation {

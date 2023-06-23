@@ -10,9 +10,8 @@ use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // A polynomial is a vector of (usually secret) field elements
-// TODO (CRP-310): Consider making the polynomials private again
-pub mod polynomial;
-pub use polynomial::Polynomial;
+pub(crate) mod polynomial;
+pub(crate) use polynomial::Polynomial;
 
 // 'PublicCoefficients' is a vector of exponents and is the public version of
 // 'polynomial'.

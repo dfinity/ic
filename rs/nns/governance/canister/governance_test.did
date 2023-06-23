@@ -77,7 +77,7 @@ type Command_1 = variant {
   ClaimOrRefresh : ClaimOrRefreshResponse;
   Configure : record {};
   RegisterVote : record {};
-  Merge : record {};
+  Merge : MergeResponse;
   DisburseToNeuron : SpawnResponse;
   MakeProposal : MakeProposalResponse;
   StakeMaturity : StakeMaturityResponse;
@@ -97,6 +97,7 @@ type Command_2 = variant {
 };
 type Committed = record { sns_governance_canister_id : opt principal };
 type Configure = record { operation : opt Operation };
+type Countries = record { iso_codes : vec text };
 type CreateServiceNervousSystem = record {
   url : opt text;
   governance_parameters : opt GovernanceParameters;
@@ -135,6 +136,7 @@ type Duration = record { seconds : opt nat64 };
 type ExecuteNnsFunction = record { nns_function : int32; payload : vec nat8 };
 type Follow = record { topic : int32; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
+type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
   most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
@@ -221,6 +223,7 @@ type ListProposalInfo = record {
   before_proposal : opt NeuronId;
   limit : nat32;
   exclude_topic : vec int32;
+  include_all_manage_neuron_proposals : opt bool;
   include_status : vec int32;
 };
 type ListProposalInfoResponse = record { proposal_info : vec ProposalInfo };
@@ -236,6 +239,12 @@ type MergeMaturity = record { percentage_to_merge : nat32 };
 type MergeMaturityResponse = record {
   merged_maturity_e8s : nat64;
   new_stake_e8s : nat64;
+};
+type MergeResponse = record {
+  target_neuron : opt Neuron;
+  source_neuron : opt Neuron;
+  target_neuron_info : opt NeuronInfo;
+  source_neuron_info : opt NeuronInfo;
 };
 type MostRecentMonthlyNodeProviderRewards = record {
   timestamp : nat64;
@@ -467,11 +476,15 @@ type SwapBackgroundInformation = record {
 type SwapDistribution = record { total : opt Tokens };
 type SwapParameters = record {
   minimum_participants : opt nat64;
+  duration : opt Duration;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
-  maximum_participant_icp : opt nat64;
-  minimum_icp : opt nat64;
-  minimum_participant_icp : opt nat64;
-  maximum_icp : opt nat64;
+  confirmation_text : opt text;
+  maximum_participant_icp : opt Tokens;
+  minimum_icp : opt Tokens;
+  minimum_participant_icp : opt Tokens;
+  start_time : opt GlobalTimeOfDay;
+  maximum_icp : opt Tokens;
+  restricted_countries : opt Countries;
 };
 type Tally = record {
   no : nat64;
@@ -524,6 +537,7 @@ service : (Governance) -> {
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );
+  simulate_manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
   update_neuron : (Neuron) -> (opt GovernanceError);
   update_node_provider : (UpdateNodeProvider) -> (Result);

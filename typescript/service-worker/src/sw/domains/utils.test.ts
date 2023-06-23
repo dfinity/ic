@@ -40,11 +40,11 @@ describe('Resolve canister from headers', () => {
 
 describe('Match raw url', () => {
   it('should match raw url', async () => {
-    expect(isRawDomain('example.raw.ic0.app')).toBeTruthy();
-    expect(isRawDomain('example.raw.ic1.app')).toBeTruthy();
-    expect(isRawDomain('example.raw.ic0.dev')).toBeTruthy();
-    expect(isRawDomain('example.raw.ic1.dev')).toBeTruthy();
-    expect(isRawDomain('example.raw.icp0.io')).toBeTruthy();
+    expect(isRawDomain('example.raw.ic0.app', true)).toBeTruthy();
+    expect(isRawDomain('example.raw.ic1.app', true)).toBeTruthy();
+    expect(isRawDomain('example.raw.testic0.app', true)).toBeTruthy();
+    expect(isRawDomain('example.raw.testic1.app', true)).toBeTruthy();
+    expect(isRawDomain('example.raw.icp0.io', true)).toBeTruthy();
     expect(
       isRawDomain('example.raw.some.testnet.ic1.network', false)
     ).toBeTruthy();
@@ -54,19 +54,23 @@ describe('Match raw url', () => {
     expect(
       isRawDomain('example.raw.another_1.testnet.ic1.network', false)
     ).toBeTruthy();
+    expect(isRawDomain('example.raw.ic0.dev', false)).toBeTruthy();
   });
 
   it('should not match raw url', async () => {
-    expect(isRawDomain('example.raw.ic0.io')).toBeFalsy();
-    expect(isRawDomain('raw.example.ic0.app')).toBeFalsy();
-    expect(isRawDomain('raw.example.ic0.dev')).toBeFalsy();
-    expect(isRawDomain('raw.example.icp0.io')).toBeFalsy();
-    expect(isRawDomain('example.raw.icp0.app')).toBeFalsy();
-    expect(isRawDomain('example.raw.icp0.dev')).toBeFalsy();
+    expect(isRawDomain('example.raw.ic0.io', true)).toBeFalsy();
+    expect(isRawDomain('raw.example.ic0.app', true)).toBeFalsy();
+    expect(isRawDomain('raw.example.ic0.dev', true)).toBeFalsy();
+    expect(isRawDomain('raw.example.testic0.app', true)).toBeFalsy();
+    expect(isRawDomain('raw.internetcomputer.org', true)).toBeFalsy();
+    expect(isRawDomain('raw.example.icp0.io', true)).toBeFalsy();
+    expect(isRawDomain('example.raw.icp0.app', true)).toBeFalsy();
+    expect(isRawDomain('example.raw.icp0.dev', true)).toBeFalsy();
     expect(
       isRawDomain('raw.example.some.testnet.ic1.network', false)
     ).toBeFalsy();
     expect(isRawDomain('example.raw.some.testnet.network', false)).toBeFalsy();
+    expect(isRawDomain('example.raw.some.testic0.app', false)).toBeFalsy();
   });
 });
 

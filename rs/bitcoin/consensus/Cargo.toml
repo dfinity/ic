@@ -4,11 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
+ic-btc-interface = { workspace = true }
 ic-btc-types-internal = { path = "../types/internal" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
-ic-interfaces-bitcoin-adapter-client = { path = "../../interfaces/bitcoin_adapter_client" }
+ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
@@ -26,3 +26,4 @@ ic-protobuf = { path = "../../protobuf" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+mockall = "0.11.4"

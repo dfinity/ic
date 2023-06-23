@@ -5,6 +5,7 @@ use crate::file_sync_helper::{path_exists, read_file, write_file};
 use crate::nns_recovery_failover_nodes::{self, NNSRecoveryFailoverNodes};
 use crate::nns_recovery_same_nodes::{self, NNSRecoverySameNodes};
 use crate::{NeuronArgs, RecoveryArgs};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -12,13 +13,13 @@ const RECOVERY_STATE_FILE_NAME: &str = "recovery_state.json";
 
 /// State of the recovery, i.e. which step are we on right now + arguments.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct RecoveryState {
+pub struct RecoveryState<T> {
     pub recovery_args: RecoveryArgs,
-    pub subcommand_args: SubCommand,
+    pub subcommand_args: T,
     pub neuron_args: Option<NeuronArgs>,
 }
 
-impl RecoveryState {
+impl<T: Serialize + DeserializeOwned> RecoveryState<T> {
     /// Writes the state to the disk.
     ///
     /// The file is saved under $dir/recovery_state.json where $dir is the working directory.
@@ -65,57 +66,61 @@ impl RecoveryState {
 
 pub trait HasRecoveryState {
     type StepType;
+    type SubcommandArgsType;
 
     fn get_next_step(&self) -> Option<Self::StepType>;
 
-    fn get_state(&self) -> RecoveryState;
+    fn get_state(&self) -> RecoveryResult<RecoveryState<Self::SubcommandArgsType>>;
 }
 
 impl HasRecoveryState for AppSubnetRecovery {
     type StepType = app_subnet_recovery::StepType;
+    type SubcommandArgsType = SubCommand;
 
     fn get_next_step(&self) -> Option<Self::StepType> {
         self.params.next_step
     }
 
-    fn get_state(&self) -> RecoveryState {
-        RecoveryState {
+    fn get_state(&self) -> RecoveryResult<RecoveryState<Self::SubcommandArgsType>> {
+        Ok(RecoveryState {
             recovery_args: self.recovery_args.clone(),
             neuron_args: self.neuron_args.clone(),
             subcommand_args: SubCommand::AppSubnetRecovery(self.params.clone()),
-        }
+        })
     }
 }
 
 impl HasRecoveryState for NNSRecoveryFailoverNodes {
     type StepType = nns_recovery_failover_nodes::StepType;
+    type SubcommandArgsType = SubCommand;
 
     fn get_next_step(&self) -> Option<Self::StepType> {
         self.params.next_step
     }
 
-    fn get_state(&self) -> RecoveryState {
-        RecoveryState {
+    fn get_state(&self) -> RecoveryResult<RecoveryState<Self::SubcommandArgsType>> {
+        Ok(RecoveryState {
             recovery_args: self.recovery_args.clone(),
             neuron_args: self.neuron_args.clone(),
             subcommand_args: SubCommand::NNSRecoveryFailoverNodes(self.params.clone()),
-        }
+        })
     }
 }
 
 impl HasRecoveryState for NNSRecoverySameNodes {
     type StepType = nns_recovery_same_nodes::StepType;
+    type SubcommandArgsType = SubCommand;
 
     fn get_next_step(&self) -> Option<Self::StepType> {
         self.params.next_step
     }
 
-    fn get_state(&self) -> RecoveryState {
-        RecoveryState {
+    fn get_state(&self) -> RecoveryResult<RecoveryState<Self::SubcommandArgsType>> {
+        Ok(RecoveryState {
             recovery_args: self.recovery_args.clone(),
             neuron_args: None,
             subcommand_args: SubCommand::NNSRecoverySameNodes(self.params.clone()),
-        }
+        })
     }
 }
 
@@ -158,11 +163,11 @@ mod tests {
     pub fn returns_none_when_path_doesnt_exist() {
         let tmp = tempdir().expect("Couldn't create a temp test directory");
 
-        assert_eq!(RecoveryState::read(tmp.path()).unwrap(), None);
+        assert_eq!(RecoveryState::<SubCommand>::read(tmp.path()).unwrap(), None);
     }
 
-    fn fake_recovery_state(dir: &Path) -> RecoveryState {
-        RecoveryState {
+    fn fake_recovery_state(dir: &Path) -> RecoveryState<SubCommand> {
+        RecoveryState::<SubCommand> {
             recovery_args: RecoveryArgs {
                 dir: PathBuf::from(dir),
                 nns_url: Url::parse("https://fake_nns_url.com/").unwrap(),

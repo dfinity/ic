@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 askama = "0.11.1"
+async-trait = "0.1.68"
 byte-unit = "4.0.14"
 crossbeam = "0.8.2"
 hex = "0.4.2"
@@ -27,6 +28,7 @@ ic-interfaces-p2p = { path = "../../interfaces/p2p" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-pprof = { path = "../../monitoring/pprof" }
+ic-backtrace = { path = "../../monitoring/backtrace" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-registry-provisional-whitelist = { path = "../../registry/provisional_whitelist" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
@@ -53,7 +55,7 @@ url = "2.1.1"
 
 [dev-dependencies]
 bytes = "1.0.1"
-ic-agent = "=0.22.0"
+ic-agent = { workspace = true }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }

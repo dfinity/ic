@@ -4,36 +4,38 @@ use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResultV2,
+};
 use ic_nervous_system_common::{ExplosiveTokens, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
 };
-use ic_nns_test_utils::sns_wasm::{
-    build_governance_sns_wasm, build_index_sns_wasm, build_ledger_sns_wasm, build_root_sns_wasm,
-    build_swap_sns_wasm,
+use ic_nns_test_utils::{
+    sns_wasm::{
+        build_governance_sns_wasm, build_index_sns_wasm, build_ledger_sns_wasm,
+        build_root_sns_wasm, build_swap_sns_wasm,
+    },
+    state_test_helpers::set_controllers,
 };
-use ic_nns_test_utils::state_test_helpers::set_controllers;
 use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse, NervousSystemParameters};
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::pb::v1::{
     RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
     RegisterDappCanistersResponse,
 };
-use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
-use icrc_ledger_types::icrc1::account::Account;
-
-use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateResponse,
-    GetBuyersTotalResponse, GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
-    ListCommunityFundParticipantsResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
-    OpenRequest, OpenResponse, Params, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
-    Ticket,
+    self as swap_pb, params::NeuronBasketConstructionParameters, ErrorRefundIcpResponse,
+    FinalizeSwapResponse, GetBuyerStateResponse, GetBuyersTotalResponse, GetLifecycleResponse,
+    GetOpenTicketResponse, GetSaleParametersResponse, ListCommunityFundParticipantsResponse,
+    NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse, Params,
+    RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
+use icrc_ledger_types::icrc1::account::Account;
 
 #[derive(Debug)]
 pub struct SnsTestCanisterIds {
@@ -212,6 +214,7 @@ pub fn participate_in_swap(
             "refresh_buyer_tokens",
             Encode!(&RefreshBuyerTokensRequest {
                 buyer: participant_principal_id.to_string(),
+                confirmation_text: None,
             })
             .unwrap(),
         )
@@ -549,9 +552,11 @@ pub fn refresh_buyer_tokens(
     env: &StateMachine,
     swap_id: &CanisterId,
     sender: &PrincipalId,
+    confirmation_text: Option<String>,
 ) -> Result<RefreshBuyerTokensResponse, String> {
     let args = Encode!(&RefreshBuyerTokensRequest {
-        buyer: sender.to_string()
+        buyer: sender.to_string(),
+        confirmation_text,
     })
     .unwrap();
     match env.execute_ingress_as(*sender, *swap_id, "refresh_buyer_tokens", args) {

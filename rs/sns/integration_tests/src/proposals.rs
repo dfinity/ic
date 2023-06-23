@@ -1,11 +1,7 @@
 use canister_test::Canister;
-use ic_ledger_core::Tokens;
-use icrc_ledger_types::icrc1::account::Account;
-use std::collections::BTreeMap;
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
+use ic_ledger_core::Tokens;
 use ic_nervous_system_common::i2d;
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
@@ -32,7 +28,12 @@ use ic_sns_test_utils::{
     itest_helpers::{local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo},
     now_seconds,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use on_wire::bytes;
+use std::{
+    collections::BTreeMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 const MOTION_PROPOSAL_ACTION_TYPE: u64 = 1;
 

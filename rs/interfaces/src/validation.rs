@@ -18,6 +18,11 @@ impl<P, T> ValidationError<P, T> {
             ValidationError::Transient(t) => ValidationError::Transient(g(t)),
         }
     }
+
+    /// Returns true, if the error is transient
+    pub fn is_transient(&self) -> bool {
+        matches!(self, Self::Transient(_))
+    }
 }
 
 /// Validation result is result type where `Ok(())` means valid, and `Err(err)`

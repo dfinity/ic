@@ -4,7 +4,6 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
-use garcon::Delay;
 use ic_agent::Agent;
 use serde::Serialize;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
@@ -12,6 +11,7 @@ use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 use crate::{
     acme::{self, FinalizeError},
     certificate::{self, Pair},
+    check::Check,
     dns::{self, Resolve},
     registration::{Id, Registration, State},
 };
@@ -21,6 +21,7 @@ pub enum Action {
     Order,
     Ready,
     Certificate,
+    Renewal,
 }
 
 impl fmt::Display for Action {
@@ -35,7 +36,7 @@ impl From<State> for Action {
             State::Failed(_) | State::PendingOrder => Action::Order,
             State::PendingChallengeResponse => Action::Ready,
             State::PendingAcmeApproval => Action::Certificate,
-            State::Available => Action::Order,
+            State::Available => Action::Renewal,
         }
     }
 }
@@ -87,11 +88,17 @@ pub trait Dispense: Sync + Send {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProcessError {
+    #[error("awaiting creation of an acme order")]
+    AwaitingAcmeOrderCreation,
+
     #[error("awaiting propagation of challenge response dns txt record")]
     AwaitingDnsPropagation,
 
     #[error("awaiting acme approval for certificate order")]
     AwaitingAcmeOrderReady,
+
+    #[error("user configured configuration")]
+    FailedUserConfigurationCheck,
 
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
@@ -100,8 +107,10 @@ pub enum ProcessError {
 impl From<&ProcessError> for Duration {
     fn from(error: &ProcessError) -> Self {
         match error {
+            ProcessError::AwaitingAcmeOrderCreation => Duration::from_secs(60),
             ProcessError::AwaitingDnsPropagation => Duration::from_secs(60),
             ProcessError::AwaitingAcmeOrderReady => Duration::from_secs(60),
+            ProcessError::FailedUserConfigurationCheck => Duration::from_secs(60),
             ProcessError::UnexpectedError(_) => Duration::from_secs(10 * 60),
         }
     }
@@ -119,18 +128,13 @@ impl Queue for CanisterQueuer {
     async fn queue(&self, id: &Id, t: u64) -> Result<(), QueueError> {
         use ifc::{QueueTaskError as Error, QueueTaskResponse as Response};
 
-        let waiter = Delay::builder()
-            .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(10000))
-            .build();
-
         let args = Encode!(id, &t).context("failed to encode arg")?;
 
         let resp = self
             .0
             .update(&self.1, "queueTask")
             .with_arg(args)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to query canister")?;
 
@@ -185,18 +189,13 @@ impl Dispense for CanisterDispenser {
         let id = {
             use ifc::{DispenseTaskError as Error, DispenseTaskResponse as Response};
 
-            let waiter = Delay::builder()
-                .throttle(Duration::from_millis(500))
-                .timeout(Duration::from_millis(10000))
-                .build();
-
             let args = Encode!().context("failed to encode arg")?;
 
             let resp = self
                 .0
                 .update(&self.1, "dispenseTask")
                 .with_arg(args)
-                .call_and_wait(waiter)
+                .call_and_wait()
                 .await
                 .context("failed to query canister")?;
 
@@ -252,6 +251,7 @@ pub struct Processor {
     delegation_domain: String,
 
     // dependencies
+    checker: Arc<dyn Check>,
     resolver: Box<dyn Resolve>,
     acme_order: Box<dyn acme::Order>,
     acme_ready: Box<dyn acme::Ready>,
@@ -264,6 +264,7 @@ pub struct Processor {
 impl Processor {
     pub fn new(
         delegation_domain: String,
+        checker: Arc<dyn Check>,
         resolver: Box<dyn Resolve>,
         acme_order: Box<dyn acme::Order>,
         acme_ready: Box<dyn acme::Ready>,
@@ -274,6 +275,7 @@ impl Processor {
     ) -> Self {
         Self {
             delegation_domain,
+            checker,
             resolver,
             acme_order,
             acme_ready,
@@ -313,10 +315,7 @@ impl Process for Processor {
             Action::Ready => {
                 // Phase 7 - Ensure DNS TXT record has propagated
                 self.resolver
-                    .lookup(
-                        &format!("_acme-challenge.{}.{}", task.name, self.delegation_domain),
-                        RecordType::TXT,
-                    )
+                    .lookup(&format!("_acme-challenge.{}", task.name), RecordType::TXT)
                     .await
                     .map_err(|err| match err.kind() {
                         ResolveErrorKind::NoRecordsFound { .. } => {
@@ -370,6 +369,15 @@ impl Process for Processor {
 
                 Ok(())
             }
+
+            Action::Renewal => match self.checker.check(&task.name).await {
+                // Renewal - Before trying to renew the certificate of a domain,
+                // the issuer needs to check whether the domain and canister
+                // is still correctly configured (e.g., the DNS records are in place
+                // to delegate the ACME challenge to the delegation domain).
+                Ok(_) => Err(ProcessError::AwaitingAcmeOrderCreation),
+                Err(_err) => Err(ProcessError::FailedUserConfigurationCheck),
+            },
         }
     }
 }
@@ -389,6 +397,7 @@ mod tests {
     use crate::{
         acme::{MockFinalize, MockOrder, MockReady},
         certificate::MockUpload,
+        check::{CheckError, MockCheck},
         dns::{MockCreate, MockDelete, MockResolve, Record},
     };
 
@@ -403,6 +412,9 @@ mod tests {
 
         let mut resolver = MockResolve::new();
         resolver.expect_lookup().never();
+
+        let mut checker = MockCheck::new();
+        checker.expect_check().never();
 
         let mut acme_order = MockOrder::new();
         acme_order
@@ -436,6 +448,7 @@ mod tests {
 
         let processor = Processor::new(
             "delegation".into(),            // delegation_domain
+            Arc::new(checker),              // checker
             Box::new(resolver),             // resolver
             Box::new(acme_order),           // acme_order
             Box::new(acme_ready),           // acme_ready
@@ -468,7 +481,7 @@ mod tests {
             .expect_lookup()
             .times(1)
             .with(
-                predicate::eq("_acme-challenge.name.delegation"),
+                predicate::eq("_acme-challenge.name"),
                 predicate::eq(RecordType::TXT),
             )
             .returning(|_, _| {
@@ -482,6 +495,9 @@ mod tests {
                     Lookup::new_with_max_ttl(q, Arc::new([r]))
                 })
             });
+
+        let mut checker = MockCheck::new();
+        checker.expect_check().never();
 
         let mut acme_order = MockOrder::new();
         acme_order.expect_order().never();
@@ -507,6 +523,7 @@ mod tests {
 
         let processor = Processor::new(
             "delegation".into(),            // delegation_domain
+            Arc::new(checker),              // checker
             Box::new(resolver),             // resolver
             Box::new(acme_order),           // acme_order
             Box::new(acme_ready),           // acme_ready
@@ -536,6 +553,9 @@ mod tests {
 
         let mut resolver = MockResolve::new();
         resolver.expect_lookup().never();
+
+        let mut checker = MockCheck::new();
+        checker.expect_check().never();
 
         let mut acme_order = MockOrder::new();
         acme_order.expect_order().never();
@@ -575,6 +595,7 @@ mod tests {
 
         let processor = Processor::new(
             "delegation".into(),            // delegation_domain
+            Arc::new(checker),              // checker
             Box::new(resolver),             // resolver
             Box::new(acme_order),           // acme_order
             Box::new(acme_ready),           // acme_ready
@@ -587,6 +608,126 @@ mod tests {
         match processor.process(&id, &task).await {
             Ok(()) => Ok(()),
             other => Err(anyhow!("expected Ok(()) but got {:?}", other)),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_failed_renewal_check() -> Result<(), Error> {
+        let id: String = "id".into();
+
+        let task = Task {
+            name: "name".into(),
+            action: Action::Renewal,
+        };
+
+        let mut resolver = MockResolve::new();
+        resolver.expect_lookup().never();
+
+        let mut checker = MockCheck::new();
+        checker
+            .expect_check()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| {
+                Err(CheckError::KnownDomainsUnavailable {
+                    id: "oa7fk-maaaa-aaaam-abgka-cai".into(),
+                })
+            });
+
+        let mut acme_order = MockOrder::new();
+        acme_order.expect_order().never();
+
+        let mut acme_ready = MockReady::new();
+        acme_ready.expect_ready().never();
+
+        let mut acme_finalize = MockFinalize::new();
+        acme_finalize.expect_finalize().never();
+
+        let mut dns_creator = MockCreate::new();
+        dns_creator.expect_create().never();
+
+        let mut dns_deleter = MockDelete::new();
+        dns_deleter.expect_delete().never();
+
+        let mut certificate_uploader = MockUpload::new();
+        certificate_uploader.expect_upload().never();
+
+        let processor = Processor::new(
+            "delegation".into(),            // delegation_domain
+            Arc::new(checker),              // checker
+            Box::new(resolver),             // resolver
+            Box::new(acme_order),           // acme_order
+            Box::new(acme_ready),           // acme_ready
+            Box::new(acme_finalize),        // acme_finalize
+            Box::new(dns_creator),          // dns_creator
+            Box::new(dns_deleter),          // dns_deleter
+            Box::new(certificate_uploader), // certificate_uploader
+        );
+
+        match processor.process(&id, &task).await {
+            Err(ProcessError::FailedUserConfigurationCheck) => Ok(()),
+            other => Err(anyhow!(
+                "expected FailedUserConfigurationCheck but got {:?}",
+                other
+            )),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_passed_renewal_check() -> Result<(), Error> {
+        let id: String = "id".into();
+
+        let task = Task {
+            name: "name".into(),
+            action: Action::Renewal,
+        };
+
+        let mut resolver = MockResolve::new();
+        resolver.expect_lookup().never();
+
+        let mut checker = MockCheck::new();
+        checker
+            .expect_check()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| Ok(Principal::from_text("oa7fk-maaaa-aaaam-abgka-cai").unwrap()));
+
+        let mut acme_order = MockOrder::new();
+        acme_order.expect_order().never();
+
+        let mut acme_ready = MockReady::new();
+        acme_ready.expect_ready().never();
+
+        let mut acme_finalize = MockFinalize::new();
+        acme_finalize.expect_finalize().never();
+
+        let mut dns_creator = MockCreate::new();
+        dns_creator.expect_create().never();
+
+        let mut dns_deleter = MockDelete::new();
+        dns_deleter.expect_delete().never();
+
+        let mut certificate_uploader = MockUpload::new();
+        certificate_uploader.expect_upload().never();
+
+        let processor = Processor::new(
+            "delegation".into(),            // delegation_domain
+            Arc::new(checker),              // checker
+            Box::new(resolver),             // resolver
+            Box::new(acme_order),           // acme_order
+            Box::new(acme_ready),           // acme_ready
+            Box::new(acme_finalize),        // acme_finalize
+            Box::new(dns_creator),          // dns_creator
+            Box::new(dns_deleter),          // dns_deleter
+            Box::new(certificate_uploader), // certificate_uploader
+        );
+
+        match processor.process(&id, &task).await {
+            Err(ProcessError::AwaitingAcmeOrderCreation) => Ok(()),
+            other => Err(anyhow!(
+                "expected AwaitingAcmeOrderCreation but got {:?}",
+                other
+            )),
         }
     }
 }

@@ -1,5 +1,7 @@
 cargo-lock-generate:
-  extends: .ubuntu-cargo-k8s
+  extends:
+    - .ubuntu-cargo-k8s
+    - .cargo-rules
   needs: []  # don't wait on other jobs
   stage: test
   script:

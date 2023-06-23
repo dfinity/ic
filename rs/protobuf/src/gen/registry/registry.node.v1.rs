@@ -1,5 +1,5 @@
 /// A connection endpoint.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, PartialOrd, Ord)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConnectionEndpoint {
@@ -16,35 +16,8 @@ pub struct ConnectionEndpoint {
     pub port: u32,
     /// Protocol that is used on this endpoint. If PROTOCOL_UNSPECIFIED then
     /// code should default to PROTOCOL_HTTP1 for backwards compatability.
-    #[prost(enumeration = "connection_endpoint::Protocol", tag = "4")]
+    #[prost(enumeration = "Protocol", tag = "4")]
     pub protocol: i32,
-}
-/// Nested message and enum types in `ConnectionEndpoint`.
-pub mod connection_endpoint {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-    #[repr(i32)]
-    pub enum Protocol {
-        Unspecified = 0,
-        Http1 = 1,
-        Http1Tls13 = 2,
-        P2p1Tls13 = 3,
-    }
-    impl Protocol {
-        /// String value of the enum field names used in the ProtoBuf definition.
-        ///
-        /// The values are not transformed in any way and thus are considered stable
-        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-        pub fn as_str_name(&self) -> &'static str {
-            match self {
-                Protocol::Unspecified => "PROTOCOL_UNSPECIFIED",
-                Protocol::Http1 => "PROTOCOL_HTTP1",
-                Protocol::Http1Tls13 => "PROTOCOL_HTTP1_TLS_1_3",
-                Protocol::P2p1Tls13 => "PROTOCOL_P2P1_TLS_1_3",
-            }
-        }
-    }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -68,26 +41,37 @@ pub struct NodeRecord {
     /// The P2P flow end points.
     #[prost(message, repeated, tag = "8")]
     pub p2p_flow_endpoints: ::prost::alloc::vec::Vec<FlowEndpoint>,
-    /// Endpoint where the node provides Prometheus format metrics over HTTP
-    #[prost(message, optional, tag = "10")]
-    pub prometheus_metrics_http: ::core::option::Option<ConnectionEndpoint>,
-    /// Endpoints on which the public API is served.
-    #[prost(message, repeated, tag = "11")]
-    pub public_api: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
-    /// Endpoints on which private APIs are served.
-    #[prost(message, repeated, tag = "12")]
-    pub private_api: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
-    /// Endpoints on which metrics compatible with the Prometheus export
-    /// format are served.
-    #[prost(message, repeated, tag = "13")]
-    pub prometheus_metrics: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
-    /// Endpoints on which the XNet API is served
-    #[prost(message, repeated, tag = "14")]
-    pub xnet_api: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
     /// The id of the node operator that added this node.
     #[prost(bytes = "vec", tag = "15")]
     pub node_operator_id: ::prost::alloc::vec::Vec<u8>,
     /// The SEV-SNP chip_identifier for this node.
     #[prost(bytes = "vec", tag = "16")]
     pub chip_id: ::prost::alloc::vec::Vec<u8>,
+    /// ID of the HostOS version to run.
+    #[prost(string, optional, tag = "17")]
+    pub hostos_version_id: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum Protocol {
+    Unspecified = 0,
+    Http1 = 1,
+    Http1Tls13 = 2,
+    P2p1Tls13 = 3,
+}
+impl Protocol {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Protocol::Unspecified => "PROTOCOL_UNSPECIFIED",
+            Protocol::Http1 => "PROTOCOL_HTTP1",
+            Protocol::Http1Tls13 => "PROTOCOL_HTTP1_TLS_1_3",
+            Protocol::P2p1Tls13 => "PROTOCOL_P2P1_TLS_1_3",
+        }
+    }
 }

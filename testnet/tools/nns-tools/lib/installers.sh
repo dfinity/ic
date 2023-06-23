@@ -27,7 +27,7 @@ install_idl2json() {
     local DEST_FOLDER=$1
     local VERSION=${2:-0.8.5}
     log "Downloading idl2json"
-    set -x
+
     local DEST=$DEST_FOLDER/idl2json
 
     if [ "$(uname -op)" == "Darwin" ]; then

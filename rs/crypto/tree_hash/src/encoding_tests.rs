@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used)]
 use crate::arbitrary::arbitrary_mixed_hash_tree;
 use crate::MixedHashTree as T;
+use crate::{Label, MixedHashTree};
+use assert_matches::assert_matches;
 use proptest::prelude::*;
 use serde_cbor::Value as Cbor;
 
@@ -127,5 +129,34 @@ fn fail_to_decode_unknown_tag() {
             "Expected an error with message containing 'unknown tag', got {:?}",
             other
         ),
+    }
+}
+
+/// Returns a MixedHashTree of depth `depth`.
+fn mixed_hash_tree_of_depth(depth: usize) -> MixedHashTree {
+    assert_ne!(depth, 0);
+    let mut tree = MixedHashTree::Empty;
+    for _ in 1..depth {
+        tree = MixedHashTree::Labeled(Label::from("dummy label"), Box::new(tree));
+    }
+    tree
+}
+
+#[test]
+fn mixed_hash_tree_cbor_decode_recursion_limit() {
+    // Can decode a `MixedHashTree` of depth 127.
+    {
+        let tree = mixed_hash_tree_of_depth(127);
+        let buf = serde_cbor::to_vec(&tree).expect("failed to encode MixedHashTree");
+        let decoded_tree =
+            serde_cbor::from_slice::<MixedHashTree>(&buf).expect("failed to decode MixedHashTree");
+        assert_eq!(decoded_tree, tree);
+    }
+
+    // But not a `MixedHashTree` of depth 128.
+    {
+        let tree = mixed_hash_tree_of_depth(128);
+        let buf = serde_cbor::to_vec(&tree).expect("failed to encode MixedHashTree");
+        assert_matches!(serde_cbor::from_slice::<MixedHashTree>(&buf), Err(_));
     }
 }

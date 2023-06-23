@@ -79,8 +79,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         node_ip: "127.0.0.1",
         // Listening port used by transport to establish peer connections.
         listening_port: 3000,
-        // The size of the buffered messages on the transport send queue.
-        send_queue_size: 1024,
     },
     // ============================================
     // Configuration of registry client
@@ -115,13 +113,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         }
     },
     // ============================================
-    // Consensus related config.
-    // ============================================
-    consensus: {
-        // Whether or not to detect starvation. Should only be set to false in tests.
-        detect_starvation: true,
-    },
-    // ============================================
     // Configuration of the node state persistence.
     // ============================================
     crypto: {
@@ -153,14 +144,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the execution environment.
     // ================================================
     hypervisor: {
-        // Which technology to use to intercept Wasm memory changes.
-        //
-        // Alternatives:
-        // - EXAMPLE: persistence_type: "sigsegv",
-        //   Use memory persistence based on mprotect + SIGSEGV.
-        // - EXAMPLE: persistence_type: "pagemap",
-        //   Use memory persistence based on /proc/pid/pagemap (Linux) or Mac OS equivalent.
-        persistence_type: "sigsegv",
     },
     // ====================================
     // Configuration of the HTTPS endpoint.
@@ -184,7 +167,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         //   Dump prometheus metrics to the specified file on shutdown.
         exporter: "log",
         connection_read_timeout_seconds: 300,
-        max_tcp_connections: 20,
         max_concurrent_requests: 50,
         request_timeout_seconds: 30,
     },
@@ -347,6 +329,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         default_rules: [],
         ports_for_node_whitelist: [],
         ports_for_http_adapter_blacklist: [],
+        max_simultaneous_connections_per_ip_address: 0,
     },
 
     // =================================

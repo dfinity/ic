@@ -21,7 +21,7 @@ pub fn locate_state_root(config_path: PathBuf) -> Result<StateLayout, String> {
                 config_path.display()
             )
         })?
-        .state_root();
+        .state_root;
 
     Ok(StateLayout::try_new(no_op_logger(), state_root, &MetricsRegistry::new()).unwrap())
 }

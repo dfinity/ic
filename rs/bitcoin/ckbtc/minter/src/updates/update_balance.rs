@@ -7,7 +7,7 @@ use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{Memo, MAX_MEMO_LENGTH};
+use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use serde::Serialize;
 
@@ -39,7 +39,7 @@ pub enum UtxoStatus {
     },
 }
 
-enum ErrorCode {
+pub enum ErrorCode {
     ConfigurationError = 1,
 }
 
@@ -293,6 +293,7 @@ async fn kyt_check_utxo(
 
 /// Mint an amount of ckBTC to an Account.
 async fn mint(amount: u64, txid: &[u8], to: Account) -> Result<u64, UpdateBalanceError> {
+    const MAX_MEMO_LENGTH: usize = 32;
     debug_assert!(txid.len() <= MAX_MEMO_LENGTH);
     let client = ICRC1Client {
         runtime: CdkRuntime,
@@ -304,7 +305,7 @@ async fn mint(amount: u64, txid: &[u8], to: Account) -> Result<u64, UpdateBalanc
             to,
             fee: None,
             created_at_time: None,
-            memo: Some(Memo::try_from(txid.to_vec()).expect("BUG: UTXO txid exceeds memo length")),
+            memo: Some(Memo::from(txid.to_vec())),
             amount: Nat::from(amount),
         })
         .await

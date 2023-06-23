@@ -16,6 +16,7 @@ use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
+use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 
 #[cfg(test)]
 mod tests;
@@ -396,6 +397,168 @@ pub trait TlsHandshake {
         server: NodeId,
         registry_version: RegistryVersion,
     ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError>;
+}
+
+/// Implementors provide methods for generating rustls configurations that
+/// restrict the tls peers that are accepted.
+pub trait TlsConfig {
+    /// Generates a rustls server config that only allows the specified clients to connect.
+    ///
+    /// The rustls server configuration is configured with the following values:
+    /// * Minimum protocol version: TLS 1.3
+    /// * Supported signature algorithms: ed25519
+    /// * Allowed cipher suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384
+    /// * Client authentication: mandatory, with ed25519 certificate
+    /// * Maximum number of intermediate CA certificates: 1
+    ///
+    /// To determine whether the peer (that successfully performed the
+    /// handshake) is an allowed client, the rustls server config is created
+    /// to check the following:
+    /// 1. Determine the peer's node ID N_claimed from the _subject name_ of
+    ///    the certificate C_handshake that the peer presented during the
+    ///    handshake (and for which the peer therefore knows the private key).
+    ///    Return an error if N_claimed is not contained in the nodes
+    ///    in `allowed_clients`.
+    /// 2. Determine the certificate C_registry by querying the registry for the
+    ///    TLS certificate of node with ID N_claimed, and if C_registry is equal
+    ///    to C_handshake, then the peer successfully authenticated as node
+    ///    N_claimed.
+    ///
+    /// Returns the rustls server config with the described configuration.
+    ///
+    /// # Errors
+    /// * TlsConfigError::RegistryError if the registry cannot be
+    ///   accessed.
+    /// * TlsConfigError::CertificateNotInRegistry if a certificate
+    ///   that is expected to be in the registry is not found.
+    /// * TlsConfigError::MalformedSelfCertificate if the node's own
+    ///   server certificate is malformed.
+    ///
+    /// # Panics
+    /// * If the secret key corresponding to the server certificate cannot be
+    ///   found or is malformed in the server's secret key store. Note that this
+    ///   is an error in the setup of the node and registry.
+    fn server_config(
+        &self,
+        allowed_clients: AllowedClients,
+        registry_version: RegistryVersion,
+    ) -> Result<ServerConfig, TlsConfigError>;
+
+    /// Generates a rustls server config that does not perform client authentication.
+    ///
+    /// The rustls server configuration is configured with the following values:
+    /// * Minimum protocol version: TLS 1.3
+    /// * Supported signature algorithms: ed25519
+    /// * Allowed cipher suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384
+    /// * Client authentication: no client authentication is performed
+    ///
+    /// # Errors
+    /// * TlsConfigError::RegistryError if the registry cannot be
+    ///   accessed.
+    /// * TlsConfigError::CertificateNotInRegistry if a certificate
+    ///   that is expected to be in the registry is not found.
+    /// * TlsConfigError::MalformedSelfCertificate if the node's own
+    ///   server certificate is malformed.
+    ///
+    /// # Panics
+    /// * If the secret key corresponding to the server certificate cannot be
+    ///   found or is malformed in the server's secret key store. Note that this
+    ///   is an error in the setup of the node and registry.
+    fn server_config_without_client_auth(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<ServerConfig, TlsConfigError>;
+
+    /// Generates a rustls client config with an expected peer identity.
+    ///
+    /// The rustls client configuration is configured with the following values:
+    /// * Minimum protocol version: TLS 1.3
+    /// * Supported signature algorithms: ed25519
+    /// * Allowed cipher suites: TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384
+    /// * Server authentication: mandatory, with ed25519 certificate
+    ///
+    /// To determine whether the peer (that successfully performed the
+    /// handshake) is the `server`, the rustls client config is created
+    /// to check the following:
+    /// 1. Determine the peer's node ID N_claimed from the _subject name_ of
+    ///    the certificate C_handshake that the peer presented during the
+    ///    handshake (and for which the peer therefore knows the private key).
+    ///    Return an error if N_claimed is not the `server`.
+    /// 2. Determine the certificate C_registry by querying the registry for the
+    ///    TLS certificate of node with ID N_claimed. Return an error if the
+    ///    C_registry does not equal C_handshake.
+    ///
+    /// # Errors
+    /// * TlsConfigError::RegistryError if the registry cannot be
+    ///   accessed.
+    /// * TlsConfigError::CertificateNotInRegistry if a certificate
+    ///   that is expected to be in the registry is not found.
+    /// * TlsConfigError::MalformedSelfCertificate if the node's own
+    ///   client certificate is malformed.
+    ///
+    /// # Panics
+    /// * If the secret key corresponding to the client certificate cannot be
+    ///   found or is malformed in the client's secret key store. Note that this
+    ///   is an error in the setup of the node and registry.
+    fn client_config(
+        &self,
+        server: NodeId,
+        registry_version: RegistryVersion,
+    ) -> Result<ClientConfig, TlsConfigError>;
+}
+
+#[derive(Debug)]
+pub enum TlsConfigError {
+    RegistryError(RegistryClientError),
+    CertificateNotInRegistry {
+        node_id: NodeId,
+        registry_version: RegistryVersion,
+    },
+    MalformedSelfCertificate {
+        internal_error: String,
+    },
+}
+
+impl Display for TlsConfigError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl From<TlsConfigError> for TlsClientHandshakeError {
+    fn from(tls_config_error: TlsConfigError) -> Self {
+        match tls_config_error {
+            TlsConfigError::RegistryError(e) => TlsClientHandshakeError::RegistryError(e),
+            TlsConfigError::CertificateNotInRegistry {
+                node_id,
+                registry_version,
+            } => TlsClientHandshakeError::CertificateNotInRegistry {
+                node_id,
+                registry_version,
+            },
+            TlsConfigError::MalformedSelfCertificate { internal_error } => {
+                TlsClientHandshakeError::MalformedSelfCertificate { internal_error }
+            }
+        }
+    }
+}
+
+impl From<TlsConfigError> for TlsServerHandshakeError {
+    fn from(tls_config_error: TlsConfigError) -> Self {
+        match tls_config_error {
+            TlsConfigError::RegistryError(e) => TlsServerHandshakeError::RegistryError(e),
+            TlsConfigError::CertificateNotInRegistry {
+                node_id,
+                registry_version,
+            } => TlsServerHandshakeError::CertificateNotInRegistry {
+                node_id,
+                registry_version,
+            },
+            TlsConfigError::MalformedSelfCertificate { internal_error } => {
+                TlsServerHandshakeError::MalformedSelfCertificate { internal_error }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

@@ -52,7 +52,7 @@ pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_vers
                 .any(|v| v == replica_version_id),
             "Attempt to change the replica version to '{}' is rejected, \
             because that version is NOT blessed. The list of blessed replica versions, at \
-            version {}, is: {}.",
+            registry version {}, is: {}.",
             replica_version_id,
             version,
             blessed_versions_to_string(&blessed_list)

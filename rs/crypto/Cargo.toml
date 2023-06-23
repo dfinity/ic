@@ -23,11 +23,11 @@ ic-crypto-internal-threshold-sig-ecdsa = { path = "internal/crypto_lib/threshold
 ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
-ic-crypto-node-key-generation = { path = "node_key_generation" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
 ic-crypto-utils-time = { path = "utils/time" }
+ic-crypto-utils-tls = { path = "utils/tls" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
@@ -41,7 +41,7 @@ ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 lazy_static = "1.4.0"
 num-integer = "0.1.41"
-openssl = "0.10.29"
+openssl = "0.10.55"
 parking_lot = "0.12.1"
 prometheus = { version = "0.12.0", features = ["process"] }
 prost = "0.11.0"
@@ -74,8 +74,10 @@ ic-crypto-internal-basic-sig-der-utils = { path = "internal/crypto_lib/basic_sig
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "internal/crypto_lib/basic_sig/rsa_pkcs1" }
+ic-crypto-internal-csp-proptest-utils = { path = "internal/crypto_service_provider/csp_proptest_utils" }
 ic-crypto-internal-csp-test-utils = { path = "internal/csp_test_utils" }
 ic-crypto-internal-tls = { path = "internal/crypto_lib/tls" }
+ic-crypto-node-key-generation = { path = "node_key_generation" }
 ic-crypto-node-key-validation = { path = "node_key_validation" }
 ic-crypto-sha = { path = "sha" }
 ic-crypto-tecdsa = { path = "tecdsa" }
@@ -87,8 +89,8 @@ ic-crypto-test-utils-csp = { path = "test_utils/csp" }
 ic-crypto-test-utils-local-csp-vault = { path = "test_utils/local_csp_vault" }
 ic-crypto-test-utils-metrics = { path = "test_utils/metrics" }
 ic-crypto-test-utils-multi-sigs = { path = "test_utils/multi_sigs" }
+ic-crypto-test-utils-ni-dkg = { path = "test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "test_utils/reproducible_rng" }
-ic-crypto-test-utils-threshold-sigs = { path = "test_utils/threshold_sigs" }
 ic-crypto-test-utils-canister-sigs = { path = "test_utils/canister_sigs" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "test_utils/canister_threshold_sigs" }
 ic-crypto-tree-hash = { path = "tree_hash" }
@@ -115,6 +117,14 @@ harness = false
 
 [[bench]]
 name = "threshold_sig"
+harness = false
+
+[[bench]]
+name = "idkg"
+harness = false
+
+[[bench]]
+name = "tecdsa"
 harness = false
 
 [[bench]]

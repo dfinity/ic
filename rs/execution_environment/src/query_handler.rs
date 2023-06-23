@@ -41,7 +41,7 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::sync::oneshot;
-use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
+use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 
@@ -128,7 +128,7 @@ impl InternalHttpQueryHandler {
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
             cycles_account_manager,
-            query_cache: query_cache::QueryCache::new(query_cache_capacity),
+            query_cache: query_cache::QueryCache::new(metrics_registry, query_cache_capacity),
         }
     }
 }
@@ -153,7 +153,6 @@ impl QueryHandler for InternalHttpQueryHandler {
             let env = query_cache::EntryEnv::try_from((&key, state.as_ref()))?;
 
             if let Some(result) = self.query_cache.get_valid_result(&key, &env) {
-                self.metrics.query_cache_hits.inc();
                 return result;
             }
             (Some(key), Some(env))
@@ -181,6 +180,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,
+            &self.metrics.query_critical_error,
         );
         let result = context.run(
             query,
@@ -189,12 +189,11 @@ impl QueryHandler for InternalHttpQueryHandler {
             &measurement_scope,
         );
 
-        // Add the query execution result to the query cache.
+        // Add the query execution result to the query cache  (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
             if let (Some(key), Some(env)) = (cache_entry_key, cache_entry_env) {
-                self.metrics.query_cache_misses.inc();
                 self.query_cache
-                    .insert(key, query_cache::EntryValue::new(env, result.clone()));
+                    .push(key, query_cache::EntryValue::new(env, result.clone()));
             }
         }
         result
@@ -203,19 +202,15 @@ impl QueryHandler for InternalHttpQueryHandler {
 
 impl HttpQueryHandler {
     pub(crate) fn new_service(
-        concurrency_buffer: GlobalConcurrencyLimitLayer,
         internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> QueryExecutionService {
-        let base_service = BoxCloneService::new(Self {
+        BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
-        });
-        ServiceBuilder::new()
-            .layer(concurrency_buffer)
-            .service(base_service)
+        })
     }
 }
 

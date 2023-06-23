@@ -5,18 +5,15 @@ use ic_config::{
     logger::{default_logtarget, Config as LoggerConfig, LogFormat},
     transport::TransportConfig,
 };
+use ic_interfaces::artifact_manager::JoinGuard;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
-use ic_p2p::P2PThreadJoiner;
-use ic_protobuf::registry::node::v1::{
-    connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
-};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol};
+use ic_registry_keys::make_node_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_types::{replica_config::ReplicaConfig, NodeId, RegistryVersion, SubnetId};
-
-use ic_registry_keys::make_node_record_key;
 use std::collections::HashMap;
 use std::{fs, fs::File, sync::Arc, thread::sleep, time::Duration};
 
@@ -65,7 +62,7 @@ pub struct P2PTestContext {
     pub subnet_id: SubnetId,               // Dummy test subnet ID
     pub metrics_registry: MetricsRegistry, // monitor metrics from various ICP layers
     pub test_synchronizer: P2PTestSynchronizer, // Provide basic inter-test synchronization
-    pub _p2p_thread_joiner: P2PThreadJoiner, // p2p object to drive the ICP stack
+    pub _p2p_join_guard: Vec<Box<dyn JoinGuard>>, // p2p object to drive the ICP stack
 }
 
 impl P2PTestContext {
@@ -74,7 +71,7 @@ impl P2PTestContext {
         subnet_id: SubnetId,
         metrics_registry: MetricsRegistry,
         test_synchronizer: P2PTestSynchronizer,
-        p2p_thread_joiner: P2PThreadJoiner,
+        p2p_join_guard: Vec<Box<dyn JoinGuard>>,
     ) -> Self {
         P2PTestContext {
             node_num,
@@ -82,7 +79,7 @@ impl P2PTestContext {
             subnet_id,
             metrics_registry,
             test_synchronizer,
-            _p2p_thread_joiner: p2p_thread_joiner,
+            _p2p_join_guard: p2p_join_guard,
         }
     }
 }
@@ -261,11 +258,6 @@ pub fn test_group_set_registry(
             http: Some(ConnectionEndpoint {
                 ip_addr: "127.0.0.1".to_string(),
                 port: node_num as u32, /* NOTE: this port is not used in any test */
-                protocol: Protocol::Http1 as i32,
-            }),
-            prometheus_metrics_http: Some(ConnectionEndpoint {
-                ip_addr: "127.0.0.1".to_string(),
-                port: 9090,
                 protocol: Protocol::Http1 as i32,
             }),
             ..Default::default()

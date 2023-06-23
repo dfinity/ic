@@ -3,6 +3,7 @@ mod common;
 mod crypto;
 mod endpoint;
 mod firewall;
+mod hostos_version;
 mod node_operator;
 mod replica_version;
 mod routing_table;

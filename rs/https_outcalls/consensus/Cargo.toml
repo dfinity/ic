@@ -7,21 +7,23 @@ edition = "2021"
 ic-config = { path = "../../config" }
 ic-consensus-utils = { path = "../../consensus/utils" }
 ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-https-outcalls-adapter-client = { path = "../../interfaces/https_outcalls_adapter_client" }
+ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-types = { path = "../../types/types" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
+prost = "0.11.0"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 
 [dev-dependencies]
 ic-artifact-pool = { path = "../../artifact_pool" }
+ic-error-types = { path = "../../types/error_types" }
 ic-consensus-mocks = { path = "../../consensus/mocks" }
-ic-protobuf = { path = "../../protobuf" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }

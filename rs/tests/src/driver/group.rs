@@ -44,8 +44,8 @@ use super::report::{SystemGroupSummary, SystemTestGroupError};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
-const MAX_RUNTIME_THREADS: usize = 16;
-const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
+pub const MAX_RUNTIME_THREADS: usize = 16;
+pub const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
 
 const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
 const REPORT_TASK_NAME: &str = "report";
@@ -68,10 +68,31 @@ pub struct CliArgs {
     pub debug_keepalive: bool,
 
     #[clap(
+        long = "no-delete-farm-group",
+        help = "If set, Farm group is not deleted in the tear down."
+    )]
+    pub no_delete_farm_group: bool,
+
+    #[clap(
+        long = "no-summary-report",
+        help = "If set, no summary/report events are produced by the test-driver."
+    )]
+    pub no_summary_report: bool,
+
+    #[clap(
+        long = "no-farm-keepalive",
+        help = "If set, Farm group is not kept alive."
+    )]
+    pub no_farm_keepalive: bool,
+
+    #[clap(
         long = "include-tests",
         help = r#"Execute only those test functions, which contain a substring and skip all the others."#
     )]
     pub filter_tests: Option<String>,
+
+    #[clap(long = "group-base-name", help = r#"Group base name."#)]
+    pub group_base_name: String,
 
     #[clap(
         long = "farm-base-url",
@@ -377,10 +398,6 @@ impl SystemTestGroup {
         self.timeout_per_test.unwrap_or(DEFAULT_TIMEOUT_PER_TEST)
     }
 
-    fn effective_overall_timeout(&self) -> Duration {
-        self.overall_timeout.unwrap_or(DEFAULT_OVERALL_TIMEOUT)
-    }
-
     pub fn without_farm(mut self) -> Self {
         self.with_farm = false;
         self
@@ -435,10 +452,6 @@ impl SystemTestGroup {
             min_lifetime <= self.effective_timeout_per_test(),
             "min_lifetime of a SystemTestSubGroup cannot be greater than timeout_per_test"
         );
-        assert!(
-            min_lifetime <= self.effective_overall_timeout(),
-            "min_lifetime of a SystemTestSubGroup cannot be greater than overall_timeout"
-        );
         if min_lifetime.is_zero() {
             // Optimization
             return self.add_group(sub_group, EvalOrder::Parallel);
@@ -489,7 +502,6 @@ impl SystemTestGroup {
 
     fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
-        let effective_overall_timeout = self.effective_overall_timeout();
 
         let mut compose_ctx = ComposeContext {
             rh,
@@ -501,7 +513,7 @@ impl SystemTestGroup {
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
-        let keepalive_task = if self.with_farm {
+        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive {
             Box::from(subproc(
                 keepalive_task_id.clone(),
                 {
@@ -600,12 +612,16 @@ impl SystemTestGroup {
                     REPORT_TASK_NAME.to_string(),
                 )))),
                 EvalOrder::Sequential,
-                vec![timed(
-                    plan,
-                    effective_overall_timeout,
-                    Some(String::from("::group")),
-                    &mut compose_ctx,
-                )],
+                vec![if let Some(overall_timeout) = self.overall_timeout {
+                    timed(
+                        plan,
+                        overall_timeout,
+                        Some(String::from("::group")),
+                        &mut compose_ctx,
+                    )
+                } else {
+                    plan
+                }],
                 &mut compose_ctx,
             ));
             return plan;
@@ -666,12 +682,14 @@ impl SystemTestGroup {
             args.subproc_id(),
             args.filter_tests,
             args.debug_keepalive,
+            args.no_farm_keepalive,
+            args.group_base_name,
         )?;
         if is_parent_process {
             let root_env = group_ctx.get_root_env().unwrap();
             FarmBaseUrl::new_or_default(args.farm_base_url).write_attribute(&root_env);
             if self.with_farm {
-                root_env.create_group_setup();
+                root_env.create_group_setup(group_ctx.group_base_name.clone());
             }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }
@@ -764,10 +782,12 @@ impl SystemTestGroup {
                 // }
 
                 let report = task_scheduler.create_report();
-                info!(group_ctx.log(), "JSON Report:\n{}", report);
-                info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
+                if !args.no_summary_report {
+                    info!(group_ctx.log(), "JSON Report:\n{}", report);
+                    info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
+                }
 
-                if with_farm {
+                if with_farm && !args.no_delete_farm_group {
                     Self::delete_farm_group(group_ctx.clone());
                 }
                 if report.failure.is_empty() {

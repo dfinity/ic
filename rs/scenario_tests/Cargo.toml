@@ -56,7 +56,7 @@ tester = "0.7.0"
 tokio = {version = "1.15.0", features = ["full"]}
 url = "2.1.1"
 xnet-test = { path = "../rust_canisters/xnet_test" }
-ic-nns-handler-root = {path="../nns/handlers/root"}
+ic-nns-handler-root = {path="../nns/handlers/root/impl"}
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-utils-basic-sig = { path = "../crypto/utils/basic_sig" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }

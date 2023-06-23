@@ -13,11 +13,24 @@ The replica components in this directory are:
 
 == Connection management ==
 
-Components in scope assume persistent connections are established. Each component can have at most
-`+max_tcp_connections+` simultaneous TCP connections. If the limit is reached, new incoming connections are refused.
-Under extreme load, when the rate of incoming connections is higher than the rate at which the replica accepts them,
-users may also observe refused connections due to a full 
-https://www.linuxjournal.com/files/linuxjournal.com/linuxjournal/articles/023/2333/2333s2.html[TCP listener backlog queue].
+Components in scope assume persistent connections are established.
+
+=== Using Nftables ===
+
+The ReplicaOS uses https://en.wikipedia.org/wiki/Nftables[nftables] for setting firewall rules that are important
+for the overall reliability of the IC. Nftables are used for:
+
+ *  restrict inbound traffic. Only IPs of nodes that are in the registry can establish connections to IC nodes on whitelisted ports. 
+ *  limit the number of simultaneous TCP connections from a source IP. 
+ *  limit the rate at which connections are established from a source IP.
+
+The above rules serve as protection against:
+
+ *  protocol attacks by 3rd parties - since only IPs of nodes in the registry have access to replica nodes.
+ *  shared resource exhaustion (e.g. file descriptor exhaustion due to many connections, 
+ CPU exhaustion due to excessive number of TLS handshakes).
+
+=== Dead peer detection ===
 
 Given the existence of persistent connections, we must detect dead peers, disconnections due
 to network inactivity and/or peers holding on to connections without sending requests.
@@ -74,10 +87,20 @@ If a http request does not complete within the specified timeout it will be abor
 
 == Fairness ==
 
-Fairness implies that the rate at which requests from different connections are picked up is more or less the same.
+Fairness implies that the probability of picking up a request from any connection is uniformly distributed.
 
 Currently boundary nodes use https://www.nginx.com/[nginx] as reverse proxy. Thus, the boundary nodes
 can only use https://mailman.nginx.org/pipermail/nginx/2015-December/049445.html[HTTP1] for communicating with replicas.
 Hence, there can be at most one in-flight request in the replica from each connection. Given we use https://tokio.rs/blog/2019-10-scheduler[Tokio's fair scheduler]
-and we have a dedicated Tokio task for serving each connection this is sufficient for request accross connections.
+and we have a dedicated Tokio task for serving each connection, this is sufficient to provide request fairness across connections.
 
+== Graceful shutdown ==
+
+All the components are written in Rust async, implementing at least one event loop that lives for the duration
+of the replica process. For graceful shutdown of such event loops the replica relies on the Tokio runtime to cancel the 
+running and queued futures. Such cancellation happens when the runtime is dropped.
+
+== HTTP vs HTTPS ==
+
+Each component has a single listening port that accepts a TCP connection. After a connection is accepted, 
+the component peeks the first byte of the TCP stream to determine if a TLS connection is initiated.

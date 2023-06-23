@@ -15,8 +15,8 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{
-        connection_endpoint::Protocol, ConnectionEndpoint as pbConnectionEndpoint,
-        FlowEndpoint as pbFlowEndpoint, NodeRecord as pbNodeRecord,
+        ConnectionEndpoint as pbConnectionEndpoint, FlowEndpoint as pbFlowEndpoint,
+        NodeRecord as pbNodeRecord, Protocol,
     },
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
@@ -190,16 +190,10 @@ impl InitializedNode {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
-    pub xnet_api: Vec<ConnectionEndpoint>,
+    pub xnet_api: ConnectionEndpoint,
 
     /// Endpoints where the replica serves the public API interface
-    pub public_api: Vec<ConnectionEndpoint>,
-
-    /// Endpoints where the replica serves the private API interface
-    pub private_api: Vec<ConnectionEndpoint>,
-
-    /// Endpoint where the replica serves Prometheus-compatible metrics
-    pub prometheus_metrics: Vec<ConnectionEndpoint>,
+    pub public_api: ConnectionEndpoint,
 
     /// The initial endpoint that P2P uses.
     pub p2p_addr: ConnectionEndpoint,
@@ -207,7 +201,7 @@ pub struct NodeConfiguration {
     /// The principal id of the node operator that operates this node.
     pub node_operator_principal_id: Option<PrincipalId>,
 
-    /// If set, the specified secret key store will be used. Ohterwise, a new
+    /// If set, the specified secret key store will be used. Otherwise, a new
     /// one will be created when initializing the internet computer.
     ///
     /// Creating the secret key store ahead of time allows for the node id to be
@@ -218,6 +212,9 @@ pub struct NodeConfiguration {
     /// directory chosen by ic-prep.
     #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
+
+    /// The SEV-SNP chip_identifier for this node.
+    pub chip_id: Vec<u8>,
 }
 
 #[derive(Error, Debug)]
@@ -253,66 +250,8 @@ impl TryFrom<NodeConfiguration> for pbNodeRecord {
             endpoint: Some(p2p_base_endpoint),
         }];
 
-        // public_api and related fields. This must have at least one value.
-        // All values are used in the `public_api` field, and the first value
-        // with `Protocol::Http1` is copied to the deprecated `http` field.
-        let pb_public_api_endpoints = node_configuration
-            .public_api
-            .iter()
-            .map(pbConnectionEndpoint::from)
-            .collect::<Vec<_>>();
-
-        if pb_public_api_endpoints.is_empty() {
-            return Err(NodeConfigurationTryFromError::EmptyPublicApiEndpoint);
-        }
-
-        if let Some(endpoint) = pb_public_api_endpoints
-            .iter()
-            .find(|&endpoint| endpoint.protocol() == Protocol::Http1)
-        {
-            pb_node_record.http = Some(endpoint.clone());
-        }
-
-        pb_node_record.public_api = pb_public_api_endpoints;
-
-        // private_api. This may be empty (in which case the replica would not
-        // serve the private API on any address)
-        pb_node_record.private_api = node_configuration
-            .private_api
-            .iter()
-            .map(pbConnectionEndpoint::from)
-            .collect::<Vec<_>>();
-
-        // xnet and related field. All values are used in the `xnet_api`
-        // field, and the first value is used, for backwards compatibility,
-        // in the `xnet` field.
-        pb_node_record.xnet_api = node_configuration
-            .xnet_api
-            .iter()
-            .map(pbConnectionEndpoint::from)
-            .collect::<Vec<_>>();
-        if !node_configuration.xnet_api.is_empty() {
-            pb_node_record.xnet = Some(pbConnectionEndpoint::from(&node_configuration.xnet_api[0]));
-        }
-
-        // prometheus_metrics and related fields. This may be empty. If it is
-        // not then all values are used in the `prometheus_metrics` field and
-        // the first value with `Protocol::Http1` is copied to the
-        // deprecated `prometheus_metrics_http` field
-        let pb_prometheus_metrics_endpoints = node_configuration
-            .prometheus_metrics
-            .iter()
-            .map(pbConnectionEndpoint::from)
-            .collect::<Vec<_>>();
-
-        if let Some(endpoint) = pb_prometheus_metrics_endpoints
-            .iter()
-            .find(|&endpoint| endpoint.protocol() == Protocol::Http1)
-        {
-            pb_node_record.prometheus_metrics_http = Some(endpoint.clone());
-        }
-
-        pb_node_record.prometheus_metrics = pb_prometheus_metrics_endpoints;
+        pb_node_record.http = Some(pbConnectionEndpoint::from(&node_configuration.public_api));
+        pb_node_record.xnet = Some(pbConnectionEndpoint::from(&node_configuration.xnet_api));
 
         // node provider principal id
         pb_node_record.node_operator_id = node_configuration
@@ -436,13 +375,12 @@ mod node_configuration {
     #[test]
     fn into_proto_http() {
         let node_configuration = NodeConfiguration {
-            xnet_api: vec!["http://1.2.3.4:8080".parse().unwrap()],
-            public_api: vec!["http://1.2.3.4:8081".parse().unwrap()],
-            private_api: vec!["http://1.2.3.4:8082".parse().unwrap()],
-            prometheus_metrics: vec!["http://1.2.3.4:9090".parse().unwrap()],
+            xnet_api: "http://1.2.3.4:8080".parse().unwrap(),
+            public_api: "http://1.2.3.4:8081".parse().unwrap(),
             p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:1234".parse().unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
+            chip_id: vec![],
         };
 
         let got = pbNodeRecord::try_from(node_configuration).unwrap();
@@ -456,35 +394,9 @@ mod node_configuration {
                     protocol: Protocol::P2p1Tls13 as i32,
                 }),
             }],
-            public_api: vec![pbConnectionEndpoint {
-                ip_addr: "1.2.3.4".to_string(),
-                port: 8081,
-                protocol: Protocol::Http1 as i32,
-            }],
-            private_api: vec![pbConnectionEndpoint {
-                ip_addr: "1.2.3.4".to_string(),
-                port: 8082,
-                protocol: Protocol::Http1 as i32,
-            }],
-            prometheus_metrics: vec![pbConnectionEndpoint {
-                ip_addr: "1.2.3.4".to_string(),
-                port: 9090,
-                protocol: Protocol::Http1 as i32,
-            }],
-            xnet_api: vec![pbConnectionEndpoint {
-                ip_addr: "1.2.3.4".to_string(),
-                port: 8080,
-                protocol: Protocol::Http1 as i32,
-            }],
-            // Deprecated fields should also have values
             http: Some(pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 8081,
-                protocol: Protocol::Http1 as i32,
-            }),
-            prometheus_metrics_http: Some(pbConnectionEndpoint {
-                ip_addr: "1.2.3.4".to_string(),
-                port: 9090,
                 protocol: Protocol::Http1 as i32,
             }),
             xnet: Some(pbConnectionEndpoint {
@@ -493,6 +405,7 @@ mod node_configuration {
                 protocol: Protocol::Http1 as i32,
             }),
             chip_id: vec![],
+            hostos_version_id: None,
         };
 
         assert_eq!(got, want);

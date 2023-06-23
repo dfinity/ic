@@ -1,12 +1,13 @@
 //! In-process CPU profiling support.
 
+use async_trait::async_trait;
 use lazy_static::lazy_static;
 use pprof::{ProfilerGuard, Report};
 use prost::Message;
 use regex::Regex;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::time::sleep;
+use tokio::{task::spawn_blocking, time::sleep};
 
 /// Errors returned by `profile()` and `flamegraph()`.
 #[derive(Error, Debug)]
@@ -25,6 +26,8 @@ pub enum Error {
         #[from]
         source: prost::EncodeError,
     },
+    #[error("An internal error occurred.")]
+    Internal,
 }
 
 /// Drops the thread number, if any, from the thread name and replaces all
@@ -50,35 +53,52 @@ fn extract_thread_name(thread_name: &str) -> String {
 
 /// Collects a CPU profile for the given `duration` by sampling at the given
 /// `frequency`.
-pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, pprof::Error> {
-    let guard = ProfilerGuard::new(frequency)?;
-    sleep(duration).await;
+pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, Error> {
+    // ProfilerGuard has a latency of 40-60 miliseconds. Hence we want to run it
+    // without blocking the runtime with `spawn_blocking`.
+    let guard = spawn_blocking(move || ProfilerGuard::new(frequency))
+        .await
+        .map_err(|_| Error::Internal)??;
 
+    sleep(duration).await;
     guard
         .report()
         .frames_post_processor(move |frames| {
             frames.thread_name = extract_thread_name(&frames.thread_name);
         })
         .build()
+        .map_err(|source| Error::Pprof { source })
 }
 
-/// Collects a protobuf-encoded `pprof` CPU profile for the given `duration` by
-/// sampling at the given `frequency`.
-pub async fn profile(duration: Duration, frequency: i32) -> Result<Vec<u8>, Error> {
-    let mut body: Vec<u8> = Vec::new();
-    collect(duration, frequency)
-        .await?
-        .pprof()?
-        .encode(&mut body)?;
-
-    Ok(body)
+#[async_trait]
+pub trait PprofCollector: Send + Sync {
+    async fn profile(&self, duration: Duration, frequency: i32) -> Result<Vec<u8>, Error>;
+    async fn flamegraph(&self, duration: Duration, frequency: i32) -> Result<Vec<u8>, Error>;
 }
 
-/// Collects a CPU profile as SVG flamegraph for the given `duration` by
-/// sampling at the given `frequency`.
-pub async fn flamegraph(duration: Duration, frequency: i32) -> Result<Vec<u8>, Error> {
-    let mut body: Vec<u8> = Vec::new();
-    collect(duration, frequency).await?.flamegraph(&mut body)?;
+#[derive(Default)]
+pub struct Pprof;
 
-    Ok(body)
+#[async_trait]
+impl PprofCollector for Pprof {
+    /// Collects a protobuf-encoded `pprof` CPU profile for the given `duration` by
+    /// sampling at the given `frequency`.
+    async fn profile(&self, duration: Duration, frequency: i32) -> Result<Vec<u8>, Error> {
+        let mut body: Vec<u8> = Vec::new();
+        collect(duration, frequency)
+            .await?
+            .pprof()?
+            .encode(&mut body)?;
+
+        Ok(body)
+    }
+
+    /// Collects a CPU profile as SVG flamegraph for the given `duration` by
+    /// sampling at the given `frequency`.
+    async fn flamegraph(&self, duration: Duration, frequency: i32) -> Result<Vec<u8>, Error> {
+        let mut body: Vec<u8> = Vec::new();
+        collect(duration, frequency).await?.flamegraph(&mut body)?;
+
+        Ok(body)
+    }
 }

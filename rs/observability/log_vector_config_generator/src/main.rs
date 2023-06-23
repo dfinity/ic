@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::vec;
 use std::{path::PathBuf, sync::Arc, time::Duration};
@@ -15,7 +14,7 @@ use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
-use service_discovery::job_types::{JobType, NodeOS};
+use service_discovery::job_types::{map_jobs, JobAndPort};
 use service_discovery::registry_sync::sync_local_registry;
 use service_discovery::IcServiceDiscoveryImpl;
 use service_discovery::{metrics::Metrics, poll_loop::make_poll_loop};
@@ -42,11 +41,12 @@ fn main() -> Result<()> {
     ));
 
     info!(log, "Starting IcServiceDiscovery ...");
+    info!(log, "Started jobs: {:?}", cli_args.jobs_and_ports);
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
         log.clone(),
         cli_args.targets_dir,
         cli_args.registry_query_timeout,
-        get_jobs(),
+        map_jobs(&cli_args.jobs_and_ports),
     )?);
 
     let metrics = Metrics::new(metrics_registry.clone());
@@ -98,7 +98,7 @@ fn main() -> Result<()> {
         ic_discovery,
         filters,
         stop_signal_rcv,
-        vec![JobType::NodeExporter(NodeOS::Guest)],
+        map_jobs(&cli_args.jobs_and_ports).into_keys().collect(),
         update_signal_rcv,
         cli_args.vector_config_dir,
         VectorConfigBuilderImpl::new(cli_args.batch_size),
@@ -145,7 +145,7 @@ initialized with a hardcoded initial registry.
     #[clap(
     long = "poll-interval",
     default_value = "10s",
-    parse(try_from_str = parse_duration),
+    value_parser = parse_duration,
     help = r#"
 The interval at which ICs are polled for updates.
 
@@ -156,7 +156,7 @@ The interval at which ICs are polled for updates.
     #[clap(
     long = "query-request-timeout",
     default_value = "5s",
-    parse(try_from_str = parse_duration),
+    value_parser = parse_duration,
     help = r#"
 The HTTP-request timeout used when quering for registry updates.
 
@@ -222,6 +222,16 @@ The listen address on which metrics for this service should be exposed.
 "#
     )]
     metrics_listen_addr: SocketAddr,
+
+    #[clap(
+        long = "jobs-and-ports",
+        value_delimiter = ',',
+        help = r#"
+Pass the jobs through cli using comma separated values of tuples of (<name>,<port>)
+--jobs-and-ports host_node_exporter,9100 --jobs-and-ports node_exporter,9100
+"#
+    )]
+    jobs_and_ports: Vec<JobAndPort>,
 }
 
 impl CliArgs {
@@ -239,14 +249,10 @@ impl CliArgs {
             bail!("Directory does not exist: {:?}", parent_dir);
         }
 
+        if self.jobs_and_ports.is_empty() {
+            bail!("No jobs provided...");
+        }
+
         Ok(self)
     }
-}
-
-fn get_jobs() -> HashMap<JobType, u16> {
-    let mut x: HashMap<JobType, u16> = HashMap::new();
-
-    x.insert(JobType::NodeExporter(NodeOS::Guest), 9100);
-
-    x
 }

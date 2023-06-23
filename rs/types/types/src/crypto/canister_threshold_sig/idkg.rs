@@ -10,10 +10,11 @@ use crate::{Height, NodeId, NumberOfNodes, RegistryVersion};
 use ic_base_types::SubnetId;
 use ic_crypto_internal_types::NodeIndex;
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::num::TryFromIntError;
 
 pub mod conversions;
 pub mod proto_conversions;
@@ -897,9 +898,14 @@ impl IDkgTranscript {
         Ok(())
     }
 
-    /// Return the index of the signer with the givene ID< or `None` if there is no such index.
+    /// Return the index of the signer with the given ID, or `None` if there is no such index.
     pub fn index_for_signer_id(&self, signer_id: NodeId) -> Option<NodeIndex> {
         self.receivers.position(signer_id)
+    }
+
+    /// Checks if the specified `NodeId` is a receiver of the transcript.
+    pub fn has_receiver(&self, receiver_id: NodeId) -> bool {
+        self.receivers.position(receiver_id).is_some()
     }
 }
 
@@ -1040,6 +1046,85 @@ impl BatchSignedIDkgDealing {
     }
 }
 
+/// Collection of [`BatchSignedIDkgDealing`]s.
+///
+/// It is guaranteed that all dealings in the collection originate from *distinct* dealers.
+///
+/// Remark: it is essential that the [`BatchSignedIDkgDealing`]s in the collection are immutable
+/// to ensure that the value of [`BatchSignedIDkgDealing::dealer_id`] cannot be changed. Otherwise,
+/// the guarantee that all dealers are distinct could be broken.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct BatchSignedIDkgDealings {
+    dealings: BTreeMap<NodeId, BatchSignedIDkgDealing>,
+}
+
+impl BatchSignedIDkgDealings {
+    pub fn new() -> Self {
+        BatchSignedIDkgDealings {
+            dealings: Default::default(),
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.dealings.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.dealings.is_empty()
+    }
+
+    /// Inserts or update a [`BatchSignedIDkgDealing`] in the collection.
+    ///
+    /// If the collection did not have any dealing from this dealer (given by [`BatchSignedIDkgDealing::dealer_id`]),
+    /// the dealing is inserted and `None` is returned.
+    ///
+    /// Otherwise, if the collection did contain a dealing from the same dealer, the dealing
+    /// is updated and the old value is returned.
+    pub fn insert_or_update(
+        &mut self,
+        dealing: BatchSignedIDkgDealing,
+    ) -> Option<BatchSignedIDkgDealing> {
+        self.dealings.insert(dealing.dealer_id(), dealing)
+    }
+
+    /// Returns an Iterator over the [`NodeId`]s of all dealers contained in the collection.
+    pub fn dealer_ids(&self) -> impl Iterator<Item = &NodeId> {
+        self.dealings.keys()
+    }
+
+    pub fn iter(&self) -> btree_map::Values<'_, NodeId, BatchSignedIDkgDealing> {
+        self.dealings.values()
+    }
+}
+
+impl IntoIterator for BatchSignedIDkgDealings {
+    type Item = BatchSignedIDkgDealing;
+    type IntoIter = btree_map::IntoValues<NodeId, BatchSignedIDkgDealing>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.dealings.into_values()
+    }
+}
+
+impl<'a> IntoIterator for &'a BatchSignedIDkgDealings {
+    type Item = &'a BatchSignedIDkgDealing;
+    type IntoIter = btree_map::Values<'a, NodeId, BatchSignedIDkgDealing>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl FromIterator<BatchSignedIDkgDealing> for BatchSignedIDkgDealings {
+    fn from_iter<T: IntoIterator<Item = BatchSignedIDkgDealing>>(iter: T) -> Self {
+        let mut dealings = BatchSignedIDkgDealings::new();
+        for dealing in iter {
+            dealings.insert_or_update(dealing);
+        }
+        dealings
+    }
+}
+
 /// Complaint against an individual IDkg dealing in a transcript.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct IDkgComplaint {
@@ -1084,8 +1169,8 @@ impl Debug for IDkgOpening {
     }
 }
 
-fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, ()> {
-    let count = NodeIndex::try_from(number).map_err(|_| ())?;
+fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, TryFromIntError> {
+    let count = NodeIndex::try_from(number)?;
     Ok(NumberOfNodes::from(count))
 }
 

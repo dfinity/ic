@@ -1,10 +1,3 @@
-use std::cell::RefCell;
-use std::cmp::{max, min};
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
-use std::convert::TryInto;
-use std::thread::LocalKey;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
 use candid::{candid_method, CandidType, Encode};
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
@@ -14,6 +7,9 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use environment::Environment;
+use exchange_rate_canister::{
+    RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
+};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -22,6 +18,7 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, CreateCanisterArgs, Method, IC_00,
 };
 use ic_ledger_core::block::BlockType;
+use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
@@ -29,13 +26,16 @@ use icp_ledger::{
     Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire, NewType};
-
-use exchange_rate_canister::{
-    RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
-};
-use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::{
+    cell::RefCell,
+    cmp::{max, min},
+    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    convert::TryInto,
+    thread::LocalKey,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 mod environment;
 mod exchange_rate_canister;
@@ -272,11 +272,13 @@ fn main() {
     over_init(|CandidOne(args)| init(args))
 }
 
-fn init(args: CyclesCanisterInitPayload) {
+fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
+    let args =
+        maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
     print(format!(
         "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, and minting account {}",
-        args.ledger_canister_id,
-        args.governance_canister_id,
+        args.ledger_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
+        args.governance_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
         args.exchange_rate_canister.as_ref()
             .map(|x| match x {
                 ExchangeRateCanister::Set(id) => id.to_string(),
@@ -290,8 +292,12 @@ fn init(args: CyclesCanisterInitPayload) {
 
     STATE.with(|state| state.replace(Some(State::default())));
     with_state_mut(|state| {
-        state.ledger_canister_id = args.ledger_canister_id;
-        state.governance_canister_id = args.governance_canister_id;
+        state.ledger_canister_id = args
+            .ledger_canister_id
+            .expect("Ledger canister ID must be set!");
+        state.governance_canister_id = args
+            .governance_canister_id
+            .expect("Governance canister ID must be set!");
         state.minting_account_id = args.minting_account_id;
         state.last_purged_notification = args.last_purged_notification;
         if let Some(xrc_flag) = args.exchange_rate_canister {
@@ -724,34 +730,33 @@ fn get_average_icp_xdr_conversion_rate_() {
 /// the average rate over `NUM_ICP_XDR_RATES_FOR_AVERAGE` days.
 /// The first received rate for each day is stored, ideally with a timestamp
 /// exactly at the start of the day.
-fn update_recent_icp_xdr_rates(new_rate: &IcpXdrConversionRate) {
-    with_state_mut(|state| {
-        let day = new_rate.timestamp_seconds / 86_400;
-        // The index is the day modulo `ICP_XDR_CONVERSION_RATE_CACHE_SIZE`.
-        let index = (day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
+fn update_recent_icp_xdr_rates(state: &mut State, new_rate: &IcpXdrConversionRate) {
+    let day = new_rate.timestamp_seconds / 86_400;
+    // The index is the day modulo `ICP_XDR_CONVERSION_RATE_CACHE_SIZE`.
+    let index = (day as usize) % ICP_XDR_CONVERSION_RATE_CACHE_SIZE;
 
-        let recent_rates = state.recent_icp_xdr_rates.get_or_insert(vec![
-            IcpXdrConversionRate::default(
-            );
-            ICP_XDR_CONVERSION_RATE_CACHE_SIZE
-        ]);
-        // The record is updated if it is the first entry of a new day or an earlier
-        // entry of the same day.
-        let day_at_index = recent_rates[index].timestamp_seconds / 86_400;
-        if day_at_index < day
-            || (day_at_index == day
-                && recent_rates[index].timestamp_seconds > new_rate.timestamp_seconds)
-        {
-            recent_rates[index] = new_rate.clone();
-            // Update the average ICP/XDR rate and the maturity modulation.
-            if let Ok(time) = dfn_core::api::now().duration_since(UNIX_EPOCH) {
-                state.average_icp_xdr_conversion_rate =
-                    compute_average_icp_xdr_rate_at_time(recent_rates, time.as_secs());
-                state.maturity_modulation_permyriad =
-                    Some(compute_maturity_modulation(recent_rates, time.as_secs()));
-            }
+    let recent_rates = state.recent_icp_xdr_rates.get_or_insert(vec![
+        IcpXdrConversionRate::default(
+        );
+        ICP_XDR_CONVERSION_RATE_CACHE_SIZE
+    ]);
+
+    // The record is updated if it is the first entry of a new day or an earlier
+    // entry of the same day.
+    let day_at_index = recent_rates[index].timestamp_seconds / 86_400;
+    if day_at_index < day
+        || (day_at_index == day
+            && recent_rates[index].timestamp_seconds > new_rate.timestamp_seconds)
+    {
+        recent_rates[index] = new_rate.clone();
+        // Update the average ICP/XDR rate and the maturity modulation.
+        if let Ok(time) = dfn_core::api::now().duration_since(UNIX_EPOCH) {
+            state.average_icp_xdr_conversion_rate =
+                compute_average_icp_xdr_rate_at_time(recent_rates, time.as_secs());
+            state.maturity_modulation_permyriad =
+                Some(compute_maturity_modulation(recent_rates, time.as_secs()));
         }
-    })
+    }
 }
 
 /// The function returns the average ICP/XDR price over the past
@@ -806,7 +811,6 @@ fn set_icp_xdr_conversion_rate_() {
             let env = CanisterEnvironment;
             let rate = IcpXdrConversionRate::from(&proposed_conversion_rate);
             let rate_timestamp_seconds = rate.timestamp_seconds;
-            update_recent_icp_xdr_rates(&rate);
             let result = set_icp_xdr_conversion_rate(&STATE, &env, rate);
             if result.is_ok() && with_state(|state| state.exchange_rate_canister_id.is_some()) {
                 exchange_rate_canister::set_update_exchange_rate_state(
@@ -849,7 +853,8 @@ fn set_icp_xdr_conversion_rate(
             }
         }
 
-        state.icp_xdr_conversion_rate = Some(proposed_conversion_rate);
+        state.icp_xdr_conversion_rate = Some(proposed_conversion_rate.clone());
+        update_recent_icp_xdr_rates(state, &proposed_conversion_rate);
 
         let witness_generator = convert_data_to_mixed_hash_tree(state);
         env.set_certified_data(&witness_generator.hash_tree().digest().0[..]);
@@ -1719,7 +1724,7 @@ fn post_upgrade_() {
     over_init(|CandidOne(args)| post_upgrade(args))
 }
 
-fn post_upgrade(args: CyclesCanisterInitPayload) {
+fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
     let bytes = stable::get();
     print(format!(
         "[cycles] deserializing state after upgrade ({} bytes)",
@@ -1731,8 +1736,10 @@ fn post_upgrade(args: CyclesCanisterInitPayload) {
         new_state.subnet_types_to_subnets = Some(BTreeMap::new());
     }
 
-    if let Some(xrc_flag) = args.exchange_rate_canister {
-        new_state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+    if let Some(args) = maybe_args {
+        if let Some(xrc_flag) = args.exchange_rate_canister {
+            new_state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+        }
     }
 
     STATE.with(|state| state.replace(Some(new_state)));
@@ -1821,6 +1828,15 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             "Average amount of XDR corresponding to 1 ICP.",
         )?;
         w.encode_gauge(
+            "cmc_avg_icp_xdr_conversion_rate_timestamp_seconds",
+            state
+                .average_icp_xdr_conversion_rate
+                .as_ref()
+                .unwrap()
+                .timestamp_seconds as f64,
+            "Timestamp of the last update to the Average ICP/XDR conversion rate, in seconds since the Unix epoch.",
+        )?;
+        w.encode_gauge(
             "cmc_icp_xdr_conversion_rate_timestamp_seconds",
             state
                 .icp_xdr_conversion_rate
@@ -1845,13 +1861,13 @@ mod tests {
     use rand::Rng;
 
     pub(crate) fn init_test_state() {
-        init(CyclesCanisterInitPayload {
-            ledger_canister_id: CanisterId::ic_00(),
-            governance_canister_id: CanisterId::ic_00(),
+        init(Some(CyclesCanisterInitPayload {
+            ledger_canister_id: Some(CanisterId::ic_00()),
+            governance_canister_id: Some(CanisterId::ic_00()),
             exchange_rate_canister: None,
             minting_account_id: None,
             last_purged_notification: Some(0),
-        })
+        }))
     }
 
     #[test]
@@ -2015,7 +2031,9 @@ mod tests {
     #[test]
     /// The function tests if the average ICP/XDR conversion rate is computed correctly.
     fn test_average_icp_xdr_price_with_sample_rates() {
-        init_test_state();
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
 
         let timestamp = 1_632_700_800;
         let rates = get_sample_conversion_rates(timestamp);
@@ -2026,11 +2044,14 @@ mod tests {
             xdr_permyriad_per_icp: chosen_rates_sum / 5,
         };
         // The state is updated with all rates in reverse order (oldest to newest).
-        for rate in rates.iter().rev() {
-            update_recent_icp_xdr_rates(rate);
-        }
-        let recent_rates =
-            with_state(|state| state.recent_icp_xdr_rates.clone().unwrap_or_default());
+        mutate_state(&STATE, |state| {
+            for rate in rates.iter().rev() {
+                update_recent_icp_xdr_rates(state, rate);
+            }
+        });
+        let recent_rates = read_state(&STATE, |state| {
+            state.recent_icp_xdr_rates.clone().unwrap_or_default()
+        });
         let computed_average_rate =
             compute_average_icp_xdr_rate_at_time(&recent_rates, timestamp).unwrap();
         // Assert that the rates are identical.
@@ -2041,7 +2062,9 @@ mod tests {
     /// The function tests if the average ICP/XDR conversion rate is computed correctly for
     /// random input.
     fn test_random_average_icp_xdr_price() {
-        init_test_state();
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
 
         // Set a timestamp.
         let timestamp: u64 = 1_632_728_342;
@@ -2059,20 +2082,31 @@ mod tests {
             if day < NUM_DAYS_FOR_ICP_XDR_AVERAGE {
                 valid_rates_sum += valid_rate;
             }
-            // Add a rate one second before midnight (this rate will be ignored).
-            update_recent_icp_xdr_rates(&IcpXdrConversionRate {
-                timestamp_seconds: ((1_632_700_800 - day * 86_400) - 1) as u64,
-                xdr_permyriad_per_icp: rng.gen_range(1_000_000..10_000_000),
-            });
-            // Add a rate at midnight.
-            update_recent_icp_xdr_rates(&IcpXdrConversionRate {
-                timestamp_seconds: (1_632_700_800 - day * 86_400) as u64,
-                xdr_permyriad_per_icp: valid_rate,
-            });
-            // Add a rate one second after midnight (this rate will be ignored).
-            update_recent_icp_xdr_rates(&IcpXdrConversionRate {
-                timestamp_seconds: ((1_632_700_800 - day * 86_400) + 1) as u64,
-                xdr_permyriad_per_icp: rng.gen_range(1_000_000..10_000_000),
+            mutate_state(&STATE, |state| {
+                // Add a rate one second before midnight (this rate will be ignored).
+                update_recent_icp_xdr_rates(
+                    state,
+                    &IcpXdrConversionRate {
+                        timestamp_seconds: ((1_632_700_800 - day * 86_400) - 1) as u64,
+                        xdr_permyriad_per_icp: rng.gen_range(1_000_000..10_000_000),
+                    },
+                );
+                // Add a rate at midnight.
+                update_recent_icp_xdr_rates(
+                    state,
+                    &IcpXdrConversionRate {
+                        timestamp_seconds: (1_632_700_800 - day * 86_400) as u64,
+                        xdr_permyriad_per_icp: valid_rate,
+                    },
+                );
+                // Add a rate one second after midnight (this rate will be ignored).
+                update_recent_icp_xdr_rates(
+                    state,
+                    &IcpXdrConversionRate {
+                        timestamp_seconds: ((1_632_700_800 - day * 86_400) + 1) as u64,
+                        xdr_permyriad_per_icp: rng.gen_range(1_000_000..10_000_000),
+                    },
+                );
             });
         }
         // Get the average of the valid ICP/XDR rates in the last
@@ -2081,8 +2115,9 @@ mod tests {
             timestamp_seconds: (timestamp / 86_400) * 86_400,
             xdr_permyriad_per_icp: valid_rates_sum / (NUM_DAYS_FOR_ICP_XDR_AVERAGE as u64),
         };
-        let recent_rates =
-            with_state(|state| state.recent_icp_xdr_rates.clone().unwrap_or_default());
+        let recent_rates = read_state(&STATE, |state| {
+            state.recent_icp_xdr_rates.clone().unwrap_or_default()
+        });
         let computed_average_rate =
             compute_average_icp_xdr_rate_at_time(&recent_rates, timestamp).unwrap();
         // Assert that the rates are identical.
@@ -2092,15 +2127,19 @@ mod tests {
     #[test]
     /// The function tests if the maturity modulation is computed correctly using sample rates.
     fn test_maturity_modulation_with_sample_rates() {
-        init_test_state();
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
 
         let timestamp = 1_632_700_800;
         let rates = get_sample_conversion_rates(timestamp);
         // The state is updated with all rates in reverse order (oldest to newest).
-        for rate in rates.iter().rev() {
-            update_recent_icp_xdr_rates(rate);
-        }
-        let recent_rates = with_state(|state| state.recent_icp_xdr_rates.clone().unwrap());
+        mutate_state(&STATE, |state| {
+            for rate in rates.iter().rev() {
+                update_recent_icp_xdr_rates(state, rate);
+            }
+        });
+        let recent_rates = read_state(&STATE, |state| state.recent_icp_xdr_rates.clone().unwrap());
         let computed_maturity_modulation = compute_maturity_modulation(&recent_rates, timestamp);
         // The are only 5 rates (1_000_000 + 1_110_000 + 1_520_000 + 880_000 + 1_090_000) for the
         // average rate ending with the given timestamp, yielding an average rate of 1_120_000.
@@ -2116,7 +2155,9 @@ mod tests {
     /// The function tests if the maturity modulation is computed correctly for
     /// random input.
     fn test_random_maturity_modulation() {
-        init_test_state();
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
 
         // Create random start-of-day conversion rates.
         let mut current_rate: i32 = 100_000;
@@ -2136,10 +2177,12 @@ mod tests {
         }
 
         // Get the maturity modulation.
-        for rate in rates.iter().rev() {
-            update_recent_icp_xdr_rates(rate);
-        }
-        let recent_rates = with_state(|state| state.recent_icp_xdr_rates.clone().unwrap());
+        mutate_state(&STATE, |state| {
+            for rate in rates.iter().rev() {
+                update_recent_icp_xdr_rates(state, rate);
+            }
+        });
+        let recent_rates = read_state(&STATE, |state| state.recent_icp_xdr_rates.clone().unwrap());
         let computed_maturity_modulation = compute_maturity_modulation(&recent_rates, 1658102400);
 
         // Compute maturity modulation by hand.

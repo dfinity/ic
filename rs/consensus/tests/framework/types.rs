@@ -4,11 +4,15 @@ use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, dkg_pool, ecdsa_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::{consensus::ConsensusImpl, dkg};
+use ic_consensus::{
+    consensus::{ConsensusGossipImpl, ConsensusImpl},
+    dkg,
+};
 use ic_interfaces::{
-    artifact_pool::ChangeSetProducer,
+    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     canister_http::CanisterHttpPayloadBuilder,
     certification::ChangeSet,
+    consensus_pool::ChangeSet as ConsensusChangeSet,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -28,12 +32,14 @@ use ic_test_utilities::{
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
 use ic_types::{
+    artifact::{ArtifactKind, Priority, PriorityFn},
+    artifact_kind::ConsensusArtifact,
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, CatchUpPackage,
         ConsensusMessage,
     },
     replica_config::ReplicaConfig,
-    time::Time,
+    time::{Time, UNIX_EPOCH},
     NodeId, SubnetId,
 };
 use rand_chacha::ChaChaRng;
@@ -43,6 +49,7 @@ use std::collections::BinaryHeap;
 use std::fmt;
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 /// We use priority queues for input/output messages.
 pub type Queue<T> = Rc<RefCell<BinaryHeap<T>>>;
@@ -52,6 +59,9 @@ pub const UNIT_TIME_STEP: u64 = 1;
 
 /// Polling interval is 100 millisecond.
 pub const POLLING_INTERVAL: u64 = 100;
+
+/// Priority function refresh interval, default is 3s.
+pub const PRIORITY_FN_REFRESH_INTERVAL: Duration = Duration::from_secs(3);
 
 /// Messages from a consensus instance are either artifacts to be
 /// delivered to peers, or to a timer expired event that should trigger
@@ -171,11 +181,11 @@ impl ConsensusDependencies {
             metrics_registry.clone(),
             no_op_logger(),
         )));
-        let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone());
+        let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
         let ecdsa_pool =
             ecdsa_pool::EcdsaPoolImpl::new(pool_config, no_op_logger(), metrics_registry.clone());
         let canister_http_pool =
-            canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone());
+            canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
 
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
 
@@ -207,6 +217,8 @@ pub struct ConsensusInstance<'a> {
     pub driver: ConsensusDriver<'a>,
     pub deps: &'a ConsensusDependencies,
     pub(crate) in_queue: Queue<Input>,
+    // Input messages that should be re-tried when priority function changes
+    pub(crate) buffered: RefCell<Vec<InputMessage>>,
     pub(crate) out_queue: Queue<Output>,
     pub(crate) clock: RefCell<Time>,
     pub(crate) index: usize,
@@ -227,10 +239,52 @@ impl fmt::Display for ConsensusInstance<'_> {
 /// instances at every time step.
 pub type StopPredicate<'a> = &'a dyn Fn(&ConsensusInstance<'a>) -> bool;
 
+pub(crate) struct PriorityFnState<Artifact: ArtifactKind> {
+    priority_fn: PriorityFn<Artifact::Id, Artifact::Attribute>,
+    pub last_updated: Time,
+}
+
+impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
+    pub fn new<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
+        producer: &Producer,
+        pool: &Pool,
+    ) -> RefCell<Self> {
+        RefCell::new(PriorityFnState {
+            priority_fn: producer.get_priority_function(pool),
+            last_updated: UNIX_EPOCH,
+        })
+    }
+    /// Return the priority of the given message
+    pub fn get_priority(&self, msg: &Artifact::Message) -> Priority {
+        let advert = Artifact::message_to_advert(msg);
+        (self.priority_fn)(&advert.id, &advert.attribute)
+    }
+
+    /// Compute a new priority function
+    pub fn refresh<Pool, Producer: PriorityFnAndFilterProducer<Artifact, Pool>>(
+        &mut self,
+        producer: &Producer,
+        pool: &Pool,
+        now: Time,
+    ) {
+        self.priority_fn = producer.get_priority_function(pool);
+        self.last_updated = now;
+    }
+}
+
+/// Consensus modifier that can potentially change its behavior.
+pub type ConsensusModifier<'a> = &'a dyn Fn(
+    ConsensusImpl,
+) -> Box<
+    dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>,
+>;
+
 /// A ConsensusDriver mainly consists of the consensus component, and the
 /// consensus artifact pool and timer.
 pub struct ConsensusDriver<'a> {
-    pub(crate) consensus: ConsensusImpl,
+    pub(crate) consensus:
+        Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
+    pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
     pub(crate) certifier:
         Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
@@ -239,6 +293,7 @@ pub struct ConsensusDriver<'a> {
     pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     pub ingress_pool: RefCell<TestIngressPool>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
+    pub(crate) consensus_priority: RefCell<PriorityFnState<ConsensusArtifact>>,
 }
 
 /// An execution strategy picks the next instance to execute, and execute a
@@ -275,6 +330,7 @@ pub struct ConsensusRunnerConfig {
     pub num_nodes: usize,
     pub num_rounds: u64,
     pub degree: usize,
+    pub use_priority_fn: bool,
     pub execution: Box<dyn ExecutionStrategy>,
     pub delivery: Box<dyn DeliveryStrategy>,
 }
@@ -284,12 +340,13 @@ impl fmt::Display for ConsensusRunnerConfig {
         write!(
             f,
             "ConsensusRunnerConfig {{ max_delta: {}, random_seed: {}, \
-             num_nodes: {}, num_rounds: {}, degree: {}, execution: {}, delivery: {} }}",
+             num_nodes: {}, num_rounds: {}, degree: {}, use_priority_fn: {}, execution: {}, delivery: {} }}",
             self.max_delta,
             self.random_seed,
             self.num_nodes,
             self.num_rounds,
             self.degree,
+            self.use_priority_fn,
             get_name(&self.execution),
             get_name(&self.delivery)
         )

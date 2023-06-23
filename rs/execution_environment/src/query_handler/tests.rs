@@ -2,6 +2,7 @@ use crate::InternalHttpQueryHandler;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::messages::CanisterTask;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::{
@@ -9,7 +10,9 @@ use ic_test_utilities::{
     universal_canister::{call_args, wasm},
 };
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, NumInstructions};
+use ic_types::{
+    ingress::WasmResult, messages::UserQuery, time, CountBytes, Cycles, NumInstructions,
+};
 use std::{sync::Arc, time::Duration};
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -68,7 +71,6 @@ fn query_metrics_are_reported() {
 
     let query_handler = downcast_query_handler(test.query_handler());
 
-    assert_eq!(1, query_handler.metrics.query.duration.get_sample_count());
     assert_eq!(
         1,
         query_handler.metrics.query.instructions.get_sample_count()
@@ -207,8 +209,8 @@ fn query_cache_metrics_work() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_hits.get(), 0);
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.hits.get(), 0);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     let output_2 = test.query(
         UserQuery {
             source: user_test_id(1),
@@ -221,9 +223,188 @@ fn query_cache_metrics_work() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_hits.get(), 1);
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.hits.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_metrics_evicted_entries_count_bytes_work() {
+    const ITERATIONS: usize = 5;
+    const REPLY_SIZE: usize = 10_000;
+    const QUERY_CACHE_SIZE: usize = 1;
+    // Plus some room for the keys, headers etc.
+    const QUERY_CACHE_CAPACITY: usize = REPLY_SIZE * QUERY_CACHE_SIZE + REPLY_SIZE;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_capacity(QUERY_CACHE_CAPACITY as u64)
+        .build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    for i in 0..ITERATIONS {
+        let output = test.query(
+            UserQuery {
+                // Every query is unique and should produce a new cache entry.
+                source: user_test_id(i as u64),
+                receiver: canister_id,
+                method_name: "query".into(),
+                // The bytes are stored twice: as a payload in key and as a reply in value.
+                method_payload: wasm().reply_data(&[1; REPLY_SIZE / 2]).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+        assert_eq!(output, Ok(WasmResult::Reply([1; REPLY_SIZE / 2].into())));
+        // One unique query per 2 seconds.
+        test.state_mut().metadata.batch_time += Duration::from_secs(2);
+    }
+
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(ITERATIONS, metrics.misses.get() as usize);
+    assert_eq!(
+        ITERATIONS - QUERY_CACHE_SIZE,
+        metrics.evicted_entries.get() as usize
+    );
+    // Times 2 seconds per each query.
+    assert_eq!(
+        (ITERATIONS - QUERY_CACHE_SIZE) * 2,
+        metrics.evicted_entries_duration.get_sample_sum() as usize
+    );
+    assert_eq!(
+        ITERATIONS - QUERY_CACHE_SIZE,
+        metrics.evicted_entries_duration.get_sample_count() as usize
+    );
+    assert_eq!(0, metrics.invalidated_entries.get(),);
+
+    let count_bytes = metrics.count_bytes.get() as usize;
+    // We can't match the size exactly, as it includes the key and the captured environment.
+    // But we can assert that the sum of the sizes should be:
+    // REPLY_SIZE < count_bytes < REPLY_SIZE * 2
+    assert!(REPLY_SIZE < count_bytes);
+    assert!(REPLY_SIZE * 2 > count_bytes);
+}
+
+#[test]
+fn query_cache_metrics_evicted_entries_negative_duration_works() {
+    const REPLY_SIZE: usize = 10_000;
+    const QUERY_CACHE_SIZE: usize = 1;
+    // Plus some room for the keys, headers etc.
+    const QUERY_CACHE_CAPACITY: usize = REPLY_SIZE * QUERY_CACHE_SIZE + REPLY_SIZE;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_capacity(QUERY_CACHE_CAPACITY as u64)
+        .build();
+
+    // As there are no updates, the default system time is unix epoch, so we explicitly set it here.
+    test.state_mut().metadata.batch_time = time::GENESIS;
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    // Run the first query.
+    let output = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            // The bytes are stored twice: as a payload in key and as a reply in value.
+            method_payload: wasm().reply_data(&[1; REPLY_SIZE / 2]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(output, Ok(WasmResult::Reply([1; REPLY_SIZE / 2].into())));
+
+    // Move the time backward.
+    test.state_mut().metadata.batch_time = test
+        .state_mut()
+        .metadata
+        .batch_time
+        .saturating_sub_duration(Duration::from_secs(2));
+
+    // The second query should evict the first one, as there is no room in the cache for two queries.
+    let output = test.query(
+        UserQuery {
+            // The query should be different, so we evict, not invalidate.
+            source: user_test_id(2),
+            receiver: canister_id,
+            method_name: "query".into(),
+            // The bytes are stored twice: as a payload in key and as a reply in value.
+            method_payload: wasm().reply_data(&[2; REPLY_SIZE / 2]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(output, Ok(WasmResult::Reply([2; REPLY_SIZE / 2].into())));
+
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    // Negative durations should give just 0.
+    assert_eq!(
+        0,
+        metrics.evicted_entries_duration.get_sample_sum() as usize
+    );
+    // One entry should be evicted.
+    assert_eq!(
+        1,
+        metrics.evicted_entries_duration.get_sample_count() as usize
+    );
+}
+
+#[test]
+fn query_cache_metrics_invalidated_entries_work() {
+    const ITERATIONS: usize = 5;
+
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    for _ in 0..ITERATIONS {
+        // Every query is the same and should hit the same cache entry.
+        let output = test.query(
+            UserQuery {
+                source: user_test_id(1),
+                receiver: canister_id,
+                method_name: "query".into(),
+                method_payload: wasm().reply_data(&[42]).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+        assert_eq!(output, Ok(WasmResult::Reply([42].into())));
+        // Executing a default UC heartbeat should render the cache entry invalid.
+        test.canister_task(canister_id, CanisterTask::Heartbeat);
+    }
+
+    let query_handler = downcast_query_handler(test.query_handler());
+    assert_eq!(0, query_handler.query_cache.metrics.hits.get());
+    assert_eq!(
+        ITERATIONS,
+        query_handler.query_cache.metrics.misses.get() as usize
+    );
+    assert_eq!(
+        0,
+        query_handler.query_cache.metrics.evicted_entries.get() as usize
+    );
+    // Minus one for the first iteration when the entry was just added into the cache.
+    assert_eq!(
+        ITERATIONS - 1,
+        query_handler.query_cache.metrics.invalidated_entries.get() as usize,
+    );
 }
 
 #[test]
@@ -243,7 +424,7 @@ fn query_cache_key_different_source_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(
         output_1,
         Ok(WasmResult::Reply(user_test_id(1).get().into()))
@@ -260,7 +441,7 @@ fn query_cache_key_different_source_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 2);
     assert_eq!(
         output_2,
         Ok(WasmResult::Reply(user_test_id(2).get().into()))
@@ -285,7 +466,7 @@ fn query_cache_key_different_receiver_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     let output_2 = test.query(
         UserQuery {
@@ -299,7 +480,7 @@ fn query_cache_key_different_receiver_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 2);
     assert_eq!(output_1, output_2);
 }
 
@@ -351,7 +532,7 @@ fn query_cache_key_different_method_name_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(output_1, Ok(WasmResult::Reply(b"42".to_vec())));
     let output_2 = test.query(
         UserQuery {
@@ -365,7 +546,7 @@ fn query_cache_key_different_method_name_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 2);
     assert_eq!(output_1, output_2);
 }
 
@@ -389,7 +570,7 @@ fn query_cache_key_different_method_payload_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(output_1, Ok(WasmResult::Reply(b"42".to_vec())));
     let output_2 = test.query(
         UserQuery {
@@ -403,7 +584,7 @@ fn query_cache_key_different_method_payload_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 2);
     assert_eq!(output_1, output_2);
 }
 
@@ -425,7 +606,7 @@ fn query_cache_env_different_batch_time_returns_different_results() {
     );
     {
         let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
         assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     }
     test.state_mut().metadata.batch_time += Duration::from_secs(1);
@@ -442,9 +623,79 @@ fn query_cache_env_different_batch_time_returns_different_results() {
         vec![],
     );
     {
-        let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
         assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
+    }
+}
+
+#[test]
+fn query_cache_env_invalidated_entries_negative_duration_works() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+
+    // As there are no updates, the default system time is unix epoch, so we explicitly set it here.
+    test.state_mut().metadata.batch_time = time::GENESIS;
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    // Move the time backward.
+    test.state_mut().metadata.batch_time = test
+        .state_mut()
+        .metadata
+        .batch_time
+        .saturating_sub_duration(Duration::from_secs(1));
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        // Negative durations should give just 0.
+        assert_eq!(
+            0,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
     }
 }
 
@@ -466,7 +717,7 @@ fn query_cache_env_different_canister_version_returns_different_results() {
     );
     {
         let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
         assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     }
     test.canister_state_mut(canister_id)
@@ -485,9 +736,23 @@ fn query_cache_env_different_canister_version_returns_different_results() {
         vec![],
     );
     {
-        let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
         assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(0, metrics.invalidated_entries_by_time.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
+        assert_eq!(
+            0,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
     }
 }
 
@@ -509,7 +774,7 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
     );
     {
         let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
         assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     }
     test.canister_state_mut(canister_id)
@@ -528,9 +793,71 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
         vec![],
     );
     {
-        let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
         assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(0, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_balance.get());
+        assert_eq!(
+            0,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
+    }
+}
+
+#[test]
+fn query_cache_env_combined_invalidation() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    test.state_mut().metadata.batch_time += Duration::from_secs(1);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .canister_version += 1;
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
+        assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_balance.get());
     }
 }
 
@@ -1059,6 +1386,52 @@ fn composite_query_callgraph_depth_is_enforced() {
 }
 
 #[test]
+fn composite_query_recursive_calls() {
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    const NUM_CALLS: usize = 3;
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    fn generate_composite_call_to(
+        canister: ic_types::CanisterId,
+        num_calls_left: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        wasm().stable_grow(10).composite_query(
+            canister,
+            call_args()
+                .other_side(generate_return(canister, num_calls_left - 1))
+                .on_reply(wasm().stable_size().reply_int()),
+        )
+    }
+
+    // Either just return or trigger another composite query
+    fn generate_return(
+        canister: ic_types::CanisterId,
+        num_calls_left: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        if num_calls_left == 0 {
+            wasm().reply_data(b"ignore".as_ref())
+        } else {
+            generate_composite_call_to(canister, num_calls_left)
+        }
+    }
+
+    test.query(
+        UserQuery {
+            source: user_test_id(2),
+            receiver: canister,
+            method_name: "composite_query".to_string(),
+            method_payload: generate_composite_call_to(canister, NUM_CALLS).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    )
+    .unwrap();
+}
+
+#[test]
 fn composite_query_callgraph_max_instructions_is_enforced() {
     const NUM_CANISTERS: u64 = 20;
     const NUM_SUCCESSFUL_QUERIES: u64 = 5; // Number of calls expected to succeed
@@ -1223,7 +1596,12 @@ fn queries_to_frozen_canisters_are_rejected() {
     // the test. It needs to be _just_ enough to allow for the canister
     // to be installed (the canister is created with the provisional
     // create canister api that doesn't require additional cycles).
-    let low_cycles = Cycles::new(80_000_590_000);
+    //
+    // 80_000_000 cycles are needed as prepayment for max install_code instructions
+    //    590_000 cycles are needed for update call execution
+    //     41_070 cycles are needed to cover freeze_threshold_cycles
+    //                   of the canister history memory usage (134 bytes)
+    let low_cycles = Cycles::new(80_000_631_070);
     let canister_a = test.universal_canister_with_cycles(low_cycles).unwrap();
     test.update_freezing_threshold(canister_a, freezing_threshold)
         .unwrap();
@@ -1550,40 +1928,6 @@ fn composite_query_no_canister_response() {
             format!("Canister {} did not produce a response", canisters[1])
         ),
     }
-}
-
-#[test]
-fn composite_query_recursive() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_queries() // For now, query calls are only allowed in system subnets
-        .build();
-
-    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
-
-    let payload = wasm().composite_query(
-        canister,
-        call_args().other_side(wasm().message_payload().append_and_reply()),
-    );
-
-    let err = test
-        .query(
-            UserQuery {
-                source: user_test_id(2),
-                receiver: canister,
-                method_name: "composite_query".to_string(),
-                method_payload: payload.build(),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            Arc::new(test.state().clone()),
-            vec![],
-        )
-        .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::QueryCallGraphLoopDetected);
-    assert_eq!(
-        err.description(),
-        "Query calls re-entering the same canister are not allowed yet."
-    );
 }
 
 #[test]

@@ -3,6 +3,7 @@ syntax = "proto3";
 package ic_sns_init.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
+import "ic_nervous_system/pb/v1/nervous_system.proto";
 
 // This struct contains all the parameters necessary to initialize an SNS. All fields are optional
 // to avoid future candid compatibility problems. However, for the struct to be "valid", all fields
@@ -120,6 +121,17 @@ message SnsInitPayload {
   // For more information, see the wiki page on the wait-for-quiet algorithm: 
   // https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet
   optional uint64 wait_for_quiet_deadline_increase_seconds = 22;
+
+  // An optional text that swap participants should confirm before they may
+  // participate in the swap. If the field is set, its value should be plain text
+  // with at least 1 and at most 1,000 characters.
+  optional string confirmation_text = 23;
+
+  // An optional set of countries that should not participate in the swap.
+  optional ic_nervous_system.pb.v1.Countries restricted_countries = 24;
+
+  /// Canisters that will be transferred to an SNS.
+  optional DappCanisters dapp_canisters = 25;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures
@@ -220,4 +232,9 @@ message NeuronDistribution {
   // years and dissolve delay to 1 year in order to prove that they are making a minimum 4 year commitment to the
   // project.
   optional uint64 vesting_period_seconds = 5;
+}
+
+/// A Canister that will be transferred to an SNS.
+message DappCanisters {
+  repeated ic_nervous_system.pb.v1.Canister canisters = 1;
 }

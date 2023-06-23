@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_deployment::{
-    check_all_participants, init_participants, initiate_token_swap,
+    check_all_participants, init_participants, initiate_token_swap_with_oc_parameters,
     sns_setup_with_many_sale_participants_fast,
 };
 use ic_tests::systest;
@@ -19,7 +19,7 @@ fn main() -> Result<()> {
         .with_overall_timeout(Duration::from_secs(25 * 60)) // 25 min
         .with_timeout_per_test(Duration::from_secs(15 * 60)) // 15 min
         .with_setup(sns_setup_with_many_sale_participants_fast)
-        .add_test(systest!(initiate_token_swap))
+        .add_test(systest!(initiate_token_swap_with_oc_parameters))
         .add_test(systest!(init_participants))
         .add_test(systest!(check_all_participants))
         .execute_from_args()?;

@@ -19,3 +19,10 @@ pub enum Response {
     ExchangeRate(ExchangeRate),
     Error(ExchangeRateError),
 }
+
+#[derive(CandidType, Debug, candid::Deserialize)]
+pub struct SetExchangeRate {
+    pub base_asset: String,
+    pub quote_asset: String,
+    pub rate: u64,
+}

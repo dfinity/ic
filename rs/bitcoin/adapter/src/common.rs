@@ -91,6 +91,9 @@ pub mod test_common {
         pub fn has_discarded_address(&self, addr: &SocketAddr) -> bool {
             self.disconnected_addresses.contains(addr)
         }
+        pub fn add_address(&mut self, addr: SocketAddr) {
+            self.available_connections.push(addr);
+        }
     }
 
     impl Channel for TestChannel {

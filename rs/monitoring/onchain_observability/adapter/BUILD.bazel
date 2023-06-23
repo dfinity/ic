@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",
     "//rs/interfaces",
+    "//rs/interfaces/registry",
     "//rs/monitoring/adapter_metrics_server",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

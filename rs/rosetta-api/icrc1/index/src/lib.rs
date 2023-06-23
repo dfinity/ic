@@ -2,6 +2,7 @@ use candid::{CandidType, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_profiler::{measure_span, SpanStats};
 use ic_cdk::api::stable::{StableReader, StableWriter};
+use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc3::archive::QueryTxArchiveFn;
 use icrc_ledger_types::icrc3::transactions::{
     GetTransactionsResponse, Transaction, TransactionRange, Transfer,
@@ -28,12 +29,10 @@ const MAX_TRANSACTIONS_PER_RESPONSE: usize = 1000;
 
 // One second in nanosecond
 const SEC_NANOS: u64 = 1_000_000_000;
-const DEFAULT_MAX_WAIT_TIME_NANOS: u64 = 60_u64 * SEC_NANOS;
-const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 10_u64 * SEC_NANOS;
+const DEFAULT_MAX_WAIT_TIME_NANOS: u64 = 2_u64 * SEC_NANOS;
+const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 2_u64 * SEC_NANOS;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
-
-type TxId = Nat;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Index {
@@ -44,7 +43,12 @@ struct Index {
     pub next_txid: u64,
 
     // Whether there is a build_index running right now
+    #[serde(default)]
     pub is_build_index_running: bool,
+
+    // Last wait time in nanoseconds.
+    #[serde(default)]
+    pub last_wait_time: u64,
 
     // The index of transactions per account
     pub account_index: BTreeMap<PrincipalId, BTreeMap<Subaccount, Vec<u64>>>,
@@ -61,6 +65,7 @@ impl Index {
             is_build_index_running: false,
             account_index: BTreeMap::new(),
             accounts_num: 0,
+            last_wait_time: 0,
         }
     }
 }
@@ -98,14 +103,14 @@ pub struct GetAccountTransactionsArgs {
     // The txid of the last transaction seen by the client.
     // If None then the results will start from the most recent
     // txid.
-    pub start: Option<Nat>,
+    pub start: Option<BlockIndex>,
     // Maximum number of transactions to fetch.
     pub max_results: Nat,
 }
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct TransactionWithId {
-    pub id: Nat,
+    pub id: BlockIndex,
     pub transaction: Transaction,
 }
 
@@ -113,7 +118,7 @@ pub struct TransactionWithId {
 pub struct GetTransactions {
     pub transactions: Vec<TransactionWithId>,
     // The txid of the oldest transaction the account has
-    pub oldest_tx_id: Option<TxId>,
+    pub oldest_tx_id: Option<BlockIndex>,
 }
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
@@ -250,6 +255,7 @@ pub async fn build_index() -> Result<(), String> {
     ScopeGuard::into_inner(failure_guard);
     with_index_mut(|idx| {
         idx.is_build_index_running = false;
+        idx.last_wait_time = wait_time;
     });
     ic_cdk_timers::set_timer(Duration::from_nanos(wait_time), || {
         ic_cdk::spawn(async {
@@ -460,6 +466,11 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         with_index(|idx| idx.accounts_num) as f64,
         "Total number of accounts indexed.",
     )?;
+    w.encode_gauge(
+        "index_last_wait_time",
+        with_index(|idx| idx.last_wait_time) as f64,
+        "Last amount of time waited between two transactions fetch.",
+    )?;
     PROFILING_DATA.with(|cell| -> std::io::Result<()> {
         cell.borrow().record_metrics(w.histogram_vec(
             "index_profile_instructions",
@@ -527,6 +538,7 @@ mod tests {
                 is_build_index_running: false,
                 account_index,
                 accounts_num: 0,
+                last_wait_time: 0,
             });
         });
     }

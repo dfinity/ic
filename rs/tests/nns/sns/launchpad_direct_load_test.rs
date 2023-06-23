@@ -4,7 +4,7 @@ use std::time::Duration;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::nns_tests::sns_aggregator::{benchmark_config, workload_direct};
-use ic_tests::nns_tests::sns_deployment::initiate_token_swap;
+use ic_tests::nns_tests::sns_deployment::initiate_token_swap_with_oc_parameters;
 use ic_tests::systest;
 
 const WORKLOAD_DURATION: Duration = Duration::from_secs(2 * 60);
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
         .with_overall_timeout(Duration::from_secs(60 * 60))
         .with_timeout_per_test(Duration::from_secs(60 * 60))
         .with_setup(benchmark_config)
-        .add_test(systest!(initiate_token_swap))
+        .add_test(systest!(initiate_token_swap_with_oc_parameters))
         .add_test(systest!(workload_direct_rps300))
         .add_test(systest!(workload_direct_rps600))
         .add_test(systest!(workload_direct_rps1200))

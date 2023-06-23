@@ -38,13 +38,13 @@ use ic_types::{
 use std::{cell::RefCell, sync::Arc};
 
 pub struct Finalizer {
-    replica_config: ReplicaConfig,
+    pub(crate) replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
     membership: Arc<Membership>,
-    crypto: Arc<dyn ConsensusCrypto>,
+    pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,
     ingress_selector: Arc<dyn IngressSelector>,
-    log: ReplicaLogger,
+    pub(crate) log: ReplicaLogger,
     metrics: FinalizerMetrics,
     prev_finalized_height: RefCell<Height>,
 }
@@ -153,7 +153,7 @@ impl Finalizer {
     /// * This replica has not created a notarization share for height `h` on
     ///   any block other than the single fully notarized block at height `h`
     ///
-    /// In this case, the the single notarized block is returned. Otherwise,
+    /// In this case, the single notarized block is returned. Otherwise,
     /// return `None`
     fn pick_block_to_finality_sign(&self, pool: &PoolReader<'_>, h: Height) -> Option<Block> {
         let me = self.replica_config.node_id;
@@ -199,11 +199,11 @@ impl Finalizer {
 
         // If notarization shares exists created by this replica at height `h`
         // that sign a block different than `notarized_block`, do not finalize.
-        let other_notarizaed_shares_exists = pool.get_notarization_shares(h).any(|x| {
+        let other_notarized_shares_exists = pool.get_notarization_shares(h).any(|x| {
             x.signature.signer == me
                 && x.content.block != ic_types::crypto::crypto_hash(&notarized_block)
         });
-        if other_notarizaed_shares_exists {
+        if other_notarized_shares_exists {
             return None;
         }
 
@@ -223,80 +223,6 @@ impl Finalizer {
                 &content,
                 self.replica_config.node_id,
                 pool.registry_version(height)?,
-            )
-            .ok()?;
-        Some(FinalizationShare { content, signature })
-    }
-
-    /// Generate finalization shares for each notarized block in the validated
-    /// pool.
-    #[cfg(feature = "malicious_code")]
-    pub(crate) fn maliciously_finalize_all(&self, pool: &PoolReader<'_>) -> Vec<FinalizationShare> {
-        use ic_interfaces::consensus_pool::HeightRange;
-        use ic_logger::info;
-        use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-            MaliciousBehaviour, MaliciousBehaviourLogEntry,
-        };
-        trace!(self.log, "maliciously_finalize");
-        let mut finalization_shares = Vec::new();
-
-        let min_height = pool.get_finalized_height().increment();
-        let max_height = pool.get_notarized_height();
-
-        let proposals = pool
-            .pool()
-            .validated()
-            .block_proposal()
-            .get_by_height_range(HeightRange::new(min_height, max_height));
-
-        for proposal in proposals {
-            let block = proposal.as_ref();
-
-            // if this replica already created a finalization share for this block, we do
-            // not finality sign this block anymore. The point is not to spam.
-            let signed_this_block_before = pool
-                .pool()
-                .validated()
-                .finalization_share()
-                .get_by_height(block.height)
-                .any(|share| {
-                    share.signature.signer == self.replica_config.node_id
-                        && share.content.block == *proposal.content.get_hash()
-                });
-
-            if !signed_this_block_before {
-                if let Some(finalization_share) = self.maliciously_finalize_block(pool, block) {
-                    finalization_shares.push(finalization_share);
-                }
-            }
-        }
-
-        if !finalization_shares.is_empty() {
-            info!(
-                self.log,
-                "[MALICIOUS] maliciously finalizing {} proposals",
-                finalization_shares.len();
-                malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::FinalizeAll as i32}
-            );
-        }
-
-        finalization_shares
-    }
-
-    /// Try to create a finalization share for a given block.
-    #[cfg(feature = "malicious_code")]
-    fn maliciously_finalize_block(
-        &self,
-        pool: &PoolReader<'_>,
-        block: &Block,
-    ) -> Option<FinalizationShare> {
-        let content = FinalizationContent::new(block.height, ic_types::crypto::crypto_hash(block));
-        let signature = self
-            .crypto
-            .sign(
-                &content,
-                self.replica_config.node_id,
-                pool.registry_version(block.height)?,
             )
             .ok()?;
         Some(FinalizationShare { content, signature })

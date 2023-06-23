@@ -5,6 +5,7 @@ use crate::{
         crypto::check_node_crypto_keys_invariants,
         endpoint::check_endpoint_invariants,
         firewall::check_firewall_invariants,
+        hostos_version::check_hostos_version_invariants,
         node_operator::check_node_operator_invariants,
         replica_version::check_replica_version_invariants,
         routing_table::{check_canister_migrations_invariants, check_routing_table_invariants},
@@ -84,6 +85,9 @@ impl Registry {
         // Replica version invariants
         result = result.and(check_replica_version_invariants(&snapshot));
 
+        // HostOS version invariants
+        result = result.and(check_hostos_version_invariants(&snapshot));
+
         // Endpoint invariants
         result = result.and(check_endpoint_invariants(&snapshot, false));
 
@@ -95,7 +99,7 @@ impl Registry {
 
         if let Err(e) = result {
             panic!(
-                "{} invariant check failed with message:{}",
+                "{} invariant check failed with message: {}",
                 LOG_PREFIX, e.msg
             );
         }

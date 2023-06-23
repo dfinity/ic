@@ -1,6 +1,10 @@
 {
-  "image": "dfinity/ic-build-bazel:64dfdc5fa79872e16ff7d6f82f493dcaf1daaac1173e475feb8603eaf7dc018e",
+  "image": "dfinity/ic-build:4ed8c4a9b1f77d0bdd889199be6e8722b70766035e41f694d52d43137fef7ef1",
   "remoteUser": "ubuntu",
+  "runArgs": [
+    "--hostname",
+    "devenv-container"
+  ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "mounts": [
@@ -23,8 +27,26 @@
       "source": "${localEnv:HOME}/.config",
       "target": "/home/ubuntu/.config",
       "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.local",
+      "target": "/home/ubuntu/.local",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:SSH_AUTH_SOCK}",
+      "target": "${localEnv:SSH_AUTH_SOCK}",
+      "type": "bind"
     }
   ],
+  "containerEnv": {
+    "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}",
+    "TERM": "xterm-256color"
+  },
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/ic/bin",
+    "PYTHONPATH": "${containerEnv:PYTHONPATH}:/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies"
+  },
   "customizations": {
     "vscode": {
       "extensions": [

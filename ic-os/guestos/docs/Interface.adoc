@@ -1,0 +1,12 @@
+= Interface
+
+This document covers the GuestOS interface requirements, providing all the information needed to set up a GuestOS VM.
+
+* link:../../docs/Network-Configuration.adoc[Network Configuration]
+** Network configuration details
+* link:../../docs/Configuration.adoc[Configuration]
+** Details on populating the GuestOS config partition
+* link:../../../rs/ic_os/vsock/README.md[Vsock]
+** Communication between GuestOS and HostOS
+* link:../../hostos/rootfs/opt/ic/share/guestos.xml.template[guestos.xml.template]
+** Details on resource allocations used in production

@@ -22,15 +22,17 @@ pub use sign::utils::{
     threshold_sig_public_key_from_der, threshold_sig_public_key_to_der, user_public_key_from_bytes,
     verify_combined_threshold_sig, KeyBytesContentType,
 };
-pub use sign::{get_mega_pubkey, get_tecdsa_master_public_key, MegaKeyFromRegistryError};
+pub use sign::{
+    get_tecdsa_master_public_key, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+};
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::CspPublicKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_node_key_generation::derive_node_id;
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::{BasicSigner, KeyManager, ThresholdSigVerifierByPublicKey};
 use ic_interfaces::time_source::TimeSource;
@@ -239,7 +241,8 @@ impl CryptoComponentImpl<Csp> {
             .node_signing_public_key
             .as_ref()
             .expect("Missing node signing public key");
-        let node_id = derive_node_id(node_signing_pk);
+        let node_id =
+            derive_node_id(node_signing_pk).expect("Node signing public key should be valid");
         let latest_registry_version = registry_client.get_latest_version();
         let crypto_component = CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),

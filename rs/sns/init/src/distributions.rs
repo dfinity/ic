@@ -1,8 +1,10 @@
-use crate::pb::v1::{
-    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
-    SwapDistribution, TreasuryDistribution,
+use crate::{
+    pb::v1::{
+        AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
+        NeuronDistribution, SwapDistribution, TreasuryDistribution,
+    },
+    SnsCanisterIds,
 };
-use crate::SnsCanisterIds;
 use anyhow::anyhow;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
@@ -10,12 +12,12 @@ use ic_nervous_system_common::ledger::{
     compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount,
     compute_neuron_staking_subaccount_bytes,
 };
-use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
-use ic_sns_governance::pb::v1::{
-    neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+use ic_sns_governance::{
+    governance::TREASURY_SUBACCOUNT_NONCE,
+    neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+    pb::v1::{neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission},
+    types::ONE_MONTH_SECONDS,
 };
-use ic_sns_governance::types::ONE_MONTH_SECONDS;
 use ic_sns_swap::swap::{SALE_NEURON_MEMO_RANGE_END, SALE_NEURON_MEMO_RANGE_START};
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
@@ -23,6 +25,12 @@ use std::collections::BTreeMap;
 
 /// The static MEMO used when calculating the subaccount of future token swaps.
 pub const SWAP_SUBACCOUNT_NONCE: u64 = 1;
+
+/// The max number of DeveloperDistributions that can be specified in the SnsInitPayload.
+pub const MAX_DEVELOPER_DISTRIBUTION_COUNT: usize = 1000;
+
+/// The max number of AirdropDistributions that can be specified in the SnsInitPayload.
+pub const MAX_AIRDROP_DISTRIBUTION_COUNT: usize = 1000;
 
 impl FractionalDeveloperVotingPower {
     /// Given the configuration of the different buckets, when provided the SnsCanisterIds calculate
@@ -238,6 +246,14 @@ impl FractionalDeveloperVotingPower {
             ));
         }
 
+        if deduped_dev_neurons.len() > MAX_DEVELOPER_DISTRIBUTION_COUNT {
+            return Err(anyhow!(
+                "Error: The number of developer neurons must be less than {}. Current count is {}",
+                MAX_DEVELOPER_DISTRIBUTION_COUNT,
+                deduped_dev_neurons.len(),
+            ));
+        }
+
         for (controller, memo) in deduped_dev_neurons.keys() {
             if SALE_NEURON_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
                 return Err(anyhow!(
@@ -276,6 +292,14 @@ impl FractionalDeveloperVotingPower {
         if deduped_airdrop_neurons.len() != airdrop_distribution.airdrop_neurons.len() {
             return Err(anyhow!(
                 "Error: Duplicate controllers detected in airdrop_neurons"
+            ));
+        }
+
+        if deduped_airdrop_neurons.len() > MAX_AIRDROP_DISTRIBUTION_COUNT {
+            return Err(anyhow!(
+                "Error: The number of airdrop neurons must be less than {}. Current count is {}",
+                MAX_AIRDROP_DISTRIBUTION_COUNT,
+                deduped_airdrop_neurons.len(),
             ));
         }
 
@@ -563,12 +587,16 @@ impl NeuronDistribution {
 
 #[cfg(test)]
 mod test {
-    use crate::distributions::SWAP_SUBACCOUNT_NONCE;
-    use crate::pb::v1::{
-        AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
-        NeuronDistribution, SwapDistribution, TreasuryDistribution,
+    use crate::{
+        distributions::{
+            MAX_AIRDROP_DISTRIBUTION_COUNT, MAX_DEVELOPER_DISTRIBUTION_COUNT, SWAP_SUBACCOUNT_NONCE,
+        },
+        pb::v1::{
+            AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
+            NeuronDistribution, SwapDistribution, TreasuryDistribution,
+        },
+        SnsCanisterIds, Tokens,
     };
-    use crate::{SnsCanisterIds, Tokens};
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_nervous_system_common::ledger::{
         compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount_bytes,
@@ -576,11 +604,12 @@ mod test {
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
     };
-    use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-    use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
-    use ic_sns_governance::pb::v1::neuron::DissolveState;
-    use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
-    use ic_sns_governance::types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+    use ic_sns_governance::{
+        governance::TREASURY_SUBACCOUNT_NONCE,
+        neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+        pb::v1::{neuron::DissolveState, NervousSystemParameters, NeuronId, NeuronPermission},
+        types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
+    };
     use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
     use icrc_ledger_types::icrc1::account::Account;
     use std::str::FromStr;
@@ -1102,6 +1131,21 @@ mod test {
         assert!(initial_token_distribution
             .validate(&nervous_system_parameters)
             .is_ok());
+
+        // Exceeding the maximum count of developer neurons should fail
+        let invalid_developer_neurons = (0..MAX_DEVELOPER_DISTRIBUTION_COUNT + 1)
+            .map(|i| NeuronDistribution {
+                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                memo: i as u64,
+                ..NeuronDistribution::with_valid_values_for_testing()
+            })
+            .collect();
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: invalid_developer_neurons,
+        });
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
     }
 
     #[test]
@@ -1326,6 +1370,21 @@ mod test {
         // validation
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
+        });
+        assert!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .is_err());
+
+        // Exceeding the maximum count of developer neurons should fail
+        let invalid_airdrop_neurons = (0..MAX_AIRDROP_DISTRIBUTION_COUNT + 1)
+            .map(|i| NeuronDistribution {
+                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                memo: i as u64,
+                ..NeuronDistribution::with_valid_values_for_testing()
+            })
+            .collect();
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: invalid_airdrop_neurons,
         });
         assert!(initial_token_distribution
             .validate(&nervous_system_parameters)

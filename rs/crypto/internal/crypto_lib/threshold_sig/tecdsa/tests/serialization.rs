@@ -36,13 +36,13 @@ fn check_dealings(
     verify_data(
         format!("{} commitment", name),
         commitment_hash,
-        &round.commitment.serialize()?,
+        &round.commitment.serialize().expect("Serialization failed"),
     );
 
     verify_data(
         format!("{} transcript", name),
         transcript_hash,
-        &round.transcript.serialize()?,
+        &round.transcript.serialize().expect("Serialization failed"),
     );
 
     assert_eq!(round.dealings.len(), dealing_hashes.len());
@@ -52,7 +52,7 @@ fn check_dealings(
         verify_data(
             format!("{} dealing {}", name, dealer_index),
             hash,
-            &dealing.serialize()?,
+            &dealing.serialize().expect("Serialization failed"),
         );
     }
 
@@ -67,7 +67,11 @@ fn check_shares(
 
     for (index, hash) in hashes {
         let share = shares.get(index).expect("Unable to find signature share");
-        verify_data(format!("share {}", index), hash, &share.serialize()?)
+        verify_data(
+            format!("share {}", index),
+            hash,
+            &share.serialize().expect("Serialization failed"),
+        )
     }
 
     Ok(())
@@ -263,9 +267,9 @@ fn mega_k256_keyset_serialization_is_stable() -> Result<(), ThresholdEcdsaError>
         "033648d21ba07d56c189699b75098b23fa8c42d848c7a62fba29239473aba17a24"
     );
 
-    let sk_bytes = MEGaPrivateKeyK256Bytes::try_from(&sk)?;
+    let sk_bytes = MEGaPrivateKeyK256Bytes::try_from(&sk).expect("Deserialization failed");
 
-    let pk_bytes = MEGaPublicKeyK256Bytes::try_from(&pk)?;
+    let pk_bytes = MEGaPublicKeyK256Bytes::try_from(&pk).expect("Deserialization failed");
 
     assert_eq!(
         hex::encode(serde_cbor::to_vec(&sk_bytes).unwrap()),
@@ -297,8 +301,8 @@ fn commitment_opening_k256_serialization_is_stable() -> Result<(), ThresholdEcds
         "39b7c00e8bc8ea37e86a77c8f157c8175fa79aa6dd7340d302b6e484239d1487"
     );
 
-    let s1_bytes = EccScalarBytes::try_from(&s1)?;
-    let s2_bytes = EccScalarBytes::try_from(&s2)?;
+    let s1_bytes = EccScalarBytes::try_from(&s1).expect("Deserialization failed");
+    let s2_bytes = EccScalarBytes::try_from(&s2).expect("Deserialization failed");
 
     let simple = CommitmentOpeningBytes::Simple(s1_bytes.clone());
 

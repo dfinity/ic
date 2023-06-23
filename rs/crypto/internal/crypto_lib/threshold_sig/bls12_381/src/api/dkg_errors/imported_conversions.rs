@@ -81,8 +81,8 @@ mod create_dealing_error_conversions_v2 {
                         panic_prefix, error
                     );
                 }
-                CspDkgCreateReshareDealingError::InternalError(error) => {
-                    DkgCreateDealingError::InternalError(InternalError {
+                CspDkgCreateReshareDealingError::TransientInternalError(error) => {
+                    DkgCreateDealingError::TransientInternalError(InternalError {
                         internal_error: error.internal_error,
                     })
                 }

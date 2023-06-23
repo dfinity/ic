@@ -1,6 +1,5 @@
 use assert_matches::assert_matches;
 use dfn_candid::candid_one;
-
 use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
@@ -20,13 +19,13 @@ use ic_nns_test_utils::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
-    registry::get_value_or_panic,
-    registry::prepare_add_node_payload,
+    registry::{get_value_or_panic, prepare_add_node_payload},
 };
 use ic_protobuf::registry::node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload};
 use ic_registry_keys::make_node_operator_record_key;
-use ic_registry_transport::Error::KeyNotPresent;
-use ic_registry_transport::{deserialize_get_value_response, serialize_get_value_request};
+use ic_registry_transport::{
+    deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
+};
 use ic_types::PrincipalId;
 use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
@@ -94,7 +93,7 @@ fn test_node_operator_records_can_be_added_and_removed() {
         add_node_operator(&nns_canisters, &TEST_NEURON_2_OWNER_PRINCIPAL).await;
 
         // Assert that a Node Operator with no nodes can be removed
-        let (payload, _) = prepare_add_node_payload();
+        let (payload, _) = prepare_add_node_payload(1);
         let _node_id: NodeId = nns_canisters
             .registry
             .update_from_sender(

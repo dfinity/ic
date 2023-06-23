@@ -3,6 +3,7 @@
 pub mod checkpoint;
 pub mod labeled_tree_visitor;
 pub mod manifest;
+pub mod split;
 pub mod state_sync;
 pub mod stream_encoding;
 pub mod tip;
@@ -10,8 +11,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    checkpoint::SEPARATE_INGRESS_HISTORY,
-    manifest::{compute_bundled_manifest, MAX_SUPPORTED_STATE_SYNC_VERSION},
+    manifest::compute_bundled_manifest,
     state_sync::chunkable::cache::StateSyncCache,
     tip::{spawn_tip_thread, TipRequest},
 };
@@ -21,6 +21,7 @@ use ic_canonical_state::{
     hash_tree::{hash_lazy_tree, HashTree},
     lazy_tree::{materialize::materialize_partial, LazyTree},
 };
+use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{recompute_digest, Digest, LabeledTree, MixedHashTree, Witness};
 use ic_interfaces::certification::Verifier;
@@ -46,7 +47,7 @@ use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
-    state_sync::{FileGroupChunks, Manifest, MetaManifest},
+    state_sync::{FileGroupChunks, Manifest, MetaManifest, CURRENT_STATE_SYNC_VERSION},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
@@ -58,7 +59,7 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicU64, Ordering},
     Arc,
 };
 use std::time::{Duration, Instant, SystemTime};
@@ -70,6 +71,7 @@ use std::{
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use std::os::unix::io::RawFd;
 use std::os::unix::prelude::IntoRawFd;
+use tempfile::tempfile;
 use uuid::Uuid;
 
 /// The number of threads that state manager starts to construct checkpoints.
@@ -716,7 +718,6 @@ pub struct StateManagerImpl {
     _tip_thread_handle: JoinOnDrop<()>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
-    separate_ingress_history: Arc<AtomicBool>,
 }
 
 fn load_checkpoint(
@@ -1297,17 +1298,22 @@ impl StateManagerImpl {
         info!(
             log,
             "Using path '{}' to manage local state",
-            config.state_root().display()
+            config.state_root.display()
         );
         let starting_time = Instant::now();
-        let state_layout = StateLayout::try_new(log.clone(), config.state_root(), metrics_registry)
-            .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
+        let state_layout =
+            StateLayout::try_new(log.clone(), config.state_root.clone(), metrics_registry)
+                .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
         // Create the file descriptor factory that is used to create files for PageMaps.
         let page_delta_path = state_layout.page_deltas();
         let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
-            Arc::new(PageAllocatorFileDescriptorImpl::new(page_delta_path));
+            Arc::new(PageAllocatorFileDescriptorImpl::new(
+                page_delta_path,
+                config.file_backed_memory_allocator,
+                own_subnet_type,
+            ));
 
         let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
             log.clone(),
@@ -1535,7 +1541,6 @@ impl StateManagerImpl {
             _tip_thread_handle,
             fd_factory,
             malicious_flags,
-            separate_ingress_history: Arc::new(AtomicBool::new(SEPARATE_INGRESS_HISTORY)),
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -1774,7 +1779,7 @@ impl StateManagerImpl {
     }
 
     fn populate_extra_metadata(&self, state: &mut ReplicatedState, height: Height) {
-        state.metadata.state_sync_version = manifest::CURRENT_STATE_SYNC_VERSION;
+        state.metadata.state_sync_version = CURRENT_STATE_SYNC_VERSION;
         state.metadata.certification_version = ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 
         if height == Self::INITIAL_STATE_HEIGHT {
@@ -2165,11 +2170,6 @@ impl StateManagerImpl {
         result
     }
 
-    pub fn set_separate_ingress_history(&self, value: bool) {
-        self.separate_ingress_history
-            .store(value, Ordering::Relaxed);
-    }
-
     // Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
         &self,
@@ -2230,7 +2230,6 @@ impl StateManagerImpl {
                 &self.metrics.checkpoint_metrics,
                 &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
                 self.get_fd_factory(),
-                self.separate_ingress_history.load(Ordering::Relaxed),
             )
         };
         let elapsed = start.elapsed();
@@ -3416,11 +3415,40 @@ fn maliciously_return_wrong_hash(
 #[derive(Debug)]
 pub struct PageAllocatorFileDescriptorImpl {
     root: PathBuf,
+    file_backed_memory_allocator: FlagStatus,
+    subnet_type: SubnetType,
 }
 
 impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
-    /// Create a file using that unique name to back memory pages
     fn get_fd(&self) -> RawFd {
+        // Only use the file-backed allocator if the feature flag is enabled
+        // and exclude system and verified application subnets for now.
+        let is_excluded_subnet = matches!(
+            self.subnet_type,
+            SubnetType::System | SubnetType::VerifiedApplication
+        );
+        if self.file_backed_memory_allocator == FlagStatus::Enabled && !is_excluded_subnet {
+            self.get_file_backed_fd()
+        } else {
+            self.get_memory_backed_fd()
+        }
+    }
+}
+
+impl PageAllocatorFileDescriptorImpl {
+    pub fn new(
+        root: PathBuf,
+        file_backed_memory_allocator: FlagStatus,
+        subnet_type: SubnetType,
+    ) -> Self {
+        Self {
+            root,
+            file_backed_memory_allocator,
+            subnet_type,
+        }
+    }
+    /// Create a file using an unique name to back memory pages
+    fn get_file_backed_fd(&self) -> RawFd {
         // create a string uuid
         let uuid_str = Uuid::new_v4().to_string();
         let uuid_str_file = uuid_str + ".mem";
@@ -3451,10 +3479,44 @@ impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
             }
         }
     }
-}
 
-impl PageAllocatorFileDescriptorImpl {
-    pub fn new(root: PathBuf) -> Self {
-        Self { root }
+    // A platform-specific function that creates the backing file of the page allocator.
+    // On Linux it uses `memfd_create` to create an in-memory file.
+    // On MacOS and WSL it uses an ordinary temporary file.
+    #[cfg(target_os = "linux")]
+    fn get_memory_backed_fd(&self) -> RawFd {
+        if *ic_sys::IS_WSL {
+            return self.create_backing_file_portable();
+        }
+
+        match nix::sys::memfd::memfd_create(
+            &std::ffi::CString::default(),
+            nix::sys::memfd::MemFdCreateFlag::empty(),
+        ) {
+            Ok(fd) => fd,
+            Err(err) => {
+                panic!(
+                    "MmapPageAllocatorCore failed to create the memory backing file {}",
+                    err
+                )
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn get_memory_backed_fd(&self) -> RawFd {
+        self.create_backing_file_portable()
+    }
+
+    fn create_backing_file_portable(&self) -> RawFd {
+        match tempfile() {
+            Ok(file) => file.into_raw_fd(),
+            Err(err) => {
+                panic!(
+                    "MmapPageAllocatorCore failed to create the MacOS/WSL backing file {}",
+                    err
+                )
+            }
+        }
     }
 }

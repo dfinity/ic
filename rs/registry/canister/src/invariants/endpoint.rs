@@ -10,13 +10,16 @@ use std::{
 
 use prost::alloc::collections::BTreeSet;
 
-use ic_protobuf::registry::node::v1::{connection_endpoint::Protocol, ConnectionEndpoint};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, Protocol};
+
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 
 /// Node records are valid with connection endpoints containing
 /// syntactically correct data ("ip_addr" field parses as an IP address,
 /// "port" field is <= 65535):
-///    * An Xnet endpoint entry exists (either .xnet or .xnet_api)
-///    * A HTTP endpoint entry exists (either .http or .public_api)
+///    * An Xnet endpoint entry exists
+///    * A HTTP endpoint entry exists (either .http)
 ///    * IP address is not 0.0.0.0 ("unspecified" address)
 ///    * IP address is not 255.255.255.255 ("broadcast" address)
 ///    * We might want to ban others as well: must be global, not link-local
@@ -30,99 +33,102 @@ pub(crate) fn check_endpoint_invariants(
     strict: bool,
 ) -> Result<(), InvariantCheckError> {
     let mut valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
-    for (node_id, node_record) in get_node_records_from_snapshot(snapshot) {
-        let mut node_endpoints = BTreeSet::<(IpAddr, u16)>::new();
-        let mut endpoints_to_check = Vec::<ConnectionEndpoint>::new();
-
-        if node_record.xnet.is_none() && node_record.xnet_api.is_empty() {
-            return Err(InvariantCheckError {
-                msg: format!("No Xnet endpoint found for node {}", node_id),
-                source: None,
-            });
-        }
-
-        if node_record.http.is_none() && node_record.public_api.is_empty() {
-            return Err(InvariantCheckError {
-                msg: format!("No HTTP/Public API endpoint found for node {}", node_id),
-                source: None,
-            });
-        }
-
-        // Xnet endpoint
-        if node_record.xnet.is_some() {
-            endpoints_to_check.push(node_record.xnet.unwrap());
-        }
-
-        // HTTP endpoint
-        if node_record.http.is_some() {
-            endpoints_to_check.push(node_record.http.unwrap());
-        }
-
-        // Private API endpoints
-        endpoints_to_check.extend(node_record.private_api);
-
-        // Public API endpoints
-        endpoints_to_check.extend(node_record.public_api);
-
-        // Xnet API endpoints
-        endpoints_to_check.extend(node_record.xnet_api);
-
-        // Prometheus metrics endpoints
-        endpoints_to_check.extend(node_record.prometheus_metrics);
-
-        // Prometheus metrics HTTP endpoint
-        if node_record.prometheus_metrics_http.is_some() {
-            endpoints_to_check.push(node_record.prometheus_metrics_http.unwrap());
-        }
+    let node_records = get_node_records_from_snapshot(snapshot);
+    let common_error_prefix = format!(
+        "Invariant violation detected among {} node records",
+        node_records.len()
+    );
+    for (node_id, node_record) in node_records {
+        let error_prefix = format!("{common_error_prefix} (checking failed for node {node_id})");
 
         // P2P endpoints
         //    * For each of the flow endpoints that belong to one node, the identifier
         //      must be distinct (a node may have multiple flow endpoints). That is, the
         //      address-port-pair of different flow endpoints of the same node can be
-        //      the same, but the flow identifier must be different. However, 2 nodes
-        //      can have he same flow endpoints.
+        //      the same, but the flow identifier must be different.
         for endpoint in node_record.p2p_flow_endpoints {
             let connection_endpoint = match endpoint.endpoint {
                 None => {
                     return Err(InvariantCheckError {
-                        msg: "No connection endpoint specified".to_string(),
+                        msg: format!("{error_prefix}: No connection endpoint specified"),
                         source: None,
                     })
                 }
                 Some(ep) => ep,
             };
-            validate_endpoint(&connection_endpoint, strict)?;
+            validate_endpoint(&connection_endpoint, false, strict)?;
         }
 
-        if strict {
-            // Validate all endpoints of this node (excluding p2p flow endpoints which are
-            // validated separately)
-            for endpoint in endpoints_to_check {
-                if !node_endpoints.insert(validate_endpoint(&endpoint, strict)?) {
-                    return Err(InvariantCheckError {
-                        msg: format!(
-                            "Duplicate endpoint ({:?}, {:?})",
-                            &endpoint.ip_addr, &endpoint.port
-                        ),
-                        source: None,
-                    });
-                }
-            }
-        }
+        // The Boolean indicates whether an unspecified address should be tolerated
+        let mut endpoints_to_check = Vec::<(ConnectionEndpoint, bool)>::new();
 
-        // Check that there is no intersection with other nodes
-        if !node_endpoints.is_disjoint(&valid_endpoints) {
+        if node_record.xnet.is_none() {
             return Err(InvariantCheckError {
-                msg: format!(
-                    "Duplicate endpoints detected across nodes (for node {})",
-                    node_id
-                ),
+                msg: format!("{error_prefix}: No Xnet endpoint found for node"),
                 source: None,
             });
         }
+        endpoints_to_check.push((node_record.xnet.unwrap(), false));
+
+        if node_record.http.is_none() {
+            return Err(InvariantCheckError {
+                msg: format!("{error_prefix}: No HTTP/Public API endpoint found"),
+                source: None,
+            });
+        }
+        endpoints_to_check.push((node_record.http.unwrap(), false));
+
+        let mut new_valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
+
+        // Validate all endpoints of this node (excluding p2p flow endpoints which are
+        // validated separately)
+        for (endpoint, tolerate_unspecified_ip) in endpoints_to_check {
+            let valid_endpoint = validate_endpoint(&endpoint, tolerate_unspecified_ip, strict)?;
+            // Multiple nodes may have unspecified addresses, so duplicates should be avioded only for specified endpoints
+            if !valid_endpoint.0.is_unspecified() && !new_valid_endpoints.insert(valid_endpoint) {
+                let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+                    msg: format!(
+                        "{error_prefix}: Duplicate endpoint ({:?}, {:?}); previous endpoints: {new_valid_endpoints:?}",
+                        &endpoint.ip_addr, &endpoint.port
+                    ),
+                    source: None,
+                });
+                // TODO: change to `return error;` after NNS1-2228 is closed.
+                println!("WARNING: {error:?}");
+            }
+        }
+
+        // Check that there are _some_ node endpoints
+        if new_valid_endpoints.is_empty() {
+            let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+                msg: format!("{error_prefix}: No endpoints to validate"),
+                source: None,
+            });
+            // TODO: change to `return error;` after NNS1-2228 is closed.
+            println!("WARNING: {error:?}");
+        }
+
+        // Check that there is no intersection with other nodes
+        if !new_valid_endpoints.is_disjoint(&valid_endpoints) {
+            let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
+                msg: format!(
+                    "{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {}",
+                    new_valid_endpoints.iter().map(|x| if valid_endpoints.contains(x) {
+                        format!("{x:?} (duplicate)")
+                    } else {
+                        format!("{x:?} (new)")
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ")
+                ),
+                source: None,
+            });
+            // TODO: change to `return error;` after NNS1-2228 is closed.
+            println!("WARNING: {error:?}");
+        }
 
         // All is good -- add current endpoints to global set
-        valid_endpoints.append(&mut node_endpoints);
+        valid_endpoints.append(&mut new_valid_endpoints);
     }
 
     Ok(())
@@ -135,12 +141,15 @@ pub(crate) fn check_endpoint_invariants(
 ///    * IP address is not broadcast
 ///    * IP address is not a multicast address
 ///
-/// Strict check also checks that:
+/// If `tolerate_unspecified_ip` is set, allow the IP to be unspecified, e.g., 0.0.0.0
+///
+/// If `strict` is set, also checks that:
 ///    * IPv4 address is not private, reserved, documentation address,
 ///      link-local, benchmarking
 ///    * IPv6 address is not link-local or unique-local unicast address
 fn validate_endpoint(
     endpoint: &ConnectionEndpoint,
+    tolerate_unspecified_ip: bool,
     strict: bool,
 ) -> Result<(IpAddr, u16), InvariantCheckError> {
     if endpoint.protocol() != Protocol::Http1
@@ -169,7 +178,7 @@ fn validate_endpoint(
         source: Some(Box::new(e)),
     })?;
 
-    if ip.is_unspecified() {
+    if !tolerate_unspecified_ip && ip.is_unspecified() {
         return Err(InvariantCheckError {
             msg: format!("IP Address {:?} is unspecified", ip),
             source: None,
@@ -346,70 +355,70 @@ mod tests {
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&loopback_ipv4_endpoint, true).is_err());
+        assert!(validate_endpoint(&loopback_ipv4_endpoint, false, true).is_err());
 
         let loopback_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "::1".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&loopback_ipv6_endpoint, true).is_err());
+        assert!(validate_endpoint(&loopback_ipv6_endpoint, false, true).is_err());
 
         let bad_port_endpoint = ConnectionEndpoint {
             ip_addr: "212.13.11.77".to_string(),
             port: 80802,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&bad_port_endpoint, true).is_err());
-        assert!(validate_endpoint(&bad_port_endpoint, false).is_err());
+        assert!(validate_endpoint(&bad_port_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&bad_port_endpoint, false, false).is_err());
 
         let bad_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "280.13.11.77".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&bad_ipv4_endpoint, true).is_err());
-        assert!(validate_endpoint(&bad_ipv4_endpoint, false).is_err());
+        assert!(validate_endpoint(&bad_ipv4_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&bad_ipv4_endpoint, false, false).is_err());
 
         let bad_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "0fab:12345::".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&bad_ipv6_endpoint, true).is_err());
-        assert!(validate_endpoint(&bad_ipv6_endpoint, false).is_err());
+        assert!(validate_endpoint(&bad_ipv6_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&bad_ipv6_endpoint, false, false).is_err());
 
         let multicast_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "224.0.0.1".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&multicast_ipv4_endpoint, true).is_err());
-        assert!(validate_endpoint(&multicast_ipv4_endpoint, false).is_err());
+        assert!(validate_endpoint(&multicast_ipv4_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&multicast_ipv4_endpoint, false, false).is_err());
 
         let multicast_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "ff00:1:2::".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&multicast_ipv6_endpoint, true).is_err());
-        assert!(validate_endpoint(&multicast_ipv6_endpoint, false).is_err());
+        assert!(validate_endpoint(&multicast_ipv6_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&multicast_ipv6_endpoint, false, false).is_err());
 
         let private_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "192.168.0.1".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&private_ipv4_endpoint, true).is_err());
-        assert!(validate_endpoint(&private_ipv4_endpoint, false).is_ok());
+        assert!(validate_endpoint(&private_ipv4_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&private_ipv4_endpoint, false, false).is_ok());
 
         let unique_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "fc00:1234::".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&unique_ipv6_endpoint, true).is_err());
-        assert!(validate_endpoint(&unique_ipv6_endpoint, false).is_ok());
+        assert!(validate_endpoint(&unique_ipv6_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&unique_ipv6_endpoint, false, false).is_ok());
     }
 
     #[test]
@@ -422,8 +431,6 @@ mod tests {
             make_node_record_key(node_id).into_bytes(),
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                xnet: None,
-                http: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.1".to_string(),
@@ -431,20 +438,18 @@ mod tests {
                         protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
-                prometheus_metrics_http: None,
-                public_api: vec![ConnectionEndpoint {
+                http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
-                }],
-                private_api: vec![],
-                prometheus_metrics: vec![],
-                xnet_api: vec![ConnectionEndpoint {
+                }),
+                xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 chip_id: vec![],
+                hostos_version_id: None,
             }),
         );
 
@@ -457,8 +462,6 @@ mod tests {
             key.clone(),
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                xnet: None,
-                http: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.3".to_string(),
@@ -466,23 +469,22 @@ mod tests {
                         protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
-                prometheus_metrics_http: None,
-                public_api: vec![ConnectionEndpoint {
+                http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
-                }],
-                private_api: vec![],
-                prometheus_metrics: vec![],
-                xnet_api: vec![ConnectionEndpoint {
+                }),
+                xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.1".to_string(),
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 chip_id: vec![],
+                hostos_version_id: None,
             }),
         );
-        assert!(check_endpoint_invariants(&snapshot, true).is_err());
+        // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
+        assert!(check_endpoint_invariants(&snapshot, true).is_ok());
 
         snapshot.remove(&key);
 
@@ -493,8 +495,6 @@ mod tests {
             key,
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                xnet: None,
-                http: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.3".to_string(),
@@ -502,20 +502,18 @@ mod tests {
                         protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
-                prometheus_metrics_http: None,
-                public_api: vec![ConnectionEndpoint {
+                http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
-                }],
-                private_api: vec![],
-                prometheus_metrics: vec![],
-                xnet_api: vec![ConnectionEndpoint {
+                }),
+                xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 chip_id: vec![],
+                hostos_version_id: None,
             }),
         );
         check_endpoint_invariants(&snapshot, true).unwrap();

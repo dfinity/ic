@@ -88,8 +88,7 @@ fn main() {
         let store = &wasmtime.store.borrow();
         let sig = store.lookup_wasmtime_signature(wasmtime_runtime::VMSharedSignatureIndex::new(i));
         println!("sig {}: {:?}", i, sig);
-    };
-
+    }
 
     let table_index = 0;
 

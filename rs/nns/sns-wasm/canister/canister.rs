@@ -1,34 +1,41 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
-use dfn_core::api::{caller, Funds};
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
-use dfn_core::{over, over_async, over_init};
+use dfn_core::{
+    api::{caller, Funds},
+    over, over_async, over_init,
+};
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_ic00_types::CanisterInstallMode::Install;
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
-    CreateCanisterArgs, InstallCodeArgs, Method, UpdateSettingsArgs,
+    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
+    Method, UpdateSettingsArgs,
+};
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
+use ic_nervous_system_clients::canister_status::{
+    canister_status, CanisterStatusResultV2, CanisterStatusType,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_sns_wasm::canister_api::CanisterApi;
-use ic_sns_wasm::canister_stable_memory::CanisterStableMemory;
-use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
-use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
-    GetAllowedPrincipalsRequest, GetAllowedPrincipalsResponse, GetNextSnsVersionRequest,
-    GetNextSnsVersionResponse, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmRequest,
-    GetWasmResponse, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-    ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStepsRequest,
-    ListUpgradeStepsResponse, UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
-    UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
+use ic_sns_wasm::{
+    canister_api::CanisterApi,
+    canister_stable_memory::CanisterStableMemory,
+    init::SnsWasmCanisterInitPayload,
+    pb::v1::{
+        AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
+        GetAllowedPrincipalsRequest, GetAllowedPrincipalsResponse, GetNextSnsVersionRequest,
+        GetNextSnsVersionResponse, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmRequest,
+        GetWasmResponse, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+        ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStepsRequest,
+        ListUpgradeStepsResponse, UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
+        UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+    },
+    sns_wasm::SnsWasmCanister,
 };
-use ic_sns_wasm::sns_wasm::SnsWasmCanister;
 use ic_types::{CanisterId, Cycles};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::convert::TryInto;
+use std::{cell::RefCell, collections::HashMap, convert::TryInto};
+
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 
@@ -70,7 +77,7 @@ impl CanisterApi for CanisterApiImpl {
                 ),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
-            dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
+            Funds::new(cycles.get().try_into().unwrap()),
         )
         .await;
 
@@ -91,7 +98,7 @@ impl CanisterApi for CanisterApiImpl {
         let response: Result<(), (Option<i32>, String)> = dfn_core::call(
             CanisterId::ic_00(),
             "delete_canister",
-            dfn_candid::candid_one,
+            candid_one,
             CanisterIdRecord::from(canister),
         )
         .await;
@@ -107,13 +114,13 @@ impl CanisterApi for CanisterApiImpl {
         &self,
         target_canister: CanisterId,
         wasm: Vec<u8>,
-        init_paylaod: Vec<u8>,
+        init_payload: Vec<u8>,
     ) -> Result<(), String> {
         let install_args = InstallCodeArgs {
             mode: Install,
             canister_id: target_canister.get(),
             wasm_module: wasm,
-            arg: init_paylaod,
+            arg: init_payload,
             compute_allocation: None,
             memory_allocation: None,
             query_allocation: None,
@@ -191,7 +198,7 @@ impl CanisterApi for CanisterApiImpl {
         let response: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds(
             CanisterId::ic_00(),
             "deposit_cycles",
-            dfn_candid::candid_one,
+            candid_one,
             CanisterIdRecord::from(target),
             Funds::new(cycles),
         )
@@ -224,7 +231,7 @@ impl CanisterApiImpl {
         dfn_core::call(
             CanisterId::ic_00(),
             "stop_canister",
-            dfn_candid::candid_one,
+            candid_one,
             CanisterIdRecord::from(canister),
         )
         .await
@@ -240,24 +247,20 @@ impl CanisterApiImpl {
         let mut count = 0;
         // Wait until canister is in the stopped state.
         loop {
-            let status: CanisterStatusResultV2 = dfn_core::call(
-                CanisterId::ic_00(),
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(canister),
-            )
-            .await
-            .map_err(|(code, msg)| {
-                format!(
-                    "{}{}",
-                    code.map(|c| format!(
-                        "Unable to get target canister status: error code {}: ",
-                        c
-                    ))
-                    .unwrap_or_default(),
-                    msg
-                )
-            })?;
+            let status: CanisterStatusResultV2 = canister_status(CanisterIdRecord::from(canister))
+                .await
+                .map(CanisterStatusResultV2::from)
+                .map_err(|(code, msg)| {
+                    format!(
+                        "{}{}",
+                        code.map(|c| format!(
+                            "Unable to get target canister status: error code {}: ",
+                            c
+                        ))
+                        .unwrap_or_default(),
+                        msg
+                    )
+                })?;
 
             if status.status() == CanisterStatusType::Stopped {
                 return Ok(());
@@ -414,7 +417,14 @@ fn deploy_new_sns() {
 
 #[candid_method(update, rename = "deploy_new_sns")]
 async fn deploy_new_sns_(deploy_new_sns: DeployNewSnsRequest) -> DeployNewSnsResponse {
-    SnsWasmCanister::deploy_new_sns(&SNS_WASM, &canister_api(), deploy_new_sns, caller()).await
+    SnsWasmCanister::deploy_new_sns(
+        &SNS_WASM,
+        &canister_api(),
+        &NnsRootCanisterClientImpl::default(),
+        deploy_new_sns,
+        caller(),
+    )
+    .await
 }
 
 #[export_name = "canister_query list_deployed_snses"]

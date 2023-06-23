@@ -25,6 +25,7 @@ function read_variables() {
     # otherwise lead to executing arbitrary shell code!
     while IFS="=" read -r key value; do
         case "${key}" in
+            "env") ENV="${value}" ;;
             "elasticsearch_url") ELASTICSEARCH_URL="${value}" ;;
             "elasticsearch_tags") ELASTICSEARCH_TAGS="${value}" ;;
             "ip_hash_salt") IP_HASH_SALT="${value}" ;;
@@ -47,6 +48,7 @@ function read_variables() {
 function generate_vector_config() {
     mkdir -p "${RUN_DIR}"
     cat >"${ENV_FILE}" <<EOF
+ENV=${ENV}
 ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
 ELASTICSEARCH_TAGS=${ELASTICSEARCH_TAGS:-}
 IP_HASH_SALT=${IP_HASH_SALT:-}

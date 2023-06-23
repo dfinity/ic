@@ -9,7 +9,7 @@ use ic_ledger_core::{
     approvals::{Allowance, Approvals},
     block::{BlockIndex, BlockType},
     timestamp::TimeStamp,
-    tokens::{SignedTokens, Tokens},
+    tokens::Tokens,
 };
 use icp_ledger::{
     apply_operation, ArchiveOptions, Block, LedgerBalances, Memo, Operation, PaymentError,
@@ -25,10 +25,6 @@ fn test_account_id(n: u64) -> AccountIdentifier {
 
 fn tokens(n: u64) -> Tokens {
     Tokens::from_e8s(n)
-}
-
-fn stokens(n: i128) -> SignedTokens {
-    SignedTokens::try_from_i128(n).unwrap()
 }
 
 fn ts(n: u64) -> TimeStamp {
@@ -836,7 +832,7 @@ fn test_transaction_hash_consistency() {
 }
 
 #[test]
-fn test_approvals_are_cumulative() {
+fn test_approvals_are_not_cumulative() {
     let mut ctx = Ledger::default();
 
     let from = test_account_id(1);
@@ -853,7 +849,7 @@ fn test_approvals_are_cumulative() {
         &Operation::Approve {
             from,
             spender,
-            allowance: stokens(approved_amount.get_e8s() as i128),
+            allowance: approved_amount,
             expires_at: None,
             fee,
         },
@@ -872,7 +868,7 @@ fn test_approvals_are_cumulative() {
         },
     );
 
-    let extra_allowance = tokens(200_000);
+    let new_allowance = tokens(200_000);
 
     let expiration = now + Duration::from_secs(300);
     apply_operation(
@@ -880,7 +876,7 @@ fn test_approvals_are_cumulative() {
         &Operation::Approve {
             from,
             spender,
-            allowance: stokens(extra_allowance.get_e8s() as i128),
+            allowance: new_allowance,
             expires_at: Some(expiration),
             fee,
         },
@@ -893,7 +889,7 @@ fn test_approvals_are_cumulative() {
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: (approved_amount + extra_allowance).unwrap(),
+            amount: new_allowance,
             expires_at: Some(expiration)
         }
     );
@@ -934,7 +930,7 @@ fn test_approval_transfer_from() {
         &Operation::Approve {
             from,
             spender,
-            allowance: stokens(150_000),
+            allowance: tokens(150_000),
             expires_at: None,
             fee,
         },
@@ -1008,7 +1004,7 @@ fn test_approval_expiration_override() {
 
     ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
 
-    let approve = |amount: SignedTokens, expires_at: Option<u64>| Operation::Approve {
+    let approve = |amount: Tokens, expires_at: Option<u64>| Operation::Approve {
         from,
         spender,
         allowance: amount,
@@ -1016,7 +1012,7 @@ fn test_approval_expiration_override() {
         fee: tokens(10_000),
     };
 
-    apply_operation(&mut ctx, &approve(stokens(100_000), Some(2000)), now).unwrap();
+    apply_operation(&mut ctx, &approve(tokens(100_000), Some(2000)), now).unwrap();
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
@@ -1026,7 +1022,7 @@ fn test_approval_expiration_override() {
         },
     );
 
-    apply_operation(&mut ctx, &approve(stokens(100_000), Some(1500)), now).unwrap();
+    apply_operation(&mut ctx, &approve(tokens(200_000), Some(1500)), now).unwrap();
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
@@ -1036,7 +1032,7 @@ fn test_approval_expiration_override() {
         },
     );
 
-    apply_operation(&mut ctx, &approve(stokens(100_000), Some(2500)), now).unwrap();
+    apply_operation(&mut ctx, &approve(tokens(300_000), Some(2500)), now).unwrap();
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
@@ -1048,7 +1044,7 @@ fn test_approval_expiration_override() {
 
     // The expiration is in the past, the allowance is rejected.
     assert_eq!(
-        apply_operation(&mut ctx, &approve(stokens(100_000), Some(500)), now).unwrap_err(),
+        apply_operation(&mut ctx, &approve(tokens(100_000), Some(500)), now).unwrap_err(),
         TxApplyError::ExpiredApproval { now }
     );
 
@@ -1058,52 +1054,6 @@ fn test_approval_expiration_override() {
             amount: tokens(300_000),
             expires_at: Some(ts(2500))
         },
-    );
-}
-
-#[test]
-fn test_approval_negative() {
-    let mut ctx = Ledger::default();
-
-    let from = test_account_id(1);
-    let spender = test_account_id(2);
-    let now = ts(1000);
-
-    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
-
-    let approve = |amount: SignedTokens, expires_at: Option<u64>| Operation::Approve {
-        from,
-        spender,
-        allowance: amount,
-        expires_at: expires_at.map(ts),
-        fee: tokens(10_000),
-    };
-
-    apply_operation(&mut ctx, &approve(stokens(100_000), Some(2000)), now).unwrap();
-
-    assert_eq!(
-        ctx.approvals().allowance(&from, &spender, now),
-        Allowance {
-            amount: tokens(100_000),
-            expires_at: Some(ts(2000))
-        },
-    );
-
-    apply_operation(&mut ctx, &approve(stokens(-50_000), Some(1500)), now).unwrap();
-
-    assert_eq!(
-        ctx.approvals().allowance(&from, &spender, now),
-        Allowance {
-            amount: tokens(50_000),
-            expires_at: Some(ts(1500))
-        },
-    );
-
-    apply_operation(&mut ctx, &approve(stokens(-1_000_000_000), Some(2500)), now).unwrap();
-
-    assert_eq!(
-        ctx.approvals().allowance(&from, &spender, now),
-        Allowance::default(),
     );
 }
 
@@ -1123,7 +1073,7 @@ fn test_approval_no_fee_on_reject() {
             &Operation::Approve {
                 from,
                 spender,
-                allowance: stokens(1_000),
+                allowance: tokens(1_000),
                 expires_at: Some(ts(1)),
                 fee: tokens(10_000),
             },

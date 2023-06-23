@@ -32,7 +32,6 @@ use ic_types::{
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 use std::sync::Arc;
-use std::time::Duration;
 
 struct VsrMetrics {
     /// Counts of ingress message induction attempts, by status.
@@ -240,12 +239,7 @@ impl ValidSetRuleImpl {
         status: &str,
         ingress_expiry: Time,
     ) {
-        let current_expiry_time = expiry_time_from_now();
-        let delta_in_nanos = if current_expiry_time <= ingress_expiry {
-            Duration::from_secs(0)
-        } else {
-            current_expiry_time - ingress_expiry
-        };
+        let delta_in_nanos = expiry_time_from_now().saturating_sub(ingress_expiry);
         self.metrics
             .unreliable_induct_ingress_message_duration
             .with_label_values(&[status])
@@ -324,7 +318,7 @@ impl ValidSetRuleImpl {
                 }
 
                 // Withdraw cost of inducting the message.
-                let memory_usage = canister.memory_usage(state.metadata.own_subnet_type);
+                let memory_usage = canister.memory_usage();
                 let compute_allocation = canister.scheduler_state.compute_allocation;
                 if let Err(err) = self.cycles_account_manager.charge_ingress_induction_cost(
                     canister,

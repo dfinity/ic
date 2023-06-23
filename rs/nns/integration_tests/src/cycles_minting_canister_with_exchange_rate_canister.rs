@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
@@ -23,6 +21,7 @@ use ic_nns_test_utils::{
 use ic_state_machine_tests::StateMachine;
 use ic_types::time::GENESIS;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateError, ExchangeRateMetadata};
+use std::time::Duration;
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
 
 const ONE_MINUTE_SECONDS: u64 = 60;
@@ -99,7 +98,11 @@ fn propose_icp_xdr_rate(
     }
 }
 
-fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(rate: u64) -> XrcMockInitPayload {
+fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(
+    rate: u64,
+    icp_sources: Option<usize>,
+    cxdr_sources: Option<usize>,
+) -> XrcMockInitPayload {
     XrcMockInitPayload {
         response: Response::ExchangeRate(ExchangeRate {
             rate,
@@ -114,9 +117,9 @@ fn new_icp_cxdr_mock_exchange_rate_canister_init_payload(rate: u64) -> XrcMockIn
             metadata: Some(ExchangeRateMetadata {
                 decimals: 9,
                 base_asset_num_queried_sources: 7,
-                base_asset_num_received_rates: 5,
+                base_asset_num_received_rates: icp_sources.unwrap_or(5),
                 quote_asset_num_queried_sources: 10,
-                quote_asset_num_received_rates: 4,
+                quote_asset_num_received_rates: cxdr_sources.unwrap_or(4),
                 standard_deviation: 0,
                 forex_timestamp: None,
             }),
@@ -138,7 +141,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     // Install exchange rate canister.
     let installed_exchange_rate_canister_id = setup_mock_exchange_rate_canister(
         &state_machine,
-        new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000),
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
     );
     // Make sure the exchange rate canister ID and the installed canister ID match.
     assert_eq!(
@@ -193,7 +196,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     reinstall_mock_exchange_rate_canister(
         &state_machine,
         EXCHANGE_RATE_CANISTER_ID,
-        new_icp_cxdr_mock_exchange_rate_canister_init_payload(20_000_000_000),
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(20_000_000_000, None, None),
     );
 
     // Advance the time 5 minutes into the future so the heartbeat will trigger.
@@ -214,7 +217,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     );
     assert_eq!(response.data.xdr_permyriad_per_icp, 200_000);
 
-    // Step 5: Ensure that the cycles minting canister handles errors correctly
+    // Step 4: Ensure that the cycles minting canister handles errors correctly
     // from the exchange rate canister by attempting to call the exchange rate canister
     // a minute later.
     reinstall_mock_exchange_rate_canister(
@@ -243,7 +246,7 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
     reinstall_mock_exchange_rate_canister(
         &state_machine,
         EXCHANGE_RATE_CANISTER_ID,
-        new_icp_cxdr_mock_exchange_rate_canister_init_payload(21_000_000_000),
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(21_000_000_000, None, None),
     );
 
     // Move on to the next minute which should cause the cycles minting canister
@@ -284,6 +287,49 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
             i
         );
     }
+
+    // Step 5: Test to ensure the cycles minting canister ignores rates will low number of sources.
+    // Step 5a: Test with not enough ICP sources.
+    reinstall_mock_exchange_rate_canister(
+        &state_machine,
+        EXCHANGE_RATE_CANISTER_ID,
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(10_000_000_000, Some(3), None),
+    );
+
+    // Advance the time to ensure to ensure the cycles minting canister is ready
+    // to call the exchange rate canister again.
+    state_machine.advance_time(Duration::from_secs(FIVE_MINUTES_SECONDS));
+    // Trigger the heartbeat.
+    state_machine.tick();
+
+    let response = get_icp_xdr_conversion_rate(&state_machine);
+    // The rate's timestamp should be the previous timestamp.
+    assert_eq!(
+        response.data.timestamp_seconds,
+        cmc_first_rate_timestamp_seconds + (FIVE_MINUTES_SECONDS * 4) + 22
+    );
+    assert_eq!(response.data.xdr_permyriad_per_icp, 210_000);
+
+    // Step 5b: Test with not enough CXDR sources.
+    reinstall_mock_exchange_rate_canister(
+        &state_machine,
+        EXCHANGE_RATE_CANISTER_ID,
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(10_000_000_000, None, Some(1)),
+    );
+
+    // Advance the time to ensure to ensure the cycles minting canister is ready
+    // to call the exchange rate canister again.
+    state_machine.advance_time(Duration::from_secs(FIVE_MINUTES_SECONDS));
+    // Trigger the heartbeat.
+    state_machine.tick();
+
+    let response = get_icp_xdr_conversion_rate(&state_machine);
+    // The rate's timestamp should be the previous timestamp.
+    assert_eq!(
+        response.data.timestamp_seconds,
+        cmc_first_rate_timestamp_seconds + (FIVE_MINUTES_SECONDS * 4) + 22
+    );
+    assert_eq!(response.data.xdr_permyriad_per_icp, 210_000);
 }
 
 #[test]
@@ -301,7 +347,7 @@ fn test_disabling_and_reenabling_exchange_rate_canister_calling_via_exchange_rat
     // Install exchange rate canister.
     let installed_exchange_rate_canister_id = setup_mock_exchange_rate_canister(
         &state_machine,
-        new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000),
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(25_000_000_000, None, None),
     );
     // Make sure the exchange rate canister ID and the installed canister ID match.
     assert_eq!(

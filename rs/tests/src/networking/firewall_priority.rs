@@ -1,5 +1,5 @@
 /* tag::catalog[]
-Title:: Firewall
+Title:: Firewall Priority
 
 Goal:: Checks the precedence levels of the firewall configurations
 
@@ -28,7 +28,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationBuilder,
     SshSession,
 };
 use crate::nns::{
@@ -46,8 +46,6 @@ use registry_canister::mutations::firewall::{
     UpdateFirewallRulesPayload,
 };
 use slog::{info, Logger};
-use ssh2::Session;
-use std::io::{self, Read, Write};
 use std::time::Duration;
 use url::Url;
 
@@ -92,8 +90,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         .next()
         .unwrap();
     info!(log, "Installing NNS canisters on the root subnet...");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     info!(&log, "NNS canisters installed successfully.");
 
@@ -328,28 +326,14 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         toggle_endpoint.get_public_url(),
         node.node_id
     );
-    let res = execute_ssh_command(
+
+    let res = node.block_on_bash_script_from_session(
         &session,
-        format!("timeout 10s curl {}", toggle_endpoint.get_public_url()),
+        &format!("timeout 10s curl {}", toggle_endpoint.get_public_url()),
     );
-    assert_eq!(res.unwrap(), 0);
+    assert!(res.is_ok());
 
     info!(log, "Firewall priority tests has succeeded.")
-}
-
-fn execute_ssh_command(session: &Session, ssh_command: String) -> Result<i32, io::Error> {
-    let mut channel = session.channel_session()?;
-    channel.exec("bash")?;
-    channel.write_all(ssh_command.as_bytes())?;
-    channel.flush()?;
-    channel.send_eof()?;
-    let mut stderr = String::new();
-    let mut command_output = String::new();
-    channel.stderr().read_to_string(&mut stderr)?;
-    channel.read_to_string(&mut command_output)?;
-    channel.close()?;
-    channel.wait_close()?;
-    Ok(channel.exit_status()?)
 }
 
 async fn set_default_registry_rules(log: &Logger, nns_node: &IcNodeSnapshot) {

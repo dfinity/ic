@@ -1,6 +1,7 @@
 use crate::unit_helpers;
 use anyhow::anyhow;
 use clap::Parser;
+use ic_nervous_system_proto::pb::v1::Countries;
 use ic_sns_governance::{
     pb::v1::{governance::SnsMetadata, NervousSystemParameters, VotingRewardsParameters},
     types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
@@ -17,6 +18,8 @@ use std::{
     path::PathBuf,
     str::FromStr,
 };
+
+pub(crate) mod friendly;
 
 const DEFAULT_INIT_CONFIG_PATH: &str = "sns_init.yaml";
 
@@ -166,6 +169,18 @@ pub struct SnsGovernanceConfig {
     pub wait_for_quiet_deadline_increase_seconds: Option<u64>,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct SnsSwapConfig {
+    /// An optional text that swap participants should confirm before they may
+    /// participate in the swap. If the field is set, its value should be plain text
+    /// with at least 1 and at most 1,000 characters.
+    pub confirmation_text: Option<String>,
+
+    /// An optional set of countries that should not participate in the swap. If the
+    /// field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
+    pub restricted_countries: Option<Vec<String>>,
+}
+
 #[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
 pub struct SnsInitialTokenDistributionConfig {
     /// The initial tokens and neurons available at genesis will be distributed according
@@ -190,6 +205,8 @@ pub struct SnsCliInitConfig {
     pub sns_governance: SnsGovernanceConfig,
     #[serde(flatten)]
     pub initial_token_distribution: SnsInitialTokenDistributionConfig,
+    #[serde(flatten)]
+    pub sns_swap: SnsSwapConfig,
 }
 
 impl Default for SnsCliInitConfig {
@@ -243,6 +260,10 @@ impl Default for SnsCliInitConfig {
             },
             initial_token_distribution: SnsInitialTokenDistributionConfig {
                 initial_token_distribution: None,
+            },
+            sns_swap: SnsSwapConfig {
+                confirmation_text: None,
+                restricted_countries: None,
             },
         }
     }
@@ -477,6 +498,13 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             wait_for_quiet_deadline_increase_seconds: sns_cli_init_config
                 .sns_governance
                 .wait_for_quiet_deadline_increase_seconds,
+            dapp_canisters: None, // TODO[NNS1-1969]
+            confirmation_text: sns_cli_init_config.sns_swap.confirmation_text,
+            restricted_countries: sns_cli_init_config.sns_swap.restricted_countries.map(
+                |country_codes| Countries {
+                    iso_codes: country_codes,
+                },
+            ),
         })
     }
 }
@@ -550,6 +578,31 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
             ),
         ),
         (
+            Regex::new(r"confirmation_text.*").unwrap(),
+            r##"#
+#
+# SNS SWAP
+#
+# An optional text that swap participants should confirm before they may
+# participate in the swap. If the field is set, its value should be plain text
+# with at least 1 and at most 1,000 characters.
+#
+# Example: "Please confirm that 2+2=4"
+#"##
+            .to_string(),
+        ),
+        (
+            Regex::new(r"restricted_countries.*").unwrap(),
+            r##"#
+#
+# An optional set of countries that should not participate in the swap. If the
+# field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
+#
+# Example: ["CH", "FR"]
+#"##
+            .to_string(),
+        ),
+        (
             Regex::new(r"initial_token_distribution.*").unwrap(),
             r##"#
 #
@@ -559,12 +612,12 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # the FractionalDeveloperVotingPower strategy. This strategy configures how SNS tokens and neurons
 # are distributed in four "buckets": developer tokens that are given to the original developers of
 # the dapp, airdrop tokens that can be given to any other principals that should have tokens at
-# genesis, treasury tokens that are owned by the SNS governance canister, and sale tokens which
-# are sold in an initial decentralization sale but parts of which can also be reserved for future
-# sales.
+# genesis, treasury tokens that are owned by the SNS governance canister, and swap tokens which
+# are sold in an initial decentralization swap but parts of which can also be reserved for future
+# swaps.
 # All developer and airdrop tokens are distributed to the defined principals at genesis in a basket
 # of neurons called the developer neurons and the airdrop neurons, respectively.
-# If only parts of the sale tokens are sold in the initial decentralization sale, the developer
+# If only parts of the swap tokens are sold in the initial decentralization swap, the developer
 # neurons are restricted by a voting power multiplier. This voting power multiplier is calculated as
 # `swap_distribution.initial_swap_amount_e8s / swap_distribution.total_e8s`.
 
@@ -588,10 +641,10 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #    - total_e8s: The total amount of tokens in the treasury bucket.
 #
 # - swap_distribution has two fields:
-#    - total_e8s: The total amount of tokens in the sale bucket. initial_swap_amount_e8s will be
+#    - total_e8s: The total amount of tokens in the swap bucket. initial_swap_amount_e8s will be
 #      deducted from this total.
-#    - initial_swap_amount_e8s: The initial amount of tokens deposited in the sale canister for
-#      the initial token sale.
+#    - initial_swap_amount_e8s: The initial amount of tokens deposited in the swap canister for
+#      the initial token swap.
 #
 # - airdrop_distribution has one field:
 #    - airdrop_neurons: A list of NeuronDistributions that specify the neuron's stake and
@@ -667,7 +720,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
         (
             Regex::new(r"fallback_controller_principal_ids.*").unwrap(),
             r##"#
-# If the decentralization sale fails, control of the dapp canister(s) is set to these
+# If the decentralization swap fails, control of the dapp canister(s) is set to these
 # principal IDs. In most use cases, this is set to the original set of controller(s) of the dapp.
 # This field has no default, a value must be provided by the user.
 #"##
@@ -968,11 +1021,15 @@ fn validate(init_config_file: PathBuf) {
 mod test {
     use super::*;
     use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
-    use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower as FDVP;
-    use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower, SnsInitPayload};
-    use std::convert::TryFrom;
-    use std::fs::File;
-    use std::io::{BufReader, Read};
+    use ic_sns_init::pb::v1::{
+        sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower as FDVP,
+        FractionalDeveloperVotingPower, SnsInitPayload,
+    };
+    use std::{
+        convert::TryFrom,
+        fs::File,
+        io::{BufReader, Read},
+    };
 
     impl SnsLedgerConfig {
         pub fn with_test_values() -> Self {
@@ -1034,12 +1091,22 @@ mod test {
         }
     }
 
+    impl SnsSwapConfig {
+        pub fn with_test_values() -> Self {
+            Self {
+                confirmation_text: Some("Please confirm that 2+2=4".to_string()),
+                restricted_countries: Some(vec!["CH".to_string()]),
+            }
+        }
+    }
+
     impl SnsCliInitConfig {
         pub fn with_test_values() -> Self {
             Self {
                 sns_ledger: SnsLedgerConfig::with_test_values(),
                 sns_governance: SnsGovernanceConfig::with_test_values(),
                 initial_token_distribution: SnsInitialTokenDistributionConfig::with_test_values(),
+                sns_swap: SnsSwapConfig::with_test_values(),
             }
         }
     }
@@ -1149,6 +1216,9 @@ wait_for_quiet_deadline_increase_seconds: 1000
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
             initial_token_distribution,
+            dapp_canisters: _, // TODO[NNS1-1969]
+            confirmation_text,
+            restricted_countries,
         } = sns_init_payload;
 
         assert_eq!(
@@ -1243,6 +1313,14 @@ wait_for_quiet_deadline_increase_seconds: 1000
                 .sns_governance
                 .wait_for_quiet_deadline_increase_seconds,
             wait_for_quiet_deadline_increase_seconds
+        );
+        assert_eq!(
+            sns_cli_init_config.sns_swap.confirmation_text,
+            confirmation_text
+        );
+        assert_eq!(
+            sns_cli_init_config.sns_swap.restricted_countries,
+            restricted_countries.map(|items| items.iso_codes)
         );
 
         // Read the test.png file into memory

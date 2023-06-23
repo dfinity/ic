@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
+use ic_crypto_sha::Sha256;
 use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
 use serde_bytes::Bytes;
 use std::convert::{TryFrom, TryInto};
@@ -12,6 +13,7 @@ use std::ops::DerefMut;
 pub mod flat_map;
 pub mod hasher;
 pub mod proto;
+pub mod test_utils;
 pub(crate) mod tree_hash;
 
 #[cfg(test)]
@@ -102,6 +104,15 @@ impl Path {
 ///
 /// Most labels are expected to be printable ASCII strings, but some
 /// are just short sequences of arbitrary bytes (e.g., CanisterIds).
+///
+/// Note that
+/// - `Label`s are compared by comparing their byte representation.
+/// Therefore, `Label`s casted from other representations must not
+/// necessarily retain their original ordering, e.g., if `Label`s are
+/// obtained via `From<String>`.
+/// - `Label`s that hold a reference to an object are compared with
+/// other labels by comparing the bytes of the underlying representation,
+/// i.e., as if the `Label` would hold the bytes and not the reference.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(from = "&serde_bytes::Bytes")]
 #[serde(into = "serde_bytes::ByteBuf")]
@@ -167,15 +178,15 @@ impl Label {
 
 impl fmt::Debug for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fn printable(byte: u8) -> bool {
+        fn is_printable_ascii(byte: u8) -> bool {
             (32..127).contains(&byte)
         }
         let bytes = self.as_bytes();
-        if bytes.iter().all(|b| printable(*b)) {
+        if bytes.iter().all(|b| is_printable_ascii(*b)) {
             write!(
                 f,
                 "{}",
-                std::str::from_utf8(bytes).expect("Failed to convert to utf8")
+                std::str::from_utf8(bytes).expect("Conversion of ASCII to UTF8 should never fail")
             )
         } else {
             write!(f, "0x")?;
@@ -219,11 +230,10 @@ where
         }
     }
 }
-
 /// The computed hash of the data in a `Leaf`; or of a [`LabeledTree`].
 #[derive(PartialEq, Eq, Clone)]
-pub struct Digest(pub [u8; 32]);
-ic_crypto_internal_types::derive_serde!(Digest, 32);
+pub struct Digest(pub [u8; Sha256::DIGEST_LEN]);
+ic_crypto_internal_types::derive_serde!(Digest, Sha256::DIGEST_LEN);
 
 impl Digest {
     #[inline]
@@ -250,8 +260,8 @@ impl fmt::Display for Digest {
     }
 }
 
-impl From<[u8; 32]> for Digest {
-    fn from(bytes: [u8; 32]) -> Self {
+impl From<[u8; Sha256::DIGEST_LEN]> for Digest {
+    fn from(bytes: [u8; Sha256::DIGEST_LEN]) -> Self {
         Digest(bytes)
     }
 }
@@ -260,7 +270,7 @@ impl TryFrom<Vec<u8>> for Digest {
     type Error = Vec<u8>;
 
     fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-        let a: Box<[u8; 32]> = bytes.into_boxed_slice().try_into()?;
+        let a: Box<[u8; Sha256::DIGEST_LEN]> = bytes.into_boxed_slice().try_into()?;
         Ok(Digest(*a))
     }
 }
@@ -298,13 +308,46 @@ pub fn lookup_path<'a>(
     Some(tref)
 }
 
-/// A binary tree representation of a [`LabeledTree`], with [`Digest`] leaves.
+/// A *binary* Merkle tree representation of a [`LabeledTree`].
 ///
-/// A `LabeledTree::SubTree` is converted into a binary tree of zero or more
-/// `HashTree::Forks` terminating in labeled `HashTree::Nodes`, with the left
-/// child always a complete binary tree (e.g. a `SubTree` with 5 children maps
-/// to a `Fork` with a complete left subtree of 4 `Node` leaves and a right
-/// subtree consisting of a single `Node`).
+/// A [`LabeledTree::Leaf`] is converted to a [`HashTree::Leaf`]. The value
+/// contained in the former is hashed and the result is then stored as a
+/// [`Digest`].
+///
+/// A [`LabeledTree::SubTree`] is converted into a binary tree of zero or more
+/// binary [`HashTree::Fork`]s terminating in labeled, single-child
+/// [`HashTree::Node`]s, with the left child always being a complete binary tree
+/// (e.g. a [`LabeledTree::SubTree`] with 5 children maps to a
+/// [`HashTree::Fork`] with a complete left subtree of 4 [`HashTree::Node`]
+/// leaves and a right subtree consisting of a single [`HashTree::Node`]).
+///
+///
+/// That is, a [`LabeledTree`] with labels `l_0` to `l_4`
+/// ```text
+///             (------------SubTree------------)
+///             l_0 /  l_1 |  l_2 |  l_3 |  l_4 \
+/// ```
+///
+/// is transformed to the following [`HashTree`]
+///
+/// ```text
+///               (-----------Fork-----------)
+///               /                          \
+///            (--------Fork--------)       Node
+///           /                     \     l_4 |
+///         (--Fork--)          (--Fork--)
+///        /          \        /          \
+///    Node          Node   Node         Node
+///  l_0 |         l_1 |  l_2 |        l_3 |
+/// ```
+///
+/// The digest in a [`HashTree::Fork`] is computed over its children's digests.
+/// The digest in a [`HashTree::Node`]s is computed over its label's digest and
+/// the child's digest.
+///
+/// A [`HashTree`] can be obtained by feeding a [`LabeledTree`] to an
+/// implementation of the [`HashTreeBuilder`] trait. The hash values contained
+/// in the [`HashTree`] are not recomputed by altering the [`HashTree`].
 #[derive(PartialEq, Eq, Clone, Debug, Serialize, Deserialize)]
 pub enum HashTree {
     /// An unlabeled leaf that is either the root or the child of a `Node`.
@@ -315,7 +358,7 @@ pub enum HashTree {
         label: Label,
         hash_tree: Box<HashTree>,
     },
-    /// Unlabeled binary fork, used to represent a `LabeledTree::SubTree` with
+    /// Unlabeled binary fork, used to represent a [`LabeledTree::SubTree`] with
     /// more than one child as a binary tree.
     Fork {
         digest: Digest,
@@ -334,52 +377,33 @@ impl HashTree {
             HashTree::Fork { digest, .. } => digest,
         }
     }
-
-    /// Returns the left sub-tree of the tree, assuming the tree is
-    /// `HashTree::Fork`. panic!s if the tree is not a fork.
-    pub fn left_tree(&self) -> &HashTree {
-        match &self {
-            HashTree::Fork { left_tree, .. } => left_tree,
-            _ => panic!("Not a fork: {:?}", self),
-        }
-    }
-
-    /// Returns the right sub-tree of the tree, assuming the tree is
-    /// `HashTree::Fork`. panic!s if the tree is not a fork.
-    pub fn right_tree(&self) -> &HashTree {
-        match &self {
-            HashTree::Fork { right_tree, .. } => right_tree,
-            _ => panic!("Not a fork: {:?}", self),
-        }
-    }
-
-    /// Returns the contained `hash_tree` of the tree, assuming the tree is
-    /// `HashTree::Node`. panic!s if the tree is not `HashTree::Node`.
-    pub fn node_tree(&self) -> &HashTree {
-        match &self {
-            HashTree::Node { hash_tree, .. } => hash_tree,
-            _ => panic!("Not a node: {:?}", self),
-        }
-    }
-
-    /// Returns the label of the tree, assuming the tree is `HashTree::Node`.
-    /// panic!s if the tree is not `HashTree::Node`.
-    pub fn label(&self) -> &Label {
-        match &self {
-            HashTree::Node { label, .. } => label,
-            _ => panic!("Not a node: {:?}", self),
-        }
-    }
 }
 
-/// A hash tree that contains the data requested by the call to
+/// A self-sufficient proof of membership for some data in a [`HashTree`].
+///
+/// Whereas [`Witness`] requires the data-to-be-proved to be provided
+/// externally, a [`MixedHashTree`] is sufficient to generate the root hash that
+/// can be directly compared against the root hash of the [`HashTree`].
+///
+/// On a low level, the difference to [`Witness`] is twofold.
+/// 1) A [`MixedHashTree::Leaf`] directly holds leaf values instead of plugging
+///    them in to [`Witness::Known`] from external data.
+/// 2) [`MixedHashTree::Empty`] marks empty subtrees with a constant hash.
+///
+/// A [`MixedHashTree`] contains the data requested by the call to
 /// `read_certified_state` and digests for pruned parts of the hash tree.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum MixedHashTree {
+    /// Empty subtree, which has a specific hash with a different domain separator.
     Empty,
+    /// Corresponds to [`Witness::Fork`].
     Fork(Box<(MixedHashTree, MixedHashTree)>),
+    /// Corresponds to [`Witness::Node`].
     Labeled(Label, Box<MixedHashTree>),
+    /// Corresponds to [`LabeledTree::Leaf`] or, compared with the variants of
+    /// [`Witness`], to a [`LabeledTree::Leaf`] plugged into [`Witness::Known`].
     Leaf(Vec<u8>),
+    /// Corresponds to [`Witness::Pruned`].
     Pruned(Digest),
 }
 
@@ -809,32 +833,41 @@ pub enum TreeHashError {
     },
 }
 
-/// A subset of a [`HashTree`] that is sufficient to verify whether some
-/// specific partial data is consistent with the original data (for which the
-/// [`HashTree`] was computed). In particular a [`Witness`] includes no digests
-/// for the partial data it verifies; nor for the [`HashTree`] root.
+/// A subset of a [`HashTree`] that is used to verify whether some specific
+/// partial data is consistent with the original data (for which the
+/// [`HashTree`] was computed). Effectively [`Witness`] is a [`HashTree`] with
+/// some missing leaves, which have to be provided externally, e.g., by the
+/// caller, in order to produce the root hash, which can then be compared
+/// against the root hash of the full [`HashTree`]. The leaves that need to be
+/// externally provided in the [`Witness`] are marked as [`Witness::Known`].
+/// Also, since not necessarily all leaves in the [`HashTree`] are relevant to
+/// the partial data, the irrelevant data is provided in form of a hash of the
+/// root of the irrelevant subtrees as [`Witness::Pruned`]. Also, a [`Witness`]
+/// includes no digests for either the partial data it verifies or for the
+/// [`HashTree`] root.
 ///
-/// A witness can also be used to update a HashTree when part of the original
-/// data is updated.
+/// A witness can also be used to update a [`HashTree`] when part of the
+/// original data is updated.
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub enum Witness {
-    // Represents a HashTree::Fork
+    /// Represents a [`HashTree::Fork`].
     Fork {
         left_tree: Box<Witness>,
         right_tree: Box<Witness>,
     },
-    // Represents a HashTree::Node
+
+    /// Represents a [`HashTree::Node`].
     Node {
         label: Label,
         sub_witness: Box<Witness>,
     },
-    // Represents either a HashTree::Leaf or a pruned subtree of a HashTree
-    Pruned {
-        digest: Digest,
-    },
 
-    // A marker for data (leaf or a subtree) to be explicitly provided
-    // by the caller for verification or for re-computation of a digest.
+    /// Represents a pruned subtree, i.e., the root hash of a path irrelevant to
+    /// the path to [`Witness::Known`].
+    Pruned { digest: Digest },
+
+    /// A marker for data (leaf or a subtree) to be explicitly provided
+    /// by the caller for verification or for re-computation of a digest.
     Known(),
 }
 

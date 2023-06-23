@@ -1,4 +1,5 @@
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
+use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, Tokens};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -11,9 +12,10 @@ mod database_access {
     use crate::blocks::{BlockStoreError, HashedBlock};
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::{
-        block::{BlockType, EncodedBlock, HashOf},
+        block::{BlockType, EncodedBlock},
         Tokens,
     };
+    use ic_ledger_hash_of::HashOf;
     use icp_ledger::{AccountIdentifier, Block, Operation};
     use rusqlite::{params, types::Null, Connection, Error, Statement};
 

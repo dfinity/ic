@@ -33,7 +33,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -91,9 +91,9 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
 }
 
 #[test]
-fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
+fn test_a_canister_other_than_the_governance_canister_cannot_bless_a_version() {
     local_test_on_nns_subnet(|runtime| async move {
-        // An attacker got a canister that is trying to pass for the proposals
+        // An attacker got a canister that is trying to pass for the governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
         // ... but thankfully, it does not have the right ID
@@ -105,7 +105,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -121,7 +121,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
             guest_launch_measurement_sha256_hex: None,
         };
         // The attacker canister tries to bless a version, pretending to be the
-        // proposals canister. This should have no effect.
+        // governance canister. This should have no effect.
         assert!(
             !forward_call_via_universal_canister(
                 &attacker_canister,
@@ -151,16 +151,16 @@ fn test_accepted_proposal_mutates_the_registry() {
     local_test_on_nns_subnet(|runtime| async move {
         // Add an empty routing table to the registry
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .build();
         let registry = set_up_registry_canister(&runtime, init_payload).await;
 
-        // Install the universal canister in place of the proposals canister
-        let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-        // Since it takes the id reserved for the proposal canister, it can impersonate
+        // Install the universal canister in place of the governance canister
+        let fake_governance_canister = set_up_universal_canister(&runtime).await;
+        // Since it takes the id reserved for the governance canister, it can impersonate
         // it
         assert_eq!(
-            fake_proposal_canister.canister_id(),
+            fake_governance_canister.canister_id(),
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
@@ -180,7 +180,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         };
         assert!(
             forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &registry,
                 "bless_replica_version",
                 Encode!(&payload_v43).unwrap()
@@ -215,7 +215,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         };
         assert!(
             !forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &registry,
                 "bless_replica_version",
                 Encode!(&payload_v42_mutate).unwrap(),
@@ -247,7 +247,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         };
         assert!(
             forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &registry,
                 "update_subnet_replica_version",
                 Encode!(&set_to_blessed_).unwrap(),
@@ -271,7 +271,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         };
         assert!(
             !forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &registry,
                 "update_subnet_replica_version",
                 Encode!(&try_set_to_unblessed).unwrap(),

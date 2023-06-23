@@ -25,17 +25,16 @@ dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 flate2 = "1.0.22"
 futures = "0.3.10"
-garcon = "0.2"
 humantime = "2.0"
 hex = "0.4.2"
 hyper = "0.14.18"
-hyper-rustls = { version = "0.23.0", features = [ "webpki-roots" ] }
+hyper-rustls = "0.23.0"
 hyper-tls = "0.5.0"
-ic-agent = "=0.22.0"
+ic-agent = { workspace = true }
 ic-artifact-pool = { path = "../../../artifact_pool" }
 ic-backup = { path = "../../../backup" }
 ic-base-types = { path = "../../../types/base_types" }
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
+ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../../../canister_client" }
 ic-canister-client-sender = { path = "../../../canister_client/sender" }
 ic-cdk = "0.6.0"
@@ -57,6 +56,7 @@ ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../../../rosetta-a
 ic-message = { path = "../../test_canisters/message" }
 ic-nervous-system-common = { path = "../../../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../../../nervous_system/common/test_keys" }
+ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nervous-system-root = { path = "../../../nervous_system/root" }
 ic-nns-common = { path = "../../../nns/common" }
 ic-nns-init = { path = "../../../nns/init" }
@@ -65,7 +65,7 @@ ic-interfaces-registry = { path = "../../../interfaces/registry" }
 ic-nns-constants = { path = "../../../nns/constants" }
 ic-nns-governance = { path = "../../../nns/governance" }
 ic-nns-gtc = { path = "../../../nns/gtc" }
-ic-nns-handler-root = { path = "../../../nns/handlers/root" }
+ic-nns-handler-root = { path = "../../../nns/handlers/root/impl" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }
 ic-prep = { path = "../../../prep" }
 ic-protobuf = { path = "../../../protobuf" }
@@ -96,18 +96,18 @@ ic-test-utilities = { path = "../../../test_utilities" }
 ic-types = { path = "../../../types/types" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
-ic-utils = "=0.22.0"
+ic-utils = { workspace = true }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
 itertools = "0.10.0"
 json5 = "0.4.1"
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
-lifeline = { path = "../../../nns/handlers/lifeline" }
+lifeline = { path = "../../../nns/handlers/lifeline/impl" }
 maplit = "1.0.2"
 nix = "0.23.0"
 on_wire = { path = "../../../rust_canisters/on_wire"}
 openssh-keys ="0.5.0"
-openssl = "0.10.29"
+openssl = "0.10.55"
 pem = "1.0.1"
 phantom_newtype = { path = "../../../phantom_newtype" }
 proptest = "1.0"
@@ -122,6 +122,7 @@ registry-canister = { path = "../../../registry/canister" }
 reqwest = { version = "0.11.1", features = ["blocking", "multipart", "stream"] }
 ring = { version = "0.16.11", features = ["std"] }
 rustls = "0.20.4"
+rust_decimal = "1.25"
 serde = { version = "1.0.115", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
@@ -185,6 +186,14 @@ path = "sns_sale_load_test_3.rs"
 [[bin]]
 name = "ic-systest-sns-payment-flow-test"
 path = "payment_flow_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-payment-flow-with-finalization-test"
+path = "payment_flow_with_finalization_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-one-proposal-payment-flow-with-finalization-test"
+path = "one_proposal_payment_flow_with_finalization_test.rs"
 
 [[bin]]
 name = "ic-systest-sns-payment-flow-load-test"

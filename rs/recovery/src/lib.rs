@@ -3,8 +3,12 @@
 //! state replay, restart of nodes, etc. The library is designed to be usable by
 //! command line interfaces. Therefore, input arguments are first captured and
 //! returned in form of a recovery [Step], holding the human-readable (and
-//! reproducable) description of the step, as well as its potential automatic
+//! reproducible) description of the step, as well as its potential automatic
 //! execution.
+use crate::{
+    cli::wait_for_confirmation,
+    file_sync_helper::{read_file, remove_dir},
+};
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
 use error::{RecoveryError, RecoveryResult};
@@ -14,8 +18,7 @@ use ic_base_types::{CanisterId, NodeId, PrincipalId};
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
 use ic_cup_explorer::get_catchup_content;
 use ic_logger::ReplicaLogger;
-use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetListRecord};
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl, ThresholdSigPublicKey};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key};
@@ -23,27 +26,27 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_replicator::RegistryReplicator;
 use ic_registry_subnet_features::EcdsaConfig;
-use ic_replay::cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand};
-use ic_replay::player::StateParams;
-use ic_types::messages::HttpStatusResponse;
-use ic_types::{Height, ReplicaVersion, SubnetId};
+use ic_replay::{
+    cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
+    player::StateParams,
+};
+use ic_types::{messages::HttpStatusResponse, Height, ReplicaVersion, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
-use std::net::IpAddr;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{thread, time};
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    str::FromStr,
+    sync::Arc,
+    thread,
+    time::{self, Duration, SystemTime},
+};
 use steps::*;
 use url::Url;
-use util::block_on;
-
-use crate::cli::wait_for_confirmation;
-use crate::file_sync_helper::read_file;
+use util::{block_on, parse_hex_str};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -65,6 +68,7 @@ pub mod util;
 pub const RECOVERY_DIRECTORY_NAME: &str = "recovery";
 pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
+pub const CUPS_DIR: &str = "cups";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
@@ -73,8 +77,11 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
     "tip",
     "backups",
     "fs_tmp",
-    "cups",
     "recovery",
+    // The page_deltas/ directory should not be copied over on rsync as well,
+    // it is a new directory used for storing the files backing up the
+    // page deltas. We do not need to copy page deltas when nodes are re-assigned.
+    "page_deltas",
     IC_REGISTRY_LOCAL_STORE,
 ];
 pub const IC_STATE: &str = "ic_state";
@@ -131,7 +138,7 @@ pub struct Recovery {
     pub key_file: Option<PathBuf>,
     ssh_confirmation: bool,
 
-    logger: Logger,
+    pub logger: Logger,
 }
 
 impl Recovery {
@@ -344,6 +351,28 @@ impl Recovery {
         write_bytes(path, bytes)
     }
 
+    /// Removes all the checkpoints except the "highest" one.
+    ///
+    /// Returns an error when there are no checkpoints.
+    pub fn remove_all_but_highest_checkpoints(
+        checkpoint_path: &Path,
+        logger: &Logger,
+    ) -> RecoveryResult<Height> {
+        let checkpoints = Self::get_checkpoint_names(checkpoint_path)?;
+        let (max_name, max_height) = Self::get_latest_checkpoint_name_and_height(checkpoint_path)?;
+
+        for checkpoint in checkpoints {
+            if checkpoint == max_name {
+                continue;
+            }
+
+            info!(logger, "Deleting checkpoint {}", checkpoint);
+            remove_dir(&checkpoint_path.join(checkpoint))?;
+        }
+
+        Ok(max_height)
+    }
+
     /// Return a recovery [AdminStep] to halt or unhalt the given subnet
     pub fn halt_subnet(&self, subnet_id: SubnetId, is_halted: bool, keys: &[String]) -> impl Step {
         AdminStep {
@@ -422,6 +451,7 @@ impl Recovery {
         node_ip: IpAddr,
         try_readonly: bool,
         keep_downloaded_state: bool,
+        additional_excludes: Vec<&str>,
     ) -> impl Step {
         DownloadIcStateStep {
             logger: self.logger.clone(),
@@ -432,6 +462,10 @@ impl Recovery {
             working_dir: self.work_dir.display().to_string(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+            additional_excludes: additional_excludes
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
         }
     }
 
@@ -527,6 +561,21 @@ impl Recovery {
         Ok(res)
     }
 
+    /// Get the name and the height of the latest checkpoint currently on disk
+    ///
+    /// Returns an error when there are no checkpoints.
+    pub fn get_latest_checkpoint_name_and_height(
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<(String, Height)> {
+        Self::get_checkpoint_names(checkpoints_path)?
+            .into_iter()
+            .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
+            .collect::<RecoveryResult<Vec<_>>>()?
+            .into_iter()
+            .max_by_key(|(_name, height)| *height)
+            .ok_or_else(|| RecoveryError::invalid_output_error("No checkpoints"))
+    }
+
     /// Parse and return the output of the replay step.
     pub fn get_replay_output(&self) -> RecoveryResult<StateParams> {
         replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))
@@ -567,6 +616,7 @@ impl Recovery {
             data_src,
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+            check_ic_replay_height: true,
         }
     }
 
@@ -619,9 +669,9 @@ impl Recovery {
             }
         }
 
-        Err(RecoveryError::invalid_output_error(
-            "No hash found in the SHA256SUMS file".to_string(),
-        ))
+        Err(RecoveryError::invalid_output_error(format!(
+            "No hash found in the SHA256SUMS file: {output}"
+        )))
     }
 
     /// Return an [AdminStep] step electing the given [ReplicaVersion].
@@ -710,6 +760,7 @@ impl Recovery {
                     replacement_nodes,
                     registry_params,
                     ecdsa_subnet_id,
+                    SystemTime::now(),
                 ),
         })
     }
@@ -771,7 +822,7 @@ impl Recovery {
         match version {
             Some(ver) => Ok(ver),
             None => Err(RecoveryError::invalid_output_error(
-                "No version found in status".to_string(),
+                "No version found in status",
             )),
         }
     }
@@ -792,7 +843,7 @@ impl Recovery {
         })?;
 
         let mut cup_present = false;
-        for i in 0..100 {
+        for i in 0..20 {
             let maybe_cup = match block_on(get_catchup_content(&node_url)) {
                 Ok(res) => res,
                 Err(e) => {
@@ -1082,4 +1133,89 @@ pub fn get_member_ips(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_test_utilities_tmpdir::tmpdir;
+
+    #[test]
+    fn get_latest_checkpoint_name_and_height_test() {
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+            ],
+        );
+
+        let (name, height) =
+            Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
+                .expect("Failed getting the latest checkpoint name and height");
+
+        assert_eq!(name, "000000000000fd84");
+        assert_eq!(height, Height::from(64900));
+    }
+
+    #[test]
+    fn get_latest_checkpoint_name_and_height_returns_error_on_invalid_checkpoint_name() {
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+                /*height=???*/ "invalid_checkpoint_name",
+            ],
+        );
+
+        assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
+    }
+
+    #[test]
+    fn get_latest_checkpoint_name_and_height_returns_error_when_no_checkpoints() {
+        let checkpoints_dir = tmpdir("checkpoints");
+
+        assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
+    }
+
+    #[test]
+    fn remove_all_but_highest_checkpoints_test() {
+        let logger = util::make_logger();
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+            ],
+        );
+
+        let height = Recovery::remove_all_but_highest_checkpoints(checkpoints_dir.path(), &logger)
+            .expect("Failed to remove checkpoints");
+
+        assert_eq!(height, Height::from(64900));
+        assert_eq!(
+            Recovery::get_checkpoint_names(checkpoints_dir.path()).unwrap(),
+            vec![String::from("000000000000fd84")]
+        );
+    }
+
+    #[test]
+    fn remove_all_but_highest_checkpoints_returns_error_when_no_checkpoints() {
+        let logger = util::make_logger();
+        let checkpoints_dir = tmpdir("checkpoints");
+
+        assert!(
+            Recovery::remove_all_but_highest_checkpoints(checkpoints_dir.path(), &logger).is_err()
+        );
+    }
+
+    fn create_fake_checkpoint_dirs(root: &Path, checkpoint_names: &[&str]) {
+        for checkpoint_name in checkpoint_names {
+            create_dir(&root.join(checkpoint_name)).unwrap();
+        }
+    }
 }

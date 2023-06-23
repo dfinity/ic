@@ -7,7 +7,6 @@ import sys
 import dfinity_gitlab_config
 import gitrepo
 import yaml
-from gen_gitlab_cargo_pipeline import gen_pipeline
 
 if __name__ == "__main__":
     repo = gitrepo.GitRepo()
@@ -107,9 +106,6 @@ if __name__ == "__main__":
         # Otherwise, load both the parent and the child pipeline
         with open(f"{repo.repo_root()}/.gitlab-ci.yml") as f:
             gitlab.ci_cfg_load_from_file(f)
-
-    gitlab.ci_cfg_load(gen_pipeline.generate_gitlab_yaml_for_all_crates(rust_workspace=repo.repo_root()))
-    gitlab.ci_cfg_load(gen_pipeline.generate_gitlab_yaml_for_noop(rust_workspace=repo.repo_root()))
 
     if args.cfg_validate:
         gitlab.ci_cfg_lint()

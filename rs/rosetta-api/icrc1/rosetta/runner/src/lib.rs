@@ -1,11 +1,10 @@
 use candid::Principal;
+use std::default::Default;
 use std::path::Path;
 use std::process::{Child, Command};
 use std::str::FromStr;
 use tokio::time::{sleep, Duration};
-
 struct KillOnDrop(Child);
-
 pub struct RosettaContext {
     _proc: KillOnDrop,
     _state: tempfile::TempDir,
@@ -24,11 +23,34 @@ impl Drop for KillOnDrop {
     }
 }
 
-pub async fn start_rosetta(
-    rosetta_bin: &Path,
-    ledger_canister_id: Principal,
-    network_url: String,
-) -> RosettaContext {
+pub struct RosettaOptions {
+    pub ledger_id: Principal,
+
+    pub store_type: String,
+
+    pub network_type: String,
+
+    pub network_url: Option<String>,
+
+    pub exit_on_sync: bool,
+
+    pub offline: bool,
+}
+
+impl Default for RosettaOptions {
+    fn default() -> Self {
+        RosettaOptions {
+            ledger_id: Principal::anonymous(),
+            store_type: "in-memory".to_owned(),
+            network_type: "testnet".to_owned(),
+            network_url: None,
+            exit_on_sync: false,
+            offline: true,
+        }
+    }
+}
+
+pub async fn start_rosetta(rosetta_bin: &Path, arguments: RosettaOptions) -> RosettaContext {
     assert!(
         rosetta_bin.exists(),
         "ic-icrc-rosetta-bin path {} does not exist",
@@ -38,28 +60,41 @@ pub async fn start_rosetta(
     let state = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let port_file = state.path().join("port");
 
-    let _proc = KillOnDrop(
-        Command::new(rosetta_bin)
-            .arg("--ledger-id")
-            .arg(ledger_canister_id.to_string())
-            .arg("--network-type")
-            .arg("testnet")
+    let mut command = &mut Command::new(rosetta_bin);
+    command = command
+        .arg("--ledger-id")
+        .arg(arguments.ledger_id.to_string())
+        .arg("--network-type")
+        .arg(arguments.network_type)
+        .arg("--store-type")
+        .arg(arguments.store_type)
+        .arg("--port-file")
+        .arg(port_file.clone())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit());
+
+    if arguments.network_url.is_some() {
+        command = command
             .arg("--network-url")
-            .arg(network_url)
-            .arg("--port-file")
-            .arg(port_file.clone())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .spawn()
-            .unwrap_or_else(|e| {
-                panic!(
-                    "Failed to execute ic-icrc-rosetta-bin (path = {}, exists? = {}): {}",
-                    rosetta_bin.display(),
-                    rosetta_bin.exists(),
-                    e
-                )
-            }),
-    );
+            .arg(arguments.network_url.unwrap());
+    }
+
+    if arguments.offline {
+        command = command.arg("--offline");
+    }
+
+    if arguments.exit_on_sync {
+        command = command.arg("--exit-on-sync");
+    }
+
+    let _proc = KillOnDrop(command.spawn().unwrap_or_else(|e| {
+        panic!(
+            "Failed to execute ic-icrc-rosetta-bin (path = {}, exists? = {}): {}",
+            rosetta_bin.display(),
+            rosetta_bin.exists(),
+            e
+        )
+    }));
 
     let mut tries_left = 100;
     while tries_left > 0 && !port_file.exists() {

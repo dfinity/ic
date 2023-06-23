@@ -3,7 +3,6 @@ use crate::lmdb_iterator::{LMDBEcdsaIterator, LMDBIterator};
 use crate::metrics::EcdsaPoolMetrics;
 use ic_config::artifact_pool::LMDBConfig;
 use ic_interfaces::{
-    artifact_pool::ValidatedArtifact,
     consensus_pool::{
         HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedConsensusArtifact,
     },
@@ -12,11 +11,11 @@ use ic_interfaces::{
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
+use ic_types::consensus::certification::CertificationMessageHash;
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
     batch::BatchPayload,
     consensus::{
-        catchup::CUPWithOriginalProtobuf,
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         ecdsa::{
@@ -25,8 +24,8 @@ use ic_types::{
         },
         BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
         ConsensusMessageHash, ConsensusMessageHashable, Finalization, FinalizationShare, HasHeight,
-        Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
-        RandomTapeShare,
+        Notarization, NotarizationShare, Payload, PayloadType, RandomBeacon, RandomBeaconShare,
+        RandomTape, RandomTapeShare,
     },
     crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
@@ -36,6 +35,7 @@ use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
     Transaction, WriteFlags,
 };
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
@@ -89,18 +89,6 @@ pub struct PersistentHeightIndexedPool<T> {
     log: ReplicaLogger,
 }
 
-/// PersistedConsensusMessage exists to allow the direct persistence of protobuf
-/// CUP Messages. This is important to ensure that we can properly serve a
-/// version of the CUP whose signature can be verified by other nodes over HTTP.
-/// Without directly persisting the original protobuf, it might become
-/// impossible to verify the CUP signature across versions of the replica with
-/// difference in the way the cup struct is structured.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
-pub enum PersistedConsensusMessage {
-    OriginalCUPBytes(pb::CatchUpPackage),
-    ConsensusMessage(ConsensusMessage),
-}
-
 /// A trait for loading/saving pool artifacts (of ArtifactKind). It allows a
 /// flexible data schema to be used for pool objects. For example, objects may
 /// be normalized and serialized into multiple data entries, and they are
@@ -143,7 +131,9 @@ pub trait PoolArtifact: Sized {
         artifacts: Database,
         tx: &RoTransaction<'a>,
         log: &ReplicaLogger,
-    ) -> lmdb::Result<T>;
+    ) -> lmdb::Result<T>
+    where
+        <T as TryFrom<Self>>::Error: Debug;
 }
 
 /// A unique representation for each type of supported message.
@@ -268,6 +258,7 @@ macro_rules! log_err {
 }
 
 /// Combination of type/height/id keys.
+#[derive(Debug)]
 struct ArtifactKey {
     type_key: TypeKey,
     height_key: HeightKey,
@@ -307,7 +298,12 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
     builder.set_map_size(MAX_PERSISTENT_POOL_SIZE);
     let db_env = builder
         .open_with_permissions(path, permission)
-        .unwrap_or_else(|err| panic!("Error opening LMDB environment at {:?}: {:?}", path, err));
+        .unwrap_or_else(|err| {
+            panic!(
+                "Error opening LMDB environment with permissions at {:?}: {:?}",
+                path, err
+            )
+        });
 
     unsafe {
         // Mark fds created by lmdb as FD_CLOEXEC to prevent them from leaking into
@@ -431,7 +427,10 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         &self,
         min_key: HeightKey,
         max_key: HeightKey,
-    ) -> Box<dyn Iterator<Item = Message>> {
+    ) -> Box<dyn Iterator<Item = Message>>
+    where
+        <Message as TryFrom<Artifact>>::Error: Debug,
+    {
         let type_key = Message::type_key();
         let index_db = self.get_index_db(&type_key);
         let db_env = self.db_env.clone();
@@ -459,6 +458,20 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     where
         Artifact: PoolArtifact<ObjectType = PoolObject>,
     {
+        self.tx_insert_prepare(tx, key)?;
+        Artifact::save(&key.id_key, value, self.artifacts, tx, &self.log)
+    }
+
+    /// Prepares pool for artifact insertion, by checking index DB for duplicates and
+    /// updating the metadata.
+    fn tx_insert_prepare<'a, PoolObject>(
+        &self,
+        tx: &mut RwTransaction<'a>,
+        key: &ArtifactKey,
+    ) -> lmdb::Result<()>
+    where
+        Artifact: PoolArtifact<ObjectType = PoolObject>,
+    {
         // update index db first, because requiring NO_DUP_DATA may lead to
         // error when dup is detected. Insertion can be skipped in this case.
         let index_db = self.get_index_db(&key.type_key);
@@ -479,9 +492,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                 min: key.height_key,
                 max: key.height_key,
             });
-        self.update_meta(tx, &key.type_key, &meta)?;
-        // update artifacts (ignore KeyExists)
-        Artifact::save(&key.id_key, value, self.artifacts, tx, &self.log)
+        self.update_meta(tx, &key.type_key, &meta)
     }
 
     /// Remove the pool object of the given type/height/id key.
@@ -518,23 +529,23 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         }
     }
 
-    /// Remove all index entries for the given TypeKey with heights
-    /// less than the given HeightKey. Update the type's meta table
-    /// if necessary. Return the IdKeys of deleted entries.
+    /// Remove all index entries for the given [`TypeKey`] with heights
+    /// less than the given [`HeightKey`]. Update the type's meta table
+    /// if necessary. Return the [`ArtifactKey`]s of deleted entries.
     fn tx_purge_index_below<'a>(
         &self,
         tx: &mut RwTransaction<'a>,
-        type_key: &TypeKey,
+        type_key: TypeKey,
         height_key: HeightKey,
-    ) -> lmdb::Result<Vec<IdKey>> {
+    ) -> lmdb::Result<Vec<ArtifactKey>> {
         let mut artifact_ids = Vec::new();
         // only delete if meta exists
-        if let Some(meta) = self.get_meta(tx, type_key) {
+        if let Some(meta) = self.get_meta(tx, &type_key) {
             // nothing to delete if min height is already higher
             if meta.min >= height_key {
                 return Ok(artifact_ids);
             }
-            let index_db = self.get_index_db(type_key);
+            let index_db = self.get_index_db(&type_key);
             {
                 let mut cursor = tx.open_rw_cursor(index_db)?;
                 loop {
@@ -544,9 +555,12 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                             if HeightKey::from(key) >= height_key {
                                 break;
                             }
-                            let id_key = IdKey::from(id);
+                            artifact_ids.push(ArtifactKey {
+                                type_key,
+                                height_key: HeightKey::from(key),
+                                id_key: IdKey::from(id),
+                            });
                             cursor.del(WriteFlags::empty())?;
-                            artifact_ids.push(id_key);
                         }
                     }
                 }
@@ -566,22 +580,24 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                     })
             };
             match meta {
-                None => tx.del(self.meta, type_key, None)?,
-                Some(meta) => self.update_meta(tx, type_key, &meta)?,
+                None => tx.del(self.meta, &type_key, None)?,
+                Some(meta) => self.update_meta(tx, &type_key, &meta)?,
             }
         }
         Ok(artifact_ids)
     }
 
-    /// Remove all artifacts with heights less than the given HeightKey.
+    /// Remove all artifacts with heights less than the given [`HeightKey`].
+    /// Return [`ArtifactKey`]s of the removed artifacts.
     fn tx_purge_below<'a>(
         &self,
         tx: &mut RwTransaction<'a>,
         height_key: HeightKey,
-    ) -> lmdb::Result<()> {
+    ) -> lmdb::Result<Vec<ArtifactKey>> {
+        let mut purged = Vec::new();
         // delete from all index tables
-        for type_key in Artifact::type_keys() {
-            self.tx_purge_index_below(tx, type_key, height_key)?;
+        for &type_key in Artifact::type_keys() {
+            purged.append(&mut self.tx_purge_index_below(tx, type_key, height_key)?);
         }
         // delete from artifacts table
         let mut cursor = tx.open_rw_cursor(self.artifacts)?;
@@ -598,48 +614,61 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                 }
             }
         }
-        Ok(())
+        Ok(purged)
     }
 
-    /// Remove all artifacts of the given TypeKey with heights
-    /// less than the given HeightKey.
+    /// Remove all artifacts of the given [`TypeKey`] with heights less than the
+    /// given [`HeightKey`]. Return [`ArtifactKey`]s of the removed artifacts.
     fn tx_purge_type_below<'a>(
         &self,
         tx: &mut RwTransaction<'a>,
-        type_key: &TypeKey,
+        type_key: TypeKey,
         height_key: HeightKey,
-    ) -> lmdb::Result<()> {
-        let artifact_ids = self.tx_purge_index_below(tx, type_key, height_key)?;
-        // Delete the corresponding artifacts.
-        for id in artifact_ids {
-            if let Err(err) = tx.del(self.artifacts, &id, None) {
+    ) -> lmdb::Result<Vec<ArtifactKey>> {
+        let artifact_keys = self.tx_purge_index_below(tx, type_key, height_key)?;
+        // delete the corresponding artifacts, ignoring not found errors
+        for key in &artifact_keys {
+            if let Err(err) = tx.del(self.artifacts, &key.id_key, None) {
                 // Ignore not found errors, although they should not appear in practice.
                 if lmdb::Error::NotFound != err {
                     return Err(err);
                 }
             }
         }
-        Ok(())
+        Ok(artifact_keys)
     }
 }
 
 impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> {
     /// Insert a cup with the original bytes from which that cup was received.
-    fn insert_cup_with_proto(&self, cup_with_proto: CUPWithOriginalProtobuf) {
+    fn insert_cup_with_proto(&self, cup_proto: pb::CatchUpPackage) {
+        let cup = CatchUpPackage::try_from(&cup_proto).expect("deserializing CUP failed");
         let mut tx = self
             .db_env
             .begin_rw_txn()
             .expect("Unable to begin transation to initialize consensus pool");
-        let key = ArtifactKey::from(cup_with_proto.cup.get_id());
-        self.tx_insert(
-            &mut tx,
-            &key,
-            ValidatedArtifact {
-                msg: PersistedConsensusMessage::OriginalCUPBytes(cup_with_proto.protobuf),
-                timestamp: cup_with_proto.cup.content.block.as_ref().context.time,
-            },
-        )
-        .expect("Insertion of CUP into initial consensus pool failed");
+        let key = ArtifactKey::from(cup.get_id());
+
+        // convert cup to bytes
+        let bytes = &pb::ValidatedConsensusArtifact {
+            msg: Some(pb::ConsensusMessage {
+                msg: Some(pb::consensus_message::Msg::Cup(cup_proto)),
+            }),
+            timestamp: cup
+                .content
+                .block
+                .as_ref()
+                .context
+                .time
+                .as_nanos_since_unix_epoch(),
+        }
+        .encode_to_vec();
+
+        // insert raw bytes
+        self.tx_insert_prepare(&mut tx, &key)
+            .expect("Insertion of metadata or updating index failed");
+        tx.put(self.artifacts, &key.id_key, bytes, WriteFlags::empty())
+            .expect("Insertion of CUP into initial consensus pool failed");
         tx.commit()
             .expect("Transaction inserting initial CUP into pool failed to commit");
     }
@@ -649,6 +678,7 @@ impl<Artifact: PoolArtifact, Message> HeightIndexedPool<Message>
     for PersistentHeightIndexedPool<Artifact>
 where
     Message: TryFrom<Artifact> + HasTypeKey + 'static,
+    <Message as TryFrom<Artifact>>::Error: Debug,
 {
     fn height_range(&self) -> Option<HeightRange> {
         let mut tx = log_err!(self.db_env.begin_ro_txn(), self.log, "begin_ro_txn")?;
@@ -829,26 +859,41 @@ impl From<ConsensusMessageId> for ArtifactKey {
     }
 }
 
-impl From<ConsensusMessage> for PersistedConsensusMessage {
-    fn from(message: ConsensusMessage) -> PersistedConsensusMessage {
-        PersistedConsensusMessage::ConsensusMessage(message)
-    }
-}
-
-impl TryFrom<PersistedConsensusMessage> for ConsensusMessage {
+impl TryFrom<ArtifactKey> for ConsensusMessageId {
     type Error = String;
-    fn try_from(message: PersistedConsensusMessage) -> Result<Self, Self::Error> {
-        match message {
-            PersistedConsensusMessage::OriginalCUPBytes(protobuf) => {
-                CatchUpPackage::try_from(&protobuf).map(ConsensusMessage::CatchUpPackage)
+    fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
+        let h = key.id_key.hash();
+        let hash = match key.type_key {
+            RANDOM_BEACON_KEY => ConsensusMessageHash::RandomBeacon(h.into()),
+            FINALIZATION_KEY => ConsensusMessageHash::Finalization(h.into()),
+            NOTARIZATION_KEY => ConsensusMessageHash::Notarization(h.into()),
+            BLOCK_PROPOSAL_KEY => ConsensusMessageHash::BlockProposal(h.into()),
+            RANDOM_BEACON_SHARE_KEY => ConsensusMessageHash::RandomBeaconShare(h.into()),
+            NOTARIZATION_SHARE_KEY => ConsensusMessageHash::NotarizationShare(h.into()),
+            FINALIZATION_SHARE_KEY => ConsensusMessageHash::FinalizationShare(h.into()),
+            RANDOM_TAPE_KEY => ConsensusMessageHash::RandomTape(h.into()),
+            RANDOM_TAPE_SHARE_KEY => ConsensusMessageHash::RandomTapeShare(h.into()),
+            CATCH_UP_PACKAGE_KEY => ConsensusMessageHash::CatchUpPackage(h.into()),
+            CATCH_UP_PACKAGE_SHARE_KEY => ConsensusMessageHash::CatchUpPackageShare(h.into()),
+            BLOCK_PAYLOAD_KEY => {
+                return Err("Block payloads do not have a ConsensusMessageId".into())
             }
-            PersistedConsensusMessage::ConsensusMessage(message) => Ok(message),
-        }
+            other => {
+                return Err(format!(
+                    "{:?} is not a valid ConsensusMessage TypeKey.",
+                    other
+                ))
+            }
+        };
+        Ok(ConsensusMessageId {
+            hash,
+            height: key.id_key.height(),
+        })
     }
 }
 
 impl PoolArtifact for ConsensusMessage {
-    type ObjectType = ValidatedArtifact<PersistedConsensusMessage>;
+    type ObjectType = ValidatedConsensusArtifact;
     type Id = ConsensusMessageId;
 
     fn type_keys() -> &'static [TypeKey] {
@@ -863,10 +908,7 @@ impl PoolArtifact for ConsensusMessage {
         log: &ReplicaLogger,
     ) -> lmdb::Result<()> {
         // special handling for block proposal & its payload
-        if let PersistedConsensusMessage::ConsensusMessage(ConsensusMessage::BlockProposal(
-            mut proposal,
-        )) = value.msg
-        {
+        if let ConsensusMessage::BlockProposal(mut proposal) = value.msg {
             // store block payload separately
             let block = proposal.content.as_mut();
             let payload_hash = block.payload.get_hash().clone();
@@ -887,23 +929,22 @@ impl PoolArtifact for ConsensusMessage {
             block.payload = Payload::new_with(
                 payload_hash,
                 payload_type,
-                Box::new(move || {
-                    (
+                // A dummy payload. Note that during deserialization, this dummy is
+                // used to determine the payload type. So it's important that the
+                // dummy has the SAME payload type as the real payload.
+                Box::new(move || match payload_type {
+                    PayloadType::Summary => (dkg::Summary::default(), None).into(),
+                    PayloadType::Data => (
                         BatchPayload::default(),
                         dkg::Dealings::new_empty(start_height),
                         None,
                     )
-                        .into()
+                        .into(),
                 }),
             );
-            value.msg = PersistedConsensusMessage::from(proposal.into_message());
+            value.msg = proposal.into_message();
         }
-        let bytes = log_err!(
-            bincode::serialize::<Self::ObjectType>(&value),
-            log,
-            "ConsensusArtifact::save serialize"
-        )
-        .ok_or(lmdb::Error::Panic)?;
+        let bytes = pb::ValidatedConsensusArtifact::from(&value).encode_to_vec();
         tx.put(artifacts, &key, &bytes, WriteFlags::empty())
     }
 
@@ -913,43 +954,52 @@ impl PoolArtifact for ConsensusMessage {
         artifacts: Database,
         tx: &RoTransaction<'a>,
         log: &ReplicaLogger,
-    ) -> lmdb::Result<T> {
+    ) -> lmdb::Result<T>
+    where
+        <T as TryFrom<Self>>::Error: Debug,
+    {
         let bytes = tx.get(artifacts, &key)?;
-        let mut artifact = log_err!(
-            bincode::deserialize::<Self::ObjectType>(bytes),
+        let protobuf = log_err!(
+            pb::ValidatedConsensusArtifact::decode(bytes),
             log,
-            "ConsensusArtifact::load_as deserialize"
+            "ConsensusArtifact::load_as protobuf decoding"
         )
         .ok_or(lmdb::Error::Panic)?;
-        // Lazy loading of block proposal and its payload
-        if let PersistedConsensusMessage::ConsensusMessage(ConsensusMessage::BlockProposal(
-            mut proposal,
-        )) = artifact.msg
-        {
-            let block = proposal.content.as_mut();
-            let payload_hash = block.payload.get_hash();
-            let payload_key = IdKey::from((block.height(), payload_hash.get_ref()));
-            let log = log.clone();
-            block.payload = Payload::new_with(
-                payload_hash.clone(),
-                block.payload.payload_type(),
-                Box::new(move || {
-                    log_err!(
-                        load_block_payload(db_env, artifacts, &payload_key, &log),
-                        log,
-                        "ConsensusArtifact::load_as load_block_payload"
-                    )
-                    .unwrap()
-                }),
-            );
-            artifact.msg = PersistedConsensusMessage::from(proposal.into_message());
-        }
-        log_err!(
-            ConsensusMessage::try_from(artifact.msg)
-                .map_err(|_| ())
-                .and_then(|msg| msg.try_into().map_err(|_| ())),
+        let artifact: ValidatedConsensusArtifact = log_err!(
+            protobuf.try_into(),
             log,
-            "ConsensusArtifact::load_as casting"
+            "ConsensusArtifact::load_as protobuf conversion"
+        )
+        .ok_or(lmdb::Error::Panic)?;
+
+        let msg = match artifact.msg {
+            ConsensusMessage::BlockProposal(mut proposal) => {
+                // Lazy loading of block proposal and its payload
+                let block = proposal.content.as_mut();
+                let payload_hash = block.payload.get_hash();
+                let payload_key = IdKey::from((block.height(), payload_hash.get_ref()));
+                let log_clone = log.clone();
+                block.payload = Payload::new_with(
+                    payload_hash.clone(),
+                    block.payload.payload_type(),
+                    Box::new(move || {
+                        log_err!(
+                            load_block_payload(db_env, artifacts, &payload_key, &log_clone),
+                            log_clone,
+                            "ConsensusArtifact::load_as load_block_payload"
+                        )
+                        .unwrap()
+                    }),
+                );
+                proposal.into_message()
+            }
+            consensus_message => consensus_message,
+        };
+
+        log_err!(
+            T::try_from(msg),
+            log,
+            "ConsensusArtifact::load_as conversion"
         )
         .ok_or(lmdb::Error::Panic)
     }
@@ -982,49 +1032,78 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
         PersistentHeightIndexedPool::new(path.as_path(), read_only, log)
     }
 
-    fn tx_mutate(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) -> lmdb::Result<()> {
+    fn tx_mutate(
+        &mut self,
+        ops: PoolSectionOps<ValidatedConsensusArtifact>,
+    ) -> lmdb::Result<Vec<ConsensusMessageId>> {
         let mut tx = self.db_env.begin_rw_txn()?;
+        let mut purged = Vec::new();
         for op in ops.ops {
             match op {
                 PoolSectionOp::Insert(artifact) => {
                     let msg_id = artifact.msg.get_id();
                     let key = ArtifactKey::from(msg_id);
                     // Ignore KeyExist
-                    match self.tx_insert(
-                        &mut tx,
-                        &key,
-                        artifact.map(PersistedConsensusMessage::ConsensusMessage),
-                    ) {
+                    match self.tx_insert(&mut tx, &key, artifact) {
                         Err(lmdb::Error::KeyExist) => Ok(()),
                         result => result,
                     }?
                 }
                 PoolSectionOp::Remove(msg_id) => {
-                    let key = ArtifactKey::from(msg_id);
+                    let key = ArtifactKey::from(msg_id.clone());
                     // Note: We do not remove block payloads here, but leave it to purging.
-                    self.tx_remove(&mut tx, &key)?
+                    self.tx_remove(&mut tx, &key)?;
+                    purged.push(msg_id);
                 }
                 PoolSectionOp::PurgeBelow(height) => {
                     let height_key = HeightKey::from(height);
-                    self.tx_purge_below(&mut tx, height_key)?
+                    purged.extend(
+                        self.tx_purge_below(&mut tx, height_key)?
+                            .into_iter()
+                            .map(ConsensusMessageId::try_from)
+                            .flat_map(|r| {
+                                log_err!(r, self.log, "ConsensusMessage::tx_mutate PurgeBelow")
+                            }),
+                    );
                 }
                 PoolSectionOp::PurgeSharesBelow(height) => {
                     let height_key = HeightKey::from(height);
-                    for type_key in &CONSENSUS_SHARE_KEYS {
-                        self.tx_purge_type_below(&mut tx, type_key, height_key)?
+                    for type_key in CONSENSUS_SHARE_KEYS {
+                        purged.extend(
+                            self.tx_purge_type_below(&mut tx, type_key, height_key)?
+                                .into_iter()
+                                .map(ConsensusMessageId::try_from)
+                                .flat_map(|r| {
+                                    log_err!(
+                                        r,
+                                        self.log,
+                                        "ConsensusMessage::tx_mutate PurgeSharesBelow"
+                                    )
+                                }),
+                        );
                     }
                 }
             }
         }
-        tx.commit()
+        tx.commit()?;
+        Ok(purged)
     }
 }
 
 impl crate::consensus_pool::MutablePoolSection<ValidatedConsensusArtifact>
     for PersistentHeightIndexedPool<ConsensusMessage>
 {
-    fn mutate(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) {
-        log_err!(self.tx_mutate(ops), self.log, "ConsensusArtifact::mutate");
+    fn mutate(
+        &mut self,
+        ops: PoolSectionOps<ValidatedConsensusArtifact>,
+    ) -> Vec<ConsensusMessageId> {
+        match self.tx_mutate(ops) {
+            Ok(purged) => purged,
+            err => {
+                log_err!(err, self.log, "ConsensusArtifact::mutate");
+                Vec::new()
+            }
+        }
     }
 
     fn pool_section(&self) -> &dyn PoolSection<ValidatedConsensusArtifact> {
@@ -1075,11 +1154,11 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             format!("get_timestamp get {:?}", msg_id)
         )?;
         log_err!(
-            bincode::deserialize::<ValidatedArtifact<PersistedConsensusMessage>>(bytes),
+            pb::ValidatedConsensusArtifact::decode(bytes),
             self.log,
             "get_timestamp deserialize"
         )
-        .map(|x| x.timestamp)
+        .map(|x| Time::from_nanos_since_unix_epoch(x.timestamp))
     }
 
     fn random_beacon(&self) -> &dyn HeightIndexedPool<RandomBeacon> {
@@ -1143,17 +1222,17 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             move |tx: &RoTransaction<'_>, key: &[u8]| {
                 let bytes = tx.get(artifacts, &key)?;
                 let artifact = log_err!(
-                    bincode::deserialize::<PersistedConsensusMessage>(bytes),
+                    pb::ValidatedConsensusArtifact::decode(bytes),
                     log,
                     "CatchUpPackage protobuf deserialize"
                 )
                 .ok_or(lmdb::Error::Panic)?;
-                match artifact {
-                    PersistedConsensusMessage::OriginalCUPBytes(protobuf) => Ok(protobuf),
-                    PersistedConsensusMessage::ConsensusMessage(
-                        ConsensusMessage::CatchUpPackage(cup),
-                    ) => Ok(pb::CatchUpPackage::from(&cup)),
-                    _ => panic!("Unexpected artifact type when deserializing CUP"),
+                match artifact.msg {
+                    Some(pb::ConsensusMessage {
+                        msg: Some(pb::consensus_message::Msg::Cup(cup_proto)),
+                    }) => Ok(cup_proto),
+                    Some(_) => panic!("unexpected artifact type when deserializing CUP"),
+                    None => panic!("No consensus message found"),
                 }
             },
             self.log.clone(),
@@ -1198,6 +1277,27 @@ impl HasTypeKey for Certification {
 impl HasTypeKey for CertificationShare {
     fn type_key() -> TypeKey {
         CERTIFICATION_SHARE_KEY
+    }
+}
+
+impl TryFrom<ArtifactKey> for CertificationMessageId {
+    type Error = String;
+    fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
+        let h = key.id_key.hash();
+        let hash = match key.type_key {
+            CERTIFICATION_KEY => CertificationMessageHash::Certification(h.into()),
+            CERTIFICATION_SHARE_KEY => CertificationMessageHash::CertificationShare(h.into()),
+            other => {
+                return Err(format!(
+                    "{:?} is not a valid CertificationMessage TypeKey.",
+                    other
+                ))
+            }
+        };
+        Ok(CertificationMessageId {
+            hash,
+            height: key.id_key.height(),
+        })
     }
 }
 
@@ -1275,10 +1375,16 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
         tx.commit()
     }
 
-    fn purge_below_height(&self, height: Height) -> lmdb::Result<()> {
+    fn purge_below_height(&self, height: Height) -> lmdb::Result<Vec<CertificationMessageId>> {
         let mut tx = self.db_env.begin_rw_txn()?;
-        self.tx_purge_below(&mut tx, HeightKey::from(height))?;
-        tx.commit()
+        let purged = self
+            .tx_purge_below(&mut tx, HeightKey::from(height))?
+            .into_iter()
+            .map(CertificationMessageId::try_from)
+            .flat_map(|r| log_err!(r, self.log, "CertificationMessage::purge_below_height"))
+            .collect();
+        tx.commit()?;
+        Ok(purged)
     }
 }
 
@@ -1300,12 +1406,14 @@ impl crate::certification_pool::MutablePoolSection
         };
     }
 
-    fn purge_below(&self, height: Height) {
-        log_err!(
-            self.purge_below_height(height),
-            self.log,
-            "CertificationArtifact::purge_below"
-        );
+    fn purge_below(&self, height: Height) -> Vec<CertificationMessageId> {
+        match self.purge_below_height(height) {
+            Ok(purged) => purged,
+            err => {
+                log_err!(err, self.log, "CertificationArtifact::purge_below");
+                Vec::new()
+            }
+        }
     }
 
     fn certifications(&self) -> &dyn HeightIndexedPool<Certification> {

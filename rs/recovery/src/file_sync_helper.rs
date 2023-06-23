@@ -1,16 +1,20 @@
-use crate::cli::wait_for_confirmation;
-use crate::command_helper::exec_cmd;
-use crate::error::{RecoveryError, RecoveryResult};
-use crate::ssh_helper;
+use crate::{
+    cli::wait_for_confirmation,
+    command_helper::exec_cmd,
+    error::{RecoveryError, RecoveryResult},
+    ssh_helper,
+};
 use core::time;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
-use std::fs::{self, File, ReadDir};
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::thread;
+use std::{
+    fs::{self, File, ReadDir},
+    io::Write,
+    path::{Path, PathBuf},
+    process::Command,
+    thread,
+};
 
 /// Given the name and replica version of a binary, download the artifact to the
 /// target directory, unzip it, and add executable permissions.
@@ -86,24 +90,20 @@ pub fn rsync_with_retries(
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.
 /// File and directory names part of the `excludes` vector are discarded.
-pub fn rsync(
+pub fn rsync<I>(
     logger: &Logger,
-    excludes: Vec<&str>,
+    excludes: I,
     src: &str,
     target: &str,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
-) -> RecoveryResult<Option<String>> {
-    let mut rsync = Command::new("rsync");
-    rsync.arg("--delete").arg("-acP").arg("--no-g");
-    excludes
-        .iter()
-        .map(|e| format!("--exclude={}", e))
-        .for_each(|e| {
-            rsync.arg(e);
-        });
-    rsync.arg(src).arg(target);
-    rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
+) -> RecoveryResult<Option<String>>
+where
+    I: IntoIterator,
+    I::Item: std::fmt::Display,
+{
+    let mut rsync = get_rsync_command(excludes, src, target, key_file);
+
     info!(logger, "");
     info!(logger, "About to execute:");
     info!(logger, "{:?}", rsync);
@@ -123,6 +123,20 @@ pub fn rsync(
         }
         res => res,
     }
+}
+
+fn get_rsync_command<I>(excludes: I, src: &str, target: &str, key_file: Option<&PathBuf>) -> Command
+where
+    I: IntoIterator,
+    I::Item: std::fmt::Display,
+{
+    let mut rsync = Command::new("rsync");
+    rsync.arg("--delete").arg("-acP").arg("--no-g");
+    rsync.args(excludes.into_iter().map(|e| format!("--exclude={}", e)));
+    rsync.arg(src).arg(target);
+    rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
+
+    rsync
 }
 
 pub fn write_file(file: &Path, content: String) -> RecoveryResult<()> {
@@ -179,5 +193,29 @@ mod tests {
         let non_existing_path = tmp.path().join("non_existing_subdir");
 
         assert!(!path_exists(&non_existing_path).unwrap());
+    }
+
+    #[test]
+    fn get_rsync_command_test() {
+        let rsync = get_rsync_command(
+            ["exclude1", "exclude2"],
+            "/tmp/src",
+            "/tmp/target",
+            Some(&PathBuf::from("/tmp/key_file")),
+        );
+
+        assert_eq!(rsync.get_program(), "rsync");
+        assert_eq!(
+            rsync.get_args().collect::<Vec<_>>(),
+            vec![
+                "--delete",
+                "-acP",
+                "--no-g",
+                "--exclude=exclude1",
+                "--exclude=exclude2",
+                "/tmp/src",
+                "/tmp/target",
+                "-e",
+                "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=30 -o ConnectTimeout=60 -A -i /tmp/key_file"]);
     }
 }

@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::crypto::canister_threshold_sig::error::ExtendedDerivationPathSerializationError;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgTranscriptId, IDkgTranscriptOperation, InitialIDkgDealings, SignedIDkgDealing,
 };
@@ -14,6 +13,7 @@ use crate::crypto::{BasicSig, BasicSigOf};
 use crate::signature::BasicSignature;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::InitialIDkgDealings as InitialIDkgDealingsProto;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
@@ -48,10 +48,8 @@ fn should_fail_parsing_extended_derivation_path_proto_without_caller() {
     let mut proto = ExtendedDerivationPathProto::from(derivation_path);
     proto.caller = None;
     let parsing_result = ExtendedDerivationPath::try_from(proto);
-    assert_matches!(
-        parsing_result,
-        Err(ExtendedDerivationPathSerializationError::MissingCaller)
-    );
+    assert_matches!(parsing_result, 
+        Err(ProxyDecodeError::MissingField(field)) if field == "ExtendedDerivationPath::caller");
 }
 
 #[test]
@@ -60,10 +58,7 @@ fn should_fail_parsing_extended_derivation_path_proto_with_malformed_caller() {
     let mut proto = ExtendedDerivationPathProto::from(derivation_path);
     proto.caller = Some(PrincipalIdProto { raw: vec![42; 42] });
     let parsing_result = ExtendedDerivationPath::try_from(proto);
-    assert_matches!(
-        parsing_result,
-        Err(ExtendedDerivationPathSerializationError::InvalidCaller { .. })
-    );
+    assert_matches!(parsing_result, Err(ProxyDecodeError::InvalidPrincipalId(_)));
 }
 
 fn initial_dealings_without_empty_or_default_data() -> InitialIDkgDealings {

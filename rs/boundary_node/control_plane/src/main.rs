@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Error};
+use arc_swap::ArcSwap;
 use async_trait::async_trait;
 use axum::{
     body::Body,
@@ -29,7 +30,9 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
+use prometheus::proto::MetricFamily;
 use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
+
 use regex::Regex;
 use tokio::{sync::Semaphore, task};
 use tracing::info;
@@ -59,6 +62,7 @@ use crate::{
 };
 
 const SERVICE_NAME: &str = "control-plane";
+const CHECKER_METRIC_PREFIX: &str = "control_plane_check_";
 
 const SECOND: Duration = Duration::from_secs(1);
 const MINUTE: Duration = Duration::from_secs(60);
@@ -82,6 +86,30 @@ struct Cli {
     /// for a replica to be included in the routing table
     #[clap(long, default_value = "1")]
     min_ok_count: u8,
+
+    // Timeout for the whole HTTP request in seconds
+    #[clap(long, default_value = "2")]
+    http_timeout: u64,
+
+    // Timeout for the HTTP connect phase in seconds
+    #[clap(long, default_value = "1")]
+    http_timeout_connect: u64,
+
+    // How frequently to run node checks in seconds
+    #[clap(long, default_value = "10")]
+    check_interval: u64,
+
+    // How many attempts to do when checking a node
+    #[clap(long, default_value = "3")]
+    check_retries: u32,
+
+    // How long to wait between retries in seconds
+    #[clap(long, default_value = "1")]
+    check_retry_interval: u64,
+
+    // How many nodes to check concurrently
+    #[clap(long, default_value = "64")]
+    concurrency: usize,
 
     /// Maximum block height lag for a replica to be included in the routing table
     #[clap(long, default_value = "1000")]
@@ -127,18 +155,20 @@ async fn main() -> Result<(), Error> {
     )
     .expect("failed to set global subscriber");
 
-    let exporter = ExporterBuilder::new(
-        controllers::basic(
-            processors::factory(
-                selectors::simple::histogram([]),
-                aggregation::cumulative_temporality_selector(),
+    let exporter = Arc::new(
+        ExporterBuilder::new(
+            controllers::basic(
+                processors::factory(
+                    selectors::simple::histogram([]),
+                    aggregation::cumulative_temporality_selector(),
+                )
+                .with_memory(true),
             )
-            .with_memory(true),
+            .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
+            .build(),
         )
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .build(),
-    )
-    .init();
+        .init(),
+    );
 
     // Metrics
     let meter = global::meter(SERVICE_NAME);
@@ -146,7 +176,10 @@ async fn main() -> Result<(), Error> {
     // Control-Plane
     let routing_table: Arc<Mutex<Option<RoutingTable>>> = Arc::new(Mutex::new(None));
 
-    let http_client = reqwest::Client::builder().timeout(10 * SECOND).build()?;
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(cli.http_timeout))
+        .connect_timeout(Duration::from_secs(cli.http_timeout_connect))
+        .build()?;
 
     let local_store = Arc::new(ic_registry_local_store::LocalStoreImpl::new(
         cli.local_store,
@@ -184,6 +217,9 @@ async fn main() -> Result<(), Error> {
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(1 * MINUTE));
     let mut snapshot_runner = snapshot_runner;
 
+    let checker_metrics: Vec<MetricFamily> = Vec::new();
+    let checker_metrics = Arc::new(ArcSwap::from_pointee(checker_metrics));
+
     let checker = Checker::new(http_client);
     let checker = CheckWithMetrics(
         checker,
@@ -191,10 +227,10 @@ async fn main() -> Result<(), Error> {
     );
     let checker = WithRetry(
         checker,
-        3,          // max_attempts
-        1 * SECOND, // attempt_interval
+        cli.check_retries,                             // max_attempts
+        Duration::from_secs(cli.check_retry_interval), // attempt_interval
     );
-    let checker = WithSemaphore::wrap(checker, 32);
+    let checker = WithSemaphore::wrap(checker, cli.concurrency);
 
     // Service Reloads
     let ngx_reloader = PidReloader::new(cli.pid_path, Signal::SIGHUP);
@@ -262,15 +298,19 @@ async fn main() -> Result<(), Error> {
         check_persist_runner,
         MetricParams::new(&meter, SERVICE_NAME, "run"),
     );
-    let check_persist_runner = WithThrottle(check_persist_runner, ThrottleParams::new(10 * SECOND));
+    let check_persist_runner = WithThrottle(
+        check_persist_runner,
+        ThrottleParams::new(Duration::from_secs(cli.check_interval)),
+    );
     let mut check_persist_runner = check_persist_runner;
 
     // Metrics
     let metrics_router = Router::new()
         .route("/metrics", get(metrics_handler))
         .with_state(MetricsHandlerArgs {
-            exporter,
+            exporter: Arc::clone(&exporter),
             active_replicas,
+            checker_metrics: Arc::clone(&checker_metrics),
         });
 
     info!(
@@ -289,8 +329,12 @@ async fn main() -> Result<(), Error> {
             }
         }),
         task::spawn(async move {
+            let exporter = Arc::clone(&exporter);
+            let checker_metrics = Arc::clone(&checker_metrics);
+
             loop {
                 let _ = check_persist_runner.run().await;
+                update_checker_metrics(&exporter, &checker_metrics);
             }
         }),
         task::spawn(
@@ -306,18 +350,49 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs<A> {
-    exporter: PrometheusExporter,
+    exporter: Arc<PrometheusExporter>,
     active_replicas: A,
+    checker_metrics: Arc<ArcSwap<Vec<MetricFamily>>>,
+}
+
+// Gathers metrics relevant to node checking and stores them in the ArcSwap
+fn update_checker_metrics(
+    exporter: &Arc<PrometheusExporter>,
+    checker_metrics: &Arc<ArcSwap<Vec<MetricFamily>>>,
+) {
+    // Gather node checker metrics
+    let metric_families = Arc::new(
+        exporter
+            .registry()
+            .gather()
+            .into_iter()
+            .filter(|x| x.get_name().starts_with(CHECKER_METRIC_PREFIX))
+            .collect::<Vec<_>>(),
+    );
+
+    checker_metrics.store(metric_families);
 }
 
 async fn metrics_handler<A: ActiveChecker>(
     State(MetricsHandlerArgs {
         exporter,
         active_replicas,
+        checker_metrics,
     }): State<MetricsHandlerArgs<A>>,
     _: Request<Body>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    // Read out all metrics that are not related to node checking
+    let mut metric_families = exporter
+        .registry()
+        .gather()
+        .into_iter()
+        .filter(|x| !x.get_name().starts_with(CHECKER_METRIC_PREFIX))
+        .collect::<Vec<_>>();
+
+    // Concatenate node checking metrics with all others & sort the result to be consistent with gather() output
+    let mut _checker_metrics = { Vec::clone(&checker_metrics.load()) };
+    metric_families.append(&mut _checker_metrics);
+    metric_families.sort_by(|a, b| a.get_name().cmp(b.get_name()));
 
     let encoder = TextEncoder::new();
 
@@ -349,7 +424,9 @@ fn remove_stale<A: ActiveChecker>(active_replicas: A, metrics_text: &[u8]) -> Ve
         .flat_map(|ln| match ln {
             Ok(ln) => {
                 // Skip lines that arent gauges
-                if !ln.starts_with("control_plane_check_status{") {
+                if !ln.starts_with("control_plane_check_status{")
+                    && !ln.starts_with("control_plane_check_block_height{")
+                {
                     return Vec::from(format!("{ln}\n"));
                 }
 

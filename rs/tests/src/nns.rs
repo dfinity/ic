@@ -357,11 +357,11 @@ pub async fn vote_execute_proposal_assert_executed(
     proposal_id: ProposalId,
 ) {
     // Wait for the proposal to be accepted and executed.
+    let proposal_info = vote_and_execute_proposal(governance_canister, proposal_id).await;
     assert_eq!(
-        vote_and_execute_proposal(governance_canister, proposal_id)
-            .await
-            .status(),
-        ProposalStatus::Executed
+        proposal_info.status(),
+        ProposalStatus::Executed,
+        "proposal {proposal_id} did not execute: {proposal_info:?}"
     );
 }
 

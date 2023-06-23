@@ -16,7 +16,7 @@
         "IC_ICRC1_ARCHIVE_WASM_PATH=../../../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-archive-opt.wasm cargo build --manifest-path ../../Cargo.toml --target wasm32-unknown-unknown --profile canister-release --bin ic-icrc1-ledger",
         "ic-cdk-optimizer ../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-ledger.wasm -o ../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-ledger-opt.wasm"
       ],
-      "candid": "../../rosetta-api/icrc1/ledger/icrc1.did",
+      "candid": "../../rosetta-api/icrc1/ledger/ledger.did",
       "wasm": "../../target/wasm32-unknown-unknown/canister-release/ic-icrc1-ledger-opt.wasm",
       "type": "custom"
     },

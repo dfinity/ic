@@ -1,5 +1,4 @@
-use crate::driver::test_env_api::*;
-use crate::util::*;
+use crate::{driver::test_env_api::*, util::*};
 use anyhow::bail;
 use candid::Principal;
 use ic_base_types::PrincipalId;
@@ -47,9 +46,14 @@ pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg
                 debug!(log, "Try to get canister reference");
                 let mcan = MessageCanister::from_canister_id(&agent, canister_id);
                 debug!(log, "Success, will try to write next");
-                mcan.try_store_msg(msg.to_string(), create_delay(500, 30))
-                    .await
-                    .is_ok()
+                matches!(
+                    tokio::time::timeout(
+                        Duration::from_secs(30),
+                        mcan.try_store_msg(msg.to_string()),
+                    )
+                    .await,
+                    Ok(Ok(_))
+                )
             }
             Err(e) => {
                 debug!(log, "Could not create agent: {:?}", e,);
@@ -72,7 +76,13 @@ pub(crate) fn cannot_store_msg(log: Logger, url: &Url, canister_id: Principal, m
 }
 
 pub(crate) fn can_read_msg(log: &Logger, url: &Url, canister_id: Principal, msg: &str) -> bool {
-    block_on(can_read_msg_impl(log, url, canister_id, msg, 0))
+    block_on(can_read_msg_impl(
+        log,
+        url,
+        canister_id,
+        msg,
+        /*retries=*/ 0,
+    ))
 }
 
 pub(crate) fn can_read_msg_with_retries(
@@ -89,35 +99,33 @@ async fn can_read_msg_impl(
     log: &Logger,
     url: &Url,
     canister_id: Principal,
-    msg: &str,
+    expected_msg: &str,
     retries: usize,
 ) -> bool {
-    for i in 0..retries + 1 {
-        debug!(log, "Try to create agent for node {:?}...", url.as_str());
+    for i in 0..=retries {
+        debug!(log, "Try to create agent for node {}...", url);
+
         match create_agent(url.as_str()).await {
             Ok(agent) => {
                 debug!(log, "Try to get canister reference");
                 let mcan = MessageCanister::from_canister_id(&agent, canister_id);
                 debug!(log, "Success, will try to read next");
-                if mcan.try_read_msg().await == Ok(Some(msg.to_string())) {
-                    return true;
-                } else {
-                    info!(
+                match mcan.try_read_msg().await {
+                    Ok(Some(msg)) if msg == expected_msg => {
+                        return true;
+                    }
+                    Ok(Some(msg)) => debug!(
                         log,
-                        "Could not read expected message, will retry {:?} times",
-                        retries - i
-                    );
+                        "Received unexpected message: '{}', expected: '{}'", msg, expected_msg
+                    ),
+                    Ok(None) => debug!(log, "Received an empty message"),
+                    Err(err) => debug!(log, "Failed reading a message. Error: {}", err),
                 }
             }
-            Err(e) => {
-                debug!(
-                    log,
-                    "Could not create agent: {:?}, will retry {:?} times",
-                    e,
-                    retries - i
-                );
-            }
+            Err(err) => debug!(log, "Could not create agent: {:?}", err),
         };
+
+        debug!(log, "Will retry {} more times", retries - i);
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
     }
     false
@@ -232,12 +240,11 @@ pub fn install_nns_with_customizations_and_check_progress(
     });
     info!(logger, "IC is healthy and ready.");
 
-    topology
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
-        .install_nns_canisters_with_customizations(canister_wasm_strategy, customizations)
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    NnsInstallationBuilder::new()
+        .with_customizations(customizations)
+        .with_canister_wasm_strategy(canister_wasm_strategy)
+        .install(&nns_node, &topology.test_env())
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 

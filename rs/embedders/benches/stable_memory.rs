@@ -104,12 +104,12 @@ fn direct_wat() -> String {
             )
 
             (func (export "canister_query large_read")
-                (call $stable_read (i64.const 0) (i64.const 0) (i64.const {large_data_size}))
+                (call $stable_read (i64.const 0) (i64.const 0) (i64.const {large_read_data_size}))
                 (call $msg_reply)
             )
 
             (func (export "canister_update large_write")
-                (call $stable_write (i64.const 0) (i64.const 0) (i64.const {large_data_size}))
+                (call $stable_write (i64.const 0) (i64.const 0) (i64.const {large_write_data_size}))
                 (call $msg_reply)
             )
 
@@ -119,8 +119,9 @@ fn direct_wat() -> String {
     "#,
         wasm_pages = DIRECT_U64_INITIAL_NUMBER_OF_PAGES / 16 + 1, // 16 OS pages in a wasm page
         loop_count = DIRECT_U64_ENTRIES_TO_HANDLE,
-        large_data_size = 2 * 1024 * 1024, // 2 MiB
-        initial_memory = 2 * 1024 * 1024 / WASM_PAGE_SIZE_IN_BYTES,
+        large_write_data_size = 2 * 1024 * 1024, // 2 MiB
+        large_read_data_size = 20 * 1024 * 1024, // 20 MiB
+        initial_memory = 20 * 1024 * 1024 / WASM_PAGE_SIZE_IN_BYTES,
     )
 }
 
@@ -226,10 +227,10 @@ fn direct_2mb_write(c: &mut Criterion) {
     );
 }
 
-fn direct_2mb_read(c: &mut Criterion) {
+fn direct_20mb_read(c: &mut Criterion) {
     query_bench(
         c,
-        "direct_2mb_read",
+        "direct_20mb_read",
         &wat::parse_str(direct_wat()).unwrap(),
         "",
         0,
@@ -335,12 +336,17 @@ fn vec_u64_sparse_write(c: &mut Criterion) {
 }
 
 criterion_group!(
-    name = benches;
+    name = benches10;
     config = Criterion::default().sample_size(10);
-    targets = direct_u64_single_read, direct_u64_sparse_read, direct_u64_single_write, direct_u64_sparse_write,
-            direct_2mb_read, direct_2mb_write,
-            btree_u64_single_read, btree_u64_sparse_read, btree_u64_single_write, btree_u64_sparse_write,
-            vec_u64_single_read, vec_u64_sparse_read, vec_u64_single_write, vec_u64_sparse_write,
+    targets = direct_u64_sparse_write, vec_u64_sparse_write,
 );
 
-criterion_main!(benches);
+criterion_group!(
+    name = benches100;
+    config = Criterion::default().sample_size(100);
+    targets = direct_u64_single_read, direct_u64_sparse_read, direct_u64_single_write, direct_20mb_read,
+      direct_2mb_write, btree_u64_single_read, btree_u64_sparse_read, btree_u64_single_write, btree_u64_sparse_write,
+      vec_u64_single_read, vec_u64_sparse_read, vec_u64_single_write,
+);
+
+criterion_main!(benches10, benches100);

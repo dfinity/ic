@@ -14,7 +14,7 @@ def image_deps(mode, _malicious = False):
     Define all HostOS inputs.
 
     Args:
-      mode: Variant to be built, dev or prod.
+      mode: Variant to be built, dev, dev-sev or prod.
       _malicious: Unused, but currently needed to fit generic build structure.
     Returns:
       A dict containing inputs to build this image.
@@ -31,7 +31,8 @@ def image_deps(mode, _malicious = False):
             ":rootfs-tree.tar": "/",
 
             # additional files to install
-            "//publish/binaries:vsock_host": "/opt/ic/bin/vsock-host:0755",
+            "//publish/binaries:vsock_host": "/opt/ic/bin/vsock_host:0755",
+            "//ic-os:scripts/build-bootstrap-config-image.sh": "/opt/ic/bin/build-bootstrap-config-image.sh:0755",
         },
 
         # Set various configuration values

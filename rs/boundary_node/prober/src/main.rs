@@ -10,7 +10,6 @@ use std::{
 };
 
 use candid::{CandidType, Principal};
-use garcon::Delay;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
 };
@@ -50,7 +49,6 @@ use retry::WithRetry;
 
 const SERVICE_NAME: &str = "prober";
 
-const MILLISECOND: Duration = Duration::from_millis(1);
 const MINUTE: Duration = Duration::from_secs(60);
 
 const BILLION: u128 = 1_000_000_000;
@@ -374,9 +372,7 @@ fn create_agent_fn(identity: Arc<BasicIdentity>, root_key: Option<Vec<u8>>) -> i
             .context("failed to build agent")?;
 
         if let Some(root_key) = &root_key {
-            agent
-                .set_root_key(root_key.clone())
-                .context("failed to set root key")?;
+            agent.set_root_key(root_key.clone());
         }
 
         Ok((node_id, socket_addr, agent))
@@ -507,11 +503,6 @@ impl Create for Creator {
             .await
             .context("failed to build wallet")?;
 
-        let waiter = Delay::builder()
-            .throttle(500 * MILLISECOND)
-            .timeout(5 * MINUTE)
-            .build();
-
         let CreateResult { canister_id } = wallet
             .wallet_create_canister(
                 self.canister_cycles_amount, // cycles
@@ -519,7 +510,6 @@ impl Create for Creator {
                 None,                        // compute_allocation
                 None,                        // memory_allocation
                 None,                        // freezing_threshold
-                waiter,                      // waiter
             )
             .await
             .context("failed to create canister")?;
@@ -577,13 +567,8 @@ impl Install for Installer {
             0,
         );
 
-        let waiter = Delay::builder()
-            .throttle(500 * MILLISECOND)
-            .timeout(5 * MINUTE)
-            .build();
-
         install_call
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to install canister")?;
 
@@ -615,15 +600,10 @@ impl Probe for Prober {
 
         let read_result = u32::from_le_bytes(read_result);
 
-        let waiter = Delay::builder()
-            .throttle(500 * MILLISECOND)
-            .timeout(5 * MINUTE)
-            .build();
-
         let write_result = agent
             .update(&canister_id, "write")
             .with_arg(vec![0; 100])
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to update canister")?;
 
@@ -686,13 +666,8 @@ impl Stop for Stopper {
             0,
         );
 
-        let waiter = Delay::builder()
-            .throttle(500 * MILLISECOND)
-            .timeout(5 * MINUTE)
-            .build();
-
         stop_call
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to stop canister")?;
 
@@ -741,13 +716,8 @@ impl Delete for Deleter {
             0,
         );
 
-        let waiter = Delay::builder()
-            .throttle(500 * MILLISECOND)
-            .timeout(5 * MINUTE)
-            .build();
-
         delete_call
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to delete canister")?;
 

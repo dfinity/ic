@@ -1,7 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load(":system_tests.bzl", "symlink_dir", "uvm_config_image")
+load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
+load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
+load(":system_tests.bzl", "uvm_config_image")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "tip_nns_canisters", "tip_sns_canisters")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "tip_nns_canisters", "tip_sns_canisters")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -30,6 +32,51 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES,
+)
+
+download_pkgs(
+    name = "ubuntu_test_runtime_pkg",
+    additional_repos = [
+        "deb http://security.ubuntu.com/ubuntu focal-security main",
+    ],
+    image_tar = "@ubuntu_base//image",
+    packages = [
+        "ca-certificates",
+        "curl",  # TODO: remove since this is for debugging
+        "dosfstools",
+        "libssl1.1",  # the test-driver depends on libssl1.1.
+        "libunwind8",  # idem
+        "mtools",
+        "openssh-client",  # for ssh-keygen.
+        "rsync",  # for //rs/tests/consensus/orchestrator:sr_app_same_nodes_test
+        "zstd",  # for create-universal-vm-config-image.sh.
+    ],
+    tags = ["manual"],
+)
+
+install_pkgs(
+    name = "ubuntu_test_runtime_image",
+    image_tar = "@ubuntu_base//image",
+    installables_tar = ":ubuntu_test_runtime_pkg.tar",
+    installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
+    output_image_name = "ubuntu_test_runtime_image",
+    tags = ["manual"],
+)
+
+uvm_config_image(
+    name = "colocate_uvm_config_image",
+    srcs = [
+        "//rs/tests:activate-systest-uvm-config",
+        "@ubuntu_test_runtime//image",
+    ],
+    mode = "664",
+    modes = {
+        "activate": "775",
+    },
+    remap_paths = {
+        "/activate-systest-uvm-config": "/activate",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
 rust_test(
@@ -145,12 +192,6 @@ exports_files([
 ])
 
 copy_file(
-    name = "httpbin_image",
-    src = "@httpbin//image",
-    out = "httpbin.tar",
-)
-
-copy_file(
     name = "minica_image",
     src = "@minica//image",
     out = "minica.tar",
@@ -159,11 +200,11 @@ copy_file(
 uvm_config_image(
     name = "http_uvm_config_image",
     srcs = [
-        ":httpbin_image",
         ":minica_image",
         ":src/canister_http/universal_vm_activation.sh",
         "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
         "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.key",
+        "//rs/tests/httpbin-rs:httpbin_image.tar",
     ],
     mode = "664",
     modes = {

@@ -6,28 +6,24 @@
 //! can handle large state. In particular, that canister pre- and post-upgrade
 //! can finish within the execution limit.
 use dfn_core::println;
+use ic_base_types::PrincipalId;
+use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter;
+use ic_nns_common::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
+use ic_nns_governance::{
+    governance::{
+        HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS,
+        MAX_NUMBER_OF_NEURONS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
+    },
+    pb::v1::{
+        governance::NeuronInFlightCommand, proposal::Action, Governance as GovernanceProto,
+        NetworkEconomics as NetworkEconomicsProto, Neuron, Proposal, ProposalData, Topic, *,
+    },
+};
+use icp_ledger::Subaccount;
 use lazy_static::lazy_static;
 use prost::Message;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
-
-use ic_base_types::PrincipalId;
-use ic_nervous_system_common::stable_mem_utils::BufferedStableMemWriter;
-use ic_nns_common::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
-use ic_nns_governance::governance::{
-    HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, MAX_NUMBER_OF_NEURONS,
-    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
-};
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::*;
-use ic_nns_governance::{
-    governance::{MAX_FOLLOWEES_PER_TOPIC, MAX_NEURON_RECENT_BALLOTS},
-    pb::v1::{
-        governance::NeuronInFlightCommand, Governance as GovernanceProto,
-        NetworkEconomics as NetworkEconomicsProto, Neuron, Proposal, ProposalData, Topic,
-    },
-};
-use icp_ledger::Subaccount;
 
 const LOG_PREFIX: &str = "[Governance mem test] ";
 

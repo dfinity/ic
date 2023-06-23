@@ -4,7 +4,9 @@ mod tests;
 
 use ic_base_types::PrincipalId;
 use ic_crypto_ecdsa_secp256k1::PrivateKey;
-use ic_crypto_internal_types::sign::eddsa::ed25519::SecretKey as Ed25519SecretKey;
+use ic_crypto_internal_types::sign::eddsa::ed25519::{
+    PublicKey as Ed25519PublicKey, SecretKey as Ed25519SecretKey,
+};
 use ic_crypto_utils_basic_sig::conversions::Ed25519PemParseError;
 use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
@@ -51,6 +53,10 @@ impl Ed25519KeyPair {
             secret_key: secret_key.0,
             public_key: public_key.0,
         })
+    }
+
+    pub fn to_pem(&self) -> String {
+        Ed25519SecretKey(self.secret_key).to_pem(&Ed25519PublicKey(self.public_key))
     }
 
     pub fn sign(&self, msg: &[u8]) -> [u8; 64] {

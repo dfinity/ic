@@ -172,8 +172,8 @@ pub fn encrypt_and_prove(
             crypto::verify_chunking(
                 &crypto::ChunkingInstance::new(
                     public_keys.clone(),
-                    ciphertext.cc.clone(),
-                    ciphertext.rr.clone(),
+                    ciphertext.ciphertext_chunks().to_vec(),
+                    ciphertext.randomizers_r().clone(),
                 ),
                 &chunking_proof,
             ),
@@ -181,7 +181,7 @@ pub fn encrypt_and_prove(
             "We just created an invalid chunking proof"
         );
         let combined_ciphertexts: Vec<_> = ciphertext
-            .cc
+            .ciphertext_chunks()
             .iter()
             .map(|s| util::g1_from_big_endian_chunks(s))
             .collect();
@@ -191,7 +191,7 @@ pub fn encrypt_and_prove(
                 &crypto::SharingInstance::new(
                     public_keys,
                     public_coefficients,
-                    util::g1_from_big_endian_chunks(&ciphertext.rr),
+                    util::g1_from_big_endian_chunks(ciphertext.randomizers_r()),
                     combined_ciphertexts,
                 ),
                 &sharing_proof,
@@ -258,19 +258,19 @@ fn prove_chunking<R: RngCore + CryptoRng>(
     encryption_witness: &crypto::EncryptionWitness,
     rng: &mut R,
 ) -> crypto::ProofChunking {
-    let big_plaintext_chunks: Vec<Vec<Scalar>> = plaintext_chunks
+    let big_plaintext_chunks: Vec<_> = plaintext_chunks
         .iter()
         .map(|chunks| chunks.chunks_as_scalars())
         .collect();
 
     let chunking_instance = crypto::ChunkingInstance::new(
         public_keys.to_vec(),
-        ciphertext.cc.clone(),
-        ciphertext.rr.clone(),
+        ciphertext.ciphertext_chunks().to_vec(),
+        ciphertext.randomizers_r().clone(),
     );
 
     let chunking_witness =
-        crypto::ChunkingWitness::new(encryption_witness.r.clone(), big_plaintext_chunks);
+        crypto::ChunkingWitness::new(encryption_witness.witness().clone(), big_plaintext_chunks);
 
     crypto::prove_chunking(&chunking_instance, &chunking_witness, rng)
 }
@@ -286,14 +286,14 @@ fn prove_sharing<R: RngCore + CryptoRng>(
 ) -> crypto::ProofSharing {
     // Convert fs encryption data:
     let combined_ciphertexts: Vec<_> = ciphertext
-        .cc
+        .ciphertext_chunks()
         .iter()
         .map(|s| util::g1_from_big_endian_chunks(s))
         .collect();
 
-    let combined_r = util::g1_from_big_endian_chunks(&ciphertext.rr);
+    let combined_r = util::g1_from_big_endian_chunks(ciphertext.randomizers_r());
 
-    let combined_r_scalar = util::scalar_from_big_endian_chunks(&encryption_witness.r);
+    let combined_r_scalar = util::scalar_from_big_endian_chunks(encryption_witness.witness());
 
     let combined_plaintexts = plaintext_chunks
         .iter()
@@ -388,8 +388,8 @@ pub fn verify_zk_proofs(
     crypto::verify_chunking(
         &crypto::ChunkingInstance::new(
             public_keys.clone(),
-            ciphertext.cc.clone(),
-            ciphertext.rr.clone(),
+            ciphertext.ciphertext_chunks().to_vec(),
+            ciphertext.randomizers_r().clone(),
         ),
         &chunking_proof,
     )
@@ -412,9 +412,9 @@ pub fn verify_zk_proofs(
             })
         })?;
 
-    let combined_r = util::g1_from_big_endian_chunks(&ciphertext.rr);
+    let combined_r = util::g1_from_big_endian_chunks(ciphertext.randomizers_r());
     let combined_ciphertexts: Vec<_> = ciphertext
-        .cc
+        .ciphertext_chunks()
         .iter()
         .map(|s| util::g1_from_big_endian_chunks(s))
         .collect();

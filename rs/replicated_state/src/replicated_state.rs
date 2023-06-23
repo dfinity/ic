@@ -323,11 +323,6 @@ pub struct MemoryTaken {
     wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
     canister_history: NumBytes,
-    /// Total memory taken. This is the sum of `execution`, `messages`,
-    /// and `canister_history` on application subnets; and excludes
-    /// canister message memory (i.e. sum of `execution` and
-    /// `canister_history`) on system subnets.
-    total: NumBytes,
 }
 
 impl MemoryTaken {
@@ -349,11 +344,6 @@ impl MemoryTaken {
     /// Returns the amount of memory taken by canister history.
     pub fn canister_history(&self) -> NumBytes {
         self.canister_history
-    }
-
-    /// Returns the total amount of memory taken.
-    pub fn total(&self) -> NumBytes {
-        self.total
     }
 }
 
@@ -472,7 +462,7 @@ impl ReplicatedState {
     pub fn get_active_canister(
         &self,
         canister_id: &CanisterId,
-    ) -> Result<CanisterState, UserError> {
+    ) -> Result<&CanisterState, UserError> {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
             UserError::new(
                 ErrorCode::CanisterNotFound,
@@ -489,7 +479,7 @@ impl ReplicatedState {
                 ),
             ))
         } else {
-            Ok(canister.clone())
+            Ok(canister)
         }
     }
 
@@ -505,8 +495,8 @@ impl ReplicatedState {
             .unwrap_or(IngressStatus::Unknown)
     }
 
-    pub fn get_ingress_history(&self) -> IngressHistoryState {
-        self.metadata.ingress_history.clone()
+    pub fn get_ingress_history(&self) -> &IngressHistoryState {
+        &self.metadata.ingress_history
     }
 
     /// Sets the `status` for `message_id` in the ingress history. It will
@@ -586,21 +576,11 @@ impl ReplicatedState {
 
         message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
 
-        // Raw memory taken includes `wasm_custom_sections_memory_taken` so we
-        // don't have to add it to the total memory taken separately.
-        let mut total_memory_taken = raw_memory_taken + canister_history_memory_taken;
-
-        // Add message memory taken to total for non-system subnets only.
-        if self.metadata.own_subnet_type != SubnetType::System {
-            total_memory_taken += message_memory_taken;
-        }
-
         MemoryTaken {
-            execution: raw_memory_taken,
+            execution: raw_memory_taken + canister_history_memory_taken,
             messages: message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
-            total: total_memory_taken,
         }
     }
 
@@ -631,7 +611,7 @@ impl ReplicatedState {
     /// input queue).
     ///
     /// The messages from the same subnet get pushed into the local subnet
-    /// queue, while the messages form the other subnets get pushed to the inter
+    /// queue, while the messages from the other subnets get pushed to the inter
     /// subnet queues.
     ///
     /// On failure (queue full, canister not found, out of memory), returns the
@@ -641,7 +621,6 @@ impl ReplicatedState {
     pub fn push_input(
         &mut self,
         msg: RequestOrResponse,
-        max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
@@ -655,7 +634,6 @@ impl ReplicatedState {
         match self.canister_state_mut(&msg.receiver()) {
             Some(receiver_canister) => receiver_canister.push_input(
                 msg,
-                max_canister_memory_size,
                 subnet_available_memory,
                 own_subnet_type,
                 input_queue_type,
@@ -666,8 +644,6 @@ impl ReplicatedState {
                     push_input(
                         &mut self.subnet_queues,
                         msg,
-                        // No canister limit, so pass the subnet limit twice.
-                        *subnet_available_memory,
                         subnet_available_memory,
                         own_subnet_type,
                         input_queue_type,
@@ -799,11 +775,11 @@ impl ReplicatedState {
         crate::bitcoin::push_response(self, response)
     }
 
-    /// Times out requests in all `OutputQueues` found in the replicated state (except the subnet
-    /// queues). Returns the number of requests that were timed out.
+    /// Times out all requests with expired deadlines (given `current_time`) in all
+    /// canister (but not subnet) `OutputQueues`. Returns the number of timed out
+    /// requests.
     ///
     /// See `CanisterQueues::time_out_requests` for further details.
-    #[allow(clippy::needless_collect)]
     pub fn time_out_requests(&mut self, current_time: Time) -> u64 {
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_requests()` on it and replace it afterwards; and removing
@@ -833,6 +809,121 @@ impl ReplicatedState {
         }
 
         timed_out_requests_count
+    }
+
+    /// Splits the replicated state as part of subnet splitting phase 1, retaining
+    /// only the canisters of `new_subnet_id` (as determined by the provided routing
+    /// table).
+    ///
+    /// A subnet split starts with a subnet A and results in two subnets, A' and B.
+    /// For the sake of clarity, comments refer to the two resulting subnets as
+    /// *subnet A'* and *subnet B*; and to the original subnet as *subnet A*.
+    /// Because subnet A' retains the subnet ID of subnet A, it is identified by
+    /// having `new_subnet_id == self.own_subnet_id`. Conversely, subnet B has
+    /// `new_subnet_id != self.own_subnet_id`.
+    ///
+    /// This first phase only consists of:
+    ///  * Splitting the canisters hosted by A among A' and B, as determined by the
+    ///    provided routing table.
+    ///  * Producing a new, empty `MetadataState` for subnet B, but preserving
+    ///    the ingress history unchanged.
+    ///
+    /// Preserving the individual canister states and ingress history without
+    /// mutations in a first phase, makes it trivial to ensure that the state has
+    /// not been tampered with during the split (by checking that the file hashes
+    /// have not changed).
+    ///
+    /// Internal adjustments to the various parts of the state happen in a second
+    /// phase, during subnet startup (see [`Self::after_split()`]).
+    pub fn split(self, new_subnet_id: SubnetId, routing_table: &RoutingTable) -> Self {
+        // Take apart `self` and put it back together, in order for the compiler to
+        // enforce an explicit decision whenever new fields are added.
+        let Self {
+            mut canister_states,
+            metadata,
+            mut subnet_queues,
+            consensus_queue,
+        } = self;
+
+        // Consensus queue is always empty at the end of the round.
+        assert!(consensus_queue.is_empty());
+
+        // Retain only canisters hosted by `own_subnet_id`.
+        //
+        // TODO: Validate that canisters are split across no more than 2 subnets.
+        canister_states
+            .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(new_subnet_id));
+
+        // All subnet messages (ingress and canister) only remain on subnet A' because:
+        //
+        //  * Message Routing would drop a response from subnet B to a request it had
+        //    routed to subnet A.
+        //  * Message Routing will take care of routing the responses to the originator,
+        //    regardless of subnet.
+        //  * Some requests (ingress or canister) will fail if the target canister has
+        //    been migrated away, but the alternative would require unpacking and acting
+        //    on the contents of arbitrary methods' payloads.
+        if metadata.own_subnet_id != new_subnet_id {
+            // On subnet B, start with empty subnet queues.
+            subnet_queues = CanisterQueues::default();
+        }
+
+        // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
+        // setting the split marker).
+        let metadata = metadata.split(new_subnet_id);
+
+        Self {
+            canister_states,
+            metadata,
+            subnet_queues,
+            consensus_queue,
+        }
+    }
+
+    /// Makes adjustments to the replicated state, in the second phase of a subnet
+    /// split (see `Self::split()` for the first phase).
+    ///
+    /// This second phase, during subnet startup:
+    ///
+    /// * Updates canisters' input schedules, based on `self.canister_states`.
+    /// * Prunes the ingress history, retaining only messages addressed to this
+    ///   subnet and messages in terminal states (which will time out).
+    pub fn after_split(self) -> Self {
+        // Take apart `self` and put it back together, in order for the compiler to
+        // enforce an explicit decision whenever new fields are added.
+        let Self {
+            mut canister_states,
+            mut metadata,
+            subnet_queues,
+            consensus_queue,
+        } = self;
+
+        metadata
+            .split_from
+            .expect("Not a state resulting from a subnet split");
+
+        // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
+        // canisters are present in `canister_states`.
+        let local_canister_ids = canister_states.keys().cloned().collect::<Vec<_>>();
+        for canister_id in local_canister_ids.iter() {
+            let mut canister_state = canister_states.remove(canister_id).unwrap();
+            canister_state
+                .system_state
+                .split_input_schedules(canister_id, &canister_states);
+            canister_states.insert(*canister_id, canister_state);
+        }
+
+        // Prune ingress history.
+        metadata = metadata.after_split(|canister_id| canister_states.contains_key(canister_id));
+
+        let mut res = Self {
+            canister_states,
+            metadata,
+            subnet_queues,
+            consensus_queue,
+        };
+        res.update_stream_responses_size_bytes();
+        res
     }
 }
 

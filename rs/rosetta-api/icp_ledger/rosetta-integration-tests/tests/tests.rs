@@ -12,7 +12,6 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use url::Url;
-
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
 const ATTEMPTS: u8 = 100;
 const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
@@ -83,26 +82,11 @@ fn icp_ledger_init() -> Vec<u8> {
     let sender = test_identity()
         .sender()
         .expect("test identity sender not found!");
-    Encode!(&icp_ledger::LedgerCanisterInitPayload {
-        minting_account: AccountIdentifier::new(sender.into(), None),
-        icrc1_minting_account: None,
-        initial_values: std::collections::HashMap::new(),
-        max_message_size_bytes: None,
-        transaction_window: None,
-        archive_options: None,
-        send_whitelist: std::collections::HashSet::new(),
-        transfer_fee: None,
-        token_symbol: None,
-        token_name: None,
-    })
-    .unwrap()
-}
-
-fn delay() -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(500))
-        .timeout(std::time::Duration::from_secs(60 * 5))
+    Encode!(&icp_ledger::LedgerCanisterInitPayload::builder()
+        .minting_account(AccountIdentifier::new(sender.into(), None))
         .build()
+        .unwrap())
+    .unwrap()
 }
 
 #[derive(CandidType, Deserialize)]
@@ -119,7 +103,7 @@ async fn create_canister(
             "provisional_create_canister_with_cycles",
         )
         .with_arg(&Encode!(&CreateCanisterArgs::default())?)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await?;
     let result = Decode!(&response, CreateCanisterResult)?;
     Ok(result)
@@ -144,7 +128,7 @@ async fn install_canister(
             memory_allocation: None,
             compute_allocation: None,
         })?)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await?;
     Ok(())
 }

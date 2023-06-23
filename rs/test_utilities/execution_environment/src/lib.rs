@@ -10,7 +10,7 @@ use ic_config::{
     execution_environment::{BitcoinConfig, Config},
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
-    subnet_config::SubnetConfigs,
+    subnet_config::SubnetConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -47,7 +47,7 @@ use ic_replicated_state::{
     page_map::PAGE_SIZE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
-    NodeTopology, PageIndex, ReplicatedState, SubnetTopology,
+    PageIndex, ReplicatedState, SubnetTopology,
 };
 use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
@@ -64,7 +64,7 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
 
-use maplit::btreemap;
+use maplit::{btreemap, btreeset};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -83,18 +83,12 @@ pub fn generate_subnets(
     let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
     for subnet_id in subnet_ids {
         let mut subnet_type = SubnetType::System;
-        let mut nodes = btreemap! {};
+        let mut nodes = btreeset! {};
         if subnet_id == own_subnet_id {
             subnet_type = own_subnet_type;
             // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
             for i in 0..own_subnet_size {
-                nodes.insert(
-                    node_test_id(i as u64),
-                    NodeTopology {
-                        ip_address: "fake-ip-address".to_string(),
-                        http_port: 1234,
-                    },
-                );
+                nodes.insert(node_test_id(i as u64));
             }
         }
         result.insert(
@@ -299,7 +293,10 @@ impl ExecutionTest {
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
-        let memory_usage = self.execution_state(canister_id).memory_usage();
+        let memory_usage = self.execution_state(canister_id).memory_usage()
+            + self
+                .canister_state(canister_id)
+                .canister_history_memory_usage();
         let memory_allocation = self
             .canister_state(canister_id)
             .system_state
@@ -318,7 +315,7 @@ impl ExecutionTest {
 
     pub fn freezing_threshold(&self, canister_id: CanisterId) -> Cycles {
         let canister = self.canister_state(canister_id);
-        let memory_usage = canister.memory_usage(self.state().metadata.own_subnet_type);
+        let memory_usage = canister.memory_usage();
         let memory_allocation = canister.system_state.memory_allocation;
         let compute_allocation = canister.scheduler_state.compute_allocation;
         let freeze_threshold = canister.system_state.freeze_threshold;
@@ -1239,8 +1236,7 @@ impl ExecutionTest {
     /// `self.xnet_messages`.
     pub fn induct_messages(&mut self) {
         let mut state = self.state.take().unwrap();
-        let mut subnet_available_memory = self.subnet_available_memory.get_total_memory();
-        let max_canister_memory_size = self.exec_env.max_canister_memory_size();
+        let mut subnet_available_memory = self.subnet_available_memory.get_message_memory();
         let output_messages = get_output_messages(&mut state);
         let mut canisters = state.take_canister_states();
         for (canister_id, message) in output_messages {
@@ -1248,7 +1244,6 @@ impl ExecutionTest {
                 Some(dest_canister) => {
                     let result = dest_canister.push_input(
                         message.clone(),
-                        max_canister_memory_size,
                         &mut subnet_available_memory,
                         state.metadata.own_subnet_type,
                         InputQueueType::LocalSubnet,
@@ -1421,9 +1416,10 @@ pub struct ExecutionTestBuilder {
     install_code_slice_instruction_limit: NumInstructions,
     instruction_limit_without_dts: NumInstructions,
     initial_canister_cycles: Cycles,
-    subnet_total_memory: i64,
+    subnet_execution_memory: i64,
     subnet_message_memory: i64,
     subnet_wasm_custom_sections_memory: i64,
+    subnet_memory_reservation: i64,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
@@ -1439,15 +1435,14 @@ pub struct ExecutionTestBuilder {
     cost_to_compile_wasm_instruction: u64,
     max_query_call_graph_instructions: NumInstructions,
     stable_memory_dirty_page_limit: NumPages,
+    time: Time,
 }
 
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let scheduler_config = SubnetConfigs::default()
-            .own_subnet_config(subnet_type)
-            .scheduler_config;
-        let subnet_total_memory = ic_config::execution_environment::Config::default()
+        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
+        let subnet_execution_memory = ic_config::execution_environment::Config::default()
             .subnet_memory_capacity
             .get() as i64;
         let subnet_message_memory = ic_config::execution_environment::Config::default()
@@ -1455,6 +1450,9 @@ impl Default for ExecutionTestBuilder {
             .get() as i64;
         let subnet_wasm_custom_sections_memory = ic_config::execution_environment::Config::default()
             .subnet_wasm_custom_sections_memory_capacity
+            .get() as i64;
+        let subnet_memory_reservation = ic_config::execution_environment::Config::default()
+            .subnet_memory_reservation
             .get() as i64;
         let max_instructions_per_composite_query_call =
             ic_config::execution_environment::Config::default().max_query_call_graph_instructions;
@@ -1475,9 +1473,10 @@ impl Default for ExecutionTestBuilder {
             instruction_limit_without_dts: scheduler_config
                 .max_instructions_per_message_without_dts,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
-            subnet_total_memory,
+            subnet_execution_memory,
             subnet_message_memory,
             subnet_wasm_custom_sections_memory,
+            subnet_memory_reservation,
             registry_settings: test_registry_settings(),
             manual_execution: false,
             rate_limiting_of_instructions: false,
@@ -1496,6 +1495,7 @@ impl Default for ExecutionTestBuilder {
             max_query_call_graph_instructions: max_instructions_per_composite_query_call,
             stable_memory_dirty_page_limit: ic_config::execution_environment::Config::default()
                 .stable_memory_dirty_page_limit,
+            time: mock_time(),
         }
     }
 }
@@ -1606,9 +1606,16 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_subnet_total_memory(self, subnet_total_memory: i64) -> Self {
+    pub fn with_subnet_execution_memory(self, subnet_execution_memory: i64) -> Self {
         Self {
-            subnet_total_memory,
+            subnet_execution_memory,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_memory_reservation(self, subnet_memory_reservation: i64) -> Self {
+        Self {
+            subnet_memory_reservation,
             ..self
         }
     }
@@ -1745,6 +1752,11 @@ impl ExecutionTestBuilder {
         self
     }
 
+    pub fn with_time(mut self, time: Time) -> Self {
+        self.time = time;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -1790,9 +1802,7 @@ impl ExecutionTestBuilder {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let mut config = SubnetConfigs::default()
-            .own_subnet_config(self.subnet_type)
-            .cycles_account_manager_config;
+        let mut config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }
@@ -1863,8 +1873,9 @@ impl ExecutionTestBuilder {
             query_caching,
             query_cache_capacity: self.query_cache_capacity.into(),
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
-            subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
+            subnet_memory_capacity: NumBytes::from(self.subnet_execution_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
+            subnet_memory_reservation: NumBytes::from(self.subnet_memory_reservation as u64),
             bitcoin: BitcoinConfig {
                 privileged_access: self.bitcoin_privileged_access,
                 ..Default::default()
@@ -1928,11 +1939,11 @@ impl ExecutionTestBuilder {
             xnet_messages: vec![],
             lost_messages: vec![],
             subnet_available_memory: SubnetAvailableMemory::new(
-                self.subnet_total_memory,
+                self.subnet_execution_memory - self.subnet_memory_reservation,
                 self.subnet_message_memory,
                 self.subnet_wasm_custom_sections_memory,
             ),
-            time: mock_time(),
+            time: self.time,
             instruction_limits: InstructionLimits::new(
                 deterministic_time_slicing,
                 self.instruction_limit,

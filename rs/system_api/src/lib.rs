@@ -26,8 +26,8 @@ use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{SystemMethod, WasmClosure},
-    CanisterId, CanisterTimer, ComputeAllocation, Cycles, NumBytes, NumInstructions, NumPages,
-    PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
+    NumInstructions, NumPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -154,6 +154,7 @@ impl InstructionLimits {
 pub struct ExecutionParameters {
     pub instruction_limits: InstructionLimits,
     pub canister_memory_limit: NumBytes,
+    pub memory_allocation: MemoryAllocation,
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,
@@ -569,14 +570,15 @@ struct MemoryUsage {
     // expansions in the canister's memory need to be deducted from here.
     subnet_available_memory: SubnetAvailableMemory,
 
-    /// Total memory allocated during this message execution. Note that
-    /// `total_allocated_memory` should always be `>= allocated_message_memory`.
-    total_allocated_memory: NumBytes,
+    /// Execution memory allocated during this message execution, i.e. the canister
+    /// memory (Wasm binary, Wasm memory, stable memory) without message memory.
+    allocated_execution_memory: NumBytes,
 
     /// Message memory allocated during this message execution.
     allocated_message_memory: NumBytes,
 
-    log: ReplicaLogger,
+    /// The memory allocation of the canister.
+    memory_allocation: MemoryAllocation,
 }
 
 impl MemoryUsage {
@@ -586,6 +588,7 @@ impl MemoryUsage {
         limit: NumBytes,
         current_usage: NumBytes,
         subnet_available_memory: SubnetAvailableMemory,
+        memory_allocation: MemoryAllocation,
     ) -> Self {
         // A canister's current usage should never exceed its limit. This is
         // most probably a bug. Panicking here due to this inconsistency has the
@@ -604,9 +607,9 @@ impl MemoryUsage {
             limit,
             current_usage,
             subnet_available_memory,
-            total_allocated_memory: NumBytes::from(0),
+            allocated_execution_memory: NumBytes::from(0),
             allocated_message_memory: NumBytes::from(0),
-            log,
+            memory_allocation,
         }
     }
 
@@ -632,74 +635,89 @@ impl MemoryUsage {
         self.deallocate_memory(bytes, NumBytes::from(0))
     }
 
-    /// Validates that `total_bytes >= message_bytes` holds. In debug build it
-    /// will panic in case this condition does not hold. In release builds an
-    /// error will be logged. This is because panicking due to this inconsistency
-    /// has the potential to put the entire subnet in a crash loop.
-    fn validate_requested_memory(&self, total_bytes: NumBytes, message_bytes: NumBytes) {
-        debug_assert!(total_bytes >= message_bytes);
-        if total_bytes < message_bytes {
-            error!(
-                self.log,
-                "[EXC-BUG] Called `allocate_memory`: with total_bytes {} < message_bytes {}",
-                total_bytes,
-                message_bytes
-            );
-        }
-    }
-
-    /// Tries to allocate the requested amount of memory (in bytes). `total_bytes`
-    /// refers to the total number of requested bytes and `message_bytes` refers to
-    /// the required bytes for messages, meaning that this method needs to be called
-    /// with `total_bytes >= message_bytes`.
+    /// Tries to allocate the requested amount of memory (in bytes). `execution_bytes`
+    /// refers to the number of requested bytes for Wasm/stable memory; and
+    /// `message_bytes` refers to the bytes requested for messages.
+    ///
+    /// If the canister has memory allocation, then this function doesn't allocate
+    /// bytes, but only increases `current_usage`.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
     /// if either the canister memory limit, the subnet memory limit, or the
     /// message memory limit would be exceeded.
     fn allocate_memory(
         &mut self,
-        total_bytes: NumBytes,
+        execution_bytes: NumBytes,
         message_bytes: NumBytes,
     ) -> HypervisorResult<()> {
-        self.validate_requested_memory(total_bytes, message_bytes);
-
-        let (new_usage, overflow) = self.current_usage.get().overflowing_add(total_bytes.get());
+        let (new_usage, overflow) = self
+            .current_usage
+            .get()
+            .overflowing_add(execution_bytes.get());
         if overflow || new_usage > self.limit.get() {
             return Err(HypervisorError::OutOfMemory);
         }
-        match self.subnet_available_memory.try_decrement(
-            total_bytes,
-            message_bytes,
-            NumBytes::from(0),
-        ) {
-            Ok(()) => {
+
+        // The canister can increase its memory usage up to the reserved bytes without
+        // decrementing the subnet available memory because it was already decremented
+        // at the time of reservation.
+        match self.memory_allocation {
+            MemoryAllocation::BestEffort => {
+                match self.subnet_available_memory.try_decrement(
+                    execution_bytes,
+                    message_bytes,
+                    NumBytes::from(0),
+                ) {
+                    Ok(()) => {
+                        self.current_usage = NumBytes::from(new_usage);
+                        self.allocated_execution_memory += execution_bytes;
+                        self.allocated_message_memory += message_bytes;
+                        Ok(())
+                    }
+                    Err(_err) => Err(HypervisorError::OutOfMemory),
+                }
+            }
+            MemoryAllocation::Reserved(reserved_bytes) => {
+                // Note that this branch should be unreachable because
+                // `self.limit` should already be set to `reserved_bytes` and
+                // the guard above should have returned an error. In order to
+                // keep code robust, we repeat the check here again.
+                if new_usage > reserved_bytes.get() {
+                    return Err(HypervisorError::OutOfMemory);
+                }
                 self.current_usage = NumBytes::from(new_usage);
-                self.total_allocated_memory += total_bytes;
-                self.allocated_message_memory += message_bytes;
-                debug_assert!(self.total_allocated_memory >= self.allocated_message_memory);
                 Ok(())
             }
-            Err(_err) => Err(HypervisorError::OutOfMemory),
         }
     }
 
-    /// Unconditionally deallocates the given number of bytes and message bytes. Should
-    /// only be called immediately after `allocate_memory()`, with the same number of bytes,
-    /// in case growing the heap failed or upon clean up.
-    fn deallocate_memory(&mut self, total_bytes: NumBytes, message_bytes: NumBytes) {
-        self.validate_requested_memory(total_bytes, message_bytes);
+    /// Deallocates the given number of execution bytes and message bytes.
+    /// Should only be called immediately after `allocate_memory()`, with the
+    /// same number of bytes, in case growing the heap failed or upon clean up.
+    ///
+    /// If the canister has memory allocation, then this function doesn't deallocate
+    /// bytes, but only decreases `current_usage`.
+    fn deallocate_memory(&mut self, execution_bytes: NumBytes, message_bytes: NumBytes) {
+        debug_assert!(self.current_usage >= execution_bytes);
+        self.current_usage -= execution_bytes;
 
-        self.subnet_available_memory
-            .increment(total_bytes, message_bytes, NumBytes::from(0));
-
-        debug_assert!(self.current_usage >= total_bytes);
-        debug_assert!(self.total_allocated_memory >= total_bytes);
-        debug_assert!(self.allocated_message_memory >= message_bytes);
-        self.current_usage -= total_bytes;
-        self.total_allocated_memory -= total_bytes;
-        self.allocated_message_memory -= message_bytes;
-
-        debug_assert!(self.total_allocated_memory >= self.allocated_message_memory);
+        match self.memory_allocation {
+            MemoryAllocation::BestEffort => {
+                self.subnet_available_memory.increment(
+                    execution_bytes,
+                    message_bytes,
+                    NumBytes::from(0),
+                );
+                debug_assert!(self.allocated_execution_memory >= execution_bytes);
+                debug_assert!(self.allocated_message_memory >= message_bytes);
+                self.allocated_execution_memory -= execution_bytes;
+                self.allocated_message_memory -= message_bytes;
+            }
+            MemoryAllocation::Reserved(reserved_bytes) => {
+                debug_assert!(self.current_usage + execution_bytes <= reserved_bytes);
+                // Nothing to do since we didn't actually allocate new memory.
+            }
+        }
     }
 }
 
@@ -770,6 +788,7 @@ impl SystemApiImpl {
             execution_parameters.canister_memory_limit,
             canister_current_memory_usage,
             subnet_available_memory,
+            execution_parameters.memory_allocation,
         );
         let stable_memory = StableMemory::new(stable_memory);
         let slice_limit = execution_parameters.instruction_limits.slice().get();
@@ -829,7 +848,7 @@ impl SystemApiImpl {
         {
             // Return allocated memory in case of failed message execution.
             self.memory_usage.deallocate_memory(
-                self.memory_usage.total_allocated_memory,
+                self.memory_usage.allocated_execution_memory,
                 self.memory_usage.allocated_message_memory,
             );
             return Err(err);
@@ -876,9 +895,9 @@ impl SystemApiImpl {
         self.memory_usage.current_usage
     }
 
-    /// Bytes allocated in the Wasm/stable memory and messages.
+    /// Bytes allocated in the Wasm/stable memory.
     pub fn get_allocated_bytes(&self) -> NumBytes {
-        self.memory_usage.total_allocated_memory
+        self.memory_usage.allocated_execution_memory
     }
 
     /// Bytes allocated in messages.
@@ -1196,7 +1215,7 @@ impl SystemApiImpl {
         };
         if self
             .memory_usage
-            .allocate_memory(reservation_bytes, reservation_bytes)
+            .allocate_memory(NumBytes::from(0), reservation_bytes)
             .is_err()
         {
             return abort(req, &mut self.sandbox_safe_system_state);
@@ -1212,7 +1231,7 @@ impl SystemApiImpl {
             Ok(()) => Ok(0),
             Err(request) => {
                 self.memory_usage
-                    .deallocate_memory(reservation_bytes, reservation_bytes);
+                    .deallocate_memory(NumBytes::from(0), reservation_bytes);
                 abort(request, &mut self.sandbox_safe_system_state)
             }
         }
@@ -1723,58 +1742,6 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_controller_size(&self) -> HypervisorResult<usize> {
-        let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_controller_size")),
-            ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
-                Ok(self.sandbox_safe_system_state.controller.as_slice().len())
-            }
-        };
-        trace_syscall!(self, ic0_controller_size, result);
-        result
-    }
-
-    fn ic0_controller_copy(
-        &mut self,
-        dst: u32,
-        offset: u32,
-        size: u32,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()> {
-        let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_controller_copy")),
-            ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
-                valid_subslice("ic0.controller_copy heap", dst, size, heap)?;
-                let controller = self.sandbox_safe_system_state.controller;
-                let id_bytes = controller.as_slice();
-                let slice = valid_subslice("ic0.controller_copy id", offset, size, id_bytes)?;
-                let (dst, size) = (dst as usize, size as usize);
-                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
-                Ok(())
-            }
-        };
-        trace_syscall!(self, ic0_controller_copy, result);
-        result
-    }
-
     fn ic0_call_new(
         &mut self,
         callee_src: u32,
@@ -2030,9 +1997,6 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_size(&self) -> HypervisorResult<u32> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable_size"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2051,9 +2015,6 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable_grow"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2092,9 +2053,6 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable_read"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2127,9 +2085,6 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable_write"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2158,9 +2113,6 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable64_size"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2179,9 +2131,6 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable64_grow"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2220,9 +2169,6 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable64_read"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2266,9 +2212,6 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable64_write"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }

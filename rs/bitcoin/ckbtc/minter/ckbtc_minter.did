@@ -191,6 +191,7 @@ type BitcoinAddress = variant {
     p2wpkh_v0 : blob;
     p2pkh : blob;
     p2sh : blob;
+    p2tr : blob;
 };
 
 type MinterInfo = record {
@@ -210,6 +211,11 @@ type Event = variant {
         received_at : nat64;
         kyt_provider : opt principal;
     };
+    distributed_kyt_fee : record {
+        kyt_provider : principal;
+        amount : nat64;
+        block_index: nat64;
+    };
     removed_retrieve_btc_request : record { block_index : nat64 };
     sent_transaction : record {
         requests : vec nat64;
@@ -217,6 +223,14 @@ type Event = variant {
         utxos : vec Utxo;
         change_output : opt record { vout : nat32; value : nat64 };
         submitted_at : nat64;
+        fee: opt nat64;
+    };
+    replaced_transaction : record {
+        new_txid : blob;
+        old_txid : blob;
+        change_output : record { vout : nat32; value : nat64 };
+        submitted_at : nat64;
+        fee: nat64;
     };
     confirmed_transaction : record { txid : blob };
     checked_utxo : record {
@@ -238,7 +252,7 @@ type Event = variant {
 type MinterArg = variant {
     Init : InitArgs;
     Upgrade : opt UpgradeArgs;
-}
+};
 
 service : (minter_arg : MinterArg) -> {
     // Section "Convert BTC to ckBTC" {{{
@@ -274,6 +288,7 @@ service : (minter_arg : MinterArg) -> {
     // Returns the account to which the caller should deposit ckBTC
     // before withdrawing BTC using the [retrieve_btc] endpoint.
     get_withdrawal_account : () -> (Account);
+
 
     // Submits a request to convert ckBTC to BTC.
     //

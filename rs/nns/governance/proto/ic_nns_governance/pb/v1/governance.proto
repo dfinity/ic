@@ -111,7 +111,7 @@ enum Topic {
 // Every neuron is in one of three states.
 //
 // Note that `Disbursed` is not a state of a neuron, as the neuron is
-// consumed throught the act disbursement (using the method
+// consumed through the act of disbursement (using the method
 // [Governance::disburse]).
 //
 // See [neuron::DissolveState] for detail on how the different states
@@ -120,7 +120,7 @@ enum NeuronState {
   // Not a valid state. Required by Protobufs.
   NEURON_STATE_UNSPECIFIED = 0;
   // In this state, the neuron is not dissolving and has a specific
-  // `dissolve_delay`. It accrues `age` by the passge of time and it
+  // `dissolve_delay`. It accrues `age` by the passage of time and it
   // can vote if `dissolve_delay` is at least six months. The method
   // [Neuron::start_dissolving] can be called to transfer the neuron
   // to the `Dissolving` state. The method
@@ -207,7 +207,7 @@ message NeuronStakeTransfer {
   bytes from_subaccount = 3;
   // The subaccount to which the transfer was made.
   bytes to_subaccount = 4;
-  // The amount of stake that was transfered.
+  // The amount of stake that was transferred.
   uint64 neuron_stake_e8s = 5;
   // The block height at which the transfer occurred.
   uint64 block_height = 6;
@@ -362,10 +362,9 @@ message Neuron {
   // by voting.
   bool not_for_profit = 16;
 
-  // If set, this neuron participates with all of its stake in the
-  // Internet Computer's community fund. Setting this value is an
-  // irreversible decision that can only be made by the neuron's
-  // controller.
+  // If set, this neuron is a member of the Community Fund. This means that when
+  // a proposal to open an SNS token swap is executed, maturity from this neuron
+  // will be used to participate in the SNS token swap.
   optional uint64 joined_community_fund_timestamp_seconds = 17;
 
   // If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
@@ -536,6 +535,23 @@ enum NnsFunction {
   NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS = 38;
 
   NNS_FUNCTION_BITCOIN_SET_CONFIG = 39;
+
+  // A proposal to add a new version to which the HostOS can be
+  // upgraded.
+  // The proposal registers a HostOS version (identified by the hash of the
+  // installation image) in the registry. By itself, this proposal
+  // does not effect any upgrade.
+  NNS_FUNCTION_ADD_HOST_OS_VERSION = 40;
+  // Update the HostOS version running on a given list of nodes.
+  // The proposal changes the HostOS version that is used on the specified
+  // nodes. The version must be contained in the list of HostOS versions.
+  NNS_FUNCTION_UPDATE_NODES_HOST_OS_VERSION = 41;
+
+  // Uninstall and Install Root with the WASM provided in the function.  If InitArgs are provided
+  // They will be passed to the canister_init function of the WASM provided.
+  // This function is meant as a Break Glass mechanism for when an open call context in
+  // the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
+  NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION = 42;
 }
 
 // Payload of a proposal that calls a function on another NNS
@@ -612,7 +628,7 @@ message RewardNodeProvider {
     // neuron instead of directly minting ICP into the node provider's
     // account.
     RewardToNeuron reward_to_neuron = 4;
-    // If this is specificed, executing this proposal will mint to the
+    // If this is specified, executing this proposal will mint to the
     // specified account.
     RewardToAccount reward_to_account = 5;
   }
@@ -940,7 +956,7 @@ message ManageNeuron {
       uint64 memo = 1;
 
       // Claim or refresh a neuron, by providing the memo used in the
-      // staking stransfer and 'controller' as the principal id used to
+      // staking transfer and 'controller' as the principal id used to
       // calculate the subaccount to which the transfer was made. If
       // 'controller' is omitted, the principal id of the caller is
       // used.
@@ -1009,7 +1025,17 @@ message ManageNeuronResponse {
     ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
   }
 
-  message MergeResponse {}
+  // A response for merging or simulating merge neurons
+  message MergeResponse {
+    // The resulting state of the source neuron
+    Neuron source_neuron = 1;
+    // The resulting state of the target neuron
+    Neuron target_neuron = 2;
+    // The NeuronInfo of the source neuron
+    NeuronInfo source_neuron_info = 3;
+    // The NeuronInfo of the target neuron
+    NeuronInfo target_neuron_info = 4;
+  }
 
   message DisburseToNeuronResponse {
     // The ID of the Neuron created from disbursing a Neuron
@@ -1071,9 +1097,9 @@ message GovernanceError {
      // performed.
      ERROR_TYPE_RESOURCE_EXHAUSTED = 10;
      // Some precondition for executing this method was not met (e.g. the
-     // neuron's desolve time is too short). There could be a change in the
+     // neuron's dissolve time is too short). There could be a change in the
      // state of the system such that the operation becomes allowed (e.g. the
-     // owner of the neuron increases its desolve delay).
+     // owner of the neuron increases its dissolve delay).
      ERROR_TYPE_PRECONDITION_FAILED = 11;
      // Executing this method failed for some reason external to the
      // governance canister.
@@ -1194,10 +1220,9 @@ message ProposalData {
   // respect to rewards.
   map<fixed64, Ballot> ballots = 6;
 
-  // Latest tally. Recomputed for open proposals, when proposals are
-  // processed. If the proposal is decided (not open), then the tally
-  // will never change again. (But the ballots may still change as
-  // neurons may vote after the proposal has been decided.)
+  // Latest tally. Recomputed for every vote. Even after the proposal has been
+  // decided, the latest_tally will still be updated based on the recent vote,
+  // until the voting deadline.
   Tally latest_tally = 7;
 
   // If specified: the timestamp when this proposal was adopted or
@@ -1276,7 +1301,7 @@ message DerivedProposalInformation {
 // (See Governance::fetch_swap_background_information for how this is compiled.)
 message SwapBackgroundInformation {
 
-  // Obsolete. Superceded by newer fields.
+  // Obsolete. Superseded by newer fields.
 
   reserved "sns_root_canister_id"; reserved 1;
   reserved "sns_governance_canister_id"; reserved 2;
@@ -1560,10 +1585,7 @@ message CreateServiceNervousSystem {
 
   repeated ic_base_types.pb.v1.PrincipalId fallback_controller_principal_ids = 5;
 
-  message Canister {
-    optional ic_base_types.pb.v1.PrincipalId id = 1;
-  }
-  repeated Canister dapp_canisters = 6;
+  repeated ic_nervous_system.pb.v1.Canister dapp_canisters = 6;
 
   // Initial SNS Tokens and Neurons
   // ------------------------------
@@ -1599,17 +1621,17 @@ message CreateServiceNervousSystem {
 
   InitialTokenDistribution initial_token_distribution = 7;
 
-  // Canistser Initialization
+  // Canister Initialization
   // ------------------------
 
   message SwapParameters {
     optional uint64 minimum_participants = 1;
 
-    optional uint64 minimum_icp = 2;
-    optional uint64 maximum_icp = 3;
+    optional ic_nervous_system.pb.v1.Tokens minimum_icp = 2;
+    optional ic_nervous_system.pb.v1.Tokens maximum_icp = 3;
 
-    optional uint64 minimum_participant_icp = 4;
-    optional uint64 maximum_participant_icp = 5;
+    optional ic_nervous_system.pb.v1.Tokens minimum_participant_icp = 4;
+    optional ic_nervous_system.pb.v1.Tokens maximum_participant_icp = 5;
 
     message NeuronBasketConstructionParameters {
       optional uint64 count = 1;
@@ -1617,6 +1639,16 @@ message CreateServiceNervousSystem {
     }
 
     NeuronBasketConstructionParameters neuron_basket_construction_parameters = 6;
+
+    optional string confirmation_text = 7;
+
+    optional ic_nervous_system.pb.v1.Countries restricted_countries = 8;
+
+    // The swap occurs at a specific time of day, in UTC.
+    // It will happen the first time start_time occurs that's at least 24h after
+    // the proposal is adopted.
+    ic_nervous_system.pb.v1.GlobalTimeOfDay start_time = 9;
+    ic_nervous_system.pb.v1.Duration duration = 10;
   }
 
   SwapParameters swap_parameters = 8;
@@ -1701,8 +1733,8 @@ message Governance {
     reserved 4;
 
     // A general place holder for sync commands. The neuron lock is
-    // never left holding a sync command (as it either suceeds to
-    // aquire the lock and releases it in the same call, or never
+    // never left holding a sync command (as it either succeeds to
+    // acquire the lock and releases it in the same call, or never
     // acquires it in the first place), but it still must be acquired
     // to prevent interleaving with another async command. Thus there's
     // no value in actually storing the command itself, and this placeholder
@@ -1735,7 +1767,7 @@ message Governance {
   // If there are no ongoing requests, this map should be empty.
   //
   // If something goes fundamentally wrong (say we trap at some point
-  // after issueing a transfer call) the neuron(s) involved are left in a
+  // after issuing a transfer call) the neuron(s) involved are left in a
   // "locked" state, meaning new operations can't be applied without
   // reconciling the state.
   //
@@ -1820,7 +1852,7 @@ message ListProposalInfo {
   // specified, or if a value greater than 100 is specified, 100
   // will be used.
   uint32 limit = 1;
-  // If specified, only return proposals that are stricty earlier than
+  // If specified, only return proposals that are strictly earlier than
   // the specified proposal according to the proposal ID. If not
   // specified, start with the most recent proposal.
   ic_nns_common.pb.v1.ProposalId before_proposal = 2;
@@ -1840,6 +1872,10 @@ message ListProposalInfo {
   // [ProposalStatus] for more information). If this list is empty, no
   // restriction is applied.
   repeated ProposalStatus include_status = 5;
+  // Include all ManageNeuron proposals regardless of the visibility of the
+  // proposal to the caller principal. Note that exclude_topic is still
+  // respected even when this option is set to true.
+  optional bool include_all_manage_neuron_proposals = 6;
 }
 
 message ListProposalInfoResponse {

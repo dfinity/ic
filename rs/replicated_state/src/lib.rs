@@ -19,6 +19,8 @@ pub use canister_state::{
     CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, Global,
     NumWasmPages, SchedulerState,
 };
-pub use metadata_state::{NetworkTopology, NodeTopology, Stream, SubnetTopology, SystemMetadata};
+pub use metadata_state::{
+    IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
+};
 pub use page_map::{PageIndex, PageMap};
 pub use replicated_state::{InputQueueType, NextInputQueue, ReplicatedState, StateError};

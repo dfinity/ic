@@ -15,11 +15,7 @@ use std::{
     task::{Context, Poll},
 };
 use threadpool::ThreadPool;
-use tower::{util::BoxCloneService, Service, ServiceBuilder};
-
-/// Max number of inflight requests that add artifacts into the ArtifactManager.
-// Do not increase the number until we get to the root cause of NET-743.
-const MAX_INFLIGHT_INGRESS_MESSAGES: usize = 50;
+use tower::{util::BoxCloneService, Service};
 
 // Each message for each flow is being executed on the same code path. Unless those codepaths are
 // lock free (which is not the case because Gossip has locks) there is no point in having more
@@ -54,19 +50,13 @@ impl IngressEventHandler {
             .thread_name("P2P_Ingress_Thread".into())
             .build();
 
-        let base_service = Self {
+        BoxCloneService::new(Self {
             log,
             threadpool,
             ingress_throttler,
             artifact_manager,
             node_id,
-        };
-
-        BoxCloneService::new(
-            ServiceBuilder::new()
-                .concurrency_limit(MAX_INFLIGHT_INGRESS_MESSAGES)
-                .service(base_service),
-        )
+        })
     }
 }
 

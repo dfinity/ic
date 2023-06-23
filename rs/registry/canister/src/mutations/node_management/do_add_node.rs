@@ -11,7 +11,7 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol},
 };
 
 use crate::mutations::node_management::common::{
@@ -57,14 +57,8 @@ impl Registry {
                 .map(|x| flow_endpoint_from_string(x))
                 .collect(),
             node_operator_id: caller.into_vec(),
-            prometheus_metrics_http: Some(connection_endpoint_from_string(
-                &payload.prometheus_metrics_endpoint,
-            )),
-            public_api: vec![],
-            private_api: vec![],
-            prometheus_metrics: vec![],
-            xnet_api: vec![],
             chip_id: vec![],
+            hostos_version_id: None,
         };
 
         // 5. Insert node, public keys, and crypto keys
@@ -113,7 +107,7 @@ pub struct AddNodePayload {
 pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
     match endpoint.parse::<SocketAddr>() {
         Err(e) => panic!(
-            "Could not convert '{:?}' to a connection endpoint: {:?}",
+            "Could not convert {:?} to a connection endpoint: {:?}",
             endpoint, e
         ),
         Ok(sa) => ConnectionEndpoint {
@@ -133,7 +127,7 @@ pub fn flow_endpoint_from_string(endpoint: &str) -> FlowEndpoint {
     println!("Parts are {:?} and {:?}", parts[0], parts[1]);
     match parts[1].parse::<SocketAddr>() {
         Err(e) => panic!(
-            "Could not convert '{:?}' to a connection endpoint: {:?}",
+            "Could not convert {:?} to a connection endpoint: {:?}",
             endpoint, e
         ),
         Ok(sa) => FlowEndpoint {

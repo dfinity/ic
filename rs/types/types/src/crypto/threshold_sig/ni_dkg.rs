@@ -207,7 +207,7 @@ impl TryFrom<&pb::NiDkgTranscript> for NiDkgTranscript {
                     .committee
                     .iter()
                     .cloned()
-                    .map(crate::node_id_try_from_protobuf)
+                    .map(|committee_member| crate::node_id_try_from_option(Some(committee_member)))
                     .collect::<Result<BTreeSet<_>, _>>()
                     .map_err(|err| {
                         format!("Problem loading committee in NiDkgTranscript: {:?}", err)

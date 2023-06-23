@@ -3,7 +3,7 @@
 use crate::time_source::TimeSource;
 use derive_more::From;
 use ic_types::{
-    artifact::{ArtifactKind, PriorityFn},
+    artifact::{Advert, ArtifactKind, PriorityFn},
     replica_version::ReplicaVersion,
     CountBytes, NodeId, Time,
 };
@@ -32,6 +32,27 @@ pub trait ChangeSetProducer<Pool>: Send {
     fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
 }
 
+/// The result of a single 'process_changes' call can result in either:
+/// - new changes applied to the state. So 'process_changes' should be
+///   immediately called again.
+/// - no change applied and state was unchanged. So calling 'process_changes' is
+///   not immediately required.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ProcessingResult {
+    StateChanged,
+    StateUnchanged,
+}
+
+/// Ids of validated artifacts that were purged during the pool mutation, and adverts
+/// of artifacts that were validated during the pool mutation. As some changes (i.e.
+/// to the unvalidated section) might not generate adverts or purged IDs, `changed`
+/// indicates if the mutation changed the pool's state at all.
+pub struct ChangeResult<Artifact: ArtifactKind> {
+    pub purged: Vec<Artifact::Id>,
+    pub adverts: Vec<Advert<Artifact>>,
+    pub changed: ProcessingResult,
+}
+
 /// Defines the canonical way for mutating an artifact pool.
 /// Mutations should happen from a single place/component.
 pub trait MutablePool<Artifact: ArtifactKind, C> {
@@ -44,7 +65,11 @@ pub trait MutablePool<Artifact: ArtifactKind, C> {
     }
 
     /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: C);
+    fn apply_changes(
+        &mut self,
+        time_source: &dyn TimeSource,
+        change_set: C,
+    ) -> ChangeResult<Artifact>;
 }
 
 pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync {

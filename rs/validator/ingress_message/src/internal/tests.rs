@@ -32,7 +32,6 @@ mod validate_request {
         use super::*;
         use crate::RequestValidationError::InvalidIngressExpiry;
         use ic_validator_http_request_test_utils::{AuthenticationScheme, DelegationChain};
-        use std::ops::Sub;
         use std::time::Duration;
 
         #[test]
@@ -41,7 +40,9 @@ mod validate_request {
             for scheme in all_authentication_schemes(&mut rng) {
                 let request = HttpRequestBuilder::default()
                     .with_authentication(scheme.clone())
-                    .with_ingress_expiry_at(CURRENT_TIME.sub(Duration::from_nanos(1)))
+                    .with_ingress_expiry_at(
+                        CURRENT_TIME.saturating_sub_duration(Duration::from_nanos(1)),
+                    )
                     .build();
 
                 let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
@@ -507,7 +508,7 @@ mod validate_request {
             let mut rng2 = rng1.fork();
             let expired_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
             let one_ns = Duration::from_nanos(1);
-            let expired = CURRENT_TIME - one_ns;
+            let expired = CURRENT_TIME.saturating_sub_duration(one_ns);
             let not_expired = CURRENT_TIME;
             let delegation_chain = grow_delegation_chain(
                 DelegationChain::rooted_at(random_user_key_pair(&mut rng1)),

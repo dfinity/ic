@@ -17,6 +17,7 @@ def test_id():
         [],
         None,
         [],
+        [],
         None,
     )
 
@@ -40,6 +41,7 @@ def test_has_patch_version_return_true_if_vuln_dep_has_patch_and_if_other_none()
         [],
         None,
         [],
+        [],
         None,
     )
 
@@ -56,6 +58,7 @@ def test_has_patch_version_return_false_if_vuln_dep_has_no_patch_and_if_other_no
         [],
         [],
         None,
+        [],
         [],
         None,
     )
@@ -74,6 +77,7 @@ def test_has_patch_version_return_true_if_patch_was_added(patch_on_first_level_d
         [],
         [],
         None,
+        [],
         [],
         None,
     )
@@ -96,6 +100,7 @@ def test_has_patch_version_return_true_if_second_patch_was_added(patch_on_first_
         [],
         None,
         [],
+        [],
         None,
     )
     finding_after = deepcopy(finding_before)
@@ -116,6 +121,7 @@ def test_has_patch_version_return_true_if_patch_for_other_vuln_was_added(patch_o
         [],
         [],
         None,
+        [],
         [],
         None,
     )
@@ -141,6 +147,7 @@ def test_has_patch_version_return_false_if_patch_version_are_same():
         [],
         None,
         [],
+        [],
         None,
     )
     finding_after = deepcopy(finding_before)
@@ -159,6 +166,7 @@ def test_has_patch_version_raise_error_if_findings_have_different_ids(change_fie
         [],
         [],
         None,
+        [],
         [],
         None,
     )

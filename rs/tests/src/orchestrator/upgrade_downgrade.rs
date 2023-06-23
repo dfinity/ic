@@ -13,24 +13,29 @@ Success:: Upgrades work into both directions for all subnet types.
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
-use crate::orchestrator::utils::subnet_recovery::{
-    enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
+use crate::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::*,
+    },
+    orchestrator::utils::{
+        rw_message::{can_read_msg, can_read_msg_with_retries, store_message},
+        subnet_recovery::{enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test},
+        upgrade::*,
+    },
+    tecdsa::tecdsa_signature_test::{
+        add_ecdsa_key_with_timeout_and_rotation_period, make_key, KEY_ID1,
+    },
+    util::{block_on, runtime_from_url, MessageCanister},
 };
-use crate::orchestrator::utils::upgrade::*;
-use crate::tecdsa::tecdsa_signature_test::{
-    add_ecdsa_key_with_timeout_and_rotation_period, make_key, KEY_ID1,
-};
-use crate::util::{block_on, runtime_from_url, MessageCanister};
 use canister_test::Canister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
-use std::{env, time::Duration};
+use std::time::Duration;
 
 pub const MIN_HASH_LENGTH: usize = 8; // in bytes
 
@@ -77,12 +82,8 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
 fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     let logger = env.logger();
 
-    // TODO: abandon the TARGET_VERSION approach once run-system-tests.py is deprecated [VER-1818]
-    let is_bazel = env::var("TARGET_VERSION").is_err();
-
-    // TODO: [VER-1818]
-    let mainnet_version = env::var("TARGET_VERSION")
-        .or_else(|_| env.read_dependency_to_string("testnet/mainnet_nns_revision.txt"))
+    let mainnet_version = env
+        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .unwrap();
 
     // we expect to get a hash value here, so checking that is a hash number of at least 64 bits size
@@ -139,27 +140,16 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         &logger,
     ));
 
-    if is_bazel {
-        let sha256 = env.get_ic_os_update_img_test_sha256().unwrap();
-        let upgrade_url = env.get_ic_os_update_img_test_url().unwrap();
-        block_on(bless_replica_version(
-            &nns_node,
-            &original_branch_version,
-            UpdateImageType::ImageTest,
-            &logger,
-            &sha256,
-            vec![upgrade_url.to_string()],
-        ));
-    } else {
-        // TODO: [VER-1818]
-        block_on(bless_public_replica_version(
-            &nns_node,
-            &original_branch_version,
-            UpdateImageType::ImageTest,
-            UpdateImageType::ImageTest,
-            &logger,
-        ));
-    }
+    let sha256 = env.get_ic_os_update_img_test_sha256().unwrap();
+    let upgrade_url = env.get_ic_os_update_img_test_url().unwrap();
+    block_on(bless_replica_version(
+        &nns_node,
+        &original_branch_version,
+        UpdateImageType::ImageTest,
+        &logger,
+        &sha256,
+        vec![upgrade_url.to_string()],
+    ));
     info!(&logger, "Blessed all versions");
 
     downgrade_upgrade_roundtrip(
@@ -212,6 +202,10 @@ fn downgrade_upgrade_roundtrip(
             }
             (subnet.subnet_id, subnet_node, faulty_node, redundant_nodes)
         };
+    info!(
+        logger,
+        "downgrade_upgrade_roundtrip: subnet_node = {:?}", subnet_node.node_id
+    );
     subnet_node.await_status_is_healthy().unwrap();
     faulty_node.await_status_is_healthy().unwrap();
 
@@ -284,8 +278,14 @@ fn downgrade_upgrade_roundtrip(
     start_node(&logger, &faulty_node);
     assert_assigned_replica_version(&faulty_node, branch_version, env.logger());
 
-    for (c, m) in &[(can_id, msg), (can_id_2, msg_2), (can_id_3, msg_3)] {
-        assert!(can_read_msg(&logger, &faulty_node.get_public_url(), *c, m));
+    for (can_id, msg) in &[(can_id, msg), (can_id_2, msg_2), (can_id_3, msg_3)] {
+        assert!(can_read_msg_with_retries(
+            &logger,
+            &faulty_node.get_public_url(),
+            *can_id,
+            msg,
+            /*retries=*/ 3
+        ));
     }
 
     info!(logger, "Could read all previously stored messages!");

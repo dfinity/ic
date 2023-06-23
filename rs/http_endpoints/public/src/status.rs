@@ -3,6 +3,7 @@ use crate::{common, state_reader_executor::StateReaderExecutor, EndpointService}
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::{Body, Response};
+use ic_config::http_handler::Config;
 use ic_crypto_utils_threshold_sig_der::public_key_to_der;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{warn, ReplicaLogger};
@@ -23,7 +24,6 @@ use tower::{
 // TODO(NET-776)
 // The IC API version reported on status requests.
 const IC_API_VERSION: &str = "0.18.0";
-const MAX_STATUS_CONCURRENT_REQUESTS: usize = 100;
 
 #[derive(Clone)]
 pub(crate) struct StatusService {
@@ -36,6 +36,7 @@ pub(crate) struct StatusService {
 
 impl StatusService {
     pub(crate) fn new_service(
+        config: Config,
         log: ReplicaLogger,
         nns_subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
@@ -52,7 +53,7 @@ impl StatusService {
         BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
-                    MAX_STATUS_CONCURRENT_REQUESTS,
+                    config.max_status_concurrent_requests,
                 ))
                 .service(base_service),
         )
@@ -77,7 +78,7 @@ impl Service<Request<Body>> for StatusService {
         // and is the public key of the root (i.e. NNS) subnet.
         let root_key = common::get_root_threshold_public_key(
             &log,
-            self.registry_client.clone(),
+            self.registry_client.as_ref(),
             self.registry_client.get_latest_version(),
             &nns_subnet_id,
         )

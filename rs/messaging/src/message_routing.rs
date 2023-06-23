@@ -20,7 +20,6 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     ecdsa_keys::EcdsaKeysRegistry,
-    node::NodeRegistry,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
@@ -28,7 +27,7 @@ use ic_registry_client_helpers::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{NetworkTopology, NodeTopology, ReplicatedState, SubnetTopology};
+use ic_replicated_state::{NetworkTopology, ReplicatedState, SubnetTopology};
 use ic_types::{
     batch::Batch,
     malicious_flags::MaliciousFlags,
@@ -49,6 +48,9 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     time::Instant,
 };
+
+#[cfg(test)]
+mod tests;
 
 // How many batches we allow in the execution queue before we start rejecting
 // incoming batches.
@@ -407,7 +409,9 @@ impl BatchProcessorImpl {
         let mut wasm_custom_sections_memory_usage = NumBytes::from(0);
         let mut canister_history_memory_usage = NumBytes::from(0);
         for canister in state.canister_states.values() {
-            total_memory_usage += canister.memory_usage(state.metadata.own_subnet_type);
+            // Export the total canister memory usage; execution and wasm custom section
+            // memory are included in `memory_usage()`; message memory is added separately.
+            total_memory_usage += canister.memory_usage() + canister.message_memory_usage();
             wasm_custom_sections_memory_usage += canister
                 .execution_state
                 .as_ref()
@@ -486,7 +490,7 @@ impl BatchProcessorImpl {
         let mut subnets = BTreeMap::new();
 
         for subnet_id in &subnet_ids {
-            let mut nodes: BTreeMap<NodeId, NodeTopology> = BTreeMap::new();
+            let mut nodes: BTreeSet<NodeId> = BTreeSet::new();
 
             // Return the list of nodes present in the registry. If no nodes are
             // defined, as could be the case in tests, an empty `Vec` is returned.
@@ -496,53 +500,7 @@ impl BatchProcessorImpl {
             let node_ids = node_ids_record.unwrap_or_default();
 
             for node_id in node_ids {
-                // Get the node
-                let node_record = match self
-                    .registry
-                    .get_transport_info(node_id, registry_version)?
-                {
-                    Some(node_record) => node_record,
-                    None => {
-                        warn!(
-                            self.log,
-                            "No NodeRecord found for node {}. Skipping...", node_id
-                        );
-                        continue;
-                    }
-                };
-
-                let http_info = match node_record.http {
-                    Some(http_info) => http_info,
-                    None => {
-                        warn!(
-                            self.log,
-                            "NodeRecord for node {} does not contain an http connection endpoint. Skipping...",
-                            node_id
-                        );
-                        continue;
-                    }
-                };
-
-                let http_port = match u16::try_from(http_info.port) {
-                    Ok(http_port) => http_port,
-                    _ => {
-                        warn!(
-                            self.log,
-                            "Invalid HTTP port {} defined for node {}. Skipping...",
-                            http_info.port,
-                            node_id,
-                        );
-                        continue;
-                    }
-                };
-
-                nodes.insert(
-                    node_id,
-                    NodeTopology {
-                        ip_address: http_info.ip_addr,
-                        http_port,
-                    },
-                );
+                nodes.insert(node_id);
             }
 
             let public_key =
@@ -707,7 +665,7 @@ impl BatchProcessor for BatchProcessorImpl {
         let timer = Timer::start();
 
         // Fetch the mutable tip from StateManager
-        let state = match self
+        let mut state = match self
             .state_manager
             .take_tip_at(batch.batch_number.decrement())
         {
@@ -728,6 +686,15 @@ impl BatchProcessor for BatchProcessorImpl {
                 self.state_manager.latest_state_height()
             ),
         };
+        // If the subnet is starting up after a split, execute splitting phase 2.
+        if let Some(split_from) = state.metadata.split_from {
+            info!(
+                self.log,
+                "State has resulted from splitting subnet {}, running phase 2 of state splitting",
+                split_from
+            );
+            state = state.after_split();
+        }
         self.observe_phase_duration(PHASE_LOAD_STATE, &timer);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
@@ -1092,103 +1059,5 @@ impl MessageRouting for MessageRoutingImpl {
             .unwrap()
             .increment()
             .max(self.state_manager.latest_state_height().increment())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_test_utilities::{
-        notification::{Notification, WaitResult},
-        types::batch::BatchBuilder,
-    };
-    use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_metrics::{fetch_int_counter_vec, metric_vec};
-    use std::sync::Arc;
-    use std::time::Duration;
-
-    /// Helper function for testing the values of the
-    /// `METRIC_DELIVER_BATCH_COUNT` metric.
-    fn assert_deliver_batch_count_eq(
-        ignored: u64,
-        queue_full: u64,
-        success: u64,
-        metrics_registry: &MetricsRegistry,
-    ) {
-        assert_eq!(
-            metric_vec(&[
-                (&[(LABEL_STATUS, STATUS_IGNORED)], ignored),
-                (&[(LABEL_STATUS, STATUS_QUEUE_FULL)], queue_full),
-                (&[(LABEL_STATUS, STATUS_SUCCESS)], success),
-            ]),
-            fetch_int_counter_vec(metrics_registry, METRIC_DELIVER_BATCH_COUNT)
-        );
-    }
-
-    #[test]
-    fn message_routing_does_not_block() {
-        with_test_replica_logger(|log| {
-            let timeout = Duration::from_secs(10);
-
-            let mut mock = MockBatchProcessor::new();
-            let started_notification = Arc::new(Notification::new());
-            let notification = Arc::new(Notification::new());
-            mock.expect_process_batch().returning({
-                let notification = Arc::clone(&notification);
-                let started_notification = Arc::clone(&started_notification);
-                move |_| {
-                    started_notification.notify(());
-                    assert_eq!(
-                        notification.wait_with_timeout(timeout),
-                        WaitResult::Notified(())
-                    );
-                }
-            });
-
-            let mock_box = Box::new(mock);
-            let mut state_manager = MockStateManager::new();
-            state_manager
-                .expect_latest_state_height()
-                .return_const(Height::from(0));
-
-            let state_manager = Arc::new(state_manager);
-            let metrics_registry = MetricsRegistry::new();
-            let metrics = Arc::new(MessageRoutingMetrics::new(&metrics_registry));
-            let mr = MessageRoutingImpl::from_batch_processor(
-                state_manager,
-                mock_box,
-                metrics,
-                log.clone(),
-            );
-            // We need to submit one extra batch because the very first one
-            // is removed from the queue by the background worker.
-            for batch_number in 1..BATCH_QUEUE_BUFFER_SIZE + 2 {
-                let batch_number = Height::from(batch_number as u64);
-                info!(log, "Delivering batch {}", batch_number);
-                assert_eq!(batch_number, mr.expected_batch_height());
-                mr.deliver_batch(BatchBuilder::default().batch_number(batch_number).build())
-                    .unwrap();
-                assert_eq!(
-                    started_notification.wait_with_timeout(timeout),
-                    WaitResult::Notified(())
-                );
-                assert_deliver_batch_count_eq(0, 0, batch_number.get(), &metrics_registry);
-            }
-
-            let last_batch = Height::from(BATCH_QUEUE_BUFFER_SIZE as u64 + 2);
-            assert_eq!(last_batch, mr.expected_batch_height());
-            assert_eq!(
-                mr.deliver_batch(BatchBuilder::default().batch_number(last_batch).build()),
-                Err(MessageRoutingError::QueueIsFull)
-            );
-            assert_deliver_batch_count_eq(
-                0,
-                1,
-                1 + BATCH_QUEUE_BUFFER_SIZE as u64,
-                &metrics_registry,
-            );
-            notification.notify(());
-        });
     }
 }

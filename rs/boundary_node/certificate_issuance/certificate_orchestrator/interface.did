@@ -37,6 +37,7 @@ type InitArg = record {
 type CreateRegistrationError = variant {
     Duplicate: Id;
     NameError: text;
+    RateLimited: text;
     Unauthorized;
     UnexpectedError: text;
 };
@@ -102,6 +103,19 @@ type ExportCertificatesError = variant {
 
 type ExportCertificatesResponse = variant {
     Ok: vec ExportPackage;
+    Err: ExportCertificatesError;
+};
+
+type IcCertificate = record {
+    cert: blob;
+    tree: blob;
+};
+
+type ExportCertificatesCertifiedResponse = variant {
+    Ok: record {
+        vec ExportPackage;
+        IcCertificate;
+    };
     Err: ExportCertificatesError;
 };
 
@@ -182,8 +196,9 @@ service: (InitArg) -> {
 
     // Certificates
     uploadCertificate: (Id, EncryptedPair) -> (UploadCertificateResponse);
-    exportCertificates: () -> (ExportCertificatesResponse);
-    exportCertificatesPaginated: (opt Id, nat64) -> (ExportCertificatesResponse);
+    exportCertificates: () -> (ExportCertificatesResponse) query;
+    exportCertificatesPaginated: (opt Id, nat64) -> (ExportCertificatesResponse) query;
+    exportCertificatesCertified: (opt Id, nat64) -> (ExportCertificatesCertifiedResponse) query;
 
     // Tasks
     queueTask: (Id, Timestamp) -> (QueueTaskResponse);

@@ -1,0 +1,9 @@
+[Unit]
+Description=Monitor NVMe SMART log info on a regular basis
+
+[Timer]
+Unit=monitor-nvme.service
+OnCalendar=hourly
+
+[Install]
+WantedBy=timers.target

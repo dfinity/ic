@@ -1,6 +1,5 @@
 use crate::import_mod;
 
-import_mod!("log", replica_config, v1, "replica_config.v1");
 import_mod!("log", consensus_log_entry, v1, "consensus_log_entry.v1");
 import_mod!("log", crypto_log_entry, v1, "crypto_log_entry.v1");
 import_mod!("log", p2p_log_entry, v1, "p2p_log_entry.v1");

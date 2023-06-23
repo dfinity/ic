@@ -1,7 +1,7 @@
 from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
 from data_source.jira_finding_data_source import JiraFindingDataSource
 from notification.notification_config import NotificationConfig
-from notification.slack_notification import SlackNotifier
+from notification.notification_creator import NotificationCreator
 from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscriber
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyManager
@@ -20,9 +20,9 @@ if __name__ == "__main__":
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
     )
-    slack_subscriber = SlackNotifier(config)
-    finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), slack_subscriber]
-    scanner_subscribers = [ConsoleLoggerScannerSubscriber(), slack_subscriber]
+    notifier = NotificationCreator(config)
+    finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), notifier]
+    scanner_subscribers = [ConsoleLoggerScannerSubscriber(), notifier]
     scanner_job = DependencyScanner(
         BazelRustDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers), scanner_subscribers
     )

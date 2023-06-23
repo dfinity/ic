@@ -1,12 +1,12 @@
 //! Utilities for key generation and key identifier generation
 
 use crate::api::CspKeyGenerator;
-use crate::secret_key_store::panic_due_to_duplicated_key_id;
 use crate::types::{CspPop, CspPublicKey};
-use crate::vault::api::CspTlsKeygenError;
+use crate::vault::api::{
+    CspBasicSignatureKeygenError, CspMultiSignatureKeygenError, CspTlsKeygenError,
+};
 use crate::Csp;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::CryptoError;
 use ic_types::NodeId;
 
 #[cfg(test)]
@@ -15,43 +15,22 @@ mod fixtures;
 mod tests;
 
 impl CspKeyGenerator for Csp {
-    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CryptoError> {
-        Ok(self.csp_vault.gen_node_signing_key_pair()?)
+    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
+        self.csp_vault.gen_node_signing_key_pair()
     }
 
-    fn gen_committee_signing_key_pair(&self) -> Result<(CspPublicKey, CspPop), CryptoError> {
-        Ok(self.csp_vault.gen_committee_signing_key_pair()?)
+    fn gen_committee_signing_key_pair(
+        &self,
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
+        self.csp_vault.gen_committee_signing_key_pair()
     }
 
     fn gen_tls_key_pair(
         &self,
-        node: NodeId,
+        node_id: NodeId,
         not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CryptoError> {
-        let cert = self
-            .csp_vault
-            .gen_tls_key_pair(node, not_after)
-            .map_err(|e| match e {
-                CspTlsKeygenError::InvalidNotAfterDate {
-                    message: msg,
-                    not_after: date,
-                } => CryptoError::InvalidNotAfterDate {
-                    message: msg,
-                    not_after: date,
-                },
-                CspTlsKeygenError::InternalError {
-                    internal_error: msg,
-                } => CryptoError::InternalError {
-                    internal_error: msg,
-                },
-                CspTlsKeygenError::DuplicateKeyId { key_id } => {
-                    panic_due_to_duplicated_key_id(key_id)
-                }
-                CspTlsKeygenError::TransientInternalError { internal_error } => {
-                    CryptoError::TransientInternalError { internal_error }
-                }
-            })?;
-        Ok(cert)
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+        self.csp_vault.gen_tls_key_pair(node_id, not_after)
     }
 }
 
@@ -152,5 +131,45 @@ pub mod utils {
                 key_bytes: proto.key_value.clone(),
             }
         })
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use assert_matches::assert_matches;
+        use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
+
+        #[test]
+        fn should_convert_mega_proto() {
+            let mega_proto = valid_idkg_dealing_encryption_public_key();
+            let mega_public_key = mega_public_key_from_proto(&mega_proto);
+            assert_matches!(mega_public_key, Ok(key) if key.serialize() == mega_proto.key_value)
+        }
+
+        #[test]
+        fn should_fail_to_convert_mega_pubkey_from_proto_if_algorithm_unsupported() {
+            let mut mega_proto = valid_idkg_dealing_encryption_public_key();
+            mega_proto.algorithm = AlgorithmIdProto::Ed25519 as i32;
+
+            let result = mega_public_key_from_proto(&mega_proto);
+
+            assert_matches!(
+                result,
+                Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { .. })
+            );
+        }
+
+        #[test]
+        fn should_fail_to_convert_mega_pubkey_from_proto_if_pubkey_malformed() {
+            let mut mega_proto = valid_idkg_dealing_encryption_public_key();
+            mega_proto.key_value = b"malformed public key".to_vec();
+
+            let result = mega_public_key_from_proto(&mega_proto);
+
+            assert_matches!(
+                result,
+                Err(MEGaPublicKeyFromProtoError::MalformedPublicKey { .. })
+            );
+        }
     }
 }

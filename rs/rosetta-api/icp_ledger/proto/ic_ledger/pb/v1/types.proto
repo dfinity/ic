@@ -208,13 +208,6 @@ message Tokens {
 
 }
 
-message SignedTokens {
-  oneof tokens {
-    uint64 plus_e8s = 1;
-    uint64 minus_e8s = 2;
-  }
-}
-
 message Payment {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   Tokens receiver_gets = 1      [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
@@ -284,7 +277,7 @@ message TransferFrom {
 }
 
 message Approve {
-  SignedTokens allowance = 1;
+  Tokens allowance = 1;
   TimeStamp expires_at = 2;
 }
 

@@ -21,9 +21,9 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
-use crate::util::{delay, runtime_from_url, UniversalCanister};
+use crate::util::{runtime_from_url, UniversalCanister};
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     types::CanisterIdRecord,
@@ -56,8 +56,8 @@ pub fn test(env: TestEnv) {
         .nodes()
         .next()
         .unwrap();
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     info!(log, "NNS canisters installed successfully.");
     let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
@@ -106,7 +106,7 @@ async fn assert_canister_update_call(
     let has_module_hash = || async {
         ManagementCanister::create(agent)
             .canister_status(canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap()
             .0

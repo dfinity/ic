@@ -22,8 +22,10 @@ from common import report  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("experiment_data", ".", "Path to experiment data")
-gflags.DEFINE_string("asset_root", "", "Path to the root of the asset canister")
-gflags.DEFINE_integer("num_boundary_nodes", -1, "Number of boundary nodes in the IC")
+gflags.DEFINE_string(
+    "asset_root", "", "Path to the root of the asset canister")
+gflags.DEFINE_integer("num_boundary_nodes", -1,
+                      "Number of boundary nodes in the IC")
 gflags.DEFINE_boolean("regenerate", False, "Regenerate all reports")
 
 TEMPLATE_BASEDIR = "templates"
@@ -33,7 +35,7 @@ TEMPLATE_PATH = TEMPLATE_BASEDIR + "/cd-overview.html.hb"
 # Guidance: https://plotly.com/javascript/hover-text-and-formatting/
 HOVERTEMPLATE = """
 <b>Click for full report</b><br><br>
-%{yaxis.title.text}: %{y:,.0f}<br>
+%{yaxis.title.text}: %{y:,.2f}<br>
 %{xaxis.title.text}: %{x}<br>
 <br>
 %{text}
@@ -51,6 +53,7 @@ BLACKLIST = [
     ("c610c3fec6ea8acd1b831099317cc0b98fe4b310", "1649613136"),
     ("b0d3c45e14b116f8213ed88dea064fbc631c038c", "1667834847"),
     ("903c8b3a520c69a953b4cdf6468bf2612e86be49", "1660642902"),
+    ("2a0ff6c34e61d64e6fe8b0ce47e7edbec30e8c1e", "1674507377"),
 ]
 
 
@@ -112,7 +115,8 @@ def copy_results(git_revision: str, timestamp: str):
     """Copy results for an individual experiment to the asset canister."""
     if len(FLAGS.asset_root) > 0:
 
-        source_dir = os.path.join(FLAGS.experiment_data, git_revision, timestamp)
+        source_dir = os.path.join(
+            FLAGS.experiment_data, git_revision, timestamp)
         target_dir = os.path.join(FLAGS.asset_root, git_revision, timestamp)
 
         # Search for svg files in the iteration folders
@@ -123,6 +127,36 @@ def copy_results(git_revision: str, timestamp: str):
             if not os.path.exists(svg_target_dir):
                 os.mkdir(svg_target_dir)
             shutil.copy(svg, svg_target_dir)
+
+
+@dataclass
+class WorkloadDescription:
+    """Workload description extracted from summary file"""
+
+    request_type: str
+    rps: str
+    payload: str
+    canisters: str
+
+
+def workload_description_from_json(data, iteration, workload_command_summary_map, workload_id, experiment_file):
+    if data[1] is None:
+        # If the request type isn't set directly via "method" in the toml file, try to set it
+        # based on whether "-u" has been given
+        request_type = (
+            "Update"
+            if True in ["-u" in w["command"] for w in workload_command_summary_map[workload_id]["load_generators"]]
+            else "Query"
+        )
+    else:
+        request_type = str(data[1])
+
+    return WorkloadDescription(
+        request_type=request_type,
+        rps=str(data[3]),
+        payload=str(data[5]),
+        canisters=",".join(data[0])
+    )
 
 
 def default_label_formatter_from_workload_description(
@@ -137,34 +171,14 @@ def default_label_formatter_from_workload_description(
             )
         )
         return
-    data = json.loads(workload_command_summary_map[workload_id]["workload_description"])
+    data = json.loads(
+        workload_command_summary_map[workload_id]["workload_description"])
+    wd = workload_description_from_json(data, iteration, workload_command_summary_map, workload_id, experiment_file)
 
-    if data[1] is None:
-        # If the request type isn't set directly via "method" in the toml file, try to set it
-        # based on whether "-u" has been given
-        request_type = (
-            "Update"
-            if True in ["-u" in w["command"] for w in workload_command_summary_map[workload_id]["load_generators"]]
-            else "Query"
-        )
-    else:
-        request_type = str(data[1])
-
-    label = (
-        ",".join(data[0])
-        + " - req type: "
-        + request_type
-        + " - "
-        + str(data[3])
-        + " rps"
-        + " - iter: "
-        + str(iteration)
-    )
-    if data[5] is not None:
-        payload_tmp = str(data[5])
-        if len(payload_tmp) > 32:
-            payload_tmp = payload_tmp[30] + ".."
-        label = label + " - payload: " + payload_tmp
+    label = wd.canisters + " - req type: " + \
+        wd.request_type + " - " + f"{float(wd.rps):.1f}" + " rps"
+    if wd.payload is not None:
+        label = label + " - payload: " + wd.payload
 
     # Attempt to replace the canister ID with canister names
     for canister_name, canister_ids in experiment_file.canister_id.items():
@@ -194,7 +208,7 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
     base_dir = os.path.join(FLAGS.experiment_data, githash, timestamp)
     assert os.path.exists(base_dir)
 
-    experiment_file = report.parse_experiment_file(data)
+    experiment_file = report.parse_experiment_file(data, strict=False)
     xvalue = experiment_file.t_experiment_start
 
     for iteration, workloads in report.find_experiment_summaries(base_dir).items():
@@ -202,13 +216,17 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
         for workload_id, summary_files in workloads.items():
             # Find xlabel for given iteration
             if f_label is None:
-                label = str(workload_id) + " " + str(experiment_file.xlabels[iteration - 1]) + " rps"
+                label = str(workload_id) + " " + \
+                    f"{experiment_file.xlabels[iteration - 1]:.1f}" + " rps"
             else:
-                path = os.path.join(base_dir, str(iteration), "workload_command_summary_map.json")
+                path = os.path.join(base_dir, str(
+                    iteration), "workload_command_summary_map.json")
                 if os.path.exists(path):
                     with open(path, "r") as summary_map_f:
-                        workload_command_summary_map = json.loads(summary_map_f.read())
-                        label = f_label(workload_command_summary_map, iteration, experiment_file, workload_id, githash)
+                        workload_command_summary_map = json.loads(
+                            summary_map_f.read())
+                        label = f_label(
+                            workload_command_summary_map, iteration, experiment_file, workload_id, githash)
 
                 else:
                     # No workload summary mapping file, so we cannot look up anything useful as label
@@ -230,7 +248,8 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
                     }
                 )
 
-                raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue, label)]
+                raw_data[label] = raw_data.get(
+                    label, []) + [(xvalue, yvalue, label)]
                 added = True
 
     return added
@@ -249,7 +268,8 @@ def parse_rps_experiment_failure_rate(data, githash, timestamp, meta_data, raw_d
 
 def parse_rps_experiment_latency(data, githash, timestamp, meta_data, raw_data):
     return parse_rps_experiment_with_evaluated_summary(
-        data, githash, timestamp, meta_data, raw_data, lambda evaluated_summaries: evaluated_summaries.percentiles[90]
+        data, githash, timestamp, meta_data, raw_data, lambda evaluated_summaries: evaluated_summaries.percentiles[
+            90]
     )
 
 
@@ -261,7 +281,8 @@ def parse_rps_experiment_max_capacity(data, githash, experiment_timestamp, meta_
     """
     added = False
 
-    base_dir = os.path.join(FLAGS.experiment_data, githash, experiment_timestamp)
+    base_dir = os.path.join(FLAGS.experiment_data,
+                            githash, experiment_timestamp)
     assert os.path.exists(base_dir)
 
     experiment_file = report.parse_experiment_file(data, strict=False)
@@ -271,7 +292,8 @@ def parse_rps_experiment_max_capacity(data, githash, experiment_timestamp, meta_
     MAX_FAILURE_RATE = 0.3
     MAX_LATENCY = 20000
 
-    experiment_details = report.parse_experiment_details_with_fallback_duration(data["experiment_details"])
+    experiment_details = report.parse_experiment_details_with_fallback_duration(
+        data["experiment_details"])
     experiment_summaries = None
     experiment_summaries = report.find_experiment_summaries(base_dir)
 
@@ -296,7 +318,8 @@ def parse_rps_experiment_max_capacity(data, githash, experiment_timestamp, meta_
         )
 
         label = f"workload {idx}"
-        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue, "Maximum capacity")]
+        raw_data[label] = raw_data.get(
+            label, []) + [(xvalue, yvalue, "Maximum capacity")]
         added = True
 
     return added
@@ -323,10 +346,12 @@ def parse_xnet_experiment(data, githash, timestamp, meta_data, raw_data):
         )
 
         print(
-            "  {:40} {:30} {:10.3f}".format(data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
+            "  {:40} {:30} {:10.3f}".format(
+                data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
         )
         label = None
-        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue, "Xnet capacity")]
+        raw_data[label] = raw_data.get(
+            label, []) + [(xvalue, yvalue, "Xnet capacity")]
         return True
 
     else:
@@ -358,10 +383,12 @@ def parse_statesync_experiment(data, githash, timestamp, meta_data, raw_data):
 
     if yvalue > 0:
         print(
-            "  {:40} {:30} {:10.3f}".format(data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
+            "  {:40} {:30} {:10.3f}".format(
+                data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
         )
         label = False
-        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue, "Statesync capacity")]
+        raw_data[label] = raw_data.get(
+            label, []) + [(xvalue, yvalue, "Statesync capacity")]
         return True
     else:
         return False
@@ -376,7 +403,8 @@ def parse_mixed_workload_experiment(
         def eval_function(evaluated_summaries):
             return evaluated_summaries.get_median_failure_rate()
 
-    base_dir = os.path.join(FLAGS.experiment_data, githash, experiment_timestamp)
+    base_dir = os.path.join(FLAGS.experiment_data,
+                            githash, experiment_timestamp)
     print(colored(f"Parsing: {base_dir}", "grey", attrs=["bold"]))
     assert os.path.exists(base_dir)
 
@@ -436,8 +464,10 @@ def find_results(
                         timestamp,
                     ) not in BLACKLIST:
 
-                        report_file = report.parse_experiment_file(data, strict=False)
-                        results.append(ExperimentResultDirectory(result, report_file, githash, timestamp))
+                        report_file = report.parse_experiment_file(
+                            data, strict=False)
+                        results.append(ExperimentResultDirectory(
+                            result, report_file, githash, timestamp))
 
             except ValueError as e:  # Replace with proper exception
                 print(traceback.format_exc())
@@ -496,7 +526,8 @@ def render_results(
             ensure_report_generated(githash, timestamp)
 
     if len(raw_data) < 1:
-        raise Exception(f"Could not find any data for: {testnets} {experiment_names} {experiment_type}")
+        raise Exception(
+            f"Could not find any data for: {testnets} {experiment_names} {experiment_type}")
 
     meta_data = sorted(meta_data, key=lambda x: x["timestamp"])
 
@@ -564,13 +595,34 @@ if __name__ == "__main__":
         }
 
         data["plot_exp1_query"] = render_results(
-            ["experiment_1", "run_system_baseline_experiment", "system-baseline-experiment"],
+            ["experiment_1", "run_system_baseline_experiment",
+                "system-baseline-experiment"],
             ["query"],
             parse_rps_experiment_max_capacity,
             4000,
         )
+        data["plot_exp1_query_failure_rate"] = render_results(
+            ["experiment_1", "run_system_baseline_experiment",
+                "system-baseline-experiment"],
+            ["query"],
+            parse_rps_experiment_failure_rate,
+            None,
+            yaxis_title="Failure rate",
+            # time_start=1666142871,
+        )
+        data["plot_exp1_query_latency"] = render_results(
+            ["experiment_1", "run_system_baseline_experiment",
+                "system-baseline-experiment"],
+            ["query"],
+            parse_rps_experiment_latency,
+            None,
+            yaxis_title="Latency",
+            # time_start=1666142871,
+        )
+
         data["plot_exp1_update"] = render_results(
-            ["experiment_1", "run_system_baseline_experiment", "system-baseline-experiment"],
+            ["experiment_1", "run_system_baseline_experiment",
+                "system-baseline-experiment"],
             ["update"],
             parse_rps_experiment_max_capacity,
             800,
@@ -592,12 +644,15 @@ if __name__ == "__main__":
             yaxis_title="State Sync duration [s]",
         )
 
-        data["plot_xnet"] = render_results(["run_xnet_experiment"], ["query"], parse_xnet_experiment, 5500)
+        data["plot_xnet"] = render_results(["run_xnet_experiment"], [
+                                           "query"], parse_xnet_experiment, 5500)
 
         render_mixed_workload_experiment(data, "qr", "qr.toml")
         render_mixed_workload_experiment(data, "sha256", "sha256.toml")
-        render_mixed_workload_experiment(data, "http_outcall", "canister-http-benchmark.toml")
-        render_mixed_workload_experiment(data, "mixed_counter", "mixed-query-update.toml")
+        render_mixed_workload_experiment(
+            data, "http_outcall", "canister-http-benchmark.toml")
+        render_mixed_workload_experiment(
+            data, "mixed_counter", "mixed-query-update.toml")
 
         # Render the internal CD overview
         with open(f"{FLAGS.experiment_data}/cd-overview.html", "w") as outfile:
@@ -621,6 +676,7 @@ if __name__ == "__main__":
                 print("🎉 Report written")
 
         LOGO = "fully_on_chain-default-bg_dark.svg"
-        shutil.copy(os.path.join(TEMPLATE_BASEDIR, LOGO), FLAGS.experiment_data)
+        shutil.copy(os.path.join(TEMPLATE_BASEDIR, LOGO),
+                    FLAGS.experiment_data)
         if len(FLAGS.asset_root) > 0:
             shutil.copy(os.path.join(TEMPLATE_BASEDIR, LOGO), FLAGS.asset_root)

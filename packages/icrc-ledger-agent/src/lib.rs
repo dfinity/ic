@@ -1,5 +1,5 @@
 use candid::{Decode, Encode, Nat, Principal};
-use ic_agent::hash_tree::LookupResult;
+use ic_agent::hash_tree::{Label, LookupResult};
 use ic_agent::{Agent, Certificate};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc::generic_value::Hash;
@@ -61,14 +61,10 @@ impl Icrc1Agent {
         method_name: S,
         arg: &[u8],
     ) -> Result<Vec<u8>, Icrc1AgentError> {
-        let waiter = garcon::Delay::builder()
-            .throttle(std::time::Duration::from_millis(500))
-            .timeout(std::time::Duration::from_secs(60 * 5))
-            .build();
         self.agent
             .update(&self.ledger_canister_id, method_name)
             .with_arg(arg)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .map_err(Icrc1AgentError::AgentError)
     }
@@ -196,14 +192,14 @@ impl Icrc1Agent {
     /// 2. Check whether the certified data at path ["canister", ledger_canister_id, "certified_data"] is equal to root_hash.
     pub async fn verify_root_hash(
         &self,
-        certificate: &Certificate<'_>,
+        certificate: &Certificate,
         root_hash: &Hash,
     ) -> Result<(), Icrc1AgentError> {
         self.agent
             .verify(certificate, self.ledger_canister_id)
             .map_err(Icrc1AgentError::AgentError)?;
 
-        let certified_data_path = [
+        let certified_data_path: [Label<Vec<u8>>; 3] = [
             "canister".into(),
             self.ledger_canister_id.as_slice().into(),
             "certified_data".into(),

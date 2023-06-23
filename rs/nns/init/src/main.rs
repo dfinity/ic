@@ -1,21 +1,21 @@
 use canister_test::{RemoteTestRuntime, Runtime};
 use clap::Parser;
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::{Agent, HttpClientConfig, Sender};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_nns_governance::pb::v1::Governance as GovernanceProto;
-use ic_nns_init::make_hsm_sender;
-use ic_nns_init::set_up_env_vars_for_all_canisters;
+use ic_nns_init::{make_hsm_sender, set_up_env_vars_for_all_canisters};
 use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     itest_helpers::NnsCanisters,
 };
 use prost::Message;
-use std::fs;
-use std::io::Write;
-use std::path::Path;
-use std::path::PathBuf;
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
 use url::Url;
 
 #[derive(Debug, Parser)]
@@ -130,6 +130,10 @@ struct CliArgs {
     /// Pass specified_id to provisional_create_canister_with_cycles when creating canisters.
     #[clap(long)]
     pass_specified_id: bool,
+
+    /// If set, HTTP/2 is used for connections to the IC. By default, HTTP/1.1 is used.
+    #[clap(long)]
+    http2_only: bool,
 }
 
 const LOG_PREFIX: &str = "[ic-nns-init] ";
@@ -186,15 +190,20 @@ async fn main() {
 
         let url = args.url.expect("Url must be provided to install canister.");
 
+        let http_client_config = HttpClientConfig {
+            http2_only: args.http2_only,
+            ..HttpClientConfig::default()
+        };
         let agent = if args.use_hsm {
             let sender = make_hsm_sender(&args.hsm_slot, &args.key_id, &args.pin);
-            Agent::new(url.clone(), sender)
+            Agent::new_with_http_client_config(url.clone(), sender, http_client_config)
         } else {
             // Use the special identity that has superpowers, like calling
             // ic00::Method::ProvisionalCreateCanisterWithCycles.
-            Agent::new(
+            Agent::new_with_http_client_config(
                 url.clone(),
                 Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+                http_client_config,
             )
         };
 
@@ -264,10 +273,15 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
     }
 
     for account in test_ledger_accounts.into_iter() {
-        init_payloads_builder.ledger.initial_values.insert(
-            account,
-            icp_ledger::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
-        );
+        init_payloads_builder
+            .ledger
+            .init_args()
+            .unwrap()
+            .initial_values
+            .insert(
+                account,
+                icp_ledger::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
+            );
         eprintln!(
             "{}Initializing with test ledger account: {}",
             LOG_PREFIX,

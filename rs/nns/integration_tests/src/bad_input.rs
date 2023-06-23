@@ -2,15 +2,13 @@
 //! input.
 
 use assert_matches::assert_matches;
-
 use canister_test::local_test_e;
 use dfn_candid::candid;
-use on_wire::bytes;
-
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::ProposalId;
 use ic_nns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::ProposalInfo};
 use ic_nns_test_utils::itest_helpers::set_up_governance_canister;
+use on_wire::bytes;
 
 #[test]
 fn test_bad_proposal_id_candid_type() {

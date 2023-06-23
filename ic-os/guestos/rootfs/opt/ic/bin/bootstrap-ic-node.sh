@@ -3,8 +3,7 @@
 # Provision a node based on an injected "ic-bootstrap.tar" file. This script
 # is meant to be run as a prerequisite before launching orchestrator/replica.
 #
-# The configuration format is presently described here:
-# https://docs.google.com/document/d/1W2bDkq3xhNvQyWPIVSKpYuBzaa5d1QN-N4uiXByr2Qg/edit
+# The configuration format is described in guestos/docs/ConfigStore.adoc
 #
 # The tar file can be supplied using one of two methods:
 # - as "ic-bootstrap.tar" stored on a (virtual) removable media attached

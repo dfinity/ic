@@ -22,6 +22,7 @@ rust_library(
     },
     version = "0.8.0",
     deps = [
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/constants",
         "//rs/crypto/sha",
@@ -57,6 +58,7 @@ rust_test(
 LEDGER_CANISTER_DEPS = [
     ":ledger",
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/rosetta-api/icp_ledger:icp_ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
@@ -78,7 +80,6 @@ LEDGER_CANISTER_DEPS = [
 
 LEDGER_CANISTER_DATA = [
     "//rs/rosetta-api/icp_ledger:ledger.did",
-    "//rs/rosetta-api/icrc1/ledger:icrc1.did",
     "//rs/rosetta-api/icp_ledger/ledger:ledger_candid_backwards_compatible.did",
 ]
 
@@ -125,22 +126,29 @@ rust_test(
         ":ledger-canister-wasm",
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
+        "@mainnet_icp_ledger_canister//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger/ledger",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
     },
     deps = [
         ":ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger/sm-tests",
         "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/dfn_protobuf",
+        "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
+        "@crate_index//:candid",
         "@crate_index//:num-traits",
+        "@crate_index//:serde_bytes",
     ],
 )

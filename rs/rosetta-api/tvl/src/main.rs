@@ -4,6 +4,7 @@ use ic_cdk_macros::{init, post_upgrade, query};
 use ic_tvl_canister::dashboard::build_dashboard;
 use ic_tvl_canister::metrics::encode_metrics;
 use ic_tvl_canister::types::{TvlArgs, TvlResult, TvlResultError};
+use ic_tvl_canister::TvlRequest;
 
 fn main() {}
 
@@ -20,8 +21,8 @@ async fn post_upgrade(args: TvlArgs) {
 
 #[query]
 #[candid_method(query)]
-async fn get_tvl() -> Result<TvlResult, TvlResultError> {
-    ic_tvl_canister::get_tvl().await
+async fn get_tvl(req: Option<TvlRequest>) -> Result<TvlResult, TvlResultError> {
+    ic_tvl_canister::get_tvl(req).await
 }
 
 #[query]

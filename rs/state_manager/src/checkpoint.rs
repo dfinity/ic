@@ -1,15 +1,14 @@
 use crate::{CheckpointError, CheckpointMetrics, TipRequest, NUMBER_OF_CHECKPOINT_THREADS};
 use crossbeam_channel::{unbounded, Sender};
-use ic_base_types::CanisterId;
+use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
 // TODO(MR-412): uncomment
 //use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary, canister_state::system_state::CanisterHistory,
-    page_map::PageMap, CanisterMetrics, CanisterState, ExecutionState, ReplicatedState,
-    SchedulerState, SystemState,
+    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
+    ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
@@ -21,10 +20,6 @@ use std::time::{Duration, Instant};
 
 #[cfg(test)]
 mod tests;
-
-/// Controls whether the ingress history is written to a separate
-/// `ingress_history.pbuf` file; or bundled with the rest of system metadata.
-pub const SEPARATE_INGRESS_HISTORY: bool = false;
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
@@ -43,7 +38,6 @@ pub(crate) fn make_checkpoint(
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-    separate_ingress_history: bool,
 ) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), CheckpointError> {
     {
         let _timer = metrics
@@ -54,7 +48,6 @@ pub(crate) fn make_checkpoint(
             .send(TipRequest::SerializeToTip {
                 height,
                 replicated_state: Box::new(state.clone()),
-                separate_ingress_history,
             })
             .unwrap();
     }
@@ -144,17 +137,23 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             .with_label_values(&["system_metadata"])
             .start_timer();
 
-        let mut metadata_proto = checkpoint_layout.system_metadata().deserialize()?;
-        let ingress_history_proto = checkpoint_layout.ingress_history().deserialize_opt()?;
-        if ingress_history_proto.is_some() {
-            // `ingress_history` should be present in either `system_metadata.pbuf` or
-            // `ingress_history.pbuf`, but not both.
-            assert!(metadata_proto.ingress_history.is_none());
-            metadata_proto.ingress_history = ingress_history_proto;
-        }
+        let ingress_history_proto = checkpoint_layout.ingress_history().deserialize()?;
+        let ingress_history =
+            ic_replicated_state::IngressHistoryState::try_from(ingress_history_proto)
+                .map_err(|err| into_checkpoint_error("IngressHistoryState".into(), err))?;
+        let metadata_proto = checkpoint_layout.system_metadata().deserialize()?;
         let mut metadata = ic_replicated_state::SystemMetadata::try_from(metadata_proto)
             .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
+        metadata.ingress_history = ingress_history;
         metadata.own_subnet_type = own_subnet_type;
+
+        if let Some(split_from) = checkpoint_layout.split_marker().deserialize()?.subnet_id {
+            metadata.split_from = Some(
+                subnet_id_try_from_protobuf(split_from)
+                    .map_err(|err| into_checkpoint_error("split_from".into(), err))?,
+            );
+        }
+
         metadata
     };
 
@@ -259,33 +258,6 @@ pub fn load_canister_state<P: ReadPolicy>(
             )
         })?;
     durations.insert("canister_state_bits", starting_time.elapsed());
-    let starting_time = Instant::now();
-    // TODO(MR-412): replace `deserialize_opt` by `deserialize` once
-    // the file canister_metadata.pbuf exists on disk for all nodes.
-    let pb_canister_metadata: ic_protobuf::state::canister_metadata::v1::CanisterMetadata =
-        canister_layout
-            .canister_metadata()
-            .deserialize_opt()?
-            .unwrap_or_default();
-    let pb_canister_history: ic_protobuf::state::canister_metadata::v1::CanisterHistory =
-        pb_canister_metadata.canister_history.unwrap_or_default();
-    // TODO(MR-412): use the followin code to get pb_canister_history once
-    // all nodes have been upgraded
-    //  try_from_option_field(pb_canister_metadata.canister_history, "CanisterHistory").map_err(
-    //      |err| {
-    //          into_checkpoint_error(
-    //              format!("canister_states[{}]::canister_metadata", canister_id),
-    //              err,
-    //          )
-    //      },
-    //  )?;
-    let canister_history: CanisterHistory = pb_canister_history.try_into().map_err(|err| {
-        into_checkpoint_error(
-            format!("canister_states[{}]::canister_metadata", canister_id),
-            err,
-        )
-    })?;
-    durations.insert("canister_metadata", starting_time.elapsed());
 
     let session_nonce = None;
 
@@ -335,6 +307,7 @@ pub fn load_canister_state<P: ReadPolicy>(
                 exports: execution_state_bits.exports,
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
+                next_scheduled_method: execution_state_bits.next_scheduled_method,
             })
         }
         None => None,
@@ -373,7 +346,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.task_queue.into_iter().collect(),
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
-        canister_history,
+        canister_state_bits.canister_history,
     );
 
     let canister_state = CanisterState {

@@ -28,11 +28,11 @@ use crate::canister_requests;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
-use crate::util::{assert_canister_counter_with_retries, block_on, delay};
+use crate::util::{assert_canister_counter_with_retries, block_on};
 
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
@@ -118,12 +118,14 @@ fn test(
 
     if is_install_nns_canisters {
         info!(log, "Installing NNS canisters...");
-        env.topology_snapshot()
+        let nns_node = env
+            .topology_snapshot()
             .root_subnet()
             .nodes()
             .next()
-            .unwrap()
-            .install_nns_canisters()
+            .unwrap();
+        NnsInstallationBuilder::new()
+            .install(&nns_node, &env)
             .expect("Could not install NNS canisters");
     }
 
@@ -262,7 +264,7 @@ pub async fn install_counter_canister(
         .create_canister()
         .as_provisional_create_with_amount(None)
         .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap()
         .0;
@@ -271,7 +273,7 @@ pub async fn install_counter_canister(
         &canister_id,
         wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
     )
-    .call_and_wait(delay())
+    .call_and_wait()
     .await
     .expect("Failed to install counter canister.");
 

@@ -3,13 +3,19 @@ pre-commit:
     # Set the pre-commit home to this directory so we can cache it
     # more easily.
     PRE_COMMIT_HOME: /cache/pre-commit/$CI_CONCURRENT_ID
-  extends: .ubuntu-cargo-k8s
+  extends:
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
   needs: []  # don't wait on other jobs
+  tags:
+    - dfinity-ic # overwritting so we do not inherit the zh tag
   stage: test
   script:
     - |
       set -eEuo pipefail
-      pip3 install pre-commit
+
+      rustup default stable
+
       # Make sure CI can pull from the private repo.
       if ! pre-commit run -a --hook-stage=manual ; then
         echo "Pre-commit checks failed. Here is the diff of the changes:"
@@ -20,12 +26,10 @@ pre-commit:
         echo "install pre-commit by following https://pre-commit.com/#installation:"
         echo "(brew|pip) install pre-commit"
         echo "pre-commit install"
-        echo 
+        echo
         echo "Then, to fix the checks in this branch, run:"
         echo "pre-commit run --from-ref=\$(git merge-base HEAD master) --to-ref=HEAD"
         echo
         echo "And then commit the changes."
-        echo
-        echo "For more information check out https://www.notion.so/GitLab-CI-Developer-How-To-068401fe38ae410d9d608b7a945788bb"
         exit 1
       fi

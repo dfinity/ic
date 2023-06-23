@@ -1,0 +1,48 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/recovery",
+    "//rs/registry/routing_table",
+    "//rs/replay",
+    "//rs/state_manager",
+    "//rs/types/base_types",
+    "//rs/types/types",
+    "@crate_index//:clap",
+    "@crate_index//:hex",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:slog",
+    "@crate_index//:strum",
+    "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
+
+ALIASES = {}
+
+rust_binary(
+    name = "subnet-splitting-tool",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        "//rs/canister_sandbox/backend_lib",
+        "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
+    ],
+)
+
+rust_test(
+    name = "subnet_splitting_tool_test",
+    crate = "subnet-splitting-tool",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

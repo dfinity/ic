@@ -12,13 +12,16 @@ use prometheus::labels;
 cfg_if::cfg_if! {
     if #[cfg(test)] {
         use tests::time;
+        use tests::set_root_hash;
     } else {
         use ic_cdk::api::time;
+        use crate::ic_certification::set_root_hash;
     }
 }
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
+    ic_certification::remove_cert,
     id::Generate,
     LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
@@ -29,6 +32,8 @@ pub enum CreateError {
     NameError(#[from] NameError),
     #[error("Registration '{0}' already exists")]
     Duplicate(Id),
+    #[error("Rate limit exceeded for domain '{0}'")]
+    RateLimited(String),
     #[error("Unauthorized")]
     Unauthorized,
     #[error(transparent)]
@@ -131,6 +136,7 @@ impl<T: Create> Create for WithMetrics<T> {
                         Err(err) => match err {
                             CreateError::NameError(_) => "name-error",
                             CreateError::Duplicate(_) => "duplicate",
+                            CreateError::RateLimited(_) => "rate-limited",
                             CreateError::Unauthorized => "unauthorized",
                             CreateError::UnexpectedError(_) => "fail",
                         },
@@ -264,6 +270,22 @@ impl Update for Updater {
                     self.expirations.with(|exps| exps.borrow_mut().remove(id));
                     self.retries.with(|rets| rets.borrow_mut().remove(id));
                 }
+
+                // If a registration is being processed, but its expiration has not been scheduled,
+                // schedule it. This is needed, for example, for certificate renewals
+                if state != State::Available
+                    && !self
+                        .expirations
+                        .with(|exps| exps.borrow().get(id).is_some())
+                {
+                    self.expirations.with(|exps| {
+                        let mut exps = exps.borrow_mut();
+                        exps.push(
+                            id.to_owned(),
+                            Reverse(time() + REGISTRATION_EXPIRATION_TTL.as_nanos() as u64),
+                        );
+                    });
+                }
             }
         }
 
@@ -372,6 +394,9 @@ impl Remove for Remover {
         self.encrypted_certificates
             .with(|certs| certs.borrow_mut().remove(&id.into()));
 
+        // remove the IC certificate for the domain
+        remove_cert(id.into());
+
         Ok(())
     }
 }
@@ -441,34 +466,30 @@ impl Expirer {
     }
 }
 
-impl Expire for Expirer {
-    fn expire(&self, t: u64) -> Result<(), ExpireError> {
+impl Expirer {
+    fn get_id(&self, t: u64) -> Option<String> {
         self.expirations.with(|exps| {
             let mut exps = exps.borrow_mut();
+            // Check for next expiration
+            let p = exps.peek().map(|(_, p)| p.0)?;
 
-            #[allow(clippy::while_let_loop)]
-            loop {
-                // Check for next expiration
-                let p = match exps.peek() {
-                    Some((_, p)) => p.0,
-                    None => break,
-                };
-
-                if p > t {
-                    break;
-                }
-
-                let id = match exps.pop() {
-                    Some((id, _)) => id,
-                    None => break,
-                };
-
-                // Remove registration
-                self.remover.with(|r| r.borrow().remove(&id))?;
+            if p > t {
+                return None;
             }
 
-            Ok(())
+            exps.pop().map(|(id, _)| id)
         })
+    }
+}
+
+impl Expire for Expirer {
+    fn expire(&self, t: u64) -> Result<(), ExpireError> {
+        while let Some(id) = self.get_id(t) {
+            // Remove registration
+            self.remover.with(|r| r.borrow().remove(&id))?;
+        }
+        set_root_hash();
+        Ok(())
     }
 }
 
@@ -488,6 +509,8 @@ mod tests {
     pub fn time() -> u64 {
         0
     }
+
+    pub fn set_root_hash() {}
 
     #[test]
     fn get_empty() {

@@ -37,7 +37,7 @@ fn potpourri() {
     }
     let pks = keys
         .iter()
-        .map(|key| key.0.key_value.clone())
+        .map(|key| key.0.public_key().clone())
         .collect::<Vec<_>>();
 
     let ptext = Scalar::batch_random(&mut rng, keys.len());
@@ -113,7 +113,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
     // One takes refs, one takes values:
     let receiver_fs_public_keys: Vec<_> = public_keys_with_zk
         .iter()
-        .map(|key| key.key_value.clone())
+        .map(|key| key.public_key().clone())
         .collect();
 
     let polynomial = Scalar::batch_random(&mut rng, threshold);
@@ -162,19 +162,19 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         println!("Verifying chunking proof...");
         // Suggestion: Make this conversion in prove_chunking, so that the API types are
         // consistent.
-        let big_plaintext_chunks: Vec<Vec<_>> = plaintext_chunks
+        let big_plaintext_chunks: Vec<_> = plaintext_chunks
             .iter()
             .map(|chunks| chunks.chunks_as_scalars())
             .collect();
 
         let chunking_instance = ChunkingInstance::new(
             receiver_fs_public_keys.clone(),
-            crsz.cc.clone(),
-            crsz.rr.clone(),
+            crsz.ciphertext_chunks().to_vec(),
+            crsz.randomizers_r().clone(),
         );
 
         let chunking_witness =
-            ChunkingWitness::new(encryption_witness.r.clone(), big_plaintext_chunks);
+            ChunkingWitness::new(encryption_witness.witness().clone(), big_plaintext_chunks);
 
         let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, &mut rng);
 
@@ -223,12 +223,13 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         }
 
         let combined_ciphertexts: Vec<G1Affine> = crsz
-            .cc
+            .ciphertext_chunks()
             .iter()
             .map(|s| g1_from_big_endian_chunks(s))
             .collect();
-        let combined_r = scalar_from_big_endian_chunks(&encryption_witness.r);
-        let combined_r_exp = g1_from_big_endian_chunks(&crsz.rr);
+
+        let combined_r = scalar_from_big_endian_chunks(encryption_witness.witness());
+        let combined_r_exp = g1_from_big_endian_chunks(crsz.randomizers_r());
         let combined_plaintexts: Vec<Scalar> = plaintext_chunks
             .iter()
             .map(|receiver_chunks| receiver_chunks.recombine_to_scalar())

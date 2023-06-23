@@ -43,6 +43,9 @@ const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GIB);
 /// sections on a given subnet.
 const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * GIB);
 
+/// The number of bytes reserved for response callback executions.
+const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
+
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
 /// is above this limit, no more canisters will be executed till the next
@@ -70,7 +73,7 @@ pub const INSTRUCTION_OVERHEAD_PER_QUERY_CALL: u64 = 50_000_000;
 
 /// The number of query execution threads overall for all canisters.
 /// See also `QUERY_EXECUTION_THREADS_PER_CANISTER`.
-const QUERY_EXECUTION_THREADS_TOTAL: usize = 2;
+pub(crate) const QUERY_EXECUTION_THREADS_TOTAL: usize = 2;
 
 /// When a canister is scheduled for query execution, it is allowed to run for
 /// this amount of time. This limit controls how many queries the canister
@@ -135,6 +138,9 @@ pub struct Config {
     /// The maximum amount of logical storage available to wasm custom sections
     /// across the whole subnet.    
     pub subnet_wasm_custom_sections_memory_capacity: NumBytes,
+
+    /// The number of bytes reserved for response callback execution.
+    pub subnet_memory_reservation: NumBytes,
 
     /// The maximum amount of memory that can be utilized by a single canister.
     pub max_canister_memory_size: NumBytes,
@@ -255,6 +261,7 @@ impl Default for Config {
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
             subnet_wasm_custom_sections_memory_capacity:
                 SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
+            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),
@@ -294,7 +301,7 @@ impl Default for Config {
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
             composite_queries: FlagStatus::Disabled,
-            query_caching: FlagStatus::Disabled,
+            query_caching: FlagStatus::Enabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
             min_sandbox_count: embedders::DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: embedders::DEFAULT_MAX_SANDBOX_COUNT,

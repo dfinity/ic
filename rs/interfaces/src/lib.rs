@@ -4,6 +4,7 @@
 //! helps reduce unnecessary dependencies between them.
 pub mod artifact_manager;
 pub mod artifact_pool;
+pub mod batch_payload;
 pub mod canister_http;
 pub mod certification;
 pub mod consensus;
@@ -17,6 +18,7 @@ pub mod ingress_pool;
 pub mod messages;
 pub mod messaging;
 pub mod self_validating_payload;
+pub mod state_sync_client;
 pub mod time_source;
 pub mod validation;
 

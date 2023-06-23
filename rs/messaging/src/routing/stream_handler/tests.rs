@@ -274,7 +274,7 @@ fn induct_loopback_stream_reroute_response() {
 
         // The `inducted_msg` is expected to be inducted to the input queue of the local canister.
         expected_state
-            .push_input(inducted_msg, (u64::MAX / 2).into(), &mut (i64::MAX / 2))
+            .push_input(inducted_msg, &mut (i64::MAX / 2))
             .unwrap();
 
         // A reject signal is generated at index 23 and then garbage-collected.
@@ -404,48 +404,6 @@ fn induct_loopback_stream_success() {
         assert_eq!(
             2,
             fetch_inducted_payload_sizes_stats(&metrics_registry).count
-        );
-    });
-}
-
-/// Tests that canister memory limit is enforced by
-/// `StreamHandlerImpl::induct_loopback_stream()`.
-#[test]
-fn induct_loopback_stream_with_canister_memory_limit() {
-    with_test_replica_logger(|log| {
-        // A stream handler with a canister memory limit that only allows up to 3 reservations.
-        let config = HypervisorConfig {
-            max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
-            ..Default::default()
-        };
-        let (stream_handler, initial_state, metrics_registry) =
-            new_fixture_with_config(&log, config);
-
-        induct_loopback_stream_with_memory_limit_impl(
-            stream_handler,
-            initial_state,
-            metrics_registry,
-        );
-    });
-}
-
-/// Tests that subnet memory limit is enforced by
-/// `StreamHandlerImpl::induct_loopback_stream()`.
-#[test]
-fn induct_loopback_stream_with_subnet_memory_limit() {
-    with_test_replica_logger(|log| {
-        // A stream handler with a subnet memory limit that only allows up to 3 reservations.
-        let config = HypervisorConfig {
-            subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
-            ..Default::default()
-        };
-        let (stream_handler, initial_state, metrics_registry) =
-            new_fixture_with_config(&log, config);
-
-        induct_loopback_stream_with_memory_limit_impl(
-            stream_handler,
-            initial_state,
-            metrics_registry,
         );
     });
 }
@@ -2191,50 +2149,6 @@ fn induct_stream_slices_with_messages_from_migrated_canister() {
     });
 }
 
-/// Tests that canister memory limit is enforced by
-/// `StreamHandlerImpl::induct_stream_slices()`.
-#[test]
-fn induct_stream_slices_with_canister_memory_limit() {
-    with_test_replica_logger(|log| {
-        // Canister memory limit only allows for one in-flight request (plus epsilon).
-        let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
-            &log,
-            HypervisorConfig {
-                max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
-                ..Default::default()
-            },
-        );
-
-        induct_stream_slices_with_memory_limit_impl(
-            stream_handler,
-            initial_state,
-            metrics_registry,
-        );
-    });
-}
-
-/// Tests that subnet memory limit is enforced by
-/// `StreamHandlerImpl::induct_stream_slices()`.
-#[test]
-fn induct_stream_slices_with_subnet_memory_limit() {
-    with_test_replica_logger(|log| {
-        // Subnet memory limit only allows for one in-flight request (plus epsilon).
-        let (stream_handler, initial_state, metrics_registry) = new_fixture_with_config(
-            &log,
-            HypervisorConfig {
-                subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
-                ..Default::default()
-            },
-        );
-
-        induct_stream_slices_with_memory_limit_impl(
-            stream_handler,
-            initial_state,
-            metrics_registry,
-        );
-    });
-}
-
 /// Tests that subnet message memory limit is enforced by
 /// `StreamHandlerImpl::induct_stream_slices()`.
 #[test]
@@ -2250,52 +2164,6 @@ fn induct_stream_slices_with_subnet_message_memory_limit() {
                 ..Default::default()
             },
         );
-
-        induct_stream_slices_with_memory_limit_impl(
-            stream_handler,
-            initial_state,
-            metrics_registry,
-        );
-    });
-}
-
-/// Tests that canister memory limit is enforced by
-/// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
-#[test]
-fn system_subnet_induct_stream_slices_with_canister_memory_limit() {
-    with_test_replica_logger(|log| {
-        // Canister memory limit only allows for one in-flight request (plus epsilon).
-        let (stream_handler, mut initial_state, metrics_registry) = new_fixture_with_config(
-            &log,
-            HypervisorConfig {
-                max_canister_memory_size: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
-                ..Default::default()
-            },
-        );
-        initial_state.metadata.own_subnet_type = SubnetType::System;
-
-        induct_stream_slices_with_memory_limit_impl(
-            stream_handler,
-            initial_state,
-            metrics_registry,
-        );
-    });
-}
-
-/// Tests that subnet memory limit is enforced by
-/// `StreamHandlerImpl::induct_stream_slices()` on system subnets.
-#[test]
-fn system_subnet_induct_stream_slices_with_subnet_memory_limit() {
-    with_test_replica_logger(|log| {
-        // Subnet memory limit only allows for one in-flight request (plus epsilon).
-        let (stream_handler, mut initial_state, metrics_registry) = new_fixture_with_config(
-            &log,
-            HypervisorConfig {
-                subnet_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 15 / 10),
-                ..Default::default()
-            },
-        );
-        initial_state.metadata.own_subnet_type = SubnetType::System;
 
         induct_stream_slices_with_memory_limit_impl(
             stream_handler,
@@ -2984,10 +2852,7 @@ where
     I: std::iter::Iterator<Item = (StreamIndex, &'a RequestOrResponse)>,
 {
     for (_stream_index, msg) in messages {
-        assert_eq!(
-            Ok(()),
-            state.push_input(msg.clone(), (u64::MAX / 2).into(), &mut (i64::MAX / 2))
-        );
+        assert_eq!(Ok(()), state.push_input(msg.clone(), &mut (i64::MAX / 2)));
     }
 }
 

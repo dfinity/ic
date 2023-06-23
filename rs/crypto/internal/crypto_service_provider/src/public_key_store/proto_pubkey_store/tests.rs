@@ -6,12 +6,12 @@ use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
-use ic_crypto_node_key_generation::derive_node_id;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_test_utils_keys::public_keys::{
     valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
     valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key, valid_tls_certificate,
 };
+use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
@@ -315,7 +315,8 @@ fn should_deserialize_existing_public_key_store() {
     //node_id is derived from node signing public key
     //so we also check here for the expected hard-coded value
     assert_eq!(
-        derive_node_id(&store.node_signing_pubkey().unwrap()),
+        derive_node_id(&store.node_signing_pubkey().unwrap())
+            .expect("Node signing public key should be valid"),
         NodeId::new(
             PrincipalId::from_str(
                 "4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae"

@@ -1,5 +1,6 @@
 use crate::canister_agent::CanisterAgent;
 use crate::canister_api::GenericRequest;
+use crate::driver::group::{MAX_RUNTIME_BLOCKING_THREADS, MAX_RUNTIME_THREADS};
 use crate::driver::test_env_api::*;
 use crate::generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics};
 use crate::types::*;
@@ -12,17 +13,24 @@ use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity, RequestId,
+    agent::{http_transport::ReqwestHttpReplicaV2Transport, RejectCode, RejectResponse},
+    Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
+use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
 use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance::pb::v1::{
+    create_service_nervous_system::SwapParameters, CreateServiceNervousSystem,
+};
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
+use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Params};
+use ic_types::crypto::{AlgorithmId, UserPublicKey};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
@@ -35,6 +43,8 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use on_wire::FromWire;
+use rand::SeedableRng;
+use rand_chacha::ChaChaRng;
 use slog::{debug, info};
 use std::collections::BTreeMap;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
@@ -47,7 +57,8 @@ use std::{
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::net::{TcpSocket, TcpStream};
-use tokio::runtime::Runtime as TRuntime;
+use tokio::runtime::Builder;
+use tokio::runtime::Handle as THandle;
 use url::Url;
 
 pub mod delegations;
@@ -191,7 +202,7 @@ impl<'a> UniversalCanister<'a> {
             .with_optional_compute_allocation(compute_allocation)
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
             .0;
@@ -199,7 +210,7 @@ impl<'a> UniversalCanister<'a> {
         // Install the universal canister.
         mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
         Ok(Self { agent, canister_id })
@@ -218,7 +229,7 @@ impl<'a> UniversalCanister<'a> {
             .create_canister()
             .as_provisional_create_with_amount(Some(cycles.into()))
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
             .0;
@@ -226,7 +237,7 @@ impl<'a> UniversalCanister<'a> {
         // Install the universal canister.
         mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
         Ok(Self { agent, canister_id })
@@ -246,7 +257,7 @@ impl<'a> UniversalCanister<'a> {
             .create_canister()
             .as_provisional_create_with_amount(None)
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
             .0;
@@ -254,7 +265,7 @@ impl<'a> UniversalCanister<'a> {
         // Install the universal canister.
         mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
 
@@ -325,17 +336,12 @@ impl<'a> UniversalCanister<'a> {
     }
 
     /// Try to store `msg` in stable memory starting at `offset` bytes.
-    pub async fn try_store_to_stable(
-        &self,
-        offset: u32,
-        msg: &[u8],
-        delay: garcon::Delay,
-    ) -> Result<(), AgentError> {
+    pub async fn try_store_to_stable(&self, offset: u32, msg: &[u8]) -> Result<(), AgentError> {
         let res = self
             .agent
             .update(&self.canister_id, "update")
             .with_arg(Self::stable_writer(offset, msg))
-            .call_and_wait(delay)
+            .call_and_wait()
             .await;
         match res {
             Ok(_) => Ok(()),
@@ -348,7 +354,7 @@ impl<'a> UniversalCanister<'a> {
         self.agent
             .update(&self.canister_id, "update")
             .with_arg(Self::stable_writer(offset, msg))
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap_or_else(|err| panic!("Could not push message to stable: {}", err));
     }
@@ -431,7 +437,7 @@ impl<'a> UniversalCanister<'a> {
         self.agent
             .update(&self.canister_id, "update")
             .with_arg(universal_canister_payload)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
     }
 
@@ -468,7 +474,7 @@ impl<'a> UniversalCanister<'a> {
         self.agent
             .update(&self.canister_id, "update")
             .with_arg(payload.into())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
     }
 }
@@ -525,14 +531,14 @@ impl<'a> MessageCanister<'a> {
             .with_optional_compute_allocation(compute_allocation)
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
             .0;
 
         // Install the universal canister.
         mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install message canister: {}", err))?;
         Ok(Self { agent, canister_id })
@@ -549,14 +555,14 @@ impl<'a> MessageCanister<'a> {
             .create_canister()
             .as_provisional_create_with_amount(Some(cycles.into()))
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
             .0;
 
         // Install the universal canister.
         mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap_or_else(|err| panic!("Couldn't install message canister: {}", err));
 
@@ -592,7 +598,7 @@ impl<'a> MessageCanister<'a> {
         self.agent
             .update(&self.canister_id, "forward")
             .with_arg(&Encode!(&params).unwrap())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map(|bytes| Decode!(&bytes, Vec<u8>).unwrap())
     }
@@ -614,21 +620,17 @@ impl<'a> MessageCanister<'a> {
         .await
     }
 
-    pub async fn try_store_msg<P: Into<String>>(
-        &self,
-        msg: P,
-        delay: garcon::Delay,
-    ) -> Result<(), AgentError> {
+    pub async fn try_store_msg<P: Into<String>>(&self, msg: P) -> Result<(), AgentError> {
         self.agent
             .update(&self.canister_id, "store")
             .with_arg(&Encode!(&msg.into()).unwrap())
-            .call_and_wait(delay)
+            .call_and_wait()
             .await
             .map(|_| ())
     }
 
     pub async fn store_msg<P: Into<String>>(&self, msg: P) {
-        self.try_store_msg(msg, delay())
+        self.try_store_msg(msg)
             .await
             .unwrap_or_else(|err| panic!("Could not store message: {}", err))
     }
@@ -763,21 +765,6 @@ pub fn random_ed25519_identity() -> BasicIdentity {
     )
 }
 
-// How `Agent` is instructed to wait for update calls.
-pub fn delay() -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(500))
-        .timeout(std::time::Duration::from_secs(60 * 5))
-        .build()
-}
-
-pub fn create_delay(throttle_duration: u64, timeout: u64) -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(throttle_duration))
-        .timeout(std::time::Duration::from_secs(timeout))
-        .build()
-}
-
 pub fn get_nns_node(topo_snapshot: &TopologySnapshot) -> IcNodeSnapshot {
     let nns_node = topo_snapshot.root_subnet().nodes().next().unwrap();
     nns_node.await_status_is_healthy().unwrap();
@@ -818,13 +805,14 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
-            AgentError::ReplicaError {
+            AgentError::ReplicaError(RejectResponse {
                 reject_code,
                 reject_message,
-            } => assert_eq!(
-                code as u64, reject_code,
-                "Expect code {} did not match {}. Reject message: {}",
-                code as u64, reject_code, reject_message
+                ..
+            }) => assert_eq!(
+                code, reject_code,
+                "Expect code {:?} did not match {:?}. Reject message: {}",
+                code, reject_code, reject_message
             ),
             others => panic!(
                 "Expected call to fail with a replica error but got {:?} instead",
@@ -871,20 +859,22 @@ pub(crate) fn assert_nodes_health_statuses(
     }).unwrap_or_else(|err| panic!("Retry function failed within the timeout of {} sec, {err}", READY_WAIT_TIMEOUT.as_secs()));
 }
 
+/// Asserts that the response from an agent call is rejected by the replica
+/// resulting in a [`AgentError::ReplicaError`], and an expected [`RejectCode`].
 pub(crate) fn assert_http_submit_fails(
     result: Result<RequestId, AgentError>,
-    http_status_code: reqwest::StatusCode,
+    expected_reject_code: RejectCode,
 ) {
     match result {
-        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
+        Ok(val) => panic!("Expected call to fail but it succeeded with {:?}.", val),
         Err(agent_error) => match agent_error {
-            AgentError::HttpError(payload) => assert_eq!(
-                payload.status, http_status_code,
-                "Unexpected HTTP status code: {}",
-                payload
+            AgentError::ReplicaError(RejectResponse{reject_code, ..}) => assert_eq!(
+                expected_reject_code, reject_code,
+                "Unexpected reject_code: `{:?}`.",
+                reject_code
             ),
             others => panic!(
-                "Expected call to fail with http error but got {:?} instead",
+                "Expected agent call to replica to fail with AgentError::ReplicaError, but got {:?} instead.",
                 others
             ),
         },
@@ -906,29 +896,74 @@ pub(crate) async fn create_and_install(
     .await
 }
 
+pub async fn create_canister(agent: &Agent, effective_canister_id: PrincipalId) -> Principal {
+    create_canister_with_cycles(agent, effective_canister_id, CYCLES_LIMIT_PER_CANISTER).await
+}
+
+pub(crate) async fn create_canister_with_cycles(
+    agent: &Agent,
+    effective_canister_id: PrincipalId,
+    amount: Cycles,
+) -> Principal {
+    let mgr = ManagementCanister::create(agent);
+    mgr.create_canister()
+        .as_provisional_create_with_amount(Some(amount.into()))
+        .with_effective_canister_id(effective_canister_id)
+        .call_and_wait()
+        .await
+        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+        .0
+}
+
+pub(crate) async fn create_canister_with_cycles_and_specified_id(
+    agent: &Agent,
+    specified_id: PrincipalId,
+    amount: Cycles,
+) -> Principal {
+    let mgr = ManagementCanister::create(agent);
+    mgr.create_canister()
+        .as_provisional_create_with_amount(Some(amount.into()))
+        .as_provisional_create_with_specified_id(specified_id.into())
+        .call_and_wait()
+        .await
+        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+        .0
+}
+
+pub async fn install_canister(
+    agent: &Agent,
+    canister_id: Principal,
+    canister_wasm: &[u8],
+    arg: Vec<u8>,
+) {
+    let mgr = ManagementCanister::create(agent);
+    mgr.install_code(&canister_id, canister_wasm)
+        .with_raw_arg(arg)
+        .call_and_wait()
+        .await
+        .unwrap_or_else(|err| panic!("Couldn't install canister: {}", err));
+}
+
 pub(crate) async fn create_and_install_with_cycles(
     agent: &Agent,
     effective_canister_id: PrincipalId,
     canister_wasm: &[u8],
     amount: Cycles,
 ) -> Principal {
-    let mgr = ManagementCanister::create(agent);
-    let canister_id = mgr
-        .create_canister()
-        .as_provisional_create_with_amount(Some(amount.into()))
-        .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(delay())
-        .await
-        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
-        .0;
+    let canister_id = create_canister_with_cycles(agent, effective_canister_id, amount).await;
+    install_canister(agent, canister_id, canister_wasm, vec![]).await;
+    canister_id
+}
 
-    // Install the universal canister.
-    mgr.install_code(&canister_id, canister_wasm)
-        .with_raw_arg(vec![])
-        .call_and_wait(delay())
-        .await
-        .unwrap_or_else(|err| panic!("Couldn't install canister: {}", err));
-
+pub(crate) async fn create_and_install_with_cycles_and_specified_id(
+    agent: &Agent,
+    specified_id: PrincipalId,
+    canister_wasm: &[u8],
+    amount: Cycles,
+) -> Principal {
+    let canister_id =
+        create_canister_with_cycles_and_specified_id(agent, specified_id, amount).await;
+    install_canister(agent, canister_id, canister_wasm, vec![]).await;
     canister_id
 }
 
@@ -947,7 +982,7 @@ pub(crate) async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 
     let mgr = ManagementCanister::create(agent);
     let canister_status = mgr
         .canister_status(canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap_or_else(|err| panic!("Could not get canister status: {}", err))
         .0;
@@ -962,12 +997,12 @@ pub(crate) async fn set_controller(
     let mgr = ManagementCanister::create(controllee_agent);
     mgr.update_settings(controllee)
         .with_controller(*controller)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap_or_else(|err| panic!("Could not set controller: {}", err))
 }
 
-pub(crate) async fn deposit_cycles(
+pub async fn deposit_cycles(
     controller: &UniversalCanister<'_>,
     &canister_id: &Principal,
     cycles_to_deposit: Cycles,
@@ -984,9 +1019,24 @@ pub(crate) async fn deposit_cycles(
 }
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
-    let rt =
-        TRuntime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
-    rt.block_on(f)
+    // Try to get the current tokio runtime, otherwise create a new one
+    match THandle::try_current() {
+        Ok(h) => h.block_on(f),
+        Err(_) => {
+            let rt = {
+                let cpus = num_cpus::get();
+                let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
+                let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
+                Builder::new_multi_thread()
+                    .worker_threads(workers)
+                    .max_blocking_threads(blocking_threads)
+                    .enable_all()
+                    .build()
+            }
+            .unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
+            rt.block_on(f)
+        }
+    }
 }
 
 pub(crate) async fn create_canister_via_canister(
@@ -1105,7 +1155,7 @@ pub(crate) fn to_principal_id(principal: &Principal) -> PrincipalId {
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
     let status = ManagementCanister::create(agent)
         .canister_status(canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await;
     match status {
         Ok(s) => s.0.module_hash.is_some(),
@@ -1180,15 +1230,17 @@ pub(crate) fn escape_for_wat(id: &Principal) -> String {
 }
 
 pub fn get_config() -> ConfigOptional {
-    let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES).to_string();
     // Make the string parsable by filling the template placeholders with dummy values
-    let cfg = cfg.replace("{{ node_index }}", "0");
-    let cfg = cfg.replace("{{ ipv6_address }}", "::");
-    let cfg = cfg.replace("{{ backup_retention_time_secs }}", "0");
-    let cfg = cfg.replace("{{ backup_purging_interval_secs }}", "0");
-    let cfg = cfg.replace("{{ replica_log_debug_overrides }}", "[]");
-    let cfg = cfg.replace("{{ nns_url }}", "http://www.fakeurl.com/");
-    let cfg = cfg.replace("{{ malicious_behavior }}", "null");
+    let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES)
+        .to_string()
+        .replace("{{ node_index }}", "0")
+        .replace("{{ ipv6_address }}", "::")
+        .replace("{{ backup_retention_time_secs }}", "0")
+        .replace("{{ backup_purging_interval_secs }}", "0")
+        .replace("{{ replica_log_debug_overrides }}", "[]")
+        .replace("{{ nns_url }}", "http://www.fakeurl.com/")
+        .replace("{{ malicious_behavior }}", "null");
+
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
 }
 
@@ -1433,4 +1485,142 @@ pub fn spawn_round_robin_workload_engine(
         block_on(engine.execute(aggregator, LoadTestMetrics::aggregator_fn))
             .expect("Execution of the workload failed.")
     })
+}
+
+/// Divides `dividend` into `divisor` "perfectly" (with zero remainder) or returns
+/// an error.
+pub fn divide_perfectly(
+    field_name: &str,
+    dividend: u64,
+    divisor: u64,
+) -> Result<u64, anyhow::Error> {
+    match dividend.checked_rem(divisor) {
+        None => bail!(
+            "Attempted to divide by zero while validating {}. \
+                 (This is likely due to an internal bug.)",
+            field_name,
+        ),
+
+        Some(0) => Ok(dividend.saturating_div(divisor)),
+
+        Some(remainder) => {
+            assert_ne!(remainder, 0);
+            bail!(
+                "{} is supposed to contain a value that is evenly divisible by {}, \
+                 but it contains {}, which leaves a remainder of {}.",
+                field_name,
+                divisor,
+                dividend,
+                remainder,
+            )
+        }
+    }
+}
+
+pub fn add_box_drawing_left_border(s: String) -> String {
+    let mut result = String::new();
+    let lines = s.lines().map(|l| l.to_string()).collect::<Vec<_>>();
+    for (index, line) in lines.iter().enumerate() {
+        if index == 0 {
+            result.push_str("╭ ");
+        } else {
+            result.push('\n');
+            if index != lines.len() - 1 {
+                result.push_str("│ ");
+            } else {
+                result.push_str("╰ ");
+            }
+        }
+        result.push_str(line);
+    }
+    result
+}
+
+pub fn pad_all_lines_but_first(s: String, padding: usize) -> String {
+    let mut result = String::new();
+    for (index, line) in s.lines().enumerate() {
+        if index != 0 {
+            result.push('\n');
+            result.push_str(&" ".repeat(padding));
+        }
+        result.push_str(line);
+    }
+    result
+}
+
+pub fn generate_identity(seed: u64) -> (Ed25519KeyPair, UserPublicKey, PrincipalId) {
+    let mut rng = ChaChaRng::seed_from_u64(seed);
+    let keypair = Ed25519KeyPair::generate(&mut rng);
+    let pubkey = UserPublicKey {
+        key: keypair.public_key.to_vec(),
+        algorithm_id: AlgorithmId::Ed25519,
+    };
+    let principal =
+        PrincipalId::new_self_authenticating(&ed25519_public_key_to_der(pubkey.key.clone()));
+    (keypair, pubkey, principal)
+}
+
+pub(crate) fn create_service_nervous_system_into_params(
+    create_service_nervous_system: CreateServiceNervousSystem,
+    swap_approved_timestamp_seconds: u64,
+) -> Result<Params, String> {
+    let SwapParameters {
+        minimum_participants,
+        minimum_icp,
+        maximum_icp,
+        minimum_participant_icp,
+        maximum_participant_icp,
+        neuron_basket_construction_parameters,
+        confirmation_text: _,
+        restricted_countries: _,
+        start_time,
+        duration,
+    } = create_service_nervous_system
+        .swap_parameters
+        .clone()
+        .ok_or("`swap_parameters` should not be None`")?;
+
+    let neuron_basket_construction_parameters: NeuronBasketConstructionParameters =
+        neuron_basket_construction_parameters
+            .ok_or("`neuron_basket_construction_parameters` should not be None")?
+            .try_into()?;
+
+    let start_time = start_time;
+    let duration = duration.ok_or("`duration` should not be None")?;
+    let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
+        CreateServiceNervousSystem::swap_start_and_due_timestamps(
+            start_time,
+            duration,
+            swap_approved_timestamp_seconds,
+        )?;
+
+    let params = Params {
+        min_participants: minimum_participants.ok_or("`minimum_participants` should not be None")?
+            as u32,
+        min_icp_e8s: minimum_icp
+            .ok_or("`minimum_icp` should not be None")?
+            .e8s
+            .ok_or("`e8`s should not be None")?,
+        max_icp_e8s: maximum_icp
+            .ok_or("`maximum_icp` should not be None")?
+            .e8s
+            .ok_or("`e8`s should not be None")?,
+        min_participant_icp_e8s: minimum_participant_icp
+            .ok_or("`minimum_participant_icp` should not be None")?
+            .e8s
+            .ok_or("`e8`s should not be None")?,
+        max_participant_icp_e8s: maximum_participant_icp
+            .ok_or("`maximum_participant_icp` should not be None")?
+            .e8s
+            .ok_or("`e8`s should not be None")?,
+        swap_due_timestamp_seconds,
+        sns_token_e8s: create_service_nervous_system
+            .sns_token_e8s()
+            .ok_or("`swap_distribution.total.e8s` should not be None")?,
+        neuron_basket_construction_parameters: Some(neuron_basket_construction_parameters),
+        sale_delay_seconds: Some(
+            swap_start_timestamp_seconds.saturating_sub(swap_approved_timestamp_seconds),
+        ),
+    };
+    Ok(params)
 }

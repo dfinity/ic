@@ -3,7 +3,7 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            NnsInstallationExt, SubnetSnapshot,
+            NnsInstallationBuilder, SubnetSnapshot,
         },
     },
     icrc1_agent_test::install_icrc1_ledger,
@@ -84,8 +84,9 @@ pub fn install_nns_canisters_at_ids(env: &TestEnv) {
         .nodes()
         .next()
         .expect("there is no NNS node");
-    nns_node
-        .install_nns_canisters_at_ids()
+    NnsInstallationBuilder::new()
+        .at_ids()
+        .install(&nns_node, env)
         .expect("NNS canisters not installed");
     info!(&env.logger(), "NNS canisters installed");
 }
@@ -202,6 +203,7 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
+        halt_at_cup_height: None,
         max_instructions_per_message: None,
         max_instructions_per_round: None,
         max_instructions_per_install_code: None,
@@ -279,6 +281,7 @@ pub(crate) async fn install_ledger(
             max_transactions_per_response: None,
         },
         fee_collector_account: None,
+        max_memo_length: None,
     });
     install_icrc1_ledger(env, canister, &init_args).await;
     canister.canister_id()
@@ -347,14 +350,10 @@ pub(crate) async fn set_kyt_api_key(
     kyt_canister: &Principal,
     api_key: String,
 ) {
-    let waiter = garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(100))
-        .timeout(std::time::Duration::from_secs(60 * 5))
-        .build();
     agent
         .update(kyt_canister, "set_api_key")
         .with_arg(candid::Encode!(&SetApiKeyArg { api_key }).unwrap())
-        .call_and_wait(waiter)
+        .call_and_wait()
         .await
         .expect("failed to set api key");
 }

@@ -3,18 +3,18 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl, dkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::ConsensusImpl;
+use ic_consensus::consensus::ConsensusGossipImpl;
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, MutablePool},
     certification,
-    consensus_pool::ChangeAction,
+    consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
-use ic_types::consensus::ConsensusMessage;
+use ic_types::{consensus::ConsensusMessage, NodeId};
 use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 
@@ -24,8 +24,10 @@ impl<'a> ConsensusDriver<'a> {
     /// component.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        node_id: NodeId,
         pool_config: ArtifactPoolConfig,
-        consensus: ConsensusImpl,
+        consensus: Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
+        consensus_gossip: ConsensusGossipImpl,
         dkg: ic_consensus::dkg::DkgImpl,
         certifier: Box<
             dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = certification::ChangeSet> + 'a,
@@ -35,14 +37,17 @@ impl<'a> ConsensusDriver<'a> {
         logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> ConsensusDriver<'a> {
-        let ingress_pool = RefCell::new(TestIngressPool::new(pool_config.clone()));
+        let ingress_pool = RefCell::new(TestIngressPool::new(node_id, pool_config.clone()));
         let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
             pool_config,
             logger.clone(),
             metrics_registry,
         )));
+        let consensus_priority =
+            PriorityFnState::new(&consensus_gossip, &*consensus_pool.read().unwrap());
         ConsensusDriver {
             consensus,
+            consensus_gossip,
             dkg,
             certifier,
             logger,
@@ -50,6 +55,7 @@ impl<'a> ConsensusDriver<'a> {
             certification_pool,
             ingress_pool,
             dkg_pool,
+            consensus_priority,
         }
     }
 

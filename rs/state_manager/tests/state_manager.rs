@@ -12,9 +12,8 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
     ReplicatedState, Stream,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly};
+use ic_state_layout::{CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_state_manager::checkpoint::SEPARATE_INGRESS_HISTORY;
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
@@ -1714,15 +1713,9 @@ fn state_sync_message_contains_manifest() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        // Expecting 3 files, as we don't have canisters in the default state.
-        //
-        // 1. "ingress_history.pbuf"
-        // 2. "subnet_queues.pbuf"
-        // 3. "system_metadata.pbuf"
-        assert_eq!(
-            if SEPARATE_INGRESS_HISTORY { 3 } else { 2 },
-            msg.manifest.file_table.len()
-        );
+        // Expecting 1 file (system_metadata.pbuf), as we don't have canisters in the default state.
+        // Two files, subnet_queues.pbuf and ingress_history.pbuf, are empty and therefore omitted.
+        assert_eq!(1, msg.manifest.file_table.len());
 
         // Check that all the files are accessible
         for file_info in msg.manifest.file_table.iter() {
@@ -1998,20 +1991,19 @@ fn can_state_sync_from_cache() {
             // Here we choose the `system_metadata.pbuf` because it is never empty and unlikely to be identical to others.
             //   file idx  |  file size | chunk idx |                         path
             // ------------+------------+---------- +------------------------------------------------------
-            //           0 |        216 |     0     | canister_states/00000000000000640101/canister.pbuf
-            //           1 |         26 |     1     | canister_states/00000000000000640101/canister_metadata.pbuf
-            //           2 |          0 |    N/A    | canister_states/00000000000000640101/queues.pbuf
-            //           3 |         18 |     2     | canister_states/00000000000000640101/software.wasm
-            //           4 |       4096 |     3     | canister_states/00000000000000640101/stable_memory.bin
-            //           5 |       4096 |     4     | canister_states/00000000000000640101/vmemory_0.bin
-            //           6 |        216 |     5     | canister_states/00000000000000c80101/canister.pbuf
-            //           7 |          2 |     6     | canister_states/00000000000000c80101/canister_metadata.pbuf
-            //           8 |          0 |    N/A    | canister_states/00000000000000c80101/queues.pbuf
-            //           9 |         18 |     7     | canister_states/00000000000000c80101/software.wasm
-            //          10 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
-            //          11 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
-            //          12 |          0 |    N/A    | subnet_queues.pbuf
-            //          13 |         88 |     8     | system_metadata.pbuf
+            //           0 |        259 |     0     | canister_states/00000000000000640101/canister.pbuf
+            //           1 |          0 |    N/A    | canister_states/00000000000000640101/queues.pbuf
+            //           2 |         18 |     1     | canister_states/00000000000000640101/software.wasm
+            //           3 |       4096 |     2     | canister_states/00000000000000640101/stable_memory.bin
+            //           4 |       4096 |     3     | canister_states/00000000000000640101/vmemory_0.bin
+            //           5 |        221 |     4     | canister_states/00000000000000c80101/canister.pbuf
+            //           6 |          0 |    N/A    | canister_states/00000000000000c80101/queues.pbuf
+            //           7 |         18 |     5     | canister_states/00000000000000c80101/software.wasm
+            //           8 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
+            //           9 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
+            //          10 |          0 |    N/A    | ingress_history.pbuf
+            //          11 |          0 |    N/A    | subnet_queues.pbuf
+            //          12 |         86 |     6     | system_metadata.pbuf
             //
             // Given the current state layout, the chunk for `system_metadata.pbuf` is the last one in the chunk table.
             // If there are changes to the state layout and it changes the position of `system_metadata.pbuf` in the chunk table,
@@ -2022,7 +2014,7 @@ fn can_state_sync_from_cache() {
                 msg.manifest.chunk_table[chunk_table_idx_to_omit].file_index as usize;
             let file_path = &msg.manifest.file_table[file_table_idx_to_omit].relative_path;
             // Make sure the chunk to omit is from file `system_metadata.pbuf`.
-            assert!(file_path.ends_with("system_metadata.pbuf"));
+            assert!(file_path.ends_with(SYSTEM_METADATA_FILE));
 
             let omit: HashSet<ChunkId> =
                 maplit::hashset! {chunk_id_to_omit, ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
@@ -2145,7 +2137,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
         let (_height, mut state) = src_state_manager.take_tip();
 
         // Insert large number of canisters so that the encoded manifest is larger than 1 MiB.
-        let num_canisters = 2000;
+        let num_canisters = 5000;
         for id in 100..(100 + num_canisters) {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
@@ -3157,10 +3149,9 @@ fn can_get_dirty_pages() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{
-        compute_manifest, validate_manifest, CURRENT_STATE_SYNC_VERSION, DEFAULT_CHUNK_SIZE,
-    };
+    use ic_state_manager::manifest::{compute_manifest, validate_manifest, DEFAULT_CHUNK_SIZE};
     use ic_state_manager::ManifestMetrics;
+    use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
     state_manager_test(|metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
@@ -4182,7 +4173,6 @@ fn tip_is_initialized_correctly() {
             .canister(&tip_layout.canister_ids().unwrap()[0])
             .unwrap();
         assert!(!canister_layout.queues().raw_path().exists());
-        assert!(!canister_layout.canister_metadata().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
         assert!(canister_layout.vmemory_0().exists());
         assert!(canister_layout.stable_memory_blob().exists());
@@ -4194,13 +4184,13 @@ fn tip_is_initialized_correctly() {
 
         // All files are in the checkpoint
         assert!(checkpoint_layout.system_metadata().raw_path().exists());
-        assert!(checkpoint_layout.subnet_queues().raw_path().exists());
+        assert!(!checkpoint_layout.subnet_queues().raw_path().exists()); // empty
         assert_eq!(checkpoint_layout.canister_ids().unwrap().len(), 1);
         let canister_layout = checkpoint_layout
             .canister(&checkpoint_layout.canister_ids().unwrap()[0])
             .unwrap();
-        assert!(canister_layout.queues().raw_path().exists());
-        assert!(canister_layout.canister_metadata().raw_path().exists());
+        assert!(!canister_layout.queues().raw_path().exists()); // empty
+        assert!(canister_layout.canister().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
         assert!(canister_layout.vmemory_0().exists());
         assert!(canister_layout.stable_memory_blob().exists());
@@ -4226,25 +4216,10 @@ fn can_recover_ingress_history() {
             NumBytes::from(u64::MAX),
         );
 
-        // Checkpoint with old representation (ingress history in system_metadata.pbuf).
-        state_manager.set_separate_ingress_history(false);
         state_manager.commit_and_certify(state.clone(), height(2), CertificationScope::Full);
         let (_height, state2) = state_manager.take_tip();
         state.metadata.prev_state_hash = state2.metadata.prev_state_hash.clone();
         assert_eq!(state2, state);
-
-        state_manager.set_separate_ingress_history(true);
-        state_manager.commit_and_certify(state2, height(3), CertificationScope::Full);
-        let (_height, state3) = state_manager.take_tip();
-        state.metadata.prev_state_hash = state3.metadata.prev_state_hash.clone();
-        assert_eq!(state3, state);
-
-        // And a downgrade to the old representation.
-        state_manager.set_separate_ingress_history(false);
-        state_manager.commit_and_certify(state3, height(4), CertificationScope::Full);
-        let (_height, state4) = state_manager.take_tip();
-        state.metadata.prev_state_hash = state4.metadata.prev_state_hash.clone();
-        assert_eq!(state4, state);
     });
 }
 

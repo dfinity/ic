@@ -33,9 +33,24 @@
 //! ```text
 //!   chunk_hash := hash(dsep("ic-state-chunk") · file[offset:offset + size_bytes])
 //! ```
+//! where
+//! ```text
+//! dsep(seq) = byte(len(seq)) · seq
+//! ```
 //!
 //! * The hash in the file table is the hash of the slice of the chunk table
 //!   corresponding to this file:
+//! ```text
+//!   file_hash   := hash(dsep("ic-state-file") · len(slice) as u32 · chunk_entry*)
+//!   chunk_entry := size_bytes as u32
+//!                  · offset as u64
+//!                  · chunk_hash
+//! ```
+//!
+//! * The manifest hash is the hash of the protobuf-encoded meta manifest.
+//!
+//! * Before `StateSyncVersion::V3` the file hash additionally includes the file
+//!   index within every chunk entry:
 //! ```text
 //!   file_hash   := hash(dsep("ic-state-file") · len(slice) as u32 · chunk_entry*)
 //!   chunk_entry := file_index as u32
@@ -44,8 +59,8 @@
 //!                  · chunk_hash
 //! ```
 //!
-//! * When the manifest version is less than or equal to `STATE_SYNC_V1`,
-//!   the hash of the whole manifest is computed by hashing the file table:
+//! * The `StateSyncVersion::V1` manifest hash is computed by hashing the file
+//!   and chunk tables:
 //! ```text
 //!   manifest_hash := hash(dsep("ic-state-manifest")
 //!                    · version as u32
@@ -59,12 +74,9 @@
 //!                    · size_bytes as u64
 //!                    · file_hash
 //! ```
-//! where
-//! ```text
-//! dsep(seq) = byte(len(seq)) · seq
-//! ```
-//! * When the manifest version is greater than or equal to `STATE_SYNC_V2`,
-//!   the hash of the meta-manifest functions as the manifest hash.
+//!
+//! * The `StateSyncVersion::V0` manifest hash is computed by hashing the file
+//!   table only and does not include a version number.
 pub mod proto;
 
 use crate::chunkable::ChunkId;
@@ -72,10 +84,11 @@ use ic_protobuf::{proxy::ProtoProxy, state::sync::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    fmt,
+    fmt::{self, Display},
     ops::{Deref, Range},
     sync::Arc,
 };
+use strum_macros::EnumIter;
 
 /// The default chunk size used in manifest computation and state sync.
 pub const DEFAULT_CHUNK_SIZE: u32 = 1 << 20; // 1 MiB.
@@ -111,6 +124,52 @@ pub const MANIFEST_CHUNK_ID_OFFSET: u32 = 1 << 31;
 /// `MANIFEST_CHUNK_ID_OFFSET` should be greater than `FILE_GROUP_CHUNK_ID_OFFSET` to have valid ID range assignment.
 #[allow(clippy::assertions_on_constants)]
 const _: () = assert!(MANIFEST_CHUNK_ID_OFFSET > FILE_GROUP_CHUNK_ID_OFFSET);
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, EnumIter, Serialize, Deserialize,
+)]
+pub enum StateSyncVersion {
+    /// Initial version.
+    V0 = 0,
+
+    /// Also include version and chunk hashes into manifest hash.
+    V1 = 1,
+
+    /// Compute the manifest hash based on the encoded manifest.
+    V2 = 2,
+
+    /// File index-independent manifest hash: file index no longer included in file
+    /// hash.
+    V3 = 3,
+}
+
+impl std::convert::TryFrom<u32> for StateSyncVersion {
+    type Error = u32;
+
+    fn try_from(n: u32) -> Result<Self, Self::Error> {
+        use strum::IntoEnumIterator;
+        for version in StateSyncVersion::iter() {
+            if version as u32 == n {
+                return Ok(version);
+            }
+        }
+        Err(n)
+    }
+}
+
+impl Display for StateSyncVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+/// The version of StateSync protocol that should be used for all newly created manifests.
+pub const CURRENT_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V3;
+
+/// Maximum supported StateSync version.
+///
+/// The replica will panic if trying to deal with a manifest with a version higher than this.
+pub const MAX_SUPPORTED_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V3;
 
 /// The type and associated index (if applicable) of a chunk in state sync.
 #[derive(Debug, PartialEq, Eq)]
@@ -188,7 +247,11 @@ pub struct Manifest(
 );
 
 impl Manifest {
-    pub fn new(version: u32, file_table: Vec<FileInfo>, chunk_table: Vec<ChunkInfo>) -> Self {
+    pub fn new(
+        version: StateSyncVersion,
+        file_table: Vec<FileInfo>,
+        chunk_table: Vec<ChunkInfo>,
+    ) -> Self {
         Self(Arc::new(ManifestData {
             version,
             file_table,
@@ -226,8 +289,7 @@ impl Deref for Manifest {
 #[derive(Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ManifestData {
     /// Which version of the hashing procedure should be used.
-    #[serde(default)]
-    pub version: u32,
+    pub version: StateSyncVersion,
     pub file_table: Vec<FileInfo>,
     pub chunk_table: Vec<ChunkInfo>,
 }
@@ -249,10 +311,10 @@ pub struct ManifestData {
 ///   sub_manifest_hash  := hash(dsep("ic-state-sub-manifest") · encoded_manifest[offset:offset + size_bytes])
 /// ```
 ///
-/// The `meta_manifest_hash` is used as the manifest hash when the manifest version is greater than or equal to `STATE_SYNC_V2`.
+/// The `meta_manifest_hash` is used as the manifest hash when the manifest version is greater than or equal to `StateSyncVersion::V1`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct MetaManifest {
-    pub version: u32,
+    pub version: StateSyncVersion,
     pub sub_manifest_hashes: Vec<[u8; 32]>,
 }
 

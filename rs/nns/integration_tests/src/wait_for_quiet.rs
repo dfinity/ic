@@ -4,15 +4,17 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
 };
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::governance::{TimeWarp, ONE_DAY_SECONDS};
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_nns_governance::pb::v1::{
-    add_or_remove_node_provider::Change,
-    manage_neuron::{self, Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal::Action,
-    AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, Neuron, NodeProvider, Proposal,
-    ProposalInfo, Vote,
+use ic_nns_governance::{
+    governance::{TimeWarp, ONE_DAY_SECONDS},
+    pb::v1::{
+        add_or_remove_node_provider::Change,
+        manage_neuron::{self, Command, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        neuron::DissolveState,
+        proposal::Action,
+        AddOrRemoveNodeProvider, ManageNeuron, ManageNeuronResponse, Neuron, NodeProvider,
+        Proposal, ProposalInfo, Vote,
+    },
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder, ids::TEST_NEURON_2_ID, itest_helpers::NnsCanisters,

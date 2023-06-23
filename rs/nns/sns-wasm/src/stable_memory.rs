@@ -163,9 +163,12 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::canister_stable_memory::TestCanisterStableMemory;
-    use crate::pb::v1::{
-        DeployedSns, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasmStableIndex, UpgradePath,
+    use crate::{
+        canister_stable_memory::TestCanisterStableMemory,
+        pb::v1::{
+            DeployedSns, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasmStableIndex,
+            UpgradePath,
+        },
     };
     use ic_base_types::PrincipalId;
 

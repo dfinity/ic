@@ -20,7 +20,7 @@ DEPENDENCIES = [
     "//rs/https_outcalls/client",
     "//rs/ic_os/sev",
     "//rs/interfaces",
-    "//rs/interfaces/bitcoin_adapter_client",
+    "//rs/interfaces/adapter_client",
     "//rs/interfaces/certified_stream_store",
     "//rs/interfaces/p2p",
     "//rs/interfaces/registry",
@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/monitoring/onchain_observability/server",
+    "//rs/monitoring/pprof",
     "//rs/nns/constants",
     "//rs/p2p",
     "//rs/protobuf",
@@ -68,7 +69,12 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tower",
     "@crate_index//:tracing",
-]
+] + select({
+    "@rules_rust//rust/platform:linux": [
+        "//rs/monitoring/backtrace",
+    ],
+    "//conditions:default": [],
+})
 
 MACRO_DEPENDENCIES = []
 

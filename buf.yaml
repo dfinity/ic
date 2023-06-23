@@ -7,7 +7,7 @@ build:
     - rs/nervous_system/proto/proto
     - rs/nns/common/proto
     - rs/nns/gtc/proto Temporarily removed because a PR was reverted and then un-reverted
-    - rs/nns/handlers/root/proto
+    - rs/nns/handlers/root/impl/proto
     - rs/nns/governance/proto
     - rs/protobuf/def
     - rs/rosetta-api/icp_ledger/proto

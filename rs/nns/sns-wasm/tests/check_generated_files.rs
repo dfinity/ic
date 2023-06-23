@@ -13,11 +13,13 @@ fn check_generated_files() {
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let sns_wasm_proto = manifest_dir.join("./proto");
     let base_types_proto = manifest_dir.join("../../types/base_types/proto");
+    let nervous_system_proto = manifest_dir.join("../../nervous_system/proto/proto");
     let sns_init_proto = manifest_dir.join("../../sns/init/proto");
     generate_prost_files(
         ProtoPaths {
             sns_wasm: &sns_wasm_proto,
             base_types: &base_types_proto,
+            nervous_system: &nervous_system_proto,
             sns_init: &sns_init_proto,
         },
         out.path(),

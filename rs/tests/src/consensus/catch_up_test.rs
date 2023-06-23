@@ -22,7 +22,7 @@ const TARGET_FR_MS: u64 = 400;
 const DKG_INTERVAL: u64 = 100;
 const DKG_INTERVAL_TIME_MS: u64 = TARGET_FR_MS * DKG_INTERVAL;
 
-const CATCH_UP_RETRIES: u64 = 60;
+const CATCH_UP_RETRIES: u64 = 120;
 
 const STATE_MANAGER_MAX_RESIDENT_HEIGHT: &str = "state_manager_max_resident_height";
 
@@ -200,6 +200,12 @@ fn test(env: TestEnv, expect_catch_up: bool) {
                 log,
                 "Try {}: Node is still considerably behind, retrying", try_idx
             );
+            info!(
+                log,
+                "Restarting node height: {:?}, rest of the nodes: {:?}",
+                unhealthy_height,
+                healthy_heights
+            );
         }
         if expect_catch_up {
             panic!("The node failed to catch up");
@@ -209,7 +215,11 @@ fn test(env: TestEnv, expect_catch_up: bool) {
     });
 }
 
-fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log: Logger) {
+pub(crate) fn await_node_certified_height(
+    node: &IcNodeSnapshot,
+    target_height: Height,
+    log: Logger,
+) {
     retry(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
         node.status()
             .and_then(|response| match response.certified_height {
@@ -222,5 +232,5 @@ fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log
                 None => bail!("Certified height not available"),
             })
     })
-    .expect("The node did not reach the speicifed height in time")
+    .expect("The node did not reach the specified height in time")
 }

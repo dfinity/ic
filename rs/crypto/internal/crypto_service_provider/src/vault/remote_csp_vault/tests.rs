@@ -90,34 +90,6 @@ mod timeout {
     }
 }
 
-mod secret_key_store {
-    use super::*;
-
-    #[test]
-    fn key_should_be_present_only_after_generation() {
-        let tokio_rt = new_tokio_runtime();
-        let (vault_1, vault_2) = new_csp_vaults_for_test(tokio_rt.handle());
-
-        test_utils::sks::sks_should_contain_keys_only_after_generation(vault_1, vault_2);
-    }
-
-    #[test]
-    fn tls_key_should_be_present_only_after_generation() {
-        let tokio_rt = new_tokio_runtime();
-        let (vault_1, vault_2) = new_csp_vaults_for_test(tokio_rt.handle());
-
-        test_utils::sks::sks_should_contain_tls_keys_only_after_generation(vault_1, vault_2);
-    }
-
-    fn new_csp_vaults_for_test(
-        rt_handle: &tokio::runtime::Handle,
-    ) -> (Arc<dyn CspVault>, Arc<dyn CspVault>) {
-        let csp_vault_1 = new_remote_csp_vault(rt_handle);
-        let csp_vault_2 = new_remote_csp_vault(rt_handle);
-        (csp_vault_1, csp_vault_2)
-    }
-}
-
 mod ni_dkg {
     use super::*;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
@@ -222,7 +194,7 @@ mod ni_dkg {
                 .times(1)
                 .returning(|_key| Ok(()))
                 .in_sequence(&mut seq);
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_node_secret_key_store(sks)
                 .with_public_key_store(pks)
                 .build_into_arc()
@@ -243,7 +215,7 @@ mod ni_dkg {
             pks_returning_already_set_error
                 .expect_set_once_ni_dkg_dealing_encryption_pubkey()
                 .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_already_set_error)
                 .build_into_arc()
         };
@@ -272,7 +244,7 @@ mod ni_dkg {
             pks_returning_io_error
                 .expect_set_once_ni_dkg_dealing_encryption_pubkey()
                 .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_io_error)
                 .build_into_arc()
         };
@@ -314,7 +286,7 @@ mod idkg {
                 .times(1)
                 .return_once(|_key| Ok(()))
                 .in_sequence(&mut seq);
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_node_secret_key_store(sks)
                 .with_public_key_store(pks)
                 .build_into_arc()
@@ -335,7 +307,7 @@ mod idkg {
             pks_returning_io_error
                 .expect_add_idkg_dealing_encryption_pubkey()
                 .return_once(|_| Err(PublicKeyAddError::Io(io_error)));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_io_error)
                 .build_into_arc()
         };
@@ -372,7 +344,7 @@ mod tls_keygen {
         let duplicated_key_id = KeyId::from([42; 32]);
         let secret_key_store =
             secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id);
-        let local_csp_vault = LocalCspVault::builder()
+        let local_csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(secret_key_store)
             .build_into_arc();
         let remote_csp_vault =
@@ -421,7 +393,7 @@ mod tls_keygen {
 
     #[test]
     fn should_set_random_cert_serial_number() {
-        let local_csp_vault = LocalCspVault::builder()
+        let local_csp_vault = LocalCspVault::builder_for_test()
             .with_rng(test_utils::tls::csprng_seeded_with(
                 test_utils::tls::FIXED_SEED,
             ))
@@ -483,7 +455,7 @@ mod tls_keygen {
                 .times(1)
                 .returning(|_key| Ok(()))
                 .in_sequence(&mut seq);
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_node_secret_key_store(sks)
                 .with_public_key_store(pks)
                 .build_into_arc()
@@ -502,7 +474,7 @@ mod tls_keygen {
             pks_returning_already_set_error
                 .expect_set_once_tls_certificate()
                 .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_already_set_error)
                 .build_into_arc()
         };
@@ -530,7 +502,7 @@ mod tls_keygen {
             pks_returning_io_error
                 .expect_set_once_tls_certificate()
                 .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_io_error)
                 .build_into_arc()
         };
@@ -580,7 +552,7 @@ mod tls_sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_encoding() {
         let key_id = KeyId::from([42; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_encoding(key_id);
-        let local_csp_vault = LocalCspVault::builder()
+        let local_csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
             .build_into_arc();
         let tokio_rt = new_tokio_runtime();
@@ -597,7 +569,7 @@ mod tls_sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length() {
         let key_id = KeyId::from([43; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_length(key_id);
-        let local_csp_vault = LocalCspVault::builder()
+        let local_csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
             .build_into_arc();
         let tokio_rt = new_tokio_runtime();
@@ -608,96 +580,6 @@ mod tls_sign {
             key_id,
             remote_csp_vault,
         );
-    }
-}
-
-mod public_key_store {
-    use super::*;
-
-    #[test]
-    fn should_retrieve_current_public_keys() {
-        let tokio_rt = new_tokio_runtime();
-        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::public_key_store::should_retrieve_current_public_keys(csp_vault);
-    }
-
-    #[test]
-    fn should_retrieve_last_idkg_public_key() {
-        let tokio_rt = new_tokio_runtime();
-        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::public_key_store::should_retrieve_last_idkg_public_key(csp_vault);
-    }
-
-    #[test]
-    fn should_correctly_return_idkg_key_count_for_no_keys() {
-        let tokio_rt = new_tokio_runtime();
-        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_no_keys(csp_vault);
-    }
-
-    #[test]
-    fn should_correctly_return_idkg_key_count_for_single_key() {
-        let tokio_rt = new_tokio_runtime();
-        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_single_key(
-            csp_vault,
-        );
-    }
-
-    #[test]
-    fn should_correctly_return_idkg_key_count_for_two_keys() {
-        let tokio_rt = new_tokio_runtime();
-        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys(
-            csp_vault,
-        );
-    }
-
-    #[test]
-    fn should_correctly_return_idkg_key_count_when_all_other_keys_exist_except_idkg_key() {
-        let tokio_rt = new_tokio_runtime();
-        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-        test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key(
-            csp_vault,
-        );
-    }
-
-    mod current_node_public_keys_with_timestamps {
-        use super::*;
-        use crate::vault::test_utils::public_key_store::genesis_time_source;
-        use ic_types::time::GENESIS;
-
-        #[test]
-        fn should_be_consistent_with_current_node_public_keys() {
-            let tokio_rt = new_tokio_runtime();
-            let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-            test_utils::public_key_store::should_be_consistent_with_current_node_public_keys(
-                csp_vault,
-            );
-        }
-
-        #[test]
-        fn should_retrieve_timestamp_of_generated_idkg_public_key() {
-            let local_vault = LocalCspVault::builder()
-                .with_time_source(genesis_time_source())
-                .build_into_arc();
-            let tokio_rt = new_tokio_runtime();
-            let csp_vault =
-                new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), local_vault);
-
-            test_utils::public_key_store::should_retrieve_timestamp_of_generated_idkg_public_key(
-                csp_vault, GENESIS,
-            );
-        }
-
-        #[test]
-        fn should_not_retrieve_timestamps_of_other_generated_keys_because_they_are_not_set_yet() {
-            let tokio_rt = new_tokio_runtime();
-            let csp_vault = new_remote_csp_vault(tokio_rt.handle());
-            test_utils::public_key_store::should_not_retrieve_timestamps_of_other_generated_keys_because_they_are_not_set_yet(
-                csp_vault,
-            );
-        }
     }
 }
 
@@ -712,7 +594,7 @@ mod public_seed {
     fn remote_csp_vault_should_generate_correct_public_seeds() {
         let tokio_rt = new_tokio_runtime();
         let mut csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_rng(csprng.clone())
             .build_into_arc();
         let expected_seeds: Vec<_> = (0..10)

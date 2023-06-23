@@ -5,7 +5,7 @@
 IC-OS is an umbrella term for all the operating systems within the IC, including SetupOS, HostOS, GuestOS, and Boundary-guestOS.
 
 * SetupOS: Responsible for booting a new replica node and installing HostOS and GuestOS.
-* HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design.
+* HostOS: The operating system that runs on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. In terms of its capabilities, it is intentionally limited by design to not perform any trusted capabilities.
 * GuestOS: The operating system that runs inside a virtual machine on the HostOS. The core IC protocol is executed within the GuestOS.
 * Boundary-guestOS: The operating system that runs on boundary nodes.
 
@@ -27,9 +27,9 @@ As an alternative, the following script can be used to build the images in a con
 
 Each image has its own build targets, which are variations of the image:
 
-* SetupOS: `prod`, `dev`
-* HostOS: `prod`, `dev`
-* GuestOS: `prod`, `dev`, `dev-malicious`
+* SetupOS: `prod`, `dev`, `dev-sev`
+* HostOS: `prod`, `dev`, `dev-sev`
+* GuestOS: `prod`, `dev`, `dev-malicious`, `dev-sev`
 * BoundaryGuestOS: `prod`, `prod-sev`, `dev`, `dev-sev`
 ** Note that the `dev` and `dev-sev` images use the local service worker, while the `prod` and `prod-dev` images pull the service worker from `npm`.
 
@@ -43,7 +43,7 @@ Use the following command to build images:
 
    $ bazel build //ic-os/{setupos,hostos,guestos,boundary-guestos}/envs/<TARGET>/...
 
-All build outputs are stored under `/ic/bazel-bin/ic-os/{setupos,hostos,guestos,boundary-guestos}/envs/`
+All IC-OS image build outputs are stored under `/ic/bazel-bin/ic-os/{setupos,hostos,guestos,boundary-guestos}/envs/<TARGET>`
 
 Example:
 
@@ -52,7 +52,7 @@ Example:
 
 == Under the hood: Building an image
 
-IC-OS images are first created as docker images and then transformed into "bare-metal" or "virtual-metal" images that can be use outside containerization.
+IC-OS images are first created as docker images and then transformed into "bare-metal" or "virtual-metal" images that can be used outside containerization.
 
 Rather than installing and relying on a full-blown upstream ISO image, the system is assembled based on a minimal Docker image with the required components added. This approach allows for a minimal, controlled, and well understood system - which is key for a secure platform.
 
@@ -90,11 +90,16 @@ This means that some development and testing could be done on the docker image i
 * *scripts/*: This directory contains build scripts. 
 ** Note that GuestOS has its own scripts subdirectory that still need to be unified with the outer scripts directory.
 
-* *rootfs/*: Each rootfs subdirectory contains everything required to build a bootable Ubuntu system. Various template directories (e.g., /opt) are used, which are simply copied verbatim to the target system. You can add files to these directories to include them in the image.
+* *rootfs/*: Each rootfs subdirectory contains everything required to build a bootable Ubuntu system. Various template directories (e.g., /opt) are used, which are copied verbatim to the target system. You can add files to these directories to include them in the image.
 ** For instructions on how to make changes to the OS, refer to the link:docs/Rootfs.adoc#[rootfs documentation]
 
 == SEV testing
-=== Storing the SEV Certificates on the host (e.g. for test/farm machines)
+
+=== Preparing DEV machine
+
+Follow instructions link:docs/SEVSnpTest.adoc#[here] to prepare the dev machine.
+
+==== Storing the SEV Certificates on the host (e.g. for test/farm machines)
 
 Note: we are storing the PEM files instead of the DER files.
 
@@ -104,31 +109,6 @@ Note: we are storing the PEM files instead of the DER files.
 ```
 
 === Running SEV-SNP VM with virsh
-
-==== Preparing dev machine
-
-Here are the steps to run a boundary-guestOS image as a SEV-SNP image
-
-* Download the latest snp release from here: https://github.com/dfinity/AMDSEV/releases/tag/snp-release-2022-08-02
-* Install the host kernel and reboot the machine
-* Make sure that SEV-SNP is enabled on the host. By running this command:
-```bash
-ubuntu@sf1-gby01:~/AMDSEV/snp-release-2022-04-15$ sudo dmesg | grep  -i -e sev -e ccp -e rmp
-[    0.000000] Command line: BOOT_IMAGE=/boot/vmlinuz-5.14.0-rc2-snp-host-6d4469b86f90 root=/dev/mapper/vgroot-lvroot ro mem_encrypt=on kvm_amd.sev=1 amd_iommu=on
-[    0.520036] Kernel command line: BOOT_IMAGE=/boot/vmlinuz-5.14.0-rc2-snp-host-6d4469b86f90 root=/dev/mapper/vgroot-lvroot ro mem_encrypt=on kvm_amd.sev=1 amd_iommu=on
-[    1.768903] SEV-SNP: RMP table physical address 0x0000007fef500000 - 0x000000806fcfffff
-[    2.767472] [Hardware Error]: event severity: fatal
-[    8.328990] ccp 0000:22:00.1: enabling device (0000 -> 0002)
-[    8.330886] ccp 0000:22:00.1: no command queues available
-[    8.331699] ccp 0000:22:00.1: sev enabled
-[    8.331702] ccp 0000:22:00.1: psp enabled
-[    8.331973] ccp 0000:a6:00.1: enabling device (0000 -> 0002)
-[    8.333711] ccp 0000:a6:00.1: no command queues available
-[    8.382289] ccp 0000:22:00.1: SEV firmware update successful
-[   17.253755] ccp 0000:22:00.1: SEV-SNP API:1.51 build:3
-[   17.267208] SEV supported: 410 ASIDs
-[   17.267209] SEV-ES and SEV-SNP supported: 99 ASIDs
-```
 
 ### Preparing image
 

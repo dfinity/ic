@@ -20,6 +20,7 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-constants = { path = "../../../constants" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
+ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1"
 icp-ledger = { path = "../" }
@@ -36,6 +37,7 @@ num-traits = {version = "0.2.15"}
 
 
 [dev-dependencies]
+candid = "0.8.1"
 ic-icrc1-ledger-sm-tests = { path = "../../icrc1/ledger/sm-tests" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

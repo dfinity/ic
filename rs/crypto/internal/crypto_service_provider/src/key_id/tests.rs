@@ -78,30 +78,6 @@ mod stability_tests {
     }
 
     #[test]
-    fn should_instantiate_same_key_id_from_display_string() {
-        let key_id =
-            KeyId::from_hex("e1299603ca276e7164d25be3596f98c6139202959b6a83195acf0c5121d57742")
-                .expect("invalid key id");
-
-        let reconstructed_key_id =
-            KeyId::try_from(key_id.to_string().as_str()).expect("invalid key id");
-
-        assert_eq!(key_id, reconstructed_key_id);
-    }
-
-    #[test]
-    fn should_provide_stable_key_id_from_display_string() {
-        let displayed_key_id =
-            "KeyId(0xd9564f1e7ab210c9f0c95d4627d5266485b4a7724048a36170c8ff5ac2915a48)";
-        let computed_key_id = KeyId::try_from(displayed_key_id).expect("invalid key id");
-        let expected_key_id =
-            KeyId::from_hex("d9564f1e7ab210c9f0c95d4627d5266485b4a7724048a36170c8ff5ac2915a48")
-                .expect("invalid key id");
-
-        assert_eq!(computed_key_id, expected_key_id);
-    }
-
-    #[test]
     fn should_provide_stable_key_id_from_algorithm_id_and_slice_of_bytes() {
         let bytes = b"The quick brown fox jumps over the lazy dog";
         let tests = vec![

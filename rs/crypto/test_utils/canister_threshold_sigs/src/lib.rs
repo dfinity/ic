@@ -6,13 +6,16 @@ use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_interfaces::crypto::{
     BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
+use ic_logger::ReplicaLogger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
-    IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealing,
+    IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
+    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
@@ -27,6 +30,8 @@ use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetI
 use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
+
+pub mod dummy_values;
 
 pub fn create_params_for_dealers(
     dealer_set: &BTreeSet<NodeId>,
@@ -227,15 +232,10 @@ pub fn batch_sign_signed_dealings(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
     signed_dealings: BTreeMap<NodeId, SignedIDkgDealing>,
-) -> BTreeMap<NodeId, BatchSignedIDkgDealing> {
+) -> BatchSignedIDkgDealings {
     signed_dealings
-        .into_iter()
-        .map(|(dealer_id, signed_dealing)| {
-            let multisigned_dealing =
-                batch_sign_signed_dealing(params, crypto_components, signed_dealing);
-
-            (dealer_id, multisigned_dealing)
-        })
+        .into_values()
+        .map(|signed_dealing| batch_sign_signed_dealing(params, crypto_components, signed_dealing))
         .collect()
 }
 
@@ -255,7 +255,7 @@ pub fn add_support_from_all_receivers(
 pub fn create_transcript(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+    dealings: &BatchSignedIDkgDealings,
     creator_id: NodeId,
 ) -> IDkgTranscript {
     crypto_for(creator_id, crypto_components)
@@ -468,6 +468,7 @@ pub struct CanisterThresholdSigTestEnvironment {
     pub registry_data: Arc<ProtoRegistryDataProvider>,
     pub registry: Arc<FakeRegistryClient>,
     pub newest_registry_version: RegistryVersion,
+    pub in_memory_loggers: BTreeMap<NodeId, InMemoryReplicaLogger>,
 }
 
 impl CanisterThresholdSigTestEnvironment {
@@ -482,13 +483,17 @@ impl CanisterThresholdSigTestEnvironment {
             registry_data,
             registry,
             newest_registry_version: registry_version,
+            in_memory_loggers: BTreeMap::new(),
         };
 
         for node_id in n_random_node_ids(num_of_nodes) {
+            let in_memory_logger = InMemoryReplicaLogger::new();
             env.create_crypto_component_with_sign_mega_and_multisign_keys_in_registry(
                 node_id,
                 registry_version,
+                ReplicaLogger::from(&in_memory_logger),
             );
+            env.in_memory_loggers.insert(node_id, in_memory_logger);
         }
         env.registry.update_to_latest_version();
 
@@ -519,6 +524,7 @@ impl CanisterThresholdSigTestEnvironment {
         &mut self,
         node_id: NodeId,
         registry_version: RegistryVersion,
+        logger: ReplicaLogger,
     ) {
         if self.crypto_components.contains_key(&node_id) {
             return;
@@ -534,6 +540,7 @@ impl CanisterThresholdSigTestEnvironment {
                 generate_idkg_dealing_encryption_keys: true,
                 generate_tls_keys_and_certificate: false,
             })
+            .with_logger(logger)
             .build();
         let node_keys = temp_crypto
             .current_node_public_keys()
@@ -747,13 +754,13 @@ pub fn generate_tecdsa_protocol_inputs(
     key_transcript: &IDkgTranscript,
     message_hash: &[u8],
     nonce: Randomness,
-    derivation_path: ExtendedDerivationPath,
+    derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
 ) -> ThresholdEcdsaSigInputs {
     let quadruple = generate_presig_quadruple(env, algorithm_id, key_transcript);
 
     ThresholdEcdsaSigInputs::new(
-        &derivation_path,
+        derivation_path,
         message_hash,
         nonce,
         quadruple,

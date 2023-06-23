@@ -144,7 +144,7 @@ it('should reject invalid certification (body hash mismatch)', async () => {
   const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
-  expect(await response.text()).toEqual('Body does not pass verification');
+  expect(await response.text()).toEqual('Response verification failed');
   expect(fetch.mock.calls).toHaveLength(2);
   expect(fetch.mock.calls[0][0]).toEqual('https://ic0.app/api/v2/status');
   expect(fetch.mock.calls[1][0]).toEqual(
@@ -167,7 +167,7 @@ it('should reject invalid certification (invalid root key)', async () => {
   const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
-  expect(await response.text()).toEqual('Body does not pass verification');
+  expect(await response.text()).toEqual('Response verification failed');
   expect(fetch.mock.calls).toHaveLength(2);
   expect(fetch.mock.calls[0][0]).toEqual('https://ic0.app/api/v2/status');
   expect(fetch.mock.calls[1][0]).toEqual(
@@ -650,7 +650,7 @@ it('should reject redirects', async () => {
 
   expect(response.status).toEqual(500);
   expect(await response.text()).toEqual(
-    'Due to security reasons redirects are blocked on the IC until further notice!'
+    'Response verification v1 does not allow redirects'
   );
 });
 

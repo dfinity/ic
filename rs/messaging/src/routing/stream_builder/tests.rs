@@ -122,7 +122,6 @@ fn reject_local_request() {
                     }),
                 }
                 .into(),
-                (u64::MAX / 2).into(),
                 &mut (i64::MAX / 2),
             )
             .unwrap();
@@ -186,7 +185,6 @@ fn reject_local_request_for_subnet() {
                     }),
                 }
                 .into(),
-                (u64::MAX / 2).into(),
                 &mut (i64::MAX / 2),
             )
             .unwrap();
@@ -1061,7 +1059,6 @@ fn push_input(canister_state: &mut CanisterState, msg: RequestOrResponse) {
     canister_state
         .push_input(
             msg,
-            (1 << 30).into(),
             &mut subnet_available_memory,
             SubnetType::Application,
             InputQueueType::RemoteSubnet,

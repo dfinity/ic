@@ -3,12 +3,16 @@ use super::execution::*;
 use super::types::*;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
+use ic_consensus::{
+    certification::{CertificationCrypto, CertifierImpl},
+    dkg,
+};
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::time_source::TimeSource;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_test_utilities::{crypto::CryptoReturningOk, FastForwardTimeSource};
+use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_registry::FakeLocalStoreCertifiedTimeReader;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::Time;
@@ -71,9 +75,18 @@ impl<'a> ConsensusRunner<'a> {
         time_source: Arc<FastForwardTimeSource>,
     ) -> ConsensusRunner<'a> {
         let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
-        let no_stamp = |_: &mut dyn std::io::Write| Ok(());
+        let time_source_clone = time_source.clone();
+        let timestamp_fn = move |w: &mut dyn std::io::Write| {
+            write!(
+                w,
+                "{:016}",
+                time_source_clone
+                    .get_relative_time()
+                    .as_nanos_since_unix_epoch()
+            )
+        };
         let drain = slog_term::FullFormat::new(plain)
-            .use_custom_timestamp(no_stamp)
+            .use_custom_timestamp(timestamp_fn)
             .build()
             .fuse();
         let drain = slog_async::AsyncCore::custom(slog_envlogger::new(drain))
@@ -114,7 +127,9 @@ impl<'a> ConsensusRunner<'a> {
     pub fn add_instance(
         &mut self,
         membership: Arc<Membership>,
-        fake_crypto: Arc<CryptoReturningOk>,
+        consensus_crypto: Arc<dyn ConsensusCrypto>,
+        certification_crypto: Arc<dyn CertificationCrypto>,
+        modifier: Option<ConsensusModifier<'_>>,
         deps: &'a ConsensusDependencies,
         pool_config: ArtifactPoolConfig,
         pool_reader: &PoolReader<'_>,
@@ -128,19 +143,18 @@ impl<'a> ConsensusRunner<'a> {
 
         let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
             deps.metrics_registry.clone(),
-            Arc::clone(&fake_crypto) as Arc<_>,
+            consensus_crypto.clone(),
             replica_logger.clone(),
             pool_reader,
         )));
         let fake_local_store_certified_time_reader =
             Arc::new(FakeLocalStoreCertifiedTimeReader::new(self.time.clone()));
 
-        let consensus = ConsensusImpl::new(
+        let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             deps.replica_config.clone(),
-            Default::default(),
             Arc::clone(&deps.registry_client),
             membership.clone(),
-            fake_crypto.clone(),
+            consensus_crypto.clone(),
             deps.ingress_selector.clone(),
             deps.xnet_payload_builder.clone(),
             deps.self_validating_payload_builder.clone(),
@@ -151,15 +165,15 @@ impl<'a> ConsensusRunner<'a> {
             deps.message_routing.clone(),
             deps.state_manager.clone(),
             Arc::clone(&self.time) as Arc<_>,
-            Duration::from_secs(0),
             MaliciousFlags::default(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
             fake_local_store_certified_time_reader,
+            0,
         );
         let dkg = dkg::DkgImpl::new(
             deps.replica_config.node_id,
-            fake_crypto.clone(),
+            consensus_crypto,
             deps.consensus_pool.read().unwrap().get_cache(),
             dkg_key_manager,
             deps.metrics_registry.clone(),
@@ -168,7 +182,7 @@ impl<'a> ConsensusRunner<'a> {
         let certifier = CertifierImpl::new(
             deps.replica_config.clone(),
             membership,
-            fake_crypto,
+            certification_crypto,
             deps.state_manager.clone(),
             deps.consensus_pool.read().unwrap().get_cache(),
             deps.metrics_registry.clone(),
@@ -182,11 +196,14 @@ impl<'a> ConsensusRunner<'a> {
             node_id,
             deps,
             in_queue,
+            buffered: Default::default(),
             out_queue: Default::default(),
 
             driver: ConsensusDriver::new(
+                node_id,
                 pool_config,
-                consensus,
+                modifier.unwrap_or(&|x| Box::new(x))(consensus),
+                consensus_gossip,
                 dkg,
                 Box::new(certifier),
                 deps.consensus_pool.clone(),
@@ -264,7 +281,8 @@ impl Default for ConsensusRunnerConfig {
             num_nodes: 10,
             num_rounds: 20,
             degree: 9,
-            execution: GlobalMessage::new(),
+            use_priority_fn: false,
+            execution: GlobalMessage::new(false),
             delivery: Sequential::new(),
         }
     }
@@ -298,7 +316,7 @@ impl ConsensusRunnerConfig {
         for (key, value) in std::env::vars() {
             if key.eq_ignore_ascii_case("num_nodes") {
                 if value.eq_ignore_ascii_case("random") {
-                    num_nodes = rng.gen_range(1..20);
+                    num_nodes = rng.gen_range(1..7) * 3 + 1;
                 } else {
                     num_nodes = value
                         .parse()
@@ -318,6 +336,7 @@ impl ConsensusRunnerConfig {
         config.num_rounds = rng.gen_range(10..101);
         config.degree = rng
             .gen_range(std::cmp::min(5, config.num_nodes / 2)..std::cmp::min(config.num_nodes, 20));
+        config.use_priority_fn = rng.gen_bool(0.5);
         config.reset_strategies();
         config
     }
@@ -333,9 +352,9 @@ impl ConsensusRunnerConfig {
     fn strategies<R: Rng>(&self, rng: &mut R) -> Strategies {
         (
             vec![
-                GlobalMessage::new(),
-                GlobalClock::new(),
-                RandomExecute::new(),
+                GlobalMessage::new(self.use_priority_fn),
+                GlobalClock::new(self.use_priority_fn),
+                RandomExecute::new(self.use_priority_fn),
             ],
             vec![
                 Sequential::new(),
@@ -346,8 +365,8 @@ impl ConsensusRunnerConfig {
     }
 
     /// Parse and update configuration from environment: NUM_NODES,
-    /// NUM_ROUNDS, MAX_DELTA, DEGREE, EXECUTION and DELIVERY (except
-    /// RANDOM_SEED, which should be used when first creating the config).
+    /// NUM_ROUNDS, MAX_DELTA, DEGREE, USE_PRIORITY_FN, EXECUTION and DELIVERY
+    /// (except RANDOM_SEED, which should be used when first creating the config).
     /// Return the updated config if parsing is successful, or an error message
     /// in string otherwise.
     pub fn parse_extra_config(mut self) -> Result<Self, String> {
@@ -368,6 +387,11 @@ impl ConsensusRunnerConfig {
                     self.degree = value
                         .parse()
                         .map_err(|_| "DEGREE must be an unsigned integer")?
+                }
+                "use_priority_fn" => {
+                    self.use_priority_fn = value
+                        .parse()
+                        .map_err(|_| "USE_PRIORITY_FN must be either true or false")?
                 }
                 _ => (),
             }

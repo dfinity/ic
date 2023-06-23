@@ -71,12 +71,6 @@ fn build_log_proto(def: &Path, out: &Path) {
 
     add_log_proto_derives!(
         config,
-        ReplicaConfig,
-        "log.replica_config.v1",
-        replica_config
-    );
-    add_log_proto_derives!(
-        config,
         ConsensusLogEntry,
         "log.consensus_log_entry.v1",
         consensus,
@@ -260,20 +254,25 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
-
+    config.type_attribute(
+        ".registry.hostos_version",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
     config.type_attribute(
         ".registry.node_rewards.v2",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
-
     config.type_attribute(
         ".registry.dc",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
-
     config.type_attribute(
         ".registry.unassigned_nodes_config",
         "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.node.v1.ConnectionEndpoint",
+        "#[derive(Eq, PartialOrd, Ord)]",
     );
 
     let registry_files = [
@@ -286,6 +285,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
         def.join("registry/provisional_whitelist/v1/provisional_whitelist.proto"),
         def.join("registry/subnet/v1/subnet.proto"),
         def.join("registry/replica_version/v1/replica_version.proto"),
+        def.join("registry/hostos_version/v1/hostos_version.proto"),
         def.join("registry/node_rewards/v1/node_rewards.proto"),
         def.join("registry/node_rewards/v2/node_rewards.proto"),
         def.join("registry/dc/v1/dc.proto"),
@@ -339,7 +339,6 @@ fn build_state_proto(def: &Path, out: &Path) {
         def.join("state/ingress/v1/ingress.proto"),
         def.join("state/metadata/v1/metadata.proto"),
         def.join("state/canister_state_bits/v1/canister_state_bits.proto"),
-        def.join("state/canister_metadata/v1/canister_metadata.proto"),
         def.join("state/queues/v1/queues.proto"),
         def.join("state/sync/v1/manifest.proto"),
         def.join("state/v1/metadata.proto"),

@@ -47,17 +47,12 @@ impl CkBtcMinterAgent {
         Input: CandidType,
         Output: CandidType + for<'a> Deserialize<'a>,
     {
-        let waiter = garcon::Delay::builder()
-            .throttle(std::time::Duration::from_millis(500))
-            .timeout(std::time::Duration::from_secs(60 * 5))
-            .build();
-
         Ok(candid::decode_one(
             &self
                 .agent
                 .update(&self.minter_canister_id, method_name)
                 .with_arg(candid::encode_one(arg)?)
-                .call_and_wait(waiter)
+                .call_and_wait()
                 .await?,
         )?)
     }
@@ -117,6 +112,10 @@ impl CkBtcMinterAgent {
             RetrieveBtcStatusRequest { block_index },
         )
         .await
+    }
+
+    pub async fn distribute_kyt_fee(&self) -> Result<(), CkBtcMinterAgentError> {
+        self.update("distribute_kyt_fee", ()).await
     }
 
     pub async fn get_events(

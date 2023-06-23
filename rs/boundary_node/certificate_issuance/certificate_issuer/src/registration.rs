@@ -1,10 +1,9 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
-use garcon::Delay;
 use ic_agent::Agent;
 use mockall::automock;
 use serde::{Deserialize, Serialize};
@@ -31,8 +30,10 @@ impl ToString for State {
 impl From<ProcessError> for State {
     fn from(e: ProcessError) -> Self {
         match e {
+            ProcessError::AwaitingAcmeOrderCreation => State::PendingOrder,
             ProcessError::AwaitingDnsPropagation => State::PendingChallengeResponse,
             ProcessError::AwaitingAcmeOrderReady => State::PendingAcmeApproval,
+            ProcessError::FailedUserConfigurationCheck => State::PendingAcmeApproval,
             ProcessError::UnexpectedError(_) => State::Failed(e.to_string()),
         }
     }
@@ -98,6 +99,8 @@ impl From<UpdateType> for ifc::UpdateType {
 pub enum CreateError {
     #[error("Registration '{0}' already exists")]
     Duplicate(Id),
+    #[error("Rate limit exceeded for apex domain '{0}'")]
+    RateLimited(String),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -186,18 +189,13 @@ impl Create for CanisterCreator {
     async fn create(&self, name: &str, canister: &Principal) -> Result<Id, CreateError> {
         use ifc::{CreateRegistrationError as Error, CreateRegistrationResponse as Response};
 
-        let waiter = Delay::builder()
-            .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(10000))
-            .build();
-
         let args = Encode!(&name.to_string(), canister).context("failed to encode arg")?;
 
         let resp = self
             .0
             .update(&self.1, "createRegistration")
             .with_arg(args)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to query canister")?;
 
@@ -208,6 +206,7 @@ impl Create for CanisterCreator {
             Response::Err(err) => Err(match err {
                 Error::Duplicate(id) => CreateError::Duplicate(id),
                 Error::NameError(err) => CreateError::UnexpectedError(anyhow!(err)),
+                Error::RateLimited(domain) => CreateError::RateLimited(domain),
                 Error::Unauthorized => CreateError::UnexpectedError(anyhow!("unauthorized")),
                 Error::UnexpectedError(err) => CreateError::UnexpectedError(anyhow!(err)),
             }),
@@ -222,11 +221,6 @@ impl Update for CanisterUpdater {
     async fn update(&self, id: &Id, typ: &UpdateType) -> Result<(), UpdateError> {
         use ifc::{UpdateRegistrationError as Error, UpdateRegistrationResponse as Response};
 
-        let waiter = Delay::builder()
-            .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(10000))
-            .build();
-
         let typ: ifc::UpdateType = typ.to_owned().into();
         let args = Encode!(&id, &typ).context("failed to encode arg")?;
 
@@ -234,7 +228,7 @@ impl Update for CanisterUpdater {
             .0
             .update(&self.1, "updateRegistration")
             .with_arg(args)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to query canister")?;
 
@@ -258,18 +252,13 @@ impl Remove for CanisterRemover {
     async fn remove(&self, id: &Id) -> Result<(), RemoveError> {
         use ifc::{RemoveRegistrationError as Error, RemoveRegistrationResponse as Response};
 
-        let waiter = Delay::builder()
-            .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(10000))
-            .build();
-
         let args = Encode!(&id).context("failed to encode arg")?;
 
         let resp = self
             .0
             .update(&self.1, "removeRegistration")
             .with_arg(args)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to query canister")?;
 

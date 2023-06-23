@@ -2,7 +2,7 @@ use backoff::backoff::Backoff;
 use core::future::Future;
 use dfn_candid::{candid, candid_multi_arity};
 use ic_canister_client::{Agent, Sender};
-use ic_config::{subnet_config::SubnetConfig, Config};
+use ic_config::Config;
 use ic_ic00_types::CanisterStatusType::Stopped;
 pub use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResult, InstallCodeArgs,
@@ -449,17 +449,13 @@ where
 }
 
 /// Same as local_test but running a custom Config.
-pub fn local_test_with_config<Fut, Out, F>(
-    config: Config,
-    subnet_config: SubnetConfig,
-    run: F,
-) -> Out
+pub fn local_test_with_config<Fut, Out, F>(config: Config, run: F) -> Out
 where
     Fut: Future<Output = Out>,
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let ic_config = get_ic_config();
-    canister_test_with_config_async(config, subnet_config, ic_config, |t| run(Runtime::Local(t)))
+    canister_test_with_config_async(config, ic_config, |t| run(Runtime::Local(t)))
 }
 
 /// Same as local_test but running a custom Config and applying initial Registry
@@ -475,25 +471,16 @@ where
 {
     let mut ic_config = get_ic_config();
     ic_config.initial_mutations = mutations;
-    canister_test_with_config_async(
-        config,
-        SubnetConfig::default_application_subnet(),
-        ic_config,
-        |t| run(Runtime::Local(t)),
-    )
+    canister_test_with_config_async(config, ic_config, |t| run(Runtime::Local(t)))
 }
 
 /// Same as local_test but running a custom Config
-pub fn local_test_with_config_e<Fut, Out, F>(
-    config: Config,
-    subnet_config: SubnetConfig,
-    run: F,
-) -> Out
+pub fn local_test_with_config_e<Fut, Out, F>(config: Config, run: F) -> Out
 where
     Fut: Future<Output = Result<Out, String>>,
     F: FnOnce(Runtime) -> Fut + 'static,
 {
-    local_test_with_config(config, subnet_config, run).expect("local_test_with_config_e failed")
+    local_test_with_config(config, run).expect("local_test_with_config_e failed")
 }
 
 /// A representation of a canister on the IC, with or without code installed,

@@ -328,6 +328,7 @@ fn global_timer_is_one_off() {
 
     // The timer should reach the deadline now
     env.advance_time(Duration::from_secs(1));
+    env.tick();
     let result = env
         .execute_ingress(canister_id, "update", get_global_counter.clone())
         .unwrap();
@@ -417,13 +418,19 @@ fn global_timer_can_be_reactivated_in_canister_global_timer_method() {
 
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
 
-    for i in 1..5u64 {
-        // Each execution should trigger the timer, increase the counter
-        // and reactivate the timer again.
+    for i in 1..20u64 {
+        // In every third execution, NextScheduledMethod is Message, hence in such
+        // executions only the message will be executed.
+        // While in the other executions, NextScheduledMethod is either GlobalTimer
+        // or Heartbeat hence timer, heartbeat, and messages are all executed.
         let result = env
             .execute_ingress(canister_id, "update", get_global_counter.clone())
             .unwrap();
-        assert_eq!(WasmResult::Reply(i.to_le_bytes().into()), result);
+        let expected_global_counter = i - i / 3;
+        assert_eq!(
+            WasmResult::Reply(expected_global_counter.to_le_bytes().into()),
+            result
+        );
     }
 }
 
@@ -439,6 +446,10 @@ fn system_task_metrics_are_observable() {
         .api_global_timer_set(1)
         .reply_int64()
         .build();
+
+    // Execute heartbeat.
+    env.tick();
+
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
@@ -458,7 +469,7 @@ fn system_task_metrics_are_observable() {
         "api_type".into() => "heartbeat".into(),
         "status".into() => "NoResponse".into(),
     };
-    // Includes install code, update and 5 ticks
+    // Includes install code, tick prior the update and 5 ticks
     assert_eq!(7, executed_messages[&heartbeat_no_response]);
 
     let global_timer_no_response = btreemap! {
@@ -481,6 +492,9 @@ fn global_timer_is_not_set_if_execution_traps() {
         .api_global_timer_set(1)
         .reply_int64()
         .build();
+
+    env.tick();
+
     let result = env
         .execute_ingress(canister_id, "update", set_global_timer)
         .unwrap();
@@ -506,7 +520,7 @@ fn global_timer_is_not_set_if_execution_traps() {
         "api_type".into() => "heartbeat".into(),
         "status".into() => "NoResponse".into(),
     };
-    // Includes install code, update and 5 ticks
+    // Includes install code, tick prior the update and 5 ticks
     assert_eq!(7, executed_messages[&heartbeat_no_response]);
 }
 

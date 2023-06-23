@@ -156,6 +156,7 @@ bazel-test-all-rebuild:
   variables:
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
+  timeout: 2h
 
 bazel-build-macos:
   extends:
@@ -184,6 +185,21 @@ macos-openssl-static-binaries:
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--config macos_ci"
     BAZEL_TARGETS: "//publish/binaries:upload"
+  script:
+    - !reference [.bazel-test-all, script]
+    - |
+      # check replica
+      if ! bazel run --config macos_ci //publish/binaries:replica -- --print-sample-config --replica-version 1 >/dev/null; then
+        BIN=$(bazel cquery --output=files //publish/binaries:replica)
+        otool -L "$BIN"
+        exit 1
+      fi
+      # check ic-starter
+      if ! bazel run --config macos_ci //publish/binaries:ic-starter -- --version; then
+        BIN=$(bazel cquery --output=files //publish/binaries:ic-starter)
+        otool -L "$BIN"
+        exit 1
+      fi
 
 bazel-cache-perf-test-macos:
   extends:
@@ -192,11 +208,3 @@ bazel-cache-perf-test-macos:
   needs:
     - job: bazel-build-macos
       artifacts: false
-
-bazel-build-fuzzers:
-  extends:
-    - .bazel-test-all
-  variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing"
-    BAZEL_COMMAND: "build"
-    BAZEL_TARGETS: "//rs/..."

@@ -114,6 +114,17 @@ pub struct SnsInitPayload {
     /// <https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet>
     #[prost(uint64, optional, tag = "22")]
     pub wait_for_quiet_deadline_increase_seconds: ::core::option::Option<u64>,
+    /// An optional text that swap participants should confirm before they may
+    /// participate in the swap. If the field is set, its value should be plain text
+    /// with at least 1 and at most 1,000 characters.
+    #[prost(string, optional, tag = "23")]
+    pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
+    /// An optional set of countries that should not participate in the swap.
+    #[prost(message, optional, tag = "24")]
+    pub restricted_countries: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Countries>,
+    /// / Canisters that will be transferred to an SNS.
+    #[prost(message, optional, tag = "25")]
+    pub dapp_canisters: ::core::option::Option<DappCanisters>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
@@ -295,4 +306,18 @@ pub struct NeuronDistribution {
     /// project.
     #[prost(uint64, optional, tag = "5")]
     pub vesting_period_seconds: ::core::option::Option<u64>,
+}
+/// / A Canister that will be transferred to an SNS.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Eq,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DappCanisters {
+    #[prost(message, repeated, tag = "1")]
+    pub canisters: ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
 }

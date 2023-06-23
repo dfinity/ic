@@ -40,7 +40,7 @@ if ! which dfx >/dev/null; then
     exit 1
 fi
 
-PEM=$NNS_TOOLS_DIR/nns_test_user_dfx_identity
+PEM=$NNS_TOOLS_DIR/test_user.pem
 dfx identity import --force --disable-encryption nns_test_user_dfx_identity $PEM
 dfx identity use nns_test_user_dfx_identity
 PRINCIPAL=$(dfx identity get-principal)
@@ -103,8 +103,8 @@ step 4 "Create the cycles wallet for our test user" || time (
         | sed 's/.*"\(.*\)"/\1/') # get the CanisterId in quotes
 
     # Request to install must be made to here...
-    dfx identity --network "$SUBNET_URL" deploy-wallet "$WALLET_CANISTER"
-    dfx identity --network "$SUBNET_URL" set-wallet "$WALLET_CANISTER"
+    dfx -q identity --network "$SUBNET_URL" deploy-wallet "$WALLET_CANISTER"
+    dfx -q identity --network "$SUBNET_URL" set-wallet "$WALLET_CANISTER"
 
     # NOTE - to use deploy_new_sns you need to set the --network  to the SUBNET_URL not NNS_URL, b/c it has to go through your
     # wallet first....
@@ -123,10 +123,10 @@ step 5 "Configure SNS-WASMs" || time (
     sleep 5
 
     echo "Currently allowed sns_subnet_ids?"
-    dfx canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})'
+    dfx -q canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})'
 
     echo "Currently allowed principals?"
-    dfx canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_allowed_principals '(record {})'
+    dfx -q canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_allowed_principals '(record {})'
 
 )
 
@@ -135,19 +135,53 @@ step 6 "Set up the boundary node" || time (
     configure_boundary_nodes_for_recovered_nns "$NNS_URL" "$TESTNET"
 )
 
-step --optional 7 "Upload WASMs to SNS-WASM" || time (
+step 7 "Set up mock XRC canister" || time (
+    echo "Configuring mock XRC for CMC"
+    # TODO pull this from CI when it's available
+    bazel build //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister
+    XRC_MOCK_WASM=$(repo_root)/$(canister_bazel_artifact_path "xrc-mock-canister")
+
+    XRC_MOCK_CANISTER=$(dfx ledger --network "$NNS_URL" create-canister "$PRINCIPAL" --amount 10 \
+        | grep "Canister created" \
+        | sed 's/.*"\(.*\)"/\1/') # get the CanisterId in quotes
+
+    dfx canister \
+        --network "$SUBNET_URL" \
+        install \
+        --wasm "$XRC_MOCK_WASM" \
+        --argument \
+        '(record { response = variant {
+            ExchangeRate = record {
+             rate = 100_000_000_000: nat64;
+             metadata = opt record {
+                decimals = 9: nat32;
+                base_asset_num_received_rates = 7: nat64;
+                base_asset_num_queried_sources = 7: nat64;
+                quote_asset_num_received_rates = 7: nat64;
+                quote_asset_num_queried_sources = 7: nat64;
+                standard_deviation = 0: nat64;
+                forex_timestamp = null } } } })' \
+        "$XRC_MOCK_CANISTER"
+
+    echo "$XRC_MOCK_CANISTER" >"$DIR"/xrc_mock_canister
+)
+XRC_MOCK_CANISTER=$(cat "$DIR/xrc_mock_canister")
+
+step --optional 8 "Upload WASMs to SNS-WASM" || time (
     LOG_FILE="$DIR/4_upload_wasms_to_sns_wasm.txt"
     for TYPE in ledger governance archive swap root index; do
-        upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" $TYPE "$VERSION"
+        upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" $TYPE "$VERSION"
     done >"$LOG_FILE"
 )
 
 # Put all useful variables into a single place
 VARS_FILE="$DIR/output_vars_nns_dev_testnet.sh"
 echo "source $DIR/output_vars_nns_state_deployment.sh" >"$VARS_FILE"
+echo "export SUBNET_IP=$SUBNET_IP" >>"$VARS_FILE"
 echo "export SUBNET_URL=$SUBNET_URL" >>"$VARS_FILE"
 echo "export WALLET_CANISTER=$WALLET_CANISTER" >>"$VARS_FILE"
 echo "export IC_ADMIN=$IC_ADMIN" >>$VARS_FILE
 echo "export SNS_CLI=$SNS_CLI" >>$VARS_FILE
+echo "export XRC_MOCK_CANISTER=$XRC_MOCK_CANISTER" >>$VARS_FILE
 
 print_green "Variables from script stored at $VARS_FILE"

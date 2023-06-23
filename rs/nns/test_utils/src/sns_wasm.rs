@@ -1,19 +1,22 @@
-use crate::ids::TEST_NEURON_1_ID;
-use crate::state_test_helpers::{
-    query, try_call_with_cycles_via_universal_canister, update, update_with_sender,
+use crate::{
+    common::modify_wasm_bytes,
+    ids::TEST_NEURON_1_ID,
+    state_test_helpers::{
+        query, try_call_with_cycles_via_universal_canister, update, update_with_sender,
+    },
 };
 use candid::{Decode, Encode};
-use canister_test::{Project, Wasm};
+use canister_test::Project;
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_common::types::ProposalId;
+use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::manage_neuron::{Command, NeuronIdOrSubaccount};
 use ic_nns_governance::pb::v1::{
-    manage_neuron_response::Command as CommandResponse, proposal, ExecuteNnsFunction, ManageNeuron,
-    ManageNeuronResponse, NnsFunction, Proposal, ProposalInfo, ProposalStatus,
+    manage_neuron::{Command, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+    ProposalInfo, ProposalStatus,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
@@ -25,12 +28,10 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_state_machine_tests::StateMachine;
 use maplit::{btreemap, hashmap};
-use std::collections::BTreeMap;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     time::{Duration, Instant},
 };
-use walrus::{Module, RawCustomSection};
 
 /// Get a valid tiny WASM for use in tests of a particular SnsCanisterType
 pub fn test_wasm(canister_type: SnsCanisterType, modify_with: Option<u8>) -> SnsWasm {
@@ -241,25 +242,38 @@ fn get_proposal_info(env: &StateMachine, pid: ProposalId) -> Option<ProposalInfo
 /// Make deploy_new_sns request to a canister in the StateMachine
 pub fn deploy_new_sns(
     env: &StateMachine,
-    wallet_canister: CanisterId,
+    caller: CanisterId,
     sns_wasm_canister_id: CanisterId,
     sns_init_payload: SnsInitPayload,
     cycles: u128,
 ) -> DeployNewSnsResponse {
-    let response = try_call_with_cycles_via_universal_canister(
-        env,
-        wallet_canister,
-        sns_wasm_canister_id,
-        "deploy_new_sns",
-        Encode!(&DeployNewSnsRequest {
-            sns_init_payload: Some(sns_init_payload)
-        })
-        .unwrap(),
-        cycles,
-    )
-    .unwrap();
-
-    Decode!(&response, DeployNewSnsResponse).unwrap()
+    if caller == GOVERNANCE_CANISTER_ID {
+        update_with_sender(
+            env,
+            sns_wasm_canister_id,
+            "deploy_new_sns",
+            candid_one,
+            DeployNewSnsRequest {
+                sns_init_payload: Some(sns_init_payload),
+            },
+            caller.get(),
+        )
+        .unwrap()
+    } else {
+        let response = try_call_with_cycles_via_universal_canister(
+            env,
+            caller,
+            sns_wasm_canister_id,
+            "deploy_new_sns",
+            Encode!(&DeployNewSnsRequest {
+                sns_init_payload: Some(sns_init_payload)
+            })
+            .unwrap(),
+            cycles,
+        )
+        .unwrap();
+        Decode!(&response, DeployNewSnsResponse).unwrap()
+    }
 }
 
 /// Make list_deployed_snses request to a canister in the StateMachine
@@ -492,17 +506,11 @@ pub fn create_modified_wasm(original_wasm: &SnsWasm, modify_with: Option<&str>) 
     let original_hash = original_wasm.sha256_hash();
     let wasm_to_add = &original_wasm.wasm;
 
-    let mut wasm_to_add = Module::from_buffer(wasm_to_add).unwrap();
-    let custom_section = RawCustomSection {
-        name: modify_with.unwrap_or("no op").into(),
-        data: vec![1u8, 2u8, 3u8],
-    };
-    wasm_to_add.customs.add(custom_section);
+    let wasm_to_add = modify_wasm_bytes(wasm_to_add, modify_with.unwrap_or("no op"));
 
     // We get our new WASM, which is functionally the same.
-    let wasm_to_add = Wasm::from_bytes(wasm_to_add.emit_wasm());
     let sns_wasm_to_add = SnsWasm {
-        wasm: wasm_to_add.bytes(),
+        wasm: wasm_to_add,
         canister_type: original_wasm.canister_type,
     };
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();

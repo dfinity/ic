@@ -1,6 +1,6 @@
 = Guest OS
 
-GuestOS refers to the operating system running inside a QEMU virtual machine on the hostOS. A GuestOS image consists of the base Ubuntu system, along with the replica and orchestrator binaries. The IC protocol runs inside the GuestOS virtual machine.
+GuestOS refers to the operating system running inside a QEMU virtual machine on the HostOS. A GuestOS image consists of the base Ubuntu system, along with the replica and orchestrator binaries. The IC protocol runs inside the GuestOS virtual machine.
 
 For more details on the goals, structure, and disk layout of GuestOS, https://docs.google.com/presentation/d/1xECozJhVCqzFC3mMMvROD7rlB-xWDHHLKvZuVnuLgJc/edit?usp=sharing[see here]
 
@@ -36,7 +36,7 @@ For more details about the program, refer to the `rs/ic_os/launch-single-vm` dir
 
 The GuestOS disk layout contains two sets of system partitions, called partition sets "A" and "B". The A/B partitions enable a dual-boot system that can be updated and maintained without any downtime.
 
-image:doc/media/guestOS_disk-layout.png[]
+image:docs/media/guestOS_disk-layout.png[]
 
 The image above shows the GuestOS disk layout with partition set "A" in green and partition set "B" in blue.
 
@@ -47,9 +47,9 @@ To upgrade the GuestOS, first, the new GuestOS is written to the passive partiti
 
 The same Bazel command used to build a GuestOS image will also produce a GuestOS upgrade image:
 
-    bazel build //ic-os/guestos/{prod,dev,dev-malicious}/...
+    bazel build //ic-os/guestos/{prod,dev,dev-sev,dev-malicious}/...
 
-This command will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-malicious}, which is the tarred GuestOS update image.
+This command will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-sev,dev-malicious}, which is the tarred GuestOS update image.
 
 === Installing GuestOS upgrade image
 
@@ -68,4 +68,4 @@ The Ubuntu configuration and system logic is contained in the rootfs/ subdirecto
 See instructions link:rootfs/README.adoc#[here] on how to make changes to the OS.
 
 For further reading, see the docs in the
-link:doc/README.adoc#[doc/ subdirectory]
+link:docs/README.adoc#[docs/ subdirectory]

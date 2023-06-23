@@ -1,7 +1,6 @@
 use crate::api::CspCreateMEGaKeyError;
-use crate::secret_key_store::SecretKeyStoreError;
+use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::vault::api::IDkgProtocolCspVault;
-use crate::vault::local_csp_vault::idkg::SecretKeyStorePersistenceError;
 use crate::vault::local_csp_vault::PublicKeyStore;
 use crate::vault::test_utils;
 use crate::LocalCspVault;
@@ -34,7 +33,7 @@ mod idkg_gen_dealing_encryption_key_pair {
 
         #[test]
         fn should_generate_mega_key_pair_and_store_it_in_the_vault(seed: [u8;32]) {
-            let vault =  LocalCspVault::builder().with_rng(Seed::from_bytes(&seed).into_rng()).build();
+            let vault =  LocalCspVault::builder_for_test().with_rng(Seed::from_bytes(&seed).into_rng()).build();
 
             let generated_public_key = vault
                 .idkg_gen_dealing_encryption_key_pair()
@@ -55,7 +54,7 @@ mod idkg_gen_dealing_encryption_key_pair {
 
     #[test]
     fn should_generate_distinct_mega_public_keys_with_high_probability() {
-        let vault = LocalCspVault::builder().build();
+        let vault = LocalCspVault::builder_for_test().build();
         let mut generated_keys = HashSet::new();
         for _ in 1..=100 {
             let public_key = vault
@@ -73,13 +72,13 @@ mod idkg_gen_dealing_encryption_key_pair {
     #[test]
     fn should_generate_and_store_dealing_encryption_key_pair_multiple_times() {
         test_utils::idkg::should_generate_and_store_dealing_encryption_key_pair_multiple_times(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_correctly_extend_public_key_vector() {
-        let vault = LocalCspVault::builder().build();
+        let vault = LocalCspVault::builder_for_test().build();
         let mut generated_keys = Vec::new();
         for _ in 1..=5 {
             let public_key = vault
@@ -100,7 +99,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     #[test]
     fn should_eventually_detect_race_condition_when_extending_public_key_vector() {
         const NUM_ITERATIONS: usize = 200;
-        let vault = LocalCspVault::builder().build_into_arc();
+        let vault = LocalCspVault::builder_for_test().build_into_arc();
         let mut thread_handles = Vec::new();
         for _ in 1..=NUM_ITERATIONS {
             let vault = Arc::clone(&vault);
@@ -147,7 +146,7 @@ mod idkg_gen_dealing_encryption_key_pair {
             .return_once(|_key| Ok(()))
             .in_sequence(&mut seq);
 
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(sks)
             .with_public_key_store(pks)
             .build_into_arc();
@@ -163,7 +162,7 @@ mod idkg_gen_dealing_encryption_key_pair {
             .expect_add_idkg_dealing_encryption_pubkey()
             .return_once(|_| Err(PublicKeyAddError::Io(io_error)));
 
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_public_key_store(pks_returning_io_error)
             .build_into_arc();
 
@@ -180,10 +179,10 @@ mod idkg_gen_dealing_encryption_key_pair {
         sks_returning_io_error
             .expect_insert()
             .times(1)
-            .return_const(Err(SecretKeyStoreError::PersistenceError(
-                SecretKeyStorePersistenceError::IoError(expected_io_error.clone()),
+            .return_const(Err(SecretKeyStoreInsertionError::TransientError(
+                expected_io_error.clone(),
             )));
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(sks_returning_io_error)
             .build();
 
@@ -204,12 +203,10 @@ mod idkg_gen_dealing_encryption_key_pair {
         sks_returning_serialization_error
             .expect_insert()
             .times(1)
-            .return_const(Err(SecretKeyStoreError::PersistenceError(
-                SecretKeyStorePersistenceError::SerializationError(
-                    expected_serialization_error.clone(),
-                ),
+            .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
+                expected_serialization_error.clone(),
             )));
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(sks_returning_serialization_error)
             .build();
 
@@ -224,7 +221,7 @@ mod idkg_gen_dealing_encryption_key_pair {
 
     #[test]
     fn should_add_new_idkg_dealing_encryption_public_key_last() {
-        let vault = LocalCspVault::builder().build();
+        let vault = LocalCspVault::builder_for_test().build();
         assert!(vault
             .public_key_store_read_lock()
             .idkg_dealing_encryption_pubkeys()
@@ -266,7 +263,7 @@ mod idkg_gen_dealing_encryption_key_pair {
                 *key_id == expected_key_id && *scope == Some(IDKG_MEGA_SCOPE)
             })
             .return_const(Ok(()));
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_rng(ChaCha20Rng::seed_from_u64(42))
             .with_node_secret_key_store(sks)
             .build_into_arc();
@@ -278,7 +275,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     fn should_generate_idkg_dealing_encryption_public_key_with_timestamp() {
         let time_source = FastForwardTimeSource::new();
         time_source.set_time(GENESIS).expect("wrong time");
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_time_source(time_source)
             .build();
 
@@ -321,7 +318,7 @@ mod idkg_retain_active_keys {
 
     #[test]
     fn should_fail_when_idkg_oldest_public_key_not_found() {
-        let vault = LocalCspVault::builder().build();
+        let vault = LocalCspVault::builder_for_test().build();
 
         let result = vault.idkg_retain_active_keys(BTreeSet::new(), an_idkg_public_key());
 
@@ -332,7 +329,7 @@ mod idkg_retain_active_keys {
 
     #[test]
     fn should_not_delete_only_key_pair() {
-        let vault = LocalCspVault::builder().build();
+        let vault = LocalCspVault::builder_for_test().build();
         let public_key = vault
             .idkg_gen_dealing_encryption_key_pair()
             .expect("error generating IDKG key pair");
@@ -354,7 +351,7 @@ mod idkg_retain_active_keys {
 
     #[test]
     fn should_retain_only_active_public_keys() {
-        let vault = LocalCspVault::builder().build();
+        let vault = LocalCspVault::builder_for_test().build();
         let number_of_keys = 5;
         let oldest_public_key_index = 2;
         let mut rotated_public_keys =
@@ -384,7 +381,7 @@ mod idkg_retain_active_keys {
 
     #[test]
     fn should_retain_only_active_secret_keys() {
-        let vault = LocalCspVault::builder().build();
+        let vault = LocalCspVault::builder_for_test().build();
         let number_of_keys = 5;
         let oldest_public_key_index = 2;
         let rotated_public_keys =
@@ -439,7 +436,7 @@ mod idkg_retain_active_keys {
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgThresholdKeys))
             .return_const(Ok(()));
 
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(node_sks)
             .with_canister_secret_key_store(canister_sks)
             .with_public_key_store(pks)
@@ -472,7 +469,7 @@ mod idkg_retain_active_keys {
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgThresholdKeys))
             .return_const(Ok(()));
 
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(node_sks)
             .with_canister_secret_key_store(canister_sks)
             .with_public_key_store(pks)

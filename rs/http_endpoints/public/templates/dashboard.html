@@ -100,6 +100,7 @@
                     <table>
                         <tr><td>controllers</td><td>{{ c.system_state.collect_controllers_as_string() }}</td></tr>
                         <tr><td>certified_data length</td><td>{{ c.system_state.certified_data.len() }} bytes</td></tr>
+                        <tr><td>canister_history_memory_usage</td><td>{{ c.system_state.canister_history_memory_usage() }} bytes</td></tr>
                     </table>
                     <h3>Execution state</h3>
                     {% match c.execution_state.as_ref() %}
@@ -127,7 +128,7 @@
                         <tr><td>last_full_execution_round</td><td>{{ c.scheduler_state.last_full_execution_round }}</td></tr>
                         <tr><td>compute_allocation</td><td>{{ c.scheduler_state.compute_allocation }}</td></tr>
                         <tr><td>freeze_threshold (seconds)</td><td>{{ c.system_state.freeze_threshold }}</td></tr>
-                        <tr><td>memory_usage</td><td>{{ c.memory_usage_ref(subnet_type) }}</td></tr>
+                        <tr><td>memory_usage</td><td>{{ c.memory_usage() }}</td></tr>
                         <tr><td>accumulated_priority</td><td>{{ c.scheduler_state.accumulated_priority.get() }} </td></tr>
                         <tr><td>Cycles balance</td><td>{{ c.system_state.balance() }}</td></tr>
                     </table>

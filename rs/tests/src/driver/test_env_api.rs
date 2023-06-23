@@ -135,11 +135,12 @@ use super::config::NODES_INFO;
 use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use super::farm::{DnsRecord, PlaynetCertificate};
 use super::test_setup::GroupSetup;
+use crate::driver::boundary_node::BoundaryNodeVm;
 use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
-use crate::util::{create_agent, delay};
-use anyhow::{anyhow, bail, Result};
+use crate::util::{block_on, create_agent};
+use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::export::Principal;
@@ -152,6 +153,7 @@ use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
+use ic_nns_governance::pb::v1::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -173,6 +175,7 @@ use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh2::Session;
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::fs;
 use std::future::Future;
 use std::io::{Read, Write};
@@ -189,6 +192,8 @@ pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
+// It usually takes below 60 secs to install nns canisters.
+const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
 
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
@@ -619,6 +624,23 @@ impl IcNodeSnapshot {
         }
     }
 
+    pub fn get_last_canister_id_in_allocation_ranges(&self) -> PrincipalId {
+        match self.subnet_id() {
+            Some(subnet_id) => {
+                let canister_ranges = self
+                    .local_registry
+                    .get_subnet_canister_ranges(self.registry_version, subnet_id)
+                    .expect("Could not deserialize optional routing table from local registry.")
+                    .expect("Optional routing table is None in local registry.");
+                match canister_ranges.last() {
+                    Some(range) => range.end.get(),
+                    None => PrincipalId::default(),
+                }
+            }
+            None => PrincipalId::default(),
+        }
+    }
+
     /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
     /// install it on the target node.
     ///
@@ -641,7 +663,7 @@ impl IcNodeSnapshot {
                 .create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(effective_canister_id)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
                 .0;
@@ -651,7 +673,7 @@ impl IcNodeSnapshot {
                 install_code = install_code.with_raw_arg(arg)
             }
             install_code
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .map_err(|err| format!("Couldn't install canister: {}", err))?;
             Ok::<_, String>(canister_id)
@@ -801,6 +823,8 @@ pub trait HasIcDependencies {
     fn get_boundary_node_snp_img_sha256(&self) -> Result<String>;
     fn get_boundary_node_img_url(&self) -> Result<Url>;
     fn get_boundary_node_img_sha256(&self) -> Result<String>;
+    fn get_api_boundary_node_img_url(&self) -> Result<Url>;
+    fn get_api_boundary_node_img_sha256(&self) -> Result<String>;
     fn get_canister_http_test_ca_cert(&self) -> Result<String>;
     fn get_canister_http_test_ca_key(&self) -> Result<String>;
 }
@@ -821,8 +845,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let dep_rel_path = std::env::var("IC_VERSION_FILE")?;
-        let replica_ver = self.read_dependency_to_string(dep_rel_path)?;
+        let replica_ver = self.read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?;
         Ok(ReplicaVersion::try_from(replica_ver)?)
     }
 
@@ -833,22 +856,20 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_ic_os_img_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/guestos/envs/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev/disk-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        let sha256 =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_DISK_IMG_TAR_ZST_SHA256")?;
         bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
         Ok(sha256)
     }
 
     fn get_malicious_ic_os_img_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/guestos/envs/dev-malicious/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
+        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/disk-img.tar.zst.cas-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }
@@ -861,42 +882,33 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_ic_os_update_img_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/guestos/envs/dev/upload_update-img_update-img.tar.zst.proxy-cache-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_update_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev/update-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        let sha256 =
+            self.read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
         bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
         Ok(sha256)
     }
 
     fn get_ic_os_update_img_test_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/guestos/envs/dev/upload_update-img_update-img-test.tar.zst.proxy-cache-url";
+        let dep_rel_path = "ic-os/guestos/envs/dev/update-img-test.tar.zst.cas-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_update_img_test_sha256(&self) -> Result<String> {
-        let dep_rel_path =
-            "ic-os/guestos/envs/dev/upload_update-img/update-img-test.tar.zst.SHA256SUM";
-        let sha256 = self
-            .read_dependency_to_string(dep_rel_path)?
-            .split(' ')
-            .next()
-            .unwrap()
-            .to_string();
-        bail_if_sha256_invalid(&sha256, "update-img-test.tar.zst")?;
+        let dep_rel_path = "ic-os/guestos/envs/dev/update-img-test.tar.zst.sha256";
+        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
         Ok(sha256)
     }
 
     fn get_malicious_ic_os_update_img_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/guestos/envs/dev-malicious/upload_update-img_update-img.tar.zst.proxy-cache-url";
+        let dep_rel_path = "ic-os/guestos/envs/dev-malicious/update-img.tar.zst.cas-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }
@@ -909,8 +921,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_boundary_node_snp_img_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/boundary-guestos/envs/dev-sev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
+        let dep_rel_path = "ic-os/boundary-guestos/envs/dev-sev/disk-img.tar.zst.cas-url";
         let result = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&result)?)
     }
@@ -923,8 +934,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_boundary_node_img_url(&self) -> Result<Url> {
-        let dep_rel_path =
-            "ic-os/boundary-guestos/envs/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
+        let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.cas-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }
@@ -933,6 +943,20 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
         let sha256 = self.read_dependency_to_string(dep_rel_path)?;
         bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
+        Ok(sha256)
+    }
+
+    fn get_api_boundary_node_img_url(&self) -> Result<Url> {
+        let dep_rel_path =
+            "ic-os/boundary-api-guestos/envs/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
+        let url = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_api_boundary_node_img_sha256(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/boundary-api-guestos/envs/dev/disk-img.tar.zst.sha256";
+        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        bail_if_sha256_invalid(&sha256, "api_boundary_node_img_sha256")?;
         Ok(sha256)
     }
 
@@ -947,36 +971,42 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(&self);
+    fn create_group_setup(&self, group_base_name: String);
 }
 
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(&self) {
+    fn create_group_setup(&self, group_base_name: String) {
         let log = self.logger();
-        let group_setup = GroupSetup::from_bazel_env();
-        let farm_base_url = FarmBaseUrl::read_attribute(self);
-        let farm = Farm::new(farm_base_url.into(), self.logger());
-        let group_spec = GroupSpec {
-            vm_allocation: None,
-            required_host_features: vec![],
-            preferred_network: None,
-            metadata: None,
-        };
-        farm.create_group(
-            &group_setup.farm_group_name,
-            group_setup.group_timeout,
-            group_spec,
-            self,
-        )
-        .unwrap();
-        group_setup.write_attribute(self);
-        self.ssh_keygen().expect("ssh key generation failed");
-        info!(
-            log,
-            "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
-            group_setup.farm_group_name,
-            kibana_link(&group_setup.farm_group_name)
-        );
+        if self.get_json_path(GroupSetup::attribute_name()).exists() {
+            let group_setup = GroupSetup::read_attribute(self);
+            info!(log, "Group {} already set up.", group_setup.farm_group_name);
+        } else {
+            let group_setup = GroupSetup::new(group_base_name);
+            let farm_base_url = FarmBaseUrl::read_attribute(self);
+            let farm = Farm::new(farm_base_url.into(), self.logger());
+            let group_spec = GroupSpec {
+                vm_allocation: None,
+                required_host_features: vec![],
+                preferred_network: None,
+                metadata: None,
+            };
+            farm.create_group(
+                &group_setup.group_base_name,
+                &group_setup.farm_group_name,
+                group_setup.group_timeout,
+                group_spec,
+                self,
+            )
+            .unwrap();
+            group_setup.write_attribute(self);
+            self.ssh_keygen().expect("ssh key generation failed");
+            info!(
+                log,
+                "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
+                group_setup.farm_group_name,
+                kibana_link(&group_setup.farm_group_name)
+            );
+        }
     }
 }
 
@@ -1052,6 +1082,12 @@ pub trait HasDependencies {
             Err(anyhow!("Couldn't find dependency {dep_path:?}"))
         }
     }
+
+    fn read_dependency_from_env_to_string(&self, v: &str) -> Result<String> {
+        let path_from_env =
+            std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+        self.read_dependency_to_string(path_from_env)
+    }
 }
 
 impl<T: HasTestEnv> HasDependencies for T {
@@ -1120,8 +1156,9 @@ pub trait SshSession {
         channel.send_eof()?;
         let mut out = String::new();
         channel.read_to_string(&mut out)?;
-        if channel.exit_status()? != 0 {
-            bail!("block_on_bash_script: exit != 0");
+        let exit_status = channel.exit_status()?;
+        if exit_status != 0 {
+            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out}");
         }
         Ok(out)
     }
@@ -1150,8 +1187,11 @@ pub trait HasMetricsUrl {
 impl HasMetricsUrl for IcNodeSnapshot {
     fn get_metrics_url(&self) -> Option<Url> {
         let node_record = self.raw_node_record();
-        let metrics_endpoint = node_record.prometheus_metrics.first().cloned();
-        metrics_endpoint.map(|me| IcNodeSnapshot::http_endpoint_to_url(&me))
+        node_record.http.map(|me| {
+            let mut url = IcNodeSnapshot::http_endpoint_to_url(&me);
+            let _ = url.set_port(Some(9090));
+            url
+        })
     }
 }
 
@@ -1299,53 +1339,83 @@ impl HasPublicApiUrl for IcNodeSnapshot {
     }
 }
 
-pub trait NnsInstallationExt {
-    /// Installs the NNS canisters on the subnet this node belongs to. The NNS
-    /// is installed with test neurons enabled which simplify voting on proposals in testing.
-    fn install_nns_canisters(&self) -> Result<()>;
-
-    /// Installs the mainnet NNS canisters on the subnet this node belongs to. The NNS
-    /// is installed with test neurons enabled which simplify voting on proposals in testing.
-    fn install_mainnet_nns_canisters(&self) -> Result<()>;
-
-    /// Installs the qualifying NNS canisters on the subnet this node belongs to. The NNS
-    /// is installed with test neurons enabled which simplify voting on proposals in testing.
-    fn install_qualifying_nns_canisters(&self) -> Result<()>;
-
-    fn install_nns_canisters_with_customizations(
-        &self,
-        canister_wasm_strategy: NnsCanisterWasmStrategy,
-        customizations: NnsCustomizations,
-    ) -> Result<()>;
-
-    fn install_nns_canisters_at_ids(&self) -> Result<()>;
-}
-
 #[derive(Default)]
 pub struct NnsCustomizations {
     /// Summarizes the custom parameters that a newly installed NNS should have.
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
+    pub neurons: Option<Vec<Neuron>>,
+    pub install_at_ids: bool,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum NnsCanisterWasmStrategy {
     TakeBuiltFromSources,
     TakeLatestMainnetDeployments,
     NnsReleaseQualification,
 }
 
-impl<T> NnsInstallationExt for T
-where
-    T: HasIcName + HasPublicApiUrl,
-{
-    fn install_nns_canisters_with_customizations(
-        &self,
+pub struct NnsInstallationBuilder {
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    customizations: NnsCustomizations,
+    installation_timeout: Duration,
+}
+
+impl Default for NnsInstallationBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl NnsInstallationBuilder {
+    pub fn new() -> Self {
+        Self {
+            canister_wasm_strategy: NnsCanisterWasmStrategy::TakeBuiltFromSources,
+            customizations: NnsCustomizations::default(),
+            installation_timeout: NNS_CANISTER_INSTALL_TIMEOUT,
+        }
+    }
+
+    pub fn use_mainnet_nns_canisters(mut self) -> Self {
+        self.canister_wasm_strategy = NnsCanisterWasmStrategy::TakeLatestMainnetDeployments;
+        self
+    }
+
+    pub fn use_qualifying_nns_canisters(mut self) -> Self {
+        self.canister_wasm_strategy = NnsCanisterWasmStrategy::NnsReleaseQualification;
+        self
+    }
+
+    pub fn use_nns_canisters_from_current_branch(mut self) -> Self {
+        self.canister_wasm_strategy = NnsCanisterWasmStrategy::TakeBuiltFromSources;
+        self
+    }
+
+    pub fn with_overall_timeout(mut self, duration: Duration) -> Self {
+        self.installation_timeout = duration;
+        self
+    }
+
+    pub fn at_ids(mut self) -> Self {
+        self.customizations.install_at_ids = true;
+        self
+    }
+
+    pub fn with_customizations(mut self, customizations: NnsCustomizations) -> Self {
+        self.customizations = customizations;
+        self
+    }
+
+    pub fn with_canister_wasm_strategy(
+        mut self,
         canister_wasm_strategy: NnsCanisterWasmStrategy,
-        customizations: NnsCustomizations,
-    ) -> Result<()> {
-        let test_env = self.test_env();
+    ) -> Self {
+        self.canister_wasm_strategy = canister_wasm_strategy;
+        self
+    }
+
+    pub fn install(&self, node: &IcNodeSnapshot, test_env: &TestEnv) -> Result<()> {
         let log = test_env.logger();
-        match canister_wasm_strategy {
+        match self.canister_wasm_strategy {
             NnsCanisterWasmStrategy::TakeBuiltFromSources => {
                 info!(
                     log,
@@ -1363,63 +1433,40 @@ where
                         "rs/tests/qualifying-nns-canisters/selected-qualifying-nns-canisters.json",
                     )
                     .unwrap();
-                info!(log, "Installing qualification NNS canisters ({qual}) ...");
+                info!(log, "Installing qualification NNS canisters ({}) ...", qual);
                 test_env.set_qualifying_nns_canisters_env_vars()?;
             }
         }
-        let ic_name = self.ic_name();
-        let url = self.get_public_url();
+
+        let ic_name = node.ic_name();
+        let url = node.get_public_url();
         let prep_dir = match test_env.prep_dir(&ic_name) {
             Some(v) => v,
             None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
         };
         info!(log, "Wait for node reporting healthy status");
-        self.await_status_is_healthy().unwrap();
-        install_nns_canisters(
+        node.await_status_is_healthy().unwrap();
+
+        let install_future = install_nns_canisters(
             &log,
             url,
             &prep_dir,
             true,
-            false,
-            customizations.ledger_balances,
+            self.customizations.install_at_ids,
+            self.customizations.ledger_balances.clone(),
+            self.customizations.neurons.clone(),
         );
-        Ok(())
-    }
-
-    fn install_nns_canisters(&self) -> Result<()> {
-        self.install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::TakeBuiltFromSources,
-            NnsCustomizations::default(),
-        )
-    }
-
-    fn install_mainnet_nns_canisters(&self) -> Result<()> {
-        self.install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::TakeLatestMainnetDeployments,
-            NnsCustomizations::default(),
-        )
-    }
-
-    fn install_qualifying_nns_canisters(&self) -> Result<()> {
-        self.install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::NnsReleaseQualification,
-            NnsCustomizations::default(),
-        )
-    }
-
-    fn install_nns_canisters_at_ids(&self) -> Result<()> {
-        let test_env = self.test_env();
-        test_env.set_nns_canisters_env_vars()?;
-        let log = test_env.logger();
-        let ic_name = self.ic_name();
-        let url = self.get_public_url();
-        let prep_dir = match test_env.prep_dir(&ic_name) {
-            Some(v) => v,
-            None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
-        };
-        info!(log, "Wait for node reporting healthy status");
-        self.await_status_is_healthy().unwrap();
-        install_nns_canisters(&log, url, &prep_dir, true, true, None);
+        block_on(async {
+            let timeout_result =
+                tokio::time::timeout(self.installation_timeout, install_future).await;
+            if timeout_result.is_err() {
+                warn!(
+                    log,
+                    "NNS canisters were not installed within timeout of {} sec",
+                    self.installation_timeout.as_secs()
+                );
+            }
+        });
         Ok(())
     }
 }
@@ -1501,19 +1548,33 @@ pub trait CanisterEnvVars {
 impl<T: HasDependencies> CanisterEnvVars for T {
     fn set_canister_env_vars<P: AsRef<Path>>(&self, dirname: P) -> Result<()> {
         let dir = self.get_dependency_path(dirname);
-        for entry in (std::fs::read_dir(dir.clone())?).flatten() {
+        let entries = std::fs::read_dir(dir.clone()).context(format!(
+            "Problem reading directory at {}",
+            dir.to_string_lossy()
+        ))?;
+        for entry in entries.flatten() {
             let file_name = entry.file_name();
             let canister_name = file_name
                 .to_str()
-                .expect("Couldn't convert file path to canister name!");
+                .context("Couldn't convert file path to string")?;
             let env_name = format!("{}_WASM_PATH", canister_name)
                 .replace('-', "_")
                 .to_uppercase();
-            let path = std::fs::read_link(dir.join(file_name))?;
-            std::env::set_var(env_name, path);
+            set_var_to_path(env_name, dir.join(file_name));
         }
         Ok(())
     }
+}
+
+/// Set environment variable `env_name` to `file_path`
+/// or to wherever `file_path` points to in case it's a symlink.
+pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
+    let path = if file_path.is_symlink() {
+        std::fs::read_link(file_path).unwrap()
+    } else {
+        file_path
+    };
+    std::env::set_var(env_name, path);
 }
 
 pub trait HasRegistryVersion {
@@ -1762,79 +1823,82 @@ trait RegistryResultHelper<T> {
 pub const TEST_USER1_STARTING_TOKENS: Tokens = Tokens::from_e8s(u64::MAX / 2);
 
 /// Installs the NNS canister versions provided by `canister_wasm_strategy`, with `customizations`, on the node given by `url` using the initial registry created by `ic-prep`, stored under `registry_local_store`.
-pub fn install_nns_canisters(
+pub async fn install_nns_canisters(
     logger: &Logger,
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
     nns_test_neurons_present: bool,
     install_at_ids: bool,
     ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
+    neurons: Option<Vec<Neuron>>,
 ) {
-    let rt = Rt::new().expect("Could not create tokio runtime.");
     info!(
         logger,
         "Compiling/installing NNS canisters (might take a while)."
     );
-    rt.block_on(async move {
-        let mut init_payloads = NnsInitPayloadsBuilder::new();
-        if nns_test_neurons_present {
-            let mut ledger_balances = if let Some(ledger_balances) = ledger_balances {
-                ledger_balances
-            } else {
-                HashMap::new()
-            };
-            ledger_balances.insert(
-                LIFELINE_CANISTER_ID.get().into(),
-                Tokens::from_tokens(10_000).unwrap(),
-            );
-            ledger_balances.insert((*TEST_USER1_PRINCIPAL).into(), TEST_USER1_STARTING_TOKENS);
-            if ledger_balances.len() > 100 {
-                let first_100_ledger_balances: HashMap<AccountIdentifier, Tokens> = ledger_balances
-                    .iter()
-                    .take(100)
-                    .map(|(x, y)| (*x, *y))
-                    .collect();
-                info!(
-                    logger,
-                    "Initial ledger (showing the first 100 entries out of {}): {:?}",
-                    ledger_balances.len(),
-                    first_100_ledger_balances
-                );
-            } else {
-                info!(logger, "Initial ledger: {:?}", ledger_balances);
-            }
-
-            let mut ledger_init_payload = LedgerCanisterInitPayload::builder()
-                .minting_account(GOVERNANCE_CANISTER_ID.get().into())
-                .initial_values(ledger_balances)
-                .build()
-                .unwrap();
-            ledger_init_payload
-                .send_whitelist
-                .insert(CYCLES_MINTING_CANISTER_ID);
-            init_payloads
-                .with_test_neurons()
-                .with_ledger_init_state(ledger_init_payload);
-        }
-        let registry_local_store = ic_prep_state_dir.registry_local_store_path();
-        let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
-        init_payloads.with_initial_mutations(initial_mutations);
-
-        let agent = InternalAgent::new(
-            url,
-            Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
-        );
-        let runtime = Runtime::Remote(RemoteTestRuntime {
-            agent,
-            effective_canister_id: REGISTRY_CANISTER_ID.into(),
-        });
-
-        if install_at_ids {
-            NnsCanisters::set_up_at_ids(&runtime, init_payloads.build()).await;
+    let mut init_payloads = NnsInitPayloadsBuilder::new();
+    if nns_test_neurons_present {
+        let mut ledger_balances = if let Some(ledger_balances) = ledger_balances {
+            ledger_balances
         } else {
-            NnsCanisters::set_up(&runtime, init_payloads.build()).await;
+            HashMap::new()
+        };
+        let neurons = if let Some(neurons) = neurons {
+            neurons
+        } else {
+            Vec::new()
+        };
+        ledger_balances.insert(
+            LIFELINE_CANISTER_ID.get().into(),
+            Tokens::from_tokens(10_000).unwrap(),
+        );
+        ledger_balances.insert((*TEST_USER1_PRINCIPAL).into(), TEST_USER1_STARTING_TOKENS);
+        if ledger_balances.len() > 100 {
+            let first_100_ledger_balances: HashMap<AccountIdentifier, Tokens> = ledger_balances
+                .iter()
+                .take(100)
+                .map(|(x, y)| (*x, *y))
+                .collect();
+            info!(
+                logger,
+                "Initial ledger (showing the first 100 entries out of {}): {:?}",
+                ledger_balances.len(),
+                first_100_ledger_balances
+            );
+        } else {
+            info!(logger, "Initial ledger: {:?}", ledger_balances);
         }
+
+        let ledger_init_payload = LedgerCanisterInitPayload::builder()
+            .minting_account(GOVERNANCE_CANISTER_ID.get().into())
+            .initial_values(ledger_balances)
+            .send_whitelist(HashSet::from([CYCLES_MINTING_CANISTER_ID]))
+            .build()
+            .unwrap();
+
+        init_payloads
+            .with_test_neurons()
+            .with_additional_neurons(neurons)
+            .with_ledger_init_state(ledger_init_payload);
+    }
+    let registry_local_store = ic_prep_state_dir.registry_local_store_path();
+    let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
+    init_payloads.with_initial_mutations(initial_mutations);
+
+    let agent = InternalAgent::new(
+        url,
+        Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
+    );
+    let runtime = Runtime::Remote(RemoteTestRuntime {
+        agent,
+        effective_canister_id: REGISTRY_CANISTER_ID.into(),
     });
+
+    if install_at_ids {
+        NnsCanisters::set_up_at_ids(&runtime, init_payloads.build()).await;
+    } else {
+        NnsCanisters::set_up(&runtime, init_payloads.build()).await;
+    }
 }
 
 /// A short wasm module that is a legal canister binary.
@@ -1944,4 +2008,15 @@ impl TestEnvAttribute for FarmBaseUrl {
     fn attribute_name() -> String {
         "farm_url".to_string()
     }
+}
+
+pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
+    let boundary_node = env
+        .get_deployed_boundary_node(boundary_node_name)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    boundary_node
+        .await_status_is_healthy()
+        .expect("BN did not come up!");
 }

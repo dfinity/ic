@@ -10,12 +10,12 @@ use crate::{
     canister_agent::CanisterAgent,
     canister_api::{CallMode, SnsRequestProvider},
     canister_requests,
-    driver::test_env_api::{retry_async, NnsCanisterWasmStrategy, NnsCustomizations},
+    driver::test_env_api::{retry_async, NnsCanisterWasmStrategy},
     generic_workload_engine::{
         engine::Engine,
         metrics::{LoadTestMetrics, RequestOutcome},
     },
-    sns_client::SnsClient,
+    sns_client::{openchat_create_service_nervous_system_proposal, SnsClient},
 };
 use anyhow::{bail, Context};
 use candid::{Decode, Principal};
@@ -40,10 +40,10 @@ use crate::{
             HasWasm, IcNodeContainer,
         },
     },
-    util::{block_on, delay},
+    util::block_on,
 };
 
-use super::sns_deployment::{self, install_nns, install_sns, SaleParticipant};
+use super::sns_deployment::{self, install_nns, install_sns_legacy, SaleParticipant};
 
 use ic_base_types::PrincipalId;
 
@@ -69,8 +69,9 @@ fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStra
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    install_nns(env, wasm_strategy, NnsCustomizations::default());
-    install_sns(env, wasm_strategy);
+    install_nns(env, wasm_strategy, vec![], vec![]);
+    let create_service_nervous_system_proposal = openchat_create_service_nervous_system_proposal();
+    install_sns_legacy(env, wasm_strategy, create_service_nervous_system_proposal);
 }
 
 pub fn benchmark_config(env: TestEnv) {
@@ -151,7 +152,7 @@ impl AggregatorClient {
         relative_url: String,
     ) -> Result<HttpResponse> {
         let (response,) = canister
-            .http_request("GET", relative_url.clone(), vec![], vec![])
+            .http_request("GET", relative_url.clone(), vec![], vec![], None)
             .call()
             .await
             .unwrap();
@@ -301,7 +302,7 @@ impl AggregatorClient {
                 "Validating aggregator canister's installation via public endpoint {}",
                 app_node.get_public_url().as_str(),
             );
-            let p = env.get_dependency_path("external/sns_aggregator/file/sns_aggregator.wasm");
+            let p = env.get_dependency_path("external/sns_aggregator/file/sns_aggregator_dev.wasm");
             let p = std::fs::canonicalize(p.clone())
                 .unwrap_or_else(|e| panic!("cannot obtain canonical path from {p:?}: {e:?}"));
             let canister_bytes = env.load_wasm(p);
@@ -317,7 +318,7 @@ impl AggregatorClient {
                         .create_canister()
                         .as_provisional_create_with_amount(None)
                         .with_effective_canister_id(effective_canister_id)
-                        .call_and_wait(delay())
+                        .call_and_wait()
                         .await
                         .unwrap();
                     info!(
@@ -326,7 +327,7 @@ impl AggregatorClient {
                     );
                     management_canister
                         .install_code(&canister_id, &canister_bytes)
-                        .call_and_wait(delay())
+                        .call_and_wait()
                         .await
                         .unwrap();
                     info!(log, "Successfully installed canister {canister_id:?}");
@@ -400,7 +401,7 @@ pub fn validate_aggregator_data(env: TestEnv) {
             let swap_params = AggregatorClient::first_swap_params(
                 &log,
                 &http_canister,
-                Duration::from_secs(2 * 60),
+                Duration::from_secs(5 * 60),
             )
             .await
             .result()

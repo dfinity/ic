@@ -3,10 +3,8 @@ end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::util::block_on;
-use crate::{
-    types::RejectCode,
-    util::{assert_reject, create_and_install, escape_for_wat, UniversalCanister},
-};
+use crate::util::{assert_reject, create_and_install, escape_for_wat, UniversalCanister};
+use ic_agent::agent::RejectCode;
 use ic_types::CanisterId;
 use ic_universal_canister::{call_args, wasm};
 
@@ -63,7 +61,7 @@ pub fn simple_query(env: TestEnv) {
 }
 
 /// User queries canister A; A queries self which fails.
-pub fn self_loop_fails(env: TestEnv) {
+pub fn self_loop_succeeds(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -75,13 +73,13 @@ pub fn self_loop_fails(env: TestEnv) {
             let res = canister
                 .query(wasm().inter_query(canister.canister_id(), call_args()))
                 .await;
-            assert_reject(res, RejectCode::CanisterError);
+            assert!(res.is_ok());
         }
     });
 }
 
 /// User queries canister A; A queries B; B queries A which fails.
-pub fn canisters_loop_fails(env: TestEnv) {
+pub fn canisters_loop_succeeds(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -102,7 +100,7 @@ pub fn canisters_loop_fails(env: TestEnv) {
                     ),
                 )
                 .await;
-            assert_reject(res, RejectCode::CanisterError);
+            assert!(res.is_ok());
         }
     });
 }

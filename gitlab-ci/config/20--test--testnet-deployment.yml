@@ -2,7 +2,12 @@
 test-testnet-deployment:
   extends:
     - .ubuntu-k8s
-    - .rules-protected-branch
+  rules:
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH =~ /^rc--/'
+  needs:
+    - job: bazel-test-all
+      artifacts: false
   stage: test
   resource_group: $TESTNET
   variables:

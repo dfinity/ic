@@ -21,6 +21,7 @@ rust_library(
     },
     version = "0.8.0",
     deps = [
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/tree_hash",
         "//rs/rosetta-api/icrc1",
@@ -44,7 +45,7 @@ rust_canister(
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
     ],
-    service_file = ":icrc1.did",
+    service_file = ":ledger.did",
     deps = [
         ":ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -67,8 +68,7 @@ rust_test(
     name = "ledger_canister_test",
     crate = ":_wasm_ledger_canister",
     data = [
-        ":icrc1.did",
-        ":txlog.did",
+        ":ledger.did",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
@@ -84,10 +84,14 @@ rust_test(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
         "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
+        "@ic-icrc1-ledger-first-version.wasm.gz//file",
+        "@mainnet_ic-icrc1-ledger//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister.wasm)",
+        "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
+        "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ic-icrc1-ledger//file)",
         "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
@@ -110,5 +114,24 @@ rust_test(
         "@crate_index//:leb128",
         "@crate_index//:num-traits",
         "@crate_index//:proptest",
+        "@crate_index//:serde_bytes",
+    ],
+)
+
+rust_test(
+    name = "ledger_unit_test",
+    srcs = ["src/tests.rs"],
+    compile_data = [
+        "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
+    ],
+    crate = "ledger",
+    deps = [
+        ":ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/icrc1/ledger/sm-tests",
+        "//rs/rosetta-api/ledger_canister_core",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/types/base_types",
     ],
 )

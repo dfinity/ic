@@ -2,25 +2,24 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/sha",
+    "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",
     "//rs/nns/cmc",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
-    "//rs/nns/gtc",
     "//rs/nns/gtc_accounts",
-    "//rs/nns/handlers/lifeline",
-    "//rs/nns/handlers/root",
-    "//rs/nns/sns-wasm",
+    "//rs/nns/handlers/lifeline/impl:lifeline",
+    "//rs/nns/handlers/lifeline/interface",
     "//rs/protobuf",
     "//rs/registry/canister",
     "//rs/registry/keys",
@@ -34,8 +33,6 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/on_wire",
-    "//rs/sns/governance",
-    "//rs/sns/init",
     "//rs/state_machine_tests",
     "//rs/test_utilities",
     "//rs/types/base_types",
@@ -54,6 +51,26 @@ DEPENDENCIES = [
     "@crate_index//:walrus",
 ]
 
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance",
+    "//rs/nns/gtc",
+    "//rs/nns/sns-wasm",
+    "//rs/nns/handlers/root/impl:root",
+    "//rs/sns/governance",
+    "//rs/sns/init",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance:governance--test_feature",
+    "//rs/nns/gtc:gtc--test_feature",
+    "//rs/nns/sns-wasm:sns-wasm--test_feature",
+    "//rs/nns/handlers/root/impl:root--test_feature",
+    "//rs/sns/governance:governance--test_feature",
+    "//rs/sns/init:init--test_feature",
+]
+
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
@@ -66,4 +83,15 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
+)
+
+rust_library(
+    name = "test_utils--test_feature",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nns_test_utils",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES,
 )

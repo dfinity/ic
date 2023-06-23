@@ -7,7 +7,7 @@ use ic_tests::nns_tests::sns_aggregator::{
     benchmark_config_with_aggregator, validate_aggregator_data, wait_until_aggregator_finds_sns,
     workload_via_aggregator,
 };
-use ic_tests::nns_tests::sns_deployment::initiate_token_swap;
+use ic_tests::nns_tests::sns_deployment::initiate_token_swap_with_oc_parameters;
 use ic_tests::systest;
 
 const WORKLOAD_DURATION: Duration = Duration::from_secs(2 * 60);
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
         .with_timeout_per_test(Duration::from_secs(60 * 60))
         .with_setup(benchmark_config_with_aggregator)
         .add_test(systest!(wait_until_aggregator_finds_sns))
-        .add_test(systest!(initiate_token_swap))
+        .add_test(systest!(initiate_token_swap_with_oc_parameters))
         .add_test(systest!(validate_aggregator_data))
         .add_test(systest!(workload_via_aggregator_rps60))
         .add_test(systest!(workload_via_aggregator_rps120))

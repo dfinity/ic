@@ -703,46 +703,6 @@ pub(crate) fn syscalls<S: SystemApi>(
         .unwrap();
 
     linker
-        .func_wrap("ic0", "controller_size", {
-            move |mut caller: Caller<'_, StoreData<S>>| {
-                with_system_api(&mut caller, |s| s.ic0_controller_size())
-                    .map_err(|e| process_err(&mut caller, e))
-                    .and_then(|s| {
-                        i32::try_from(s).map_err(|e| {
-                            anyhow::Error::msg(format!("ic0_controller_size failed: {}", e))
-                        })
-                    })
-            }
-        })
-        .unwrap();
-
-    linker
-        .func_wrap("ic0", "controller_copy", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>, dst: i32, offset: i32, size: i32| {
-                observe_execution_complexity(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CONTROLLER_COPY,
-                        ..Default::default()
-                    },
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_controller_copy(dst as u32, offset as u32, size as u32, memory)
-                })?;
-                if feature_flags.write_barrier == FlagStatus::Enabled {
-                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
-                } else {
-                    Ok(())
-                }
-            }
-        })
-        .unwrap();
-
-    linker
         .func_wrap("ic0", "debug_print", {
             let log = log.clone();
             move |mut caller: Caller<'_, StoreData<S>>, offset: i32, length: i32| {

@@ -27,14 +27,37 @@ inputs = ["nginx_access"]
 source = """
 . = parse_json!(.message)
 
+# Inject the environment
+.env = "${ENV:?ENV must be provided}"
+
 # Anonymize remote_addr
 remote_addr, err = to_string(.remote_addr)
 if err != null || remote_addr == "" {
+  .remote_addr_family = 0;
   .remote_addr_hashed = ""
 } else {
-  .remote_addr_hashed = sha3("${IP_HASH_SALT}" + remote_addr, variant: "SHA3-224")
+  # Make sure it's properly parsed as either IPv4 or IPv6, otherwise fall back to 0
+  .remote_addr_family = if is_ipv4(remote_addr) { 4 } else if is_ipv6(remote_addr) { 6 } else { 0 };
+
+  .remote_addr_hashed = sha3("${IP_HASH_SALT:?IP_HASH_SALT must be provided}" + remote_addr, variant: "SHA3-224")
   .remote_addr_hashed = truncate(.remote_addr_hashed, limit: 32, ellipsis: false)
 }
+
+# In some rare cases several replicas are contacted and it makes the following fields
+# comma- and/or colon-separated depending on the request flow. This breaks Clickhouse ingests.
+# See http://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_addr
+#
+# We're trying to parse all these potentially multi-value fields as ints/floats and fall back to zero if that fails
+.upstream_bytes_received = to_int(.upstream_bytes_received) ?? 0
+.upstream_bytes_sent = to_int(.upstream_bytes_sent) ?? 0
+.upstream_connect_time = to_float(.upstream_connect_time) ?? 0.0
+.upstream_header_time = to_float(.upstream_header_time) ?? 0.0
+.upstream_response_length = to_int(.upstream_response_length) ?? 0
+.upstream_response_time = to_float(.upstream_response_time) ?? 0.0
+
+# Also sometimes status contains a dash "-" and this also breaks ingests.
+# This happens e.g. when a client closed connection before the upstream returned a reply.
+.upstream_status = to_int(.upstream_status) ?? 0
 
 # Remove privacy related info
 del(.remote_user)
@@ -101,30 +124,12 @@ inputs = ["metrics_nginx_access_preprocessed"]
     upstream_cache_status = "{{ upstream_cache_status }}"
     upstream_status = "{{ upstream_status }}"
 
-  [[transforms.nginx_access_metrics.metrics]]
-  type = "histogram"
-  field = "request_time"
-  name = "request_sec_duration"
-
-    [transforms.nginx_access_metrics.metrics.tags]
-    hostname = "{{ hostname }}"
-    ic_http_request = "{{ ic_http_request }}"
-    ic_node_id = "{{ ic_node_id }}"
-    ic_request_type = "{{ ic_request_type }}"
-    ic_subnet_id = "{{ ic_subnet_id }}"
-    is_bot = "{{ is_bot }}"
-    request_method = "{{ request_method }}"
-    status = "{{ status }}"
-    traffic_segment = "{{ traffic_segment }}"
-    upstream_cache_status = "{{ upstream_cache_status }}"
-    upstream_status = "{{ upstream_status }}"
-
 # nginx access (clickhouse)
 
 [transforms.clickhouse_nginx_access_2xx_sampled]
 type = "sample"
 inputs = ["nginx_access_by_status.2xx"]
-rate = ${CLICKHOUSE_2XX_SAMPLE_RATE:?err}
+rate = ${CLICKHOUSE_2XX_SAMPLE_RATE:?CLICKHOUSE_2XX_SAMPLE_RATE must be provided}
 
 [transforms.clickhouse_nginx_access_preprocessed]
 type = "remap"
@@ -165,7 +170,7 @@ type = "clickhouse"
 inputs = ["clickhouse_nginx_access_preprocessed"]
 
 # General
-endpoint = "${CLICKHOUSE_URL}"
+endpoint = "${CLICKHOUSE_URL:?CLICKHOUSE_URL must be provided}"
 database = "default"
 table = "http_access"
 
@@ -186,8 +191,8 @@ table = "http_access"
 
   [sinks.clickhouse_nginx_access.auth]
   strategy = "basic"
-  user = "${CLICKHOUSE_USER}"
-  password = "${CLICKHOUSE_PASSWORD}"
+  user = "${CLICKHOUSE_USER:?CLICKHOUSE_USER must be provided}"
+  password = "${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD must be provided}"
 
   [sinks.clickhouse_nginx_access.encoding]
   only_fields = [
@@ -197,6 +202,7 @@ table = "http_access"
     "content_length",
     "content_type",
     "date",
+    "env",
     "geo_city_name",
     "geo_country_code",
     "geo_country_name",
@@ -208,10 +214,12 @@ table = "http_access"
     "http_user_agent",
     "https",
     "ic_canister_id",
+    "ic_canister_id_cbor",
     "ic_http_request",
     "ic_method_name",
     "ic_node_id",
     "ic_request_type",
+    "ic_sender",
     "ic_subnet_id",
     "is_bot",
     "nginx_version",
@@ -220,6 +228,8 @@ table = "http_access"
     "proxy_port",
     "query_string",
     "remote_addr_hashed",
+    "remote_addr_family",
+    "request_id",
     "request_length",
     "request_method",
     "request_time_ms",
@@ -286,7 +296,7 @@ if err == null && length(tags) != 0 {
 [sinks.elasticsearch_nginx_access]
 type = "elasticsearch"
 inputs = ["elasticsearch_nginx_access_preprocessed"]
-endpoint = "${ELASTICSEARCH_URL}"
+endpoint = "${ELASTICSEARCH_URL:?ELASTICSEARCH_URL must be provided}"
 mode = "bulk"
 
   [sinks.elasticsearch_nginx_access.bulk]
@@ -348,7 +358,7 @@ inputs = ["nginx_error_json"]
 [sinks.prometheus_exporter_nginx]
 type = "prometheus_exporter"
 inputs = ["nginx_access_metrics", "nginx_error_metrics"]
-address = "${NGINX_PROMETHUS_ADDR}"
+address = "${NGINX_PROMETHUS_ADDR?:NGINX_PROMETHUS_ADDR must be provided}"
 default_namespace = "nginx"
 suppress_timestamp = true
 
@@ -527,7 +537,7 @@ inputs = ["danted_json"]
 [sinks.prometheus_exporter_danted]
 type = "prometheus_exporter"
 inputs = ["danted_metrics"]
-address = "${DANTED_PROMETHUS_ADDR}"
+address = "${DANTED_PROMETHUS_ADDR:?DANTED_PROMETHUS_ADDR must be provided}"
 default_namespace = "danted"
 suppress_timestamp = true
 

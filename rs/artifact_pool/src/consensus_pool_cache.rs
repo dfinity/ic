@@ -5,16 +5,16 @@ use ic_interfaces::consensus_pool::{
     ChainIterator, ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusBlockChainErr,
     ConsensusPool, ConsensusPoolCache,
 };
+use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::{
-        catchup::CUPWithOriginalProtobuf, ecdsa::EcdsaPayload, Block, BlockPayload, CatchUpPackage,
-        ConsensusMessage, Finalization, HasHeight,
+        ecdsa::EcdsaPayload, Block, BlockPayload, CatchUpPackage, ConsensusMessage, Finalization,
+        HasHeight,
     },
     Height, Time,
 };
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
 
 /// Implementation of ConsensusCache and ConsensusPoolCache.
@@ -33,7 +33,8 @@ pub(crate) enum CacheUpdateAction {
 struct CachedData {
     finalized_block: Block,
     summary_block: Block,
-    catch_up_package: CUPWithOriginalProtobuf,
+    catch_up_package: CatchUpPackage,
+    catch_up_package_proto: pb::CatchUpPackage,
     finalized_chain: ConsensusBlockChainImpl,
 }
 
@@ -50,7 +51,7 @@ impl CachedData {
         &self,
         catch_up_package: &CatchUpPackage,
     ) -> Option<CacheUpdateAction> {
-        if catch_up_package.height() > self.catch_up_package.cup.height() {
+        if catch_up_package.height() > self.catch_up_package.height() {
             Some(CacheUpdateAction::CatchUpPackage)
         } else {
             None
@@ -73,11 +74,11 @@ impl ConsensusPoolCache for ConsensusCacheImpl {
     }
 
     fn catch_up_package(&self) -> CatchUpPackage {
-        self.cache.read().unwrap().catch_up_package.cup.clone()
+        self.cache.read().unwrap().catch_up_package.clone()
     }
 
-    fn cup_with_protobuf(&self) -> CUPWithOriginalProtobuf {
-        self.cache.read().unwrap().catch_up_package.clone()
+    fn cup_as_protobuf(&self) -> pb::CatchUpPackage {
+        self.cache.read().unwrap().catch_up_package_proto.clone()
     }
 
     fn summary_block(&self) -> Block {
@@ -95,9 +96,10 @@ impl ConsensusCacheImpl {
     /// Initialize and return a new ConsensusCache with data from the given
     /// ConsensusPool.
     pub(crate) fn new(pool: &dyn ConsensusPool) -> Self {
-        let catch_up_package = get_highest_catch_up_package(pool);
-        let finalized_block = get_highest_finalized_block(pool, &catch_up_package.cup);
-        let mut summary_block = catch_up_package.cup.content.block.as_ref().clone();
+        let cup_proto = pool.validated().highest_catch_up_package_proto();
+        let catch_up_package = (&cup_proto).try_into().expect("deserializing CUP failed");
+        let finalized_block = get_highest_finalized_block(pool, &catch_up_package);
+        let mut summary_block = catch_up_package.content.block.as_ref().clone();
         update_summary_block(pool, &mut summary_block, &finalized_block);
         let finalized_chain = ConsensusBlockChainImpl::new(pool, &summary_block, &finalized_block);
 
@@ -106,6 +108,7 @@ impl ConsensusCacheImpl {
                 finalized_block,
                 summary_block,
                 catch_up_package,
+                catch_up_package_proto: cup_proto,
                 finalized_chain,
             }),
         }
@@ -140,17 +143,17 @@ impl ConsensusCacheImpl {
         let cache = &mut *self.cache.write().unwrap();
         updates.iter().for_each(|update| {
             if let CacheUpdateAction::CatchUpPackage = update {
-                cache.catch_up_package = get_highest_catch_up_package(pool);
-                if cache.catch_up_package.cup.height() > cache.finalized_block.height() {
-                    cache.finalized_block =
-                        cache.catch_up_package.cup.content.block.as_ref().clone()
+                cache.catch_up_package_proto = pool.validated().highest_catch_up_package_proto();
+                cache.catch_up_package = CatchUpPackage::try_from(&cache.catch_up_package_proto)
+                    .expect("deserializing CUP from protobuf artifact");
+                if cache.catch_up_package.height() > cache.finalized_block.height() {
+                    cache.finalized_block = cache.catch_up_package.content.block.as_ref().clone()
                 }
             }
         });
         updates.iter().for_each(|update| {
             if let CacheUpdateAction::Finalization = update {
-                cache.finalized_block =
-                    get_highest_finalized_block(pool, &cache.catch_up_package.cup);
+                cache.finalized_block = get_highest_finalized_block(pool, &cache.catch_up_package);
             }
         });
         update_summary_block(pool, &mut cache.summary_block, &cache.finalized_block);
@@ -184,12 +187,6 @@ pub(crate) fn get_highest_finalized_block(
         }
         Err(_) => catch_up_package.content.block.as_ref().clone(),
     }
-}
-
-pub(crate) fn get_highest_catch_up_package(pool: &dyn ConsensusPool) -> CUPWithOriginalProtobuf {
-    let protobuf = pool.validated().highest_catch_up_package_proto();
-    let cup = CatchUpPackage::try_from(&protobuf).expect("CUP should be retrievable from protobuf");
-    CUPWithOriginalProtobuf { cup, protobuf }
 }
 
 /// Find the DKG summary block that is between the given 'summary_block' and a
@@ -443,6 +440,8 @@ mod test {
             let mut block = pool.make_next_block();
             let time = mock_time() + Duration::from_secs(10);
             block.content.as_mut().context.time = time;
+            // recompute the hash to make sure it's still correct
+            block.update_content();
             pool.insert_validated(block.clone());
             pool.notarize(&block);
             let finalization = Finalization::fake(FinalizationContent::new(

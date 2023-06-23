@@ -1,16 +1,13 @@
-use crate::admin_helper::IcAdmin;
-use crate::command_helper::exec_cmd;
-use crate::error::{RecoveryError, RecoveryResult};
-use crate::file_sync_helper::{create_dir, read_dir, remove_dir, rsync, rsync_with_retries};
-use crate::ssh_helper::SshHelper;
-use crate::util::{block_on, parse_hex_str};
 use crate::{
-    get_member_ips, get_node_heights_from_metrics, replay_helper, ADMIN, CHECKPOINTS,
-    IC_CERTIFICATIONS_PATH, IC_STATE, NEW_IC_STATE, READONLY,
-};
-use crate::{
-    Recovery, IC_CHECKPOINTS_PATH, IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE,
-    IC_STATE_EXCLUDES,
+    admin_helper::IcAdmin,
+    command_helper::exec_cmd,
+    error::{RecoveryError, RecoveryResult},
+    file_sync_helper::{create_dir, read_dir, remove_dir, rsync, rsync_with_retries},
+    get_member_ips, get_node_heights_from_metrics, replay_helper,
+    ssh_helper::SshHelper,
+    util::{block_on, parse_hex_str},
+    Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
+    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE, READONLY,
 };
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::CanisterId;
@@ -19,15 +16,11 @@ use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::artifact::CertificationMessage;
-use ic_types::{Height, SubnetId};
+use ic_types::{artifact::CertificationMessage, Height, SubnetId};
 use slog::{debug, info, warn, Logger};
-use std::collections::HashMap;
-use std::net::IpAddr;
-use std::path::PathBuf;
-use std::process::Command;
-use std::sync::Arc;
-use std::{thread, time};
+use std::{
+    collections::HashMap, net::IpAddr, path::PathBuf, process::Command, sync::Arc, thread, time,
+};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -39,6 +32,12 @@ use std::{thread, time};
 pub trait Step {
     fn descr(&self) -> String;
     fn exec(&self) -> RecoveryResult<()>;
+}
+
+impl<T: Step + 'static> From<T> for Box<dyn Step> {
+    fn from(step: T) -> Self {
+        Box::new(step)
+    }
 }
 
 /// A step containing an ic-admin proposal or query to be executed.
@@ -108,7 +107,7 @@ impl Step for DownloadCertificationsStep {
 
         if !downloaded_at_least_once {
             Err(RecoveryError::invalid_output_error(
-                "Failed to download certifications from any node.".into(),
+                "Failed to download certifications from any node.",
             ))
         } else {
             Ok(())
@@ -265,6 +264,7 @@ pub struct DownloadIcStateStep {
     pub keep_downloaded_state: bool,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
+    pub additional_excludes: Vec<String>,
 }
 
 impl Step for DownloadIcStateStep {
@@ -301,9 +301,7 @@ impl Step for DownloadIcStateStep {
         if ssh_helper.wait_for_access().is_err() {
             ssh_helper.account = ADMIN.to_string();
             if !ssh_helper.can_connect() {
-                return Err(RecoveryError::invalid_output_error(
-                    "SSH access denied".to_string(),
-                ));
+                return Err(RecoveryError::invalid_output_error("SSH access denied"));
             }
         }
 
@@ -318,7 +316,12 @@ impl Step for DownloadIcStateStep {
             ssh_helper.account, self.node_ip, IC_JSON5_PATH
         );
 
-        let mut excludes = IC_STATE_EXCLUDES.to_vec();
+        let mut excludes: Vec<&str> = IC_STATE_EXCLUDES
+            .iter()
+            .copied()
+            .chain(self.additional_excludes.iter().map(|x| x.as_str()))
+            .collect();
+
         let res = ssh_helper
             .ssh(format!(
                 r"echo $(ls {}/{} | sort | awk 'n>=1 {{ print a[n%1] }} {{ a[n++%1]=$0 }}');",
@@ -356,7 +359,7 @@ impl Step for DownloadIcStateStep {
 
         rsync(
             &self.logger,
-            vec![],
+            Vec::<String>::default(),
             &config_src,
             target,
             self.require_confirmation,
@@ -411,60 +414,36 @@ impl Step for ReplayStep {
     fn exec(&self) -> RecoveryResult<()> {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
-        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
+        let checkpoint_height =
+            Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?;
 
-        let checkpoint_heights = checkpoints
-            .iter()
-            .map(|c| parse_hex_str(c))
-            .collect::<RecoveryResult<Vec<u64>>>()?;
+        let state_params = block_on(replay_helper::replay(
+            self.subnet_id,
+            self.config.clone(),
+            self.canister_caller_id,
+            self.work_dir.join("data"),
+            self.subcmd.as_ref().map(|c| c.cmd.clone()),
+            self.result.clone(),
+        ))?;
 
-        let delete_checkpoints = |except: &u64| {
-            Recovery::get_checkpoint_names(&checkpoint_path)?
-                .iter()
-                .filter(|c| parse_hex_str(c).unwrap() != *except)
-                .map(|c| {
-                    info!(self.logger, "Deleting checkpoint {}", c);
-                    remove_dir(&checkpoint_path.join(c))
-                })
-                .collect::<RecoveryResult<Vec<_>>>()
-        };
+        let latest_height = state_params.height;
+        let state_hash = state_params.hash;
 
-        if let Some(max) = checkpoint_heights.iter().max() {
-            delete_checkpoints(max)?;
-            let height = Height::from(*max);
+        info!(self.logger, "Checkpoint height: {}", checkpoint_height);
+        info!(self.logger, "Height after replay: {}", latest_height);
 
-            let state_params = block_on(replay_helper::replay(
-                self.subnet_id,
-                self.config.clone(),
-                self.canister_caller_id,
-                self.work_dir.join("data"),
-                self.subcmd.as_ref().map(|c| c.cmd.clone()),
-                self.result.clone(),
-            ))?;
-
-            let latest_height = state_params.height;
-            let state_hash = state_params.hash;
-
-            info!(self.logger, "Checkpoint height: {}", height);
-            info!(self.logger, "Height after replay: {}", latest_height);
-
-            if latest_height < height {
-                return Err(RecoveryError::invalid_output_error(
-                    "Replay height and checkpoint height diverged.".to_string(),
-                ));
-            }
-
-            info!(self.logger, "State hash: {}", state_hash);
-
-            info!(self.logger, "Deleting old checkpoints");
-            delete_checkpoints(&latest_height.get())?;
-
-            return Ok(());
+        if latest_height < checkpoint_height {
+            return Err(RecoveryError::invalid_output_error(
+                "Replay height and checkpoint height diverged.",
+            ));
         }
 
-        Err(RecoveryError::invalid_output_error(
-            "Did not find any checkpoints".to_string(),
-        ))
+        info!(self.logger, "State hash: {}", state_hash);
+
+        info!(self.logger, "Deleting old checkpoints");
+        Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?;
+
+        Ok(())
     }
 }
 
@@ -494,17 +473,13 @@ impl Step for ValidateReplayStep {
             .iter()
             .max_by_key(|v| v.certification_height)
             .map(|v| v.certification_height)
-            .ok_or_else(|| {
-                RecoveryError::OutputError("No certification heights found".to_string())
-            })?;
+            .ok_or_else(|| RecoveryError::invalid_output_error("No certification heights found"))?;
 
         let finalization_height = &heights
             .iter()
             .max_by_key(|v| v.finalization_height)
             .map(|v| v.finalization_height)
-            .ok_or_else(|| {
-                RecoveryError::invalid_output_error("No finalization heights found".to_string())
-            })?;
+            .ok_or_else(|| RecoveryError::invalid_output_error("No finalization heights found"))?;
 
         info!(self.logger, "Certification height: {}", cert_height);
         info!(
@@ -518,14 +493,13 @@ impl Step for ValidateReplayStep {
         }
         if latest_height.get() - self.extra_batches < cert_height.get() {
             return Err(RecoveryError::invalid_output_error(
-                "Replay height smaller than certification height.".to_string(),
+                "Replay height smaller than certification height.",
             ));
         }
 
         if latest_height.get() - self.extra_batches < finalization_height.get() {
             return Err(RecoveryError::invalid_output_error(
-                "There exists a node with finalization height greater than the replay height."
-                    .to_string(),
+                "There exists a node with finalization height greater than the replay height.",
             ));
         }
 
@@ -542,11 +516,17 @@ pub struct UploadAndRestartStep {
     pub data_src: PathBuf,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
+    pub check_ic_replay_height: bool,
 }
 
 impl Step for UploadAndRestartStep {
     fn descr(&self) -> String {
-        format!("Stopping replica {}, uploading and replacing state from {}, set access rights, restart replica.", self.node_ip, self.data_src.display())
+        format!(
+            "Stopping replica {}, uploading and replacing state from {}, set access rights, \
+            restart replica.",
+            self.node_ip,
+            self.data_src.display()
+        )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -562,23 +542,22 @@ impl Step for UploadAndRestartStep {
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
-        if checkpoints.len() != 1 {
+        let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(
-                "Found multiple checkpoints in upload directory".to_string(),
-            ));
-        }
+                "Found multiple checkpoints in upload directory"));
+        };
 
-        let max_checkpoint = checkpoints.into_iter().max().ok_or_else(|| {
-            RecoveryError::invalid_output_error("No checkpoints found".to_string())
-        })?;
-        let replay_height =
-            replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
+        if self.check_ic_replay_height {
+            let replay_height =
+                replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?
+                    .height;
 
-        if parse_hex_str(&max_checkpoint)? != replay_height.get() {
-            return Err(RecoveryError::invalid_output_error(format!(
-                "Latest checkpoint height ({}) doesn't match replay output ({})",
-                max_checkpoint, replay_height
-            )));
+            if parse_hex_str(max_checkpoint)? != replay_height.get() {
+                return Err(RecoveryError::invalid_output_error(format!(
+                    "Latest checkpoint height ({}) doesn't match replay output ({})",
+                    max_checkpoint, replay_height
+                )));
+            }
         }
 
         let ic_checkpoints_path = format!("{}/{}", IC_DATA_PATH, IC_CHECKPOINTS_PATH);
@@ -724,7 +703,9 @@ pub struct UpdateLocalStoreStep {
 
 impl Step for UpdateLocalStoreStep {
     fn descr(&self) -> String {
-        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store", self.work_dir.join("ic.json5"), self.subnet_id)
+        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store",
+            self.work_dir.join("ic.json5"),
+            self.subnet_id)
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -751,7 +732,14 @@ pub struct GetRecoveryCUPStep {
 
 impl Step for GetRecoveryCUPStep {
     fn descr(&self) -> String {
-        format!("Set recovery CUP by executing:\nic-replay {:?} --subnet-id {:?} get-recovery-cup {:?} {:?} cup.proto", self.config, self.subnet_id, self.state_hash, self.recovery_height)
+        format!(
+            "Set recovery CUP by executing:\n\
+            ic-replay {} --subnet-id {} get-recovery-cup {} {} cup.proto",
+            self.config.display(),
+            self.subnet_id,
+            self.state_hash,
+            self.recovery_height
+        )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -801,13 +789,16 @@ pub struct CopyIcStateStep {
 
 impl Step for CopyIcStateStep {
     fn descr(&self) -> String {
-        format!("Copying ic_state for upload to: {:?}", self.new_state_dir,)
+        format!(
+            "Copying ic_state for upload to: {}",
+            self.new_state_dir.display()
+        )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
         rsync(
             &self.logger,
-            vec![],
+            Vec::<String>::default(),
             &format!("{}/", self.work_dir.display()),
             &format!("{}/", self.new_state_dir.display()),
             false,
@@ -892,7 +883,7 @@ impl Step for UploadCUPAndTar {
 
                 rsync(
                     &self.logger,
-                    vec![],
+                    Vec::<String>::default(),
                     &format!("{}/cup.proto", self.work_dir.display()),
                     &target,
                     self.require_confirmation,
@@ -901,7 +892,7 @@ impl Step for UploadCUPAndTar {
 
                 rsync(
                     &self.logger,
-                    vec![],
+                    Vec::<String>::default(),
                     &format!("{}/ic_registry_local_store.tar.gz", self.work_dir.display()),
                     &target,
                     self.require_confirmation,
@@ -978,7 +969,7 @@ impl Step for DownloadRegistryStoreStep {
 
         rsync(
             &self.logger,
-            vec![],
+            Vec::<String>::default(),
             &data_src,
             &format!("{}/", self.work_dir.display()),
             self.require_confirmation,
@@ -1026,7 +1017,7 @@ impl Step for UploadAndHostTarStep {
         let src = format!("{}", self.tar.display());
         rsync(
             &self.logger,
-            vec![],
+            Vec::<String>::default(),
             &src,
             &target,
             self.require_confirmation,

@@ -23,6 +23,7 @@ pub(crate) enum ApiReqType {
     PprofHome,
     PprofProfile,
     PprofFlamegraph,
+    Threads,
     InvalidArgument,
 }
 
@@ -72,6 +73,7 @@ mod tests {
             StaticStr::from(ApiReqType::PprofFlamegraph),
             "pprof_flamegraph"
         );
+        assert_eq!(StaticStr::from(ApiReqType::Threads), "threads");
 
         assert_eq!(StaticStr::from(AppLayer::Http), "http");
         assert_eq!(StaticStr::from(AppLayer::Https), "https");

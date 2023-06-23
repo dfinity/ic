@@ -14,7 +14,7 @@ use crate::{
     canister_api::{Request, Response},
     driver::test_env_api::{retry_async, HasPublicApiUrl, IcNodeSnapshot},
     generic_workload_engine::metrics::RequestOutcome,
-    util::{assert_create_agent, assert_create_agent_with_identity, delay},
+    util::{assert_create_agent, assert_create_agent_with_identity},
 };
 
 /// An agent that is well-suited for interacting with arbitrary IC canisters.
@@ -67,7 +67,7 @@ impl CanisterAgent {
     pub async fn call<T>(
         &self,
         request: &(dyn Request<T> + Send + Sync),
-    ) -> RequestOutcome<Vec<u8>, String>
+    ) -> RequestOutcome<Vec<u8>, anyhow::Error>
     where
         T: Response,
     {
@@ -82,21 +82,26 @@ impl CanisterAgent {
             self.agent
                 .update(&request.canister_id(), request.method_name())
                 .with_arg(request.payload())
-                .call_and_wait(delay())
+                // TODO: polling interval or (throttling duration) can be important in case of high rps.
+                // If chosen badly it could result in 429 Too Many Requests from the node.
+                // Ideally, node should have a high rate limit to mitigate the impact/sensitivity of this value.
+                .call_and_wait()
                 .await
         })
-        .map_err(|e| format!("{e:?}"));
+        .map_err(|e| anyhow::anyhow!(e));
         RequestOutcome::new(result, request.signature(), start_time.elapsed(), 1)
     }
 
     pub async fn call_and_parse<T>(
         &self,
         request: &(dyn Request<T> + Send + Sync),
-    ) -> RequestOutcome<T, String>
+    ) -> RequestOutcome<T, anyhow::Error>
     where
         T: Response + Clone,
     {
         let raw_outcome = self.call(request).await;
+        let duration = raw_outcome.duration;
+        let attempts = raw_outcome.attempts;
         RequestOutcome::new(
             raw_outcome.result().map(|r| {
                 request
@@ -104,8 +109,8 @@ impl CanisterAgent {
                     .expect("failed to decode")
             }),
             format!("{}+parse", request.signature()),
-            raw_outcome.duration,
-            raw_outcome.attempts,
+            duration,
+            attempts,
         )
     }
 
@@ -115,7 +120,7 @@ impl CanisterAgent {
         timeout: Duration,
         backoff_delay: Duration,
         expected_outcome: Option<&(dyn Fn(T) -> bool + Sync + Send)>,
-    ) -> RequestOutcome<T, String>
+    ) -> RequestOutcome<T, anyhow::Error>
     where
         T: Response + Clone,
         R: Request<T> + Clone + Sync + Send + 'static,
@@ -150,8 +155,7 @@ impl CanisterAgent {
                 }
             }
         })
-        .await
-        .map_err(|e| format!("{e:?}"));
+        .await;
         RequestOutcome::new(
             result,
             format!("{}+retries", label),

@@ -255,7 +255,7 @@ impl BasicSignatureCspVault for RemoteCspVault {
             key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspBasicSignatureError::InternalError {
+            Err(CspBasicSignatureError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -288,7 +288,7 @@ impl MultiSignatureCspVault for RemoteCspVault {
             key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspMultiSignatureError::InternalError {
+            Err(CspMultiSignatureError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -323,7 +323,7 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
             key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspThresholdSignError::InternalError {
+            Err(CspThresholdSignError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -337,7 +337,7 @@ impl SecretKeyStoreCspVault for RemoteCspVault {
                 .sks_contains(context_with_timeout(self.rpc_timeout), *key_id),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspSecretKeyStoreContainsError::InternalError {
+            Err(CspSecretKeyStoreContainsError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -469,7 +469,7 @@ impl NiDkgCspVault for RemoteCspVault {
             maybe_resharing_secret,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspDkgCreateReshareDealingError::InternalError(
+            Err(CspDkgCreateReshareDealingError::TransientInternalError(
                 InternalError {
                     internal_error: rpc_error.to_string(),
                 },
@@ -553,7 +553,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
                 *key_id,
             ))
             .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-                Err(CspTlsSignError::InternalError {
+                Err(CspTlsSignError::TransientInternalError {
                     internal_error: rpc_error.to_string(),
                 })
             })
@@ -581,7 +581,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             transcript_operation.clone(),
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgCreateDealingError::InternalError {
+            Err(IDkgCreateDealingError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -606,9 +606,9 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             context_data.to_vec(),
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgVerifyDealingPrivateError::CspVaultRpcError(
-                rpc_error.to_string(),
-            ))
+            Err(IDkgVerifyDealingPrivateError::TransientInternalError {
+                internal_error: rpc_error.to_string(),
+            })
         })
     }
 
@@ -629,7 +629,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             transcript.clone(),
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgLoadTranscriptError::InternalError {
+            Err(IDkgLoadTranscriptError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -654,7 +654,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             transcript.clone(),
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgLoadTranscriptError::InternalError {
+            Err(IDkgLoadTranscriptError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -671,7 +671,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             oldest_public_key,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgRetainKeysError::InternalError {
+            Err(IDkgRetainKeysError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -706,7 +706,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
             *opener_key_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgOpenTranscriptError::InternalError {
+            Err(IDkgOpenTranscriptError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
@@ -739,7 +739,7 @@ impl ThresholdEcdsaSignerCspVault for RemoteCspVault {
             algorithm_id,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(ThresholdEcdsaSignShareError::InternalError {
+            Err(ThresholdEcdsaSignShareError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })

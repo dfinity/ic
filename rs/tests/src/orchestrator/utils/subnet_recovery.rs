@@ -34,12 +34,9 @@ use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use url::Url;
 
-pub(crate) fn set_sandbox_env_vars(dir: PathBuf) -> std::io::Result<()> {
-    let path = std::fs::read_link(dir.join("canister_sandbox"))?;
-    std::env::set_var("SANDBOX_BINARY", path);
-    let path = std::fs::read_link(dir.join("sandbox_launcher"))?;
-    std::env::set_var("LAUNCHER_BINARY", path);
-    Ok(())
+pub(crate) fn set_sandbox_env_vars(dir: PathBuf) {
+    set_var_to_path("SANDBOX_BINARY", dir.join("canister_sandbox"));
+    set_var_to_path("LAUNCHER_BINARY", dir.join("sandbox_launcher"));
 }
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
@@ -197,8 +194,9 @@ pub(crate) fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) 
         "Asserting that node {} has deleted its state.",
         node.get_ip_addr()
     );
-    let check =
-        r#"[ "$(ls -A /var/lib/ic/data/ic_state)" ] && echo "assigned" || echo "unassigned""#;
+    // We need to exclude the page_deltas/ directory, which is not deleted on state deletion.
+    // That is because deleting it would break SELinux assumptions.
+    let check = r#"[ "$(ls -A /var/lib/ic/data/ic_state -I page_deltas)" ] && echo "assigned" || echo "unassigned""#;
     retry(logger.clone(), secs(300), secs(10), || {
         let s = match node.get_ssh_session() {
             Ok(s) => s,

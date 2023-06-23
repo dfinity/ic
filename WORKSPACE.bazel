@@ -209,13 +209,6 @@ container_pull(
 )
 
 container_pull(
-    name = "httpbin",
-    digest = "sha256:506a878e386b4c3014088b9089e692ecb3cb6a35fb35c9d68c1ac300ce9ab984",
-    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
-    repository = "dfinity/httpbin",
-)
-
-container_pull(
     name = "minica",
     digest = "sha256:c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0",
     registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
@@ -234,6 +227,25 @@ container_pull(
     digest = "sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
     registry = "docker.io",
     repository = "ubuntu:latest",
+)
+
+# This image was built with bazel (bazel build //rs/tests:ubuntu_test_runtime_image)
+# then uploaded to our GitLab registry using:
+#
+#  $ bazel build //rs/tests:ubuntu_test_runtime_image
+#  $ docker login registry.gitlab.com
+#  $ docker load -i bazel-bin/rs/tests/ubuntu_test_runtime_image.tar
+#  $ docker tag ubuntu_test_runtime_image:latest "registry.gitlab.com/dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image:latest"
+#  $ docker image push  "registry.gitlab.com/dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image:latest"
+#
+# The reason we can't directly depend on //rs/tests:ubuntu_test_runtime_image is that
+# the target //rs/tests/httpbin-rs:httpbin_image_base
+# fails to build in our container (gitlab-ci/container/container-run.sh).
+container_pull(
+    name = "ubuntu_test_runtime",
+    digest = "sha256:d5b2f17ee8fcd45b4f1580893680b78a540f491e647a9f6971bdaab393e372f7",
+    registry = "registry.gitlab.com",
+    repository = "dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image",
 )
 
 # URL: registry.gitlab.com/dfinity-lab/open/public-docker-registry/nns-dapp-specs:latest
@@ -425,8 +437,8 @@ http_archive(
 package(default_visibility = ["//visibility:public"])
 filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibility = ["//visibility:public"])
       """,
-    sha256 = "4a70dbe9ff70ac052e101815510135a457869d847f63180442e0afe5c5bd36ef",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-1431d7b5-x86_64-linux.tar.gz"],
+    sha256 = "daca2dd0f0d8a615c43b70e69bf08919a42e4ff324d7311751897b4f0b8d7000",
+    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-189b3a3c-x86_64-linux.tar.gz"],
 )
 
 # Deployed NNS canisters
@@ -448,8 +460,8 @@ http_file(
 http_file(
     name = "mainnet_icp_ledger_canister",
     downloaded_file_path = "ledger-canister_notify-method.wasm.gz",
-    sha256 = "900e30c4bf3293244cd4649e8470ece822e18723e9a942decabc32d46257b514",
-    url = "https://download.dfinity.systems/ic/f02cc38677905e24a9016637fddc697039930808/canisters/ledger-canister_notify-method.wasm.gz",
+    sha256 = "cb16acc20a8948b68cc40b7d7328a53ec36c3cf713b3111921b49d009b98c5a5",
+    url = "https://download.dfinity.systems/ic/c63b73baa88d65a45a60f4d7e0ec043f1fbf98be/canisters/ledger-canister_notify-method.wasm.gz",
 )
 
 # From https://dashboard.internetcomputer.org/proposal/44955
@@ -457,8 +469,8 @@ http_file(
 http_file(
     name = "mainnet_icp_ledger-archive-node-canister",
     downloaded_file_path = "ledger-archive-node-canister.wasm.gz",
-    sha256 = "a88d0b6a327361208a48dd8dab5b7f47f8e1ed0f3c2aca6b6ad383187520ff67",
-    url = "https://download.dfinity.systems/ic/1b98a5d984176b1c948d0cb92227d88ad5ee8044/canisters/ledger-archive-node-canister.wasm.gz",
+    sha256 = "569d498b638668733953a756f4a417533e1f513d1d41d55960abcd2f160d2aad",
+    url = "https://download.dfinity.systems/ic/acd7e2928237a8e8bc1aa5e73efd47c8a8dfb556/canisters/ledger-archive-node-canister.wasm.gz",
 )
 
 http_file(
@@ -471,9 +483,8 @@ http_file(
 http_file(
     name = "mainnet_nns_lifeline_canister",
     downloaded_file_path = "lifeline-canister.wasm.gz",
-    sha256 = "2cce2f281c86325988528624dc9375272ecd2adc96e1021e41d08943a6e9e5a1",
-    # TODO: change to https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/lifeline_canister.wasm.gz after the next lifeline canister release.
-    url = "https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/lifeline.wasm.gz",
+    sha256 = "775303f6b99530db496117df1edfa1e24153a161895c56e79d4e39daae36e28b",
+    url = "https://download.dfinity.systems/ic/e4a9c0aa4ef24f7ee5bb9d27ce930551a7c5e24d/canisters/lifeline_canister.wasm.gz",
 )
 
 http_file(
@@ -488,8 +499,8 @@ http_file(
 http_file(
     name = "mainnet_nns_cycles-minting-canister",
     downloaded_file_path = "cycles-minting-canister.wasm.gz",
-    sha256 = "d9b64cbf4fbc05d4f6a7128a5d116a4b3d22706109461bed9385961234443cb8",
-    url = "https://download.dfinity.systems/ic/18dc31ca64a4ead42c5d4222e647dce7124eb90e/canisters/cycles-minting-canister.wasm.gz",
+    sha256 = "fc1655302a81cd1b7148a6f66479b2830bd0d567d04780720e7bdd6c5b124fb5",
+    url = "https://download.dfinity.systems/ic/e813c43a337a26c026c2f2ec19099bd2036e7280/canisters/cycles-minting-canister.wasm.gz",
 )
 
 http_file(
@@ -567,14 +578,22 @@ http_file(
     url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-01-16/internet_identity_test.wasm",
 )
 
-# SNS aggregator canister (https://github.com/dfinity/nns-dapp/releases/tag/tip)
+# NNS frontend dapp canister
+
+http_file(
+    name = "nns_dapp_canister",
+    downloaded_file_path = "nns_dapp_canister.wasm",
+    sha256 = "6af3470ef980b01eb427bdecde7d7c2c440a8c444f6c1fd6e7a39b251eceaf7a",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/nns-dapp.wasm",
+)
+
+# SNS aggregator canister
 
 http_file(
     name = "sns_aggregator",
-    downloaded_file_path = "sns_aggregator.wasm",
-    sha256 = "428b21acccfa442101096d95f74ab8368724d0e87e14d08f21d9a3bed77b69f3",
-    # Keep this dependency while the aggregator release process is WIP (IDX-2661)
-    url = "https://github.com/dfinity/nns-dapp/releases/download/ci-pin/sns_aggregator2.wasm",
+    downloaded_file_path = "sns_aggregator_dev.wasm",
+    sha256 = "fb50fbd91ca28373a1dd9207dee7cab22b5d73fde66fe1cc8a9dac63b9549da1",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm",
 )
 
 # Import Python rules
@@ -605,3 +624,12 @@ pip_parse(
 load("@python_deps//:requirements.bzl", "install_deps")
 
 install_deps()
+
+# Financial Integration artifacts for upgrade testing
+
+# first ic-icrc1-ledger release (see https://dashboard.internetcomputer.org/proposal/104499)
+http_file(
+    name = "ic-icrc1-ledger-first-version.wasm.gz",
+    sha256 = "7af4f7308c883c286d4a5c0448b6bd03bd4d8bffebd58c4fc7114761ad652932",
+    url = "https://download.dfinity.systems/ic/0456f740295aabdd287811f1ed51829082b3df01/canisters/ic-icrc1-ledger.wasm.gz",
+)

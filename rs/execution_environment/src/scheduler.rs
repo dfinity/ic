@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::uninstall_canister,
+    canister_manager::{uninstall_canister, AddCanisterChangeToHistory},
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,
@@ -23,7 +23,9 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    canister_state::{system_state::CyclesUseCase, NextExecution},
+    canister_state::{
+        execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
+    },
     testing::ReplicatedStateTesting,
     CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
@@ -564,22 +566,18 @@ impl SchedulerImpl {
                         // is pending.
                     }
                     NextExecution::None | NextExecution::StartNew => {
-                        // TODO: RUN-599 Alternate the order to avoid heartbeats starvation?
-                        if canister.exports_heartbeat_method() {
-                            canister
-                                .system_state
-                                .task_queue
-                                .push_front(ExecutionTask::Heartbeat);
-                            heartbeat_and_timer_canister_ids.insert(canister.canister_id());
-                        }
-                        if global_timer_has_reached_deadline
-                            && canister.exports_global_timer_method()
-                        {
-                            canister
-                                .system_state
-                                .task_queue
-                                .push_front(ExecutionTask::GlobalTimer);
-                            heartbeat_and_timer_canister_ids.insert(canister.canister_id());
+                        for _ in 0..NextScheduledMethod::NUMBER_OF_VARIANTS {
+                            let method_chosen = is_next_method_chosen(
+                                canister,
+                                &mut heartbeat_and_timer_canister_ids,
+                                global_timer_has_reached_deadline,
+                            );
+
+                            canister.inc_next_scheduled_method();
+
+                            if method_chosen {
+                                break;
+                            }
                         }
                     }
                 }
@@ -1006,9 +1004,15 @@ impl SchedulerImpl {
                     )
                     .is_err()
                 {
-                    all_rejects.push(uninstall_canister(&self.log, canister, state_time));
+                    all_rejects.push(uninstall_canister(
+                        &self.log,
+                        canister,
+                        state_time,
+                        AddCanisterChangeToHistory::No,
+                    ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
+                    canister.system_state.clear_canister_history();
                     // Burn the remaining balance of the canister.
                     canister
                         .system_state
@@ -1048,9 +1052,7 @@ impl SchedulerImpl {
         let mut subnet_available_memory = self
             .exec_env
             .subnet_available_memory(state)
-            .max_available_message_memory();
-
-        let max_canister_memory_size = self.exec_env.max_canister_memory_size();
+            .get_message_memory();
 
         let mut canisters = state.take_canister_states();
 
@@ -1082,7 +1084,6 @@ impl SchedulerImpl {
                 .queues()
                 .output_queues_message_count();
             source_canister.induct_messages_to_self(
-                max_canister_memory_size,
                 &mut subnet_available_memory,
                 state.metadata.own_subnet_type,
             );
@@ -1103,7 +1104,6 @@ impl SchedulerImpl {
                     Some(dest_canister) => dest_canister
                         .push_input(
                             (*msg).clone(),
-                            max_canister_memory_size,
                             &mut subnet_available_memory,
                             state.metadata.own_subnet_type,
                             InputQueueType::LocalSubnet,
@@ -1147,10 +1147,7 @@ impl SchedulerImpl {
     ) -> bool {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
-            if let Err(err) = canister.check_invariants(
-                state.metadata.own_subnet_type,
-                self.exec_env.max_canister_memory_size(),
-            ) {
+            if let Err(err) = canister.check_invariants(self.exec_env.max_canister_memory_size()) {
                 // Crash in debug mode if any invariant fails.
                 debug_assert!(false,
                     "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
@@ -1529,7 +1526,6 @@ impl Scheduler for SchedulerImpl {
             let mut total_canister_history_memory_usage = NumBytes::new(0);
             let mut total_canister_memory_usage = NumBytes::new(0);
             let _timer = self.metrics.round_finalization_duration.start_timer();
-            let own_subnet_type = state.metadata.own_subnet_type;
             for canister in state.canisters_iter_mut() {
                 let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                 self.metrics
@@ -1555,7 +1551,7 @@ impl Scheduler for SchedulerImpl {
                         FlagStatus::Disabled => NumInstructions::from(0),
                     };
                 total_canister_history_memory_usage += canister.canister_history_memory_usage();
-                total_canister_memory_usage += canister.memory_usage(own_subnet_type);
+                total_canister_memory_usage += canister.memory_usage();
                 total_canister_balance += canister.system_state.balance();
                 cycles_out_sum += canister.system_state.queues().output_queue_cycles();
             }
@@ -1943,7 +1939,7 @@ fn observe_replicated_state_metrics(
                     error!(
                         logger,
                         "Call context has been open for {:?}: origin: {:?}, respondent: {}",
-                        state.time() - *origin_time,
+                        state.time().saturating_sub(*origin_time),
                         origin,
                         canister.canister_id()
                     );
@@ -2120,6 +2116,7 @@ fn get_instructions_limits_for_subnet_message(
     match Ic00Method::from_str(method_name) {
         Ok(method) => match method {
             CanisterStatus
+            | CanisterInfo
             | CreateCanister
             | DeleteCanister
             | DepositCycles
@@ -2149,5 +2146,87 @@ fn get_instructions_limits_for_subnet_message(
             ),
         },
         Err(_) => default_limits,
+    }
+}
+
+fn is_next_method_chosen(
+    canister: &mut CanisterState,
+    heartbeat_and_timer_canister_ids: &mut BTreeSet<CanisterId>,
+    global_timer_has_reached_deadline: bool,
+) -> bool {
+    let mut tasks_added = false;
+    let method_chosen = match canister.get_next_scheduled_method() {
+        NextScheduledMethod::Message => canister.has_input(),
+        NextScheduledMethod::Heartbeat => {
+            tasks_added = try_add_tasks(
+                canister,
+                ExecutionTask::Heartbeat,
+                global_timer_has_reached_deadline,
+            );
+            tasks_added
+        }
+        NextScheduledMethod::GlobalTimer => {
+            tasks_added = try_add_tasks(
+                canister,
+                ExecutionTask::GlobalTimer,
+                global_timer_has_reached_deadline,
+            );
+            tasks_added
+        }
+    };
+
+    if tasks_added {
+        heartbeat_and_timer_canister_ids.insert(canister.canister_id());
+    }
+
+    method_chosen
+}
+
+fn try_add_tasks(
+    canister: &mut CanisterState,
+    scheduled_task: ExecutionTask,
+    global_timer_has_reached_deadline: bool,
+) -> bool {
+    if should_add_task(canister, &scheduled_task, global_timer_has_reached_deadline) {
+        // If the conditions for the 'other_task' are satisfied, then we are
+        // adding it as well, because we want to execute as many tasks as
+        // possible on the single canister to avoid context switching.
+        // We are first adding the 'other_task' to the front of the queue and after it
+        // 'scheduled_task' so that the 'scheduled_task' is the first executed.
+        let other_task = get_other_task(scheduled_task.clone());
+        if should_add_task(canister, &other_task, global_timer_has_reached_deadline) {
+            canister.system_state.task_queue.push_front(other_task);
+        }
+        canister.system_state.task_queue.push_front(scheduled_task);
+        return true;
+    }
+    false
+}
+
+fn should_add_task(
+    canister: &CanisterState,
+    task: &ExecutionTask,
+    global_timer_has_reached_deadline: bool,
+) -> bool {
+    match task {
+        ExecutionTask::Heartbeat => canister.exports_heartbeat_method(),
+        ExecutionTask::GlobalTimer => {
+            global_timer_has_reached_deadline && canister.exports_global_timer_method()
+        }
+        ExecutionTask::AbortedExecution { .. }
+        | ExecutionTask::AbortedInstallCode { .. }
+        | ExecutionTask::PausedExecution(..)
+        | ExecutionTask::PausedInstallCode(..) => unreachable!("Unexpected ExecutionTask variant."),
+    }
+}
+
+fn get_other_task(task: ExecutionTask) -> ExecutionTask {
+    match task {
+        ExecutionTask::Heartbeat => ExecutionTask::GlobalTimer,
+        ExecutionTask::GlobalTimer => ExecutionTask::Heartbeat,
+        ExecutionTask::AbortedExecution { .. }
+        | ExecutionTask::AbortedInstallCode { .. }
+        | ExecutionTask::PausedExecution(..)
+        | ExecutionTask::PausedInstallCode(..) => unreachable!("Unexpected ExecutionTask variant."),
     }
 }

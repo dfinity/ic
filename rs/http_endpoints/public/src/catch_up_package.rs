@@ -9,6 +9,7 @@ use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_types::consensus::catchup::CatchUpPackageParam;
+use ic_types::consensus::CatchUpPackage;
 use prost::Message;
 use std::convert::Infallible;
 use std::future::Future;
@@ -18,8 +19,6 @@ use std::task::{Context, Poll};
 use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
-
-const MAX_CATCH_UP_PACKAGE_CONCURRENT_REQUESTS: usize = 100;
 
 #[derive(Clone)]
 pub(crate) struct CatchUpPackageService {
@@ -36,7 +35,7 @@ impl CatchUpPackageService {
         let base_service = BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
-                    MAX_CATCH_UP_PACKAGE_CONCURRENT_REQUESTS,
+                    config.max_catch_up_package_concurrent_requests,
                 ))
                 .service(Self {
                     metrics,
@@ -86,14 +85,16 @@ impl Service<Request<Vec<u8>>> for CatchUpPackageService {
             .observe(request.body().len() as f64);
 
         let body = request.into_body();
-        let cup = self.consensus_pool_cache.cup_with_protobuf();
+        let cup_proto = self.consensus_pool_cache.cup_as_protobuf();
         let res = if body.is_empty() {
-            Ok(protobuf_response(&cup.protobuf))
+            Ok(protobuf_response(&cup_proto))
         } else {
             match serde_cbor::from_slice::<CatchUpPackageParam>(&body) {
                 Ok(param) => {
-                    if CatchUpPackageParam::from(&cup.cup) > param {
-                        Ok(protobuf_response(&cup.protobuf))
+                    let cup: CatchUpPackage =
+                        (&cup_proto).try_into().expect("deserializing CUP failed");
+                    if CatchUpPackageParam::from(&cup) > param {
+                        Ok(protobuf_response(&cup_proto))
                     } else {
                         Ok(common::empty_response())
                     }

@@ -3,7 +3,7 @@ use std::io::Read;
 use std::sync::Arc;
 
 /// Maximum size of a WebAssembly module.
-pub const MAX_WASM_MODULE_SIZE_BYTES: usize = 10 * 1024 * 1024;
+pub const MAX_WASM_MODULE_SIZE_BYTES: usize = 30 * 1024 * 1024;
 
 fn make_module_too_large_error() -> WasmValidationError {
     WasmValidationError::DecodingError(format!(

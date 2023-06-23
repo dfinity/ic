@@ -11,7 +11,6 @@
     transport: {
         node_ip: "{{ ipv6_address }}",
         listening_port: 4100,
-        send_queue_size: 51200,
     },
     // ============================================
     // Configuration of registry client
@@ -46,13 +45,6 @@
     },
 
     // ============================================
-    // Consensus related config.
-    // ============================================
-    consensus: {
-        detect_starvation: true,
-    },
-
-    // ============================================
     // Configuration of the crypto state persistence.
     // ============================================
     crypto: {
@@ -65,14 +57,6 @@
     // Configuration of the message scheduling.
     // ========================================
     scheduler: {
-        /// Number of canisters that the scheduler is allowed to schedule in
-        /// parallel on the NNS subnet.
-        nns_subnet_scheduler_cores: 1,
-
-        /// Number of canisters that the scheduler is allowed to schedule in
-        /// parallel on the non-NNS subnets.
-        non_nns_subnet_scheduler_cores: 32,
-
         // Maximum amount of instructions a single round can consume.
         max_instructions_per_round: 26843545600,
         // Maximum number of instructions a single message's execution
@@ -84,11 +68,6 @@
     // Configuration of the Wasm execution environment.
     // ================================================
     hypervisor: {
-        // Which technology to use to intercept Wasm memory changes.
-        // Options:
-        // - "sigsegv" - use mprotect + SIGSEGV
-        // - { fuse: { mount_point: "/tmp/fuse", }, } (experimental)
-        persistence_type: "sigsegv",
         // A whitelist of principal IDs that are allowed to call the
         // "dev_create_canister_with_funds" and "dev_set_funds" methods on
         // the subnet.
@@ -129,7 +108,6 @@
         // The canister http adapter socket file is: /ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
         https_outcalls_uds_metrics_path: "/run/ic-node/https-outcalls-adapter/metrics",
-        onchain_observability_enable_grpc_server: false,
         onchain_observability_uds_metrics_path: "/run/ic-node/onchain-observability-adapter/metrics",
     },
 
@@ -171,9 +149,19 @@
     firewall: {
         config_file: "/run/ic-node/nftables-ruleset/nftables.conf",
         file_template: "table filter {\n\
+  set active_connections {\n\
+    type ipv4_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
+    #  Notes about the rule below:\n\
+    #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip address.\n\
+    #   - The rule drops all new connections that goes over the configured limit.\n\
+    ct state new add @active_connections { ip saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } drop\n\
     icmp type parameter-problem accept\n\
     icmp type echo-request accept\n\
     icmp type echo-reply accept\n\
@@ -192,11 +180,21 @@
 }\n\
 \n\
 table ip6 filter {\n\
+  set active_connections {\n\
+    type ipv6_addr\n\
+    size 65535\n\
+    flags dynamic\n\
+  }\n\
+\n\
   chain INPUT {\n\
     type filter hook input priority 0; policy drop;\n\
     iif lo accept\n\
     ct state { invalid } drop\n\
     ct state { established, related } accept\n\
+    #  Notes about the rule below:\n\
+    #   - The rule allows a maximum of <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> persistent connections to any ip6 address.\n\
+    #   - The rule drops all new connections that goes over the configured limit.\n\
+    ct state new add @active_connections { ip6 saddr ct count over <<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>> } drop\n\
     icmpv6 type destination-unreachable accept\n\
     icmpv6 type packet-too-big accept\n\
     icmpv6 type time-exceeded accept\n\
@@ -306,6 +304,7 @@ table ip6 filter {\n\
         }],
         ports_for_node_whitelist: [2497, 4100, 8080],
         ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19531],
+        max_simultaneous_connections_per_ip_address: 100,
     },
 
     registration: {

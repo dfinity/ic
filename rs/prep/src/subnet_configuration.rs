@@ -297,6 +297,7 @@ impl SubnetConfig {
             start_as_nns: false,
             subnet_type: self.subnet_type.into(),
             is_halted: false,
+            halt_at_cup_height: false,
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,

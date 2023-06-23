@@ -17,7 +17,7 @@ use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::HasIcDependencies;
 use crate::driver::test_setup::GroupSetup;
 
-const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
+const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
 
 /// A declaration of resources needed to instantiate a InternetComputer.
@@ -172,7 +172,7 @@ pub fn get_resource_request(
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "d7720f8a518aeeef65970d2f087756f86b00b928ccc41986db15fcb5bc8847f3";
+    "95f74bebf26b84c04e08590c2e8d2f5f53270e1c5cbc4cc9cb9c6ec39a2963fd";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
@@ -221,12 +221,14 @@ pub fn get_resource_request_for_universal_vm(
 }
 
 pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<ResourceGroup> {
-    let group_name = &req.group_name;
-    let mut res_group = ResourceGroup::new(group_name.clone());
+    let group_name = req.group_name.clone();
+    // Create VMs in parallel via Farm.
+    let mut threads = vec![];
     for vm_config in req.vm_configs.iter() {
-        let name = vm_config.name.clone();
+        let farm_cloned = farm.clone();
+        let vm_name = vm_config.name.clone();
         let create_vm_request = CreateVmRequest::new(
-            name.clone(),
+            vm_name.clone(),
             VmType::Production,
             vm_config.vcpus,
             vm_config.memory_kibibytes,
@@ -240,13 +242,25 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
             vm_config.vm_allocation.clone(),
             vm_config.required_host_features.clone(),
         );
-
-        let created_vm = farm.create_vm(group_name, create_vm_request)?;
+        let group_name = group_name.clone();
+        // Spin up another thread
+        threads.push(std::thread::spawn(move || {
+            (
+                vm_name,
+                farm_cloned.create_vm(&group_name, create_vm_request),
+            )
+        }));
+    }
+    let mut res_group = ResourceGroup::new(group_name.clone());
+    for thread in threads {
+        let (vm_name, created_vm) = thread
+            .join()
+            .expect("Couldn't join on the associated thread");
         res_group.add_vm(AllocatedVm {
-            name,
+            name: vm_name,
             group_name: group_name.clone(),
-            ipv6: created_vm.ipv6,
-        });
+            ipv6: created_vm?.ipv6,
+        })
     }
     Ok(res_group)
 }

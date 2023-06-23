@@ -19,7 +19,7 @@ use ic_ckbtc_minter::updates::{
 use ic_ckbtc_minter::MinterInfo;
 use ic_ckbtc_minter::{
     state::eventlog::{Event, GetEventsArg},
-    storage,
+    storage, {Log, LogEntry, Priority},
 };
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -31,6 +31,7 @@ fn init(args: MinterArg) {
             lifecycle::init::init(args);
             schedule_now(TaskType::ProcessLogic);
             schedule_now(TaskType::RefreshFeePercentiles);
+            schedule_now(TaskType::DistributeKytFee);
 
             #[cfg(feature = "self_check")]
             ok_or_die(check_invariants())
@@ -72,6 +73,24 @@ fn check_invariants() -> Result<(), String> {
     })
 }
 
+#[cfg(feature = "self_check")]
+#[candid_method(update)]
+#[update]
+async fn distribute_kyt_fee() {
+    let _guard = match ic_ckbtc_minter::guard::DistributeKytFeeGuard::new() {
+        Some(guard) => guard,
+        None => return,
+    };
+    ic_ckbtc_minter::distribute_kyt_fees().await;
+}
+
+#[cfg(feature = "self_check")]
+#[candid_method(update)]
+#[update]
+async fn refresh_fee_percentiles() {
+    let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
+}
+
 fn check_postcondition<T>(t: T) -> T {
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants());
@@ -103,6 +122,8 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
     }
     lifecycle::upgrade::post_upgrade(upgrade_arg);
     schedule_now(TaskType::ProcessLogic);
+    schedule_now(TaskType::RefreshFeePercentiles);
+    schedule_now(TaskType::DistributeKytFee);
 }
 
 #[candid_method(update)]
@@ -192,32 +213,29 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             .with_body_and_content_length(dashboard)
             .build()
     } else if req.path() == "/logs" {
-        use std::io::Write;
-        let mut buf = vec![];
-
-        writeln!(&mut buf, "P0 logs:").unwrap();
+        use serde_json;
+        let mut entries: Log = Default::default();
         for entry in export_logs(&ic_ckbtc_minter::logs::P0) {
-            writeln!(
-                &mut buf,
-                "{} {}:{} {}",
-                entry.timestamp, entry.file, entry.line, entry.message
-            )
-            .unwrap();
+            entries.entries.push(LogEntry {
+                timestamp: entry.timestamp,
+                priority: Priority::P0,
+                file: entry.file.to_string(),
+                line: entry.line,
+                message: entry.message,
+            });
         }
-
-        writeln!(&mut buf, "P1 logs:").unwrap();
         for entry in export_logs(&ic_ckbtc_minter::logs::P1) {
-            writeln!(
-                &mut buf,
-                "{} {}:{} {}",
-                entry.timestamp, entry.file, entry.line, entry.message
-            )
-            .unwrap();
+            entries.entries.push(LogEntry {
+                timestamp: entry.timestamp,
+                priority: Priority::P1,
+                file: entry.file.to_string(),
+                line: entry.line,
+                message: entry.message,
+            });
         }
-
         HttpResponseBuilder::ok()
-            .header("Content-Type", "text/plain; charset=utf-8")
-            .with_body_and_content_length(buf)
+            .header("Content-Type", "application/json; charset=utf-8")
+            .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
             .build()
     } else {
         HttpResponseBuilder::not_found().build()

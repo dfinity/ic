@@ -250,7 +250,7 @@ impl std::fmt::Display for PersistenceError {
 
 /// A wrapper around the raw file descriptor to be used for memory mapping the
 /// file into the Wasm heap while executing a canister.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FileDescriptor {
     pub fd: RawFd,
 }
@@ -266,6 +266,7 @@ pub type FileOffset = off_t;
 /// - The page maps to the checkpoint file.
 /// - The page is in the page delta of the current `PageMap`. In this case the
 ///   range is a singleton and its contents need to be copied out.
+#[derive(Debug, PartialEq)]
 pub enum MemoryRegion<'a> {
     Zeros(Range<PageIndex>),
     BackedByFile(Range<PageIndex>, FileDescriptor),

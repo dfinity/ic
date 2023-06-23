@@ -1,4 +1,8 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, RwLock},
+};
 
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
 use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
@@ -112,7 +116,7 @@ impl ReplayValidator {
             subnet_id,
         ));
         let time_source = Arc::new(SysTimeSource::new());
-        let dkg_pool = RwLock::new(DkgPoolImpl::new(metrics_registry.clone()));
+        let dkg_pool = RwLock::new(DkgPoolImpl::new(metrics_registry.clone(), log.clone()));
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let replica_cfg = ReplicaConfig::new(node_id, subnet_id);
 
@@ -278,6 +282,7 @@ impl ReplayValidator {
     pub fn validate(
         &self,
         pool: &mut ConsensusPoolImpl,
+        expected: &mut HashMap<ConsensusMessageHash, PathBuf>,
         dkg: &mut DkgKeyManager,
         target_height: Height,
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
@@ -310,7 +315,10 @@ impl ReplayValidator {
                         },
                     );
                 }
-                ChangeAction::MoveToValidated(_) => {}
+                ChangeAction::MoveToValidated(a) => {
+                    let hash = a.get_cm_hash();
+                    expected.remove(&hash);
+                }
                 other => {
                     println!("Unexpected change action: {:?}", other);
                 }
@@ -349,6 +357,6 @@ impl ReplayValidator {
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
         let mut pool = self.get_new_unvalidated(consensus_pool, cup);
         let mut dkg = self.new_key_manager(&PoolReader::new(&pool));
-        self.validate(&mut pool, &mut dkg, target_height)
+        self.validate(&mut pool, &mut HashMap::new(), &mut dkg, target_height)
     }
 }

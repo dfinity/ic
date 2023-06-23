@@ -1,139 +1,100 @@
-ARG SRC_IMG_PATH=undefined
-FROM ${SRC_IMG_PATH} as src_img
-
 # https://hub.docker.com/_/ubuntu
-# focal-20220922
-FROM ubuntu@sha256:e722c7335fdd0ce77044ab5942cb1fbd2b5f60d1f5416acfcdb0814b2baf7898
-
-# The image expects the following volumes mounted from the host:
-# /cache - holding the cache artifacts
-# /cargo - is the CARGO_HOME, holding cargo binaries and cloned repos
-# /builds/git - a read only volume with the git repository which should be built
+# focal-20230301
+FROM ubuntu@sha256:3626dff0d616e8ee7065a9ac8c7117e904a4178725385910eeecd7f1872fc12d
 
 ENV TZ=UTC
 
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
-    apt -yq update && \
-    apt -yqq install --no-install-recommends git openssh-client curl xz-utils time parallel net-tools \
-        apt-transport-https ca-certificates curl gnupg lsb-release && \
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
-    curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
+COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
+
+RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
+    apt -yq update && apt -yqq install  \
+    curl build-essential git gnupg node-json5 uuid-dev zsh clang iproute2 shellcheck \
+    # GitLab CI \
+    sudo gosu jq rclone time qemu-system-x86 \
+    # Test \
+    rsync \
+    # RUST \
+    gcc lld pkg-config libssl-dev libunwind-dev libusb-1.0-0-dev libsqlite3-dev zlib1g-dev libclang-10-dev protobuf-compiler llvm liblmdb-dev liblzma-dev\
+    # IC-OS \
+    python3 python-is-python3 python3-pip fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools lvm2
+
+ARG motoko_version=0.9.1
+RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+
+ARG buildevents_version=0.6.0
+RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /usr/bin/buildevents && \
+    chmod +x /usr/bin/buildevents
+
+RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
     echo "deb https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/ /" | tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends \
-        android-sdk-ext4-utils \
-        build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang clang-10 cmake libbz2-dev gcc-multilib zlib1g-dev \
-        lldb libc-bin libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libusb-1.0-0-dev libzstd-dev zstd vim emacs nano jq \
-        zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev libsystemd-dev uuid-dev \
-        qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
-        policycoreutils python-is-python3 python3 python3-pip python3-cbor shellcheck \
-        sudo docker-ce-cli ripgrep patchelf cpio nodejs npm gosu pigz zsh hub less \
-        ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake \
-        grub-efi-amd64-bin podman buildah lvm2 fuse-overlayfs
+    apt -yqq install --no-install-recommends docker-ce-cli podman buildah
 
-COPY --from=docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/docker-buildx
+ARG sdk_version=0.12.0
+ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
+RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
+    echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
+    tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/dfx
 
-# Add the `${USER}` user, and the required folders
-ARG USER=ubuntu
-ARG UID=1000
-ARG USE_BAZEL_VERSION=invalid
-RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
-    mkdir -p /home/${USER} && \
-    chown -R ${UID}.${UID} /home/${USER} && \
-    mkdir -p /cargo /cargo_target /builds /builds/dfinity-lab && \
-    chown -R ${UID}.${UID} /cargo /cargo_target /builds && \
-    chmod +s /usr/sbin/gosu
+ARG bazelisk_sha=8b739ac23a189b70d51a98041e90ba16f6559d5f991d83bbc031c740f8796310
+RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/bazelisk-linux-amd64 -o /usr/bin/bazel && \
+    echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
+    chmod 777 /usr/bin/bazel
 
-# Sudo is needed to run `ip tun` commands to create a virtual network for e2e tests
-RUN usermod -a -G sudo ${USER} && echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 
-# Install Rust and Cargo in /opt
-ENV RUSTUP_HOME=/opt/rustup \
-    CARGO_TARGET_DIR=/cargo_target \
-    ZSTD_LIB_DIR=/usr/lib \
-    PROTOC=/usr/protoc/bin/protoc \
-    PROTOC_INCLUDE=/usr/protoc/include \
-    PATH=/opt/cargo/bin:$PATH
+# CI before script requires sudo
+RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-COPY --from=src_img /opt /tmp/src-artifacts
-RUN rsync --chmod=755 -rav /tmp/src-artifacts/ /usr && rm -rf /tmp/src-artifacts
+# Pre-populate the Bazel installation for root
+COPY .bazelversion /tmp/bazel/
+RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
 
-# rustup uses $CARGO_HOME to figure out where to install itself
-ARG rust_version=1.58.1
-ENV CARGO_HOME=/opt/cargo
+COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
+RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh
+RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
+
+USER ubuntu
+
+# Set PATH for ubuntu user
+ENV PATH=/ic/bin:/home/ubuntu/.cargo/bin:/home/ubuntu/.local/bin:$PATH
+
+# Pre-populate the Bazel installation for ubuntu
+RUN cd /tmp/bazel && bazel version
+
+# Add Rust/Cargo support
+ARG rust_version=1.66.1
 RUN curl --fail https://sh.rustup.rs -sSf \
-        | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
+    | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
     rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
-    rustup target add wasm32-unknown-unknown && \
-    chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
+    rustup target add wasm32-unknown-unknown
 
-# Since we are cloning multiple NPM repos, we need to have multiple node versions installed 
-# to switch between them for comptability. 
-ARG nvm_version=v0.39.1
-ARG dependency_mgmt_agent_js_node_version=16
-ARG node_version=17
-ARG dependency_mgmt_nns_dapp_node_version=18
-ARG dependency_mgmt_default_node_version=19
-ENV NVM_DIR=/opt/nvm
-RUN mkdir $NVM_DIR && \
-    curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
+# Install all python requirements
+COPY ./requirements.txt /tmp/requirements.txt
+RUN pip3 install --ignore-installed -r /tmp/requirements.txt
+RUN pip3 install pre-commit
 
-# CARGO_HOME is also where the crates.io registry and git checkouts are cached.
-# We bind mount this on the CI runners, so the image needs to be able to function properly
-# even if this directory is empty.
-ENV CARGO_HOME=/cargo
+# Add buf
+ARG BUF_BIN="/usr/local/bin"
+ARG BUF_VERSION="1.21.0"
+RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" \
+    -o "${BUF_BIN}/buf" && chmod +x "${BUF_BIN}/buf"
 
-# Add Python Path
-ENV PATH=$PATH:/home/${USER}/.local/bin
-
-RUN /usr/bin/pip3 install pip-tools==6.12.2
-
-ARG didc_release_date=2022-01-06
-RUN curl --fail \
-         --location https://github.com/dfinity/candid/releases/download/${didc_release_date}/didc-linux64 \
-         --output /usr/bin/didc-linux64 && chmod +x /usr/bin/didc-linux64
-
-RUN . /opt/nvm/nvm.sh && \
-    nvm install ${dependency_mgmt_agent_js_node_version} && \
-    nvm install ${node_version} && \
-    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
-    nvm install ${dependency_mgmt_default_node_version} && \
-    npm install -g @vscode/dev-container-cli
-
-USER ${UID}
-
-ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
-    SNAPPY_INCLUDE_DIR=/usr/include SNAPPY_LIB_DIR=/usr/lib/x86_64-linux-gnu SNAPPY_STATIC=1 \
-    LZ4_INCLUDE_DIR=/usr/include LZ4_LIB_DIR=/usr/lib/x86_64-linux-gnu LZ4_STATIC=1 \
-    ZSTD_INCLUDE_DIR=/usr/include ZSTD_LIB_DIR=/usr/lib/x86_64-linux-gnu ZSTD_STATIC=1 \
-    Z_INCLUDE_DIR=/usr/include Z_LIB_DIR=/usr/lib/x86_64-linux-gnu Z_STATIC=1 \
-    BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
-
-# Pre-populate the Bazel installation.
-RUN bazel version
-
-RUN mkdir --mode=0700 /home/${USER}/.ssh
-COPY ./files/known_hosts /home/${USER}/.ssh/known_hosts
-
-COPY ./files/entrypoint.sh /entrypoint.sh
 WORKDIR /
-
 USER 0
 
 RUN mv /usr/bin/docker /usr/bin/docker-bin
-COPY ./files/containers.conf /etc/containers/containers.conf
-COPY ./files/docker.sh /usr/bin/docker
-
-# Install all python requirements
-COPY ./files/requirements.txt /tmp/requirements.txt
-RUN pip3 install --ignore-installed -r /tmp/requirements.txt
+COPY ./gitlab-ci/container/files/containers.conf /etc/containers/containers.conf
+COPY ./gitlab-ci/container/files/docker.sh /usr/bin/docker
+COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
 
 # Add mold linker
-ARG mold_platform="mold-1.11.0-x86_64-linux"
-RUN curl -L https://github.com/rui314/mold/releases/download/v1.11.0/$mold_platform.tar.gz --output $mold_platform && \ 
-    tar xvf $mold_platform && \
-    mv $mold_platform/bin/mold /usr/bin/mold && \ 
-    rm -rf $mold_platform
+ARG mold_version=1.11.0
+RUN curl -L --retry 10 --silent --show-error "https://github.com/rui314/mold/releases/download/v${mold_version}/mold-${mold_version}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
+    ln -sf /usr/local/bin/mold "$(realpath /usr/bin/ld)"
 
 ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/bin/bash"]

@@ -13,11 +13,11 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
+use ic_types::artifact::CertificationMessageId;
 use ic_types::{
     artifact::ConsensusMessageId,
     batch::BatchPayload,
     consensus::{
-        catchup::CUPWithOriginalProtobuf,
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg::Dealings,
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
@@ -386,14 +386,15 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
 
 impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> {
     /// Insert a cup with the original bytes from which that cup was received.
-    fn insert_cup_with_proto(&self, cup_with_proto: CUPWithOriginalProtobuf) {
-        let height = cup_with_proto.cup.height();
+    fn insert_cup_with_proto(&self, cup_with_proto: pb::CatchUpPackage) {
+        let cup = CatchUpPackage::try_from(&cup_with_proto).expect("deserializing CUP failed");
+        let height = cup.height();
         let info = &CATCH_UP_PACKAGE_CF_INFO;
-        let key = make_key(height.get(), &cup_with_proto.cup.get_cm_hash().digest().0);
+        let key = make_key(height.get(), &cup.get_cm_hash().digest().0);
         let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
         let artifact = ValidatedArtifact {
-            msg: cup_with_proto.protobuf,
-            timestamp: cup_with_proto.cup.content.block.as_ref().context.time,
+            msg: cup_with_proto,
+            timestamp: cup.content.block.as_ref().context.time,
         };
         check_ok_uw!(self
             .db
@@ -404,7 +405,10 @@ impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> 
 impl MutablePoolSection<ValidatedConsensusArtifact>
     for PersistentHeightIndexedPool<ConsensusMessage>
 {
-    fn mutate(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) {
+    fn mutate(
+        &mut self,
+        ops: PoolSectionOps<ValidatedConsensusArtifact>,
+    ) -> Vec<ConsensusMessageId> {
         let mut batch = WriteBatch::default();
         for op in ops.ops {
             match op {
@@ -475,6 +479,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
             }
         }
         check_ok!(self.db.write(batch));
+        Vec::new()
     }
 
     fn pool_section(&self) -> &dyn PoolSection<ValidatedConsensusArtifact> {
@@ -1078,8 +1083,9 @@ impl crate::certification_pool::MutablePoolSection
         self
     }
 
-    fn purge_below(&self, height: Height) {
-        self.purge_below_height(height)
+    fn purge_below(&self, height: Height) -> Vec<CertificationMessageId> {
+        self.purge_below_height(height);
+        Vec::new()
     }
 }
 

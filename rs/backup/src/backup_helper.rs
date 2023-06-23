@@ -1,6 +1,7 @@
 use crate::notification_client::NotificationClient;
 use crate::util::{block_on, sleep_secs};
 use ic_recovery::command_helper::exec_cmd;
+use ic_recovery::error::RecoveryError;
 use ic_recovery::file_sync_helper::download_binary;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::node::NodeRegistry;
@@ -459,18 +460,13 @@ impl BackupHelper {
         match exec_cmd(&mut cmd) {
             Err(e) => {
                 error!(self.log, "[#{}] Error: {}", self.thread_id, e.to_string());
+                if let RecoveryError::CommandError(_, ref out_str) = e {
+                    self.dump_log_file(start_height, out_str)?;
+                }
                 Err(e.to_string())
             }
             Ok(Some(stdout)) => {
-                let timestamp = Utc::now().timestamp();
-                let log_file_name = format!(
-                    "{}_{:010}_{:012}.log",
-                    self.subnet_id, timestamp, start_height
-                );
-                let mut file = File::create(self.logs_dir().join(log_file_name))
-                    .map_err(|err| format!("Error creating log file: {:?}", err))?;
-                file.write_all(stdout.as_bytes())
-                    .map_err(|err| format!("Error writing log file: {:?}", err))?;
+                self.dump_log_file(start_height, &stdout)?;
 
                 if let Some(upgrade_version) = self.check_upgrade_request(stdout) {
                     debug!(
@@ -500,6 +496,21 @@ impl BackupHelper {
                 Err("No ic-replay output".to_string())
             }
         }
+    }
+
+    fn dump_log_file(&self, start_height: u64, stdout: &String) -> Result<(), String> {
+        let timestamp = Utc::now().timestamp();
+        let log_file_name = format!(
+            "{}_{:010}_{:012}.log",
+            self.subnet_id, timestamp, start_height
+        );
+        let file_name = self.logs_dir().join(log_file_name);
+        debug!(self.log, "Write replay log to: {:?}", file_name);
+        let mut file =
+            File::create(file_name).map_err(|err| format!("Error creating log file: {:?}", err))?;
+        file.write_all(stdout.as_bytes())
+            .map_err(|err| format!("Error writing log file: {:?}", err))?;
+        Ok(())
     }
 
     pub fn retrieve_spool_top_height(&self) -> u64 {
@@ -730,6 +741,12 @@ impl BackupHelper {
                 debug!(self.log, "Will execute: {:?}", cmd2);
                 exec_cmd(&mut cmd2).map_err(|err| format!("Error copying artifacts: {:?}", err))?;
             }
+            ls_path(
+                &self.log,
+                self.cold_storage_dir
+                    .join(format!("{}", self.subnet_id))
+                    .as_path(),
+            )?;
         }
 
         info!(
@@ -769,6 +786,12 @@ impl BackupHelper {
                     reversed.nth(self.daily_replays - 2);
                 }
             }
+            ls_path(
+                &self.log,
+                self.cold_storage_dir
+                    .join(format!("{}", self.subnet_id))
+                    .as_path(),
+            )?;
         }
 
         let trash_dir = self.trash_dir();
@@ -801,6 +824,16 @@ impl BackupHelper {
         );
         Ok(())
     }
+}
+
+pub fn ls_path(log: &Logger, dir: &Path) -> Result<(), String> {
+    let mut cmd = Command::new("ls");
+    cmd.arg(dir);
+    debug!(log, "Will execute: {:?}", cmd);
+    let res = exec_cmd(&mut cmd)
+        .map_err(|err| format!("Error listing cold store directory: {:?}", err))?;
+    debug!(log, "{:?}", res);
+    Ok(())
 }
 
 fn into_replica_version(log: &Logger, spool_dir: &DirEntry) -> Option<ReplicaVersion> {
@@ -868,7 +901,7 @@ fn last_dir_height(dir: &PathBuf, radix: u32) -> u64 {
     }
 }
 
-fn last_checkpoint(dir: &Path) -> u64 {
+pub fn last_checkpoint(dir: &Path) -> u64 {
     last_dir_height(&dir.join("checkpoints"), 16)
 }
 

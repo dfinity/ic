@@ -471,9 +471,9 @@ pub fn apply_canister_state_changes(
                 execution_state.stable_memory = stable_memory;
                 execution_state.exported_globals = globals;
                 // We increment the canister version here, as all the message execution
-                // functions call this `apply_canister_state_change` to finish execution.
-                // For some messages, like upgrade and install, this may be called
-                // multiple times, so the version will be incremented multiple times.
+                // functions (except messages executed during `install_code`,
+                // i.e., `(start)`, `canister_init`, `canister_pre_upgrade`, and `canister_post_upgrade`)
+                // call this `apply_canister_state_change` to finish execution.
                 system_state.canister_version += 1;
             }
             Err(err) => {

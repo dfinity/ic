@@ -4,7 +4,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
-use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::{
     governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM,
     pb::v1::{
@@ -26,8 +26,8 @@ use ic_nns_test_utils::{
     ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
-        list_deployed_snses, nns_governance_make_proposal, nns_list_proposals,
-        nns_wait_for_proposal_execution, setup_nns_canisters,
+        create_canister_id_at_position, list_deployed_snses, nns_governance_make_proposal,
+        nns_list_proposals, nns_wait_for_proposal_execution, set_controllers, setup_nns_canisters,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -64,6 +64,13 @@ fn test_several_proposals() {
     // Note that this uses governance with cfg(features = "test") enabled.
     setup_nns_canisters(&state_machine, nns_init_payload);
     add_real_wasms_to_sns_wasms(&state_machine);
+    let dapp_canister = create_canister_id_at_position(&state_machine, 1000, None);
+    set_controllers(
+        &state_machine,
+        PrincipalId::new_anonymous(),
+        dapp_canister,
+        vec![ROOT_CANISTER_ID.get()],
+    );
 
     // In real life, DFINITY would top up SNS_WASM's cycle balance (and the SNS
     // is supposed to repay with ICP raised).
@@ -123,7 +130,7 @@ fn test_several_proposals() {
         })
         .id;
 
-    // Step 3: Insepct results.
+    // Step 3: Inspect results.
 
     // Step 3.0: Wait for proposal_1 to finish executing.
     nns_wait_for_proposal_execution(&mut state_machine, proposal_id_1);

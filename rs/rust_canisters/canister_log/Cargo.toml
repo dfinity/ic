@@ -1,4 +1,12 @@
 [package]
 name = "ic-canister-log"
-version = "0.8.0"
 edition = "2021"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+description = "A logging library for smart contracts running on the Internet Computer."
+license = "Apache-2.0"
+readme = "README.md"
+documentation = "https://docs.rs/ic-canister-log"
+keywords = ["internet-computer", "dfinity", "canister", "logging"]
+repository = "https://github.com/dfinity/ic"
+include = ["src", "Cargo.toml", "LICENSE", "README.md", "CHANGELOG.md"]

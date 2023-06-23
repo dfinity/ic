@@ -48,9 +48,16 @@ DEPENDENCIES = [
     "@crate_index//:tokio-io-timeout",
     "@crate_index//:tower",
     "@crate_index//:url",
-]
+] + select({
+    "@rules_rust//rust/platform:linux": [
+        "//rs/monitoring/backtrace",
+    ],
+    "//conditions:default": [],
+})
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 BUILD_DEPENDENCIES = []
 

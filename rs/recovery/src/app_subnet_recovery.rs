@@ -1,21 +1,20 @@
-use crate::cli::{
-    consent_given, print_height_info, read_optional, read_optional_ip, read_optional_node_ids,
-    read_optional_subnet_id, read_optional_version, wait_for_confirmation,
+use crate::{
+    cli::{
+        consent_given, print_height_info, read_optional, read_optional_node_ids,
+        read_optional_subnet_id, read_optional_version, wait_for_confirmation,
+    },
+    error::RecoveryError,
+    recovery_iterator::RecoveryIterator,
+    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
 };
-use crate::recovery_iterator::RecoveryIterator;
-use crate::RecoveryResult;
-use crate::{error::RecoveryError, RecoveryArgs};
 use clap::Parser;
 use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
-use std::iter::Peekable;
-use std::net::IpAddr;
+use std::{iter::Peekable, net::IpAddr};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
-
-use crate::{NeuronArgs, Recovery, Step};
 
 #[derive(
     Debug, Copy, Clone, PartialEq, EnumIter, EnumString, Serialize, Deserialize, EnumMessage,
@@ -173,8 +172,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 );
 
                 if self.params.download_node.is_none() {
-                    self.params.download_node =
-                        read_optional_ip(&self.logger, "Enter download IP:");
+                    self.params.download_node = read_optional(&self.logger, "Enter download IP:");
                 }
 
                 self.params.keep_downloaded_state = Some(consent_given(
@@ -208,7 +206,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             StepType::UploadState => {
                 if self.params.upload_node.is_none() {
                     self.params.upload_node =
-                        read_optional_ip(&self.logger, "Enter IP of node with admin access: ");
+                        read_optional(&self.logger, "Enter IP of node with admin access: ");
                 }
             }
 
@@ -256,6 +254,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         node_ip,
                         self.params.pub_key.is_some(),
                         self.params.keep_downloaded_state == Some(true),
+                        /*additional_excludes=*/ vec![CUPS_DIR],
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)

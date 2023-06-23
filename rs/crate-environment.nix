@@ -18,16 +18,16 @@ let
       cfg = normalize stdenv.hostPlatform.config;
       inherit (stdenv.cc) targetPrefix;
     in
-      {
-        "CARGO_TARGET_${lib.toUpper cfg}_LINKER" = "${stdenv.cc}/bin/${targetPrefix}cc";
-        "CC_${cfg}" = "${stdenv.cc}/bin/${targetPrefix}cc";
-        "CXX_${cfg}" = "${stdenv.cc}/bin/${targetPrefix}c++";
-        "AR_${cfg}" = "${stdenv.cc.bintools.bintools}/bin/${targetPrefix}ar";
-      };
+    {
+      "CARGO_TARGET_${lib.toUpper cfg}_LINKER" = "${stdenv.cc}/bin/${targetPrefix}cc";
+      "CC_${cfg}" = "${stdenv.cc}/bin/${targetPrefix}cc";
+      "CXX_${cfg}" = "${stdenv.cc}/bin/${targetPrefix}c++";
+      "AR_${cfg}" = "${stdenv.cc.bintools.bintools}/bin/${targetPrefix}ar";
+    };
 
 in
 oldAttrs: {
-  nativeBuildInputs = (oldAttrs.nativeBuildInputs or []) ++ [
+  nativeBuildInputs = (oldAttrs.nativeBuildInputs or [ ]) ++ [
     pkgs.pkgconfig
     pkgs.moc
 
@@ -35,7 +35,7 @@ oldAttrs: {
     # ar (for cmake)
     pkgs.stdenv.cc.bintools
   ];
-  propagatedBuildInputs = (oldAttrs.propagatedBuildInputs or []) ++ [
+  propagatedBuildInputs = (oldAttrs.propagatedBuildInputs or [ ]) ++ [
     lmdb
     pkgs.pkgsStatic.sqlite
   ] ++ optionals isDarwin [
@@ -45,7 +45,7 @@ oldAttrs: {
     pkgs.darwin.CF
     pkgs.xcbuild
   ];
-  propagatedNativeBuildInputs = (oldAttrs.propagatedNativeBuildInputs or []) ++ [
+  propagatedNativeBuildInputs = (oldAttrs.propagatedNativeBuildInputs or [ ]) ++ [
     pkgs.pkgsStatic.libiconv
   ];
 

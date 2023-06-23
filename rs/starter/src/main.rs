@@ -24,7 +24,6 @@ use clap::Parser;
 use ic_config::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
-    consensus::ConsensusConfig,
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
@@ -88,15 +87,14 @@ fn main() -> Result<()> {
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: vec!["http://0.0.0.0:0".parse().expect("can't fail")],
-                public_api: vec![ConnectionEndpoint::from(config.http_listen_addr)],
-                private_api: vec![],
+                xnet_api: "http://0.0.0.0:0".parse().expect("can't fail"),
+                public_api: ConnectionEndpoint::from(config.http_listen_addr),
                 p2p_addr: "org.internetcomputer.p2p1://0.0.0.0:0"
                     .parse()
                     .expect("can't fail"),
-                prometheus_metrics: vec![],
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                chip_id: vec![],
             },
         );
 
@@ -295,10 +293,6 @@ struct CliArgs {
     #[clap(long = "dkg-interval-length")]
     dkg_interval_length: Option<u64>,
 
-    /// Whether or not to detect and warn of starvations in consensus.
-    #[clap(long = "detect-consensus-starvation")]
-    detect_consensus_starvation: Option<bool>,
-
     /// The backend DB used by Consensus, can be rocksdb or lmdb.
     #[clap(long = "consensus-pool-backend",
                 possible_values = &["lmdb", "rocksdb"])]
@@ -309,6 +303,7 @@ struct CliArgs {
         possible_values = &[
             "canister_sandboxing",
             "http_requests",
+            "onchain_observability",
             "bitcoin_testnet",
             "bitcoin_testnet_syncing",
             "bitcoin_testnet_paused",
@@ -539,7 +534,6 @@ impl CliArgs {
             unit_delay,
             initial_notary_delay,
             dkg_interval_length: self.dkg_interval_length.map(Height::from),
-            detect_consensus_starvation: self.detect_consensus_starvation,
             consensus_pool_backend: self.consensus_pool_backend,
             subnet_features: to_subnet_features(&self.subnet_features),
             ecdsa_keyid,
@@ -574,10 +568,15 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     } else {
         None
     };
+    let onchain_observability = features
+        .iter()
+        .any(|s| s.as_str() == "onchain_observability")
+        .then_some(true);
     SubnetFeatures {
         canister_sandboxing,
         http_requests,
         sev_status,
+        onchain_observability,
     }
 }
 
@@ -601,7 +600,6 @@ struct ValidatedConfig {
     unit_delay: Option<Duration>,
     initial_notary_delay: Option<Duration>,
     dkg_interval_length: Option<Height>,
-    detect_consensus_starvation: Option<bool>,
     consensus_pool_backend: Option<String>,
     subnet_features: SubnetFeatures,
     ecdsa_keyid: Option<EcdsaKeyId>,
@@ -667,8 +665,6 @@ impl ValidatedConfig {
 
         let hypervisor = Some(hypervisor_config);
 
-        let consensus = self.detect_consensus_starvation.map(ConsensusConfig::new);
-
         let adapters_config = Some(AdaptersConfig {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),
             https_outcalls_uds_path: self.https_outcalls_uds_path.clone(),
@@ -683,7 +679,6 @@ impl ValidatedConfig {
             http_handler,
             metrics,
             artifact_pool,
-            consensus,
             crypto,
             logger,
             adapters_config,

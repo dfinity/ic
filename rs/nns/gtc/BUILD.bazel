@@ -10,12 +10,12 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
-DEPENDENCIES = [
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha",
     "//rs/nns/common",
     "//rs/nns/constants",
-    "//rs/nns/governance",
     "//rs/nns/gtc_accounts",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/dfn_candid",
@@ -32,6 +32,16 @@ DEPENDENCIES = [
     "@crate_index//:sha3",
     "@crate_index//:simple_asn1",
     "@crate_index//:hex-literal",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance:governance--test_feature",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -82,6 +92,19 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "gtc--test_feature",
+    srcs = glob([
+        "src/**",
+    ]),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nns_gtc",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
 rust_binary(

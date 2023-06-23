@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+DEPENDENCIES = [
+    "//rs/types/base_types",
+]
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:maplit",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:tokio",
+]
+
+rust_library(
+    name = "proxied_canister_calls_tracker",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = [
+            "**/*tests.rs",
+            "main.rs",
+        ],
+    ),
+    crate_name = "ic_nervous_system_proxied_canister_calls_tracker",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "proxied_canister_calls_tracker_test",
+    srcs = glob(["src/**/*.rs"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "proxied_canister_calls_tracker_doctest",
+    crate = ":proxied_canister_calls_tracker",
+)
+
+rust_test_suite(
+    name = "proxied_canister_calls_tracker_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [":proxied_canister_calls_tracker"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)

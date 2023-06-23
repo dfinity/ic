@@ -35,6 +35,7 @@ rust_test(
     name = "utils_test",
     crate = ":utils",
     deps = [
+        "@crate_index//:assert_matches",
         "@crate_index//:serde",
         "@crate_index//:tempfile",
     ],

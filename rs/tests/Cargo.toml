@@ -17,7 +17,7 @@ candid = "0.8.1"
 proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
-chrono = { version = "0.4.19", features = ["serde"]  }
+chrono = { version = "0.4.19", features = ["serde"] }
 clap = { version = "3.1.6", features = ["derive"] }
 crossbeam-channel = "0.5.5"
 crossbeam-utils = "0.8.11"
@@ -27,14 +27,13 @@ dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
 flate2 = "1.0.22"
 futures = "0.3.10"
-garcon = "0.2"
 humantime = "2.0"
 ic-base-types = { path = "../types/base_types" }
 hex = "0.4.2"
 hyper-tls = "0.5.0"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-backup = { path = "../backup" }
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
+ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = "0.6.0"
@@ -58,6 +57,7 @@ ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/led
 ic-message = { path = "./test_canisters/message" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nervous-system-common-test-keys = { path = "../nervous_system/common/test_keys" }
+ic-nervous-system-proto = { path = "../nervous_system/proto" }
 ic-nervous-system-root = { path = "../nervous_system/root" }
 ic-nns-common = { path = "../nns/common" }
 ic-nns-init = { path = "../nns/init" }
@@ -66,7 +66,7 @@ ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-nns-governance = { path = "../nns/governance" }
 ic-nns-gtc = { path = "../nns/gtc" }
-ic-nns-handler-root = { path = "../nns/handlers/root" }
+ic-nns-handler-root = { path = "../nns/handlers/root/impl" }
 ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
@@ -100,20 +100,21 @@ ic-universal-canister = { path = "../universal_canister/lib" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 json5 = "0.4.1"
-k256 = { version = "0.12", features = ["ecdsa"] }
+k256 = { workspace = true }
 hyper = "0.14.18"
-hyper-rustls = { version = "0.24.0", features = [ "webpki-roots" ] }
+hyper-rustls = "0.24.0"
 lazy_static = "1.4.0"
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
 leb128 = "0.2.5"
-lifeline = { path = "../nns/handlers/lifeline" }
+libflate = "1.3.0"
+lifeline = { path = "../nns/handlers/lifeline/impl" }
 itertools = "0.10.0"
 maplit = "1.0.2"
 nix = "0.23.0"
 num_cpus = "1.13.1"
-on_wire = { path = "../rust_canisters/on_wire"}
-openssh-keys ="0.5.0"
-openssl = "0.10.29"
+on_wire = { path = "../rust_canisters/on_wire" }
+openssh-keys = "0.5.0"
+openssl = "0.10.55"
 pem = "1.0.1"
 phantom_newtype = { path = "../phantom_newtype" }
 proptest = "1.0"
@@ -124,34 +125,45 @@ rand_chacha = "0.3"
 rayon = "1"
 regex = "1.5.0"
 registry-canister = { path = "../registry/canister" }
-reqwest = { version = "0.11.1", features = ["blocking", "multipart", "stream", "rustls-tls"] }
+reqwest = { version = "0.11.1", features = [
+    "blocking",
+    "multipart",
+    "stream",
+    "rustls-tls",
+] }
 ring = { version = "0.16.11", features = ["std"] }
 rustls = "0.21.0"
+rust_decimal = "1.25"
 serde = { version = "1.0.115", features = ["derive"] }
 serde_bytes = "0.11"
 serde_cbor = "0.11.1"
 serde_json = "1.0.54"
-serde_millis =  "0.1"
+serde_millis = "0.1"
 slog = { version = "2.5.2", features = ["release_max_level_trace"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 ssh2 = { git = "https://github.com/dfinity-lab/ssh2-rs", branch = "master" }
 tempfile = "3.1.0"
 thiserror = "1.0"
+time = "^0.3.20"
 walkdir = "2.3.1"
-tokio = {version = "1.15.0", features = ["full"]}
+tokio = { version = "1.15.0", features = ["full"] }
 tree-deserializer = { path = "../tree_deserializer" }
 url = "2.1.1"
-utils = { path = "../utils", package ="ic-utils" }
+utils = { path = "../utils", package = "ic-utils" }
 wat = "1.0.52"
 xnet-test = { path = "../rust_canisters/xnet_test" }
 
-ic-agent = "=0.22.0"
-ic-utils = "=0.22.0"
+ic-agent = { workspace = true }
+ic-utils = { workspace = true }
 
 [lib]
 name = "ic_tests"
 path = "src/lib.rs"
+
+[[bin]]
+name = "ic-colocate"
+path = "testing_verification/colocate_test.rs"
 
 [[bin]]
 name = "ic-systest-basic-health"
@@ -230,8 +242,48 @@ name = "ic-systest-rosetta"
 path = "financial_integrations/rosetta/rosetta_test.rs"
 
 [[bin]]
-name = "ic-systest-rosetta-split"
-path = "financial_integrations/rosetta/rosetta_split_test.rs"
+name = "ic-systest-rosetta-derive-test"
+path = "financial_integrations/rosetta/rosetta_derive_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-make-transactions-test"
+path = "financial_integrations/rosetta/rosetta_make_transactions_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-network-test"
+path = "financial_integrations/rosetta/rosetta_network_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-neuron-disbourse-test"
+path = "financial_integrations/rosetta/rosetta_neuron_disbourse_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-neuron-dissolve-test"
+path = "financial_integrations/rosetta/rosetta_neuron_dissolve_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-neuron-follow-test"
+path = "financial_integrations/rosetta/rosetta_neuron_follow_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-neuron-hotkey-test"
+path = "financial_integrations/rosetta/rosetta_neuron_hotkey_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-neuron-info-test"
+path = "financial_integrations/rosetta/rosetta_neuron_info_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-neuron-maturity-test"
+path = "financial_integrations/rosetta/rosetta_neuron_maturity_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-neuron-spawn-test"
+path = "financial_integrations/rosetta/rosetta_neuron_spawn_test.rs"
+
+[[bin]]
+name = "ic-systest-rosetta-neuron-staking-test"
+path = "financial_integrations/rosetta/rosetta_neuron_staking_test.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-minter-basics-test"
@@ -296,6 +348,10 @@ path = "execution/system_subnets_test.rs"
 [[bin]]
 name = "ic-systest-single-large-node"
 path = "testing_verification/testnets/single_large_node.rs"
+
+[[bin]]
+name = "ic-systest-single-app-large-node"
+path = "testing_verification/testnets/single_app_large_node.rs"
 
 [[bin]]
 name = "ic-systest-cow-safety-test"
@@ -482,6 +538,10 @@ name = "ic-systest-canister-sig-verification-cache-test"
 path = "crypto/canister_sig_verification_cache_test.rs"
 
 [[bin]]
+name = "ic-systest-ic-crypto-csp-umask-test"
+path = "crypto/ic_crypto_csp_umask_test.rs"
+
+[[bin]]
 name = "ic-systest-rpc-csp-vault-reconnection-test"
 path = "crypto/rpc_csp_vault_reconnection_test.rs"
 
@@ -492,3 +552,35 @@ path = "message_routing/xnet/xnet_malicious_slices.rs"
 [[bin]]
 name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
+
+[[bin]]
+name = "ic-systest-nns-dapp"
+path = "gix/nns_dapp_test.rs"
+
+[[bin]]
+name = "ic-systest-small"
+path = "testing_verification/testnets/small.rs"
+
+[[bin]]
+name = "ic-systest-small-nns"
+path = "testing_verification/testnets/small_nns.rs"
+
+[[bin]]
+name = "ic-systest-sns-testing"
+path = "testing_verification/testnets/sns_testing.rs"
+
+[[bin]]
+name = "ic-systest-medium"
+path = "testing_verification/testnets/medium.rs"
+
+[[bin]]
+name = "ic-systest-consensus-performance"
+path = "consensus/consensus_performance.rs"
+
+[[bin]]
+name = "ic-systest-consensus-performance-bytes"
+path = "consensus/throughput_with_large_messages.rs"
+
+[[bin]]
+name = "ic-systest-consensus-performance-requests"
+path = "consensus/throughput_with_small_messages.rs"

@@ -14,9 +14,11 @@ use ic_registry_transport::{
 };
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use prost::Message;
-use std::cmp::max;
-use std::collections::{BTreeMap, VecDeque};
-use std::fmt;
+use std::{
+    cmp::max,
+    collections::{BTreeMap, VecDeque},
+    fmt,
+};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -242,13 +244,6 @@ impl Registry {
         }
         self.increment_version();
         self.apply_mutations_as_version(mutations, self.version);
-    }
-
-    /// This is needed to test certain edge cases where the registry is in an invalid state
-    /// such as when a new invariant is added.
-    #[cfg(test)]
-    pub(crate) fn dangerously_apply_mutations(&mut self, mutations: Vec<RegistryMutation>) {
-        self.apply_mutations(mutations)
     }
 
     /// Verifies the implicit precondition corresponding to the mutation_type

@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
+async-trait = "0.1.68"
 lazy_static = "1.4.0"
 pprof = { version = "0.10.1", default-features = false, features = ["flamegraph", "prost-codec"] }
 prost = "0.11.0"

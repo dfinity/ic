@@ -1,18 +1,15 @@
 use crate::SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES;
-use candid::types::number::Nat;
-use candid::Principal;
+use candid::{types::number::Nat, Principal};
 use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
 use ic_canister_client_sender::Sender;
-use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_crypto_sha::Sha256;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
-use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
-use ic_icrc1_ledger::LedgerArgument;
+use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_root::canister_status::{CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_clients::canister_status::{CanisterStatusResult, CanisterStatusType};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
@@ -34,12 +31,12 @@ use ic_sns_governance::{
             RemoveNeuronPermissionsResponse,
         },
         proposal::Action,
-        Account as AccountProto, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-        Governance, GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons,
-        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-        ManageNeuronResponse, Motion, NervousSystemParameters, Neuron, NeuronId,
-        NeuronPermissionList, Proposal, ProposalData, ProposalId, RegisterDappCanisters,
-        RewardEvent, Subaccount as SubaccountProto, Vote,
+        Account as AccountProto, GetMaturityModulationRequest, GetMaturityModulationResponse,
+        GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance,
+        GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
+        ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse, Motion,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData,
+        ProposalId, RegisterDappCanisters, RewardEvent, Subaccount as SubaccountProto, Vote,
     },
     types::DEFAULT_TRANSFER_FEE,
 };
@@ -49,13 +46,17 @@ use ic_sns_root::{
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc1::{
+    account::{Account, Subaccount},
+    transfer::TransferArg,
+};
 use maplit::btreemap;
 use on_wire::IntoWire;
-use std::future::Future;
-use std::thread;
-use std::time::{Duration, Instant, SystemTime};
+use std::{
+    future::Future,
+    thread,
+    time::{Duration, Instant, SystemTime},
+};
 
 /// Constant nonce to use when generating the subaccount. Using a constant nonce
 /// allows the testing environment to calculate what a given subaccount will
@@ -146,6 +147,7 @@ impl SnsTestsInitPayloadBuilder {
             token_name: "Token Example".to_string(),
             metadata: vec![],
             fee_collector_account: None,
+            max_memo_length: None,
         };
 
         let swap = SwapInit {
@@ -951,7 +953,7 @@ impl SnsCanisters<'_> {
                 TIME_OUT_MINUTES
             );
 
-            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(100)).await;
             proposal = self.get_proposal(proposal_id).await;
         }
 
@@ -1225,6 +1227,38 @@ impl SnsCanisters<'_> {
 
         self.await_proposal_execution_or_failure(&proposal_id).await;
     }
+
+    /// Get the summary of the SNS from root
+    pub async fn get_maturity_modulation(&self) -> GetMaturityModulationResponse {
+        self.governance
+            .update_(
+                "get_maturity_modulation",
+                candid_one,
+                GetMaturityModulationRequest {},
+            )
+            .await
+            .expect("Error calling the get_maturity_modulation.")
+    }
+
+    pub async fn wait_for_maturity_modulation_or_panic(&self) {
+        const MAX_ATTEMPTS: usize = 100;
+        for attempt in 0..MAX_ATTEMPTS {
+            let response = self.get_maturity_modulation().await;
+            if response.maturity_modulation.as_ref().is_some() {
+                println!(
+                    "got MaturityModulation on attempt {}: {:#?}",
+                    attempt, response
+                );
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        panic!(
+            "maturity_modulation still None after {} attempts.",
+            MAX_ATTEMPTS
+        );
+    }
 }
 
 /// Installs a rust canister with the provided memory allocation.
@@ -1282,7 +1316,7 @@ where
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_e(config, SubnetConfig::default_system_subnet(), run)
+    local_test_with_config_e(config, run)
 }
 
 /// Compiles the governance canister, builds it's initial payload and installs

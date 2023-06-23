@@ -87,10 +87,9 @@
         fi
       {% endif %}
 
-      tar xzf "{{ ic_media_path }}"/config.tgz -C "{{ ic_media_path }}" "./$NODE0_NAME"
       timeout 600 "{{ ic_media_path }}/bin/ic-nns-init" \
           --url "$NNS_URL" \
-          --registry-local-store-dir "{{ ic_media_path }}/$NODE0_NAME/ic_registry_local_store" \
+          --registry-local-store-dir "{{ ic_media_path }}/ic_registry_local_store" \
           $GOVERNANCE_PB \
           {% if initial_neurons is defined %} --initial-neurons "{{ initial_neurons }}" {% endif %} \
           {% if test_ledger_accounts is defined %}
@@ -130,7 +129,7 @@
   include_tasks: 
     file: url_waitfor_connect.yml
   when:
-    - "'subnet_unassigned' not in hostvars[item].group_names and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
+    - "'subnet_unassigned' not in hostvars[item].group_names and 'api' not in hostvars[item].group_names and 'boundary' not in hostvars[item].group_names and 'aux' not in hostvars[item].group_names"
   loop: "{{ groups['nodes'] }}"
   loop_control:
     label: 

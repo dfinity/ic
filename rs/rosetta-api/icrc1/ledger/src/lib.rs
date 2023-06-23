@@ -1,16 +1,19 @@
 pub mod cdk_runtime;
 
+#[cfg(test)]
+mod tests;
+
 use crate::cdk_runtime::CdkRuntime;
 use candid::{
     types::number::{Int, Nat},
     CandidType, Principal,
 };
-use ic_base_types::PrincipalId;
 use ic_crypto_tree_hash::{Label, MixedHashTree};
-use ic_icrc1::blocks::icrc1_block_from_encoded;
+use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerBalances, Transaction};
+pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::{
-    archive::{ArchiveCanisterWasm, ArchiveOptions},
+    archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
     ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
     range_utils,
@@ -18,10 +21,11 @@ use ic_ledger_canister_core::{
 use ic_ledger_core::{
     approvals::AllowanceTable,
     balances::Balances,
-    block::{BlockIndex, BlockType, EncodedBlock, FeeCollector, HashOf},
+    block::{BlockIndex, BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
+use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
@@ -43,6 +47,8 @@ const MAX_TRANSACTIONS_PER_REQUEST: usize = 2_000;
 const ACCOUNTS_OVERFLOW_TRIM_QUANTITY: usize = 100_000;
 const MAX_TRANSACTIONS_IN_WINDOW: usize = 3_000_000;
 const MAX_TRANSACTIONS_TO_PURGE: usize = 100_000;
+
+const DEFAULT_MAX_MEMO_LENGTH: u16 = 32;
 
 #[derive(Debug, Clone)]
 pub struct Icrc1ArchiveWasm;
@@ -108,6 +114,7 @@ pub struct InitArgs {
     pub token_symbol: String,
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
+    pub max_memo_length: Option<u16>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -125,7 +132,7 @@ impl From<ChangeFeeCollector> for Option<FeeCollector<Account>> {
     }
 }
 
-#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Vec<(String, Value)>>,
@@ -137,6 +144,8 @@ pub struct UpgradeArgs {
     pub transfer_fee: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub change_fee_collector: Option<ChangeFeeCollector>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_memo_length: Option<u16>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -148,6 +157,8 @@ pub enum LedgerArgument {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     balances: LedgerBalances,
+    #[serde(default)]
+    approvals: AllowanceTable<ApprovalKey, Account>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
 
     minting_account: Account,
@@ -160,6 +171,12 @@ pub struct Ledger {
     token_symbol: String,
     token_name: String,
     metadata: Vec<(String, StoredValue)>,
+    #[serde(default = "default_max_memo_length")]
+    max_memo_length: u16,
+}
+
+fn default_max_memo_length() -> u16 {
+    DEFAULT_MAX_MEMO_LENGTH
 }
 
 impl Ledger {
@@ -173,11 +190,13 @@ impl Ledger {
             metadata,
             archive_options,
             fee_collector_account,
+            max_memo_length,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
         let mut ledger = Self {
             balances: LedgerBalances::default(),
+            approvals: Default::default(),
             blockchain: Blockchain::new_with_archive(archive_options),
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
@@ -190,6 +209,7 @@ impl Ledger {
                 .into_iter()
                 .map(|(k, v)| (k, StoredValue::from(v)))
                 .collect(),
+            max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -208,19 +228,18 @@ impl Ledger {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct ApprovalKey(Account, PrincipalId);
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
+pub struct ApprovalKey(Account, Account);
 
-impl From<(&Account, &PrincipalId)> for ApprovalKey {
-    fn from((account, principal): (&Account, &PrincipalId)) -> Self {
-        Self(*account, *principal)
+impl From<(&Account, &Account)> for ApprovalKey {
+    fn from((account, spender): (&Account, &Account)) -> Self {
+        Self(*account, *spender)
     }
 }
 
 impl LedgerContext for Ledger {
     type AccountId = Account;
-    type SpenderId = PrincipalId;
-    type Approvals = AllowanceTable<ApprovalKey, Account, PrincipalId>;
+    type Approvals = AllowanceTable<ApprovalKey, Account>;
     type BalancesStore = HashMap<Self::AccountId, Tokens>;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
@@ -232,11 +251,11 @@ impl LedgerContext for Ledger {
     }
 
     fn approvals(&self) -> &Self::Approvals {
-        unimplemented!()
+        &self.approvals
     }
 
     fn approvals_mut(&mut self) -> &mut Self::Approvals {
-        unimplemented!()
+        &mut self.approvals
     }
 
     fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>> {
@@ -318,6 +337,10 @@ impl Ledger {
         self.transfer_fee
     }
 
+    pub fn max_memo_length(&self) -> u16 {
+        self.max_memo_length
+    }
+
     pub fn metadata(&self) -> Vec<(String, Value)> {
         let mut records: Vec<(String, Value)> = self
             .metadata
@@ -330,6 +353,10 @@ impl Ledger {
         records.push(Value::entry("icrc1:name", self.token_name()));
         records.push(Value::entry("icrc1:symbol", self.token_symbol()));
         records.push(Value::entry("icrc1:fee", self.transfer_fee().get_e8s()));
+        records.push(Value::entry(
+            "icrc1:max_memo_length",
+            self.max_memo_length() as u64,
+        ));
         records
     }
 
@@ -348,6 +375,12 @@ impl Ledger {
         }
         if let Some(transfer_fee) = args.transfer_fee {
             self.transfer_fee = Tokens::from_e8s(transfer_fee);
+        }
+        if let Some(max_memo_length) = args.max_memo_length {
+            if self.max_memo_length > max_memo_length {
+                ic_cdk::trap(&format!("The max len of the memo can be changed only to be bigger or equal than the current size. Current size: {}", self.max_memo_length));
+            }
+            self.max_memo_length = max_memo_length;
         }
         if let Some(change_fee_collector) = args.change_fee_collector {
             self.fee_collector = change_fee_collector.into();
@@ -441,10 +474,12 @@ impl Ledger {
 
     /// Returns blocks in the specified range.
     pub fn get_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
-        let (first_index, local_blocks, archived_blocks) =
-            self.query_blocks(start, length, icrc1_block_from_encoded, |canister_id| {
-                QueryBlockArchiveFn::new(canister_id, "get_blocks")
-            });
+        let (first_index, local_blocks, archived_blocks) = self.query_blocks(
+            start,
+            length,
+            encoded_block_to_generic_block,
+            |canister_id| QueryBlockArchiveFn::new(canister_id, "get_blocks"),
+        );
 
         GetBlocksResponse {
             first_index: Nat::from(first_index),

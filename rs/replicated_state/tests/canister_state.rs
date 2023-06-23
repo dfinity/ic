@@ -1,4 +1,4 @@
-use ic_base_types::{CanisterId, NumBytes};
+use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, InputQueueType, StateError};
 use ic_test_utilities::{
@@ -89,7 +89,6 @@ impl CanisterFixture {
         let mut subnet_available_memory = i64::MAX / 2;
         self.canister_state.push_input(
             msg,
-            NumBytes::new(u64::MAX / 2),
             &mut subnet_available_memory,
             SubnetType::Application,
             InputQueueType::RemoteSubnet,

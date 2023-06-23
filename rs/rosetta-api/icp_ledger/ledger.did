@@ -237,30 +237,143 @@ type Archives = record {
     archives: vec Archive;
 };
 
-service : {
-  // Transfers tokens from a subaccount of the caller to the destination address.
-  // The source address is computed from the principal of the caller and the specified subaccount.
-  // When successful, returns the index of the block containing the transaction.
-  transfer : (TransferArgs) -> (TransferResult);
+type Duration = record {
+    secs: nat64;
+    nanos: nat32;
+};
 
-  // Returns the amount of Tokens on the specified account.
-  account_balance : (AccountBalanceArgs) -> (Tokens) query;
+type ArchiveOptions = record {
+    trigger_threshold : nat64;
+    num_blocks_to_archive : nat64;
+    node_max_memory_size_bytes: opt nat64;
+    max_message_size_bytes: opt nat64;
+    controller_id: principal;
+    cycles_for_archive_creation: opt nat64;
+};
 
-  // Returns the current transfer_fee.
-  transfer_fee : (TransferFeeArg) -> (TransferFee) query;
+// Account identifier encoded as a 64-byte ASCII hex string.
+type TextAccountIdentifier = text;
 
-  // Queries blocks in the specified range.
-  query_blocks : (GetBlocksArgs) -> (QueryBlocksResponse) query;
+// Arguments for the `send_dfx` call.
+type SendArgs = record {
+    memo: Memo;
+    amount: Tokens;
+    fee: Tokens;
+    from_subaccount: opt SubAccount;
+    to: TextAccountIdentifier;
+    created_at_time: opt TimeStamp;
+};
 
-  // Returns token symbol.
-  symbol : () -> (record { symbol: text }) query;
+type AccountBalanceArgsDfx = record {
+    account: TextAccountIdentifier;
+};
 
-  // Returns token name.
-  name : () -> (record { name: text }) query;
+type InitArgs = record {
+    minting_account: TextAccountIdentifier;
+    icrc1_minting_account: opt Account;
+    initial_values: vec record {TextAccountIdentifier; Tokens};
+    max_message_size_bytes: opt nat64;
+    transaction_window: opt Duration;
+    archive_options: opt ArchiveOptions;
+    send_whitelist: vec principal;
+    transfer_fee: opt Tokens;
+    token_symbol: opt text;
+    token_name: opt text;
+};
 
-  // Returns token decimals.
-  decimals : () -> (record { decimals: nat32 }) query;
+type Icrc1BlockIndex = nat;
+// Number of nanoseconds since the UNIX epoch in UTC timezone.
+type Icrc1Timestamp = nat64;
+type Icrc1Tokens = nat;
 
-  // Returns the existing archive canisters information.
-  archives : () -> (Archives) query;
+type Account = record {
+    owner : principal;
+    subaccount : opt SubAccount;
+};
+
+type TransferArg = record {
+    from_subaccount : opt SubAccount;
+    to : Account;
+    amount : Icrc1Tokens;
+    fee : opt Icrc1Tokens;
+    memo : opt blob;
+    created_at_time: opt Icrc1Timestamp;
+};
+
+type Icrc1TransferError = variant {
+    BadFee : record { expected_fee : Icrc1Tokens };
+    BadBurn : record { min_burn_amount : Icrc1Tokens };
+    InsufficientFunds : record { balance : Icrc1Tokens };
+    TooOld;
+    CreatedInFuture : record { ledger_time : nat64 };
+    TemporarilyUnavailable;
+    Duplicate : record { duplicate_of : Icrc1BlockIndex };
+    GenericError : record { error_code : nat; message : text };
+};
+
+type Icrc1TransferResult = variant {
+    Ok : Icrc1BlockIndex;
+    Err : Icrc1TransferError;
+};
+
+// The value returned from the [icrc1_metadata] endpoint.
+type Value = variant {
+    Nat : nat;
+    Int : int;
+    Text : text;
+    Blob : blob;
+};
+
+type UpgradeArgs = record {
+  maximum_number_of_accounts : opt nat64;
+  icrc1_minting_account : opt Account;
+};
+
+type LedgerCanisterPayload = variant {
+    Init: InitArgs;
+    Upgrade: opt UpgradeArgs;
+};
+
+service: (LedgerCanisterPayload) -> {
+    // Transfers tokens from a subaccount of the caller to the destination address.
+    // The source address is computed from the principal of the caller and the specified subaccount.
+    // When successful, returns the index of the block containing the transaction.
+    transfer : (TransferArgs) -> (TransferResult);
+
+    // Returns the amount of Tokens on the specified account.
+    account_balance : (AccountBalanceArgs) -> (Tokens) query;
+
+    // Returns the current transfer_fee.
+    transfer_fee : (TransferFeeArg) -> (TransferFee) query;
+
+    // Queries blocks in the specified range.
+    query_blocks : (GetBlocksArgs) -> (QueryBlocksResponse) query;
+
+    // Returns token symbol.
+    symbol : () -> (record { symbol: text }) query;
+
+    // Returns token name.
+    name : () -> (record { name: text }) query;
+
+    // Returns token decimals.
+    decimals : () -> (record { decimals: nat32 }) query;
+
+    // Returns the existing archive canisters information.
+    archives : () -> (Archives) query;
+
+    send_dfx : (SendArgs) -> (BlockIndex);
+    account_balance_dfx : (AccountBalanceArgsDfx) -> (Tokens) query;
+
+    // The following methods implement the ICRC-1 Token Standard.
+    // https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1
+    icrc1_name : () -> (text) query;
+    icrc1_symbol : () -> (text) query;
+    icrc1_decimals : () -> (nat8) query;
+    icrc1_metadata : () -> (vec record { text; Value }) query;
+    icrc1_total_supply : () -> (Icrc1Tokens) query;
+    icrc1_fee : () -> (Icrc1Tokens) query;
+    icrc1_minting_account : () -> (opt Account) query;
+    icrc1_balance_of : (Account) -> (Icrc1Tokens) query;
+    icrc1_transfer : (TransferArg) -> (Icrc1TransferResult);
+    icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;  
 }

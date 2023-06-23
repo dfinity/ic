@@ -3,7 +3,7 @@ Hold manifest common to all SetupOS variants.
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//toolchains/sysimage:toolchain.bzl", "ext4_image")
+load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -48,12 +48,15 @@ def image_deps(mode, _malicious = False):
 
     return deps
 
-# Inject a step building a data partition that contains either dev or prod
+# Inject a step building a data partition that contains either dev, dev-sev or prod
 # child images, depending on this build variant.
 def _custom_partitions(mode):
     if mode == "dev":
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.gz")
+    elif mode == "dev-sev":
+        guest_image = Label("//ic-os/guestos/envs/dev-sev:disk-img.tar.gz")
+        host_image = Label("//ic-os/hostos/envs/dev-sev:disk-img.tar.gz")
     else:
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.gz")
@@ -70,6 +73,27 @@ def _custom_partitions(mode):
         src = host_image,
         out = "host-os.img.tar.gz",
         allow_symlink = True,
+    )
+
+    pkg_tar(
+        name = "config_tar",
+        srcs = [
+            Label("//ic-os/setupos:config/config.ini"),
+            Label("//ic-os/setupos:config/ssh_authorized_keys"),
+        ] + ([Label("//ic-os/setupos:config/node_operator_private_key.pem")] if mode == "dev" else []),
+        mode = "0644",
+        package_dir = "config",
+    )
+
+    fat32_image(
+        name = "partition-config.tar",
+        src = "config_tar",
+        label = "CONFIG",
+        partition_size = "50M",
+        subdir = "./config",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
     )
 
     pkg_tar(
@@ -95,6 +119,6 @@ def _custom_partitions(mode):
     )
 
     return [
-        Label("//ic-os/setupos:partition-config.tar"),
+        ":partition-config.tar",
         ":partition-data.tar",
     ]

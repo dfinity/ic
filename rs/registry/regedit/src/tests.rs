@@ -127,15 +127,14 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
     subnet_nodes.insert(
         NODE_INDEX,
         NodeConfiguration {
-            xnet_api: vec!["http://0.0.0.0:0".parse().expect("can't fail")],
-            public_api: vec!["http://0.0.0.0:8080".parse().expect("can't fail")],
-            private_api: vec![],
+            xnet_api: "http://0.0.0.0:0".parse().expect("can't fail"),
+            public_api: "http://0.0.0.0:8080".parse().expect("can't fail"),
             p2p_addr: "org.internetcomputer.p2p1://0.0.0.0:0"
                 .parse()
                 .expect("can't fail"),
-            prometheus_metrics: vec![],
             node_operator_principal_id: None,
             secret_key_store: None,
+            chip_id: vec![],
         },
     );
 

@@ -3,6 +3,7 @@ use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{CanisterStatus, NumWasmPages};
@@ -595,7 +596,8 @@ fn dts_works_in_cleanup_callback() {
 #[test]
 fn dts_out_of_subnet_memory_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(100 * 1024 * 1024)
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(40 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
@@ -662,7 +664,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     )
     .unwrap();
     let available_memory_before_finishing_callback =
-        test.subnet_available_memory().get_total_memory();
+        test.subnet_available_memory().get_execution_memory();
 
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
@@ -681,7 +683,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
         // memory changes not reflected in global state
         assert_eq!(
             available_memory_before_finishing_callback,
-            test.subnet_available_memory().get_total_memory()
+            test.subnet_available_memory().get_execution_memory()
         );
         test.execute_slice(a_id);
     }
@@ -692,14 +694,15 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     // verify that cleanup was in fact unable to allocate over subnet memory limit
     assert_eq!(
         available_memory_before_finishing_callback,
-        test.subnet_available_memory().get_total_memory()
+        test.subnet_available_memory().get_execution_memory()
     );
 }
 
 #[test]
 fn dts_out_of_subnet_memory_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(100 * 1024 * 1024)
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(40 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
@@ -765,7 +768,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     .unwrap();
 
     let available_memory_before_finishing_callback =
-        test.subnet_available_memory().get_total_memory();
+        test.subnet_available_memory().get_execution_memory();
 
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
@@ -784,7 +787,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
         // memory changes not reflected in global state
         assert_eq!(
             available_memory_before_finishing_callback,
-            test.subnet_available_memory().get_total_memory()
+            test.subnet_available_memory().get_execution_memory()
         );
         test.execute_slice(a_id);
     }
@@ -795,7 +798,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     // verify that cleanup was in fact unable to allocate over subnet memory limit
     assert_eq!(
         available_memory_before_finishing_callback,
-        test.subnet_available_memory().get_total_memory()
+        test.subnet_available_memory().get_execution_memory()
     )
 }
 
@@ -1855,4 +1858,651 @@ fn reserve_instructions_for_cleanup_callback_with_dts() {
         .build();
 
     reserve_instructions_for_cleanup_callback_scenario(&mut test, instruction_limit);
+}
+
+#[test]
+fn response_callback_succeeds_with_memory_reservation() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // On reply grows memory by roughly 80MB.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .stable_grow(1280)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000)
+                        .message_payload()
+                        .append_and_reply(),
+                ),
+            Cycles::from(2000u128),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    let available_memory_before_starting_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    // Start executing the response callback.
+    let original_system_state: ic_replicated_state::SystemState =
+        test.canister_state(a_id).system_state.clone();
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+
+    // Create a new canister allocating 10MB. It is expected to succeed.
+    test.create_canister_with_allocation(
+        Cycles::new(1_000_000_000_000_000),
+        None,
+        Some(10 * 1024 * 1024),
+    )
+    .unwrap();
+
+    // Create a new canister allocating 10MB. It is expected to fail.
+    test.create_canister_with_allocation(
+        Cycles::new(1_000_000_000_000_000),
+        None,
+        Some(10 * 1024 * 1024),
+    )
+    .unwrap_err();
+
+    let available_memory_before_finishing_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    assert!(available_memory_before_finishing_callback >= 0);
+
+    // Keep executing until callback finishes.
+    while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
+        // The canister state should be clean. Specifically, no changes in the
+        // cycles balance and call contexts.
+        assert_eq!(
+            test.canister_state(a_id).system_state.balance(),
+            original_system_state.balance()
+        );
+        assert_eq!(
+            test.canister_state(a_id)
+                .system_state
+                .call_context_manager(),
+            original_system_state.call_context_manager()
+        );
+        // Memory changes not reflected in global state.
+        assert_eq!(
+            available_memory_before_finishing_callback,
+            test.subnet_available_memory().get_execution_memory()
+        );
+        test.execute_slice(a_id);
+    }
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    check_ingress_status(ingress_status).unwrap();
+
+    // Verify that the response callback allocated at least 80MB.
+    assert!(
+        available_memory_before_finishing_callback
+            > test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
+    );
+}
+
+#[test]
+fn cleanup_callback_succeeds_with_memory_reservation() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // On cleanup grows memory by roughly 80MB.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reply(wasm().trap())
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_cleanup(
+                    wasm()
+                        .stable_grow(1280)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
+            Cycles::from(1000u128),
+        )
+        .build();
+
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    let available_memory_before_starting_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    // Start executing the response and cleanup callbacks.
+    let original_system_state: ic_replicated_state::SystemState =
+        test.canister_state(a_id).system_state.clone();
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+
+    // Create a new canister allocating 10MB. It is expected to succeed.
+    test.create_canister_with_allocation(
+        Cycles::new(1_000_000_000_000_000),
+        None,
+        Some(10 * 1024 * 1024),
+    )
+    .unwrap();
+
+    // Create a new canister allocating 10MB. It is expected to fail.
+    test.create_canister_with_allocation(
+        Cycles::new(1_000_000_000_000_000),
+        None,
+        Some(10 * 1024 * 1024),
+    )
+    .unwrap_err();
+
+    let available_memory_before_finishing_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    assert!(available_memory_before_finishing_callback >= 0);
+
+    // Keep executing until callback finishes.
+    while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
+        // The canister state should be clean. Specifically, no changes in the
+        // cycles balance and call contexts.
+        assert_eq!(
+            test.canister_state(a_id).system_state.balance(),
+            original_system_state.balance()
+        );
+        assert_eq!(
+            test.canister_state(a_id)
+                .system_state
+                .call_context_manager(),
+            original_system_state.call_context_manager()
+        );
+        // Memory changes not reflected in global state.
+        assert_eq!(
+            available_memory_before_finishing_callback,
+            test.subnet_available_memory().get_execution_memory()
+        );
+        test.execute_slice(a_id);
+    }
+
+    let ingress_status = test.ingress_status(&ingress_id);
+    let err = check_ingress_status(ingress_status).unwrap_err();
+    // The response callback calls trap and that is returned even after the
+    // cleanup callback runs.
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+
+    // Verify that the cleanup callback allocated at least 80MB.
+    assert!(
+        available_memory_before_finishing_callback
+            > test.subnet_available_memory().get_execution_memory() + 80 * 1024 * 1024
+    )
+}
+
+#[test]
+fn subnet_available_memory_does_not_change_on_response_abort() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // On reply grows memory by roughly 80MB.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .stable_grow(1280)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000)
+                        .message_payload()
+                        .append_and_reply(),
+                ),
+            Cycles::from(2000u128),
+        )
+        .build();
+
+    test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    let available_memory_before_starting_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    // Start executing the response callback.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+
+    test.abort_all_paused_executions();
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+}
+
+#[test]
+fn subnet_available_memory_does_not_change_on_cleanup_abort() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // On cleanup grows memory by roughly 80MB.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reply(wasm().trap())
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_cleanup(
+                    wasm()
+                        .stable_grow(1280)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
+            Cycles::from(1000u128),
+        )
+        .build();
+
+    test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    let available_memory_before_starting_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    // Start executing the response and cleanup callbacks.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+
+    test.abort_all_paused_executions();
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+}
+
+#[test]
+fn subnet_available_memory_does_not_change_on_response_validation_failure() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // On reply grows memory by roughly 80MB.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .stable_grow(1280)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000)
+                        .message_payload()
+                        .append_and_reply(),
+                ),
+            Cycles::from(2000u128),
+        )
+        .build();
+
+    test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Uninstall canister A to mark its call context as deleted.
+    test.uninstall_code(a_id).unwrap();
+
+    let available_memory_before_starting_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    // Start executing the response callback.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+}
+
+#[test]
+fn subnet_available_memory_does_not_change_on_response_resume_failure() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // On reply grows memory by roughly 80MB.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .stable_grow(1280)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000)
+                        .message_payload()
+                        .append_and_reply(),
+                ),
+            Cycles::from(2000u128),
+        )
+        .build();
+
+    test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    let available_memory_before_starting_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    // Start executing the response callback.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+
+    // Change the cycles balance to force the response resuming to fail.
+    test.canister_state_mut(a_id)
+        .system_state
+        .burn_remaining_balance(CyclesUseCase::Memory);
+
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+}
+
+#[test]
+fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(100 * 1024 * 1024)
+        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // On cleanup grows memory by roughly 80MB.
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reply(wasm().trap())
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_cleanup(
+                    wasm()
+                        .stable_grow(1280)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
+            Cycles::from(1000u128),
+        )
+        .build();
+
+    test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    let available_memory_before_starting_callback =
+        test.subnet_available_memory().get_execution_memory();
+
+    // Start executing the response and cleanup callbacks.
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
+
+    // Change the cycles balance to force the cleanup resuming to fail.
+    test.canister_state_mut(a_id)
+        .system_state
+        .burn_remaining_balance(CyclesUseCase::Memory);
+
+    test.execute_slice(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None,
+    );
+
+    assert_eq!(
+        available_memory_before_starting_callback,
+        test.subnet_available_memory().get_execution_memory()
+    );
 }

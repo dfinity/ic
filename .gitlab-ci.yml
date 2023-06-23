@@ -8,24 +8,27 @@ include:
   - local: /gitlab-ci/config/00--common.yml
   - local: /gitlab-ci/config/10--init--github-integration.yml
   - local: /gitlab-ci/config/20--build-boundary-node-service-worker.yml
-  - local: /gitlab-ci/config/20--test--build-ic.yml
-  - local: /gitlab-ci/config/20--test--cargo-pipeline.yml
+  - local: /gitlab-ci/config/20--test--after-script.yml
+  - local: /gitlab-ci/config/20--test--bazel-fuzzers.yml
   - local: /gitlab-ci/config/20--test--bazel-pipeline.yml
+  - local: /gitlab-ci/config/20--test--build-ic.yml
   - local: /gitlab-ci/config/20--test--pre-commit.yml
   - local: /gitlab-ci/config/20--test--cargo-generate.yml
-  - local: /gitlab-ci/config/20--test--gitlab-runners.yml
   - local: /gitlab-ci/config/20--test--python.yml
   - local: /gitlab-ci/config/20--test--container-image-autobuild.yml
   - local: /gitlab-ci/config/20--test--dependencies.yml
   - local: /gitlab-ci/config/20--test--testnet-deployment.yml
   - local: /gitlab-ci/config/21--test--bins.yml
-  - local: /gitlab-ci/config/40--cargo-test--benchmarks.yml
+  - local: /gitlab-ci/config/30--cargo-build.yml
+  - local: /gitlab-ci/config/40--rust-test--benchmarks.yml
   - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
   - local: /gitlab-ci/config/46--rosetta-release.yml
+  - local: /gitlab-ci/config/46--rosetta-api-docker-image.yml
+  - local: /gitlab-ci/config/54--host-os-test--host-os-upgrade-test.yml
+  - local: /gitlab-ci/config/55--determinism-test.yml
   - local: /gitlab-ci/config/55--determinism-test-release.yml
   - local: /gitlab-ci/config/60--prod-test--spawn-test-pipeline.yml
   - local: /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml
-  - local: /gitlab-ci/config/70--policy-monitoring-deployment.yml
   - local: /gitlab-ci/config/75--push-branches--push.yml
   - local: /gitlab-ci/config/80--npm-release-boundary-node-service-worker.yml
   - local: /gitlab-ci/config/100--finalize--notify.yml

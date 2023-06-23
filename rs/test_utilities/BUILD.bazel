@@ -27,7 +27,6 @@ rust_library(
         "//rs/embedders",
         "//rs/execution_environment",
         "//rs/interfaces",
-        "//rs/interfaces/bitcoin_adapter_client",
         "//rs/interfaces/certified_stream_store",
         "//rs/interfaces/p2p",
         "//rs/interfaces/registry",

@@ -6,14 +6,15 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-p256 = { version = "0.12", features = ["ecdsa", "pkcs8", "pem"] }
+p256 = { workspace = true }
 pem = "1.1.0"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 simple_asn1 = "0.6.1"
 rand = "0.8"
 rand_chacha = "0.3"
 lazy_static = "1.4"
+ic-crypto-getrandom-for-wasm = { path = "../getrandom_for_wasm" }
 
 [dev-dependencies]
 hex = "0.4"
-wycheproof = "0.4"
+wycheproof = "0.5"

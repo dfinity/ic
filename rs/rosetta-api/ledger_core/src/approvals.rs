@@ -13,19 +13,20 @@ mod tests;
 pub struct InsufficientAllowance(pub Tokens);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ExpiredApproval {
-    pub now: TimeStamp,
+pub enum ApproveError {
+    AllowanceChanged { current_allowance: Tokens },
+    ExpiredApproval { now: TimeStamp },
+    SelfApproval,
 }
 
 pub trait Approvals {
     type AccountId;
-    type SpenderId;
 
     /// Returns the current spender's allowance for the account.
     fn allowance(
         &self,
         account: &Self::AccountId,
-        spender: &Self::SpenderId,
+        spender: &Self::AccountId,
         now: TimeStamp,
     ) -> Allowance;
 
@@ -33,23 +34,12 @@ pub trait Approvals {
     fn approve(
         &mut self,
         account: &Self::AccountId,
-        spender: &Self::SpenderId,
+        spender: &Self::AccountId,
         amount: Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
-    ) -> Result<Tokens, ExpiredApproval>;
-
-    /// Decreases the spender's allowance for the account by the specified amount.
-    ///
-    /// If the total allowance goes negative, the table resets it to zero.
-    fn decrease_allowance(
-        &mut self,
-        account: &Self::AccountId,
-        spender: &Self::SpenderId,
-        by: Tokens,
-        new_expiration: Option<TimeStamp>,
-        now: TimeStamp,
-    ) -> Result<Tokens, ExpiredApproval>;
+        expected_allowance: Option<Tokens>,
+    ) -> Result<Tokens, ApproveError>;
 
     /// Consumes amount from the spender's allowance for the account.
     ///
@@ -58,7 +48,7 @@ pub trait Approvals {
     fn use_allowance(
         &mut self,
         account: &Self::AccountId,
-        spender: &Self::SpenderId,
+        spender: &Self::AccountId,
         amount: Tokens,
         now: TimeStamp,
     ) -> Result<Tokens, InsufficientAllowance>;
@@ -78,7 +68,7 @@ pub struct Allowance {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AllowanceTable<K, AccountId, SpenderId>
+pub struct AllowanceTable<K, AccountId>
 where
     K: Ord,
 {
@@ -86,16 +76,16 @@ where
     expiration_queue: BinaryHeap<Reverse<(TimeStamp, K)>>,
     #[serde(skip)]
     #[serde(default)]
-    _marker: PhantomData<fn(&AccountId, &SpenderId) -> K>,
+    _marker: PhantomData<fn(&AccountId, &AccountId) -> K>,
 }
 
-impl<K: Ord, AccountId, SpenderId> Default for AllowanceTable<K, AccountId, SpenderId> {
+impl<K: Ord, AccountId> Default for AllowanceTable<K, AccountId> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K, AccountId, SpenderId> AllowanceTable<K, AccountId, SpenderId>
+impl<K, AccountId> AllowanceTable<K, AccountId>
 where
     K: Ord,
 {
@@ -108,14 +98,14 @@ where
     }
 }
 
-impl<K, AccountId, SpenderId> Approvals for AllowanceTable<K, AccountId, SpenderId>
+impl<K, AccountId> Approvals for AllowanceTable<K, AccountId>
 where
-    K: Ord + for<'a> From<(&'a AccountId, &'a SpenderId)> + Clone,
+    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
+    AccountId: std::cmp::PartialEq,
 {
     type AccountId = AccountId;
-    type SpenderId = SpenderId;
 
-    fn allowance(&self, account: &AccountId, spender: &SpenderId, now: TimeStamp) -> Allowance {
+    fn allowance(&self, account: &AccountId, spender: &AccountId, now: TimeStamp) -> Allowance {
         let key = K::from((account, spender));
         match self.allowances.get(&key) {
             Some(allowance) if allowance.expires_at.unwrap_or_else(remote_future) > now => {
@@ -128,19 +118,31 @@ where
     fn approve(
         &mut self,
         account: &AccountId,
-        spender: &SpenderId,
+        spender: &AccountId,
         amount: Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
-    ) -> Result<Tokens, ExpiredApproval> {
+        expected_allowance: Option<Tokens>,
+    ) -> Result<Tokens, ApproveError> {
+        if account == spender {
+            return Err(ApproveError::SelfApproval);
+        }
+
         if expires_at.unwrap_or_else(remote_future) <= now {
-            return Err(ExpiredApproval { now });
+            return Err(ApproveError::ExpiredApproval { now });
         }
 
         let key = K::from((account, spender));
 
         match self.allowances.entry(key.clone()) {
             Entry::Vacant(e) => {
+                if let Some(expected_allowance) = expected_allowance {
+                    if expected_allowance != Tokens::ZERO {
+                        return Err(ApproveError::AllowanceChanged {
+                            current_allowance: Tokens::ZERO,
+                        });
+                    }
+                }
                 if let Some(expires_at) = expires_at {
                     self.expiration_queue.push(Reverse((expires_at, key)));
                 }
@@ -148,16 +150,16 @@ where
                 Ok(amount)
             }
             Entry::Occupied(mut e) => {
-                let old_expiration = if e.get().expires_at.unwrap_or_else(remote_future) <= now {
-                    // Overwrite the allowance if the previous approval expired.
-                    let allowance = e.get_mut();
-                    allowance.amount = amount;
-                    std::mem::replace(&mut allowance.expires_at, expires_at)
-                } else {
-                    let allowance = e.get_mut();
-                    allowance.amount = allowance.amount.saturating_add(amount);
-                    std::mem::replace(&mut allowance.expires_at, expires_at)
-                };
+                let allowance = e.get_mut();
+                if let Some(expected_allowance) = expected_allowance {
+                    if expected_allowance != allowance.amount {
+                        return Err(ApproveError::AllowanceChanged {
+                            current_allowance: allowance.amount,
+                        });
+                    }
+                }
+                allowance.amount = amount;
+                let old_expiration = std::mem::replace(&mut allowance.expires_at, expires_at);
 
                 if expires_at != old_expiration {
                     if let Some(expires_at) = expires_at {
@@ -169,53 +171,10 @@ where
         }
     }
 
-    fn decrease_allowance(
-        &mut self,
-        account: &AccountId,
-        spender: &SpenderId,
-        amount: Tokens,
-        expires_at: Option<TimeStamp>,
-        now: TimeStamp,
-    ) -> Result<Tokens, ExpiredApproval> {
-        if expires_at.unwrap_or_else(remote_future) <= now {
-            return Err(ExpiredApproval { now });
-        }
-
-        let key = K::from((account, spender));
-
-        match self.allowances.entry(key.clone()) {
-            Entry::Vacant(_) => Ok(Tokens::ZERO),
-            Entry::Occupied(mut e) => {
-                if e.get().expires_at.unwrap_or_else(remote_future) <= now {
-                    // The approval expired, removing it.
-                    e.remove();
-                    return Ok(Tokens::ZERO);
-                } else {
-                    let allowance = e.get_mut();
-                    allowance.amount = allowance.amount.saturating_sub(amount);
-                    let old_expiration = std::mem::replace(&mut allowance.expires_at, expires_at);
-
-                    if allowance.amount == Tokens::ZERO {
-                        e.remove();
-                        return Ok(Tokens::ZERO);
-                    }
-
-                    if expires_at != old_expiration {
-                        if let Some(expires_at) = expires_at {
-                            self.expiration_queue.push(Reverse((expires_at, key)));
-                        }
-                    }
-                };
-
-                Ok(e.get().amount)
-            }
-        }
-    }
-
     fn use_allowance(
         &mut self,
         account: &AccountId,
-        spender: &SpenderId,
+        spender: &AccountId,
         amount: Tokens,
         now: TimeStamp,
     ) -> Result<Tokens, InsufficientAllowance> {
@@ -243,7 +202,7 @@ where
     }
 }
 
-impl<K, AccountId, SpenderId> PrunableApprovals for AllowanceTable<K, AccountId, SpenderId>
+impl<K, AccountId> PrunableApprovals for AllowanceTable<K, AccountId>
 where
     K: Ord,
 {

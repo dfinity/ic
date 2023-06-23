@@ -1,28 +1,30 @@
-use crate::clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient};
-use crate::logs::{ERROR, INFO};
-use crate::memory;
-use crate::pb::v1::{
-    get_open_ticket_response, new_sale_ticket_response,
-    params::NeuronBasketConstructionParameters,
-    restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
-    set_mode_call_result::SetModeResult,
-    settle_community_fund_participation_result,
-    sns_neuron_recipe::Investor,
-    sns_neuron_recipe::{ClaimedStatus, NeuronAttributes},
-    BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
-    ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
-    GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
-    GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse, GetSaleParametersRequest,
-    GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
-    ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
-    ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
-    ListSnsNeuronRecipesResponse, NeuronId as SaleNeuronId, NewSaleTicketRequest,
-    NewSaleTicketResponse, OpenRequest, OpenResponse, Participant, RefreshBuyerTokensResponse,
-    RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
-    SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
-    TransferableAmount,
+use crate::{
+    clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
+    environment::CanisterEnvironment,
+    logs::{ERROR, INFO},
+    memory,
+    pb::v1::{
+        get_open_ticket_response, new_sale_ticket_response,
+        params::NeuronBasketConstructionParameters,
+        restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
+        settle_community_fund_participation_result,
+        sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
+        BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
+        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
+        GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
+        GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
+        GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
+        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
+        ListSnsNeuronRecipesResponse, NeuronId as SaleNeuronId, NewSaleTicketRequest,
+        NewSaleTicketResponse, OpenRequest, OpenResponse, Participant, RefreshBuyerTokensResponse,
+        RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
+        SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
+        TransferableAmount,
+    },
+    types::{ScheduledVestingEvent, TransferResult},
 };
-use crate::types::{ScheduledVestingEvent, TransferResult};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use dfn_core::CanisterId;
@@ -34,25 +36,26 @@ use ic_sns_governance::{
     ledger::ICRC1Ledger,
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
-        claim_swap_neurons_response::ClaimSwapNeuronsResult,
-        claim_swap_neurons_response::SwapNeuron, governance, ClaimSwapNeuronsError,
-        ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, SetMode, SetModeResponse,
+        claim_swap_neurons_response::{ClaimSwapNeuronsResult, SwapNeuron},
+        governance, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus,
+        NeuronId, SetMode, SetModeResponse,
     },
 };
-use ic_stable_structures::storable::Blob;
-use ic_stable_structures::{BoundedStorable, GrowFailed, Storable};
+use ic_stable_structures::{storable::Blob, BoundedStorable, GrowFailed, Storable};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use itertools::{Either, Itertools};
 use maplit::btreemap;
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
-use std::borrow::Cow;
-use std::collections::BTreeMap;
-use std::ops::Bound::{Included, Unbounded};
 use std::{
+    borrow::Cow,
+    collections::BTreeMap,
     num::{NonZeroU128, NonZeroU64},
-    ops::Div,
+    ops::{
+        Bound::{Included, Unbounded},
+        Div,
+    },
     str::FromStr,
 };
 
@@ -78,9 +81,9 @@ const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 /// by ListSnsNeuronRecipes
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
-/// Range of allowed memos for neurons distributed via an SNS sale. This range is used to choose
-/// the memos of Sale neurons, and to enforce that other memos (e.g. for Airdrop neurons) do not
-/// conflict with the memos of Sale neurons.
+/// Range of allowed memos for neurons distributed via an SNS swap. This range is used to choose
+/// the memos of Swap neurons, and to enforce that other memos (e.g. for Airdrop neurons) do not
+/// conflict with the memos of Swap neurons.
 pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
 
@@ -166,6 +169,9 @@ impl From<DerivedState> for GetDerivedStateResponse {
     fn from(state: DerivedState) -> GetDerivedStateResponse {
         GetDerivedStateResponse {
             buyer_total_icp_e8s: Some(state.buyer_total_icp_e8s),
+            direct_participant_count: state.direct_participant_count,
+            cf_participant_count: state.cf_participant_count,
+            cf_neuron_count: state.cf_neuron_count,
             sns_tokens_per_icp: Some(state.sns_tokens_per_icp as f64),
         }
     }
@@ -249,30 +255,30 @@ impl Swap {
     pub fn init_or_panic(&self) -> &Init {
         self.init
             .as_ref()
-            .expect("Expected the init field to be populated in the Sale canister state")
+            .expect("Expected the init field to be populated in the Swap canister state")
     }
 
     /// Retrieves a reference to the `init` field.
     pub fn init(&self) -> Result<&Init, String> {
         self.init
             .as_ref()
-            .ok_or_else(|| "The Init field is not populated in the Sale canister state".to_string())
+            .ok_or_else(|| "The Init field is not populated in the Swap canister state".to_string())
     }
 
     pub fn init_and_validate(&self) -> Result<&Init, String> {
         match &self.init {
-            None => Err("Missing Init in the Sale canister state".to_string()),
+            None => Err("Missing Init in the Swap canister state".to_string()),
             Some(init) => init.validate().map(|_| init),
         }
     }
 
-    /// A Result with the number of SNS tokens for sale, or an Err if the sale hasn't
+    /// A Result with the number of SNS tokens to be swapped, or an Err if the swap hasn't
     /// been opened yet.
     pub fn sns_token_e8s(&self) -> Result<u64, String> {
         self.params
             .as_ref()
             .map(|params| params.sns_token_e8s)
-            .ok_or_else(|| "Sale not open, no tokens available.".to_string())
+            .ok_or_else(|| "Swap not open, no tokens available.".to_string())
     }
 
     /// The total amount of ICP contributed by direct investors and the
@@ -299,14 +305,14 @@ impl Swap {
     }
 
     /// The count of unique CommunityFund Neurons.
-    pub fn cf_neurons_count(&self) -> u64 {
+    pub fn cf_neuron_count(&self) -> u64 {
         self.cf_participants
             .iter()
             .flat_map(|cf_participant| &cf_participant.cf_neurons)
             .count() as u64
     }
 
-    /// Determines if the Sale is in it's terminal state
+    /// Determines if the Swap is in it's terminal state
     /// based on it's lifecycle.
     fn lifecycle_is_terminal(&self) -> bool {
         self.lifecycle().is_terminal()
@@ -316,7 +322,7 @@ impl Swap {
     // --- state transition functions ------------------------------------------
     //
 
-    /// If the sale is ADOPTED, tries to open it (if the delay is elapsed).
+    /// If the swap is ADOPTED, tries to open it (if the delay is elapsed).
     /// Returns true if a transition was made, and false otherwise.
     pub fn try_open_after_delay(&mut self, now_seconds: u64) -> bool {
         if self.can_open(now_seconds) {
@@ -332,7 +338,7 @@ impl Swap {
     /// If the swap is OPEN, tries to commit or abort the swap. Returns
     /// true if a transition was made and false otherwise.
     pub fn try_commit_or_abort(&mut self, now_seconds: u64) -> bool {
-        // If the sale lifecycle is not open, we can't commit or abort it
+        // If the swap lifecycle is not open, we can't commit or abort it
         let lifecycle = self.lifecycle();
         if lifecycle != Lifecycle::Open {
             return false;
@@ -365,7 +371,7 @@ impl Swap {
     ///
     /// The parameters of the swap, specified in the request, specify
     /// the limits on total and per-participant ICP, the number of SNS
-    /// tokens for sale, and the community fund participation of the
+    /// tokens for swap, and the community fund participation of the
     /// swap.
     pub async fn open(
         &mut self,
@@ -586,6 +592,25 @@ impl Swap {
     // --- state modifying methods ---------------------------------------------
     //
 
+    pub fn run_periodic_tasks(&mut self, now_seconds: u64) {
+        const NUMBER_OF_TICKETS_THRESHOLD: u64 = 100_000_000; // 100M * ~size(ticket) = ~25GB
+        const TWO_DAYS_IN_NANOSECONDS: u64 = 60 * 60 * 24 * 2 * 1_000_000_000;
+        const MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT: u64 = 100_000;
+
+        self.try_purge_old_tickets(
+            dfn_core::api::time_nanos,
+            NUMBER_OF_TICKETS_THRESHOLD,
+            TWO_DAYS_IN_NANOSECONDS,
+            MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
+        );
+        if self.try_open_after_delay(now_seconds) {
+            log!(INFO, "Swap opened at timestamp {}", now_seconds);
+        }
+        if self.try_commit_or_abort(now_seconds) {
+            log!(INFO, "Swap committed/aborted at timestamp {}", now_seconds);
+        }
+    }
+
     /*
 
     Transfers IN - these transfers happen on ICP ledger canister and
@@ -605,15 +630,21 @@ impl Swap {
     /// (i.e. the requested increment is >= that the ticket amount).
     /// (This allows participation to be increased later.)
     ///
-    /// If a ledger transfer was successfully made, but this calls
+    /// If the SNS had specified a swap confirmation text, the caller of this
+    /// function must accept this confirmation by sending the exact same text
+    /// as an argument to this function (otherwise, the call will result in
+    /// an error).
+    ///
+    /// If a ledger transfer was successfully made, but this call
     /// fails (many reasons are possible), the owner of the ICP sent
-    /// to the subaccount can be reclaimed using `error_refund_icp`
+    /// to the subaccount can reclaim their tokens using `error_refund_icp`
     /// once this swap is closed (committed or aborted).
     ///
     /// TODO(NNS1-1682): attempt to refund ICP that cannot be accepted.
     pub async fn refresh_buyer_token_e8s(
         &mut self,
         buyer: PrincipalId,
+        confirmation_text: Option<String>,
         this_canister: CanisterId,
         icp_ledger: &dyn ICRC1Ledger,
     ) -> Result<RefreshBuyerTokensResponse, String> {
@@ -625,6 +656,24 @@ impl Swap {
         }
         if self.icp_target_reached() {
             return Err("The ICP target for this token swap has already been reached.".to_string());
+        }
+
+        match (
+            self.init_or_panic().confirmation_text.as_ref(),
+            confirmation_text,
+        ) {
+            (Some(expected_text), Some(text)) => {
+                if &text != expected_text {
+                    return Err("The value of `confirmation_text` does not match the value provided in SNS init payload.".to_string());
+                }
+            }
+            (Some(_), None) => {
+                return Err("No value provided for `confirmation_text`.".to_string());
+            }
+            (None, Some(_)) => {
+                return Err("Found a value for `confirmation_text`, expected none.".to_string());
+            }
+            (None, None) => {}
         }
 
         // Look for the token balance of the specified principal's subaccount on 'this' canister.
@@ -721,7 +770,7 @@ impl Swap {
             memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow().get(&principal))
         {
             let amount_ticket = ticket_sns_sale_canister.amount_icp_e8s;
-            // If the user has already bought tokens in this sale at a prior to the current purchase the
+            // If the user has already bought tokens in this swap at a prior to the current purchase the
             // balance in the subaccount of the SNS sales canister that corresponds to the user will
             // show both the ICP balance used for the previous buy and the ICP balance used to make
             // this new purchase of SNS tokens (requested_increment_e8s + old_amount_icp_e8s).
@@ -857,9 +906,9 @@ impl Swap {
         self.lifecycle() == Lifecycle::Aborted
     }
 
-    /// Calls SNS Root with the Sale canister's configured
+    /// Calls SNS Root with the Swap canister's configured
     /// `fallback_controller_principal_ids`. set_dapp_controllers is generic and
-    /// used for the various Sale APIs that need to return control of the dapp(s)
+    /// used for the various Swap APIs that need to return control of the dapp(s)
     /// back to the devs.
     pub async fn set_dapp_controllers(
         &self,
@@ -910,7 +959,7 @@ impl Swap {
     /// Acquires the lock on `finalize_swap`.
     pub fn lock_finalize_swap(&mut self) -> Result<(), String> {
         match self.is_finalize_swap_locked() {
-            true => Err("The Sale canister has finalize_swap call already in progress".to_string()),
+            true => Err("The Swap canister has finalize_swap call already in progress".to_string()),
             false => {
                 self.finalize_swap_in_progress = Some(true);
                 Ok(())
@@ -967,11 +1016,7 @@ impl Swap {
     pub async fn finalize(
         &mut self,
         now_fn: fn(bool) -> u64,
-        sns_root_client: &mut impl SnsRootClient,
-        sns_governance_client: &mut impl SnsGovernanceClient,
-        icp_ledger: &dyn ICRC1Ledger,
-        sns_ledger: &dyn ICRC1Ledger,
-        nns_governance_client: &mut impl NnsGovernanceClient,
+        environment: &mut impl CanisterEnvironment,
     ) -> FinalizeSwapResponse {
         // Acquire the lock or return a FinalizeSwapResponse with an error message.
         if let Err(error_message) = self.lock_finalize_swap() {
@@ -980,33 +1025,24 @@ impl Swap {
 
         // The lock is now acquired and asynchronous calls to finalize are blocked.
         // Perform all subactions.
-        let finalize_swap_response = self
-            .finalize_inner(
-                now_fn,
-                sns_root_client,
-                sns_governance_client,
-                icp_ledger,
-                sns_ledger,
-                nns_governance_client,
-            )
-            .await;
+        let finalize_swap_response = self.finalize_inner(now_fn, environment).await;
 
         if finalize_swap_response.has_error_message() {
             log!(
                 ERROR,
-                "The sale did not finalize successfully. \n\
+                "The swap did not finalize successfully. \n\
                 finalize_swap_response: {finalize_swap_response:?}"
             );
         } else {
             log!(
                 INFO,
-                "The sale finalized successfully. \n\
+                "The swap finalized successfully. \n\
                 finalize_swap_response: {finalize_swap_response:?}"
             );
         }
 
         // Release the lock. Note, if there is a panic, the lock will
-        // not be released. In that case, the Sale canister will need
+        // not be released. In that case, the Swap canister will need
         // to be upgraded to release the lock.
         self.unlock_finalize_swap();
 
@@ -1019,36 +1055,33 @@ impl Swap {
     /// inter-canister calls, finalize_inner and all subsequent methods MUST
     /// avoid panicking or the lock resource will not be released.
     ///
-    /// In the case of an unexpected panic, the Sale canister can be upgraded
+    /// In the case of an unexpected panic, the Swap canister can be upgraded
     /// and a post-upgrade hook can release the lock.
     pub async fn finalize_inner(
         &mut self,
         now_fn: fn(bool) -> u64,
-        sns_root_client: &mut impl SnsRootClient,
-        sns_governance_client: &mut impl SnsGovernanceClient,
-        icp_ledger: &dyn ICRC1Ledger,
-        sns_ledger: &dyn ICRC1Ledger,
-        nns_governance_client: &mut impl NnsGovernanceClient,
+        environment: &mut impl CanisterEnvironment,
     ) -> FinalizeSwapResponse {
         let mut finalize_swap_response = FinalizeSwapResponse::default();
 
         if !self.lifecycle_is_terminal() {
             finalize_swap_response.set_error_message(format!(
-                "The Sale can only be finalized in the COMMITTED or ABORTED states. Current state is {:?}",
+                "The Swap can only be finalized in the COMMITTED or ABORTED states. Current state is {:?}",
                 self.lifecycle()
             ));
             return finalize_swap_response;
         }
 
-        // Transfer the ICP tokens from the Sale canister.
-        finalize_swap_response.set_sweep_icp_result(self.sweep_icp(now_fn, icp_ledger).await);
+        // Transfer the ICP tokens from the Swap canister.
+        finalize_swap_response
+            .set_sweep_icp_result(self.sweep_icp(now_fn, environment.icp_ledger()).await);
         if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
 
-        // Settle the CommunityFund's participation in the Sale (if any).
+        // Settle the CommunityFund's participation in the Swap (if any).
         finalize_swap_response.set_settle_community_fund_participation_result(
-            self.settle_community_fund_participation(nns_governance_client)
+            self.settle_community_fund_participation(environment.nns_governance_mut())
                 .await,
         );
         if finalize_swap_response.has_error_message() {
@@ -1059,7 +1092,7 @@ impl Swap {
             // Restore controllers of dapp canisters to their original
             // owners (i.e. self.init.fallback_controller_principal_ids).
             finalize_swap_response.set_set_dapp_controllers_result(
-                self.set_dapp_controllers_for_finalize(sns_root_client)
+                self.set_dapp_controllers_for_finalize(environment.sns_root_mut())
                     .await,
             );
 
@@ -1069,22 +1102,25 @@ impl Swap {
             return finalize_swap_response;
         }
 
-        // Transfer the SNS tokens from the Sale canister.
-        finalize_swap_response.set_sweep_sns_result(self.sweep_sns(now_fn, sns_ledger).await);
+        // Transfer the SNS tokens from the Swap canister.
+        finalize_swap_response
+            .set_sweep_sns_result(self.sweep_sns(now_fn, environment.sns_ledger()).await);
         if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
 
         // Once SNS tokens have been distributed to the correct accounts, claim
-        // them as neurons on behalf of the Sale participants.
-        finalize_swap_response
-            .set_claim_neuron_result(self.claim_swap_neurons(sns_governance_client).await);
+        // them as neurons on behalf of the Swap participants.
+        finalize_swap_response.set_claim_neuron_result(
+            self.claim_swap_neurons(environment.sns_governance_mut())
+                .await,
+        );
         if finalize_swap_response.has_error_message() {
             return finalize_swap_response;
         }
 
         finalize_swap_response.set_set_mode_call_result(
-            Self::set_sns_governance_to_normal_mode(sns_governance_client).await,
+            Self::set_sns_governance_to_normal_mode(environment.sns_governance_mut()).await,
         );
 
         finalize_swap_response
@@ -1097,7 +1133,7 @@ impl Swap {
     /// - the number of successful claims
     /// - the number of failed claims
     /// - the number of invalid claims due to corrupted neuron recipe state
-    /// - the number of global failures due to corrupted Sale state or inconsistent API responses
+    /// - the number of global failures due to corrupted Swap state or inconsistent API responses
     pub async fn claim_swap_neurons(
         &mut self,
         sns_governance_client: &mut impl SnsGovernanceClient,
@@ -1296,7 +1332,7 @@ impl Swap {
         sweep_result
     }
 
-    /// A helper to batch claim the sale neurons, and process the results from SNS Governance.
+    /// A helper to batch claim the swap neurons, and process the results from SNS Governance.
     async fn batch_claim_swap_neurons(
         sns_governance_client: &mut impl SnsGovernanceClient,
         neuron_parameters: &mut Vec<NeuronParameters>,
@@ -1339,7 +1375,7 @@ impl Swap {
                     // could be the result of an unexpected panic in SNS Governance or an issue
                     // with the underlying Canister or Replica. As it is a CanisterCallError
                     // we hope that the canister being called rolls back to the appropriate checkpoint.
-                    // The sale canister will mark the current batch and remaining neurons as failed
+                    // The swap canister will mark the current batch and remaining neurons as failed
                     // and return. Calling finalize again will result in another attempt to
                     // claim those neurons.
                     log!(
@@ -1365,7 +1401,7 @@ impl Swap {
                 Some(ClaimSwapNeuronsResult::Ok(claimed_neurons)) => claimed_neurons.swap_neurons,
                 None => {
                     // This should not happen as it means the `claim_swap_neurons` is returning malformed
-                    // input or there is a decoding problem in the Sale canister.
+                    // input or there is a decoding problem in the Swap canister.
                     log!(
                         ERROR,
                         "ClaimSwapNeuronsResponse missing a ClaimSwapNeuronsResult. Response: {:?}",
@@ -1604,10 +1640,10 @@ impl Swap {
     /// - the number of successful transfers
     /// - the number of failed transfers
     /// - the number of invalid buyers due to corrupted buyer state or invalid balances
-    /// - the number of global failures across the sweep such as corrupted sale state
+    /// - the number of global failures across the sweep such as corrupted swap state
     ///
     /// Pre-conditions:
-    /// - The Sale canister's `Lifecycle` is either ABORTED or COMMITTED
+    /// - The Swap canister's `Lifecycle` is either ABORTED or COMMITTED
     pub async fn sweep_icp(
         &mut self,
         now_fn: fn(bool) -> u64,
@@ -1726,7 +1762,7 @@ impl Swap {
     /// - the number of successful transfers
     /// - the number of errors
     /// - the number of invalid neuron recipes due to corrupted neuron recipe state or invalid balances
-    /// - the number of global failures due to corrupted Sale state
+    /// - the number of global failures due to corrupted Swap state
     pub async fn sweep_sns(
         &mut self,
         now_fn: fn(bool) -> u64,
@@ -1867,8 +1903,8 @@ impl Swap {
     }
 
     /// Requests the NNS Governance canister to settle the CommunityFund
-    /// participation in the Sale. If the Sale is committed, ICP will be
-    /// minted. If the Sale is aborted, maturity will be refunded to
+    /// participation in the Sale. If the Swap is committed, ICP will be
+    /// minted. If the Swap is aborted, maturity will be refunded to
     /// CF Neurons.
     pub async fn settle_community_fund_participation(
         &self,
@@ -2176,11 +2212,11 @@ impl Swap {
     }
 
     /// The parameter `now_seconds` is greater than or equal to decentralization_sale_open_timestamp_seconds.
-    pub fn sale_opening_due(&self, now_seconds: u64) -> bool {
-        let sale_open_timestamp = self
+    pub fn swap_opening_due(&self, now_seconds: u64) -> bool {
+        let swap_open_timestamp = self
             .decentralization_sale_open_timestamp_seconds
             .unwrap_or(now_seconds);
-        now_seconds >= sale_open_timestamp
+        now_seconds >= swap_open_timestamp
     }
 
     /// The minimum number of participants have been achieved, and the
@@ -2214,7 +2250,7 @@ impl Swap {
         if self.lifecycle() != Lifecycle::Adopted {
             return false;
         }
-        self.sale_opening_due(now_seconds)
+        self.swap_opening_due(now_seconds)
     }
 
     /// Returns true if the swap can be committed at the specified
@@ -2237,8 +2273,8 @@ impl Swap {
     // --- query methods on the state  -----------------------------------------
     //
 
-    /// Gets a copy of the Sale canister state and elides the dynamic data sources that
-    /// can grow unbounded and computes the derived state of the Sale.
+    /// Gets a copy of the Swap canister state and elides the dynamic data sources that
+    /// can grow unbounded and computes the derived state of the Swap.
     pub fn get_state(&self) -> GetStateResponse {
         let swap = Swap {
             cf_participants: vec![],
@@ -2257,19 +2293,26 @@ impl Swap {
     /// `sns_tokens_per_icp` will be 0 if `participant_total_icp_e8s` is 0.
     pub fn derived_state(&self) -> DerivedState {
         let participant_total_icp_e8s = self.participant_total_icp_e8s();
-        let tokens_available_for_sale = match self.sns_token_e8s() {
+        let direct_participant_count = self.buyers.len() as u64;
+        let cf_participant_count = self.cf_participants.len() as u64;
+        let cf_neuron_count = self.cf_neuron_count();
+        let tokens_available_for_swap = match self.sns_token_e8s() {
             Ok(tokens) => tokens,
             Err(err) => {
                 log!(ERROR, "{}", err);
                 0
             }
         };
+        let sns_tokens_per_icp = i2d(tokens_available_for_swap)
+            .checked_div(i2d(participant_total_icp_e8s))
+            .and_then(|d| d.to_f32())
+            .unwrap_or(0.0);
         DerivedState {
             buyer_total_icp_e8s: participant_total_icp_e8s,
-            sns_tokens_per_icp: i2d(tokens_available_for_sale)
-                .checked_div(i2d(participant_total_icp_e8s))
-                .and_then(|d| d.to_f32())
-                .unwrap_or(0.0),
+            direct_participant_count: Some(direct_participant_count),
+            cf_participant_count: Some(cf_participant_count),
+            cf_neuron_count: Some(cf_neuron_count),
+            sns_tokens_per_icp,
         }
     }
 
@@ -2297,12 +2340,12 @@ impl Swap {
         }
     }
 
-    /// If there is an open sale ticket for the caller then it returns it;
+    /// If there is an open swap ticket for the caller then it returns it;
     /// otherwise returns none.
     ///
     /// Returns an error if
-    ///  - the sale is not open
-    ///  - the sale is closed
+    ///  - the swap is not open
+    ///  - the swap is closed
     ///
     pub fn get_open_ticket(
         &self,
@@ -2442,17 +2485,17 @@ impl Swap {
 /// # Arguments
 ///
 /// * `tot_participation` - The current amount of tokens commited to
-///                         the sale by all users.
+///                         the swap by all users.
 /// * `max_tot_participation` - The maximum amount of tokens that can
-///                             be commited to the sale.
+///                             be commited to the swap.
 /// * `min_user_participation` - The minimum amount of tokens that a
-///                              user must commit to participate to the sale.
+///                              user must commit to participate to the swap.
 /// * `max_user_participation` - The maximum amount of tokens that a
-///                              user can commit to participate to the sale.
+///                              user can commit to participate to the swap.
 /// * `user_participation` - The current amount of tokens commited to the
-///                          sale by the user that requested the increment.
+///                          swap by the user that requested the increment.
 /// * `requested_increment` - The amount of tokens by which the user wants
-///                           to increase its participation in the sale.
+///                           to increase its participation in the swap.
 fn compute_participation_increment(
     tot_participation: u64,
     max_tot_participation: u64,
@@ -2470,12 +2513,12 @@ fn compute_participation_increment(
 
     // Check that the user can reach min_user_participation with the next
     // ticket. We do not want users to participate less than min_user_participation
-    // even if that's what's remaining in the sale.
+    // even if that's what's remaining in the swap.
     if user_participation.saturating_add(max_available_increment) < min_user_participation {
         return Err((0, 0));
     }
 
-    // If we reached this point then the user can participate in the sale.
+    // If we reached this point then the user can participate in the swap.
     // Next we check that the increment requested by the user is valid, that
     // is that it would put the user participation within the min and max
     // user participation (included). We also check that the increment is strictly
@@ -2512,7 +2555,7 @@ pub fn principal_to_subaccount(principal_id: &PrincipalId) -> Subaccount {
     subaccount
 }
 
-/// A common pattern throughout the Sale canister is parsing the String
+/// A common pattern throughout the Swap canister is parsing the String
 /// representation of a PrincipalId and logging the error if any.
 fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
     match PrincipalId::from_str(maybe_principal_id) {
@@ -2520,7 +2563,7 @@ fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
         Err(error_message) => {
             log!(
                 ERROR,
-                "Cannot parse principal {} for use in Sale Canister: {}",
+                "Cannot parse principal {} for use in Swap Canister: {}",
                 maybe_principal_id,
                 error_message
             );
@@ -2549,7 +2592,7 @@ fn create_sns_neuron_basket_for_direct_participant(
     // Create the neuron basket for the direct investors. The unique
     // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
     // is a hash of PrincipalId and some unique memo. Since direct
-    // investors in the sale use their own principal_id, there are no
+    // investors in the swap use their own principal_id, there are no
     // neuron id collisions, and each basket can use memos starting at memo_offset.
     for (i, scheduled_vesting_event) in vesting_schedule.iter().enumerate() {
         let memo = memo_offset + i as u64;
@@ -2611,7 +2654,7 @@ fn create_sns_neuron_basket_for_cf_participant(
     // Create the neuron basket for the community fund investors. The unique
     // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
     // is a hash of PrincipalId and some unique memo. Since community
-    // investors in the sale use the NNS Governance principal, there can be
+    // investors in the swap use the NNS Governance principal, there can be
     // neuron id collisions. Avoiding such collisions is handled by starting the range
     // of memos in the basket at memo_offset.
     for (i, scheduled_vesting_event) in vesting_schedule.iter().enumerate() {
@@ -2836,6 +2879,8 @@ mod tests {
             fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(5).to_string()],
             transaction_fee_e8s: Some(0),
             neuron_minimum_stake_e8s: Some(0),
+            confirmation_text: None,
+            restricted_countries: None,
         });
     }
 
@@ -2895,11 +2940,17 @@ mod tests {
         let derived_state = DerivedState {
             buyer_total_icp_e8s: 400_000_000,
             sns_tokens_per_icp: 2.5f32,
+            direct_participant_count: Some(1000),
+            cf_participant_count: Some(100),
+            cf_neuron_count: Some(200),
         };
 
         let response: GetDerivedStateResponse = derived_state.into();
         assert_eq!(response.sns_tokens_per_icp, Some(2.5f64));
         assert_eq!(response.buyer_total_icp_e8s, Some(400_000_000));
+        assert_eq!(response.direct_participant_count, Some(1000));
+        assert_eq!(response.cf_participant_count, Some(100));
+        assert_eq!(response.cf_neuron_count, Some(200));
     }
 
     #[test]
@@ -3268,7 +3319,7 @@ mod tests {
                 requested_increment: 3,
                 expected_result: Ok(3),
             },
-            // no more tokens available in the sale
+            // no more tokens available in the swap
             ComputeParticipationIncrementScenario {
                 tot_participation: 100,
                 max_tot_participation: 100,
@@ -3310,7 +3361,7 @@ mod tests {
             },
             // The actual_increment here is 10-9 and the new participation
             // would be only 1 which is less than min_user_participation
-            // required to be part of the sale.
+            // required to be part of the swap.
             ComputeParticipationIncrementScenario {
                 tot_participation: 9,
                 max_tot_participation: 10,
@@ -3414,6 +3465,8 @@ mod tests {
                     fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
                     transaction_fee_e8s: Some(10_000),
                     neuron_minimum_stake_e8s: Some(10_010_000),
+                    confirmation_text: None,
+                    restricted_countries: None,
                 }),
                 params: Some(Params {
                     min_participants: 1,
@@ -3533,7 +3586,7 @@ mod tests {
             ..(SWAP.clone())
         };
         let result = swap.try_commit_or_abort(sale_duration - time_remaining);
-        // sale should be open because there is time remaining and we have not
+        // swap should be open because there is time remaining and we have not
         // reached the maximum amount of ICP raised
         assert!(!result);
         assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
@@ -3566,7 +3619,7 @@ mod tests {
             ..(SWAP.clone())
         };
         let result = swap.try_commit_or_abort(sale_duration - time_remaining);
-        // sale should be closed because there is time remaining and we have not
+        // swap should be closed because there is time remaining and we have not
         // reached the maximum amount of time remaining
         assert!(result);
         assert_eq!(swap.lifecycle, Lifecycle::Committed as i32);
@@ -3592,7 +3645,7 @@ mod tests {
             ..(SWAP.clone())
         };
         let result = swap.try_commit_or_abort(sale_duration - time_remaining);
-        // sale should be closed because there is time remaining and we have not
+        // swap should be closed because there is time remaining and we have not
         // reached the maximum amount of time remaining
         assert!(result);
         assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
@@ -3625,7 +3678,7 @@ mod tests {
             ..(SWAP.clone())
         };
         let result = swap.try_commit_or_abort(sale_duration - time_remaining);
-        // sale should be closed because there is time remaining and we have not
+        // swap should be closed because there is time remaining and we have not
         // reached the maximum amount of time remaining
         assert!(result);
         assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
@@ -3640,7 +3693,7 @@ mod tests {
         const MAX_NUMBER_TO_INSPECT: u64 = 2;
 
         let min_participant_icp_e8s = 1;
-        let mut sale = Swap {
+        let mut swap = Swap {
             lifecycle: Lifecycle::Open as i32,
             init: Some(Init {
                 nns_governance_canister_id: PrincipalId::new_anonymous().to_string(),
@@ -3651,6 +3704,8 @@ mod tests {
                 fallback_controller_principal_ids: vec![PrincipalId::new_anonymous().to_string()],
                 transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
                 neuron_minimum_stake_e8s: Some(0),
+                confirmation_text: None,
+                restricted_countries: None,
             }),
             params: Some(Params {
                 min_participants: 0,
@@ -3693,7 +3748,7 @@ mod tests {
         // Check that the number_of_tickets_threshold parameter works and prevents
         // the method from being called (None == purge_old_ticket didn't run)
         assert_eq!(
-            sale.try_purge_old_tickets(
+            swap.try_purge_old_tickets(
                 || TEN_MINUTES,
                 1, /* there are 0 tickets */
                 0,
@@ -3708,7 +3763,7 @@ mod tests {
 
         // add the first batch of tickets at the beginning of time
         for principal in &principals1 {
-            assert!(sale
+            assert!(swap
                 .new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
@@ -3722,11 +3777,11 @@ mod tests {
         }
 
         // try to purge old tickets without advancing time. None of the tickets should be removed
-        try_purge_old_tickets(&mut sale, TEN_MINUTES); // TEN_MINUTES in order to trigger the call
+        try_purge_old_tickets(&mut swap, TEN_MINUTES); // TEN_MINUTES in order to trigger the call
 
         // not purged because 0 days old
         for principal in &principals1 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3735,7 +3790,7 @@ mod tests {
 
         // add the second batch of tickets after one day
         for principal in &principals2 {
-            assert!(sale
+            assert!(swap
                 .new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
@@ -3749,11 +3804,11 @@ mod tests {
         }
 
         // try to purge old tickets after one day. None of the tickets should be removed
-        try_purge_old_tickets(&mut sale, ONE_DAY);
+        try_purge_old_tickets(&mut swap, ONE_DAY);
 
         // not purged because 1 day old
         for principal in &principals1 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3762,7 +3817,7 @@ mod tests {
 
         // not purged because 0 days old
         for principal in &principals2 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3771,12 +3826,12 @@ mod tests {
 
         // try to purge old tickets after two days minus 1 second.
         // check that all the tickets are still there. This verifies
-        // that the sale canister keep the tickets for the right amount of time
-        try_purge_old_tickets(&mut sale, ONE_DAY * 2 - 1);
+        // that the swap canister keep the tickets for the right amount of time
+        try_purge_old_tickets(&mut swap, ONE_DAY * 2 - 1);
 
         // not purged because 2 day - 1 second old
         for principal in &principals1 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3785,7 +3840,7 @@ mod tests {
 
         // not purged because 1 days - 1 second old
         for principal in &principals2 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3795,11 +3850,11 @@ mod tests {
         // try to purge old tickets after two days.
         // All the principal1 tickets should be gone.
         // TEN_MINUTES required to trigger the method.
-        try_purge_old_tickets(&mut sale, ONE_DAY * 2 + TEN_MINUTES);
+        try_purge_old_tickets(&mut swap, ONE_DAY * 2 + TEN_MINUTES);
 
         // purged because 2 days old
         for principal in &principals1 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3808,7 +3863,7 @@ mod tests {
 
         // not purged because 1 days old
         for principal in &principals2 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3817,7 +3872,7 @@ mod tests {
 
         // add the third batch of tickets at two days
         for principal in &principals3 {
-            assert!(sale
+            assert!(swap
                 .new_sale_ticket(
                     &NewSaleTicketRequest {
                         amount_icp_e8s: min_participant_icp_e8s,
@@ -3832,11 +3887,11 @@ mod tests {
 
         // try to purge old tickets after three days - 1 second.
         // same result
-        try_purge_old_tickets(&mut sale, ONE_DAY * 3 - 1);
+        try_purge_old_tickets(&mut swap, ONE_DAY * 3 - 1);
 
         // not purged because 2 days old - 1 second
         for principal in &principals2 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3846,11 +3901,11 @@ mod tests {
         // try to purge old tickets after three days.
         // All the principal2 tickets should be gone.
         // TEN_MINUTES required to trigger the method.
-        try_purge_old_tickets(&mut sale, ONE_DAY * 3 + TEN_MINUTES);
+        try_purge_old_tickets(&mut swap, ONE_DAY * 3 + TEN_MINUTES);
 
         // purged because 2 days old
         for principal in &principals2 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3859,7 +3914,7 @@ mod tests {
 
         // not purged because 1 days old
         for principal in &principals3 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3872,7 +3927,7 @@ mod tests {
         // there because of the threshold
 
         assert_eq!(
-            sale.try_purge_old_tickets(
+            swap.try_purge_old_tickets(
                 || ONE_DAY * 4 + TEN_MINUTES,
                 principals3.len() as u64 + 1,
                 0,
@@ -3883,7 +3938,7 @@ mod tests {
 
         // not purged because threshold was not met
         for principal in &principals3 {
-            assert!(sale
+            assert!(swap
                 .get_open_ticket(&GetOpenTicketRequest {}, *principal)
                 .ticket()
                 .unwrap()
@@ -3941,6 +3996,6 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(7, swap.cf_neurons_count());
+        assert_eq!(7, swap.cf_neuron_count());
     }
 }

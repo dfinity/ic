@@ -1,0 +1,118 @@
+type Tokens = nat;
+
+type InitArg = record {
+    ledger_id: principal;
+};
+
+type IndexArg = variant {
+    Init: InitArg;
+};
+
+type GetBlocksRequest = record {
+    start : nat;
+    length : nat;
+};
+
+type Value = variant {
+    Blob : blob;
+    Text : text;
+    Nat : nat;
+    Nat64: nat64;
+    Int : int;
+    Array : vec Value;
+    Map : Map;
+};
+
+type Map = vec record { text; Value };
+
+type Block = Value;
+
+type GetBlocksResponse = record {
+    chain_length: nat64;
+    blocks: vec Block;
+};
+
+type BlockIndex = nat;
+
+type SubAccount = blob;
+
+type Account = record { owner : principal; subaccount : opt SubAccount };
+
+type Transaction = record {
+     kind : text;
+     mint : opt record {
+         amount : nat;
+         to : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+     };
+     burn : opt record {
+         amount : nat;
+         from : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+     };
+     transfer : opt record {
+         amount : nat;
+         from : Account;
+         to : Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+         fee : opt nat;
+     };
+     timestamp : nat64;
+};
+
+type GetAccountTransactionsArgs = record {
+    account : Account;
+    // The txid of the last transaction seen by the client.
+    // If None then the results will start from the most recent
+    // txid.
+    start : opt BlockIndex;
+    // Maximum number of transactions to fetch.
+    max_results : nat;
+};
+
+type TransactionWithId = record {
+  id : BlockIndex;
+  transaction : Transaction;
+};
+
+type GetTransactions = record {
+  balance : Tokens;
+  transactions : vec TransactionWithId;
+  // The txid of the oldest transaction the account has
+  oldest_tx_id : opt BlockIndex;
+};
+
+type GetTransactionsErr = record {
+  message : text;
+};
+
+type GetTransactionsResult = variant {
+  Ok : GetTransactions;
+  Err : GetTransactionsErr;
+};
+
+type ListSubaccountsArgs = record {
+    owner: principal;
+    start: opt SubAccount;
+};
+
+type Status = record {
+    num_blocks_synced : BlockIndex;
+};
+
+type FeeCollectorRanges = record {
+    ranges : vec  record { Account; vec record { BlockIndex; BlockIndex } };
+}
+
+service : (index_arg: opt IndexArg) -> {
+    get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult) query;
+    get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
+    get_fee_collectors_ranges : () -> (FeeCollectorRanges) query;
+    icrc1_balance_of : (Account) -> (Tokens) query;
+    ledger_id : () -> (principal) query;
+    list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
+    status : () -> (Status) query;
+}

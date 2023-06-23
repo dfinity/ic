@@ -110,3 +110,27 @@ pub struct CanisterHttpResponseDivergence {
     #[prost(message, repeated, tag = "1")]
     pub shares: ::prost::alloc::vec::Vec<CanisterHttpShare>,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHttpResponseMessage {
+    #[prost(
+        oneof = "canister_http_response_message::MessageType",
+        tags = "1, 2, 3"
+    )]
+    pub message_type: ::core::option::Option<canister_http_response_message::MessageType>,
+}
+/// Nested message and enum types in `CanisterHttpResponseMessage`.
+pub mod canister_http_response_message {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum MessageType {
+        #[prost(message, tag = "1")]
+        Response(super::CanisterHttpResponseWithConsensus),
+        #[prost(uint64, tag = "2")]
+        Timeout(u64),
+        #[prost(message, tag = "3")]
+        DivergenceResponse(super::CanisterHttpResponseDivergence),
+    }
+}

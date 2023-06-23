@@ -1,16 +1,17 @@
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_test_utils::sns_wasm::{
-    get_sns_subnet_ids, update_sns_subnet_list, update_sns_subnet_list_via_proposal,
-};
-pub mod common;
 use candid::Encode;
 use canister_test::Project;
 use common::set_up_state_machine_with_nns;
-use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
-use ic_nns_test_utils::state_test_helpers::{self, create_canister};
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    sns_wasm::{get_sns_subnet_ids, update_sns_subnet_list, update_sns_subnet_list_via_proposal},
+    state_test_helpers::{self, create_canister},
+};
 use ic_sns_wasm::pb::v1::UpdateSnsSubnetListRequest;
 use ic_state_machine_tests::StateMachine;
 use ic_types::PrincipalId;
+
+pub mod common;
 
 #[test]
 fn test_update_sns_subnet_list_can_be_called_via_nns_proposal() {

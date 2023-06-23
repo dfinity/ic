@@ -10,7 +10,10 @@ use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPaylo
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::Governance};
+use ic_nns_governance::{
+    init::GovernanceCanisterInitPayloadBuilder,
+    pb::v1::{Governance, Neuron},
+};
 use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
@@ -24,8 +27,8 @@ use icp_ledger::{
 };
 use lifeline::LIFELINE_CANISTER_WASM;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
-use std::convert::TryInto;
-use std::path::Path;
+use std::{convert::TryInto, path::Path};
+use walrus::{Module, RawCustomSection};
 
 /// Payloads for all the canisters that exist at genesis.
 #[derive(Clone, Debug)]
@@ -34,7 +37,7 @@ pub struct NnsInitPayloads {
     pub governance: Governance,
     pub ledger: LedgerCanisterInitPayload,
     pub root: RootCanisterInitPayload,
-    pub cycles_minting: CyclesCanisterInitPayload,
+    pub cycles_minting: Option<CyclesCanisterInitPayload>,
     pub lifeline: LifelineCanisterInitPayload,
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
@@ -46,7 +49,7 @@ pub struct NnsInitPayloadsBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerCanisterInitPayload,
     pub root: RootCanisterInitPayloadBuilder,
-    pub cycles_minting: CyclesCanisterInitPayload,
+    pub cycles_minting: Option<CyclesCanisterInitPayload>,
     pub lifeline: LifelineCanisterInitPayloadBuilder,
     pub genesis_token: GenesisTokenCanisterInitPayloadBuilder,
     pub sns_wasms: SnsWasmCanisterInitPayloadBuilder,
@@ -79,13 +82,13 @@ impl NnsInitPayloadsBuilder {
                 .build()
                 .unwrap(),
             root: RootCanisterInitPayloadBuilder::new(),
-            cycles_minting: CyclesCanisterInitPayload {
-                ledger_canister_id: LEDGER_CANISTER_ID,
-                governance_canister_id: GOVERNANCE_CANISTER_ID,
+            cycles_minting: Some(CyclesCanisterInitPayload {
+                ledger_canister_id: Some(LEDGER_CANISTER_ID),
+                governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
-            },
+            }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),
             sns_wasms: SnsWasmCanisterInitPayloadBuilder::new(),
@@ -98,7 +101,11 @@ impl NnsInitPayloadsBuilder {
     }
 
     pub fn with_ledger_account(&mut self, account: AccountIdentifier, icpts: Tokens) -> &mut Self {
-        self.ledger.initial_values.insert(account, icpts);
+        self.ledger
+            .init_args()
+            .unwrap()
+            .initial_values
+            .insert(account, icpts);
         self
     }
 
@@ -119,6 +126,11 @@ impl NnsInitPayloadsBuilder {
 
     pub fn with_test_neurons(&mut self) -> &mut Self {
         self.governance.with_test_neurons();
+        self
+    }
+
+    pub fn with_additional_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
+        self.governance.with_additional_neurons(neurons);
         self
     }
 
@@ -148,7 +160,7 @@ impl NnsInitPayloadsBuilder {
     pub fn with_initial_invariant_compliant_mutations(&mut self) -> &mut Self {
         self.registry
             .push_init_mutate_request(RegistryAtomicMutateRequest {
-                mutations: invariant_compliant_mutation(),
+                mutations: invariant_compliant_mutation(0),
                 preconditions: vec![],
             });
         self
@@ -197,19 +209,23 @@ impl NnsInitPayloadsBuilder {
         &mut self,
         exchange_rate_canister_id: CanisterId,
     ) -> &mut Self {
-        self.cycles_minting.exchange_rate_canister = Some(
-            cycles_minting_canister::ExchangeRateCanister::Set(exchange_rate_canister_id),
-        );
+        if let Some(init_payload) = self.cycles_minting.as_mut() {
+            init_payload.exchange_rate_canister = Some(
+                cycles_minting_canister::ExchangeRateCanister::Set(exchange_rate_canister_id),
+            );
+        }
+
         self
     }
 
     pub fn build(&mut self) -> NnsInitPayloads {
         assert!(self
             .ledger
+            .init_args()
+            .unwrap()
             .initial_values
             .get(&GOVERNANCE_CANISTER_ID.get().into())
             .is_none());
-
         for n in self.governance.proto.neurons.values() {
             let sub = Subaccount(n.account.as_slice().try_into().unwrap_or_else(|e| {
                 panic!(
@@ -224,12 +240,13 @@ impl NnsInitPayloadsBuilder {
             let aid = ledger::AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(sub));
             let previous_value = self
                 .ledger
+                .init_args()
+                .unwrap()
                 .initial_values
                 .insert(aid, Tokens::from_e8s(n.cached_neuron_stake_e8s));
 
             assert_eq!(previous_value, None);
         }
-
         NnsInitPayloads {
             registry: self.registry.build(),
             governance: self.governance.build(),
@@ -241,6 +258,18 @@ impl NnsInitPayloadsBuilder {
             sns_wasms: self.sns_wasms.build(),
         }
     }
+}
+
+pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: &str) -> Vec<u8> {
+    let mut wasm_module = Module::from_buffer(wasm_bytes).unwrap();
+    let custom_section = RawCustomSection {
+        name: modify_with.into(),
+        data: vec![1u8, 2u8, 3u8],
+    };
+    wasm_module.customs.add(custom_section);
+
+    // We get our new WASM, which is functionally the same.
+    wasm_module.emit_wasm()
 }
 
 /// Build Wasm for NNS Governance canister

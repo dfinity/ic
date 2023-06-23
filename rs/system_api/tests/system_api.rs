@@ -29,7 +29,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
-    time, CanisterTimer, CountBytes, Cycles, NumBytes, NumInstructions, Time,
+    time, CanisterTimer, CountBytes, Cycles, NumInstructions, Time,
 };
 use std::{
     collections::BTreeSet,
@@ -108,32 +108,21 @@ fn assert_stable_apis_panic(mut api: SystemApiImpl) {
         .expect_err("Stable API should panic");
 }
 
-fn check_stable_apis_support(mut api: SystemApiImpl, supported: bool) {
+fn check_stable_apis_support(mut api: SystemApiImpl) {
     match EmbeddersConfig::default()
         .feature_flags
         .wasm_native_stable_memory
     {
         FlagStatus::Enabled => assert_stable_apis_panic(api),
         FlagStatus::Disabled => {
-            if supported {
-                assert_api_supported(api.ic0_stable_size());
-                assert_api_supported(api.ic0_stable_grow(1));
-                assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
-                assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-                assert_api_supported(api.ic0_stable64_size());
-                assert_api_supported(api.ic0_stable64_grow(1));
-                assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
-                assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
-            } else {
-                assert_api_not_supported(api.ic0_stable_size());
-                assert_api_not_supported(api.ic0_stable_grow(1));
-                assert_api_not_supported(api.ic0_stable_read(0, 0, 0, &mut []));
-                assert_api_not_supported(api.ic0_stable_write(0, 0, 0, &[]));
-                assert_api_not_supported(api.ic0_stable64_size());
-                assert_api_not_supported(api.ic0_stable64_grow(1));
-                assert_api_not_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
-                assert_api_not_supported(api.ic0_stable64_write(0, 0, 0, &[]));
-            }
+            assert_api_supported(api.ic0_stable_size());
+            assert_api_supported(api.ic0_stable_grow(1));
+            assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+            assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
+            assert_api_supported(api.ic0_stable64_size());
+            assert_api_supported(api.ic0_stable64_grow(1));
+            assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+            assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         }
     }
 }
@@ -162,8 +151,6 @@ fn test_canister_init_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -193,7 +180,7 @@ fn test_canister_init_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -220,8 +207,6 @@ fn test_canister_update_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -251,7 +236,7 @@ fn test_canister_update_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -278,8 +263,6 @@ fn test_canister_replicated_query_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -309,7 +292,7 @@ fn test_canister_replicated_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -336,8 +319,6 @@ fn test_canister_pure_query_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -367,7 +348,7 @@ fn test_canister_pure_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -404,8 +385,6 @@ fn test_canister_stateful_query_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -435,7 +414,7 @@ fn test_canister_stateful_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -462,8 +441,6 @@ fn test_reply_api_support_on_nns() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -493,7 +470,7 @@ fn test_reply_api_support_on_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -520,8 +497,6 @@ fn test_reply_api_support_non_nns() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -551,7 +526,7 @@ fn test_reply_api_support_non_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -581,8 +556,6 @@ fn test_reject_api_support_on_nns() {
     assert_api_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -612,7 +585,7 @@ fn test_reject_api_support_on_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -642,8 +615,6 @@ fn test_reject_api_support_non_nns() {
     assert_api_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -673,7 +644,7 @@ fn test_reject_api_support_non_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -700,8 +671,6 @@ fn test_pre_upgrade_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -731,7 +700,7 @@ fn test_pre_upgrade_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -758,8 +727,6 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_canister_self_size());
     assert_api_not_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_not_supported(api.ic0_controller_size());
-    assert_api_not_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -789,7 +756,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, false);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -816,8 +783,6 @@ fn test_cleanup_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -847,7 +812,7 @@ fn test_cleanup_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -879,8 +844,6 @@ fn test_inspect_message_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_not_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -910,7 +873,7 @@ fn test_inspect_message_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -938,8 +901,6 @@ fn test_canister_heartbeat_support() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -969,7 +930,7 @@ fn test_canister_heartbeat_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -996,8 +957,6 @@ fn test_canister_heartbeat_support_nns() {
     assert_api_not_supported(api.ic0_msg_reject_msg_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_canister_self_size());
     assert_api_supported(api.ic0_canister_self_copy(0, 0, 0, &mut []));
-    assert_api_supported(api.ic0_controller_size());
-    assert_api_supported(api.ic0_controller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_debug_print(0, 0, &[]));
     assert_api_supported(api.ic0_trap(0, 0, &[]));
     assert_api_supported(api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]));
@@ -1027,7 +986,7 @@ fn test_canister_heartbeat_support_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -1606,118 +1565,116 @@ fn take_execution_result_properly_frees_memory() {
 
 #[test]
 fn push_output_request_respects_memory_limits() {
-    let run_test = |subnet_available_memory_bytes, subnet_available_message_memory_bytes| {
-        let subnet_available_memory = SubnetAvailableMemory::new(
-            subnet_available_memory_bytes,
-            subnet_available_message_memory_bytes,
-            0,
-        );
-        let mut system_state = SystemStateBuilder::default().build();
-        let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-        let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
-            &system_state,
-            cycles_account_manager,
-            &NetworkTopology::default(),
-            SchedulerConfig::application_subnet().dirty_page_overhead,
-        );
-        let own_canister_id = system_state.canister_id;
-        let callback_id = sandbox_safe_system_state
-            .register_callback(Callback::new(
-                call_context_test_id(0),
-                Some(own_canister_id),
-                Some(canister_test_id(0)),
-                Cycles::zero(),
-                Some(Cycles::zero()),
-                Some(Cycles::zero()),
-                WasmClosure::new(0, 0),
-                WasmClosure::new(0, 0),
-                None,
-            ))
-            .unwrap();
-        let mut api = SystemApiImpl::new(
-            ApiTypeBuilder::build_update_api(),
-            sandbox_safe_system_state,
-            CANISTER_CURRENT_MEMORY_USAGE,
-            execution_parameters(),
-            subnet_available_memory,
-            EmbeddersConfig::default()
-                .feature_flags
-                .wasm_native_stable_memory,
-            Memory::new_for_testing(),
-            Arc::new(DefaultOutOfInstructionsHandler {}),
-            no_op_logger(),
-        );
+    let subnet_available_memory_bytes = 1 << 30;
+    let subnet_available_message_memory_bytes = MAX_RESPONSE_COUNT_BYTES as i64 + 13;
 
-        let req = RequestBuilder::default()
-            .sender(own_canister_id)
-            .sender_reply_callback(callback_id)
-            .build();
+    let subnet_available_memory = SubnetAvailableMemory::new(
+        subnet_available_memory_bytes,
+        subnet_available_message_memory_bytes,
+        0,
+    );
+    let mut system_state = SystemStateBuilder::default().build();
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        cycles_account_manager,
+        &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
+    );
+    let own_canister_id = system_state.canister_id;
+    let callback_id = sandbox_safe_system_state
+        .register_callback(Callback::new(
+            call_context_test_id(0),
+            Some(own_canister_id),
+            Some(canister_test_id(0)),
+            Cycles::zero(),
+            Some(Cycles::zero()),
+            Some(Cycles::zero()),
+            WasmClosure::new(0, 0),
+            WasmClosure::new(0, 0),
+            None,
+        ))
+        .unwrap();
+    let mut api = SystemApiImpl::new(
+        ApiTypeBuilder::build_update_api(),
+        sandbox_safe_system_state,
+        CANISTER_CURRENT_MEMORY_USAGE,
+        execution_parameters(),
+        subnet_available_memory,
+        EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory,
+        Memory::new_for_testing(),
+        Arc::new(DefaultOutOfInstructionsHandler {}),
+        no_op_logger(),
+    );
 
-        // First push succeeds with or without message memory usage accounting, as the
-        // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
-        assert_eq!(
-            0,
-            api.push_output_request(req.clone(), Cycles::zero(), Cycles::zero())
-                .unwrap()
-        );
+    let req = RequestBuilder::default()
+        .sender(own_canister_id)
+        .sender_reply_callback(callback_id)
+        .build();
 
-        // `MAX_RESPONSE_COUNT_BYTES` are consumed.
-        assert_eq!(
-            api.get_allocated_bytes().get(),
-            MAX_RESPONSE_COUNT_BYTES as u64
-        );
-        assert_eq!(
-            api.get_allocated_message_bytes().get(),
-            MAX_RESPONSE_COUNT_BYTES as u64
-        );
-        assert_eq!(
-            CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
-            api.get_current_memory_usage()
-        );
+    // First push succeeds with or without message memory usage accounting, as the
+    // initial subnet available memory is `MAX_RESPONSE_COUNT_BYTES + 13`.
+    assert_eq!(
+        0,
+        api.push_output_request(req.clone(), Cycles::zero(), Cycles::zero())
+            .unwrap()
+    );
 
-        // And the second push fails.
-        assert_eq!(
-            RejectCode::SysTransient as i32,
-            api.push_output_request(req, Cycles::zero(), Cycles::zero())
-                .unwrap()
-        );
-        // Without altering memory usage.
-        assert_eq!(
-            api.get_allocated_bytes().get(),
-            MAX_RESPONSE_COUNT_BYTES as u64
-        );
-        assert_eq!(
-            api.get_allocated_message_bytes().get(),
-            MAX_RESPONSE_COUNT_BYTES as u64
-        );
-        assert_eq!(
-            CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(MAX_RESPONSE_COUNT_BYTES as u64),
-            api.get_current_memory_usage()
-        );
+    // Nothing is consumed for execution memory.
+    assert_eq!(api.get_allocated_bytes().get(), 0);
+    // `MAX_RESPONSE_COUNT_BYTES` are consumed for message memory.
+    assert_eq!(
+        api.get_allocated_message_bytes().get(),
+        MAX_RESPONSE_COUNT_BYTES as u64
+    );
+    assert_eq!(
+        CANISTER_CURRENT_MEMORY_USAGE,
+        api.get_current_memory_usage()
+    );
 
-        // Ensure that exactly one output request was pushed.
-        let system_state_changes = api.into_system_state_changes();
-        system_state_changes
-            .apply_changes(
-                mock_time(),
-                &mut system_state,
-                &default_network_topology(),
-                subnet_test_id(1),
-                &no_op_logger(),
-            )
-            .unwrap();
-        assert_eq!(1, system_state.queues().output_queues_len());
-    };
+    // And the second push fails.
+    assert_eq!(
+        RejectCode::SysTransient as i32,
+        api.push_output_request(req, Cycles::zero(), Cycles::zero())
+            .unwrap()
+    );
+    // Without altering memory usage.
+    assert_eq!(api.get_allocated_bytes().get(), 0,);
+    assert_eq!(
+        api.get_allocated_message_bytes().get(),
+        MAX_RESPONSE_COUNT_BYTES as u64
+    );
+    assert_eq!(
+        CANISTER_CURRENT_MEMORY_USAGE,
+        api.get_current_memory_usage()
+    );
 
-    run_test(MAX_RESPONSE_COUNT_BYTES as i64 + 13, 1 << 30);
-    run_test(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 + 13);
+    // Ensure that exactly one output request was pushed.
+    let system_state_changes = api.into_system_state_changes();
+    system_state_changes
+        .apply_changes(
+            mock_time(),
+            &mut system_state,
+            &default_network_topology(),
+            subnet_test_id(1),
+            &no_op_logger(),
+        )
+        .unwrap();
+    assert_eq!(1, system_state.queues().output_queues_len());
 }
 
 #[test]
 fn push_output_request_oversized_request_memory_limits() {
-    let subnet_available_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
-    let subnet_available_memory =
-        SubnetAvailableMemory::new(subnet_available_memory_bytes, 1 << 30, 0);
+    let subnet_available_memory_bytes = 1 << 30;
+    let subnet_available_message_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
+
+    let subnet_available_memory = SubnetAvailableMemory::new(
+        subnet_available_memory_bytes,
+        subnet_available_message_memory_bytes,
+        0,
+    );
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
@@ -1788,13 +1745,13 @@ fn push_output_request_oversized_request_memory_limits() {
     );
 
     // `req_size_bytes` are consumed.
-    assert_eq!(req_size_bytes as u64, api.get_allocated_bytes().get());
+    assert_eq!(0, api.get_allocated_bytes().get());
     assert_eq!(
         req_size_bytes as u64,
         api.get_allocated_message_bytes().get()
     );
     assert_eq!(
-        CANISTER_CURRENT_MEMORY_USAGE + NumBytes::from(req_size_bytes as u64),
+        CANISTER_CURRENT_MEMORY_USAGE,
         api.get_current_memory_usage()
     );
 

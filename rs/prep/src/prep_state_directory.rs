@@ -121,13 +121,12 @@ mod tests {
         subnet_nodes.insert(
             0,
             NodeConfiguration {
-                xnet_api: vec!["http://1.2.3.4:1".parse()?],
-                public_api: vec!["http://1.2.3.4:2".parse()?],
-                private_api: vec![],
-                prometheus_metrics: vec!["http://1.2.3.4:3".parse()?],
+                xnet_api: "http://1.2.3.4:1".parse()?,
+                public_api: "http://1.2.3.4:2".parse()?,
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:4".parse()?,
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                chip_id: vec![],
             },
         );
 

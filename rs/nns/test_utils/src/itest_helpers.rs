@@ -19,14 +19,14 @@ use dfn_candid::{candid_one, CandidOne};
 use futures::future::join_all;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
-use ic_config::{subnet_config::SubnetConfig, Config};
+use ic_config::Config;
 use ic_ic00_types::CanisterInstallMode;
-use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
-use ic_nervous_system_root::{
-    canister_status::{CanisterStatusResult, CanisterStatusType::Running},
-    change_canister::ChangeCanisterProposal,
-    CanisterIdRecord,
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
+    canister_status::{CanisterStatusResult, CanisterStatusType},
 };
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
+use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nns_common::{
     init::LifelineCanisterInitPayload,
     types::{NeuronId, ProposalId},
@@ -547,7 +547,7 @@ pub async fn set_up_root_canister(
 /// installs it
 pub async fn install_cycles_minting_canister(
     canister: &mut Canister<'_>,
-    init_payload: CyclesCanisterInitPayload,
+    init_payload: Option<CyclesCanisterInitPayload>,
 ) {
     install_rust_canister(
         canister,
@@ -561,7 +561,7 @@ pub async fn install_cycles_minting_canister(
 /// Creates and installs the cycles minting canister.
 pub async fn set_up_cycles_minting_canister(
     runtime: &'_ Runtime,
-    init_payload: CyclesCanisterInitPayload,
+    init_payload: Option<CyclesCanisterInitPayload>,
 ) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_cycles_minting_canister(&mut canister, init_payload).await;
@@ -661,7 +661,7 @@ where
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_e(config, SubnetConfig::default_system_subnet(), run)
+    local_test_with_config_e(config, run)
 }
 
 /// Runs a local test on the nns subnetwork, so that the canister will be
@@ -751,7 +751,9 @@ pub async fn upgrade_root_canister_by_proposal(
             )
             .await
             .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash && status.status == Running {
+        if status.module_hash.unwrap().as_slice() == new_module_hash
+            && status.status == CanisterStatusType::Running
+        {
             break;
         }
     }
@@ -821,7 +823,9 @@ async fn change_nns_canister_by_proposal(
             )
             .await
             .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash && status.status == Running {
+        if status.module_hash.unwrap().as_slice() == new_module_hash
+            && status.status == CanisterStatusType::Running
+        {
             break;
         }
     }
@@ -906,7 +910,7 @@ pub async fn reinstall_nns_canister_by_proposal(
 ///
 /// This goes through MANY rounds of consensus, so expect it to be slow!
 ///
-/// WARNING: this calls `execute_eligible_proposals` on the Proposals canister,
+/// WARNING: this calls `execute_eligible_proposals` on the governance canister,
 /// so it may have side effects!
 pub async fn maybe_upgrade_root_controlled_canister_to_self(
     // nns_canisters is NOT passed by reference because of the canister to upgrade,

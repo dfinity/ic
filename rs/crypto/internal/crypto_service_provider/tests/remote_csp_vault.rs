@@ -24,7 +24,7 @@ mod rpc_connection {
     use ic_config::logger::Config as LoggerConfig;
     use ic_crypto_internal_csp::api::CspCreateMEGaKeyError;
     use ic_crypto_internal_csp::types::CspSignature;
-    use ic_crypto_internal_csp::vault::api::CspBasicSignatureError::InternalError;
+    use ic_crypto_internal_csp::vault::api::CspBasicSignatureError::TransientInternalError;
     use ic_crypto_internal_csp::vault::api::{
         BasicSignatureCspVault, CspBasicSignatureError, CspPublicKeyStoreError,
         IDkgProtocolCspVault, PublicKeyStoreCspVault,
@@ -60,7 +60,7 @@ mod rpc_connection {
         assert_matches!(signature, Ok(_));
 
         let signature = sign_message(TooLarge, key_id, &client_cannot_send_large_request);
-        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the client failed to send the request"));
+        assert_matches!(signature, Err(TransientInternalError {internal_error}) if internal_error.contains("the client failed to send the request"));
 
         let signature = sign_message(Small, key_id, &client_cannot_send_large_request);
         assert_matches!(signature, Ok(_));
@@ -87,7 +87,7 @@ mod rpc_connection {
         assert_matches!(signature_before_error, Ok(_));
 
         let signature = sign_message(TooLarge, key_id, &client);
-        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the request exceeded its deadline"));
+        assert_matches!(signature, Err(TransientInternalError {internal_error}) if internal_error.contains("the request exceeded its deadline"));
 
         let signature_after_error = sign_message(Small, key_id, &client);
         assert_eq!(signature_before_error, signature_after_error);
@@ -202,7 +202,7 @@ mod rpc_connection {
     }
 
     #[test]
-    fn should_automatically_detect_disconnection_without_any_request() {
+    fn should_automatically_detect_disconnection() {
         activate_tracing();
         let in_memory_logger = InMemoryReplicaLogger::new();
 
@@ -211,13 +211,16 @@ mod rpc_connection {
         let mut env = RemoteVaultEnvironment::start_server(
             TarpcCspVaultServerImplBuilder::new_with_local_csp_vault(vault),
         );
-        let _client = vault_client_with_short_timeouts(&env)
+        let client = vault_client_with_short_timeouts(&env)
             .with_logger(ReplicaLogger::from(&in_memory_logger))
             .build_expecting_ok();
+        let _ensure_client_can_contact_server = client
+            .current_node_public_keys()
+            .expect("should successfully get current node public keys");
 
         env.shutdown_server_now();
 
-        sleep(Duration::from_secs(2));
+        sleep(Duration::from_secs(1));
         let logs = in_memory_logger.drain_logs();
 
         LogEntriesAssert::assert_that(logs)
@@ -455,6 +458,103 @@ mod threshold_signature_csp_vault {
             let remote_vault = env.new_vault_client();
 
             let result = remote_vault.threshold_sign(algorithm_id, &message, key_id);
+
+            prop_assert_eq!(result, expected_result);
+        }
+    }
+}
+
+mod secret_key_store_csp_vault {
+    use super::*;
+    use ic_crypto_internal_csp_proptest_utils::arb_csp_secret_key_store_contains_error;
+    use ic_crypto_internal_csp_proptest_utils::arb_key_id;
+
+    proptest! {
+        #![proptest_config(proptest_config_for_delegation())]
+        #[test]
+        fn should_delegate_for_sks_contains(
+            key_id in arb_key_id(),
+            expected_result in maybe_err(any::<bool>(), arb_csp_secret_key_store_contains_error())
+        ) {
+            let mut local_vault = MockLocalCspVault::new();
+            local_vault
+                .expect_sks_contains()
+                .times(1)
+                .withf(move |key_id_| {
+                     *key_id_ == key_id
+                })
+                .return_const(expected_result.clone());
+            let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
+            let remote_vault = env.new_vault_client();
+
+            let result = remote_vault.sks_contains(&key_id);
+
+            prop_assert_eq!(result, expected_result);
+        }
+    }
+}
+
+mod public_key_store_csp_vault {
+    use super::*;
+    use ic_crypto_internal_csp_proptest_utils::{
+        arb_csp_public_key_store_error, arb_current_node_public_keys,
+    };
+
+    proptest! {
+        #![proptest_config(proptest_config_for_delegation())]
+        #[test]
+        fn should_delegate_for_current_node_public_keys(
+            expected_result in maybe_err(arb_current_node_public_keys(), arb_csp_public_key_store_error())
+        ) {
+            let mut local_vault = MockLocalCspVault::new();
+            local_vault
+                .expect_current_node_public_keys()
+                .times(1)
+                .return_const(expected_result.clone());
+            let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
+            let remote_vault = env.new_vault_client();
+
+            let result = remote_vault.current_node_public_keys();
+
+            prop_assert_eq!(result, expected_result);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(proptest_config_for_delegation())]
+        #[test]
+        fn should_delegate_for_current_node_public_keys_with_timestamps(
+            expected_result in maybe_err(arb_current_node_public_keys(), arb_csp_public_key_store_error())
+        ) {
+            let mut local_vault = MockLocalCspVault::new();
+            local_vault
+                .expect_current_node_public_keys_with_timestamps()
+                .times(1)
+                .return_const(expected_result.clone());
+            let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
+            let remote_vault = env.new_vault_client();
+
+            let result = remote_vault.current_node_public_keys_with_timestamps();
+
+            prop_assert_eq!(result, expected_result);
+        }
+    }
+
+    proptest! {
+        #![proptest_config(proptest_config_for_delegation())]
+        #[test]
+        fn should_delegate_for_idkg_dealing_encryption_pubkeys_count(
+            expected_result in maybe_err(any::<usize>(), arb_csp_public_key_store_error())
+        ) {
+            let mut local_vault = MockLocalCspVault::new();
+            local_vault
+                .expect_idkg_dealing_encryption_pubkeys_count()
+                .times(1)
+                .return_const(expected_result.clone());
+            let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(local_vault));
+            let remote_vault = env.new_vault_client();
+
+            let result = remote_vault.idkg_dealing_encryption_pubkeys_count();
 
             prop_assert_eq!(result, expected_result);
         }

@@ -894,6 +894,16 @@ message NervousSystemParameters {
   //
   // To achieve functionality equivalent to NNS, this should be set to 25.
   optional uint64 max_age_bonus_percentage = 21;
+
+  // By default, maturity modulation is enabled; however, an SNS can use this
+  // field to disable it. When disabled, this canister will still poll the
+  // Cycles Minting Canister (CMC), and store the value received therefrom.
+  // However, the fetched value does not get used when this is set to true.
+  //
+  // The reason we call this "disabled" instead of (positive) "enabled" is so
+  // that the PB default (bool fields are false) and our application default
+  // (enabled) agree.
+  optional bool maturity_modulation_disabled = 22;
 }
 
 message VotingRewardsParameters {
@@ -1243,6 +1253,9 @@ message Governance {
     bytes index_wasm_hash = 6;
   }
 
+  // Current version that this SNS is running.
+  Version deployed_version = 23;
+
   // An upgrade in progress, defined as a version target and a time at which it is considered failed.
   message UpgradeInProgress {
     // Version to  be upgraded to
@@ -1255,8 +1268,6 @@ message Governance {
     // The proposal that initiated this upgrade
     uint64 proposal_id = 4;
   }
-  // Current version that this SNS is running.
-  Version deployed_version = 23;
 
   // Version SNS is in process of upgrading to.
   UpgradeInProgress pending_version = 24;
@@ -1264,6 +1275,22 @@ message Governance {
   // True if the heartbeat function is currently finalizing disburse maturity, meaning
   // that it should finish before being called again.
   optional bool is_finalizing_disburse_maturity = 25;
+
+  message MaturityModulation {
+    // When X maturity is disbursed, the amount that goes to the destination
+    // account is X * (1 + y) where y = current_basis_points / 10_000.
+    //
+    // Fetched from the cycles minting canister (same as NNS governance).
+    //
+    // There is a positive relationship between the price of ICP (in XDR) and
+    // this value.
+    optional int32 current_basis_points = 1;
+
+    // When current_basis_points was last updated (seconds since UNIX epoch).
+    optional uint64 updated_at_timestamp_seconds = 2;
+  }
+
+  MaturityModulation maturity_modulation = 26;
 }
 
 // Request message for 'get_metadata'.
@@ -1897,6 +1924,13 @@ message ClaimSwapNeuronsResponse {
     // The status of claiming of a requested Sale neuron.
     ClaimedSwapNeuronStatus status = 2;
   }
+}
+
+message GetMaturityModulationRequest {
+}
+
+message GetMaturityModulationResponse {
+  Governance.MaturityModulation maturity_modulation = 1;
 }
 
 // A Ledger subaccount.

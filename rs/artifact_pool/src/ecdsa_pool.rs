@@ -10,7 +10,8 @@
 use crate::metrics::{EcdsaPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::artifact_pool::{
-    IntoInner, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    ChangeResult, IntoInner, MutablePool, ProcessingResult, UnvalidatedArtifact,
+    ValidatedPoolReader,
 };
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
@@ -19,17 +20,18 @@ use ic_interfaces::ecdsa::{
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::EcdsaMessageId;
+use ic_types::artifact::{ArtifactKind, EcdsaMessageId};
 use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::BlockPayload;
 use ic_types::consensus::{
-    catchup::CUPWithOriginalProtobuf,
     ecdsa::{
         ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf,
         EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
     },
+    CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -281,6 +283,7 @@ pub struct EcdsaPoolImpl {
     validated: Box<dyn MutableEcdsaPoolSection>,
     unvalidated: Box<dyn MutableEcdsaPoolSection>,
     stats: Box<dyn EcdsaStats>,
+    invalidated_artifacts: IntCounter,
     log: ReplicaLogger,
 }
 
@@ -309,6 +312,10 @@ impl EcdsaPoolImpl {
             )) as Box<_>,
         };
         Self {
+            invalidated_artifacts: metrics_registry.int_counter(
+                "ecdsa_invalidated_artifacts",
+                "The number of invalidated ECDSA artifacts",
+            ),
             validated,
             unvalidated: Box::new(InMemoryEcdsaPoolSection::new(
                 metrics_registry,
@@ -329,8 +336,8 @@ impl EcdsaPoolImpl {
     }
 
     // Populates the validated pool with the initial dealings from the CUP.
-    pub fn add_initial_dealings(&mut self, catch_up_package: &CUPWithOriginalProtobuf) {
-        let block = catch_up_package.cup.content.block.get_value().clone();
+    pub fn add_initial_dealings(&mut self, catch_up_package: &CatchUpPackage) {
+        let block = catch_up_package.content.block.get_value().clone();
         let mut initial_dealings = None;
         if block.payload.is_summary() {
             let block_payload = BlockPayload::from(block.payload);
@@ -381,33 +388,54 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
         self.unvalidated.mutate(ops);
     }
 
-    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: EcdsaChangeSet) {
+    fn apply_changes(
+        &mut self,
+        _time_source: &dyn TimeSource,
+        change_set: EcdsaChangeSet,
+    ) -> ChangeResult<EcdsaArtifact> {
         let mut unvalidated_ops = EcdsaPoolSectionOps::new();
         let mut validated_ops = EcdsaPoolSectionOps::new();
+        let changed = if !change_set.is_empty() {
+            ProcessingResult::StateChanged
+        } else {
+            ProcessingResult::StateUnchanged
+        };
+        let mut adverts = Vec::new();
+        let mut purged = Vec::new();
         for action in change_set {
             match action {
                 EcdsaChangeAction::AddToValidated(message) => {
+                    adverts.push(EcdsaArtifact::message_to_advert(&message));
                     validated_ops.insert(message);
                 }
                 EcdsaChangeAction::MoveToValidated(message) => {
+                    match &message {
+                        EcdsaMessage::EcdsaDealingSupport(_)
+                        | EcdsaMessage::EcdsaSignedDealing(_) => (),
+                        _ => adverts.push(EcdsaArtifact::message_to_advert(&message)),
+                    }
                     unvalidated_ops.remove(ecdsa_msg_id(&message));
                     validated_ops.insert(message);
                 }
-                EcdsaChangeAction::RemoveValidated(ref msg_id) => {
-                    validated_ops.remove(msg_id.clone());
+                EcdsaChangeAction::RemoveValidated(msg_id) => {
+                    purged.push(msg_id.clone());
+                    validated_ops.remove(msg_id);
                 }
-                EcdsaChangeAction::RemoveUnvalidated(ref msg_id) => {
-                    unvalidated_ops.remove(msg_id.clone());
+                EcdsaChangeAction::RemoveUnvalidated(msg_id) => {
+                    unvalidated_ops.remove(msg_id);
                 }
-                EcdsaChangeAction::HandleInvalid(ref msg_id, ref msg) => {
-                    if self.unvalidated.as_pool_section().contains(msg_id) {
-                        unvalidated_ops.remove(msg_id.clone());
-                    } else if self.validated.as_pool_section().contains(msg_id) {
-                        validated_ops.remove(msg_id.clone());
+                EcdsaChangeAction::HandleInvalid(msg_id, msg) => {
+                    self.invalidated_artifacts.inc();
+                    warn!(self.log, "Invalid ECDSA artifact ({:?}): {:?}", msg, msg_id);
+                    if self.unvalidated.as_pool_section().contains(&msg_id) {
+                        unvalidated_ops.remove(msg_id);
+                    } else if self.validated.as_pool_section().contains(&msg_id) {
+                        purged.push(msg_id.clone());
+                        validated_ops.remove(msg_id);
                     } else {
                         warn!(
                             self.log,
-                            "HandleInvalid:: artifact was not found: {:?}, msg = {}", action, msg
+                            "HandleInvalid:: artifact was not found: msg_id = {msg_id:?}, msg = {msg}" 
                         );
                     }
                 }
@@ -416,6 +444,11 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
 
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
+        ChangeResult {
+            purged,
+            adverts,
+            changed,
+        }
     }
 }
 
@@ -437,12 +470,11 @@ impl ValidatedPoolReader<EcdsaArtifact> for EcdsaPoolImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     use ic_interfaces::time_source::TimeSource;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::consensus::fake::*;
-    use ic_test_utilities::crypto::{
-        dummy_idkg_dealing_for_tests, dummy_idkg_transcript_id_for_tests,
-    };
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6};
     use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -565,9 +597,12 @@ mod tests {
                 });
             } else {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    EcdsaMessage::EcdsaDealingSupport(support),
+                    EcdsaMessage::EcdsaDealingSupport(support.clone()),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                let result = ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                assert!(result.purged.is_empty());
+                assert_eq!(result.adverts[0].id, support.message_id());
+                assert_eq!(result.changed, ProcessingResult::StateChanged);
             }
         }
 
@@ -827,12 +862,34 @@ mod tests {
                     });
                     (msg_id, msg)
                 };
+                let msg_3 = {
+                    let support = IDkgDealingSupport {
+                        transcript_id: dummy_idkg_transcript_id_for_tests(100),
+                        dealer_id: NODE_2,
+                        dealing_hash: CryptoHashOf::new(CryptoHash(vec![1])),
+                        sig_share: BasicSignature::fake(NODE_2),
+                    };
+                    let msg = EcdsaMessage::EcdsaDealingSupport(support);
+                    ecdsa_pool.insert(UnvalidatedArtifact {
+                        message: msg.clone(),
+                        peer_id: NODE_1,
+                        timestamp: time_source.get_relative_time(),
+                    });
+                    msg
+                };
                 check_state(&ecdsa_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
 
-                ecdsa_pool.apply_changes(
+                let result = ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
-                    vec![EcdsaChangeAction::MoveToValidated(msg_2)],
+                    vec![
+                        EcdsaChangeAction::MoveToValidated(msg_2),
+                        EcdsaChangeAction::MoveToValidated(msg_3),
+                    ],
                 );
+                assert!(result.purged.is_empty());
+                // No adverts are created for moved dealings and dealing support
+                assert!(result.adverts.is_empty());
+                assert_eq!(result.changed, ProcessingResult::StateChanged);
                 check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
             })
         })
@@ -883,17 +940,26 @@ mod tests {
                     &[msg_id_1.clone(), msg_id_2.clone()],
                 );
 
-                ecdsa_pool.apply_changes(
+                let result = ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
-                    vec![EcdsaChangeAction::RemoveValidated(msg_id_1)],
+                    vec![EcdsaChangeAction::RemoveValidated(msg_id_1.clone())],
                 );
+                assert!(result.adverts.is_empty());
+                assert_eq!(result.purged, vec![msg_id_1]);
+                assert_eq!(result.changed, ProcessingResult::StateChanged);
                 check_state(&ecdsa_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
-                ecdsa_pool.apply_changes(
+                let result = ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
-                    vec![EcdsaChangeAction::RemoveValidated(msg_id_2)],
+                    vec![EcdsaChangeAction::RemoveValidated(msg_id_2.clone())],
                 );
+                assert!(result.adverts.is_empty());
+                assert_eq!(result.purged, vec![msg_id_2]);
+                assert_eq!(result.changed, ProcessingResult::StateChanged);
                 check_state(&ecdsa_pool, &[msg_id_3], &[]);
+
+                let result = ecdsa_pool.apply_changes(&SysTimeSource::new(), vec![]);
+                assert_eq!(result.changed, ProcessingResult::StateUnchanged);
             })
         })
     }
@@ -919,10 +985,13 @@ mod tests {
                 };
                 check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
 
-                ecdsa_pool.apply_changes(
+                let result = ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
                     vec![EcdsaChangeAction::RemoveUnvalidated(msg_id)],
                 );
+                assert!(result.purged.is_empty());
+                assert!(result.adverts.is_empty());
+                assert_eq!(result.changed, ProcessingResult::StateChanged);
                 check_state(&ecdsa_pool, &[], &[]);
             })
         })

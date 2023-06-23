@@ -1,0 +1,205 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
+load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:prost.bzl", "generated_files_check")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["canister/root.did"])
+
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**"]),
+)
+
+# See rs/nervous_system/feature_test.md
+BASE_DEPENDENCIES = [
+    "//rs/crypto/sha",
+    "//rs/nervous_system/clients",
+    "//rs/nervous_system/common",
+    "//rs/nervous_system/proxied_canister_calls_tracker",
+    "//rs/nervous_system/root",
+    "//rs/nns/common",
+    "//rs/nns/constants",
+    "//rs/nns/handlers/root/interface",
+    "//rs/protobuf",
+    "//rs/registry/keys",
+    "//rs/registry/routing_table",
+    "//rs/registry/transport",
+    "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_core",
+    "//rs/rust_canisters/on_wire",
+    "//rs/rust_canisters/http_types",
+    "//rs/types/base_types",
+    "//rs/types/ic00_types",
+    "@crate_index//:build-info",
+    "@crate_index//:candid",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:lazy_static",
+    "@crate_index//:maplit",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+]
+
+# Each target declared in this file may choose either these (release-ready)
+# dependencies (`DEPENDENCIES`), or `DEPENDENCIES_WITH_TEST_FEATURES` feature previews.
+DEPENDENCIES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance",
+]
+
+DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
+    "//rs/nns/governance:governance--test_feature",
+]
+
+MACRO_DEPENDENCIES = [
+    "//rs/nervous_system/common/build_metadata",
+    "//rs/rust_canisters/dfn_macro",
+]
+
+BUILD_DEPENDENCIES = [
+    "@crate_index//:build-info-build",
+]
+
+ALIASES = {}
+
+DEV_DEPENDENCIES = [
+    "//rs/state_machine_tests",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:tokio",
+] + select({
+    "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
+    "//conditions:default": [
+        "//rs/rust_canisters/canister_test",
+        "//rs/nns/handlers/root/impl/protobuf_generator:lib",
+        "//rs/nns/test_utils",
+        "//rs/types/types",
+        "//rs/test_utilities",
+        "//rs/test_utilities/compare_dirs",
+        "//rs/registry/canister",
+        "@crate_index//:tempfile",
+        "@crate_index//:assert_matches",
+        "@crate_index//:hex",
+    ],
+})
+
+MACRO_DEV_DEPENDENCIES = []
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    aliases = ALIASES,
+    data = [],  # build script data (e.g. template files) goes here
+    version = "0.8.0",
+    deps = BUILD_DEPENDENCIES,
+)
+
+rust_library(
+    name = "root",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "ic_nns_handler_root",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES + [":build_script"],
+)
+
+rust_library(
+    name = "root--test_feature",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["**/*tests.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["test"],
+    crate_name = "ic_nns_handler_root",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
+)
+
+rust_test(
+    name = "root_test",
+    srcs = glob(["src/**"]),
+    deps = [":root--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "root_doc_test",
+    crate = ":root",
+)
+
+rust_canister(
+    name = "root-canister",
+    srcs = ["canister/canister.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":canister/root.did",
+    deps = DEPENDENCIES + [":root"] + [":build_script"],
+)
+
+rust_canister(
+    name = "upgrade-test-canister",
+    srcs = ["test_canisters/upgrade_test_canister.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_canisters/upgrade_test_canister.did",
+    deps = DEPENDENCIES + [":root"] + [":build_script"],
+)
+
+generated_files_check(
+    name = "check_generated_files",
+    srcs = ["tests/check_generated_files.rs"],
+    data = glob(["src/gen/**"]) + [
+        ":protos",
+        "//rs/nns/common:protos",
+        "//rs/types/base_types:protos",
+    ],
+    manifest_dir = "rs/nns/handlers/root/impl",
+    deps = [
+        "//rs/nns/handlers/root/impl/protobuf_generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
+)
+
+rust_test_suite(
+    name = "root_integration_test",
+    srcs = glob(
+        ["tests/**/*.rs"],
+        exclude = ["tests/check_generated_files.rs"],
+    ),
+    aliases = ALIASES,
+    data = [
+        ":root-canister",
+        ":upgrade-test-canister",
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/nns/cmc:cycles-minting-canister",
+        "//rs/nns/governance:governance-canister-test",
+        "//rs/nns/gtc:genesis-token-canister",
+        "//rs/nns/handlers/lifeline/impl:lifeline_canister",
+        "//rs/nns/sns-wasm:sns-wasm-canister",
+        "//rs/registry/canister:registry-canister",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+    ],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/nns/handlers/root/impl",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
+        "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
+        "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
+        "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline/impl:lifeline_canister)",
+        "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
+        "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:root-canister)",
+        "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
+        "UPGRADE_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root/impl:upgrade-test-canister)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":root"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+)

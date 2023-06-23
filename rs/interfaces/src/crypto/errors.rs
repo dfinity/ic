@@ -11,6 +11,9 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVe
 use ic_types::crypto::CryptoError;
 use ic_types::registry::RegistryClientError;
 
+#[cfg(test)]
+mod tests;
+
 // An implementation for the consensus component.
 impl ErrorReproducibility for CryptoError {
     fn is_reproducible(&self) -> bool {
@@ -22,18 +25,18 @@ impl ErrorReproducibility for CryptoError {
             CryptoError::InvalidArgument { .. } => true,
             // true, as the registry is guaranteed to be consistent across replicas
             CryptoError::PublicKeyNotFound { .. } | CryptoError::TlsCertNotFound { .. } => true,
-            // panic, as during signature verification no secret keys are involved
+            // true, as secret material is specific to a replica (other replicas may not encounter the same error)
+            // but retrying the same operation on this replica will not change the outcome
             CryptoError::SecretKeyNotFound { .. } | CryptoError::TlsSecretKeyNotFound { .. } => {
-                panic!("Unexpected error {}, no secret keys involved", &self)
+                true
             }
             // true tentatively, but may change to panic! in the future:
             // this error indicates either globally corrupted registry, or a local
             // data corruption, and in either case we should not use the key anymore
             CryptoError::MalformedPublicKey { .. } => true,
-            // panic, as during signature verification no secret keys are involved
-            CryptoError::MalformedSecretKey { .. } => {
-                panic!("Unexpected error {}, no secret keys involved", &self)
-            }
+            // true, as secret material is specific to a replica (other replicas may not encounter the same error)
+            // but retrying the same operation on this replica will not change the outcome
+            CryptoError::MalformedSecretKey { .. } => true,
             // true, but this error may be removed TODO(CRP-224)
             CryptoError::MalformedSignature { .. } => true,
             // true, but this error may be removed TODO(CRP-224)
@@ -56,10 +59,8 @@ impl ErrorReproducibility for CryptoError {
             CryptoError::DkgTranscriptNotFound { .. } => true,
             // true, as the registry is guaranteed to be consistent across replicas
             CryptoError::RootSubnetPublicKeyNotFound { .. } => true,
-            // true, as the date is either malformed, or in the past (barring out-of-sync clocks)
-            CryptoError::InvalidNotAfterDate { .. } => true,
-            // false, as the internal error can happen due to a local failure
-            CryptoError::InternalError { .. } => false,
+            // true, as non-reproducible internal errors use the other variant TransientInternalError
+            CryptoError::InternalError { .. } => true,
             // false, as by definition the transient internal error is non-reproducible
             // (catch-all for lower-level transient errors)
             CryptoError::TransientInternalError { .. } => false,
@@ -198,7 +199,7 @@ impl ErrorReproducibility for IDkgVerifyDealingPublicError {
         match self {
             // The dealer wasn't even in the transcript
             Self::TranscriptIdMismatch => true,
-            // The dealing was publically invalid
+            // The dealing was publicly invalid
             Self::InvalidDealing { .. } => true,
             Self::InvalidSignature { crypto_error, .. } => crypto_error.is_reproducible(),
         }
@@ -269,8 +270,8 @@ impl ErrorReproducibility for IDkgVerifyDealingPrivateError {
             IDkgVerifyDealingPrivateError::RegistryError(registry_client_error) => {
                 registry_client_error.is_reproducible()
             }
-            // false, as an RPC error may be transient
-            IDkgVerifyDealingPrivateError::CspVaultRpcError(_) => false,
+            // false, as a transient error is not reproducible by definition
+            IDkgVerifyDealingPrivateError::TransientInternalError { .. } => false,
             // true, as the dealing does not become valid through retrying
             IDkgVerifyDealingPrivateError::InvalidDealing(_) => true,
             // true, as validity checks of arguments are stable across replicas
@@ -364,7 +365,7 @@ impl ErrorReproducibility for RegistryClientError {
             RegistryClientError::PollLockFailed { .. } => false,
             // may be transient errors
             RegistryClientError::PollingLatestVersionFailed { .. } => false,
-            // true, as the registry is guaranteed to be consistent accross replicas
+            // true, as the registry is guaranteed to be consistent across replicas
             RegistryClientError::DecodeError { .. } => true,
         }
     }

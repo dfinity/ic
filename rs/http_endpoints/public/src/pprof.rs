@@ -1,10 +1,21 @@
-use crate::common::{
-    get_cors_headers, make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF,
+use crate::{
+    common::{get_cors_headers, make_plaintext_response, CONTENT_TYPE_HTML, CONTENT_TYPE_PROTOBUF},
+    EndpointService,
 };
-use http::{header, request::Parts};
+use futures_util::Future;
+use http::{header, request::Parts, Request};
 use hyper::{self, Body, Response, StatusCode};
-use ic_pprof::{flamegraph, profile, Error};
-use std::{collections::HashMap, time::Duration};
+use ic_pprof::{Error, PprofCollector};
+use std::{
+    collections::HashMap,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
+use tower::{
+    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service, ServiceBuilder,
+};
 
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
 /// Default CPU profile duration.
@@ -35,45 +46,6 @@ Types of profiles available:
 </p>
 </body>
 </html>"#;
-
-/// Returns the `/_/pprof` root page, listing the available profiles.
-pub(crate) fn home() -> Response<Body> {
-    let mut response = Response::new(Body::from(PPROF_HOME_HTML));
-    *response.status_mut() = StatusCode::OK;
-    *response.headers_mut() = get_cors_headers();
-    response.headers_mut().insert(
-        header::CONTENT_TYPE,
-        header::HeaderValue::from_static(CONTENT_TYPE_HTML),
-    );
-    response
-}
-
-/// Collects a CPU profile in `pprof` or flamegraph format.
-///
-/// Supported query arguments are `seconds`, for the duration of the CPU
-/// profile; and `frequency`, for the frequency at whicn stack trace samples
-/// should be collected.
-///
-/// `frequency` and its accuracy are limited (on Linux) by the resolution of
-/// the software clock, which is 250Hz by default. See
-/// [`man 7 time`](https://linux.die.net/man/7/time) for details.
-pub(crate) async fn cpu_profile(parts: Parts) -> Response<Body> {
-    match query(parts) {
-        Ok((duration, frequency)) => {
-            into_response(profile(duration, frequency).await, CONTENT_TYPE_PROTOBUF)
-        }
-        Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
-    }
-}
-
-pub(crate) async fn cpu_flamegraph(parts: Parts) -> Response<Body> {
-    match query(parts) {
-        Ok((duration, frequency)) => {
-            into_response(flamegraph(duration, frequency).await, CONTENT_TYPE_SVG)
-        }
-        Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
-    }
-}
 
 fn query(parts: Parts) -> Result<(Duration, i32), String> {
     let query_pairs: HashMap<_, _> = match parts.uri.query() {
@@ -124,4 +96,138 @@ fn ok_response(body: Vec<u8>, content_type: &'static str) -> Response<Body> {
         header::HeaderValue::from_static(content_type),
     );
     response
+}
+
+/// Returns the `/_/pprof` root page, listing the available profiles.
+#[derive(Clone)]
+pub(crate) struct PprofHomeService;
+
+impl PprofHomeService {
+    pub fn new_service(concurrency_limiter: GlobalConcurrencyLimitLayer) -> EndpointService {
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(concurrency_limiter)
+                .service(Self),
+        )
+    }
+}
+
+impl Service<Request<Body>> for PprofHomeService {
+    type Response = Response<Body>;
+    type Error = BoxError;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, _unused: Request<Body>) -> Self::Future {
+        let mut response = Response::new(Body::from(PPROF_HOME_HTML));
+        *response.status_mut() = StatusCode::OK;
+        *response.headers_mut() = get_cors_headers();
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            header::HeaderValue::from_static(CONTENT_TYPE_HTML),
+        );
+
+        Box::pin(async move { Ok(response) })
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct PprofProfileService {
+    collector: Arc<dyn PprofCollector>,
+}
+
+impl PprofProfileService {
+    pub fn new_service(
+        collector: Arc<dyn PprofCollector>,
+        concurrency_limiter: GlobalConcurrencyLimitLayer,
+    ) -> EndpointService {
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(concurrency_limiter)
+                .service(Self { collector }),
+        )
+    }
+}
+
+impl Service<Request<Body>> for PprofProfileService {
+    type Response = Response<Body>;
+    type Error = BoxError;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    /// Collects a CPU profile in `pprof` or flamegraph format.
+    ///
+    /// Supported query arguments are `seconds`, for the duration of the CPU
+    /// profile; and `frequency`, for the frequency at whicn stack trace samples
+    /// should be collected.
+    ///
+    /// `frequency` and its accuracy are limited (on Linux) by the resolution of
+    /// the software clock, which is 250Hz by default. See
+    /// [`man 7 time`](https://linux.die.net/man/7/time) for details.
+    fn call(&mut self, body: Request<Body>) -> Self::Future {
+        let parts = body.into_parts().0;
+        let collector = self.collector.clone();
+
+        Box::pin(async move {
+            Ok(match query(parts) {
+                Ok((duration, frequency)) => into_response(
+                    collector.profile(duration, frequency).await,
+                    CONTENT_TYPE_PROTOBUF,
+                ),
+                Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
+            })
+        })
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct PprofFlamegraphService {
+    collector: Arc<dyn PprofCollector>,
+}
+
+impl PprofFlamegraphService {
+    pub fn new_service(
+        collector: Arc<dyn PprofCollector>,
+        concurrency_limiter: GlobalConcurrencyLimitLayer,
+    ) -> EndpointService {
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(concurrency_limiter)
+                .service(Self { collector }),
+        )
+    }
+}
+
+impl Service<Request<Body>> for PprofFlamegraphService {
+    type Response = Response<Body>;
+    type Error = BoxError;
+    #[allow(clippy::type_complexity)]
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, body: Request<Body>) -> Self::Future {
+        let parts = body.into_parts().0;
+        let collector = self.collector.clone();
+
+        Box::pin(async move {
+            Ok(match query(parts) {
+                Ok((duration, frequency)) => into_response(
+                    collector.flamegraph(duration, frequency).await,
+                    CONTENT_TYPE_SVG,
+                ),
+                Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
+            })
+        })
+    }
 }

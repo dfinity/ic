@@ -1,5 +1,4 @@
 use std::{
-    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     thread,
 };
@@ -9,9 +8,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
-use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
-
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
 use ic_sns_swap::{
     pb::v1::{
@@ -21,7 +17,6 @@ use ic_sns_swap::{
     },
     swap::principal_to_subaccount,
 };
-
 use ic_sns_test_utils::state_test_helpers::{
     get_buyer_state, get_buyers_total, get_lifecycle, get_open_ticket, get_sns_sale_parameters,
     new_sale_ticket, notify_payment_failure, open_sale, refresh_buyer_tokens,
@@ -29,6 +24,10 @@ use ic_sns_test_utils::state_test_helpers::{
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, LedgerCanisterInitPayload as IcpInitArgs, DEFAULT_TRANSFER_FEE,
+};
+use icrc_ledger_types::icrc1::{
+    account::{Account, Subaccount},
+    transfer::{Memo, TransferArg},
 };
 use lazy_static::lazy_static;
 
@@ -147,18 +146,13 @@ impl PaymentProtocolTestSetup {
     }
 
     pub fn default_icp_init_args() -> IcpInitArgs {
-        IcpInitArgs {
-            minting_account: AccountIdentifier::from(*DEFAULT_MINTING_ACCOUNT),
-            icrc1_minting_account: Some(*DEFAULT_MINTING_ACCOUNT),
-            initial_values: HashMap::new(),
-            max_message_size_bytes: None,
-            transaction_window: None,
-            archive_options: None,
-            send_whitelist: HashSet::new(),
-            transfer_fee: Some(DEFAULT_TRANSFER_FEE),
-            token_symbol: Some("ICP".to_string()),
-            token_name: Some("Internet Computer".to_string()),
-        }
+        IcpInitArgs::builder()
+            .minting_account(AccountIdentifier::from(*DEFAULT_MINTING_ACCOUNT))
+            .icrc1_minting_account(*DEFAULT_MINTING_ACCOUNT)
+            .transfer_fee(DEFAULT_TRANSFER_FEE)
+            .token_symbol_and_name("Internet Computer", "ICP")
+            .build()
+            .unwrap()
     }
     pub fn default_icrc1_init_args() -> Icrc1InitArgs {
         Icrc1InitArgs {
@@ -176,6 +170,7 @@ impl PaymentProtocolTestSetup {
             metadata: vec![],
             archive_options: DEFAULT_ICRC1_ARCHIVE_OPTIONS.clone(),
             fee_collector_account: None,
+            max_memo_length: None,
         }
     }
 
@@ -193,6 +188,8 @@ impl PaymentProtocolTestSetup {
                 .collect(),
             transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
             neuron_minimum_stake_e8s: Some(*DEFAULT_NEURON_MINIMUM_STAKE),
+            confirmation_text: None,
+            restricted_countries: None,
         }
     }
 
@@ -285,8 +282,14 @@ impl PaymentProtocolTestSetup {
     pub fn refresh_buyer_tokens(
         &self,
         buyer: &PrincipalId,
+        confirmation_text: Option<String>,
     ) -> Result<RefreshBuyerTokensResponse, String> {
-        refresh_buyer_tokens(&self.state_machine, &self.sns_sale_canister_id, buyer)
+        refresh_buyer_tokens(
+            &self.state_machine,
+            &self.sns_sale_canister_id,
+            buyer,
+            confirmation_text,
+        )
     }
 
     pub fn get_lifecycle(&self) -> GetLifecycleResponse {
@@ -520,7 +523,9 @@ fn test_simple_refresh_buyer_token() {
         .unwrap();
 
     // Get ICP accepted by the SNS sale canister
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user0, None)
+        .is_ok());
 
     // Check that the buyer state was updated accordingly
     assert_eq!(
@@ -580,7 +585,9 @@ fn test_multiple_payment_flows() {
             .unwrap();
 
         // Step3: Get ICP accepted by the SNS sale canister
-        assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+        assert!(payment_flow_protocol
+            .refresh_buyer_tokens(&user0, None)
+            .is_ok());
         amount_committed += amount0_0;
 
         // Step 4: Check that the buyer state was updated accordingly
@@ -661,7 +668,7 @@ fn test_payment_flow_multiple_users_concurrent() {
         assert!(payment_flow_protocol
             .lock()
             .unwrap()
-            .refresh_buyer_tokens(&user)
+            .refresh_buyer_tokens(&user, None)
             .is_ok());
 
         // Check that the buyer state was updated accordingly
@@ -768,7 +775,9 @@ fn test_multiple_spending() {
         .contains(&format!("duplicate_of: Nat({})", idx)),);
 
     // Get ICP accepted by the SNS sale canister
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user0, None)
+        .is_ok());
 
     // Check that the buyer state was updated accordingly
     assert_eq!(
@@ -845,7 +854,9 @@ fn test_maximum_reached() {
                 .unwrap();
 
             // Get ICP accepted by the SNS sale canister
-            assert!(payment_flow_protocol.refresh_buyer_tokens(user).is_ok());
+            assert!(payment_flow_protocol
+                .refresh_buyer_tokens(user, None)
+                .is_ok());
 
             // Check that the ticket has been deleted
             assert!(payment_flow_protocol
@@ -943,7 +954,9 @@ fn test_committment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user0, None)
+        .is_ok());
 
     payment_flow_protocol
         .commit_icp_e8s(
@@ -953,7 +966,9 @@ fn test_committment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user1).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user1, None)
+        .is_ok());
 
     // The amount bought now should be below the maximum and the amount left should be less than the minimum per participant
     assert!(
@@ -978,7 +993,9 @@ fn test_committment_below_participant_minimum() {
             &amount2_0,
         )
         .unwrap();
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user2).is_err());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user2, None)
+        .is_err());
 
     // User0 who has participated in the sale should be able to purchase the missing tokens
     payment_flow_protocol
@@ -989,7 +1006,9 @@ fn test_committment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user0, None)
+        .is_ok());
 
     //Check that user1's purchase was registerred
     assert_eq!(

@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/https_outcalls/service",
     "//rs/interfaces",
-    "//rs/interfaces/https_outcalls_adapter_client",
+    "//rs/interfaces/adapter_client",
     "//rs/monitoring/adapter_metrics",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

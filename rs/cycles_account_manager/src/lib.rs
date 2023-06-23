@@ -824,7 +824,7 @@ impl CyclesAccountManager {
             // based on it accordingly.
             MemoryAllocation::Reserved(bytes) => bytes,
             // The canister uses best-effort memory allocation, so charge based on current usage.
-            MemoryAllocation::BestEffort => canister.memory_usage(self.own_subnet_type),
+            MemoryAllocation::BestEffort => canister.memory_usage(),
         };
         if let Err(err) = self.charge_for_memory(
             &mut canister.system_state,

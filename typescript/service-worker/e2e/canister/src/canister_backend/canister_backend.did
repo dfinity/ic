@@ -1,0 +1,3 @@
+service : {
+    "greet": (text) -> (text) query;
+}

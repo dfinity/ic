@@ -12,9 +12,9 @@ use candid::{Decode, Encode};
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
-use ic_nervous_system_root::{
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
     canister_status::{CanisterStatusResultFromManagementCanister, CanisterStatusType},
-    CanisterIdRecord,
 };
 use std::convert::TryFrom;
 

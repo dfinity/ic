@@ -244,12 +244,15 @@ pub(crate) fn verify_individual_sig(
     signature: &IndividualSignature,
     public_key: &PublicKey,
 ) -> CryptoResult<()> {
-    verify(message, signature, public_key).map_err(|_| CryptoError::SignatureVerification {
-        algorithm: AlgorithmId::ThresBls12_381,
-        public_key_bytes: PublicKeyBytes::from(public_key).0.to_vec(),
-        sig_bytes: IndividualSignatureBytes::from(signature).0.to_vec(),
-        internal_error: "Invalid individual threshold signature".to_string(),
-    })
+    match verify(message, signature, public_key) {
+        true => Ok(()),
+        false => Err(CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::ThresBls12_381,
+            public_key_bytes: PublicKeyBytes::from(public_key).0.to_vec(),
+            sig_bytes: IndividualSignatureBytes::from(signature).0.to_vec(),
+            internal_error: "Invalid individual threshold signature".to_string(),
+        }),
+    }
 }
 
 /// Verifies a combined signature against the provided public key.
@@ -262,26 +265,22 @@ pub(crate) fn verify_combined_sig(
     signature: &CombinedSignature,
     public_key: &PublicKey,
 ) -> CryptoResult<()> {
-    verify(message, signature, public_key).map_err(|_| CryptoError::SignatureVerification {
-        algorithm: AlgorithmId::ThresBls12_381,
-        public_key_bytes: PublicKeyBytes::from(public_key).0.to_vec(),
-        sig_bytes: CombinedSignatureBytes::from(signature).0.to_vec(),
-        internal_error: "Invalid combined threshold signature".to_string(),
-    })
+    match verify(message, signature, public_key) {
+        true => Ok(()),
+        false => Err(CryptoError::SignatureVerification {
+            algorithm: AlgorithmId::ThresBls12_381,
+            public_key_bytes: PublicKeyBytes::from(public_key).0.to_vec(),
+            sig_bytes: CombinedSignatureBytes::from(signature).0.to_vec(),
+            internal_error: "Invalid combined threshold signature".to_string(),
+        }),
+    }
 }
 
 /// Verifies an individual or combined signature against the provided public
 /// key.
-// TODO(DFN-1408): Optimize signature verification by combining the miller
-// loops inside the pairings, thus performing only a single final
-// exponentiation.
-fn verify(message: &[u8], signature: &Signature, public_key: &PublicKey) -> Result<(), ()> {
+fn verify(message: &[u8], signature: &Signature, public_key: &PublicKey) -> bool {
     let point = hash_message_to_g1(message).to_affine();
     let pk = public_key.0.to_affine();
 
-    if verify_bls_signature(&signature.into(), &pk, &point) {
-        Ok(())
-    } else {
-        Err(())
-    }
+    verify_bls_signature(&signature.into(), &pk, &point)
 }

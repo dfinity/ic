@@ -9,10 +9,11 @@ use ic_icrc1_index::{
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
-    block::{BlockIndex, BlockType, EncodedBlock, HashOf},
+    block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
+use ic_ledger_hash_of::HashOf;
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
@@ -73,7 +74,7 @@ fn mint_block() -> EncodedBlock {
                 amount: 1,
             },
             created_at_time: Some(1),
-            memo: Some(Memo::from([1; 32])),
+            memo: Some(Memo::from([1; 32].to_vec())),
         },
         TimeStamp::new(3, 4),
         Tokens::ZERO,
@@ -113,6 +114,7 @@ fn install_ledger(
         ],
         archive_options,
         fee_collector_account: None,
+        max_memo_length: None,
     });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
@@ -416,13 +418,13 @@ fn test_wait_time() {
 
     let txs = get_account_transactions(&env, index_id, account(3), None, u64::MAX);
     assert!(txs.transactions.is_empty());
-    env.advance_time(Duration::from_secs(50));
+    env.advance_time(Duration::from_secs(1));
     env.tick();
 
     let txs = get_account_transactions(&env, index_id, account(3), None, u64::MAX);
     assert!(txs.transactions.is_empty());
 
-    env.advance_time(Duration::from_secs(10));
+    env.advance_time(Duration::from_secs(1));
     env.tick();
 
     let txs = get_account_transactions(&env, index_id, account(3), None, u64::MAX);

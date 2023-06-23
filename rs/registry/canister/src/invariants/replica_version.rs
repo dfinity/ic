@@ -1,10 +1,9 @@
 use std::collections::BTreeSet;
 
 use crate::invariants::common::{
-    get_subnet_ids_from_snapshot, get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    assert_valid_urls_and_hash, get_subnet_ids_from_snapshot, get_value_from_snapshot,
+    InvariantCheckError, RegistrySnapshot,
 };
-
-use url::Url;
 
 use ic_base_types::SubnetId;
 use ic_nns_common::registry::decode_or_panic;
@@ -102,35 +101,6 @@ fn get_all_replica_versions_of_subnets(snapshot: &RegistrySnapshot) -> BTreeSet<
         .collect()
 }
 
-fn assert_sha256(s: &str) {
-    if s.bytes().any(|x| !x.is_ascii_hexdigit()) {
-        panic!("Hash contains at least one invalid character: `{s}`");
-    }
-}
-
-fn assert_valid_urls_and_hash(urls: &[String], hash: &str, allow_file_url: bool) {
-    // Either both, the URL and the hash are set, or both are not set.
-    if (urls.is_empty() as i32 ^ hash.is_empty() as i32) > 0 {
-        panic!("Either both, an url and a hash must be set, or none.");
-    }
-    if urls.is_empty() {
-        return;
-    }
-
-    assert_sha256(hash);
-
-    urls.iter().for_each(|url|
-        // File URLs are used in test deployments. We only disallow non-ASCII.
-        if allow_file_url && url.starts_with("file://") {
-            assert!(url.is_ascii(), "file-URL {url} contains non-ASCII characters.");
-        }
-        // if it's not a file URL, it should be a valid URL.
-        else if let Err(e) = Url::parse(url) {
-            panic!("Release package URL {url} is not valid: {e}");
-        }
-    );
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -142,11 +112,11 @@ mod tests {
     use ic_registry_transport::{insert, upsert};
     use ic_types::ReplicaVersion;
 
-    const MOCK_HASH: &str = "C0FFEE";
+    const MOCK_HASH: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
     const MOCK_URL: &str = "http://release_package.tar.gz";
 
     fn check_bless_version(versions: Vec<String>) {
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
 
         let key = make_blessed_replica_versions_key();
         let value = encode_or_panic(&BlessedReplicaVersions {
@@ -190,7 +160,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Using a version that isn't blessed.")]
     fn panic_when_using_unelected_version() {
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
 
         let list = registry.get_subnet_list_record();
         let nns_id = SubnetId::from(PrincipalId::try_from(list.subnets.get(0).unwrap()).unwrap());
@@ -207,7 +177,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Using a version that isn't blessed.")]
     fn panic_when_retiring_unassigned_nodes_version() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
         let replica_version_id = "unassigned_version".to_string();
         let replica_version = ReplicaVersionRecord {
@@ -252,7 +222,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Using a version that isn't blessed.")]
     fn panic_when_using_unelected_unassigned_version() {
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
 
         let key = make_unassigned_nodes_config_record_key();
         let value = encode_or_panic(&UnassignedNodesConfigRecord {
@@ -265,7 +235,7 @@ mod tests {
     }
 
     fn check_replica_version(hash: &str, urls: Vec<String>) {
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
 
         let key = make_replica_version_key(ReplicaVersion::default());
         let value = encode_or_panic(&ReplicaVersionRecord {

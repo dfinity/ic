@@ -176,21 +176,6 @@ impl From<&CspPublicCoefficients> for KeyId {
     }
 }
 
-impl TryFrom<&str> for KeyId {
-    type Error = String;
-
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        if s.starts_with(KEY_ID_PREFIX) && s.ends_with(KEY_ID_SUFFIX) {
-            let key_id_hex = s
-                .get(KEY_ID_PREFIX.len()..s.len() - KEY_ID_SUFFIX.len())
-                .ok_or(format!("Invalid display string for KeyId: {}", s))?;
-            KeyId::from_hex(key_id_hex)
-        } else {
-            Err(format!("Invalid display string for KeyId: {}", s))
-        }
-    }
-}
-
 impl FromHex for KeyId {
     type Error = String;
 

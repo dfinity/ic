@@ -1,14 +1,15 @@
-use crate::common::doubles::{
-    ExplodingSnsRootClient, LedgerExpect, NnsGovernanceClientCall, NnsGovernanceClientReply,
-    SnsGovernanceClientCall, SnsGovernanceClientReply, SnsRootClientCall, SnsRootClientReply,
-    SpyNnsGovernanceClient, SpySnsGovernanceClient, SpySnsRootClient,
-};
 use crate::common::{
     buy_token, compute_multiple_successful_claim_swap_neurons_response,
     compute_single_successful_claim_swap_neurons_response, create_generic_cf_participants,
-    create_generic_sns_neuron_recipes, create_single_neuron_recipe, extract_canister_call_error,
-    extract_set_dapp_controller_response, get_account_balance_mock_ledger,
-    get_snapshot_of_buyers_index_list, get_sns_balance,
+    create_generic_sns_neuron_recipes, create_single_neuron_recipe,
+    doubles::{
+        spy_clients, spy_clients_exploding_root, ExplodingSnsRootClient, LedgerExpect,
+        NnsGovernanceClientCall, NnsGovernanceClientReply, SnsGovernanceClientCall,
+        SnsGovernanceClientReply, SnsRootClientCall, SnsRootClientReply, SpyNnsGovernanceClient,
+        SpySnsGovernanceClient, SpySnsRootClient,
+    },
+    extract_canister_call_error, extract_set_dapp_controller_response,
+    get_account_balance_mock_ledger, get_snapshot_of_buyers_index_list, get_sns_balance,
     get_transfer_and_account_balance_mock_ledger, get_transfer_mock_ledger, i2principal_id_string,
     mock_stub, open_swap, paginate_participants, successful_set_dapp_controllers_call_result,
     successful_set_mode_call_result, successful_settle_community_fund_participation_result, sweep,
@@ -30,6 +31,7 @@ use ic_nervous_system_common_test_utils::{
     drain_receiver_channel, InterleavingTestLedger, LedgerCall, LedgerControlMessage, LedgerReply,
     SpyLedger,
 };
+use ic_nervous_system_proto::pb::v1::Countries;
 use ic_sns_governance::{
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
@@ -38,10 +40,8 @@ use ic_sns_governance::{
     },
     types::ONE_MONTH_SECONDS,
 };
-use ic_sns_swap::swap::{
-    CLAIM_SWAP_NEURONS_BATCH_SIZE, FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START,
-};
 use ic_sns_swap::{
+    environment::CanisterClients,
     memory,
     pb::v1::{
         params::NeuronBasketConstructionParameters,
@@ -49,7 +49,10 @@ use ic_sns_swap::{
         Lifecycle::{Aborted, Adopted, Committed, Open, Pending, Unspecified},
         SetDappControllersRequest, SetDappControllersResponse, *,
     },
-    swap::{apportion_approximately_equally, principal_to_subaccount},
+    swap::{
+        apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
+        FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START,
+    },
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
@@ -83,7 +86,7 @@ const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECO
 const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
 
 /// Returns a valid Init.
-fn init() -> Init {
+fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
     let result = Init {
         nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
@@ -94,9 +97,17 @@ fn init() -> Init {
         // Similar to, but different from values used in NNS.
         transaction_fee_e8s: Some(12_345),
         neuron_minimum_stake_e8s: Some(123_456_789),
+        confirmation_text,
+        restricted_countries: Some(Countries {
+            iso_codes: vec!["CH".to_string()],
+        }),
     };
     assert_is_ok!(result.validate());
     result
+}
+
+fn init() -> Init {
+    init_with_confirmation_text(None)
 }
 
 pub fn params() -> Params {
@@ -240,10 +251,10 @@ fn test_open() {
             .unwrap();
         assert!(r.is_err());
     }
-    // assert that before sale is open, no tokens are available for sale.
+    // assert that before swap is open, no tokens are available for swap.
     assert_eq!(
         swap.sns_token_e8s().unwrap_err(),
-        "Sale not open, no tokens available.".to_string()
+        "Swap not open, no tokens available.".to_string()
     );
     // Funding is available - now we can open.
     {
@@ -375,6 +386,7 @@ fn test_min_icp() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -398,6 +410,7 @@ fn test_min_icp() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -522,6 +535,7 @@ fn test_min_max_icp_per_buyer() {
         let e = swap
             .refresh_buyer_token_e8s(
                 *TEST_USER1_PRINCIPAL,
+                None,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
@@ -541,6 +555,7 @@ fn test_min_max_icp_per_buyer() {
         let e = swap
             .refresh_buyer_token_e8s(
                 *TEST_USER1_PRINCIPAL,
+                None,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
@@ -565,6 +580,7 @@ fn test_min_max_icp_per_buyer() {
         let e = swap
             .refresh_buyer_token_e8s(
                 *TEST_USER1_PRINCIPAL,
+                None,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
@@ -635,6 +651,7 @@ fn test_max_icp() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -658,6 +675,7 @@ fn test_max_icp() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -758,6 +776,7 @@ fn test_scenario_happy() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -783,6 +802,7 @@ fn test_scenario_happy() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -813,6 +833,7 @@ fn test_scenario_happy() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER3_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -1107,38 +1128,30 @@ async fn test_finalize_swap_ok() {
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
 
-    let mut sns_root_client = ExplodingSnsRootClient::default();
-    let mut nns_governance_client = SpyNnsGovernanceClient::with_successful_replies();
-
-    let mut sns_governance_client = SpySnsGovernanceClient::new(vec![
-        SnsGovernanceClientReply::ClaimSwapNeurons(
-            compute_single_successful_claim_swap_neurons_response(&swap.neuron_recipes),
-        ),
-        SnsGovernanceClientReply::SetMode(SetModeResponse {}),
-    ]);
-
-    // Mock 3 successful ICP Ledger::transfer_funds calls
-    let icp_ledger: SpyLedger = SpyLedger::new(vec![
-        LedgerReply::TransferFunds(Ok(1000)),
-        LedgerReply::TransferFunds(Ok(1001)),
-        LedgerReply::TransferFunds(Ok(1002)),
-    ]);
-
-    // Mock 9 successful SNS Ledger::transfer_funds calls
-    let sns_ledger_reply_calls = (0..9).map(|i| LedgerReply::TransferFunds(Ok(i))).collect();
-    let sns_ledger: SpyLedger = SpyLedger::new(sns_ledger_reply_calls);
+    let mut clients = CanisterClients {
+        sns_governance: SpySnsGovernanceClient::new(vec![
+            SnsGovernanceClientReply::ClaimSwapNeurons(
+                compute_single_successful_claim_swap_neurons_response(&swap.neuron_recipes),
+            ),
+            SnsGovernanceClientReply::SetMode(SetModeResponse {}),
+        ]),
+        // Mock 3 successful ICP Ledger::transfer_funds calls
+        icp_ledger: SpyLedger::new(vec![
+            LedgerReply::TransferFunds(Ok(1000)),
+            LedgerReply::TransferFunds(Ok(1001)),
+            LedgerReply::TransferFunds(Ok(1002)),
+        ]),
+        sns_ledger: {
+            // Mock 9 successful SNS Ledger::transfer_funds calls
+            let sns_ledger_reply_calls =
+                (0..9).map(|i| LedgerReply::TransferFunds(Ok(i))).collect();
+            SpyLedger::new(sns_ledger_reply_calls)
+        },
+        ..spy_clients_exploding_root()
+    };
 
     // Step 2: Run the code under test. To wit, finalize_swap.
-    let result = swap
-        .finalize(
-            now_fn,
-            &mut sns_root_client,
-            &mut sns_governance_client,
-            &icp_ledger,
-            &sns_ledger,
-            &mut nns_governance_client,
-        )
-        .await;
+    let result = swap.finalize(now_fn, &mut clients).await;
 
     // Step 3: Inspect the results.
     {
@@ -1178,12 +1191,13 @@ async fn test_finalize_swap_ok() {
 
     // Assert that do_finalize_swap created neurons.
     assert_eq!(
-        sns_governance_client.calls.len(),
+        clients.sns_governance.calls.len(),
         2,
         "{:#?}",
-        sns_governance_client.calls
+        clients.sns_governance.calls
     );
-    let neuron_controllers = sns_governance_client
+    let neuron_controllers = clients
+        .sns_governance
         .calls
         .iter()
         .filter_map(|c| {
@@ -1203,7 +1217,7 @@ async fn test_finalize_swap_ok() {
     );
     // Assert that SNS governance was set to normal mode.
     {
-        let calls = &sns_governance_client.calls;
+        let calls = &clients.sns_governance.calls;
         let last_call = &calls[calls.len() - 1];
         assert_eq!(
             last_call,
@@ -1219,28 +1233,28 @@ async fn test_finalize_swap_ok() {
         .transaction_fee_e8s
         .as_ref()
         .expect("Transaction fee not known.");
-    let icp_ledger_calls = icp_ledger.get_calls_snapshot();
+    let icp_ledger_calls = clients.icp_ledger.get_calls_snapshot();
     assert_eq!(icp_ledger_calls.len(), 3, "{:#?}", icp_ledger_calls);
     for call in icp_ledger_calls.iter() {
-        let (fee_e8s, memo) = match call {
+        let (&fee_e8s, &memo) = match call {
             LedgerCall::TransferFundsICRC1 { fee_e8s, memo, .. } => (fee_e8s, memo),
             call => panic!("Unexpected call on the queue: {call:?}"),
         };
 
-        assert_eq!(*fee_e8s, DEFAULT_TRANSFER_FEE.get_e8s(), "{:#?}", call);
-        assert_eq!(*memo, 0, "{:#?}", call);
+        assert_eq!(fee_e8s, DEFAULT_TRANSFER_FEE.get_e8s(), "{:#?}", call);
+        assert_eq!(memo, 0, "{:#?}", call);
     }
 
-    let sns_ledger_calls = sns_ledger.get_calls_snapshot();
+    let sns_ledger_calls = clients.sns_ledger.get_calls_snapshot();
     assert_eq!(sns_ledger_calls.len(), 9, "{:#?}", sns_ledger_calls);
     for call in sns_ledger_calls.iter() {
-        let (fee_e8s, memo) = match call {
+        let (&fee_e8s, &memo) = match call {
             LedgerCall::TransferFundsICRC1 { fee_e8s, memo, .. } => (fee_e8s, memo),
             call => panic!("Unexpected call on the queue: {call:?}"),
         };
 
-        assert_eq!(*fee_e8s, sns_transaction_fee_e8s, "{:#?}", call);
-        assert_eq!(*memo, 0, "{:#?}", call);
+        assert_eq!(fee_e8s, sns_transaction_fee_e8s, "{:#?}", call);
+        assert_eq!(memo, 0, "{:#?}", call);
     }
 
     // ICP should be sent to SNS governance (from various swap subaccounts.)
@@ -1310,7 +1324,7 @@ async fn test_finalize_swap_ok() {
     {
         use settle_community_fund_participation::{Committed, Result};
         assert_eq!(
-            nns_governance_client.calls,
+            clients.nns_governance.calls,
             vec![NnsGovernanceClientCall::SettleCommunityFundParticipation(
                 SettleCommunityFundParticipation {
                     open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
@@ -1400,34 +1414,22 @@ async fn test_finalize_swap_abort() {
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS + 1));
     assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS + 1));
 
-    // These clients should have no calls observed and therefore no calls mocked
-    let mut sns_governance_client = SpySnsGovernanceClient::default();
-    let mut nns_governance_client = SpyNnsGovernanceClient::with_successful_replies();
-    let sns_ledger: SpyLedger = SpyLedger::default();
-
-    let mut sns_root_client = SpySnsRootClient::new(vec![
-        // SNS Root will respond with zero errors
-        SnsRootClientReply::SetDappControllers(SetDappControllersResponse {
-            failed_updates: vec![],
-        }),
-    ]);
-
-    let icp_ledger: SpyLedger = SpyLedger::new(
-        // ICP Ledger should be called once and should return success
-        vec![LedgerReply::TransferFunds(Ok(1000))],
-    );
+    let mut clients = CanisterClients {
+        icp_ledger: SpyLedger::new(
+            // ICP Ledger should be called once and should return success
+            vec![LedgerReply::TransferFunds(Ok(1000))],
+        ),
+        sns_root: SpySnsRootClient::new(vec![
+            // SNS Root will respond with zero errors
+            SnsRootClientReply::SetDappControllers(SetDappControllersResponse {
+                failed_updates: vec![],
+            }),
+        ]),
+        ..spy_clients()
+    };
 
     // Step 2: Run the code under test. To wit, finalize_swap.
-    let result = swap
-        .finalize(
-            now_fn,
-            &mut sns_root_client,
-            &mut sns_governance_client,
-            &icp_ledger,
-            &sns_ledger,
-            &mut nns_governance_client,
-        )
-        .await;
+    let result = swap.finalize(now_fn, &mut clients).await;
 
     // Step 3: Inspect the results.
     {
@@ -1458,14 +1460,14 @@ async fn test_finalize_swap_abort() {
 
     // Step 3.1: Assert that no neurons were created, and SNS governance was not set to normal mode.
     assert_eq!(
-        sns_governance_client.calls,
+        clients.sns_governance.calls,
         vec![],
         "{:#?}",
-        sns_governance_client.calls
+        clients.sns_governance.calls
     );
 
     // Step 3.2: Verify ledger calls.
-    let icp_ledger_calls = icp_ledger.get_calls_snapshot();
+    let icp_ledger_calls = clients.icp_ledger.get_calls_snapshot();
     assert_eq!(
         icp_ledger_calls,
         vec![
@@ -1482,7 +1484,7 @@ async fn test_finalize_swap_abort() {
         "{icp_ledger_calls:#?}"
     );
     assert_eq!(
-        sns_ledger.get_calls_snapshot(),
+        clients.sns_ledger.get_calls_snapshot(),
         vec![/* Test started in Open state */]
     );
 
@@ -1493,7 +1495,7 @@ async fn test_finalize_swap_abort() {
         .map(|s| PrincipalId::from_str(s).unwrap())
         .collect();
     assert_eq!(
-        sns_root_client.observed_calls,
+        clients.sns_root.observed_calls,
         vec![SnsRootClientCall::SetDappControllers(
             SetDappControllersRequest {
                 // Change controller of all dapps controlled by the root canister.
@@ -1507,7 +1509,7 @@ async fn test_finalize_swap_abort() {
     {
         use settle_community_fund_participation::{Aborted, Result};
         assert_eq!(
-            nns_governance_client.calls,
+            clients.nns_governance.calls,
             vec![NnsGovernanceClientCall::SettleCommunityFundParticipation(
                 SettleCommunityFundParticipation {
                     open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
@@ -1557,7 +1559,7 @@ fn test_error_refund_single_user() {
         .now_or_never()
         .unwrap();
 
-        // Verify that SNS Sale canister registered the tokens
+        // Verify that SNS Swap canister registered the tokens
         assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
         // User has not commited yet --> No neuron has been created
@@ -1674,7 +1676,7 @@ fn test_error_refund_single_user() {
 
         // User can't get a refund after sweep. Balance of the subaccount of the buyer is now 0
         // since it was transferred to the sns governance canister. Transfer Response is set to be
-        // an Error since the account of the user1 in the sns sales canister is 0 and cannot pay for
+        // an Error since the account of the user1 in the sns swap canister is 0 and cannot pay for
         // fees.
         let refund_err = try_error_refund_err(
             &mut swap,
@@ -1753,7 +1755,7 @@ fn test_error_refund_multiple_users() {
         assert!(refund_err.description.unwrap().contains("escrow"));
         assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
 
-        // If user2 has sent ICP to the SNS sale in error but did not go through normal payment flow they should be able to get a refund
+        // If user2 has sent ICP to the SNS swap in error but did not go through normal payment flow they should be able to get a refund
         let refund_ok = try_error_refund_ok(
             &mut swap,
             &user2,
@@ -1788,7 +1790,7 @@ fn test_error_refund_multiple_users() {
         assert_eq!(global_failures, 0);
 
         //After user1 has gotten back their ICP they should not be able to call the refund_error function again and get back any ICP>0
-        //Transfer Response is set to be an Error since the account of the user1 in the sns sales canister is 0 and cannot pay for fees or the amount requested
+        //Transfer Response is set to be an Error since the account of the user1 in the sns swap canister is 0 and cannot pay for fees or the amount requested
         let refund_err = try_error_refund_err(
             &mut swap,
             &user1,
@@ -1809,7 +1811,7 @@ fn test_error_refund_multiple_users() {
     }
 }
 
-/// Test the error refund method after sale has closed
+/// Test the error refund method after swap has closed
 #[test]
 fn test_error_refund_after_close() {
     let user1 = *TEST_USER1_PRINCIPAL;
@@ -1844,7 +1846,7 @@ fn test_error_refund_after_close() {
         .now_or_never()
         .unwrap();
 
-        //Verify that SNS Sale canister registered the tokens
+        //Verify that SNS Swap canister registered the tokens
         assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
         //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
@@ -1886,7 +1888,7 @@ fn test_error_refund_after_close() {
         assert_eq!(invalid, 0);
         assert_eq!(global_failures, 0);
 
-        // If user2 has sent ICP in Error but never committed their tokens , i.e. never called refresh_buyer_tokens they should be able to get their funds back even after the sale is committed
+        // If user2 has sent ICP in Error but never committed their tokens , i.e. never called refresh_buyer_tokens they should be able to get their funds back even after the swap is committed
         let refund_ok = try_error_refund_ok(
             &mut swap,
             &user2,
@@ -1942,6 +1944,7 @@ fn test_get_buyer_state() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -1978,6 +1981,7 @@ fn test_get_buyer_state() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -2047,34 +2051,29 @@ fn test_finalize_swap_rejects_concurrent_calls() {
     // across message blocks.
     let (sender_channel, mut receiver_channel) = mpsc::unbounded::<LedgerControlMessage>();
 
-    let underlying_icp_ledger: SpyLedger =
-        SpyLedger::new(vec![LedgerReply::TransferFunds(Ok(1000))]);
-    let interleaving_ledger =
-        InterleavingTestLedger::new(Box::new(underlying_icp_ledger), sender_channel);
-
-    // TODO there must be an easier way to specify these calls
-    let mut sns_governance_client = SpySnsGovernanceClient::new(vec![
-        SnsGovernanceClientReply::ClaimSwapNeurons(
-            compute_single_successful_claim_swap_neurons_response(&boxed_swap.neuron_recipes),
-        ),
-        SnsGovernanceClientReply::SetMode(SetModeResponse {}),
-    ]);
+    let mut clients = CanisterClients {
+        icp_ledger: {
+            let underlying_icp_ledger: SpyLedger =
+                SpyLedger::new(vec![LedgerReply::TransferFunds(Ok(1000))]);
+            InterleavingTestLedger::new(Box::new(underlying_icp_ledger), sender_channel)
+        },
+        sns_governance: SpySnsGovernanceClient::new(vec![
+            SnsGovernanceClientReply::ClaimSwapNeurons(
+                compute_single_successful_claim_swap_neurons_response(&boxed_swap.neuron_recipes),
+            ),
+            SnsGovernanceClientReply::SetMode(SetModeResponse {}),
+        ]),
+        sns_ledger: SpyLedger::new(vec![LedgerReply::TransferFunds(Ok(1000))]),
+        sns_root: spy_clients().sns_root,
+        nns_governance: spy_clients().nns_governance,
+    };
 
     // Step 2: Call finalize and have the thread block
 
     // Spawn a call to finalize in a new thread; meanwhile, on the main thread we'll await
     // for the signal that the ICP Ledger transfer has been initiated
     let thread_handle = thread::spawn(move || {
-        let sns_ledger = SpyLedger::new(vec![LedgerReply::TransferFunds(Ok(1000))]);
-
-        let finalize_result = tokio_test::block_on(boxed_swap.finalize(
-            now_fn,
-            &mut ExplodingSnsRootClient::default(),
-            &mut sns_governance_client,
-            &interleaving_ledger,
-            &sns_ledger,
-            &mut SpyNnsGovernanceClient::with_successful_replies(),
-        ));
+        let finalize_result = tokio_test::block_on(boxed_swap.finalize(now_fn, &mut clients));
 
         // Assert that this call to finalize returned a response. As we are only testing the
         // locking mechanism, assert that the values aren't set to None.
@@ -2102,17 +2101,12 @@ fn test_finalize_swap_rejects_concurrent_calls() {
         // Assert the lock exists in Swap's state
         assert!((*raw_ptr_swap).is_finalize_swap_locked());
 
+        let mut clients = spy_clients_exploding_root();
+
         // Interleave a call to finalize using the raw pointer. This call should return a
         // default FinalizeSwapResponse with an error message after hitting the lock.
         let response = (*raw_ptr_swap)
-            .finalize(
-                now_fn,
-                &mut ExplodingSnsRootClient::default(),
-                &mut SpySnsGovernanceClient::default(),
-                &SpyLedger::default(),
-                &SpyLedger::default(),
-                &mut SpyNnsGovernanceClient::with_successful_replies(),
-            )
+            .finalize(now_fn, &mut clients)
             .now_or_never()
             .unwrap();
 
@@ -2121,7 +2115,7 @@ fn test_finalize_swap_rejects_concurrent_calls() {
             None => panic!("Expected finalize_swap to reject this concurrent request"),
             Some(error_message) => {
                 assert!(error_message
-                    .contains("The Sale canister has finalize_swap call already in progress"))
+                    .contains("The Swap canister has finalize_swap call already in progress"))
             }
         }
 
@@ -2158,10 +2152,10 @@ fn test_finalize_swap_rejects_concurrent_calls() {
     }
 }
 
-/// Test that the Sale canister must be in the terminal state (Aborted || Committed)
+/// Test that the Swap canister must be in the terminal state (Aborted || Committed)
 /// for finalize to be invoked correctly.
 #[tokio::test]
-async fn test_sale_must_be_terminal_to_invoke_finalize() {
+async fn test_swap_must_be_terminal_to_invoke_finalize() {
     let invalid_finalize_lifecycles = vec![Open, Unspecified, Pending];
 
     for lifecycle in invalid_finalize_lifecycles {
@@ -2172,16 +2166,9 @@ async fn test_sale_must_be_terminal_to_invoke_finalize() {
             ..Default::default()
         };
 
-        let response = swap
-            .finalize(
-                now_fn,
-                &mut ExplodingSnsRootClient::default(),
-                &mut SpySnsGovernanceClient::default(),
-                &SpyLedger::default(), // ICP Ledger
-                &SpyLedger::default(), // SNS Ledger
-                &mut SpyNnsGovernanceClient::default(),
-            )
-            .await;
+        let mut clients = spy_clients_exploding_root();
+
+        let response = swap.finalize(now_fn, &mut clients).await;
 
         let error_message = response
             .error_message
@@ -2190,7 +2177,7 @@ async fn test_sale_must_be_terminal_to_invoke_finalize() {
         // Assert the error message contains the correct message
         assert!(
             error_message
-                .contains("The Sale can only be finalized in the COMMITTED or ABORTED states"),
+                .contains("The Swap can only be finalized in the COMMITTED or ABORTED states"),
             "{}",
             error_message,
         );
@@ -2394,25 +2381,18 @@ async fn test_finalization_halts_when_sweep_icp_fails() {
         ..Default::default()
     };
 
-    // Mock the replies from the ledger
-    let icp_ledger = SpyLedger::new(vec![
-        // This mocked reply should produce a successful transfer in SweepResult
-        LedgerReply::TransferFunds(Err(NervousSystemError::new_with_message(
-            "Error when transferring funds",
-        ))),
-    ]);
+    let mut clients = CanisterClients {
+        icp_ledger: SpyLedger::new(vec![
+            // This mocked reply should produce a successful transfer in SweepResult
+            LedgerReply::TransferFunds(Err(NervousSystemError::new_with_message(
+                "Error when transferring funds",
+            ))),
+        ]),
+        ..spy_clients()
+    };
 
     // Step 2: Call sweep_icp
-    let result = swap
-        .finalize(
-            now_fn,
-            &mut SpySnsRootClient::default(),
-            &mut SpySnsGovernanceClient::default(),
-            &icp_ledger,
-            &SpyLedger::default(), // SNS Ledger
-            &mut SpyNnsGovernanceClient::default(),
-        )
-        .await;
+    let result = swap.finalize(now_fn, &mut clients).await;
 
     assert_eq!(
         result.sweep_icp_result,
@@ -2427,7 +2407,7 @@ async fn test_finalization_halts_when_sweep_icp_fails() {
 
     assert_eq!(
         result.error_message,
-        Some(String::from("Transferring ICP did not complete fully, some transfers were invalid or failed. Halting sale finalization"))
+        Some(String::from("Transferring ICP did not complete fully, some transfers were invalid or failed. Halting swap finalization"))
     );
 
     // Assert all other fields are set to None because finalization was halted
@@ -2688,29 +2668,21 @@ async fn test_finalization_halts_when_sweep_sns_fails() {
         ..Default::default()
     };
 
-    let mut nns_governance_client = SpyNnsGovernanceClient::new(vec![
-        NnsGovernanceClientReply::SettleCommunityFundParticipation(Ok(())),
-    ]);
-
-    // Mock the replies from the ledger
-    let sns_ledger = SpyLedger::new(vec![
-        // This mocked reply should produce a successful transfer in SweepResult
-        LedgerReply::TransferFunds(Err(NervousSystemError::new_with_message(
-            "Error when transferring funds",
-        ))),
-    ]);
+    let mut clients = CanisterClients {
+        nns_governance: SpyNnsGovernanceClient::new(vec![
+            NnsGovernanceClientReply::SettleCommunityFundParticipation(Ok(())),
+        ]),
+        sns_ledger: SpyLedger::new(vec![
+            // This mocked reply should produce a successful transfer in SweepResult
+            LedgerReply::TransferFunds(Err(NervousSystemError::new_with_message(
+                "Error when transferring funds",
+            ))),
+        ]),
+        ..spy_clients()
+    };
 
     // Step 2: Call sweep_icp
-    let result = swap
-        .finalize(
-            now_fn,
-            &mut SpySnsRootClient::default(),
-            &mut SpySnsGovernanceClient::default(),
-            &SpyLedger::default(), // ICP Ledger
-            &sns_ledger,
-            &mut nns_governance_client,
-        )
-        .await;
+    let result = swap.finalize(now_fn, &mut clients).await;
 
     // Assert that sweep_icp was executed correctly, but ignore the specific values
     assert!(result.sweep_icp_result.is_some());
@@ -2729,7 +2701,7 @@ async fn test_finalization_halts_when_sweep_sns_fails() {
 
     assert_eq!(
         result.error_message,
-        Some(String::from("Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting sale finalization"))
+        Some(String::from("Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting swap finalization"))
     );
 
     // Assert all other fields are set to None because finalization was halted
@@ -2783,22 +2755,15 @@ async fn test_finalization_halts_when_settle_cf_fails() {
         description: "UNEXPECTED ERROR".to_string(),
     };
 
-    let mut nns_governance_client =
-        SpyNnsGovernanceClient::new(vec![NnsGovernanceClientReply::CanisterCallError(
-            expected_canister_call_error.clone(),
-        )]);
+    let mut clients = CanisterClients {
+        nns_governance: SpyNnsGovernanceClient::new(vec![
+            NnsGovernanceClientReply::CanisterCallError(expected_canister_call_error.clone()),
+        ]),
+        ..spy_clients()
+    };
 
     // Step 2: Call finalize
-    let result = swap
-        .finalize(
-            now_fn,
-            &mut SpySnsRootClient::default(),
-            &mut SpySnsGovernanceClient::default(),
-            &SpyLedger::default(), // ICP Ledger
-            &SpyLedger::default(), // SNS Ledger
-            &mut nns_governance_client,
-        )
-        .await;
+    let result = swap.finalize(now_fn, &mut clients).await;
 
     // Assert that sweep_icp was executed correctly, but ignore the specific values
     assert!(result.sweep_icp_result.is_some());
@@ -2818,7 +2783,7 @@ async fn test_finalization_halts_when_settle_cf_fails() {
     assert_eq!(
         result.error_message,
         Some(String::from(
-            "Settling the CommunityFund participation did not succeed. Halting sale finalization"
+            "Settling the CommunityFund participation did not succeed. Halting swap finalization"
         ))
     );
 
@@ -2846,26 +2811,19 @@ async fn test_finalize_swap_abort_executes_correct_subactions() {
         ..Default::default()
     };
 
-    let mut sns_root_client = SpySnsRootClient::new(vec![
-        // Add a mock reply of a successful call to SNS Root
-        SnsRootClientReply::successful_set_dapp_controllers(),
-    ]);
+    let mut clients = CanisterClients {
+        sns_root: SpySnsRootClient::new(vec![
+            // Add a mock reply of a successful call to SNS Root
+            SnsRootClientReply::successful_set_dapp_controllers(),
+        ]),
+        icp_ledger: SpyLedger::new(
+            // ICP Ledger should be called once and should return success
+            vec![LedgerReply::TransferFunds(Ok(1000))],
+        ),
+        ..spy_clients()
+    };
 
-    let icp_ledger: SpyLedger = SpyLedger::new(
-        // ICP Ledger should be called once and should return success
-        vec![LedgerReply::TransferFunds(Ok(1000))],
-    );
-
-    let response = swap
-        .finalize(
-            now_fn,
-            &mut sns_root_client,
-            &mut SpySnsGovernanceClient::default(),
-            &icp_ledger,
-            &SpyLedger::default(), // SNS Ledger
-            &mut SpyNnsGovernanceClient::with_successful_replies(),
-        )
-        .await;
+    let response = swap.finalize(now_fn, &mut clients).await;
 
     // Assert not other subactions were started
 
@@ -2948,7 +2906,7 @@ async fn test_restore_dapp_controllers_happy() {
     // Assert that the response contains no failures
     assert_eq!(set_dapp_controller_response.failed_updates, vec![],);
 
-    // Assert that with a successful call the Lifecycle of the Sale has been set to aborted
+    // Assert that with a successful call the Lifecycle of the Swap has been set to aborted
     assert_eq!(swap.lifecycle(), Aborted);
 
     // Inspect the request to SNS Root and that it has all the fallback controllers
@@ -3001,26 +2959,18 @@ async fn test_finalization_halts_when_set_mode_fails() {
         description: "BAD REPLY".to_string(),
     };
 
-    let mut sns_governance_client =
-        SpySnsGovernanceClient::new(vec![SnsGovernanceClientReply::CanisterCallError(
-            expected_canister_call_error.clone(),
-        )]);
-
-    let mut nns_governance_client = SpyNnsGovernanceClient::new(vec![
-        NnsGovernanceClientReply::SettleCommunityFundParticipation(Ok(())),
-    ]);
+    let mut clients = CanisterClients {
+        sns_governance: SpySnsGovernanceClient::new(vec![
+            SnsGovernanceClientReply::CanisterCallError(expected_canister_call_error.clone()),
+        ]),
+        nns_governance: SpyNnsGovernanceClient::new(vec![
+            NnsGovernanceClientReply::SettleCommunityFundParticipation(Ok(())),
+        ]),
+        ..spy_clients()
+    };
 
     // Step 2: Call finalize
-    let result = swap
-        .finalize(
-            now_fn,
-            &mut SpySnsRootClient::default(),
-            &mut sns_governance_client,
-            &SpyLedger::default(), // ICP Ledger
-            &SpyLedger::default(), // SNS Ledger
-            &mut nns_governance_client,
-        )
-        .await;
+    let result = swap.finalize(now_fn, &mut clients).await;
 
     assert_eq!(
         result.set_mode_call_result,
@@ -3031,7 +2981,7 @@ async fn test_finalization_halts_when_set_mode_fails() {
         })
     );
 
-    assert_eq!(result.error_message, Some(String::from("Setting the SNS Governance mode to normal did not complete fully. Halting sale finalization")));
+    assert_eq!(result.error_message, Some(String::from("Setting the SNS Governance mode to normal did not complete fully. Halting swap finalization")));
 
     // Assert that sweep_icp was executed correctly, but ignore the specific values
     assert!(result.sweep_icp_result.is_some());
@@ -3113,7 +3063,7 @@ async fn test_restore_dapp_controllers_cannot_parse_fallback_controllers() {
         canister_call_error.description
     );
 
-    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
     assert_eq!(swap.lifecycle(), Aborted);
 }
 
@@ -3159,7 +3109,7 @@ async fn test_restore_dapp_controllers_handles_external_root_failures() {
     // Assert that the error code is expected
     assert_eq!(canister_call_error.code, Some(0));
 
-    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
     assert_eq!(swap.lifecycle(), Aborted);
 }
 
@@ -3203,7 +3153,7 @@ async fn test_restore_dapp_controllers_handles_internal_root_failures() {
         vec![set_dapp_controllers_response::FailedUpdate::default()],
     );
 
-    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    // Assert that even with a failure, the Lifecycle of the Swap has been set to aborted
     assert_eq!(swap.lifecycle(), Aborted);
 }
 
@@ -3214,6 +3164,9 @@ fn test_derived_state() {
     let expected_derived_state1 = DerivedState {
         buyer_total_icp_e8s: 0,
         sns_tokens_per_icp: 0f32,
+        direct_participant_count: Some(0),
+        cf_participant_count: Some(0),
+        cf_neuron_count: Some(0),
     };
     let actual_derived_state1 = swap.derived_state();
     assert_eq!(expected_derived_state1, actual_derived_state1);
@@ -3227,6 +3180,9 @@ fn test_derived_state() {
     let expected_derived_state2 = DerivedState {
         buyer_total_icp_e8s: 0,
         sns_tokens_per_icp: 0f32,
+        direct_participant_count: Some(0),
+        cf_participant_count: Some(0),
+        cf_neuron_count: Some(0),
     };
     let actual_derived_state2 = swap.derived_state();
     assert_eq!(expected_derived_state2, actual_derived_state2);
@@ -3248,21 +3204,33 @@ fn test_derived_state() {
     let expected_derived_state3 = DerivedState {
         buyer_total_icp_e8s: 100_000_000,
         sns_tokens_per_icp: 10f32,
+        direct_participant_count: Some(1),
+        cf_participant_count: Some(0),
+        cf_neuron_count: Some(0),
     };
     let actual_derived_state3 = swap.derived_state();
     assert_eq!(expected_derived_state3, actual_derived_state3);
 
     swap.cf_participants = vec![CfParticipant {
         hotkey_principal: "".to_string(),
-        cf_neurons: vec![CfNeuron {
-            nns_neuron_id: 0,
-            amount_icp_e8s: 300_000_000,
-        }],
+        cf_neurons: vec![
+            CfNeuron {
+                nns_neuron_id: 0,
+                amount_icp_e8s: 300_000_000,
+            },
+            CfNeuron {
+                nns_neuron_id: 1,
+                amount_icp_e8s: 400_000_000,
+            },
+        ],
     }];
 
     let expected_derived_state4 = DerivedState {
-        buyer_total_icp_e8s: 400_000_000,
-        sns_tokens_per_icp: 2.5f32,
+        buyer_total_icp_e8s: 800_000_000,
+        sns_tokens_per_icp: 1.25f32,
+        direct_participant_count: Some(1),
+        cf_participant_count: Some(1),
+        cf_neuron_count: Some(2),
     };
     let actual_derived_state4 = swap.derived_state();
     assert_eq!(expected_derived_state4, actual_derived_state4);
@@ -3793,11 +3761,12 @@ fn test_list_direct_participants_list_is_deterministic() {
         LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
     ]);
 
-    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // Participate in the swap by calling refresh_buyer_tokens. This will update the
     // buyers map and BUYERS_LIST_INDEX
     for i in 0..4 {
         swap.refresh_buyer_token_e8s(
             PrincipalId::new_user_test_id(i),
+            None,
             SWAP_CANISTER_ID,
             &spy_ledger,
         )
@@ -3832,11 +3801,12 @@ fn test_list_direct_participants_paginates_all_participants() {
         LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
     ]);
 
-    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // Participate in the swap by calling refresh_buyer_tokens. This will update the
     // buyers map and BUYERS_LIST_INDEX
     for i in 0..4 {
         swap.refresh_buyer_token_e8s(
             PrincipalId::new_user_test_id(i),
+            None,
             SWAP_CANISTER_ID,
             &spy_ledger,
         )
@@ -3919,11 +3889,12 @@ fn test_rebuild_indexes_ignores_existing_index() {
         LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
     ]);
 
-    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // Participate in the swap by calling refresh_buyer_tokens. This will update the
     // buyers map and BUYERS_LIST_INDEX
     for i in 0..2 {
         swap.refresh_buyer_token_e8s(
             PrincipalId::new_user_test_id(i),
+            None,
             SWAP_CANISTER_ID,
             &spy_ledger,
         )
@@ -3979,6 +3950,7 @@ fn test_refresh_buyer_tokens() {
             assert_eq!(
                 swap.refresh_buyer_token_e8s(
                     *user,
+                    None,
                     SWAP_CANISTER_ID,
                     &mock_stub(vec![LedgerExpect::AccountBalance(
                         Account {
@@ -4003,6 +3975,7 @@ fn test_refresh_buyer_tokens() {
             assert!(swap
                 .refresh_buyer_token_e8s(
                     *user,
+                    None,
                     SWAP_CANISTER_ID,
                     &mock_stub(vec![LedgerExpect::AccountBalance(
                         Account {
@@ -4077,7 +4050,7 @@ fn test_refresh_buyer_tokens() {
 
         // Make sure tokens can only be commited once the swap is open
         assert!(swap
-            .refresh_buyer_token_e8s(user1, SWAP_CANISTER_ID, &mock_stub(vec![]))
+            .refresh_buyer_token_e8s(user1, None, SWAP_CANISTER_ID, &mock_stub(vec![]))
             .now_or_never()
             .unwrap()
             .unwrap_err()
@@ -4203,7 +4176,7 @@ fn test_refresh_buyer_tokens() {
             100 * E8
         );
 
-        //Try and buy 41 more tokens. Since user1 has already participated in the sale they can purchase the missing amount until the user limit
+        //Try and buy 41 more tokens. Since user1 has already participated in the swap they can purchase the missing amount until the user limit
         buy_token_ok(
             &mut swap,
             &user1,
@@ -4260,7 +4233,7 @@ fn test_refresh_buyer_tokens() {
                 < params.min_participant_icp_e8s
         );
 
-        // No user that has not participated in the sale yet can buy this one token left
+        // No user that has not participated in the swap yet can buy this one token left
         buy_token_err(
             &mut swap,
             &user1,
@@ -4407,7 +4380,7 @@ fn test_refresh_buyer_tokens() {
         );
     }
 
-    //Test committing with no funds sent
+    // Test committing with no funds sent
     {
         let params = Params {
             max_icp_e8s: 100 * E8,
@@ -4440,6 +4413,87 @@ fn test_refresh_buyer_tokens() {
         buy_token_ok(&mut swap, &user1, &amount_user1_0, &(2 * E8));
 
         check_final_conditions(&mut swap, &user1, &(2 * E8), &(params.max_icp_e8s));
+    }
+}
+
+/// Test that the `refresh_buyer_token_e8s` function handles confirmations correctly.
+#[test]
+fn test_swap_participation_confirmation() {
+    let confirmation_text = "Please confirm that 2+2=4".to_string();
+    let another_text = "Please confirm that 2+2=5".to_string();
+    let user = PrincipalId::new_user_test_id(1);
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get().into(),
+        subaccount: None,
+    };
+    let amount = 101 * E8;
+
+    let buy_token = |swap: &mut Swap, confirmation_text: Option<String>| {
+        swap.refresh_buyer_token_e8s(
+            user,
+            confirmation_text,
+            SWAP_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                Account {
+                    owner: SWAP_CANISTER_ID.get().into(),
+                    subaccount: Some(principal_to_subaccount(&user)),
+                },
+                Ok(Tokens::from_e8s(amount)),
+            )]),
+        )
+        .now_or_never()
+        .unwrap()
+    };
+
+    let open_swap = |swap: &mut Swap, params: &Params| {
+        assert!(swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+                }
+            )
+            .now_or_never()
+            .unwrap()
+            .is_ok());
+    };
+
+    // A. SNS specifies confirmation text & client sends confirmation text
+    {
+        let mut swap = Swap::new(init_with_confirmation_text(Some(confirmation_text.clone())));
+        open_swap(&mut swap, &params());
+        // A.1. The texts match
+        assert_is_ok!(buy_token(&mut swap, Some(confirmation_text.clone())));
+        // A.2. The texts do not match
+        assert_is_err!(buy_token(&mut swap, Some(another_text)));
+    }
+
+    // B. SNS specifies confirmation text & client does not send a confirmation text
+    {
+        let mut swap = Swap::new(init_with_confirmation_text(Some(confirmation_text.clone())));
+        open_swap(&mut swap, &params());
+        assert_is_err!(buy_token(&mut swap, None));
+    }
+
+    // C. SNS does not specify confirmation text & client sends a confirmation text
+    {
+        let mut swap = Swap::new(init_with_confirmation_text(None));
+        open_swap(&mut swap, &params());
+        assert_is_err!(buy_token(&mut swap, Some(confirmation_text)));
+    }
+
+    // D. SNS does not specify confirmation text & client does not send a confirmation text
+    {
+        let mut swap = Swap::new(init_with_confirmation_text(None));
+        open_swap(&mut swap, &params());
+        assert_is_ok!(buy_token(&mut swap, None));
     }
 }
 
@@ -4479,7 +4533,7 @@ fn test_get_state_bounds_data_sources() {
     assert!(!swap.buyers.is_empty());
 }
 
-/// Assert that an aborted sale that successfully refunds buyers also clears these buyers' buyer
+/// Assert that an aborted swap that successfully refunds buyers also clears these buyers' buyer
 /// state (i.e. sets their committed amounts to 0).
 #[tokio::test]
 async fn test_finalize_swap_abort_sets_amount_transferred_and_fees_correctly() {
@@ -4503,26 +4557,19 @@ async fn test_finalize_swap_abort_sets_amount_transferred_and_fees_correctly() {
     let response = swap.get_buyer_state(&req);
     assert_eq!(e8s, response.buyer_state.unwrap().amount_icp_e8s());
 
-    let mut sns_root_client = SpySnsRootClient::new(vec![
-        // Add a mock reply of a successful call to SNS Root
-        SnsRootClientReply::successful_set_dapp_controllers(),
-    ]);
+    let mut clients = CanisterClients {
+        sns_root: SpySnsRootClient::new(vec![
+            // Add a mock reply of a successful call to SNS Root
+            SnsRootClientReply::successful_set_dapp_controllers(),
+        ]),
+        icp_ledger: SpyLedger::new(
+            // ICP Ledger should be called once and should return success
+            vec![LedgerReply::TransferFunds(Ok(1000))],
+        ),
+        ..spy_clients()
+    };
 
-    let icp_ledger: SpyLedger = SpyLedger::new(
-        // ICP Ledger should be called once and should return success
-        vec![LedgerReply::TransferFunds(Ok(1000))],
-    );
-
-    let response = swap
-        .finalize(
-            now_fn,
-            &mut sns_root_client,
-            &mut SpySnsGovernanceClient::default(),
-            &icp_ledger,
-            &SpyLedger::default(), // SNS Ledger
-            &mut SpyNnsGovernanceClient::with_successful_replies(),
-        )
-        .await;
+    let response = swap.finalize(now_fn, &mut clients).await;
 
     // Successful sweep_icp
     assert_eq!(

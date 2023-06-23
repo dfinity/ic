@@ -2,7 +2,9 @@
 
 == Introduction
 
-The term HostOS is used for the operating system running on the physical machine. The purpose of this system is to enable virtualization for any node running on top.
+HostOS refers to the operating system running on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. 
+
+In terms of its capabilities, HostOS is intentionally limited by design to not perform any trusted capabilities—anything related to the Internet Computer Protocol (replica, orchestrator, etc).
 
 == Building HostOS
 
@@ -65,8 +67,8 @@ In addition to the regular, built-in Ubuntu user accounts, the following users a
 |====
 |Username     |Home Directory     |Default Shell    |Description
 |backup       |var/lib/backup     |/bin/bash        |Backup subnet state
-|readonly     |/var/lib/readonly  |/bin/bash        |Administrative read-only account for node providers/operators
-|admin        |/var/lib/admin     |/bin/bash        |Administrative account for node providers/operators
+|readonly     |/var/lib/readonly  |/bin/bash        |Administrative read-only account for Node Providers/Technicians
+|admin        |/var/lib/admin     |/bin/bash        |Administrative account for Node Providers/Technicians
 |journalbeat  |/home/journalbeat  |/usr/sbin/nologin|Journalbeat service account
 |node_exporter|/home/node_exporter|/usr/sbin/nologin|node_exporter service account
 |====
@@ -165,8 +167,10 @@ The following TCP/UDP output ports are open:
 
 == VMSockets Interface
 
-The primary goal of virtualization is to securely isolate operating systems and system resources. However, there is a need for the virtual machine (GuestOS) to communicate with the underlying hypervisor (HostOS) to perform certain functions. This is necessary since the HostOS is not running the replica and doesn't communicate with the NNS or any application subnet.
+The primary goal of virtualization is to securely isolate operating systems and system resources. However, there is a need for the virtual machine (GuestOS) to communicate with the underlying hypervisor (HostOS) to perform certain functions.
 
-To maintain the highest level of isolation between the two operating systems, the Guestos is restricted to strictly defined commands. All VSOCK (VM Socket) commands are initiated from the GuestOS.
+The VSOCK (VM Socket) acts as a controlled environment for GuestOS to communicate with and steer the HostOS.
+
+To maintain the highest level of isolation between the two operating systems, the Guestos is restricted to strictly defined commands. All VSOCK commands are initiated from the GuestOS.
 
 For a complete list of VSOCK commands and a detailed description of the vsock program, please link:../../rs/ic_os/vsock/README.md[refer to the vsock README].

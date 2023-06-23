@@ -1,7 +1,5 @@
-use crate::common::utils::conversion::{
-    generic_block_to_encoded_block, generic_transaction_from_generic_block,
-};
 use candid::Deserialize;
+use ic_icrc1::blocks::{generic_block_to_encoded_block, generic_transaction_from_generic_block};
 use ic_icrc1::{Block, Transaction};
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::{BlockType, EncodedBlock};
@@ -21,10 +19,14 @@ pub struct RosettaBlock {
 impl RosettaBlock {
     pub fn from_generic_block(generic_block: GenericBlock, block_idx: u64) -> anyhow::Result<Self> {
         let block_hash = ByteBuf::from(generic_block.hash());
-        let block = Block::decode(generic_block_to_encoded_block(generic_block.clone())?)
-            .map_err(anyhow::Error::msg)?;
-        let transaction_hash =
-            ByteBuf::from(generic_transaction_from_generic_block(generic_block)?.hash());
+        let block =
+            generic_block_to_encoded_block(generic_block.clone()).map_err(anyhow::Error::msg)?;
+        let block = Block::decode(block).map_err(anyhow::Error::msg)?;
+        let transaction_hash = ByteBuf::from(
+            generic_transaction_from_generic_block(generic_block)
+                .map_err(anyhow::Error::msg)?
+                .hash(),
+        );
         Ok(Self {
             index: block_idx,
             parent_hash: Block::parent_hash(&block).map(|eb| ByteBuf::from(eb.as_slice().to_vec())),
@@ -53,5 +55,11 @@ impl RosettaBlock {
             Block::decode(eb).map_err(anyhow::Error::msg)?,
             block_idx,
         )
+    }
+
+    pub fn get_transaction(&self) -> anyhow::Result<Transaction> {
+        Ok(Block::decode(self.encoded_block.clone())
+            .map_err(anyhow::Error::msg)?
+            .transaction)
     }
 }

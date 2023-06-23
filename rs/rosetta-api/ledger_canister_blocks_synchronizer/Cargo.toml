@@ -10,12 +10,13 @@ async-trait = "0.1.41"
 candid = "0.8.1"
 clap = { version = "3.1.6", features = ["derive"] }
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
-ic-agent = "0.22.0"
+ic-agent = { workspace = true }
 ic-certification = { path = "../../certification" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-types = { path = "../../types/types" }
 icp-ledger = { path = "../icp_ledger" }
+ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 log = "0.4.14"
 log4rs = "1.1.1"
 on_wire = {path = "../../rust_canisters/on_wire"}
@@ -26,7 +27,7 @@ url = "2.2.1"
 
 [dev-dependencies]
 actix-rt = "2.2.0"
-actix-web = { version = "4.0.1", default_features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
+actix-web = { version = "4.0.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "test_utils" }
 serde_bytes = "0.11"
 

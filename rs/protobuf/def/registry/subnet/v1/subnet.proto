@@ -90,6 +90,10 @@ message SubnetRecord {
   // to `Some`. To remove a key, the list of `key_ids` can be set to not include a particular key.
   // If a removed key is not held by another subnet, it will be lost.
   EcdsaConfig ecdsa_config = 27;
+
+  // If `true`, the subnet will be halted after reaching the next cup height: it will no longer
+  // create or execute blocks.
+  bool halt_at_cup_height = 28;
 }
 
 message EcdsaInitialization {
@@ -347,6 +351,9 @@ message SubnetFeatures {
 
     // Status of the SEV-SNP feature.
     optional SevFeatureStatus sev_status = 7;
+
+    // Controls whether to collect/publish data to the onchain observability canister
+    optional bool onchain_observability = 8;
 }
 
 // Per subnet ECDSA configuration

@@ -1,6 +1,9 @@
 use rand::{CryptoRng, Error, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
+/// Byte length of the seed type used in [`ReproducibleRng`].
+pub const SEED_LEN: usize = 32;
+
 /// Provides a seeded RNG, where the randomly chosen seed is printed on standard output.
 pub fn reproducible_rng() -> ReproducibleRng {
     ReproducibleRng::new()
@@ -14,7 +17,7 @@ pub fn reproducible_rng() -> ReproducibleRng {
 /// (See [impl trait type](https://doc.rust-lang.org/reference/types/impl-trait.html)).
 pub struct ReproducibleRng {
     rng: ChaCha20Rng,
-    seed: [u8; 32],
+    seed: [u8; SEED_LEN],
 }
 
 impl ReproducibleRng {

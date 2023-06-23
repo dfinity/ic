@@ -1,15 +1,15 @@
 //! Utilities to help with testing interleavings of calls to the governance
 //! canister
 use async_trait::async_trait;
-use futures::channel::mpsc::UnboundedSender as USender;
-use futures::channel::oneshot::{self, Sender as OSender};
+use futures::channel::{
+    mpsc::UnboundedSender as USender,
+    oneshot::{self, Sender as OSender},
+};
 use ic_base_types::CanisterId;
 use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
-use std::sync::atomic;
-use std::sync::atomic::Ordering as AOrdering;
+use std::sync::{atomic, atomic::Ordering as AOrdering};
 
-use icp_ledger::Subaccount;
-use icp_ledger::{AccountIdentifier, Tokens};
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
 /// channel

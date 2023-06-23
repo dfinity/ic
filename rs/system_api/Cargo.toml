@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 candid = "0.8.1"
 ic-base-types = { path = "../types/base_types" }
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
+ic-btc-interface = { workspace = true }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }

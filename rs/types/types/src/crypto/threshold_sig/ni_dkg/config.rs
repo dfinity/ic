@@ -9,6 +9,7 @@ use receivers::NiDkgReceivers;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
+use std::num::TryFromIntError;
 
 #[cfg(test)]
 mod tests;
@@ -73,7 +74,7 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
                 config
                     .dealers
                     .into_iter()
-                    .map(crate::node_id_try_from_protobuf)
+                    .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
                     .collect::<Result<BTreeSet<_>, _>>()
                     .map_err(|err| format!("Problem loading dealers in NiDkgConfig: {:?}", err))?,
             )
@@ -83,7 +84,7 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
                 config
                     .receivers
                     .into_iter()
-                    .map(crate::node_id_try_from_protobuf)
+                    .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
                     .collect::<Result<BTreeSet<_>, _>>()
                     .map_err(|err| {
                         format!("Problem loading receivers in NiDkgConfig: {:?}", err)
@@ -339,7 +340,7 @@ impl NiDkgThreshold {
     }
 }
 
-fn number_of_nodes_from_usize(count: usize) -> Result<NumberOfNodes, ()> {
-    let count = NodeIndex::try_from(count).map_err(|_| ())?;
+fn number_of_nodes_from_usize(count: usize) -> Result<NumberOfNodes, TryFromIntError> {
+    let count = NodeIndex::try_from(count)?;
     Ok(NumberOfNodes::from(count))
 }

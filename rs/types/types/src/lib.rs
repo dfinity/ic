@@ -170,14 +170,6 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
     }
 }
 
-/// TODO: Deprecated. Remove in favor of [`node_id_try_from_option`].
-pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, PrincipalIdBlobParseError> {
-    // All fields in Protobuf definition are required hence they are encoded in
-    // `Option`.  We simply treat them as required here though.
-    let principal_id = PrincipalId::try_from(value.principal_id.unwrap())?;
-    Ok(NodeId::from(principal_id))
-}
-
 /// From its protobuf definition convert to a NodeId.  Normally, we would
 /// use `impl TryFrom<Option<pb::NodeId>> for NodeId` here however we cannot
 /// as both `Id` and `pb::NodeId` are defined in other crates.
@@ -525,6 +517,15 @@ impl MemoryAllocation {
             MemoryAllocation::BestEffort => NumBytes::from(0),
         }
     }
+
+    /// Returns the number of actually allocated bytes considering both
+    /// the memory allocation and the memory usage of the canister.
+    pub fn allocated_bytes(&self, memory_usage: NumBytes) -> NumBytes {
+        match self {
+            MemoryAllocation::Reserved(bytes) => (*bytes).max(memory_usage),
+            MemoryAllocation::BestEffort => memory_usage,
+        }
+    }
 }
 
 impl fmt::Display for MemoryAllocation {
@@ -556,7 +557,7 @@ const GB: u64 = 1024 * 1024 * 1024;
 /// The upper limit on the stable memory size.
 /// This constant is used by other crates to define other constants, that's why
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
-pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 48 * GB;
+pub const MAX_STABLE_MEMORY_IN_BYTES: u64 = 64 * GB;
 
 /// The upper limit on the Wasm memory size.
 /// This constant is used by other crates to define other constants, that's why

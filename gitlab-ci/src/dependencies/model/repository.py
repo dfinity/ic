@@ -1,6 +1,8 @@
 import typing
 from dataclasses import dataclass, field
 
+from model.team import Team
+
 
 @dataclass
 class Project:
@@ -11,6 +13,8 @@ class Project:
     path: str
     """link to project"""
     link: typing.Optional[str] = None
+    """owner of the project"""
+    owner: typing.Optional[Team] = None
 
     def __post_init__(self):
         """Validate field values after initialization"""
@@ -27,7 +31,7 @@ class Repository:
     """github url of the repository"""
     url: str
     """list of Projects in the repository"""
-    projects: typing.List = field(default_factory=list)
+    projects: typing.List[Project] = field(default_factory=list)
     """version of the compilation engine"""
     engine_version: typing.Optional[int] = None
 

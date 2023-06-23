@@ -291,10 +291,10 @@ mod test {
 
     fn setup_registry_with_subnet_holding_key(key_id: &EcdsaKeyId) -> (Registry, SubnetId) {
         let subnet_id_holding_key = subnet_test_id(1001);
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -322,7 +322,7 @@ mod test {
 
     #[test]
     fn panic_if_value_changed_across_versions_no_change() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
         let mutation = upsert("foo", "Bar");
         registry.maybe_apply_mutation_internal(vec![mutation]);
 
@@ -337,7 +337,7 @@ mod test {
 
     #[test]
     fn panic_if_value_changed_across_versions_unrelated_change() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
         let mutation = upsert("foo", "Bar");
         registry.maybe_apply_mutation_internal(vec![mutation]);
         let initial_version = registry.latest_version();
@@ -359,7 +359,7 @@ mod test {
     #[test]
     #[should_panic(expected = "A custom panic message")]
     fn panic_if_value_changed_across_versions_yes_change() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
         let mutation = upsert("foo", "Bar");
         registry.maybe_apply_mutation_internal(vec![mutation]);
         let initial_version = registry.latest_version();
@@ -382,7 +382,7 @@ mod test {
     #[test]
     #[should_panic(expected = "[Registry] Record for some_key not found in registry")]
     fn panic_if_value_changed_across_versions_record_not_found() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
         let mutation = upsert("foo", "Bar");
         registry.maybe_apply_mutation_internal(vec![mutation]);
         let initial_version = registry.latest_version();
@@ -408,7 +408,7 @@ mod test {
         'Secp256k1:test_key_id' was not found in any subnet."
     )]
     fn do_recover_subnet_should_panic_if_ecdsa_keys_non_existing() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
         let subnet_id = subnet_test_id(1000);
         let mut payload = get_default_recover_subnet_payload(subnet_id);
 

@@ -3,8 +3,7 @@
 use crate::{
     body::BodyReceiverLayer,
     common::{
-        get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response,
-        remove_effective_canister_id,
+        get_cors_headers, make_plaintext_response, make_response, remove_effective_canister_id,
     },
     metrics::LABEL_UNKNOWN,
     types::ApiReqType,
@@ -32,7 +31,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{load_shed::LoadShed, util::BoxCloneService, Service, ServiceBuilder, ServiceExt};
+use tower::{
+    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder, ServiceExt,
+};
 
 #[derive(Clone)]
 pub(crate) struct CallService {
@@ -42,7 +43,7 @@ pub(crate) struct CallService {
     registry_client: Arc<dyn RegistryClient>,
     validator_executor: ValidatorExecutor,
     ingress_sender: IngressIngestionService,
-    ingress_filter: LoadShed<IngressFilterService>,
+    ingress_filter: IngressFilterService,
     malicious_flags: MaliciousFlags,
 }
 
@@ -59,16 +60,23 @@ impl CallService {
         ingress_filter: IngressFilterService,
         malicious_flags: MaliciousFlags,
     ) -> EndpointService {
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(Self {
-            log,
-            metrics,
-            subnet_id,
-            registry_client,
-            validator_executor,
-            ingress_sender,
-            ingress_filter: ServiceBuilder::new().load_shed().service(ingress_filter),
-            malicious_flags,
-        }));
+        let base_service = BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    config.max_call_concurrent_requests,
+                ))
+                .service(Self {
+                    log,
+                    metrics,
+                    subnet_id,
+                    registry_client,
+                    validator_executor,
+                    ingress_sender,
+                    ingress_filter,
+                    malicious_flags,
+                }),
+        );
+
         BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(BodyReceiverLayer::new(&config))
@@ -252,9 +260,7 @@ impl Service<Request<Vec<u8>>> for CallService {
                 .call((provisional_whitelist, msg.content().clone()))
                 .await
             {
-                Err(err) => {
-                    return Ok(map_box_error_to_response(err));
-                }
+                Err(_) => panic!("Can't panic on Infallible"),
                 Ok(Err(err)) => {
                     return Ok(make_response(err));
                 }

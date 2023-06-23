@@ -33,7 +33,6 @@ use ic_wasm_types::CanisterModule;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
-const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
 const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
 
 fn default_input_request() -> RequestOrResponse {
@@ -116,7 +115,6 @@ impl CanisterStateFixture {
     ) -> Result<(), (StateError, RequestOrResponse)> {
         self.canister_state.push_input(
             msg,
-            MAX_CANISTER_MEMORY_SIZE,
             &mut SUBNET_AVAILABLE_MEMORY.clone(),
             subnet_type,
             input_queue_type,
@@ -214,7 +212,6 @@ fn canister_state_push_input_response_mismatched_originator() {
 fn application_subnet_remote_push_input_request_not_enough_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
         13,
-        MAX_CANISTER_MEMORY_SIZE,
         SubnetType::Application,
         InputQueueType::RemoteSubnet,
         true,
@@ -225,29 +222,6 @@ fn application_subnet_remote_push_input_request_not_enough_subnet_memory() {
 fn application_subnet_local_push_input_request_not_enough_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
         13,
-        MAX_CANISTER_MEMORY_SIZE,
-        SubnetType::Application,
-        InputQueueType::LocalSubnet,
-        true,
-    );
-}
-
-#[test]
-fn application_subnet_remote_push_input_request_not_enough_canister_memory() {
-    canister_state_push_input_request_memory_limit_test_impl(
-        SUBNET_AVAILABLE_MEMORY,
-        NumBytes::new(13),
-        SubnetType::Application,
-        InputQueueType::RemoteSubnet,
-        true,
-    );
-}
-
-#[test]
-fn application_subnet_local_push_input_request_not_enough_canister_memory() {
-    canister_state_push_input_request_memory_limit_test_impl(
-        SUBNET_AVAILABLE_MEMORY,
-        NumBytes::new(13),
         SubnetType::Application,
         InputQueueType::LocalSubnet,
         true,
@@ -258,7 +232,6 @@ fn application_subnet_local_push_input_request_not_enough_canister_memory() {
 fn system_subnet_remote_push_input_request_not_enough_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
         13,
-        MAX_CANISTER_MEMORY_SIZE,
         SubnetType::System,
         InputQueueType::RemoteSubnet,
         true,
@@ -269,29 +242,6 @@ fn system_subnet_remote_push_input_request_not_enough_subnet_memory() {
 fn system_subnet_local_push_input_request_ignores_subnet_memory() {
     canister_state_push_input_request_memory_limit_test_impl(
         13,
-        MAX_CANISTER_MEMORY_SIZE,
-        SubnetType::System,
-        InputQueueType::LocalSubnet,
-        false,
-    );
-}
-
-#[test]
-fn system_subnet_remote_push_input_request_not_enough_canister_memory() {
-    canister_state_push_input_request_memory_limit_test_impl(
-        SUBNET_AVAILABLE_MEMORY,
-        NumBytes::new(13),
-        SubnetType::System,
-        InputQueueType::RemoteSubnet,
-        true,
-    );
-}
-
-#[test]
-fn system_subnet_local_push_input_request_ignores_canister_memory() {
-    canister_state_push_input_request_memory_limit_test_impl(
-        SUBNET_AVAILABLE_MEMORY,
-        NumBytes::new(13),
         SubnetType::System,
         InputQueueType::LocalSubnet,
         false,
@@ -299,7 +249,7 @@ fn system_subnet_local_push_input_request_ignores_canister_memory() {
 }
 
 /// Common implementation for `CanisterState::push_input()` memory limit tests
-/// for `Requests`. Expects a subnet and/or canister memory limit that is below
+/// for `Requests`. Expects a subnet memory limit that is below
 /// `MAX_RESPONSE_COUNT_BYTES`.
 ///
 /// Calls `push_input()` with a `Request` and the provided subnet type and input
@@ -307,7 +257,6 @@ fn system_subnet_local_push_input_request_ignores_canister_memory() {
 /// the value of the `should_enforce_limit` parameter.
 fn canister_state_push_input_request_memory_limit_test_impl(
     subnet_available_memory: i64,
-    max_canister_memory_size: NumBytes,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
     should_enforce_limit: bool,
@@ -319,7 +268,6 @@ fn canister_state_push_input_request_memory_limit_test_impl(
 
     let result = canister_state.push_input(
         request.clone(),
-        max_canister_memory_size,
         &mut subnet_available_memory_,
         own_subnet_type,
         input_queue_type,
@@ -329,7 +277,7 @@ fn canister_state_push_input_request_memory_limit_test_impl(
             Err((
                 StateError::OutOfMemory {
                     requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-                    available: subnet_available_memory.min(max_canister_memory_size.get() as i64)
+                    available: subnet_available_memory,
                 },
                 request,
             )),
@@ -341,8 +289,7 @@ fn canister_state_push_input_request_memory_limit_test_impl(
     }
 }
 
-/// On system subnets we disregard memory reservations and execution memory
-/// usage and allow up to `max_canister_memory_size` worth of messages.
+/// On system subnets we disregard memory reservations and execution memory usage.
 #[test]
 fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execution_memory_usage() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
@@ -350,9 +297,6 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     // Remote message inducted into system subnet.
     let own_subnet_type = SubnetType::System;
     let input_queue_type = InputQueueType::RemoteSubnet;
-
-    // Only enough memory for one request, no space for wasm or globals.
-    let max_canister_memory_size = NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64);
 
     // Tiny explicit allocation, not enough for a request.
     canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::new(13));
@@ -366,9 +310,9 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
         vec![Global::I64(14)],
         WasmMetadata::default(),
     ));
-    assert!(canister_state.memory_usage(own_subnet_type).get() > 0);
+    assert!(canister_state.memory_usage().get() > 0);
     let initial_memory_usage =
-        canister_state.raw_memory_usage() + canister_state.message_memory_usage();
+        canister_state.raw_memory_usage() + canister_state.system_state.message_memory_usage();
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     let request = default_input_request();
@@ -376,7 +320,6 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     canister_state
         .push_input(
             request,
-            max_canister_memory_size,
             &mut subnet_available_memory,
             own_subnet_type,
             input_queue_type,
@@ -385,7 +328,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
 
     assert_eq!(
         initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-        canister_state.raw_memory_usage() + canister_state.message_memory_usage(),
+        canister_state.raw_memory_usage() + canister_state.system_state.message_memory_usage(),
     );
     assert_eq!(
         SUBNET_AVAILABLE_MEMORY - MAX_RESPONSE_COUNT_BYTES as i64,
@@ -447,7 +390,6 @@ fn canister_state_push_input_response_memory_limit_test_impl(
         .canister_state
         .push_input(
             response.clone(),
-            NumBytes::new(14),
             &mut subnet_available_memory,
             own_subnet_type,
             input_queue_type,
@@ -705,6 +647,14 @@ fn execution_state_test_partial_eq() {
     assert_ne!(
         ExecutionState {
             last_executed_round: ExecutionRound::from(12345),
+            ..state_1.clone()
+        },
+        state_1
+    );
+
+    assert_ne!(
+        ExecutionState {
+            next_scheduled_method: NextScheduledMethod::Heartbeat,
             ..state_1.clone()
         },
         state_1

@@ -11,86 +11,74 @@ use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
-use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
+use ic_nns_common::{
+    pb::v1::{NeuronId, ProposalId},
+    types::UpdateIcpXdrConversionRatePayload,
+};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, subaccount_from_slice, Environment,
-        Governance, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        Governance, HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        governance_error::ErrorType,
-        governance_error::ErrorType::InsufficientFunds,
-        governance_error::ErrorType::NotAuthorized,
-        governance_error::ErrorType::PreconditionFailed,
+        governance::GovernanceCachedMetrics,
+        governance_error::{
+            ErrorType,
+            ErrorType::{
+                InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
+            },
+        },
         manage_neuron,
-        manage_neuron::claim_or_refresh::{By, MemoAndController},
-        manage_neuron::configure::Operation,
-        manage_neuron::disburse::Amount,
-        manage_neuron::ClaimOrRefresh,
-        manage_neuron::Command,
-        manage_neuron::Configure,
-        manage_neuron::Disburse,
-        manage_neuron::DisburseToNeuron,
-        manage_neuron::IncreaseDissolveDelay,
-        manage_neuron::Merge,
-        manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron::SetDissolveTimestamp,
-        manage_neuron::Spawn,
-        manage_neuron::Split,
-        manage_neuron::StartDissolving,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            configure::Operation,
+            disburse::Amount,
+            ClaimOrRefresh, Command, Configure, Disburse, DisburseToNeuron, IncreaseDissolveDelay,
+            Merge, MergeMaturity, NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split,
+            StartDissolving,
+        },
         manage_neuron_response,
-        manage_neuron_response::Command as CommandResponse,
+        manage_neuron_response::{Command as CommandResponse, MergeMaturityResponse},
         neuron,
-        neuron::DissolveState,
-        neuron::Followees,
+        neuron::{DissolveState, Followees},
         proposal,
+        proposal::Action,
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron, NeuronStakeTransfer,
-        NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
-        RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
+        ListProposalInfo, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron,
+        NeuronStakeTransfer, NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData,
+        ProposalRewardStatus,
+        ProposalRewardStatus::{AcceptVotes, ReadyToSettle},
+        ProposalStatus,
+        ProposalStatus::Rejected,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees, Tally, Topic,
+        Vote,
     },
 };
-use icp_ledger::{AccountIdentifier, Memo, Tokens};
+use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
 use maplit::hashmap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
-use std::collections::hash_map::Entry;
-use std::collections::BTreeMap;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::iter;
-use std::iter::once;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::Mutex;
-
-use ic_nns_governance::governance::{
-    HeapGrowthPotential, CMC, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, ONE_YEAR_SECONDS,
+use std::{
+    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
+    convert::{TryFrom, TryInto},
+    iter,
+    iter::once,
+    path::PathBuf,
+    sync::{Arc, Mutex},
 };
-use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
-use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
-use ic_nns_governance::pb::v1::manage_neuron::MergeMaturity;
-use ic_nns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
-use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
-use ic_nns_governance::pb::v1::{ManageNeuronResponse, ProposalRewardStatus, RewardNodeProviders};
-use icp_ledger::Subaccount;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
@@ -100,6 +88,19 @@ type LedgerMap = BTreeMap<AccountIdentifier, u64>;
 /// Convenience functions to make creating neurons more concise.
 pub fn principal(i: u64) -> PrincipalId {
     PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
+}
+
+// Constructs a simple motion proposal for tests where the content does not
+// matter.
+pub fn new_motion_proposal() -> Proposal {
+    Proposal {
+        title: Some("A Reasonable Title".to_string()),
+        summary: "Summary".to_string(),
+        action: Some(proposal::Action::Motion(Motion {
+            motion_text: "Some proposal".to_string(),
+        })),
+        ..Default::default()
+    }
 }
 
 pub fn prorated_neuron_age(
@@ -284,6 +285,11 @@ impl NeuronBuilder {
 
     pub fn set_owner(mut self, owner: PrincipalId) -> Self {
         self.owner = Some(owner);
+        self
+    }
+
+    pub fn set_hotkeys(mut self, hotkeys: Vec<PrincipalId>) -> Self {
+        self.hot_keys = hotkeys;
         self
     }
 
@@ -846,6 +852,28 @@ impl NNS {
                 controller,
                 &Merge {
                     source_neuron_id: Some(source.clone()),
+                },
+            )
+            .now_or_never()
+            .unwrap()?;
+        Ok(())
+    }
+
+    pub fn simulate_merge_neurons(
+        &mut self,
+        target: &NeuronId,
+        controller: &PrincipalId,
+        source: &NeuronId,
+    ) -> ManageNeuronResponse {
+        self.governance
+            .simulate_manage_neuron(
+                controller,
+                ManageNeuron {
+                    id: Some(target.clone()),
+                    neuron_id_or_subaccount: None,
+                    command: Some(Command::Merge(Merge {
+                        source_neuron_id: Some(source.clone()),
+                    })),
                 },
             )
             .now_or_never()

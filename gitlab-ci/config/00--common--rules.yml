@@ -9,61 +9,6 @@
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
 
-.boundary-node-service-worker:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
-
-.rules-dependency-scan-release-cut:
-  rules :
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-
-.cargo-rules-autorun-on-trigger:
-  # References (anchors) do not work for 'rules' (yet), so we need to copy the `.cargo-rules`
-  # https://docs.gitlab.com/ee/ci/yaml/#yaml-anchors-for-scripts
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "web" && $DISKIMG_BRANCH == ""'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CI_PIPELINE_SOURCE != "trigger" && $CI_COMMIT_BRANCH =~ /^rc--/'
-    - if: '$CI_PIPELINE_SOURCE == "trigger"'
-
-.rules-merge-branch-only:
-  rules:
-    - if: '$CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
-
-.rules-after-script-test:
-  rules:
-    - if: '$CI_COMMIT_REF_NAME == "master" || $GITLAB_CI_CONFIG_CHANGED == "true"'
-
-.rules-master-schedule-push-branch:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-      when: on_success
-
-.on-success-rules:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: on_success
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: on_success
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-      when: on_success
-
-.on-failure-rules:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: on_failure
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-      when: on_failure
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-      when: on_failure
-
 .rules-parent-pipeline:
   rules:
     - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
@@ -71,77 +16,11 @@
       allow_failure: true  # the pipeline continues running even if the manual job is not run
     - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
 
-.rules-parent-pipeline-autorun-on-trigger:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
-
-.rules-parent-pipeline-protected-branch-only:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH == "master"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH =~ /^rc--.*/'
-
-.rules-parent-pipeline-prs-only:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH != "master" && $CI_COMMIT_BRANCH != "post-merge-tests-passed" && $CI_COMMIT_BRANCH !~ /^rc--.*/'
-
-.rules-prs-only:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-
-.rules-prs-dockerfile-changes:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - .bazelversion
-        - gitlab-ci/container/**/*
-        - gitlab-ci/config/20--test--container-image-autobuild.yml
-
-.rules-any-schedule:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule"'
-
-.rules-rc-cut-schedule:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"'
-
-.rules-cargo-audit-schedule:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "cargo-audit"'
-
-.rules-dependency-scan-schedule:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "dependency-scan-nightly"'
-
-.rules-benchmarks-schedule:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "benchmarks"'
-
-.rules-build-base-images-schedule:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_REF_PROTECTED == "true"'
-      when: manual
-      allow_failure: true
-
-.rules-rollout-pipeline-manual:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-      when: manual
-      # Allow failure needs to be set explicitly, despite what GitLab's documentation says.
-      allow_failure: true
-
 # 1. If on the RC branch and "hotfix" (case insensitive) is in the commit message,
 #    then allow manual execution of prod hourly and nightly tests.
 # 2. Otherwise, if on the RC branch then perform automatic execution of prod hourly and nightly
 #    tests.
-# 3. Otherwise, if on any other branch and triggered by a merge request allow for manual 
+# 3. Otherwise, if on any other branch and triggered by a merge request allow for manual
 #    execution of prod hourly and nightly tests.
 .rules-rollout-pipeline-auto:
   rules:
@@ -175,136 +54,20 @@
       when: manual
       allow_failure: true
 
-.rules-prod-hotfix-tests:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "trigger"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/'
-      when: always
-    - if: '$CD_ENV == $cd_target_env && ( $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/ || $CI_MERGE_REQUEST_TITLE =~ /hotfix/i )'
-    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /(\[rc\]|hotfix)/i'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-
 .rules-rollout-pipeline-run-on-trigger:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "trigger"'
       when: manual
       allow_failure: true  # the pipeline continues running even if the manual job is not run
 
-# Rule for triggering max capacity benchmarks
-.rules-benchmark-tests:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_SUITE"'
-      when: always
-
-# Rule for triggering performance tests
-.rules-benchmark-spot-tests:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_NIGHTLY"'
-      when: always
-
 # Rule for triggering SNS tests
-.rules-sns-tests:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[sns\]/'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"'
-      when: always
-
-.rules-prod-tests:
-  rules:
-    - if: '$CD_ENV == $cd_target_env && $CI_COMMIT_BRANCH =~ /^rc--/ && $CI_COMMIT_MESSAGE =~ /hotfix/i'
-      when: manual
-      allow_failure: true
-    - if: '$CD_ENV == $cd_target_env && $CI_MERGE_REQUEST_TITLE =~ /\[rc\]/'
-      when: manual
-      allow_failure: true
-    - if: '$CI_PIPELINE_SOURCE == "web" && $CD_ENV != "BENCHMARK_SUITE"'
-      when: manual
-      allow_failure: true  # the pipeline continues running even if the manual job is not run
-      # Run debug targets on the debug pipeline, when it is enabled (DEBUG_PIPELINE == 'true')
-      # If this is not the DEBUG_PIPELINE, we must ignore '$cd_debug_target' so that it
-      # gets included in any case.
-    - if: '$CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"'
-      when: always
-
 .rules-simple-prober:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_COMMIT_REF_NAME == "precious-automation/run-simple-prober-v4"'
 
-.rules-protected-branch:
-  rules:
-    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH =~ /^rc--/'
-
-.rules-protected-branch-manual:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_REF_PROTECTED == "true"'
-      when: manual
-      allow_failure: true
-
-.rules-dockerfile-base-changes:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH == "master"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH =~ /^rc--.*/'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
-      changes:
-        - gitlab-ci/config/46--guest-os-build--guest-base-image.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
-
-.rules-scheduled-rosetta-release:
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "rosetta-release"
-
-.rules-service-worker-release:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
-
-.rules-monpoly-deploy:
-  rules:
-    - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
-      changes:
-        - policy-monitoring/**/*
-
 .rules-scheduled-reproducibility:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-
-.rules-hostos:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - 'ic-os/**/*'
-        - 'toolchains/sysimage/**/*'
-        - 'testnet/**/*'
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-    - if: '$SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_COMMIT_BRANCH =~ /^rc--/'
 
 .rules-pipeline-no-merge-train:
   rules:

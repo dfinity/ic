@@ -103,6 +103,7 @@ impl From<ErrorCode> for RejectCode {
             CompositeQueryCalledInReplicatedMode => CanisterError,
             CanisterNotHostedBySubnet => CanisterReject,
             QueryTimeLimitExceeded => CanisterError,
+            QueryCallGraphInternal => CanisterError,
         }
     }
 }
@@ -157,6 +158,7 @@ pub enum ErrorCode {
     QueryCallGraphTotalInstructionLimitExceeded = 526,
     CompositeQueryCalledInReplicatedMode = 527,
     QueryTimeLimitExceeded = 528,
+    QueryCallGraphInternal = 529,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -205,6 +207,7 @@ impl TryFrom<u64> for ErrorCode {
             526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
             527 => Ok(ErrorCode::CompositeQueryCalledInReplicatedMode),
             528 => Ok(ErrorCode::QueryTimeLimitExceeded),
+            529 => Ok(ErrorCode::QueryCallGraphInternal),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -255,7 +258,7 @@ impl UserError {
 
     pub fn is_system_error(&self) -> bool {
         match self.code {
-            ErrorCode::CanisterWasmEngineError => true,
+            ErrorCode::CanisterWasmEngineError | ErrorCode::QueryCallGraphInternal => true,
             ErrorCode::SubnetOversubscribed
             | ErrorCode::MaxNumberOfCanistersReached
             | ErrorCode::CanisterOutputQueueFull

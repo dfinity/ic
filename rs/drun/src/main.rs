@@ -5,6 +5,7 @@ use ic_canister_sandbox_backend_lib::{
 use ic_canister_sandbox_launcher::sandbox_launcher_main;
 use ic_config::{flag_status::FlagStatus, Config, ConfigSource};
 use ic_drun::{run_drun, DrunOptions};
+use ic_registry_subnet_type::SubnetType;
 use std::path::PathBuf;
 
 const DEFAULT_CONFIG_FILE: &str = "ic.json5";
@@ -14,6 +15,7 @@ const ARG_LOG_FILE: &str = "log-file";
 const ARG_MESSAGES: &str = "messages";
 const ARG_EXTRA_BATCHES: &str = "extra-batches";
 const ARG_INSTRUCTION_LIMIT: &str = "instruction-limit";
+const ARG_SUBNET_TYPE: &str = "subnet-type";
 
 fn main() -> Result<(), String> {
     // Check if `drun` is running in the canister sandbox mode where it waits
@@ -56,7 +58,7 @@ async fn drun_main() -> Result<(), String> {
             .value_of(ARG_EXTRA_BATCHES)
             .map(|arg| {
                 arg.parse().unwrap_or_else(|err| {
-                    eprintln!("Failed to parse ARG_EXTRA_BATCHES\n  {}", err);
+                    eprintln!("Failed to parse {}\n  {}", ARG_EXTRA_BATCHES, err);
                     std::process::exit(1);
                 })
             })
@@ -64,10 +66,20 @@ async fn drun_main() -> Result<(), String> {
 
         let instruction_limit = matches.value_of(ARG_INSTRUCTION_LIMIT).map(|arg| {
             arg.parse().unwrap_or_else(|err| {
-                eprintln!("Failed to parse ARG_INSTRUCTION_LIMIT\n  {}", err);
+                eprintln!("Failed to parse {}\n  {}", ARG_INSTRUCTION_LIMIT, err);
                 std::process::exit(1);
             })
         });
+
+        let subnet_type = matches
+            .value_of(ARG_SUBNET_TYPE)
+            .map(|arg| {
+                arg.parse().unwrap_or_else(|err| {
+                    eprintln!("Failed to parse {}\n  {}", ARG_SUBNET_TYPE, err);
+                    std::process::exit(1);
+                })
+            })
+            .unwrap_or(SubnetType::System);
 
         let uo = DrunOptions {
             msg_filename: matches.value_of(ARG_MESSAGES).unwrap().to_string(),
@@ -75,6 +87,7 @@ async fn drun_main() -> Result<(), String> {
             extra_batches,
             log_file,
             instruction_limit,
+            subnet_type,
         };
         run_drun(uo)
     })
@@ -128,6 +141,12 @@ fn get_arg_matches() -> ArgMatches {
                 .long(ARG_INSTRUCTION_LIMIT)
                 .value_name("Instruction Limit")
                 .help("Limit on the number of instructions a message is allowed to execute.")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new(ARG_SUBNET_TYPE)
+                .long(ARG_SUBNET_TYPE)
+                .value_name("Subnet Type")
                 .takes_value(true),
         )
         .get_matches()

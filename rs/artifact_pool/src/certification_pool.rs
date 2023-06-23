@@ -2,13 +2,16 @@ use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+    artifact_pool::{
+        ChangeResult, MutablePool, ProcessingResult, UnvalidatedArtifact, ValidatedPoolReader,
+    },
     certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
     time_source::TimeSource,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_types::artifact::ArtifactKind;
 use ic_types::crypto::crypto_hash;
 use ic_types::{
     artifact::CertificationMessageFilter,
@@ -20,6 +23,7 @@ use ic_types::{
     consensus::HasHeight,
     Height,
 };
+use prometheus::IntCounter;
 use std::collections::HashSet;
 
 /// Certification pool contains 2 types of artifacts: partial and
@@ -35,6 +39,9 @@ pub struct CertificationPoolImpl {
 
     unvalidated_pool_metrics: PoolMetrics,
     validated_pool_metrics: PoolMetrics,
+    invalidated_artifacts: IntCounter,
+
+    log: ReplicaLogger,
 }
 
 const POOL_CERTIFICATION: &str = "certification";
@@ -50,13 +57,14 @@ impl CertificationPoolImpl {
                 crate::lmdb_pool::PersistentHeightIndexedPool::new_certification_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
-                    log,
+                    log.clone(),
                 ),
             ) as Box<_>,
             #[cfg(feature = "rocksdb_backend")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_certification_pool(
-                    config, log,
+                    config,
+                    log.clone(),
                 ),
             ) as Box<_>,
             #[allow(unreachable_patterns)]
@@ -69,6 +77,10 @@ impl CertificationPoolImpl {
             unvalidated_shares: HeightIndex::default(),
             unvalidated_certifications: HeightIndex::default(),
             persistent_pool,
+            invalidated_artifacts: metrics_registry.int_counter(
+                "certification_invalidated_artifacts",
+                "The number of invalidated certification artifacts",
+            ),
             unvalidated_pool_metrics: PoolMetrics::new(
                 metrics_registry.clone(),
                 POOL_CERTIFICATION,
@@ -79,6 +91,7 @@ impl CertificationPoolImpl {
                 POOL_CERTIFICATION,
                 POOL_TYPE_VALIDATED,
             ),
+            log,
         }
     }
 
@@ -124,9 +137,21 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
         }
     }
 
-    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: ChangeSet) {
+    fn apply_changes(
+        &mut self,
+        _time_source: &dyn TimeSource,
+        change_set: ChangeSet,
+    ) -> ChangeResult<CertificationArtifact> {
+        let changed = if !change_set.is_empty() {
+            ProcessingResult::StateChanged
+        } else {
+            ProcessingResult::StateUnchanged
+        };
+        let mut adverts = Vec::new();
+        let mut purged = Vec::new();
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
+                adverts.push(CertificationArtifact::message_to_advert(&msg));
                 self.validated_pool_metrics
                     .received_artifact_bytes
                     .observe(std::mem::size_of_val(&msg) as f64);
@@ -134,6 +159,7 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
             }
 
             ChangeAction::MoveToValidated(msg) => {
+                adverts.push(CertificationArtifact::message_to_advert(&msg));
                 let height = msg.height();
                 match msg {
                     CertificationMessage::CertificationShare(share) => {
@@ -169,10 +195,15 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
             ChangeAction::RemoveAllBelow(height) => {
                 self.unvalidated_shares.remove_all_below(height);
                 self.unvalidated_certifications.remove_all_below(height);
-                self.persistent_pool.purge_below(height);
+                purged.append(&mut self.persistent_pool.purge_below(height));
             }
 
-            ChangeAction::HandleInvalid(msg, _) => {
+            ChangeAction::HandleInvalid(msg, reason) => {
+                self.invalidated_artifacts.inc();
+                warn!(
+                    self.log,
+                    "Invalid certification message ({:?}): {:?}", reason, msg
+                );
                 let height = msg.height();
                 match msg {
                     CertificationMessage::CertificationShare(share) => {
@@ -184,15 +215,25 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
                 };
             }
         });
+        ChangeResult {
+            purged,
+            adverts,
+            changed,
+        }
     }
 }
 
-/// Operations that mutates the persistent pool.
+/// Operations that mutate the persistent pool.
 pub trait MutablePoolSection {
+    /// Insert a [`CertificationMessage`] into the pool.
     fn insert(&self, message: CertificationMessage);
+    /// Get the height indexed pool section for full [`Certification`]s.
     fn certifications(&self) -> &dyn HeightIndexedPool<Certification>;
+    /// Get the height indexed pool section for [`CertificationShare`]s.
     fn certification_shares(&self) -> &dyn HeightIndexedPool<CertificationShare>;
-    fn purge_below(&self, height: Height);
+    /// Purge all artifacts below the given [`Height`]. Return the [`CertificationMessageId`]s
+    /// of the deleted artifacts.
+    fn purge_below(&self, height: Height) -> Vec<CertificationMessageId>;
 }
 
 impl CertificationPool for CertificationPoolImpl {
@@ -433,13 +474,16 @@ mod tests {
                 CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
-            pool.apply_changes(
+            let result = pool.apply_changes(
                 &SysTimeSource::new(),
                 vec![
                     ChangeAction::AddToValidated(share_msg.clone()),
                     ChangeAction::AddToValidated(cert_msg.clone()),
                 ],
             );
+            assert_eq!(result.adverts.len(), 2);
+            assert!(result.purged.is_empty());
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
                 Some(msg_to_cert(cert_msg))
@@ -460,13 +504,16 @@ mod tests {
             let cert_msg = fake_cert(20);
             pool.insert(to_unvalidated(share_msg.clone()));
             pool.insert(to_unvalidated(cert_msg.clone()));
-            pool.apply_changes(
+            let result = pool.apply_changes(
                 &SysTimeSource::new(),
                 vec![
                     ChangeAction::MoveToValidated(share_msg.clone()),
                     ChangeAction::MoveToValidated(cert_msg.clone()),
                 ],
             );
+            assert_eq!(result.adverts.len(), 2);
+            assert!(result.purged.is_empty());
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
                     .collect::<Vec<CertificationShare>>(),
@@ -522,7 +569,7 @@ mod tests {
                 1
             );
 
-            pool.apply_changes(
+            let result = pool.apply_changes(
                 &SysTimeSource::new(),
                 vec![ChangeAction::RemoveAllBelow(Height::from(11))],
             );
@@ -539,6 +586,9 @@ mod tests {
                     panic!("Purging couldn't finish in more than 6 seconds.")
                 }
             }
+            assert!(result.adverts.is_empty());
+            assert_eq!(result.purged.len(), 2);
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
             assert!(pool.certification_at_height(Height::from(10)).is_none());
@@ -566,17 +616,23 @@ mod tests {
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 1
             );
-            pool.apply_changes(
+            let result = pool.apply_changes(
                 &SysTimeSource::new(),
                 vec![ChangeAction::HandleInvalid(
                     share_msg,
                     "Testing the removal of invalid artifacts".to_string(),
                 )],
             );
+            assert!(result.adverts.is_empty());
+            assert!(result.purged.is_empty());
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 0
             );
+
+            let result = pool.apply_changes(&SysTimeSource::new(), vec![]);
+            assert_eq!(result.changed, ProcessingResult::StateUnchanged);
         });
     }
 }

@@ -2,7 +2,10 @@ use super::*;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::crypto::CryptoHash;
+use ic_types::{
+    crypto::CryptoHash,
+    state_sync::StateSyncVersion::{self, *},
+};
 use tempfile::TempDir;
 
 const NUM_THREADS: u32 = 3;
@@ -42,10 +45,13 @@ impl TestEnvironment {
 /// Creates a fake DownloadState::Loading.
 /// We only use download states for comparison in tests, so it doesn't matter
 /// if the contents make sense.
-fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>, FileGroupChunks) {
-    let manifest = Manifest::new(seed, vec![], vec![]);
+fn fake_loading(
+    version: StateSyncVersion,
+    seed: u32,
+) -> (DownloadState, Manifest, HashSet<usize>, FileGroupChunks) {
+    let manifest = Manifest::new(version, vec![], vec![]);
     let meta_manifest = MetaManifest {
-        version: 0,
+        version,
         sub_manifest_hashes: vec![],
     };
     let fetch_chunks: HashSet<usize> =
@@ -63,9 +69,9 @@ fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>, FileGrou
 
 /// Creates a fake DownloadState::Completed for an empty state.
 fn fake_complete() -> DownloadState {
-    let manifest = Manifest::new(0, vec![], vec![]);
+    let manifest = Manifest::new(StateSyncVersion::V0, vec![], vec![]);
     let meta_manifest = MetaManifest {
-        version: 0,
+        version: StateSyncVersion::V0,
         sub_manifest_hashes: vec![],
     };
     let artifact = Artifact::StateSync(StateSyncMessage {
@@ -137,7 +143,8 @@ fn incomplete_state_for_tests(
     } = &result.state
     {
         std::fs::create_dir(&result.root).unwrap();
-        let mut _file = std::fs::File::create(result.root.join(manifest.version.to_string()));
+        let mut _file =
+            std::fs::File::create(result.root.join((manifest.version as u32).to_string()));
     }
     result
 }
@@ -170,7 +177,7 @@ fn blank_sync() {
 fn loading_sync() {
     with_test_replica_logger(|log| {
         let env = TestEnvironment::new(log);
-        let (state, manifest, fetch_chunks, file_groups) = fake_loading(1);
+        let (state, manifest, fetch_chunks, file_groups) = fake_loading(V1, 1);
 
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         let scratchpad = sync.root.clone();
@@ -202,7 +209,7 @@ fn loading_sync() {
         }
 
         // Second sync at lower height, should be ignored by cache
-        let (state, _, _, _) = fake_loading(2);
+        let (state, _, _, _) = fake_loading(V2, 2);
         let sync = incomplete_state_for_tests(&env, Height::new(4), state);
         let scratchpad = sync.root.clone();
 
@@ -228,7 +235,7 @@ fn loading_sync() {
         }
 
         // Third sync at the same height as the cache, should replace cache
-        let (state, manifest, fetch_chunks, file_groups) = fake_loading(3);
+        let (state, manifest, fetch_chunks, file_groups) = fake_loading(V2, 3);
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         let scratchpad = sync.root.clone();
 
@@ -250,13 +257,13 @@ fn loading_sync() {
                 ungroup_fetch_chunks(&fetch_chunks, &file_groups)
             );
             assert!(entry.path.exists());
-            assert!(entry.path.join("3").exists());
+            assert!(entry.path.join("2").exists());
             assert!(!entry.path.join("1").exists());
         }
 
         // Fourth sync at higher height than cache, should replace
         let old_cache_path = env.cache.read().get().unwrap().path.clone();
-        let (state, manifest, fetch_chunks, file_groups) = fake_loading(4);
+        let (state, manifest, fetch_chunks, file_groups) = fake_loading(V2, 4);
 
         let sync = incomplete_state_for_tests(&env, Height::new(6), state);
         let scratchpad = sync.root.clone();
@@ -279,7 +286,7 @@ fn loading_sync() {
                 ungroup_fetch_chunks(&fetch_chunks, &file_groups)
             );
             assert!(entry.path.exists());
-            assert!(entry.path.join("4").exists());
+            assert!(entry.path.join("2").exists());
         }
     })
 }
@@ -310,7 +317,7 @@ fn completed_sync() {
 
         // Populate cache
 
-        let (state, _, _, _) = fake_loading(1);
+        let (state, _, _, _) = fake_loading(V1, 1);
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         drop(sync);
 
@@ -327,7 +334,7 @@ fn completed_sync() {
         assert!(env.cache.read().get().is_none());
 
         // Populate cache again
-        let (state, _, _, _) = fake_loading(1);
+        let (state, _, _, _) = fake_loading(V1, 1);
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         drop(sync);
 
@@ -345,7 +352,7 @@ fn completed_sync() {
 fn existing_folder() {
     with_test_replica_logger(|log| {
         let env = TestEnvironment::new(log);
-        let (state, _, _, _) = fake_loading(1);
+        let (state, _, _, _) = fake_loading(V1, 1);
 
         let height = Height::new(5);
         let sync = incomplete_state_for_tests(&env, height, state);

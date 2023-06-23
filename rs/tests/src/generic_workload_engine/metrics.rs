@@ -10,6 +10,8 @@ use async_trait::async_trait;
 use itertools::Itertools;
 use slog::{info, Logger};
 
+use crate::util::{add_box_drawing_left_border, pad_all_lines_but_first};
+
 use super::engine::Engine;
 
 #[derive(Default, Clone, Debug)]
@@ -194,8 +196,12 @@ impl LoadTestMetrics {
 
     pub fn aggregator_fn(
         aggr: LoadTestMetrics,
-        item: LoadTestOutcome<(), String>,
+        item: LoadTestOutcome<(), impl ToString>,
     ) -> LoadTestMetrics {
+        let item = item
+            .into_iter()
+            .map(|(s, outcome)| (s, outcome.map_err(|err| err.to_string())))
+            .collect::<Vec<_>>();
         aggr.aggregate_load_testing_metrics(item)
     }
 }
@@ -352,7 +358,18 @@ impl Display for RequestMetrics {
             } else {
                 writeln!(f, " errors:").and(
                     self.errors_map.iter().sorted_unstable_by(|(err_a, count_a), (err_b, count_b)| count_a.cmp(count_b).then(err_a.cmp(err_b))).fold(write!(f, ""), |acc, (error, count)| {
-                        acc.and(writeln!(f, "          {count:>7} x {error:?}"))
+                        let error: String = error.replace("\\n", "\n");
+                        let prefix = format!("         {count:>7} x ");
+                        // Format the error if it's multiple lines, otherwise just print it as is.
+                        let error = {
+                            if error.contains('\n') {
+                                pad_all_lines_but_first(add_box_drawing_left_border(error), prefix.len())
+                            } else {
+                                error
+                            }
+                        };
+
+                        acc.and(writeln!(f, "{prefix}{error}"))
                     })
                 ).and(writeln!(f, "     }}"))
             }
@@ -365,7 +382,7 @@ impl Display for RequestMetrics {
 /// - An HTTP request that is expected to return a JSON object of a particular shape
 ///
 /// [`ResultType`] can be instantiated with one of the following:
-/// 1. Union, i.e., [`()`], meaning that we are solely interested in whether there has been an error, and the result value is not used.
+/// 1. Unit, i.e., [`()`], meaning that we are solely interested in whether there has been an error, and the result value is not used.
 /// 2. A concrete type, e.g., [`Value`] for an http_request that serves a JSON object.
 ///    This is the preferred case, as the client can then match on the structure of [`ResultType`] without needing to decode it.
 /// 3. A generic encoding of a response, i.e., [`Vec<u8>`]. This allows aggregating multiple instances of [`RequestOutcome`],
@@ -373,7 +390,7 @@ impl Display for RequestMetrics {
 ///    for collecting metrics in a stateful workload generation scenario, when one first calls request A and then (upon its success)
 ///    request B, and if type(response(A)) != type(response(B)).
 #[derive(Debug, Clone)]
-pub struct RequestOutcome<ResultType: Clone, ErrorType: Clone> {
+pub struct RequestOutcome<ResultType, ErrorType> {
     result: Result<ResultType, ErrorType>,
     /// Each request class can be identified via a [`(workflow_pos, label)`] pair used to aggregate statistical information about outcomes of multiple requests with the same label.
     /// - [`workflow_pos`] is an (optional, unique) position of this request in its workflow. [`None`] is used to classify the overall worflow outcome, in which case the position
@@ -386,7 +403,7 @@ pub struct RequestOutcome<ResultType: Clone, ErrorType: Clone> {
     pub attempts: Counter,
 }
 
-impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> {
+impl<ResultType, ErrorType> RequestOutcome<ResultType, ErrorType> {
     pub fn new(
         result: Result<ResultType, ErrorType>,
         label: String,
@@ -402,22 +419,11 @@ impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> 
         }
     }
 
-    pub fn result(&self) -> Result<ResultType, ErrorType> {
-        self.result.clone()
-    }
-
-    pub fn with_workflow_position(mut self, pos: usize) -> Self {
-        self.workflow_pos = Some(pos);
-        self
-    }
-
     fn map_result<F, NewResultType, NewErrorType>(
         self,
         f: F,
     ) -> RequestOutcome<NewResultType, NewErrorType>
     where
-        NewResultType: Clone,
-        NewErrorType: Clone,
         F: FnOnce(Result<ResultType, ErrorType>) -> Result<NewResultType, NewErrorType>,
     {
         RequestOutcome {
@@ -435,7 +441,6 @@ impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> 
     /// A common pattern is `request_outcome.map(|_| ())`, used for making request outcomes compatible with the provided `RequestMetrics` aggregators.
     pub fn map<F, NewResultType>(self, f: F) -> RequestOutcome<NewResultType, ErrorType>
     where
-        NewResultType: Clone,
         F: FnOnce(ResultType) -> NewResultType,
     {
         self.map_result(|result| result.map(f))
@@ -445,10 +450,40 @@ impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> 
     /// leaving an `Ok` value untouched.
     pub fn map_err<F, NewErrorType>(self, f: F) -> RequestOutcome<ResultType, NewErrorType>
     where
-        NewErrorType: Clone,
         F: FnOnce(ErrorType) -> NewErrorType,
     {
         self.map_result(|result| result.map_err(f))
+    }
+
+    pub fn into_test_outcome(self) -> LoadTestOutcome<ResultType, ErrorType> {
+        vec![(self.key(), self)]
+    }
+
+    pub fn with_workflow_position(mut self, pos: usize) -> Self {
+        self.workflow_pos = Some(pos);
+        self
+    }
+
+    pub fn result(self) -> Result<ResultType, ErrorType> {
+        self.result
+    }
+
+    // Pushes the outcome to the provided `test_outcome`, and returns a boolean indicating whether the outcome was `ok`.
+    pub fn push_outcome_owned(
+        self,
+        test_outcome: &mut LoadTestOutcome<ResultType, ErrorType>,
+    ) -> bool {
+        let is_ok = self.result.is_ok();
+        test_outcome.push((self.key(), self));
+        is_ok
+    }
+
+    fn key(&self) -> String {
+        if let Some(workflow_pos) = self.workflow_pos {
+            format!("{workflow_pos}_{}", self.label)
+        } else {
+            self.label.clone()
+        }
     }
 
     /// Map `RequestOutcome<ResultType, ErrorType>` to a new `RequestOutcome<(), ErrorType>` instance by applying `checker` to the `Ok` result of `self`.
@@ -466,21 +501,40 @@ impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> 
             }
         })
     }
+}
 
-    fn key(&self) -> String {
-        if let Some(workflow_pos) = self.workflow_pos {
-            format!("{workflow_pos}_{}", self.label)
-        } else {
-            self.label.clone()
-        }
+impl<ResultType> RequestOutcome<ResultType, anyhow::Error> {
+    pub fn context(self, context: impl ToString) -> Self {
+        self.map_err(|err| err.context(context.to_string()))
     }
+}
 
-    pub fn into_test_outcome(self) -> LoadTestOutcome<ResultType, ErrorType> {
-        vec![(self.key(), self)]
-    }
-
+impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> {
+    /// A convenience function - equivalent to `RequestOutcome::push_outcome_owned`,
+    /// except it clones the result so you don't have to.
     pub fn push_outcome(self, test_outcome: &mut LoadTestOutcome<ResultType, ErrorType>) -> Self {
-        test_outcome.push((self.key(), self.clone()));
+        self.clone().push_outcome_owned(test_outcome);
+        self
+    }
+}
+
+impl<ResultType: Clone, ErrorType: std::fmt::Debug> RequestOutcome<ResultType, ErrorType> {
+    /// Convenience function. Like `push_outcome`, but converts its `ErrorType` to a `String` first.
+    pub fn push_outcome_display_error(
+        self,
+        test_outcome: &mut LoadTestOutcome<ResultType, String>,
+    ) -> Self {
+        let new = RequestOutcome::<ResultType, String> {
+            result: match self.result {
+                Ok(ref result) => Ok(result.clone()),
+                Err(ref err) => Err(format!("{err:?}")),
+            },
+            workflow_pos: self.workflow_pos,
+            label: self.label.clone(),
+            duration: self.duration,
+            attempts: self.attempts,
+        };
+        new.push_outcome_owned(test_outcome);
         self
     }
 }
@@ -494,10 +548,11 @@ pub trait LoadTestMetricsProvider {
 }
 
 #[async_trait]
-impl<F, Fut> LoadTestMetricsProvider for Engine<F>
+impl<F, Fut, E> LoadTestMetricsProvider for Engine<F>
 where
+    E: ToString + Send + 'static,
     F: FnMut(usize) -> Fut + Send + 'static,
-    Fut: std::future::Future<Output = LoadTestOutcome<(), String>> + Send + 'static,
+    Fut: std::future::Future<Output = LoadTestOutcome<(), E>> + Send + 'static,
 {
     async fn execute_simply(mut self, log: Logger) -> LoadTestMetrics {
         let aggr = LoadTestMetrics::new(log);

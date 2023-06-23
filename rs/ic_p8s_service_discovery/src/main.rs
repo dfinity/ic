@@ -23,7 +23,7 @@ use elastic_common_schema::{self as ecs, process_fields::WithCurrentProcess};
 use ic_async_utils::shutdown_signal;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_nns_data_provider_wrappers::create_nns_data_provider;
+use ic_registry_nns_data_provider_wrappers::CertifiedNnsDataProvider;
 
 use config::Config;
 
@@ -64,20 +64,14 @@ async fn main() -> Result<()> {
     let discovery_metrics = Arc::clone(&metrics);
     let discovery_shutdown = shutdown_signal.clone();
 
-    let nns_public_key = if !config.nns_public_key_path.is_empty() {
-        Some(
-            parse_threshold_sig_key(&PathBuf::from(&config.nns_public_key_path))
-                .expect("unable to parse NNS public key"),
-        )
-    } else {
-        None
-    };
+    let nns_public_key = parse_threshold_sig_key(&PathBuf::from(&config.nns_public_key_path))
+        .expect("Failed to get the NNS public key");
 
-    let data_provider = create_nns_data_provider(
+    let data_provider = Arc::new(CertifiedNnsDataProvider::new(
         tokio::runtime::Handle::current(),
         config.nns.urls.clone(),
         nns_public_key,
-    );
+    ));
 
     let registry_client = Arc::new(RegistryClientImpl::new(
         data_provider,

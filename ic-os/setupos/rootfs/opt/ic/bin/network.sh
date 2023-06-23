@@ -147,8 +147,8 @@ function ping_ipv6_gateway() {
 }
 
 function assemble_nns_nodes_list() {
-    NNS_URL=$(/opt/ic/bin/fetch-property.sh --key=.nns.url --config=${DEPLOYMENT})
-    NNS_URL_LIST=$(echo $NNS_URL | sed 's@,@ @g')
+    NNS_URL_STRING=$(/opt/ic/bin/fetch-property.sh --key=.nns.url --config=${DEPLOYMENT})
+    NNS_URL_LIST=$(echo $NNS_URL_STRING | sed 's@,@ @g')
 }
 
 function query_nns_nodes() {
@@ -157,10 +157,8 @@ function query_nns_nodes() {
     i=0
     success=0
     nodes=$(echo ${NNS_URL_LIST} | wc -w)
+    # At least one of the provided URLs needs to work.
     verify=1
-    if [ ${nodes} -gt 1 ]; then
-        verify=$(awk "BEGIN {printf \"%.0f\n\", ${nodes}*0.20}")
-    fi
     for url in $(echo $NNS_URL_LIST); do
         # When running against testnets, we need to ignore self signed certs
         # with `--insecure`. This check is only meant to confirm from SetupOS

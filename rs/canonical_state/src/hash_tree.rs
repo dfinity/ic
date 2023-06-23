@@ -362,25 +362,6 @@ impl HashTree {
             .all(|vec| vec.iter().all(|range| range.indexes_into(self))));
     }
 
-    /// Returns the estimate of the size occupied by this data structure in
-    /// bytes.
-    pub fn size_estimate(&self) -> usize {
-        fn slice_size<T>(s: &[Vec<T>]) -> usize {
-            s.iter()
-                .map(|vec| std::mem::size_of_val(vec) + vec.len() * std::mem::size_of::<T>())
-                .sum()
-        }
-        std::mem::size_of_val(self)
-            + slice_size(&self.leaf_digests)
-            + slice_size(&self.fork_digests)
-            + slice_size(&self.fork_left_children)
-            + slice_size(&self.fork_right_children)
-            + slice_size(&self.node_digests)
-            + slice_size(&self.node_labels)
-            + slice_size(&self.node_children)
-            + slice_size(&self.node_children_labels_ranges)
-    }
-
     /// Returns a structured representation-independent view of the node with
     /// the specified ID.
     pub fn view(&self, node_id: NodeId) -> HashTreeView<'_> {
@@ -574,6 +555,11 @@ impl HashTree {
                         );
                     }
                 }
+
+                // Empty subtree.
+                LabeledTree::SubTree(children) if children.is_empty() => B::make_empty(),
+
+                // Non-empty subtree.
                 LabeledTree::SubTree(children) => children
                     .iter()
                     .map(|(l, t)| child_witness::<B>(ht, parent, pos, l, t))
@@ -731,7 +717,11 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
                 } = ht.preallocate_nodes(num_children, parent);
                 let mut nodes = Vec::with_capacity(num_children);
 
-                // We only use multithreading if the number of children is large
+                // We only use multithreading if the number of children is large. It is generally
+                // efficient to do so because the children of a given parent are of the same type
+                // (e.g. everything under `/canisters` is a canister state) and thus require
+                // similar amounts of work to materialize.
+                //
                 // We do not pass the thread pool down after use, so we are not spawning new threads
                 // in a nested way.
                 if num_children > 100 && par_strategy.is_concurrent() {

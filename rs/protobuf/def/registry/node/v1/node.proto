@@ -1,15 +1,15 @@
 syntax = "proto3";
 package registry.node.v1;
 
+enum Protocol {
+  PROTOCOL_UNSPECIFIED = 0;
+  PROTOCOL_HTTP1 = 1;
+  PROTOCOL_HTTP1_TLS_1_3 = 2;
+  PROTOCOL_P2P1_TLS_1_3 = 3;
+}
+
 // A connection endpoint.
 message ConnectionEndpoint {
-  enum Protocol {
-    PROTOCOL_UNSPECIFIED = 0;
-    PROTOCOL_HTTP1 = 1;
-    PROTOCOL_HTTP1_TLS_1_3 = 2;
-    PROTOCOL_P2P1_TLS_1_3 = 3;
-  }
-
   // The IP address. Senders SHOULD use dotted-quad notation for IPv4 addresses
   // and RFC5952 representation for IPv6 addresses (which means that IPv6
   // addresses are *not* enclosed in `[` and `]`, as they are not written
@@ -37,13 +37,10 @@ message FlowEndpoint {
 message NodeRecord {
   // the node_id is redundant as it is already contained in the key for this
   // value.
-  reserved 1;
+  reserved 1, 2, 3, 4;
   reserved "node_id";
-  reserved 2;
   reserved "gossip_advert";
-  reserved 3;
   reserved "gossip_request";
-  reserved 4;
   reserved "gossip_artifact";
 
   // The endpoint where this node receives xnet messages.
@@ -58,28 +55,20 @@ message NodeRecord {
   // The P2P flow end points.
   repeated FlowEndpoint p2p_flow_endpoints = 8;
 
-  reserved 9;
+  reserved 9, 10, 11, 12, 13, 14;
   reserved "dcop_principal_id";
-
-  // Endpoint where the node provides Prometheus format metrics over HTTP
-  ConnectionEndpoint prometheus_metrics_http = 10;
-
-  // Endpoints on which the public API is served.
-  repeated ConnectionEndpoint public_api = 11;
-
-  // Endpoints on which private APIs are served.
-  repeated ConnectionEndpoint private_api = 12;
-
-  // Endpoints on which metrics compatible with the Prometheus export
-  // format are served.
-  repeated ConnectionEndpoint prometheus_metrics = 13;
-
-  // Endpoints on which the XNet API is served
-  repeated ConnectionEndpoint xnet_api = 14;
+  reserved "prometheus_metrics_http";
+  reserved "public_api";
+  reserved "private_api";
+  reserved "prometheus_metrics";
+  reserved "xnet_api";  
 
   // The id of the node operator that added this node.
   bytes node_operator_id = 15;
 
   // The SEV-SNP chip_identifier for this node.
   bytes chip_id = 16;
+
+  // ID of the HostOS version to run.
+  optional string hostos_version_id = 17;
 }

@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:candid.bzl", "did_git_test")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -28,6 +29,7 @@ rust_library(
     ],
     version = "0.8.0",
     deps = [
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/sha",
         "//rs/rosetta-api/icrc1",
@@ -104,6 +106,8 @@ rust_test(
     },
     deps = [
         ":icp_ledger",
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/canister_client/sender",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
@@ -126,6 +130,7 @@ rust_test(
     srcs = ["test/protobuf_encoding.rs"],
     deps = [
         ":icp_ledger",
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/dfn_protobuf",
         "@crate_index//:proptest",
@@ -133,11 +138,10 @@ rust_test(
     ],
 )
 
-# TODO enable this test after the refactoring
-# did_git_test(
-#     name = "ledger_did_git_test",
-#     did = ":ledger.did",
-# )
+did_git_test(
+    name = "ledger_did_git_test",
+    did = ":ledger.did",
+)
 
 generated_files_check(
     name = "check_generated_files",

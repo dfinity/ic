@@ -1,7 +1,8 @@
 no-interrupt:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-any-schedule
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
   stage: init
   interruptible: False
   script:
@@ -10,7 +11,8 @@ no-interrupt:
 cargo-audit:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-cargo-audit-schedule
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "cargo-audit"'
   stage: init
   script:
     - cd rs; cargo audit

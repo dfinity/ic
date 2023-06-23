@@ -15,7 +15,7 @@ ic-https-outcalls-consensus = { path = "../../https_outcalls/consensus" }
 ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }
-ic-interfaces-https-outcalls-adapter-client = { path = "../../interfaces/https_outcalls_adapter_client" }
+ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-p2p = { path = "../../interfaces/p2p" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
@@ -23,6 +23,7 @@ ic-interfaces-transport = { path = "../../interfaces/transport" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-p2p = { path = "../../p2p" }
+ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-manager = { path = "../../state_manager" }

@@ -1,10 +1,11 @@
 use ic_crypto_internal_bls12_381_type::*;
-use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
-use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use itertools::izip;
 use paste::paste;
+use rand::seq::IteratorRandom;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use sha2::{Digest, Sha256};
 
 fn scalar_test_encoding(scalar: Scalar, expected_value: &'static str) {
     assert_eq!(hex::encode(scalar.serialize()), expected_value);
@@ -427,6 +428,59 @@ fn test_pairing_bilinearity() {
 }
 
 #[test]
+fn test_gt_tag_is_expected_value() {
+    fn hash_of_tag(g: &Gt) -> String {
+        let mut sha = Sha256::default();
+        sha.update(g.tag());
+        hex::encode(sha.finalize().as_slice())
+    }
+
+    // The SHA-256 of the encodings of g*1, g*2, g*3, ...
+    let expected = [
+        "300e47c99502f3af33ad2080847d528cabd90365a90ab98bc174565c27928591",
+        "067894e43096b5a855549fd6d19955d3922f402680ca82cb02ebc545f65779a7",
+        "aad5ac496dd4b1ea2a6353051e81950185d56882c75664792ab71164820d386d",
+        "557219d7adf954d8438411808e20ba5834c286e9a80e0d22e47a37c543282e6e",
+        "621f31153ec9fafd2d0547620f76b6d0c5935d3fe920ca27adcf6afa5501941c",
+        "e9e1a6e7029556364ca875f9582ebdf8dcc0db1c6f3312341292ebc0df17baa3",
+        "f93ac623ee1dc6d057070f8f19c069565fc60708431175d5053b88004106648a",
+        "c8a6cc7acc0b87a957fdb2d999108db57c71c53a81804dad951de9f34d6c1da4",
+        "0f650545765993b34996e5adf1ef3dd4c835e7b23926e15fd569ef07a36f5ab9",
+        "d446409bee1f57b697be2d71979ce6e57e54fa6cc9d7899304c0862f83bc95a8",
+        "9b526347ba5a9b440c22c164c1f62ab18ae1c32f63c42d6efa3819b53b21c37f",
+        "e44e2a3d236f34decd4d6a4f6f958dfdb98cdda8b0f8e2b7809609c2b0bf89b7",
+        "2c74b687d7f06e8ef3473463393b16128f4ec1c3e5b30aa1b297305717ef9984",
+        "789aad7bcc07c3053908a8de556ab1512cd3e3a89e9b23b63d383543235b7a11",
+        "140ff2aa98b9fc1e25900b1af0c74e242f603919b72910a52f3f6e41b6ce363e",
+        "2d7e7b7b420f6b01d0c0c822ba5dd03006f95529a702ebbd48f2c0bcb512871b",
+        "06a291618e610ea18dcc57202f6e917576997731e3b6e24db593aa9c0ed672d4",
+        "2a8c95c256fcfc3a5d003ec04d13366138421870b3b28c2dd3ed8ffa2f4a759a",
+        "12b826c18cda8414f0efb3a909fadde1909a11eb2de944837f9b0137efa1251a",
+        "3ee907fa77740c5631ed321c5b5a941af5592cf33efc1b3ee6c2674b21fc9194",
+        "37fc0038857c81a431bd361d6610441125353c8ce3b17484cf512626652bb456",
+        "ce79a21dbd31218b153b9c3e0e8fa9340bc36f92e3319aae88d3f0587b49dafa",
+        "14669f024da5757b913976dcf8b6eed5d2a35d5d5863ad5df7241cdaa33d4a44",
+        "d778f3e6645e45554ac27cb243b959427fa8786446065113ab76154a784d5d56",
+        "f7f098948e4bc9f31a5cd9a927f41a07bc225e3da130692acf99888d4a5ed606",
+        "ca027cc487f092de0e30fde26c2297f12bff759b9a59004df2dd737a84eb17df",
+        "0c683f5bc078cff9a1cdf4016bb5461e6b298a7ffb51e9fc7dde1e21b923ead8",
+        "71cb0152efdf758280de68aa539e69dbf46ec3d72a738339485a56350f41e8cc",
+        "06af9830dcab4047081894519019b04fecfb8395aff845ba96bc1e712606e636",
+        "6b638b23cbe45d4ea3d478cc1399ffecfe3f215f391d01610db26d1f2b39f356",
+        "739262709aa4c7b628d66e702836c1dc12d3df9a4e36cb3171f0d8eedf4ad0f4",
+        "a52e01b0c4776ed83790961c18264e1e1db3e275e176fa321c4e42e8010aedb8",
+        "c6bd4a052f1cbbf3eacc0ff28c0c62045fa8aca7ad1b83db1dd3a6bdbf322e6d",
+    ];
+
+    let mut g = Gt::identity();
+
+    for h in expected {
+        g += Gt::generator();
+        assert_eq!(hash_of_tag(&g), h);
+    }
+}
+
+#[test]
 fn test_g1_generator_is_expected_value() {
     /*
     The generators of G1 and and G2 are computed by finding the
@@ -528,7 +582,8 @@ fn test_g1_deserialize_rejects_infinity_bit_with_nonzero_x() {
     let g1 = G1Affine::generator();
 
     let mut g1_bytes = g1.serialize();
-    g1_bytes[G1Bytes::FLAG_BYTE_OFFSET] |= G1Bytes::INFINITY_FLAG;
+    // set the infinity bit
+    g1_bytes[0] |= 1 << 6;
 
     assert!(G1Affine::deserialize(&g1_bytes).is_err());
     assert!(G1Affine::deserialize_unchecked(&g1_bytes).is_err());
@@ -539,7 +594,8 @@ fn test_g2_deserialize_rejects_infinity_bit_with_nonzero_x() {
     let g2 = G2Affine::generator();
 
     let mut g2_bytes = g2.serialize();
-    g2_bytes[G2Bytes::FLAG_BYTE_OFFSET] |= G2Bytes::INFINITY_FLAG;
+    // set the infinity bit
+    g2_bytes[0] |= 1 << 6;
 
     assert!(G2Affine::deserialize(&g2_bytes).is_err());
     assert!(G2Affine::deserialize_unchecked(&g2_bytes).is_err());
@@ -599,26 +655,59 @@ fn test_scalar_serialization_round_trips() {
 
 #[test]
 fn test_g1_test_vectors() {
+    /// The chosen generator for the G1 group.
+    ///
+    /// Note: This matches `x=0x17f1d3..` in the spec, with flag bits added to the
+    /// first byte.
+    const GENERATOR: &str = "97f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb";
+    /// The additive identity, also known as zero.
+    const INFINITY: &str = "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+    /// Powers of 2: `g1_generator * {1, 2, 4, 8, ...}`
+    const POWERS_OF_2: &[&str] = &[
+        GENERATOR,
+        "a572cbea904d67468808c8eb50a9450c9721db309128012543902d0ac358a62ae28f75bb8f1c7c42c39a8c5529bf0f4e",
+        "ac9b60d5afcbd5663a8a44b7c5a02f19e9a77ab0a35bd65809bb5c67ec582c897feb04decc694b13e08587f3ff9b5b60",
+        "a85ae765588126f5e860d019c0e26235f567a9c0c0b2d8ff30f3e8d436b1082596e5e7462d20f5be3764fd473e57f9cf",
+        "a73eb991aa22cdb794da6fcde55a427f0a4df5a4a70de23a988b5e5fc8c4d844f66d990273267a54dd21579b7ba6a086",
+        "a72841987e4f219d54f2b6a9eac5fe6e78704644753c3579e776a3691bc123743f8c63770ed0f72a71e9e964dbf58f43",
+    ];
+    /// Positive numbers: `g1_generator * {1,2,3,4,...}`
+    const POSITIVE_NUMBERS: &[&str] = &[
+        GENERATOR,
+        "a572cbea904d67468808c8eb50a9450c9721db309128012543902d0ac358a62ae28f75bb8f1c7c42c39a8c5529bf0f4e",
+        "89ece308f9d1f0131765212deca99697b112d61f9be9a5f1f3780a51335b3ff981747a0b2ca2179b96d2c0c9024e5224",
+        "ac9b60d5afcbd5663a8a44b7c5a02f19e9a77ab0a35bd65809bb5c67ec582c897feb04decc694b13e08587f3ff9b5b60",
+        "b0e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc",
+    ];
+    /// Negative numbers: `g1_generator * {-1, -2, -3, -4, ...}`
+    const NEGATIVE_NUMBERS: &[&str] = &[
+        "b7f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb",
+        "8572cbea904d67468808c8eb50a9450c9721db309128012543902d0ac358a62ae28f75bb8f1c7c42c39a8c5529bf0f4e",
+        "a9ece308f9d1f0131765212deca99697b112d61f9be9a5f1f3780a51335b3ff981747a0b2ca2179b96d2c0c9024e5224",
+        "8c9b60d5afcbd5663a8a44b7c5a02f19e9a77ab0a35bd65809bb5c67ec582c897feb04decc694b13e08587f3ff9b5b60",
+        "90e7791fb972fe014159aa33a98622da3cdc98ff707965e536d8636b5fcc5ac7a91a8c46e59a00dca575af0f18fb13dc",
+    ];
+
     let g = G1Affine::generator();
     let identity = G1Affine::identity();
 
-    g1_test_encoding(identity.clone(), test_vectors::g1::INFINITY);
-    g1_test_encoding(g.clone(), test_vectors::g1::GENERATOR);
+    g1_test_encoding(identity.clone(), INFINITY);
+    g1_test_encoding(g.clone(), GENERATOR);
 
     assert_eq!(identity, G1Affine::from(G1Projective::identity()));
     assert_eq!(g, &G1Affine::from(G1Projective::generator()));
 
-    for (i, expected) in test_vectors::g1::POSITIVE_NUMBERS.iter().enumerate() {
+    for (i, expected) in POSITIVE_NUMBERS.iter().enumerate() {
         let s = Scalar::from_u64((i + 1) as u64);
         g1_test_encoding((g * s).into(), expected);
     }
 
-    for (i, expected) in test_vectors::g1::NEGATIVE_NUMBERS.iter().enumerate() {
+    for (i, expected) in NEGATIVE_NUMBERS.iter().enumerate() {
         let s = Scalar::from_u64((i + 1) as u64).neg();
         g1_test_encoding((g * s).into(), expected);
     }
 
-    for (i, expected) in test_vectors::g1::POWERS_OF_2.iter().enumerate() {
+    for (i, expected) in POWERS_OF_2.iter().enumerate() {
         let s = Scalar::from_u64(1 << i);
         g1_test_encoding((g * s).into(), expected);
     }
@@ -626,26 +715,70 @@ fn test_g1_test_vectors() {
 
 #[test]
 fn test_g2_test_vectors() {
+    /// The chosen generator for the G2 group.
+    ///
+    /// Note: This matches `x'_1 || x'_0` in the spec, with flag bits added to the
+    /// first byte.
+    const GENERATOR: &str = "93e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8";
+    /// The additive identity, also known as zero.
+    const INFINITY: &str = "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+    /// Powers of 2: `g2_generator * [1, 2, 4, 8, ..., 256]`
+    const POWERS_OF_2: &[&str] = &[
+        GENERATOR,
+        "aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053",
+        "870227d3f13684fdb7ce31b8065ba3acb35f7bde6fe2ddfefa359f8b35d08a9ab9537b43e24f4ffb720b5a0bda2a82f20e7a30979a8853a077454eb63b8dcee75f106221b262886bb8e01b0abb043368da82f60899cc1412e33e4120195fc557",
+        "92be651a5fa620340d418834526d37a8c932652345400b4cd9d43c8f41c080f41a6d9558118ebeab9d4268bb73e850e102142a58bae275564a6d63cb6bd6266ca66bef07a6ab8ca37b9d0ba2d4effbccfd89c169649f7d0e8a3eb006846579ad",
+        "a70401d9bba01c0445e0a682406b099f21d16d9c348cc97156769084055ca328a145c134b8c8b58f019d62882b2965de1800ecc167bb714100f31e7610cd3fd010ca299b394c01b1a89afd11b051e92989f6336db5e6d3212f6b04673526d839",
+        "ac1bcdf2034a7d577355b280f431cf2bf2cb5e955915904766a52d57b3aca6e8c4c96af35382e0c63687f4a77724012b0f22d7c4d43cbb513893e53e6cf995c70e4f5fa7c5b6f167838b217825d3d2dadab5f07764ef69d346f2dc97c231a3f6",
+        "b6480241fab3ca8ec408219988d8dce6180dbed76fd5e9b84fdb42d73759ea991f179a40566038c1ec6cbbd2d16745390254b59e8676796a65a52610b9c88e366f9dbf7fdbdd5983a4e0b691a3c310f8eb5d2bc1177833bdfa1c1b42cacb953f",
+        "afc5f85e7adc6cea5b3792af7c9fa9d3acc465e3785f40654292be3a09dfd2f266bc765fcfe8da55e948c2312ec571d211f6a8f78fa020f9ea41dc9c2b54e1037c77f59dcb9058a1f7ff95a0102d30b7ad18e0ada1dee28bc05183abf87cdb1e",
+        "82f7f6cc00b080cb3a7f8976c44d1987fd36a8334db831be269c6f6144c392b54bb934313d5fc832ec41d2f9a4b7ea910412f6b2e37effc7e16d566d6f831572411d130eee4c15d82aa29e44cb4db9b5eb8c08b0ae158cde970d9d29ba368780",
+    ];
+    /// Positive numbers: `g2_generator * [1, 2, 3, ..., 9]`
+    const POSITIVE_NUMBERS: &[&str] = &[
+        GENERATOR,
+        "aa4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053",
+        "89380275bbc8e5dcea7dc4dd7e0550ff2ac480905396eda55062650f8d251c96eb480673937cc6d9d6a44aaa56ca66dc122915c824a0857e2ee414a3dccb23ae691ae54329781315a0c75df1c04d6d7a50a030fc866f09d516020ef82324afae",
+        "870227d3f13684fdb7ce31b8065ba3acb35f7bde6fe2ddfefa359f8b35d08a9ab9537b43e24f4ffb720b5a0bda2a82f20e7a30979a8853a077454eb63b8dcee75f106221b262886bb8e01b0abb043368da82f60899cc1412e33e4120195fc557",
+        "80fb837804dba8213329db46608b6c121d973363c1234a86dd183baff112709cf97096c5e9a1a770ee9d7dc641a894d60411a5de6730ffece671a9f21d65028cc0f1102378de124562cb1ff49db6f004fcd14d683024b0548eff3d1468df2688",
+        "83f4b4e761936d90fd5f55f99087138a07a69755ad4a46e4dd1c2cfe6d11371e1cc033111a0595e3bba98d0f538db45119e384121b7d70927c49e6d044fd8517c36bc6ed2813a8956dd64f049869e8a77f7e46930240e6984abe26fa6a89658f",
+        "8d0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c",
+        "92be651a5fa620340d418834526d37a8c932652345400b4cd9d43c8f41c080f41a6d9558118ebeab9d4268bb73e850e102142a58bae275564a6d63cb6bd6266ca66bef07a6ab8ca37b9d0ba2d4effbccfd89c169649f7d0e8a3eb006846579ad",
+        "ac48e0d4f9404ae0a7f10774c55a9e838bb09d3bae85b5eaa6b16b0f4dc2354368117f3799c37f3f7126d8b54d3f8393018405e4b67f957b6465ead9f5afc47832d45643dc3aa03af7314c6cf980fa23dd3bb8db3358693ad06011f6a6b1a5ff",
+    ];
+    /// Negative numbers: `g2_generator * [-1, -2, -3, ..., -9]`
+    const NEGATIVE_NUMBERS: &[&str] = &[
+    "b3e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb8",
+    "8a4edef9c1ed7f729f520e47730a124fd70662a904ba1074728114d1031e1572c6c886f6b57ec72a6178288c47c335771638533957d540a9d2370f17cc7ed5863bc0b995b8825e0ee1ea1e1e4d00dbae81f14b0bf3611b78c952aacab827a053",
+    "a9380275bbc8e5dcea7dc4dd7e0550ff2ac480905396eda55062650f8d251c96eb480673937cc6d9d6a44aaa56ca66dc122915c824a0857e2ee414a3dccb23ae691ae54329781315a0c75df1c04d6d7a50a030fc866f09d516020ef82324afae",
+    "a70227d3f13684fdb7ce31b8065ba3acb35f7bde6fe2ddfefa359f8b35d08a9ab9537b43e24f4ffb720b5a0bda2a82f20e7a30979a8853a077454eb63b8dcee75f106221b262886bb8e01b0abb043368da82f60899cc1412e33e4120195fc557",
+    "a0fb837804dba8213329db46608b6c121d973363c1234a86dd183baff112709cf97096c5e9a1a770ee9d7dc641a894d60411a5de6730ffece671a9f21d65028cc0f1102378de124562cb1ff49db6f004fcd14d683024b0548eff3d1468df2688",
+    "a3f4b4e761936d90fd5f55f99087138a07a69755ad4a46e4dd1c2cfe6d11371e1cc033111a0595e3bba98d0f538db45119e384121b7d70927c49e6d044fd8517c36bc6ed2813a8956dd64f049869e8a77f7e46930240e6984abe26fa6a89658f",
+    "ad0273f6bf31ed37c3b8d68083ec3d8e20b5f2cc170fa24b9b5be35b34ed013f9a921f1cad1644d4bdb14674247234c8049cd1dbb2d2c3581e54c088135fef36505a6823d61b859437bfc79b617030dc8b40e32bad1fa85b9c0f368af6d38d3c",
+    "b2be651a5fa620340d418834526d37a8c932652345400b4cd9d43c8f41c080f41a6d9558118ebeab9d4268bb73e850e102142a58bae275564a6d63cb6bd6266ca66bef07a6ab8ca37b9d0ba2d4effbccfd89c169649f7d0e8a3eb006846579ad",
+    "8c48e0d4f9404ae0a7f10774c55a9e838bb09d3bae85b5eaa6b16b0f4dc2354368117f3799c37f3f7126d8b54d3f8393018405e4b67f957b6465ead9f5afc47832d45643dc3aa03af7314c6cf980fa23dd3bb8db3358693ad06011f6a6b1a5ff",
+];
+
     let g = G2Affine::generator();
     let identity = G2Affine::identity();
 
-    g2_test_encoding(identity.clone(), test_vectors::g2::INFINITY);
-    g2_test_encoding(g.clone(), test_vectors::g2::GENERATOR);
+    g2_test_encoding(identity.clone(), INFINITY);
+    g2_test_encoding(g.clone(), GENERATOR);
 
     assert_eq!(identity, G2Affine::from(G2Projective::identity()));
     assert_eq!(g, &G2Affine::from(G2Projective::generator()));
 
-    for (i, expected) in test_vectors::g2::POSITIVE_NUMBERS.iter().enumerate() {
+    for (i, expected) in POSITIVE_NUMBERS.iter().enumerate() {
         let s = Scalar::from_u64((i + 1) as u64);
         g2_test_encoding((g * s).into(), expected);
     }
 
-    for (i, expected) in test_vectors::g2::NEGATIVE_NUMBERS.iter().enumerate() {
+    for (i, expected) in NEGATIVE_NUMBERS.iter().enumerate() {
         let s = Scalar::from_u64((i + 1) as u64).neg();
         g2_test_encoding((g * s).into(), expected);
     }
 
-    for (i, expected) in test_vectors::g2::POWERS_OF_2.iter().enumerate() {
+    for (i, expected) in POWERS_OF_2.iter().enumerate() {
         let s = Scalar::from_u64(1 << i);
         g2_test_encoding((g * s).into(), expected);
     }
@@ -690,6 +823,402 @@ fn test_verify_bls_signature() {
 
     assert!(verify_bls_signature(&signature, &pk, &message));
     assert!(!verify_bls_signature(&message, &pk, &signature));
+}
+
+fn with_random_duplicates(
+    n: usize,
+    rng: &mut (impl Rng + CryptoRng),
+    sigs: &[G1Affine],
+    pks: &[G2Affine],
+    msgs: &[G1Affine],
+) -> (Vec<G1Affine>, Vec<G2Affine>, Vec<G1Affine>) {
+    let mut result_sigs = sigs.to_vec();
+    let mut result_pks = pks.to_vec();
+    let mut result_msgs = msgs.to_vec();
+    for _ in 0..n {
+        let in_index = rng.gen_range(0..sigs.len());
+        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+        result_sigs.insert(out_index, sigs[in_index].clone());
+        result_pks.insert(out_index, pks[in_index].clone());
+        result_msgs.insert(out_index, msgs[in_index].clone());
+    }
+
+    (result_sigs, result_pks, result_msgs)
+}
+
+fn with_random_new_msgs_signed_by_existing_keys(
+    n: usize,
+    rng: &mut (impl Rng + CryptoRng),
+    sks: &[Scalar],
+    sigs: &[G1Affine],
+    pks: &[G2Affine],
+    msgs: &[G1Affine],
+) -> (Vec<G1Affine>, Vec<G2Affine>, Vec<G1Affine>) {
+    let mut result_sigs = sigs.to_vec();
+    let mut result_pks = pks.to_vec();
+    let mut result_msgs = msgs.to_vec();
+    for _ in 0..n {
+        let in_index = rng.gen_range(0..sigs.len());
+        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+
+        let rand_new_msg = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+
+        let rand_selected_pk = pks[in_index].clone();
+        let rand_selected_sk = sks[in_index].clone();
+
+        let new_sig = G1Affine::from(&rand_new_msg * rand_selected_sk);
+
+        result_sigs.insert(out_index, new_sig);
+        result_pks.insert(out_index, rand_selected_pk);
+        result_msgs.insert(out_index, rand_new_msg);
+    }
+
+    (result_sigs, result_pks, result_msgs)
+}
+
+fn with_random_sigs_of_existing_messages_signed_by_existing_signers(
+    n: usize,
+    rng: &mut (impl Rng + CryptoRng),
+    sks: &[Scalar],
+    sigs: &[G1Affine],
+    pks: &[G2Affine],
+    msgs: &[G1Affine],
+) -> (Vec<G1Affine>, Vec<G2Affine>, Vec<G1Affine>) {
+    let mut result_sigs = sigs.to_vec();
+    let mut result_pks = pks.to_vec();
+    let mut result_msgs = msgs.to_vec();
+    for _ in 0..n {
+        let msg_index = rng.gen_range(0..sigs.len());
+        let signer_index = rng.gen_range(0..sigs.len());
+
+        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+
+        let rand_selected_pk = pks[signer_index].clone();
+        let rand_selected_sk = sks[signer_index].clone();
+        let rand_selected_msg = msgs[msg_index].clone();
+
+        let new_sig = G1Affine::from(&rand_selected_msg * rand_selected_sk);
+
+        result_sigs.insert(out_index, new_sig);
+        result_pks.insert(out_index, rand_selected_pk);
+        result_msgs.insert(out_index, rand_selected_msg);
+    }
+
+    (result_sigs, result_pks, result_msgs)
+}
+
+const NUM_DUPLICATES: usize = 10;
+
+macro_rules! generic_test_verify_bls_signature_batch {
+    ($batch_verification_function:ident) => {
+        let mut rng = reproducible_rng();
+
+        for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
+            let sks: Vec<_> = (0..num_inputs).map(|_| Scalar::random(&mut rng)).collect();
+            let pks: Vec<_> = sks
+                .iter()
+                .map(|sk| G2Affine::from(G2Affine::generator() * sk))
+                .collect();
+            let msgs: Vec<_> = (0..num_inputs)
+                .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
+                .collect();
+            let sigs: Vec<_> = sks
+                .iter()
+                .zip(msgs.iter())
+                .map(|(sk, msg)| G1Affine::from(msg * sk))
+                .collect();
+
+            for i in 0..num_inputs {
+                assert!(verify_bls_signature(&sigs[i], &pks[i], &msgs[i]));
+                // swapped sigs/msgs must not work
+                assert!(!verify_bls_signature(&msgs[i], &pks[i], &sigs[i]));
+            }
+
+            assert!($batch_verification_function(
+                &izip!(sigs.iter(), pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+
+            // swapped sigs/msgs must not work
+            assert!(!$batch_verification_function(
+                &izip!(msgs.iter(), pks.iter(), sigs.iter()).collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+
+            if num_inputs > 1 {
+                // swapped single sigs must not work
+                let mut cloned_sigs = sigs.clone();
+                cloned_sigs.swap(0, 1);
+                assert!(!$batch_verification_function(
+                    &izip!(cloned_sigs.iter(), pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
+                    &mut rng
+                ));
+
+                // swapped single msgs must not work
+                let mut cloned_msgs = msgs.clone();
+                cloned_msgs.swap(0, 1);
+
+                assert!(!$batch_verification_function(
+                    &izip!(sigs.iter(), pks.iter(), cloned_msgs.iter()).collect::<Vec<_>>()[..],
+                    &mut rng
+                ));
+
+                // swapped single pks must not work
+                let mut cloned_pks = pks.clone();
+                cloned_pks.swap(0, 1);
+
+                assert!(!$batch_verification_function(
+                    &izip!(sigs.iter(), cloned_pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
+                    &mut rng
+                ));
+            }
+
+            let (sigs_w_dups, pks_w_dups, msgs_w_dups) =
+                with_random_duplicates(NUM_DUPLICATES, &mut rng, &sigs, &pks, &msgs);
+
+            assert!($batch_verification_function(
+                &izip!(sigs_w_dups.iter(), pks_w_dups.iter(), msgs_w_dups.iter())
+                    .collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+
+            let (sigs_w_new_msgs, pks_w_new_msgs, msgs_w_new_msgs) =
+                with_random_new_msgs_signed_by_existing_keys(
+                    NUM_DUPLICATES,
+                    &mut rng,
+                    &sks,
+                    &sigs,
+                    &pks,
+                    &msgs,
+                );
+
+            assert!($batch_verification_function(
+                &izip!(
+                    sigs_w_new_msgs.iter(),
+                    pks_w_new_msgs.iter(),
+                    msgs_w_new_msgs.iter()
+                )
+                .collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+
+            // corrupt each signature sequentially for not too large batches
+            if sigs_w_new_msgs.len() < 50 {
+                for i in 0..sigs_w_new_msgs.len() {
+                    let sigs_w_new_msgs: Vec<_> = sigs_w_new_msgs
+                        .iter()
+                        .enumerate()
+                        .map(|(j, sig)| {
+                            if j == i {
+                                // corrupt signature i
+                                G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>())
+                            } else {
+                                sig.clone()
+                            }
+                        })
+                        .collect();
+                    assert!(!$batch_verification_function(
+                        &izip!(
+                            sigs_w_new_msgs.iter(),
+                            pks_w_new_msgs.iter(),
+                            msgs_w_new_msgs.iter()
+                        )
+                        .collect::<Vec<_>>()[..],
+                        &mut rng
+                    ));
+                }
+            }
+
+            let (sigs_w_dup_msgs, pks_w_dup_msgs, msgs_w_dup_msgs) =
+                with_random_sigs_of_existing_messages_signed_by_existing_signers(
+                    NUM_DUPLICATES,
+                    &mut rng,
+                    &sks,
+                    &sigs,
+                    &pks,
+                    &msgs,
+                );
+
+            assert!($batch_verification_function(
+                &izip!(
+                    sigs_w_dup_msgs.iter(),
+                    pks_w_dup_msgs.iter(),
+                    msgs_w_dup_msgs.iter()
+                )
+                .collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+        }
+    };
+}
+
+#[test]
+fn test_verify_bls_signature_batch_with_distinct_msgs_and_sigs() {
+    generic_test_verify_bls_signature_batch!(verify_bls_signature_batch_distinct);
+}
+
+#[test]
+fn test_verify_bls_signature_mixed_batch() {
+    generic_test_verify_bls_signature_batch!(verify_bls_signature_batch);
+}
+
+#[test]
+fn test_verify_bls_signature_batch_with_same_msg() {
+    let mut rng = reproducible_rng();
+
+    for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
+        let sks: Vec<_> = (0..num_inputs).map(|_| Scalar::random(&mut rng)).collect();
+        let pks: Vec<_> = sks
+            .iter()
+            .map(|sk| G2Affine::from(G2Affine::generator() * sk))
+            .collect();
+        let msg = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+        let sigs: Vec<_> = sks.iter().map(|sk| G1Affine::from(&msg * sk)).collect();
+
+        for i in 0..num_inputs {
+            assert!(verify_bls_signature(&sigs[i], &pks[i], &msg));
+            assert!(!verify_bls_signature(&msg, &pks[i], &sigs[i]));
+        }
+
+        assert!(verify_bls_signature_batch_same_msg(
+            &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
+            &msg,
+            &mut rng
+        ));
+
+        // the "all-distinct" batched method should also work
+        assert!(verify_bls_signature_batch_distinct(
+            &sigs
+                .iter()
+                .zip(pks.iter())
+                .map(|(sig, pk)| (sig, pk, &msg))
+                .collect::<Vec<_>>()[..],
+            &mut rng
+        ));
+
+        assert!(!verify_bls_signature_batch_same_msg(
+            &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
+            &G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()),
+            &mut rng
+        ));
+
+        // swapped single sigs/pks must not work
+        if num_inputs > 1 {
+            let mut cloned_sigs = sigs.clone();
+            cloned_sigs.swap(0, 1);
+
+            assert!(!verify_bls_signature_batch_same_msg(
+                &cloned_sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
+                &msg,
+                &mut rng
+            ));
+
+            let mut cloned_pks = pks.clone();
+            cloned_pks.swap(0, 1);
+
+            assert!(!verify_bls_signature_batch_same_msg(
+                &sigs.iter().zip(cloned_pks.iter()).collect::<Vec<_>>()[..],
+                &msg,
+                &mut rng
+            ));
+        }
+
+        let (sigs_w_dups, pks_w_dups, _msgs_w_dups) = with_random_duplicates(
+            NUM_DUPLICATES,
+            &mut rng,
+            &sigs,
+            &pks,
+            &vec![msg.clone(); pks.len()][..],
+        );
+
+        assert!(verify_bls_signature_batch_same_msg(
+            &sigs_w_dups
+                .iter()
+                .zip(pks_w_dups.iter())
+                .collect::<Vec<_>>()[..],
+            &msg,
+            &mut rng
+        ));
+    }
+}
+
+#[test]
+fn test_verify_bls_signature_batch_with_same_pk() {
+    let mut rng = reproducible_rng();
+
+    for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
+        let sk = Scalar::random(&mut rng);
+        let pk = G2Affine::from(G2Affine::generator() * &sk);
+        let msgs: Vec<_> = (0..num_inputs)
+            .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
+            .collect();
+        let sigs: Vec<_> = msgs.iter().map(|msg| G1Affine::from(msg * &sk)).collect();
+
+        for i in 0..num_inputs {
+            assert!(verify_bls_signature(&sigs[i], &pk, &msgs[i]));
+            assert!(!verify_bls_signature(&msgs[i], &pk, &sigs[i]));
+        }
+
+        assert!(verify_bls_signature_batch_same_pk(
+            &sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
+            &pk,
+            &mut rng
+        ));
+
+        // the "all-distinct" batched method should also work
+        assert!(verify_bls_signature_batch_distinct(
+            &sigs
+                .iter()
+                .zip(msgs.iter())
+                .map(|(sig, msg)| (sig, &pk, msg))
+                .collect::<Vec<_>>()[..],
+            &mut rng
+        ));
+
+        assert!(!verify_bls_signature_batch_same_pk(
+            &sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
+            &G2Affine::from(G2Affine::generator() * &Scalar::random(&mut rng)),
+            &mut rng
+        ));
+
+        // swapped single sigs/msgs must not work
+        if num_inputs > 1 {
+            let mut cloned_sigs = sigs.clone();
+            cloned_sigs.swap(0, 1);
+
+            assert!(!verify_bls_signature_batch_same_pk(
+                &cloned_sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
+                &pk,
+                &mut rng
+            ));
+
+            let mut cloned_msgs = msgs.clone();
+            cloned_msgs.swap(0, 1);
+
+            assert!(!verify_bls_signature_batch_same_pk(
+                &sigs.iter().zip(cloned_msgs.iter()).collect::<Vec<_>>()[..],
+                &pk,
+                &mut rng
+            ));
+        }
+
+        let (sigs_w_dups, _pks_w_dups, msgs_w_dups) = with_random_duplicates(
+            NUM_DUPLICATES,
+            &mut rng,
+            &sigs[..],
+            &vec![pk.clone(); msgs.len()][..],
+            &msgs[..],
+        );
+
+        assert!(verify_bls_signature_batch_same_pk(
+            &sigs_w_dups
+                .iter()
+                .zip(msgs_w_dups.iter())
+                .collect::<Vec<_>>()[..],
+            &pk,
+            &mut rng
+        ));
+    }
 }
 
 #[test]
@@ -1065,6 +1594,81 @@ test_point_operation!(mul2, [g1, g2], {
 
         assert_eq!(Projective::mul2(&p1, &s1, &p2, &s2), reference);
         assert_eq!(Projective::mul2(&p2, &s2, &p1, &s1), reference);
+    }
+});
+
+test_point_operation!(muln_sparse, [g1, g2], {
+    let mut rng = reproducible_rng();
+
+    assert_eq!(
+        Projective::muln_affine_sparse_vartime(&[]),
+        Projective::identity()
+    );
+
+    fn gen_rand_subset(k: usize, n: usize, rng: &mut (impl Rng + CryptoRng)) -> Vec<usize> {
+        (0..n)
+            .collect::<Vec<usize>>()
+            .iter()
+            .choose_multiple(rng, k)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    fn gen_rand_sparse_scalar(k: usize, rng: &mut (impl Rng + CryptoRng)) -> Scalar {
+        let set_bit = |bytes: &mut [u8], i: usize| {
+            bytes[Scalar::BYTES - i / 8 - 1] |= 1 << (i % 8);
+        };
+
+        const SCALAR_FLOORED_BIT_LENGTH: usize = 254;
+
+        let mut scalar = [0u8; Scalar::BYTES];
+        for i in gen_rand_subset(k, SCALAR_FLOORED_BIT_LENGTH, rng) {
+            set_bit(&mut scalar, i);
+        }
+        Scalar::deserialize(&scalar).unwrap()
+    }
+
+    // test sparse scalars
+    for hamming_weight in [1, 2, 3, 5, 10, 15, 20, 100] {
+        for num_inputs in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 40, 50, 100] {
+            let points: Vec<Affine> = (0..num_inputs)
+                .map(|_| Projective::biased(&mut rng).to_affine())
+                .collect();
+            let scalars: Vec<Scalar> = (0..num_inputs)
+                .map(|_| gen_rand_sparse_scalar(hamming_weight, &mut rng))
+                .collect();
+
+            let reference_val = points
+                .iter()
+                .zip(scalars.iter())
+                .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
+
+            let computed = Projective::muln_affine_sparse_vartime(
+                &points.iter().zip(scalars.iter()).collect::<Vec<_>>()[..],
+            );
+            assert_eq!(computed, reference_val);
+        }
+    }
+
+    // non-sparse scalars must also work, although slower
+    for t in 1..20 {
+        let mut points = Vec::with_capacity(t);
+        let mut scalars = Vec::with_capacity(t);
+        for _ in 0..t {
+            points.push(Projective::biased(&mut rng).to_affine());
+            scalars.push(Scalar::biased(&mut rng));
+        }
+
+        let reference_val = points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
+
+        let computed = Projective::muln_affine_sparse_vartime(
+            &points.iter().zip(scalars.iter()).collect::<Vec<_>>()[..],
+        );
+        assert_eq!(computed, reference_val);
     }
 });
 

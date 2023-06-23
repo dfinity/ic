@@ -134,8 +134,8 @@ pub enum CspDkgCreateDealingError {
     /// Hardware error: This machine cannot handle this request because some
     /// parameter was too large.
     SizeError(SizeError),
-    // An internal error, e.g. an RPC error.
-    InternalError(InternalError),
+    /// Transient internal error, e.g. an RPC error.
+    TransientInternalError(InternalError),
 }
 
 impl From<EncryptAndZKProveError> for CspDkgCreateDealingError {
@@ -183,8 +183,8 @@ pub enum CspDkgCreateReshareDealingError {
     /// Hardware error: This machine cannot handle this request because some
     /// parameter was too large.
     SizeError(SizeError),
-    // An internal error, e.g. an RPC error.
-    InternalError(InternalError),
+    /// Transient internal error, e.g. an RPC error.
+    TransientInternalError(InternalError),
 }
 
 impl From<EncryptAndZKProveError> for CspDkgCreateReshareDealingError {
@@ -230,8 +230,8 @@ impl From<CspDkgCreateDealingError> for CspDkgCreateReshareDealingError {
             CspDkgCreateDealingError::SizeError(error) => {
                 CspDkgCreateReshareDealingError::SizeError(error)
             }
-            CspDkgCreateDealingError::InternalError(error) => {
-                CspDkgCreateReshareDealingError::InternalError(error)
+            CspDkgCreateDealingError::TransientInternalError(error) => {
+                CspDkgCreateReshareDealingError::TransientInternalError(error)
             }
         }
     }
@@ -269,8 +269,8 @@ impl From<CspDkgCreateReshareDealingError> for CspDkgCreateDealingError {
             CspDkgCreateReshareDealingError::SizeError(error) => {
                 CspDkgCreateDealingError::SizeError(error)
             }
-            CspDkgCreateReshareDealingError::InternalError(error) => {
-                CspDkgCreateDealingError::InternalError(error)
+            CspDkgCreateReshareDealingError::TransientInternalError(error) => {
+                CspDkgCreateDealingError::TransientInternalError(error)
             }
         }
     }

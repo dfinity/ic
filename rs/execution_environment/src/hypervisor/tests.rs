@@ -1,8 +1,8 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::CanisterHttpResponsePayload;
+use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_interfaces::messages::CanisterTask;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -32,6 +32,7 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
+use std::mem::size_of;
 use std::time::Duration;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -471,8 +472,9 @@ fn ic0_stable_read_and_write_work() {
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32))
             )
-            (func (export "canister_update test")
-                ;; Swap the first 8 bytes from "abcdefgh" to "efghabcd" using stable memory
+            (func $swap
+                ;; Swap the first 8 bytes from "abcdefgh" to "efghabcd"
+                ;; (and vice-versa in a repeated call) using stable memory
 
                 ;; Grow stable memory by 1 page.
                 (drop (call $stable_grow (i32.const 1)))
@@ -488,7 +490,12 @@ fn ic0_stable_read_and_write_work() {
 
                 ;; heap[4..8] = stable_memory[0..4]
                 (call $stable_read (i32.const 4) (i32.const 0) (i32.const 4))
-
+            )
+            (func $test
+                (call $swap)
+                (call $read)
+            )
+            (func $read
                 ;; Return the first 8 bytes of the heap.
                 (call $msg_reply_data_append
                     (i32.const 0)     ;; heap offset = 0
@@ -496,11 +503,16 @@ fn ic0_stable_read_and_write_work() {
                 (call $msg_reply)     ;; call reply
             )
             (memory 1)
+            (start $swap)
+            (export "canister_query read" (func $read))
+            (export "canister_update test" (func $test))
             (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "read", vec![]).unwrap();
+    assert_eq!(WasmResult::Reply(b"efghabcd".to_vec()), result); // swapped in `start`
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
-    assert_eq!(WasmResult::Reply(b"efghabcd".to_vec()), result);
+    assert_eq!(WasmResult::Reply(b"abcdefgh".to_vec()), result); // swapped again in `test`
 }
 
 #[test]
@@ -2068,7 +2080,8 @@ fn instruction_limit_is_respected() {
 #[test]
 fn subnet_available_memory_is_respected_by_memory_grow() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(9 * WASM_PAGE_SIZE as i64)
+        .with_subnet_execution_memory(9 * WASM_PAGE_SIZE as i64)
+        .with_subnet_memory_reservation(0)
         .build();
     let wat = r#"
         (module
@@ -2097,8 +2110,8 @@ fn subnet_available_memory_is_updated() {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2124,8 +2137,8 @@ fn subnet_available_memory_is_updated_in_heartbeat() {
         NumWasmPages::new(11)
     );
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2151,8 +2164,8 @@ fn subnet_available_memory_is_updated_in_global_timer() {
         NumWasmPages::new(11)
     );
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2175,8 +2188,8 @@ fn subnet_available_memory_is_not_updated_in_query() {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory(),
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory(),
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2197,17 +2210,20 @@ fn subnet_available_memory_is_updated_by_canister_init() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     test.canister_from_wat(wat).unwrap();
     assert!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64
-            > test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64
+            > test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    let memory_used = test.state().memory_taken().total().get() as i64;
+    let memory_used = test.state().memory_taken().execution().get() as i64;
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        test.subnet_available_memory().get_total_memory(),
-        initial_subnet_available_memory.get_total_memory() - memory_used
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory.get_execution_memory() - memory_used
+            + canister_history_memory as i64
     );
 }
 
@@ -2225,24 +2241,27 @@ fn subnet_available_memory_is_updated_by_canister_start() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     let canister_id = test.canister_from_wat(wat).unwrap();
     assert!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64
-            > test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64
+            > test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    let mem_before_upgrade = test.subnet_available_memory().get_total_memory();
+    let mem_before_upgrade = test.subnet_available_memory().get_execution_memory();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
         mem_before_upgrade,
-        test.subnet_available_memory().get_total_memory()
+        test.subnet_available_memory().get_execution_memory()
     );
-    let memory_used = test.state().memory_taken().total().get() as i64;
+    let memory_used = test.state().memory_taken().execution().get() as i64;
+    let canister_history_memory = 3 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        test.subnet_available_memory().get_total_memory(),
-        initial_subnet_available_memory.get_total_memory() - memory_used
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory.get_execution_memory() - memory_used
+            + canister_history_memory as i64
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2268,8 +2287,8 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2292,8 +2311,8 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory(),
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory(),
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2316,8 +2335,8 @@ fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2341,8 +2360,8 @@ fn subnet_available_memory_does_not_change_after_failed_execution() {
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory(),
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory(),
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2366,21 +2385,26 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
 
     test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
         .unwrap();
-    let initial_memory_used = test.state().memory_taken().total();
-    assert_eq!(initial_memory_used.get(), memory_allocation.get());
+    let initial_memory_used = test.state().memory_taken().execution();
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
+    assert_eq!(
+        initial_memory_used.get(),
+        memory_allocation.get() + canister_history_memory as u64
+    );
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     // memory taken should not change
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory(),
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory(),
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    assert_eq!(initial_memory_used, test.state().memory_taken().total());
+    assert_eq!(initial_memory_used, test.state().memory_taken().execution());
 }
 
 #[test]
@@ -4883,5 +4907,288 @@ fn grow_memory_and_write_to_new_pages() {
         ),
         "[1×02 3×00 1×08 65531×00 1×07 65535×00 1×08 65535×00 1×09 65535×00 1×0a 65535×00]"
         //                        ^^^ page(1)   ^^^ page(2)   ^^^ page(3)   ^^^ page(4)
+    );
+}
+
+#[test]
+fn memory_out_of_bounds_accesses() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+            (import "ic0" "stable64_write"
+                (func $stable64_write (param $offset i64) (param $src i64) (param $size i64))
+            )
+            (import "ic0" "stable64_read"
+                (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64))
+            )
+            (func (export "canister_init")
+                (drop (call $stable64_grow (i64.const 1)))
+            )
+            (func (export "canister_update read_heap0")
+                (drop (i32.load (i32.const 65532)))
+            )
+            (func (export "canister_update write_heap0")
+                (i32.store (i32.const 65532) (i32.const 42))
+            )
+            (func (export "canister_update read_heap1")
+                (drop (i32.load (i32.const 65533)))
+            )
+            (func (export "canister_update write_heap1")
+                (i32.store (i32.const 65533) (i32.const 42))
+            )
+            (func (export "canister_update read_heap2")
+                (drop (i32.load (i32.const 2147483647)))
+            )
+            (func (export "canister_update write_heap2")
+                (i32.store (i32.const 2147483647) (i32.const 42))
+            )
+            (func (export "canister_update read_heap3")
+                (drop (i32.load (i32.const -1)))
+            )
+            (func (export "canister_update write_heap3")
+                (i32.store (i32.const -1) (i32.const 42))
+            )
+            (func (export "canister_update read_stable0")
+                (call $stable64_read (i64.const 0) (i64.const 65532) (i64.const 4))
+            )
+            (func (export "canister_update write_stable0")
+                (call $stable64_write (i64.const 65532) (i64.const 0) (i64.const 4))
+            )
+            (func (export "canister_update read_stable1")
+                (call $stable64_read (i64.const 0) (i64.const 65533) (i64.const 4))
+            )
+            (func (export "canister_update write_stable1")
+                (call $stable64_write (i64.const 65533) (i64.const 0) (i64.const 4))
+            )
+            (func (export "canister_update read_stable2")
+                (call $stable64_read (i64.const 0) (i64.const 2147483647) (i64.const 4))
+            )
+            (func (export "canister_update write_stable2")
+                (call $stable64_write (i64.const 2147483647) (i64.const 0) (i64.const 4))
+            )
+            (func (export "canister_update read_stable3")
+                (call $stable64_read (i64.const 0) (i64.const -1) (i64.const 4))
+            )
+            (func (export "canister_update write_stable3")
+                (call $stable64_write (i64.const -1) (i64.const 0) (i64.const 4))
+            )
+            (memory 1 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "read_heap0", vec![]);
+    assert_empty_reply(result);
+
+    let result = test.ingress(canister_id, "write_heap0", vec![]);
+    assert_empty_reply(result);
+
+    let err = test.ingress(canister_id, "read_heap1", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: heap out of bounds", canister_id)
+    );
+
+    let err = test
+        .ingress(canister_id, "write_heap1", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: heap out of bounds", canister_id)
+    );
+
+    let err = test.ingress(canister_id, "read_heap2", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: heap out of bounds", canister_id)
+    );
+
+    let err = test
+        .ingress(canister_id, "write_heap2", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: heap out of bounds", canister_id)
+    );
+
+    let err = test.ingress(canister_id, "read_heap3", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: heap out of bounds", canister_id)
+    );
+
+    let err = test
+        .ingress(canister_id, "write_heap3", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: heap out of bounds", canister_id)
+    );
+
+    let result = test.ingress(canister_id, "read_stable0", vec![]);
+    assert_empty_reply(result);
+
+    let result = test.ingress(canister_id, "write_stable0", vec![]);
+    assert_empty_reply(result);
+
+    let err = test
+        .ingress(canister_id, "read_stable1", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Canister {} trapped: stable memory out of bounds",
+            canister_id
+        )
+    );
+
+    let err = test
+        .ingress(canister_id, "write_stable1", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Canister {} trapped: stable memory out of bounds",
+            canister_id
+        )
+    );
+
+    let err = test
+        .ingress(canister_id, "read_stable2", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Canister {} trapped: stable memory out of bounds",
+            canister_id
+        )
+    );
+
+    let err = test
+        .ingress(canister_id, "write_stable2", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Canister {} trapped: stable memory out of bounds",
+            canister_id
+        )
+    );
+
+    let err = test
+        .ingress(canister_id, "read_stable3", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Canister {} trapped: stable memory out of bounds",
+            canister_id
+        )
+    );
+    let err = test
+        .ingress(canister_id, "write_stable3", vec![])
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!(
+            "Canister {} trapped: stable memory out of bounds",
+            canister_id
+        )
+    );
+}
+
+#[test]
+fn division_by_zero() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32))
+            )
+            (func (export "canister_update div_f32")
+                (f32.store (i32.const 0) (f32.div (f32.const 1) (f32.const 0)))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 4))
+                (call $msg_reply)
+            )
+            (func (export "canister_update div_f64")
+                (f64.store (i32.const 0) (f64.div (f64.const 1) (f64.const 0)))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 8))
+                (call $msg_reply)
+            )
+            (func (export "canister_update div_u_i32")
+                (drop (i32.div_u (i32.const 1) (i32.const 0)))
+            )
+            (func (export "canister_update div_s_i32")
+                (drop (i32.div_s (i32.const -1) (i32.const 0)))
+            )
+            (func (export "canister_update div_u_i64")
+                (drop (i64.div_u (i64.const 1) (i64.const 0)))
+            )
+            (func (export "canister_update div_s_i64")
+                (drop (i64.div_s (i64.const -1) (i64.const 0)))
+            )
+            (memory 1 1)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "div_f32", vec![]).unwrap();
+    match result {
+        WasmResult::Reply(v) => {
+            let mut bytes = [0u8; 4];
+            bytes.copy_from_slice(&v);
+            let res = f32::from_le_bytes(bytes);
+            assert!(res.is_infinite());
+        }
+        WasmResult::Reject(_) => unreachable!("expected reply"),
+    }
+
+    let result = test.ingress(canister_id, "div_f64", vec![]).unwrap();
+    match result {
+        WasmResult::Reply(v) => {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&v);
+            let res = f64::from_le_bytes(bytes);
+            assert!(res.is_infinite());
+        }
+        WasmResult::Reject(_) => unreachable!("expected reply"),
+    }
+
+    let err = test.ingress(canister_id, "div_u_i32", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: integer division by 0", canister_id)
+    );
+
+    let err = test.ingress(canister_id, "div_s_i32", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: integer division by 0", canister_id)
+    );
+
+    let err = test.ingress(canister_id, "div_u_i64", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: integer division by 0", canister_id)
+    );
+
+    let err = test.ingress(canister_id, "div_s_i64", vec![]).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: integer division by 0", canister_id)
     );
 }

@@ -72,7 +72,7 @@ impl Registry {
     /// The given rules are added at the given positions. If multiple rules are added at the
     /// same position, the order is maintained.
     ///
-    /// This method is called by the proposals canister.
+    /// This method is called by the governance canister.
     pub fn do_add_firewall_rules(&mut self, payload: AddFirewallRulesPayload) {
         println!("{}do_add_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash);
 
@@ -85,7 +85,7 @@ impl Registry {
     /// Remove firewall rules for a given scope.
     /// Removes the rules at the given positions.
     ///
-    /// This method is called by the proposals canister.
+    /// This method is called by the governance canister.
     pub fn do_remove_firewall_rules(&mut self, payload: RemoveFirewallRulesPayload) {
         println!(
             "{}do_remove_firewall_rules: scope: {:?}, positions: {:?}, expected_hash: {:?}",
@@ -101,7 +101,7 @@ impl Registry {
     /// Update firewall rules for a given scope.
     /// Replaces the existing rules at the given positions with the given rules.
     ///
-    /// This method is called by the proposals canister.
+    /// This method is called by the governance canister.
     pub fn do_update_firewall_rules(&mut self, payload: UpdateFirewallRulesPayload) {
         println!("{}do_update_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash);
 
@@ -269,8 +269,8 @@ mod tests {
     use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
     use ic_types::PrincipalId;
 
-    fn firewall_mutations_test(scope: FirewallRulesScope) {
-        let mut registry = invariant_compliant_registry();
+    fn firewall_mutations_test(mutation_id: u8, scope: FirewallRulesScope) {
+        let mut registry = invariant_compliant_registry(mutation_id);
 
         // Add initial rules
         let mut expected_result = FirewallRuleSet {
@@ -569,9 +569,9 @@ mod tests {
     #[test]
     fn firewall_mutations_all_scope_types() {
         let id = PrincipalId::new_node_test_id(TEST_ID);
-        firewall_mutations_test(FirewallRulesScope::Global);
-        firewall_mutations_test(FirewallRulesScope::ReplicaNodes);
-        firewall_mutations_test(FirewallRulesScope::Subnet(SubnetId::from(id)));
-        firewall_mutations_test(FirewallRulesScope::Node(NodeId::from(id)));
+        firewall_mutations_test(0, FirewallRulesScope::Global);
+        firewall_mutations_test(0, FirewallRulesScope::ReplicaNodes);
+        firewall_mutations_test(0, FirewallRulesScope::Subnet(SubnetId::from(id)));
+        firewall_mutations_test(0, FirewallRulesScope::Node(NodeId::from(id)));
     }
 }

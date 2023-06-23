@@ -31,8 +31,8 @@ use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     orchestrator::utils::rw_message::install_nns_and_check_progress,
     util::{
-        assert_create_agent, block_on, create_delay, get_app_subnet_and_node, get_nns_node,
-        runtime_from_url, MessageCanister,
+        assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
+        MessageCanister,
     },
 };
 use canister_test;
@@ -142,9 +142,7 @@ pub fn test(env: TestEnv) {
 
     // Assert that `update` call to the canister succeeds.
     info!(logger, "Assert that update call to the canister succeeds");
-    let delay = create_delay(500, 300);
-    block_on(message_canister.try_store_msg(UPDATE_MSG_1, delay.clone()))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_1)).expect("Update canister call failed.");
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_1.to_string()))
@@ -168,8 +166,7 @@ pub fn test(env: TestEnv) {
         logger,
         "Assert that update call to the canister still succeeds"
     );
-    block_on(message_canister.try_store_msg(UPDATE_MSG_2, delay.clone()))
-        .expect("Update canister call failed.");
+    block_on(message_canister.try_store_msg(UPDATE_MSG_2)).expect("Update canister call failed.");
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(UPDATE_MSG_2.to_string()))
@@ -185,5 +182,13 @@ pub fn test(env: TestEnv) {
 
     // Assert that `update` call to the canister now fails.
     info!(logger, "Assert that update call to the canister now fails");
-    assert!(block_on(message_canister.try_store_msg(UPDATE_MSG_3, delay)).is_err());
+    if let Ok(Ok(result)) = block_on(async {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            message_canister.try_store_msg(UPDATE_MSG_3),
+        )
+        .await
+    }) {
+        panic!("expected the update to fail, got {:?}", result);
+    };
 }

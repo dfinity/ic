@@ -501,7 +501,7 @@ impl RosettaRequestHandler {
                 ));
             }
 
-            let tid = ic_ledger_core::block::HashOf::try_from(tid)
+            let tid = ic_ledger_hash_of::HashOf::try_from(tid)
                 .map_err(|e| ApiError::InvalidTransactionId(false, e.into()))?;
 
             if let Ok(indices) = blocks.get_block_idxs_by_transaction_hash(&tid) {
@@ -626,7 +626,7 @@ fn get_block(
             index: Some(block_height),
             hash: Some(block_hash),
         }) => {
-            let hash: ic_ledger_core::block::HashOf<ic_ledger_core::block::EncodedBlock> =
+            let hash: ic_ledger_hash_of::HashOf<ic_ledger_core::block::EncodedBlock> =
                 convert::to_hash(&block_hash)?;
             if block_height < 0 {
                 return Err(ApiError::InvalidBlockId(false, Default::default()));
@@ -661,7 +661,7 @@ fn get_block(
             index: None,
             hash: Some(block_hash),
         }) => {
-            let hash: ic_ledger_core::block::HashOf<ic_ledger_core::block::EncodedBlock> =
+            let hash: ic_ledger_hash_of::HashOf<ic_ledger_core::block::EncodedBlock> =
                 convert::to_hash(&block_hash)?;
             if blocks.is_verified_by_hash(&hash)? {
                 let idx = blocks.get_block_idx_by_block_hash(&hash)?;

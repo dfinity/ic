@@ -28,15 +28,25 @@ pub struct LaunchSandboxReply {
     pub pid: u32,
 }
 
+/// Instruct the Sandbox Launcher process to terminate.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TerminateRequest {}
+
+/// Ack signal to the controller that termination was complete.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TerminateReply {}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Request {
     LaunchSandbox(LaunchSandboxRequest),
+    Terminate(TerminateRequest),
 }
 
 impl EnumerateInnerFileDescriptors for Request {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         match self {
             Request::LaunchSandbox(req) => req.enumerate_fds(fds),
+            Request::Terminate(_req) => {}
         }
     }
 }
@@ -45,6 +55,7 @@ impl EnumerateInnerFileDescriptors for Request {
 #[derive(Serialize, Deserialize, Clone)]
 pub enum Reply {
     LaunchSandbox(LaunchSandboxReply),
+    Terminate(TerminateReply),
 }
 
 impl EnumerateInnerFileDescriptors for Reply {

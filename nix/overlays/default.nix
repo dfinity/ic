@@ -25,7 +25,7 @@ sources:
           );
         };
 
-        naersk = self.callPackage self.sources.naersk {};
+        naersk = self.callPackage self.sources.naersk { };
 
         # The 'pre-commit' tool that we use for a lot of checks (formatting, etc)
         # https://pre-commit.com
@@ -35,34 +35,34 @@ sources:
         # we don't build from source because the build is somewhat involved
         # and buildGoModule fails on missing includes that aren't easy to
         # inject.
-        rosetta-cli = self.runCommand "rosetta-cli" {}
+        rosetta-cli = self.runCommand "rosetta-cli" { }
           ''
-            tar -xvzf ${self.sources."rosetta-cli-${self.stdenv.system}"}
-            exe=$(find . -name 'rosetta*')
+              tar -xvzf ${self.sources."rosetta-cli-${self.stdenv.system}"}
+              exe=$(find . -name 'rosetta*')
 
-            echo "exe is $exe"
+              echo "exe is $exe"
 
-            ${ # on Linux we need to set the correct interpreter
-          if self.stdenv.isLinux then ''
-            interp=$("${self.glibc.bin}/bin/ldd" "$exe" | grep 'ld-linux-x86-64' | awk '/ => / { print $3 }')
+              ${ # on Linux we need to set the correct interpreter
+            if self.stdenv.isLinux then ''
+              interp=$("${self.glibc.bin}/bin/ldd" "$exe" | grep 'ld-linux-x86-64' | awk '/ => / { print $3 }')
 
-            echo "setting interpreter to $interp"
+              echo "setting interpreter to $interp"
 
-            "${self.patchelf}/bin/patchelf" --set-interpreter "$interp" "$exe"
-            "${self.glibc.bin}/bin/ldd" "$exe"
-          '' else ""
-          }
+              "${self.patchelf}/bin/patchelf" --set-interpreter "$interp" "$exe"
+              "${self.glibc.bin}/bin/ldd" "$exe"
+            '' else ""
+            }
 
-            mkdir -p $out/bin
+              mkdir -p $out/bin
 
-            cp "$exe" $out/bin/rosetta-cli
+              cp "$exe" $out/bin/rosetta-cli
 
-            # just make sure everything is linked properly
-            $out/bin/rosetta-cli --help
+              # just make sure everything is linked properly
+              $out/bin/rosetta-cli --help
           '';
 
         lib = super.lib // {
-          runBenchmarks = self.callPackage ../benchmarks {};
+          runBenchmarks = self.callPackage ../benchmarks { };
         };
         isMaster = super.isMaster or false;
 
@@ -70,7 +70,7 @@ sources:
           releaseVersion = self.sources.sdk.tag or "latest";
         };
 
-        dfx = self.callPackage ./dfx.nix {};
+        dfx = self.callPackage ./dfx.nix { };
 
         idl2json = import self.sources.idl2json {
           inherit (self) pkgs;
@@ -87,7 +87,7 @@ sources:
               buildInputs = self.lib.optional self.stdenv.isDarwin self.xcbuild;
             };
 
-        ic-cdk-optimizer = self.callPackage ./ic-cdk-optimizer {};
+        ic-cdk-optimizer = self.callPackage ./ic-cdk-optimizer { };
 
         # The rust code-coverage tool. As per the doc, only runs on Linux
         # (doesn't even build on Darwin).
@@ -99,10 +99,10 @@ sources:
           };
         cargo-graph = self.naersk.buildPackage self.sources.cargo-graph;
 
-        rocksdb = super.callPackage ./rocksdb {};
+        rocksdb = super.callPackage ./rocksdb { };
 
         # LMDB 0.9.24 does not provide MDB_SYSV_SEM option, so we have to use a newer one.
-        lmdb = super.callPackage ./lmdb {};
+        lmdb = super.callPackage ./lmdb { };
         lmdb_static = self.pkgsStatic.lmdb;
 
         rocksdb_static = self.pkgsStatic.rocksdb.override {
@@ -137,9 +137,9 @@ sources:
 
         jemalloc_static = self.pkgsStatic.jemalloc;
 
-        buf = super.callPackage ./buf {};
+        buf = super.callPackage ./buf { };
 
-        clipboard = super.callPackage ./clipboard {};
+        clipboard = super.callPackage ./clipboard { };
 
         ansible_2_10 = super.ansible_2_10.overrideAttrs (
           _oldAttrs: rec {
@@ -153,24 +153,26 @@ sources:
         # configuration is dynamic (depends on store entries) we can't set it
         # in ansible.cfg. Instead we set it through environment variables.
         # ANSIBLE_STRATEGY*: set up mitogen
-        ansible = self.runCommandNoCC "ansible-wrapped" rec {
-          ansible = self.ansible_2_10;
-          inherit (self.sources) mitogen;
-          ansible_collections = self.runCommandNoCC "ansible-collections" {
-            nativeBuildInputs = [ ansible self.cacert ];
-            collections = [
-              "ansible.posix:1.2.0" # provides the required "debug" callback plugin.
-              "community.libvirt:1.0.1" # needed to deploy IC-OS guest VMs.
-              "community.general:2.5.1" # needed to deploy IC-OS guest VMs.
-            ];
-            outputHashMode = "recursive";
-            outputHashAlgo = "sha256";
-            outputHash = "06na37dinir4yf4vh5g2ib9fq6bx4j161vnb11pfbmlw42gy6mk4";
-          } ''
-            export HOME="$NIX_BUILD_TOP"
-            ansible-galaxy collection install -p $out $collections
-          '';
-        }
+        ansible = self.runCommandNoCC "ansible-wrapped"
+          rec {
+            ansible = self.ansible_2_10;
+            inherit (self.sources) mitogen;
+            ansible_collections = self.runCommandNoCC "ansible-collections"
+              {
+                nativeBuildInputs = [ ansible self.cacert ];
+                collections = [
+                  "ansible.posix:1.2.0" # provides the required "debug" callback plugin.
+                  "community.libvirt:1.0.1" # needed to deploy IC-OS guest VMs.
+                  "community.general:2.5.1" # needed to deploy IC-OS guest VMs.
+                ];
+                outputHashMode = "recursive";
+                outputHashAlgo = "sha256";
+                outputHash = "06na37dinir4yf4vh5g2ib9fq6bx4j161vnb11pfbmlw42gy6mk4";
+              } ''
+              export HOME="$NIX_BUILD_TOP"
+              ansible-galaxy collection install -p $out $collections
+            '';
+          }
           ''
             mkdir -p $out/bin
             for exe in $ansible/bin/*; do
@@ -192,9 +194,10 @@ sources:
         # ansible-lint. To fix this we only copy the bin and lib directories
         # of ansible-lint and ignore the nix-support directory which would
         # bring the wrong ansible into scope.
-        ansible-lint = self.runCommandNoCC super.ansible-lint.name {
-          ansible_lint = super.ansible-lint;
-        } ''
+        ansible-lint = self.runCommandNoCC super.ansible-lint.name
+          {
+            ansible_lint = super.ansible-lint;
+          } ''
           mkdir $out
           cp -r $ansible_lint/{bin,lib} $out/
         '';
@@ -204,9 +207,9 @@ sources:
         # system because we already did that in self.
         pkgsForSystem = super.lib.genAttrs [ "x86_64-linux" "x86_64-darwin" ] (
           supportedSystem:
-            if supportedSystem == super.system
-            then self
-            else import ../. { system = supportedSystem; }
+          if supportedSystem == super.system
+          then self
+          else import ../. { system = supportedSystem; }
         );
 
         # Use a recent version of python-gitlab

@@ -8,7 +8,10 @@ use ic_crypto_internal_csp::api::{
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use ic_crypto_internal_csp::vault::api::CspBasicSignatureKeygenError;
+use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
 use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
+use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::vault::api::ValidatePksAndSksError;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
@@ -38,7 +41,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, CurrentNodePublicKeys};
+use ic_types::crypto::{AlgorithmId, CryptoResult, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::predicate::*;
 use mockall::*;
@@ -96,17 +99,17 @@ mock! {
     }
 
     pub trait CspKeyGenerator {
-        fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CryptoError>;
+        fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError>;
 
         fn gen_committee_signing_key_pair(
             &self,
-        ) -> Result<(CspPublicKey, CspPop), CryptoError>;
+        ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError>;
 
         fn gen_tls_key_pair(
             &self,
-            node: NodeId,
+            node_id: NodeId,
             not_after: &str,
-        ) -> Result<TlsPublicKeyCert, CryptoError>;
+        ) -> Result<TlsPublicKeyCert, CspTlsKeygenError>;
     }
 
     pub trait ThresholdSignatureCspClient {
@@ -236,6 +239,10 @@ mock! {
             &self,
             active_keys: BTreeSet<CspPublicCoefficients>
         ) -> Result<(), CspDkgRetainThresholdKeysError>;
+
+        fn observe_minimum_epoch_in_active_transcripts(&self, epoch: Epoch);
+
+        fn observe_epoch_in_loaded_transcript(&self, epoch: Epoch);
     }
 
     pub trait CspPublicAndSecretKeyStoreChecker {

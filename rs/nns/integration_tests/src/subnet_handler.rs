@@ -1,8 +1,6 @@
 use dfn_candid::candid;
-
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
-
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
 };
@@ -14,8 +12,7 @@ use ic_nns_governance::pb::v1::{ManageNeuronResponse, NnsFunction, ProposalStatu
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::{get_pending_proposals, submit_external_update_proposal, wait_for_final_state},
-    ids::TEST_NEURON_1_ID,
-    ids::TEST_NEURON_2_ID,
+    ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
     registry::get_value_or_panic,
 };
@@ -32,7 +29,6 @@ use ic_types::{
     ReplicaVersion,
 };
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-
 use std::str::FromStr;
 
 #[test]
@@ -59,6 +55,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
+                halt_at_cup_height: false,
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 7_000_000_000,
                 max_instructions_per_install_code: 200_000_000_000,
@@ -109,6 +106,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                 start_as_nns: None,
                 subnet_type: None,
                 is_halted: Some(true),
+                halt_at_cup_height: Some(true),
                 max_instructions_per_message: None,
                 max_instructions_per_round: Some(8_000_000_000),
                 max_instructions_per_install_code: None,
@@ -180,6 +178,7 @@ fn test_submit_and_accept_update_subnet_proposal() {
                     start_as_nns: false,
                     subnet_type: SubnetType::Application.into(),
                     is_halted: true,
+                    halt_at_cup_height: true,
                     max_instructions_per_message: 5_000_000_000,
                     max_instructions_per_round: 8_000_000_000,
                     max_instructions_per_install_code: 200_000_000_000,

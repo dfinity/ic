@@ -20,6 +20,7 @@ pub mod proposal_info_response;
 use core::ops::Deref;
 
 use candid::{Decode, Encode};
+use ic_agent::agent::{RejectCode, RejectResponse};
 use ic_nns_governance::pb::v1::ProposalInfo;
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
@@ -29,7 +30,7 @@ use url::Url;
 
 use async_trait::async_trait;
 use log::{debug, error, warn};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 
 use dfn_candid::CandidOne;
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
@@ -67,13 +68,6 @@ use crate::request_types::{RequestType, Status};
 use crate::transaction_id::TransactionIdentifier;
 
 use self::proposal_info_response::ProposalInfoResponse;
-
-fn waiter() -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(500))
-        .timeout(std::time::Duration::from_secs(60 * 5))
-        .build()
-}
 
 struct LedgerBlocksSynchronizerMetricsImpl {}
 
@@ -376,7 +370,7 @@ impl LedgerAccess for LedgerClient {
                     "get_neuron_info_by_id_or_subaccount",
                 )
                 .with_arg(arg)
-                .call_and_wait(waiter())
+                .call_and_wait()
                 .await
         } else {
             agent
@@ -476,8 +470,9 @@ impl LedgerClient {
             .find(|EnvelopePair { update, .. }| {
                 let ingress_expiry =
                     ic_types::Time::from_nanos_since_unix_epoch(update.content.ingress_expiry());
-                let ingress_start = ingress_expiry
-                    - (ic_constants::MAX_INGRESS_TTL - ic_constants::PERMITTED_DRIFT);
+                let ingress_start = ingress_expiry.saturating_sub_duration(
+                    ic_constants::MAX_INGRESS_TTL.saturating_sub(ic_constants::PERMITTED_DRIFT),
+                );
                 ingress_start <= now && ingress_expiry > now
             })
             .ok_or(ApiError::TransactionExpired)?;
@@ -537,24 +532,48 @@ impl LedgerClient {
                     error!("Error while submitting transaction: {}.", err);
                 }
                 Ok((body, status)) => {
-                    if status.is_success() {
-                        break;
-                    }
-                    // Retry on 5xx errors. We don't want to retry on
-                    // e.g. authentication errors.
-                    let body =
-                        String::from_utf8(body).unwrap_or_else(|_| "<undecodable>".to_owned());
-                    if status.is_server_error() {
-                        error!(
-                            "HTTP error {} while submitting transaction: {}.",
-                            status, body
-                        );
-                    } else {
-                        return Err(ApiError::ICError(ICError {
-                            retriable: false,
-                            ic_http_status: status.as_u16(),
-                            error_message: body,
-                        }));
+                    match status {
+                        StatusCode::ACCEPTED => {
+                            break;
+                        }
+                        // Status code 200 means there is a CBOR encoded RejectResponse encoded in the body.
+                        StatusCode::OK => {
+                            let reject_response: Result<RejectResponse, _> =
+                                serde_cbor::from_slice(&body);
+
+                            let (retriable, error_message) = reject_response
+                                .map(|response| {
+                                    let retriable =
+                                        response.reject_code != RejectCode::DestinationInvalid;
+                                    (retriable, response.reject_message)
+                                })
+                                .unwrap_or((true, "<undecodable>".to_owned()));
+
+                            return Err(ApiError::ICError(ICError {
+                                retriable,
+                                ic_http_status: status.as_u16(),
+                                error_message,
+                            }));
+                        }
+                        _ => {
+                            let body = String::from_utf8(body)
+                                .unwrap_or_else(|_| "<undecodable>".to_owned());
+
+                            // Retry on 5xx errors. We don't want to retry on
+                            // e.g. authentication errors.
+                            if status.is_server_error() {
+                                error!(
+                                    "HTTP error {} while submitting transaction: {}.",
+                                    status, body
+                                );
+                            } else {
+                                return Err(ApiError::ICError(ICError {
+                                    retriable: false,
+                                    ic_http_status: status.as_u16(),
+                                    error_message: body,
+                                }));
+                            }
+                        }
                     }
                 }
             }

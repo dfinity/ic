@@ -15,9 +15,7 @@ use ic_btc_types_internal::{
     GetSuccessorsResponseComplete, SendTransactionRequest, SendTransactionResponse,
 };
 use ic_config::adapters::AdaptersConfig;
-use ic_interfaces_bitcoin_adapter_client::{
-    BitcoinAdapterClient, BitcoinAdapterClientError, Options, RpcResult,
-};
+use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
 use ic_logger::{error, ReplicaLogger};
 use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
 use std::{convert::TryFrom, path::PathBuf};
@@ -25,15 +23,11 @@ use tokio::net::UnixStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
-fn convert_tonic_error(status: tonic::Status) -> BitcoinAdapterClientError {
+fn convert_tonic_error(status: tonic::Status) -> RpcError {
     match status.code() {
-        tonic::Code::Unavailable => {
-            BitcoinAdapterClientError::Unavailable(status.message().to_string())
-        }
-        tonic::Code::Cancelled => {
-            BitcoinAdapterClientError::Cancelled(status.message().to_string())
-        }
-        _ => BitcoinAdapterClientError::Unknown(status.message().to_string()),
+        tonic::Code::Unavailable => RpcError::Unavailable(status.message().to_string()),
+        tonic::Code::Cancelled => RpcError::Cancelled(status.message().to_string()),
+        _ => RpcError::Unknown(status.message().to_string()),
     }
 }
 
@@ -54,8 +48,10 @@ impl BitcoinAdapterClientImpl {
     }
 }
 
-impl BitcoinAdapterClient for BitcoinAdapterClientImpl {
-    fn send_request(
+impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClientImpl {
+    type Response = BitcoinAdapterResponseWrapper;
+
+    fn send_blocking(
         &self,
         request: BitcoinAdapterRequestWrapper,
         opts: Options,
@@ -142,8 +138,10 @@ impl BrokenConnectionBitcoinClient {
     }
 }
 
-impl BitcoinAdapterClient for BrokenConnectionBitcoinClient {
-    fn send_request(
+impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BrokenConnectionBitcoinClient {
+    type Response = BitcoinAdapterResponseWrapper;
+
+    fn send_blocking(
         &self,
         request: BitcoinAdapterRequestWrapper,
         _opts: Options,
@@ -161,11 +159,8 @@ impl BitcoinAdapterClient for BrokenConnectionBitcoinClient {
                 request_timer.set_label(LABEL_REQUEST_TYPE, LABEL_SEND_TRANSACTION)
             }
         }
-        request_timer.set_label(
-            LABEL_STATUS,
-            BitcoinAdapterClientError::ConnectionBroken.into(),
-        );
-        Err(BitcoinAdapterClientError::ConnectionBroken)
+        request_timer.set_label(LABEL_STATUS, RpcError::ConnectionBroken.into());
+        Err(RpcError::ConnectionBroken)
     }
 }
 
@@ -174,7 +169,8 @@ fn setup_bitcoin_adapter_client(
     metrics: Metrics,
     rt_handle: tokio::runtime::Handle,
     uds_path: Option<PathBuf>,
-) -> Box<dyn BitcoinAdapterClient> {
+) -> Box<dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>>
+{
     match uds_path {
         None => Box::new(BrokenConnectionBitcoinClient::new(metrics)),
         Some(uds_path) => {
@@ -201,8 +197,18 @@ fn setup_bitcoin_adapter_client(
 }
 
 pub struct BitcoinAdapterClients {
-    pub btc_testnet_client: Box<dyn BitcoinAdapterClient>,
-    pub btc_mainnet_client: Box<dyn BitcoinAdapterClient>,
+    pub btc_testnet_client: Box<
+        dyn RpcAdapterClient<
+            BitcoinAdapterRequestWrapper,
+            Response = BitcoinAdapterResponseWrapper,
+        >,
+    >,
+    pub btc_mainnet_client: Box<
+        dyn RpcAdapterClient<
+            BitcoinAdapterRequestWrapper,
+            Response = BitcoinAdapterResponseWrapper,
+        >,
+    >,
 }
 
 pub fn setup_bitcoin_adapter_clients(

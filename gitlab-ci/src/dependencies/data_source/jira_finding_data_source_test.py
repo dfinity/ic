@@ -12,6 +12,7 @@ from data_source.jira_finding_data_source import (
     JIRA_LABEL_PATCH_ALLDEP_PUBLISHED,
     JIRA_LABEL_PATCH_VULNDEP_PUBLISHED,
     JIRA_MERGE_REQUEST_EXCEPTION_TICKET,
+    JIRA_OWNER_GROUP_BY_TEAM,
     JIRA_RELEASE_CANDIDATE_EXCEPTION_TICKET,
     JIRA_SECURITY_RISK_TO_ID,
     JiraFindingDataSource,
@@ -19,6 +20,7 @@ from data_source.jira_finding_data_source import (
 from model.dependency import Dependency
 from model.finding import Finding
 from model.security_risk import SecurityRisk
+from model.team import Team
 from model.user import User
 from model.vulnerability import Vulnerability
 
@@ -165,6 +167,10 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
     user3.displayName = "User 3"
     risk = Mock()
     risk.id = JIRA_SECURITY_RISK_TO_ID[SecurityRisk.CRITICAL]
+    team1 = Mock()
+    team1.name = JIRA_OWNER_GROUP_BY_TEAM[Team.GIX_TEAM]["name"]
+    team2 = Mock()
+    team2.name = JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM]["name"]
     issue_data = {
         JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
@@ -184,6 +190,7 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
         JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: "* project A\n" "* project B\n" "* project C\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: [user1, user2],
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: risk,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: [team1, team2],
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: [user3],
         JIRA_FINDING_TO_CUSTOM_FIELD.get("due_date")[0]: "2022-12-24",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("score")[0]: "100",
@@ -227,6 +234,7 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
     assert res1.projects == ["project A", "project B", "project C"]
     assert res1.risk_assessor == [User(user1.accountId), User(user2.accountId, user2.displayName, user2.emailAddress)]
     assert res1.risk == SecurityRisk.CRITICAL
+    assert res1.owning_teams == [Team.GIX_TEAM, Team.FINANCIAL_INTEGRATIONS_TEAM]
     assert res1.patch_responsible == [User(user3.accountId, user3.displayName)]
     assert res1.due_date == 1671840000
     assert res1.more_info == "https://dfinity.atlassian.net/browse/SCAVM-4"
@@ -254,6 +262,7 @@ def test_get_open_finding_raise_error_if_two_issues_with_same_id_returned(jira_d
         JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: "* project A",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: [user1],
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("due_date")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("score")[0]: None,
@@ -288,6 +297,7 @@ def test_get_open_finding_return_none_if_primary_key_of_finding_not_matching(jir
         JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("due_date")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("score")[0]: None,
@@ -340,6 +350,7 @@ def test_update_open_finding_create_issue(jira_ds, jira_lib_mock):
         ["foo", "bar", "bear"],
         [User("risk assessor 1")],
         SecurityRisk.MEDIUM,
+        [Team.BOUNDARY_NODE_TEAM, Team.FINANCIAL_INTEGRATIONS_TEAM, Team.TRUST_TEAM],
         [User("patch responsible 1"), User("patch responsible 2")],
         0,
         42,
@@ -363,6 +374,11 @@ def test_update_open_finding_create_issue(jira_ds, jira_lib_mock):
             JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: "* foo\n* bar\n* bear\n",
             JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: [{"accountId": "risk assessor 1"}],
             JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: {"id": JIRA_SECURITY_RISK_TO_ID[SecurityRisk.MEDIUM]},
+            JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: [
+                JIRA_OWNER_GROUP_BY_TEAM[Team.BOUNDARY_NODE_TEAM],
+                JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM],
+                JIRA_OWNER_GROUP_BY_TEAM[Team.TRUST_TEAM],
+            ],
             JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: [
                 {"accountId": "patch responsible 1"},
                 {"accountId": "patch responsible 2"},
@@ -396,6 +412,7 @@ def test_create_query_update_finding():
         ["foo", "bar", "bear"],
         [User("risk assessor 1")],
         SecurityRisk.MEDIUM,
+        [],
         [User("patch responsible 1"), User("patch responsible 2")],
         0,
         42,
@@ -440,6 +457,7 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
         ["proj1{code}", "|proj2", "pr{code}oject3|"],
         [],
         None,
+        [],
         [],
         None,
     )
@@ -488,6 +506,7 @@ def test_delete_finding():
         JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: "",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: [],
         JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: None,
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]: [],
         JIRA_FINDING_TO_CUSTOM_FIELD.get("due_date")[0]: None,
         JIRA_FINDING_TO_CUSTOM_FIELD.get("score")[0]: None,
@@ -509,12 +528,17 @@ def test_delete_finding():
             [],
             None,
             [],
+            [],
             None,
         )
     )
 
     jira_lib_mock.transition_issue.assert_called_once_with(issue.id, "41")
     sub.on_finding_deleted.assert_called_once()
+
+def test_owning_team_mapping_complete(jira_ds, jira_lib_mock):
+    for team in Team:
+        assert team in JIRA_OWNER_GROUP_BY_TEAM
 
 
 class InMemoryJira:

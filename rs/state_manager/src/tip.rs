@@ -1,12 +1,12 @@
 use crate::{
     compute_bundled_manifest, release_lock_and_persist_metadata, CheckpointError, PageMapType,
     SharedState, StateManagerMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    MAX_SUPPORTED_STATE_SYNC_VERSION, NUMBER_OF_CHECKPOINT_THREADS,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
+use ic_base_types::subnet_id_into_protobuf;
 use ic_logger::{error, fatal, info, ReplicaLogger};
-use ic_protobuf::state::canister_metadata::v1::CanisterMetadata;
-use ic_protobuf::state::system_metadata::v1::SystemMetadata;
+use ic_protobuf::state::system_metadata::v1::{SplitFrom, SystemMetadata};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
@@ -16,7 +16,9 @@ use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
     RwPolicy, StateLayout, TipHandler,
 };
-use ic_types::state_sync::{FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET};
+use ic_types::state_sync::{
+    FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
+};
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
@@ -84,7 +86,6 @@ pub(crate) enum TipRequest {
     SerializeToTip {
         height: Height,
         replicated_state: Box<ReplicatedState>,
-        separate_ingress_history: bool,
     },
     /// Run one round of tip defragmentation.
     /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
@@ -217,6 +218,7 @@ pub(crate) fn spawn_tip_thread(
                             height,
                             page_map_type,
                         } => {
+                            #[cfg(debug_assert)]
                             match tip_state {
                                 TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
@@ -253,7 +255,6 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::SerializeToTip {
                             height,
                             replicated_state,
-                            separate_ingress_history,
                         } => {
                             let _timer = request_timer(&metrics, "serialize_to_tip");
                             #[cfg(debug_assert)]
@@ -274,7 +275,6 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 }),
                                 &mut thread_pool,
-                                separate_ingress_history,
                             )
                             .unwrap_or_else(|err| {
                                 fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
@@ -356,20 +356,31 @@ fn serialize_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
-    separate_ingress_history: bool,
 ) -> Result<(), CheckpointError> {
-    if separate_ingress_history {
-        // Take out ingress history from system_metadata and serialize it separately.
-        let mut system_metadata: SystemMetadata = state.system_metadata().into();
-        let ingress_history = system_metadata.ingress_history.take().unwrap();
-        tip.system_metadata().serialize(system_metadata)?;
-        tip.ingress_history().serialize(ingress_history)?;
-    } else {
-        // Serialize full system_metadata, including ingress history.
-        tip.system_metadata()
-            .serialize(state.system_metadata().into())?;
-        // Delete ingress history file if present.
-        tip.ingress_history().try_remove_file()?;
+    // Serialize ingress history separately. The `SystemMetadata` proto does not
+    // encode it.
+    //
+    // This also makes it possible to validate post-split states simply by comparing
+    // manifest file hashes (the ingress history is initially preserved unmodified
+    // on both sides of the split, while the system metadata is not).
+    let ingress_history = (&state.system_metadata().ingress_history).into();
+    tip.ingress_history().serialize(ingress_history)?;
+
+    let system_metadata: SystemMetadata = state.system_metadata().into();
+    tip.system_metadata().serialize(system_metadata)?;
+
+    // The split marker is also serialized separately from `SystemMetadata` because
+    // preserving the latter unmodified during a split makes verification a matter
+    // of comparing manifest file hashes.
+    match state.system_metadata().split_from {
+        Some(subnet_id) => {
+            tip.split_marker().serialize(SplitFrom {
+                subnet_id: Some(subnet_id_into_protobuf(subnet_id)),
+            })?;
+        }
+        None => {
+            tip.split_marker().try_remove_file()?;
+        }
     }
 
     tip.subnet_queues()
@@ -437,12 +448,13 @@ fn serialize_canister_to_tip(
                 last_executed_round: execution_state.last_executed_round,
                 metadata: execution_state.metadata.clone(),
                 binary_hash: Some(execution_state.wasm_binary.binary.module_hash().into()),
+                next_scheduled_method: execution_state.next_scheduled_method,
             })
         }
         None => {
             truncate_path(log, &canister_layout.vmemory_0());
             truncate_path(log, &canister_layout.stable_memory_blob());
-            canister_layout.wasm().delete_file()?;
+            canister_layout.wasm().try_delete_file()?;
             None
         }
     };
@@ -506,16 +518,11 @@ fn serialize_canister_to_tip(
                 .canister_metrics
                 .get_consumed_cycles_since_replica_started_by_use_cases()
                 .clone(),
+            canister_history: canister_state.system_state.get_canister_history().clone(),
         }
         .into(),
     )?;
-    let pb_canister_metadata = CanisterMetadata {
-        canister_history: Some((canister_state.system_state.get_canister_history()).into()),
-    };
-    canister_layout
-        .canister_metadata()
-        .serialize(pb_canister_metadata)
-        .map_err(CheckpointError::from)
+    Ok(())
 }
 
 /// Defragments part of the tip directory.
@@ -620,7 +627,7 @@ fn handle_compute_manifest_request(
             )
         });
 
-    let state_sync_version = system_metadata.state_sync_version;
+    let state_sync_version = system_metadata.state_sync_version.try_into().unwrap();
 
     assert!(
         state_sync_version <= MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -658,7 +665,7 @@ fn handle_compute_manifest_request(
 
     info!(
         log,
-        "Computed manifest version {} for state @{} in {:?}",
+        "Computed manifest version {:?} for state @{} in {:?}",
         manifest.version,
         checkpoint_layout.height(),
         elapsed

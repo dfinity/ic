@@ -12,6 +12,7 @@ use crate::canister_requests;
 use crate::driver::farm::HostFeature;
 use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::IcNodeSnapshot;
 use crate::driver::test_env_api::NnsCanisterWasmStrategy;
 use crate::driver::test_env_api::TEST_USER1_STARTING_TOKENS;
 use crate::driver::test_env_api::{
@@ -19,15 +20,21 @@ use crate::driver::test_env_api::{
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome};
+use crate::sns_client::openchat_create_service_nervous_system_proposal;
 use candid::{Nat, Principal};
 use ic_agent::{Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
+use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
-use ic_sns_swap::pb::v1::Lifecycle;
+
+use ic_sns_governance::pb::v1::governance::Mode;
+use ic_sns_swap::pb::v1::{
+    new_sale_ticket_response, DerivedState, FinalizeSwapResponse, GetStateResponse, Lifecycle,
+};
 use ic_sns_swap::swap::principal_to_subaccount;
 use ic_types::Height;
 use icp_ledger::{AccountIdentifier, Subaccount};
@@ -232,7 +239,7 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
             let agent = agent.clone();
             async move {
                 let agent = agent.clone();
-                let request = sns_request_provider.refresh_buyer_tokens(None);
+                let request = sns_request_provider.refresh_buyer_tokens(None, None);
                 agent.call(&request).await.map(|_| ()).into_test_outcome()
             }
         }
@@ -250,15 +257,81 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
     env.emit_report(format!("{metrics}"));
 }
 
-fn setup(
+/// Like [`setup`], but initiates the SNS with an "openchat-ish" init payload.
+/// (Not guaranteed to be exactly the same as the actual payload used by
+/// openchat.)
+///
+/// This function should be the one used "by default" for most tests, to ensure
+/// that the tests are using realistic parameters.
+///
+/// The NNS will be initialized with only the "test" neurons.
+/// (See [`ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder::with_test_neurons`].)
+pub fn setup_with_oc_parameters(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
+    setup_legacy(
+        env,
+        sale_participants,
+        vec![], // no neurons
+        openchat_create_service_nervous_system_proposal(),
+        canister_wasm_strategy,
+        fast_test_setup,
+    );
+}
+
+/// Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
+pub fn setup(
+    env: TestEnv,
+    sale_participants: Vec<SaleParticipant>,
+    neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    fast_test_setup: bool,
+) {
+    setup_ic(&env, fast_test_setup);
+
+    install_nns(&env, canister_wasm_strategy, sale_participants, neurons);
+
+    // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
+    install_sns(
+        &env,
+        canister_wasm_strategy,
+        create_service_nervous_system_proposal,
+    );
+}
+
+///  Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
+pub fn setup_legacy(
+    env: TestEnv,
+    sale_participants: Vec<SaleParticipant>,
+    neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    fast_test_setup: bool,
+) {
+    setup_ic(&env, fast_test_setup);
+
+    install_nns(&env, canister_wasm_strategy, sale_participants, neurons);
+
+    // Install the SNS with an "OC-ish" init payload (generated from an "OC-ish"
+    // CreateServiceNervousSystem proposal)
+    install_sns_legacy(
+        &env,
+        canister_wasm_strategy,
+        create_service_nervous_system_proposal,
+    );
+}
+
+/// Sets up and starts the IC, and creates two subnets (one system subnet and
+/// one application subnet). If `fast_test_setup` is false, also sets up
+/// Prometheus.
+fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
     if !fast_test_setup {
         PrometheusVm::default()
-            .start(&env)
+            .start(env)
             .expect("failed to start prometheus VM");
     }
 
@@ -282,37 +355,17 @@ fn setup(
                 boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
             });
     }
-    ic.setup_and_start(&env)
+    ic.setup_and_start(env)
         .expect("failed to setup IC under test");
 
     if !fast_test_setup {
         env.sync_prometheus_config_with_topology();
     }
-
-    // Set up the initial ICP ledger
-    let mut ledger_balances = HashMap::new();
-    for participant in sale_participants {
-        if participant.starting_sns_balance.get_e8s() > 0 {
-            let account_identifier = participant.sns_account_identifier();
-            ledger_balances.insert(account_identifier, participant.starting_sns_balance);
-        }
-        if participant.starting_icp_balance.get_e8s() > 0 {
-            let account_identifier = participant.icp_account_identifier();
-            ledger_balances.insert(account_identifier, participant.starting_icp_balance);
-        }
-    }
-    let nns_customizations = NnsCustomizations {
-        ledger_balances: Some(ledger_balances),
-    };
-
-    // Install NNS with ledger customizations
-    install_nns(&env, canister_wasm_strategy, nns_customizations);
-
-    install_sns(&env, canister_wasm_strategy);
 }
 
+/// Sets up an SNS using "openchat-ish" parameters.
 pub fn sns_setup(env: TestEnv) {
-    setup(
+    setup_with_oc_parameters(
         env,
         vec![],
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -320,8 +373,9 @@ pub fn sns_setup(env: TestEnv) {
     );
 }
 
+/// Sets up an SNS using "openchat-ish" parameters, with the "fast" configuration.
 pub fn sns_setup_fast(env: TestEnv) {
-    setup(
+    setup_with_oc_parameters(
         env,
         vec![],
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -360,7 +414,7 @@ fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: boo
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup(
+    setup_with_oc_parameters(
         env,
         participants,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -393,7 +447,7 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup(
+    setup_with_oc_parameters(
         env,
         participants,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -417,7 +471,8 @@ pub fn init_participants(env: TestEnv) {
             let canister_agent = app_node
                 .build_canister_agent_with_identity(participant.clone())
                 .await;
-            let request = sns_request_provider.refresh_buyer_tokens(Some(participant.principal_id));
+            let request =
+                sns_request_provider.refresh_buyer_tokens(Some(participant.principal_id), None);
             info!(
                 log,
                 "Submitting request {request:?} from {:?} ...", participant.principal_id
@@ -489,14 +544,36 @@ pub fn check_all_participants(env: TestEnv) {
 pub fn install_nns(
     env: &TestEnv,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
-    customizations: NnsCustomizations,
+    sale_participants: Vec<SaleParticipant>,
+    neurons: Vec<ic_nns_governance::pb::v1::Neuron>,
 ) {
     let log = env.logger();
     let start_time = Instant::now();
+
+    let ledger_balances = {
+        let mut ledger_balances = HashMap::new();
+        for participant in sale_participants {
+            if participant.starting_sns_balance.get_e8s() > 0 {
+                let account_identifier = participant.sns_account_identifier();
+                ledger_balances.insert(account_identifier, participant.starting_sns_balance);
+            }
+            if participant.starting_icp_balance.get_e8s() > 0 {
+                let account_identifier = participant.icp_account_identifier();
+                ledger_balances.insert(account_identifier, participant.starting_icp_balance);
+            }
+        }
+        ledger_balances
+    };
+    let nns_customizations = NnsCustomizations {
+        ledger_balances: Some(ledger_balances),
+        neurons: Some(neurons),
+        install_at_ids: false,
+    };
+
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
         canister_wasm_strategy,
-        customizations,
+        nns_customizations,
     );
     info!(
         log,
@@ -505,10 +582,19 @@ pub fn install_nns(
     );
 }
 
-pub fn install_sns(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
+/// Installs the SNS using the one-proposal flow.
+pub fn install_sns(
+    env: &TestEnv,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+) {
     let log = env.logger();
     let start_time = Instant::now();
-    let sns_client = SnsClient::install_sns_and_check_healthy(env, canister_wasm_strategy);
+    let sns_client = SnsClient::install_sns_and_check_healthy(
+        env,
+        canister_wasm_strategy,
+        create_service_nervous_system_proposal,
+    );
     {
         let observed = sns_client.sns_canisters.swap().get();
         let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
@@ -520,18 +606,60 @@ pub fn install_sns(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrateg
     }
     info!(
         log,
-        "========== The SNS has been installed successfully in {:?} ===========",
+        "========== The SNS has been installed successfully in {:?} ===========\n\
+        (Installation was performed using the one-proposal flow.)",
         start_time.elapsed()
     );
 }
 
-pub fn initiate_token_swap(env: TestEnv) {
+/// Installs the SNS using the legacy, non-one-proposal flow.
+pub fn install_sns_legacy(
+    env: &TestEnv,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+) {
+    let log = env.logger();
+    let start_time = Instant::now();
+    let sns_client = SnsClient::install_sns_legacy_and_check_healthy(
+        env,
+        canister_wasm_strategy,
+        create_service_nervous_system_proposal,
+    );
+    {
+        let observed = sns_client.sns_canisters.swap().get();
+        let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
+            .expect("cannot parse PrincipalId of the SNS sale (a.k.a. swap) canister");
+        assert_eq!(
+            observed, expected,
+            "SNS sale canister got unexpected PrincipalId {observed:?} (expected {expected:?}"
+        );
+    }
+    info!(
+        log,
+        "========== The SNS has been installed successfully in {:?} ===========\n\
+        (Installation was performed using the legacy, non-one-proposal flow.)",
+        start_time.elapsed()
+    );
+}
+
+/// Initiates a token swap using the given parameters. Specifically, it creates
+/// an OpenSnsTokenSwap proposal and executes it, then asserts that the SNS swap
+/// is open.
+pub fn initiate_token_swap(
+    env: TestEnv,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+    community_fund_investment_e8s: u64,
+) {
     let log = env.logger();
     let start_time = Instant::now();
 
     let sns_client = SnsClient::read_attribute(&env);
-    sns_client.initiate_token_swap(&env);
-    sns_client.assert_state(&env, Lifecycle::Open);
+    sns_client.initiate_token_swap_immediately(
+        &env,
+        create_service_nervous_system_proposal,
+        community_fund_investment_e8s,
+    );
+    block_on(sns_client.assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap));
     info!(
         log,
         "==== The SNS token sale has been initialized successfully in {:?} ====",
@@ -539,26 +667,41 @@ pub fn initiate_token_swap(env: TestEnv) {
     );
 }
 
+/// Like [`initiate_token_swap`], but initiates the token swap with "openchat-ish"
+/// parameters. (Not guaranteed to be exactly the same as the actual parameters
+/// used by openchat.)
+///
+/// This function should be the one used "by default" for most tests, to ensure
+/// that the tests are using realistic parameters.
+pub fn initiate_token_swap_with_oc_parameters(env: TestEnv) {
+    let community_fund_investment_e8s = 333_333 * E8;
+    initiate_token_swap(
+        env,
+        openchat_create_service_nervous_system_proposal(),
+        community_fund_investment_e8s,
+    );
+}
+
 pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None, None);
     let rps: usize = 20;
     generate_sns_workload_with_many_users(env, rps, Duration::from_secs(10), request);
 }
 
 pub fn workload_many_users_rps100_refresh_buyer_tokens(env: TestEnv) {
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None, None);
     let rps: usize = 100;
     generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
 }
 
 pub fn workload_many_users_rps200_refresh_buyer_tokens(env: TestEnv) {
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None, None);
     let rps: usize = 200;
     generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
 }
 
 pub fn workload_many_users_rps400_refresh_buyer_tokens(env: TestEnv) {
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None, None);
     let rps: usize = 400;
     generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
 }
@@ -767,8 +910,8 @@ pub fn add_one_participant(env: TestEnv) {
     info!(log, "Checking that buyer identity is correctly set up by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
     let res_1 = {
-        let request =
-            sns_request_provider.refresh_buyer_tokens(Some(wealthy_user_identity.principal_id));
+        let request = sns_request_provider
+            .refresh_buyer_tokens(Some(wealthy_user_identity.principal_id), None);
         block_on(default_sns_agent.call(&request)).result()
     };
     info!(
@@ -779,7 +922,7 @@ pub fn add_one_participant(env: TestEnv) {
     assert!(res_1.is_err());
     // Use the wealthy user's identity refresh_buyer_tokens for "self"
     let res_2 = {
-        let request = sns_request_provider.refresh_buyer_tokens(None);
+        let request = sns_request_provider.refresh_buyer_tokens(None, None);
         block_on(wealthy_sns_agent.call(&request)).result()
     };
     info!(
@@ -868,8 +1011,8 @@ pub fn add_one_participant(env: TestEnv) {
     info!(log, "Validating the participation setup by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
     let res_4 = {
-        let request =
-            sns_request_provider.refresh_buyer_tokens(Some(wealthy_user_identity.principal_id));
+        let request = sns_request_provider
+            .refresh_buyer_tokens(Some(wealthy_user_identity.principal_id), None);
         block_on(default_sns_agent.call_and_parse(&request))
             .result()
             .unwrap()
@@ -881,7 +1024,7 @@ pub fn add_one_participant(env: TestEnv) {
     );
     // Use the wealthy user's identity to call refresh_buyer_tokens for "self"
     let res_5 = {
-        let request = sns_request_provider.refresh_buyer_tokens(None);
+        let request = sns_request_provider.refresh_buyer_tokens(None, None);
         block_on(wealthy_sns_agent.call_and_parse(&request))
             .result()
             .unwrap()
@@ -891,7 +1034,7 @@ pub fn add_one_participant(env: TestEnv) {
         "Fourth update call to `sns_sale.refresh_buyer_tokens` returned {res_5:?} (elapsed {:?})",
         start_time.elapsed()
     );
-    assert_eq!(res_4, res_5, "sns_sale.refresh_buyer_tokens(Some({:?})) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None) = {res_5:?}", wealthy_user_identity.principal_id);
+    assert_eq!(res_4, res_5, "sns_sale.refresh_buyer_tokens(Some({:?}), None) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None, None) = {res_5:?}", wealthy_user_identity.principal_id);
     info!(log, "After setting up sale participation, the response from `sns_sale.refresh_buyer_tokens` is {res_4:?}");
 
     info!(
@@ -921,221 +1064,79 @@ pub fn add_one_participant(env: TestEnv) {
     );
 }
 
-pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration: Duration) {
+/// "Mints" tokens by creating a wealthy agent and transferring the tokens from them to the specified account.
+async fn mint_tokens(
+    nns_node: IcNodeSnapshot,
+    to: Account,
+    amount_e8s: u64,
+    ledger_canister_id: Principal,
+) -> RequestOutcome<(), anyhow::Error> {
+    let wealthy_ledger_agent: CanisterAgent = {
+        let wealthy_user_identity = SaleParticipant {
+            name: "wealthy_sale_participant".to_string(),
+            principal_id: *TEST_USER1_PRINCIPAL,
+            secret_key: TEST_USER1_KEYPAIR.secret_key,
+            public_key: TEST_USER1_KEYPAIR.public_key,
+            starting_sns_balance: Tokens::ZERO,
+            starting_icp_balance: TEST_USER1_STARTING_TOKENS,
+        };
+        nns_node
+            .build_canister_agent_with_identity(wealthy_user_identity)
+            .await
+    };
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to,
+        fee: None,
+        created_at_time: None,
+        memo: None,
+        amount: Nat::from(amount_e8s),
+    };
+
+    wealthy_ledger_agent
+        .call_and_parse(&Icrc1TransferRequest::new(ledger_canister_id, transfer_arg))
+        .await
+        .context(
+            format!("Unable to \"mint\" tokens for {to} (by transferring from a freshly-created wealthy account)"),
+        )
+        .map(|_| ())
+}
+
+pub fn generate_ticket_participants_workload(
+    env: TestEnv,
+    rps: usize,
+    duration: Duration,
+    contribution_per_user: u64,
+) {
+    // TODO: reject values of contribution_per_user that are not sane
     let log = env.logger();
-    // The amount of ICP that each participant will contribute to the SNS
-    let icp_amount = SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S;
 
     let future_generator = {
         let nns_node = env.get_first_healthy_nns_node_snapshot();
         let app_node = env.get_first_healthy_application_node_snapshot();
         let sns_client = SnsClient::read_attribute(&env);
         let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
-        let sns_sale_canister_id = sns_client.sns_canisters.swap().get();
         let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
-        let wealthy_ledger_agent: CanisterAgent = {
-            let wealthy_user_identity = SaleParticipant {
-                name: "wealthy_sale_participant".to_string(),
-                principal_id: *TEST_USER1_PRINCIPAL,
-                secret_key: TEST_USER1_KEYPAIR.secret_key,
-                public_key: TEST_USER1_KEYPAIR.public_key,
-                starting_sns_balance: Tokens::ZERO,
-                starting_icp_balance: TEST_USER1_STARTING_TOKENS,
-            };
-            block_on(nns_node.build_canister_agent_with_identity(wealthy_user_identity))
-        };
+
         move |idx| {
-            let (nns_node, app_node, wealthy_ledger_agent) = (
-                nns_node.clone(),
-                app_node.clone(),
-                wealthy_ledger_agent.clone(),
-            );
+            let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
             async move {
-                let (nns_node, app_node, wealthy_ledger_agent) = (
-                    nns_node.clone(),
-                    app_node.clone(),
-                    wealthy_ledger_agent.clone(),
-                );
-                let (participant, ledger_agent, canister_agent) = {
-                    let name = format!("user_{idx}");
-                    let starting_icp_balance = Tokens::ZERO;
-                    // The amount of ICPs in this user's SNS sale sub-account is minimally enough for sale participation.
-                    let starting_sns_balance =
-                        Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S);
-                    // The seed should depend on all inputs of `generate_ticket_participants_workload` and this closure to avoid
-                    // re-creating the same participants in subsequent calls to `generate_ticket_participants_workload`, all of which
-                    // are assumed to have different values for `duration` and `rps`).
-                    let seed = ((idx as u64) << 32) + (duration.as_secs() << 16) + (rps as u64);
-                    let p = SaleParticipant::random(
-                        name,
-                        starting_icp_balance,
-                        starting_sns_balance,
-                        seed,
-                    );
-                    let ledger_agent = nns_node.build_canister_agent_with_identity(p.clone()).await;
-                    let canister_agent =
-                        app_node.build_canister_agent_with_identity(p.clone()).await;
-                    (p, ledger_agent, canister_agent)
-                };
-                let sns_subaccount = Subaccount(principal_to_subaccount(&participant.principal_id));
-                let mut sale_outcome = LoadTestOutcome::<(), String>::default();
+                let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
                 let overall_start_time = Instant::now();
-                let mut overall_result: Result<(), String> = Ok(());
+                let seed = ((idx as u64) << 32) + (duration.as_secs() << 16) + (rps as u64);
 
-                // 0. "Mint" tokens
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let transfer_arg = TransferArg {
-                            from_subaccount: None,
-                            to: participant.icp_account(),
-                            fee: None,
-                            created_at_time: None,
-                            memo: None,
-                            amount: Nat::from(icp_amount * 2), // should cover one minimal participation + fee
-                        };
-                        wealthy_ledger_agent.call_and_parse(&Icrc1TransferRequest::new(
-                            ledger_canister_id,
-                            transfer_arg,
-                        ))
-                    }
-                    .await
-                    .check_response(|response| {
-                        if let Err(error) = response {
-                            Err(format!("Minting failed: {error:?}"))
-                        } else {
-                            Ok(())
-                        }
-                    })
-                    .with_workflow_position(0)
-                    .push_outcome(&mut sale_outcome)
-                    .result();
-                }
-
-                // 1. Call sns.new_sale_ticket
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let request =
-                            sns_request_provider.new_sale_ticket(icp_amount, Some(sns_subaccount));
-                        canister_agent.call_with_retries(
-                            request,
-                            SNS_ENDPOINT_RETRY_TIMEOUT,
-                            SNS_ENDPOINT_RETRY_BACKOFF,
-                            None,
-                        )
-                    }
-                    .await
-                    .check_response(|response| {
-                        if let Err(error) = response.ticket() {
-                            Err(format!("new_sale_ticket: {:?}", error.error_type()))
-                        } else {
-                            Ok(())
-                        }
-                    })
-                    .with_workflow_position(1)
-                    .push_outcome(&mut sale_outcome)
-                    .result();
-                }
-
-                // 2. Call icp_ledger.transfer
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let sns_account = Account {
-                            owner: sns_sale_canister_id.0,
-                            subaccount: Some(sns_subaccount.0),
-                        };
-                        let transfer_arg = TransferArg {
-                            from_subaccount: None,
-                            to: sns_account,
-                            fee: None,
-                            created_at_time: None,
-                            memo: None,
-                            amount: Nat::from(icp_amount),
-                        };
-                        ledger_agent.call_and_parse(&Icrc1TransferRequest::new(
-                            ledger_canister_id,
-                            transfer_arg,
-                        ))
-                    }
-                    .await
-                    .check_response(|response| {
-                        if let Err(error) = response {
-                            Err(format!("ICP ledger transfer failed: {error:?}"))
-                        } else {
-                            Ok(())
-                        }
-                    })
-                    .with_workflow_position(2)
-                    .push_outcome(&mut sale_outcome)
-                    .result();
-                }
-
-                // 3. Call sns.refresh_buyer_tokens
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let request = sns_request_provider.refresh_buyer_tokens(None);
-                        canister_agent.call_with_retries(
-                            request,
-                            SNS_ENDPOINT_RETRY_TIMEOUT,
-                            SNS_ENDPOINT_RETRY_BACKOFF,
-                            None,
-                        )
-                    }
-                    .await
-                    .check_response(|_response| Ok(()))
-                    .with_workflow_position(3)
-                    .push_outcome(&mut sale_outcome)
-                    .result();
-                }
-
-                // 4. Call sns.get_buyer_state
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let request = sns_request_provider
-                            .get_buyer_state(Some(participant.principal_id), CallMode::Update);
-                        canister_agent.call_with_retries(
-                            request,
-                            SNS_ENDPOINT_RETRY_TIMEOUT,
-                            SNS_ENDPOINT_RETRY_BACKOFF,
-                            None,
-                        )
-                    }
-                    .await
-                    .check_response(|response| {
-                        let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
-                        if response_amount >= icp_amount {
-                            Ok(())
-                        } else {
-                            Err(format!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {icp_amount:?}"))
-                        }
-                    })
-                    .with_workflow_position(4)
-                    .push_outcome(&mut sale_outcome)
-                    .result();
-                }
-
-                // 5. Check that the ticket has been deleted via swap.get_open_ticket
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let request = sns_request_provider.get_open_ticket(CallMode::Update);
-                        canister_agent.call_with_retries(
-                            request,
-                            SNS_ENDPOINT_RETRY_TIMEOUT,
-                            SNS_ENDPOINT_RETRY_BACKOFF,
-                            None,
-                        )
-                    }
-                    .await
-                    .check_response(|response| {
-                        if response.ticket().unwrap().is_some() {
-                            Err("get_open_ticket: ticket has not been deleted".to_string())
-                        } else {
-                            Ok(())
-                        }
-                    })
-                    .with_workflow_position(5)
-                    .push_outcome(&mut sale_outcome)
-                    .result();
-                }
+                let mut sale_outcome = LoadTestOutcome::<(), String>::default();
+                let overall_result = create_one_sale_participant(
+                    format!("user_{idx}"),
+                    seed,
+                    contribution_per_user,
+                    nns_node,
+                    app_node,
+                    ledger_canister_id,
+                    sns_request_provider,
+                    &mut sale_outcome,
+                )
+                .await;
 
                 // Record e2e workflow metrics
                 RequestOutcome::new(
@@ -1144,7 +1145,7 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
                     overall_start_time.elapsed(),
                     1,
                 )
-                .push_outcome(&mut sale_outcome);
+                .push_outcome_display_error(&mut sale_outcome);
 
                 sale_outcome
             }
@@ -1166,6 +1167,304 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
     }
     .unwrap();
     env.emit_report(format!("{metrics}"));
+}
+
+/// Creates an identity for a new participant, and has them participate in the
+/// sale using the ticket API.
+/// Intended to be called in the context of a workload generator.
+///
+/// Process:
+/// 0. Mint tokens
+/// 1. Call sns.new_sale_ticket
+/// 2. Call icp_ledger.transfer
+/// 3. Call sns.refresh_buyer_tokens
+/// 4. Call sns.get_buyer_state
+/// 5. Check that the ticket has been deleted via swap.get_open_ticket
+///    (This step may fail if the swap closes when sns.refresh_buyer_tokens is
+///    called)
+async fn create_one_sale_participant(
+    participant_name: String,
+    seed: u64,
+    contribution: u64,
+    nns_node: IcNodeSnapshot,
+    app_node: IcNodeSnapshot,
+    ledger_canister_id: Principal,
+    sns_request_provider: SnsRequestProvider,
+    outcome: &mut Vec<(String, RequestOutcome<(), String>)>,
+) -> Result<(), anyhow::Error> {
+    let sns_swap_canister_id = sns_request_provider.sns_canisters.swap().get();
+    let (participant, ledger_agent, canister_agent) = {
+        let starting_icp_balance = Tokens::ZERO;
+        // Tokens for this user will be minted later.
+        let starting_sns_balance = Tokens::ZERO;
+        // The seed should depend on all inputs of `generate_ticket_participants_workload` and this closure to avoid
+        // re-creating the same participants in subsequent calls to `generate_ticket_participants_workload`, all of which
+        // are assumed to have different values for `duration` and `rps`).
+        let p = SaleParticipant::random(
+            participant_name,
+            starting_icp_balance,
+            starting_sns_balance,
+            seed,
+        );
+        let ledger_agent = nns_node.build_canister_agent_with_identity(p.clone()).await;
+        let canister_agent = app_node.build_canister_agent_with_identity(p.clone()).await;
+        (p, ledger_agent, canister_agent)
+    };
+    let sns_subaccount = Subaccount(principal_to_subaccount(&participant.principal_id));
+
+    // 0. "Mint" tokens
+    mint_tokens(
+        nns_node,
+        participant.icp_account(),
+        contribution + 10 * E8, // should cover the contribution + fees
+        ledger_canister_id,
+    )
+    .await
+    .with_workflow_position(0)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    // 1. Call sns.new_sale_ticket
+    {
+        let request = sns_request_provider.new_sale_ticket(contribution, Some(sns_subaccount));
+        canister_agent.call_with_retries(
+            request,
+            SNS_ENDPOINT_RETRY_TIMEOUT,
+            SNS_ENDPOINT_RETRY_BACKOFF,
+            None,
+        )
+    }
+    .await
+    .context("error calling sns.new_sale_ticket")
+    .map(|_| ())
+    .with_workflow_position(1)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    // 2. Call icp_ledger.transfer
+    {
+        let sns_account = Account {
+            owner: sns_swap_canister_id.into(),
+            subaccount: Some(sns_subaccount.0),
+        };
+        let transfer_arg = TransferArg {
+            from_subaccount: None,
+            to: sns_account,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(contribution),
+        };
+        ledger_agent.call_and_parse(&Icrc1TransferRequest::new(ledger_canister_id, transfer_arg))
+    }
+    .await
+    .context("error performing an ICP ledger transfer")
+    .map(|_| ())
+    .with_workflow_position(2)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    // 3. Call sns. refresh_buyer_tokens
+    {
+        let request = sns_request_provider.refresh_buyer_tokens(None, None);
+        canister_agent.call_with_retries(
+            request,
+            SNS_ENDPOINT_RETRY_TIMEOUT,
+            SNS_ENDPOINT_RETRY_BACKOFF,
+            None,
+        )
+    }
+    .await
+    .check_response(|_response| Ok(()))
+    .with_workflow_position(3)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    // 4. Call sns.get_buyer_state
+    {
+            let request = sns_request_provider
+                .get_buyer_state(Some(participant.principal_id), CallMode::Update);
+            canister_agent.call_with_retries(
+                request,
+                SNS_ENDPOINT_RETRY_TIMEOUT,
+                SNS_ENDPOINT_RETRY_BACKOFF,
+                None,
+            )
+        }
+        .await
+        .check_response(|response| {
+            let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
+            if response_amount >= contribution {
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
+            }
+        })
+        .with_workflow_position(4)
+        .push_outcome_display_error(outcome)
+        .result()?;
+
+    // 5. Check that the ticket has been deleted via swap.get_open_ticket
+    {
+        let request = sns_request_provider.get_open_ticket(CallMode::Update);
+        canister_agent.call_with_retries(
+            request,
+            SNS_ENDPOINT_RETRY_TIMEOUT,
+            SNS_ENDPOINT_RETRY_BACKOFF,
+            None,
+        )
+    }
+    .await
+    .check_response(|response| {
+        let response = response
+            .ticket()
+            .map_err(|err| {
+                // Convert the error code to a string for easier debugging
+                new_sale_ticket_response::err::Type::from_i32(err)
+                    .unwrap_or_else(|| panic!("{err} could not be converted to error type"))
+            })
+            .map_err(|err| anyhow::anyhow!("get_open_ticket failed: {err:?}"))?;
+        if response.is_some() {
+            Err(anyhow::anyhow!(
+                "get_open_ticket: ticket has not been deleted"
+            ))
+        } else {
+            Ok(())
+        }
+    })
+    .with_workflow_position(5)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    Ok(())
+}
+
+/// Finalizes the swap, and verifies that the swap was finalized as expected.
+pub async fn finalize_swap_and_check_success(
+    env: TestEnv,
+    expected_derived_swap_state: DerivedState,
+    create_service_nervous_system_proposal: CreateServiceNervousSystem,
+) {
+    let log = env.logger();
+    info!(log, "Finalizing the swap");
+
+    let sns_client = SnsClient::read_attribute(&env);
+    let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let canister_agent = app_node.build_canister_agent().await;
+
+    let finalize_swap_request = sns_request_provider.finalize_swap();
+    let finalize_swap_response = canister_agent
+        .call_and_parse(&finalize_swap_request)
+        .await
+        .result()
+        .unwrap();
+
+    let FinalizeSwapResponse {
+            sweep_icp_result: Some(_),
+            sweep_sns_result: Some(_),
+            claim_neuron_result: Some(_),
+            set_mode_call_result: Some(_),
+            set_dapp_controllers_call_result: _, // currently None because there's currently no dapps to control
+            settle_community_fund_participation_result: Some(_),
+            error_message: None,
+        } = finalize_swap_response else {
+            panic!("Unexpected finalize_swap_response: {finalize_swap_response:#?}");
+        };
+
+    info!(log, "Checking that the swap finalized successfully");
+
+    info!(log, "Swap finalization check 1: Call swap's `get_state` and assert it contains the correct information");
+    let get_state_request = sns_request_provider.get_state(CallMode::Query);
+    let get_state_response = canister_agent
+        .call_and_parse(&get_state_request)
+        .await
+        .result()
+        .unwrap();
+
+    let GetStateResponse { swap: Some(swap_state), derived: Some(derived_swap_state) } = get_state_response else {
+        panic!("Unexpected get_state_response: {get_state_response:?}");
+    };
+
+    assert_eq!(
+        Lifecycle::from_i32(swap_state.lifecycle).unwrap(),
+        Lifecycle::Committed
+    );
+    assert_eq!(derived_swap_state, expected_derived_swap_state);
+
+    sns_client
+        .assert_state(&env, Lifecycle::Committed, Mode::Normal)
+        .await;
+
+    info!(
+        log,
+        "Swap finalization check 2: Get all neurons from SNS governance"
+    );
+    let neurons = {
+        let mut start_page_at = None;
+        let mut neurons = Vec::new();
+        // Call list_neurons up to 1000 times to get all neurons.
+        // (if this is not enough, we panic, so the limit can be increased.)
+        'repeatedly_call_list_neurons: {
+            let max_pages = 1000;
+            for _ in 0..max_pages {
+                let list_neurons_request = sns_request_provider.list_neurons(
+                    0,
+                    start_page_at.clone(),
+                    None,
+                    CallMode::Query,
+                );
+                let neurons_page = canister_agent
+                    .call_and_parse(&list_neurons_request)
+                    .await
+                    .result()
+                    .unwrap()
+                    .neurons;
+                match neurons_page.last() {
+                    Some(last_neuron) => {
+                        start_page_at = last_neuron.id.clone();
+                    }
+                    None => {
+                        assert!(neurons_page.is_empty());
+                        break 'repeatedly_call_list_neurons;
+                    }
+                }
+                neurons.extend(neurons_page);
+            }
+            panic!("Too many neurons created in SNS governance, unable to read all of them! (Tried calling list_neurons {max_pages} times.)");
+        }
+        neurons
+    };
+
+    info!(
+        log,
+        "Swap finalization check 3: Verify that the correct number of neurons were created"
+    );
+    let developer_distribution = create_service_nervous_system_proposal
+        .initial_token_distribution
+        .as_ref()
+        .unwrap()
+        .developer_distribution
+        .as_ref()
+        .unwrap();
+
+    let initial_neuron_count = developer_distribution.developer_neurons.len();
+
+    let neuron_basket_construction_parameters = create_service_nervous_system_proposal
+        .swap_parameters
+        .unwrap()
+        .neuron_basket_construction_parameters
+        .unwrap();
+    let created_neuron_count = (derived_swap_state.direct_participant_count.unwrap()
+        + derived_swap_state.cf_neuron_count.unwrap())
+        * neuron_basket_construction_parameters.count.unwrap();
+
+    let expected_neuron_count = initial_neuron_count as u64 + created_neuron_count;
+    assert_eq!(neurons.len() as u64, expected_neuron_count);
+
+    // TODO(NNS1-2250): We should check that the swap finalized as expected. Some ideas for what might be relevant:
+    // 1. Check that every participant got the neurons we expected them to
+    // 2. Ask Lara Schmid, Max Summe, and Björn Assmann for additional suggestions
 }
 
 const SNS_ENDPOINT_RETRY_TIMEOUT: Duration = Duration::from_secs(5 * 60); // 5 minutes
@@ -1199,17 +1498,17 @@ pub fn workload_rps1200_get_state_update(env: TestEnv) {
 
 pub fn workload_rps400_refresh_buyer_tokens(env: TestEnv) {
     let buyer = Some(*TEST_USER1_PRINCIPAL);
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer, None);
     generate_sns_workload(env, 400, WORKLOAD_GENERATION_DURATION, request);
 }
 pub fn workload_rps800_refresh_buyer_tokens(env: TestEnv) {
     let buyer = Some(*TEST_USER1_PRINCIPAL);
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer, None);
     generate_sns_workload(env, 800, WORKLOAD_GENERATION_DURATION, request);
 }
 pub fn workload_rps1200_refresh_buyer_tokens(env: TestEnv) {
     let buyer = Some(*TEST_USER1_PRINCIPAL);
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer, None);
     generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, request);
 }
 

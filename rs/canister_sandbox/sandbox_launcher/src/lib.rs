@@ -14,7 +14,7 @@ use ic_canister_sandbox_common::{
     protocol::{
         self,
         ctllaunchersvc::SandboxExitedRequest,
-        launchersvc::{LaunchSandboxReply, LaunchSandboxRequest},
+        launchersvc::{LaunchSandboxReply, LaunchSandboxRequest, TerminateReply, TerminateRequest},
     },
     rpc,
     transport::{self, SocketReaderConfig},
@@ -166,5 +166,9 @@ impl LauncherService for LauncherServer {
                 rpc::Call::new_resolved(Err(rpc::Error::ServerError))
             }
         }
+    }
+
+    fn terminate(&self, _req: TerminateRequest) -> rpc::Call<TerminateReply> {
+        std::process::exit(0);
     }
 }

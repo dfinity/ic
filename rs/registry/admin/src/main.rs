@@ -1,9 +1,4 @@
 //! Command-line utility to help submitting proposals to modify the IC's NNS.
-//!
-//! TODO(NNS1-902) Move this utility to `rs/nns`.
-mod types;
-
-extern crate chrono;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode};
@@ -16,40 +11,47 @@ use ic_btc_interface::{Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto_sha::Sha256;
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der,
 };
 use ic_http_utils::file_downloader::{check_file_hash, extract_tar_gz_into_dir, FileDownloader};
-use ic_prep_lib::subnet_configuration;
-use ic_registry_client_helpers::deserialize_registry_value;
-use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
-use ic_types::p2p;
-#[macro_use]
-extern crate ic_admin_derive;
-use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, EcdsaKeyId};
+use ic_ic00_types::{CanisterInstallMode, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord, canister_status::CanisterStatusResult,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_KEYPAIR,
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
     TEST_USER4_PRINCIPAL,
 };
-use ic_nervous_system_root::{
-    canister_status::CanisterStatusResult,
-    change_canister::{
-        AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
-    },
+use ic_nervous_system_humanize::{
+    parse_duration, parse_percentage, parse_time_of_day, parse_tokens,
+};
+use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
+use ic_nervous_system_root::change_canister::{
+    AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance::pb::v1::{
-    add_or_remove_node_provider::Change, manage_neuron::Command, proposal::Action,
-    AddOrRemoveNodeProvider, GovernanceError, ManageNeuron, NodeProvider, OpenSnsTokenSwap,
-    Proposal, RewardNodeProviders,
-};
 use ic_nns_governance::{
     governance::{BitcoinNetwork, BitcoinSetConfigProposal},
-    pb::v1::NnsFunction,
+    pb::v1::{
+        add_or_remove_node_provider::Change,
+        create_service_nervous_system::{
+            governance_parameters::VotingRewardParameters,
+            initial_token_distribution::{
+                developer_distribution::NeuronDistribution, DeveloperDistribution,
+                SwapDistribution, TreasuryDistribution,
+            },
+            swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
+            SwapParameters,
+        },
+        manage_neuron::Command,
+        proposal::Action,
+        AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
+        NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, RewardNodeProviders,
+    },
     proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
@@ -57,28 +59,30 @@ use ic_nns_governance::{
 };
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_init::make_hsm_sender;
-use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use ic_protobuf::registry::firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet};
-use ic_protobuf::registry::node_rewards::v2::{
-    NodeRewardRate, UpdateNodeRewardsTableProposalPayload,
+use ic_nns_test_utils::{
+    governance::{HardResetNnsRootToVersionPayload, UpgradeRootProposal},
+    ids::TEST_NEURON_1_ID,
 };
+use ic_prep_lib::subnet_configuration;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
+    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
+    firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet},
+    hostos_version::v1::HostOsVersionRecord,
     node::v1::NodeRecord,
-    node_operator::v1::NodeOperatorRecord,
+    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
+    node_rewards::v2::{NodeRewardRate, UpdateNodeRewardsTableProposalPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::{CanisterMigrations, RoutingTable},
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
-use ic_protobuf::registry::{
-    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
-    node_operator::v1::RemoveNodeOperatorsPayload,
-};
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
-use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
+use ic_registry_client_helpers::{
+    crypto::CryptoRegistry, deserialize_registry_value, ecdsa_keys::EcdsaKeysRegistry,
+    subnet::SubnetRegistry,
+};
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_versions_key,
     make_canister_migrations_record_key, make_crypto_node_key,
@@ -87,7 +91,8 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    HOSTOS_VERSION_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -101,55 +106,72 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
+use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
+use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
     SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
+    p2p, CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
+use itertools::izip;
+use maplit::hashmap;
 use prost::Message;
-use registry_canister::mutations::common::decode_registry_value;
-use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
-use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
-use registry_canister::mutations::do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload;
-use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
-use registry_canister::mutations::firewall::{
-    add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
-    remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
-    AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
-};
-use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use registry_canister::mutations::{
+    common::decode_registry_value,
     complete_canister_migration::CompleteCanisterMigrationPayload,
-    do_add_node_operator::AddNodeOperatorPayload, do_add_nodes_to_subnet::AddNodesToSubnetPayload,
+    do_add_hostos_version::AddHostOsVersionPayload,
+    do_add_node_operator::AddNodeOperatorPayload,
+    do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_bless_replica_version::BlessReplicaVersionPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
-    do_create_subnet::CreateSubnetPayload, do_recover_subnet::RecoverSubnetPayload,
+    do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+    do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_retire_replica_version::RetireReplicaVersionPayload,
+    do_set_firewall_config::SetFirewallConfigPayload,
+    do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
+    do_update_nodes_hostos_version::UpdateNodesHostOsVersionPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
+    do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
+    firewall::{
+        add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
+        remove_firewall_rules_compute_entries, update_firewall_rules_compute_entries,
+        AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+    },
+    node_management::do_remove_nodes::RemoveNodesPayload,
     prepare_canister_migration::PrepareCanisterMigrationPayload,
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
-use std::fmt::Debug;
-use std::sync::Arc;
 use std::{
+    collections::{BTreeMap, HashSet},
     convert::TryFrom,
+    fmt::Debug,
     fs::{metadata, read_to_string, File},
     io::Read,
     path::{Path, PathBuf},
     process::exit,
     str::FromStr,
+    sync::Arc,
     time::SystemTime,
 };
 use types::{ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord};
 use url::Url;
+
+#[macro_use]
+extern crate ic_admin_derive;
+
+extern crate chrono;
+
+mod types;
+
+#[cfg(test)]
+mod main_tests;
 
 const IC_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
 const IC_DOMAIN: &str = "ic0.app";
@@ -210,6 +232,10 @@ struct Opts {
         requires = "verify-nns-responses"
     )]
     nns_public_key_pem_file: Option<PathBuf>,
+
+    /// Return the output in JSON format.
+    #[clap(long = "json", global = true)]
+    json: bool,
 }
 
 impl ProposeToCreateSubnetCmd {
@@ -301,6 +327,8 @@ enum SubCommand {
     ProposeToUpdateElectedReplicaVersions(ProposeToUpdateElectedReplicaVersionsCmd),
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
+    /// Submits a proposal to create a new service nervous system (usually referred to as SNS).
+    ProposeToCreateServiceNervousSystem(ProposeToCreateServiceNervousSystemCmd),
     /// Submits a proposal to update an existing subnet.
     ProposeToAddNodesToSubnet(ProposeToAddNodesToSubnetCmd),
     /// Submits a proposal to update a subnet's recovery CUP
@@ -309,6 +337,8 @@ enum SubCommand {
     ProposeToUpdateSubnet(ProposeToUpdateSubnetCmd),
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
+    /// Submits a proposal to uninstall and install root to a particular version
+    ProposeToHardResetNnsRootToVersion(ProposeToHardResetNnsRootToVersionCmd),
     /// Submits a proposal to remove the blessing of replica versions
     ProposeToRetireReplicaVersion(ProposeToRetireReplicaVersionCmd),
     /// Submits a proposal to uninstall code of a canister.
@@ -418,6 +448,12 @@ enum SubCommand {
     ProposeToOpenSnsTokenSwap(ProposeToOpenSnsTokenSwap),
     /// Propose to set the Bitcoin configuration
     ProposeToSetBitcoinConfig(ProposeToSetBitcoinConfig),
+    /// Add a HostOS version
+    ProposeToAddHostOsVersion(ProposeToAddHostOsVersionCmd),
+    /// Set or remove a HostOS version on Nodes
+    ProposeToManageHostOsVersion(ProposeToManageHostOsVersionCmd),
+    /// Get current list of HostOS versions
+    GetHostOsVersions,
 }
 
 /// Indicates whether a value should be added or removed.
@@ -1669,10 +1705,16 @@ struct ProposeToUpdateSubnetCmd {
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
     pub start_as_nns: Option<bool>,
+
     /// If set, the subnet will be halted: it will no longer create or execute
     /// blocks
     #[clap(long)]
     pub is_halted: Option<bool>,
+
+    /// If set, the subnet will be halted at the next CUP height: it will no longer create or execute
+    /// blocks
+    #[clap(long)]
+    pub halt_at_cup_height: Option<bool>,
 
     #[clap(long)]
     /// If set, this updates the instruction limit per message.
@@ -1905,6 +1947,7 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             subnet_type: None,
 
             is_halted: self.is_halted,
+            halt_at_cup_height: self.halt_at_cup_height,
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
@@ -1970,8 +2013,8 @@ struct ProposeToChangeNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: Url) -> UpgradeRootProposalPayload {
+impl ProposalPayload<UpgradeRootProposal> for ProposeToChangeNnsCanisterCmd {
+    async fn payload(&self, _: Url) -> UpgradeRootProposal {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1983,7 +2026,7 @@ impl ProposalPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsCanisterC
             .as_ref()
             .map_or(vec![], |path| read_file_fully(path));
         let stop_upgrade_start = !self.skip_stopping_before_installing;
-        UpgradeRootProposalPayload {
+        UpgradeRootProposal {
             wasm_module,
             module_arg,
             stop_upgrade_start,
@@ -2026,6 +2069,58 @@ impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
             memory_allocation: self.memory_allocation.map(candid::Nat::from),
             query_allocation: self.query_allocation.map(candid::Nat::from),
             authz_changes: vec![],
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to upgrade an NNS canister.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToHardResetNnsRootToVersionCmd {
+    #[clap(long)]
+    /// The file system path to the new wasm module to ship.
+    pub wasm_module_path: Option<PathBuf>,
+
+    #[clap(long)]
+    /// The URL of the new wasm module to ship.
+    wasm_module_url: Option<Url>,
+
+    #[clap(long, required = true)]
+    /// The sha256 of the new wasm module to ship.
+    wasm_module_sha256: String,
+
+    #[clap(long)]
+    /// The path to a binary file containing the initialization args of the canister.
+    init_arg: Option<PathBuf>,
+}
+impl ProposalTitle for ProposeToHardResetNnsRootToVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Hard reset NNS root to wasm with hash: {}",
+                &self.wasm_module_sha256
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<HardResetNnsRootToVersionPayload> for ProposeToHardResetNnsRootToVersionCmd {
+    async fn payload(&self, _: Url) -> HardResetNnsRootToVersionPayload {
+        let wasm_module = read_wasm_module(
+            &self.wasm_module_path,
+            &self.wasm_module_url,
+            &self.wasm_module_sha256,
+        )
+        .await;
+        let init_arg = self
+            .init_arg
+            .as_ref()
+            .map_or(vec![], |path| read_file_fully(path));
+        HardResetNnsRootToVersionPayload {
+            wasm_module,
+            init_arg,
         }
     }
 }
@@ -3099,7 +3194,6 @@ impl ProposalPayload<UpdateNodeRewardsTableProposalPayload> for ProposeToUpdateN
 /// Sub-command to fetch a `NodeOperatorRecord` from the registry.
 #[derive(Parser)]
 struct GetNodeOperatorCmd {
-    #[clap(long, required = true)]
     /// The principal id of the node operator
     pub node_operator_principal_id: PrincipalId,
 }
@@ -3619,6 +3713,540 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
     }
 }
 
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser, Clone, Debug)]
+struct ProposeToCreateServiceNervousSystemCmd {
+    #[clap(long)]
+    name: String,
+
+    #[clap(long)]
+    description: String,
+
+    #[clap(long)]
+    url: String,
+
+    #[clap(long)]
+    logo: String,
+
+    // Canister Control
+    // ----------------
+    #[clap(long)]
+    fallback_controller_principal_id: Vec<PrincipalId>,
+
+    #[clap(long)]
+    dapp_canister: Vec<PrincipalId>,
+
+    // Initial SNS Tokens and Neurons
+    // ------------------------------
+    #[clap(long)]
+    developer_neuron_controller: Vec<PrincipalId>,
+
+    #[clap(long, value_parser=parse_duration)]
+    developer_neuron_dissolve_delay: Vec<nervous_system_pb::Duration>,
+
+    #[clap(long)]
+    developer_neuron_memo: Vec<u64>,
+
+    #[clap(long, value_parser=parse_tokens)]
+    developer_neuron_stake: Vec<nervous_system_pb::Tokens>,
+
+    #[clap(long, value_parser=parse_duration)]
+    developer_neuron_vesting_period: Vec<nervous_system_pb::Duration>,
+
+    #[clap(long, value_parser=parse_tokens)]
+    treasury_amount: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_amount: nervous_system_pb::Tokens,
+
+    // Swap
+    // ----
+    #[clap(long)]
+    swap_minimum_participants: u64,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_minimum_icp: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_maximum_icp: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_minimum_participant_icp: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_maximum_participant_icp: nervous_system_pb::Tokens,
+
+    #[clap(long)]
+    confirmation_text: Option<String>,
+
+    #[clap(long)]
+    restrict_swap_in_country: Option<Vec<String>>,
+
+    #[clap(long)]
+    swap_neuron_count: u64,
+
+    #[clap(long, value_parser=parse_duration)]
+    swap_neuron_dissolve_delay: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_time_of_day)]
+    swap_start_time: Option<nervous_system_pb::GlobalTimeOfDay>,
+
+    #[clap(long, value_parser=parse_duration)]
+    swap_duration: nervous_system_pb::Duration,
+
+    // Ledger
+    // ------
+    #[clap(long, value_parser=parse_tokens)]
+    transaction_fee: nervous_system_pb::Tokens,
+
+    #[clap(long)]
+    token_name: String,
+
+    #[clap(long)]
+    token_symbol: String,
+
+    #[clap(long)]
+    token_logo_url: String,
+
+    // Proposals
+    // ---------
+    #[clap(long, value_parser=parse_tokens)]
+    proposal_rejection_fee: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_duration)]
+    proposal_initial_voting_period: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_duration)]
+    proposal_wait_for_quiet_deadline_increase: nervous_system_pb::Duration,
+
+    // Neurons
+    // -------
+    #[clap(long, value_parser=parse_tokens)]
+    neuron_minimum_stake: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_duration)]
+    neuron_minimum_dissolve_delay_to_vote: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_duration)]
+    neuron_maximum_dissolve_delay: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_percentage)]
+    neuron_maximum_dissolve_delay_bonus: nervous_system_pb::Percentage,
+
+    #[clap(long, value_parser=parse_duration)]
+    neuron_maximum_age_for_age_bonus: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_percentage)]
+    neuron_maximum_age_bonus: nervous_system_pb::Percentage,
+
+    // Voting Reward(s)
+    // ----------------
+    #[clap(long, value_parser=parse_percentage)]
+    initial_voting_reward_rate: nervous_system_pb::Percentage,
+
+    #[clap(long, value_parser=parse_percentage)]
+    final_voting_reward_rate: nervous_system_pb::Percentage,
+
+    #[clap(long, value_parser=parse_duration)]
+    voting_reward_rate_transition_duration: nervous_system_pb::Duration,
+}
+
+impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSystem {
+    type Error = String;
+    fn try_from(cmd: ProposeToCreateServiceNervousSystemCmd) -> Result<Self, String> {
+        let ProposeToCreateServiceNervousSystemCmd {
+            name,
+            description,
+            url,
+            logo,
+            // Deconstruct to a more indicative name
+            fallback_controller_principal_id: fallback_controller_principal_ids,
+            // Deconstruct to a more indicative name
+            dapp_canister: dapp_canisters,
+
+            developer_neuron_controller,
+            developer_neuron_dissolve_delay,
+            developer_neuron_memo,
+            developer_neuron_stake,
+            developer_neuron_vesting_period,
+
+            treasury_amount,
+            swap_amount,
+
+            swap_minimum_participants,
+            swap_minimum_icp,
+            swap_maximum_icp,
+            swap_minimum_participant_icp,
+            swap_maximum_participant_icp,
+            swap_neuron_count,
+            swap_neuron_dissolve_delay,
+            confirmation_text,
+            // Deconstruct to a more indicative name
+            restrict_swap_in_country: restricted_countries,
+            swap_start_time,
+            swap_duration,
+
+            transaction_fee,
+            token_name,
+            token_symbol,
+            token_logo_url,
+
+            proposal_rejection_fee,
+            proposal_initial_voting_period,
+            proposal_wait_for_quiet_deadline_increase,
+
+            neuron_minimum_stake,
+            neuron_minimum_dissolve_delay_to_vote,
+            neuron_maximum_dissolve_delay,
+            neuron_maximum_dissolve_delay_bonus,
+            neuron_maximum_age_for_age_bonus,
+            neuron_maximum_age_bonus,
+
+            initial_voting_reward_rate,
+            final_voting_reward_rate,
+            voting_reward_rate_transition_duration,
+
+            // Not used.
+            proposer: _,
+            test_neuron_proposer: _,
+            proposal_url: _,
+            proposal_title: _,
+            summary: _,
+            summary_file: _,
+            dry_run: _,
+            json: _,
+        } = cmd;
+
+        let name = Some(name);
+        let description = Some(description);
+        let url = Some(url);
+        let logo = Some(nervous_system_pb::Image {
+            base64_encoding: Some(logo),
+        });
+
+        let dapp_canisters = dapp_canisters
+            .into_iter()
+            .map(|id| nervous_system_pb::Canister { id: Some(id) })
+            .collect();
+
+        let initial_token_distribution = {
+            let developer_distribution = {
+                // Require that all the --developer_neuron_* receive the same
+                // number of values.
+                let lengths = hashmap! {
+                    "controller" => developer_neuron_controller.len(),
+                    "dissolve_delay" => developer_neuron_dissolve_delay.len(),
+                    "memo" => developer_neuron_memo.len(),
+                    "stake" => developer_neuron_stake.len(),
+                    "vesting_period" => developer_neuron_vesting_period.len(),
+                };
+                let distinct_lengths = lengths.values().copied().collect::<HashSet<_>>();
+                if distinct_lengths.len() != 1 {
+                    return Err(format!(
+                        "--developer_neuron_* flags must receive the same number \
+                         of values. lengths: {:#?}",
+                        lengths,
+                    ));
+                }
+
+                let developer_neurons = izip!(
+                    developer_neuron_controller,
+                    developer_neuron_dissolve_delay,
+                    developer_neuron_memo,
+                    developer_neuron_stake,
+                    developer_neuron_vesting_period,
+                )
+                .map(
+                    |(controller, dissolve_delay, memo, stake, vesting_period)| {
+                        let controller = Some(controller);
+                        let dissolve_delay = Some(dissolve_delay);
+                        let memo = Some(memo);
+                        let stake = Some(stake);
+                        let vesting_period = Some(vesting_period);
+
+                        NeuronDistribution {
+                            controller,
+                            dissolve_delay,
+                            memo,
+                            stake,
+                            vesting_period,
+                        }
+                    },
+                )
+                .collect();
+
+                Some(DeveloperDistribution { developer_neurons })
+            };
+
+            let treasury_distribution = Some(TreasuryDistribution {
+                total: Some(treasury_amount),
+            });
+
+            let swap_distribution = Some(SwapDistribution {
+                total: Some(swap_amount),
+            });
+
+            Some(InitialTokenDistribution {
+                developer_distribution,
+                treasury_distribution,
+                swap_distribution,
+            })
+        };
+
+        let swap_parameters = {
+            let minimum_participants = Some(swap_minimum_participants);
+            let minimum_icp = Some(swap_minimum_icp);
+            let maximum_icp = Some(swap_maximum_icp);
+            let minimum_participant_icp = Some(swap_minimum_participant_icp);
+            let maximum_participant_icp = Some(swap_maximum_participant_icp);
+            let start_time = swap_start_time;
+            let duration = Some(swap_duration);
+
+            let neuron_basket_construction_parameters = {
+                let count = Some(swap_neuron_count);
+                let dissolve_delay_interval = Some(swap_neuron_dissolve_delay);
+
+                Some(swap_parameters::NeuronBasketConstructionParameters {
+                    count,
+                    dissolve_delay_interval,
+                })
+            };
+
+            let restricted_countries =
+                restricted_countries.map(|iso_codes| nervous_system_pb::Countries { iso_codes });
+
+            Some(SwapParameters {
+                minimum_participants,
+                minimum_icp,
+                maximum_icp,
+                minimum_participant_icp,
+                maximum_participant_icp,
+                confirmation_text,
+                restricted_countries,
+                neuron_basket_construction_parameters,
+                start_time,
+                duration,
+            })
+        };
+
+        let ledger_parameters = {
+            let transaction_fee = Some(transaction_fee);
+            let token_name = Some(token_name);
+            let token_symbol = Some(token_symbol);
+            let token_logo = Some(nervous_system_pb::Image {
+                base64_encoding: Some(token_logo_url),
+            });
+
+            Some(LedgerParameters {
+                transaction_fee,
+                token_name,
+                token_symbol,
+                token_logo,
+            })
+        };
+
+        let governance_parameters = {
+            let proposal_rejection_fee = Some(proposal_rejection_fee);
+            let proposal_initial_voting_period = Some(proposal_initial_voting_period);
+            let proposal_wait_for_quiet_deadline_increase =
+                Some(proposal_wait_for_quiet_deadline_increase);
+
+            let neuron_minimum_stake = Some(neuron_minimum_stake);
+            let neuron_minimum_dissolve_delay_to_vote = Some(neuron_minimum_dissolve_delay_to_vote);
+            let neuron_maximum_dissolve_delay = Some(neuron_maximum_dissolve_delay);
+            let neuron_maximum_dissolve_delay_bonus = Some(neuron_maximum_dissolve_delay_bonus);
+            let neuron_maximum_age_for_age_bonus = Some(neuron_maximum_age_for_age_bonus);
+            let neuron_maximum_age_bonus = Some(neuron_maximum_age_bonus);
+
+            let voting_reward_parameters = {
+                let initial_reward_rate = Some(initial_voting_reward_rate);
+                let final_reward_rate = Some(final_voting_reward_rate);
+                let reward_rate_transition_duration = Some(voting_reward_rate_transition_duration);
+
+                Some(VotingRewardParameters {
+                    initial_reward_rate,
+                    final_reward_rate,
+                    reward_rate_transition_duration,
+                })
+            };
+
+            Some(GovernanceParameters {
+                proposal_rejection_fee,
+                proposal_initial_voting_period,
+                proposal_wait_for_quiet_deadline_increase,
+
+                neuron_minimum_stake,
+                neuron_minimum_dissolve_delay_to_vote,
+                neuron_maximum_dissolve_delay,
+                neuron_maximum_dissolve_delay_bonus,
+                neuron_maximum_age_for_age_bonus,
+                neuron_maximum_age_bonus,
+
+                voting_reward_parameters,
+            })
+        };
+
+        let result = CreateServiceNervousSystem {
+            name,
+            description,
+            url,
+            logo,
+
+            fallback_controller_principal_ids,
+            dapp_canisters,
+
+            initial_token_distribution,
+
+            swap_parameters,
+            ledger_parameters,
+            governance_parameters,
+        };
+
+        SnsInitPayload::try_from(result.clone())?;
+
+        Ok(result)
+    }
+}
+
+impl ProposalTitle for ProposeToCreateServiceNervousSystemCmd {
+    fn title(&self) -> String {
+        format!("Create a New Service Nervous System: {}", self.name)
+    }
+}
+
+async fn propose_to_create_service_nervous_system(
+    cmd: ProposeToCreateServiceNervousSystemCmd,
+    agent: Agent,
+    proposer: NeuronId,
+) {
+    let is_dry_run = cmd.is_dry_run();
+
+    let action = Some(Action::CreateServiceNervousSystem(
+        CreateServiceNervousSystem::try_from(cmd.clone()).unwrap(),
+    ));
+    let title = cmd.title();
+    let summary = cmd.summary.clone().unwrap();
+    let url = parse_proposal_url(cmd.proposal_url.clone());
+    let proposal = Proposal {
+        title: Some(title.clone()),
+        summary,
+        url,
+        action,
+    };
+    print_proposal(&proposal, &cmd);
+
+    if is_dry_run {
+        return;
+    }
+
+    let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
+        agent,
+        GOVERNANCE_CANISTER_ID,
+        Some(proposer),
+    ));
+    let response = canister_client
+        .submit_external_proposal(&create_make_proposal_payload(proposal, &proposer), &title)
+        .await;
+
+    match response {
+        Ok(ok) => {
+            println!("{:#?}", ok);
+        }
+        Err(err) => {
+            eprintln!("propose_to_create_service_nervous_system error: {:?}", err);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Sub-command to add a new HostOS version to the registry.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToAddHostOsVersionCmd {
+    /// Version ID. This can be anything, it has no semantics. The reason it is
+    /// part of the payload is that it will be needed in the subsequent step
+    /// of upgrading the HostOSs of individual nodes.
+    pub hostos_version_id: String,
+
+    /// The hex-formatted SHA-256 hash of the archive served by
+    /// 'release_package_urls'.
+    release_package_sha256_hex: String,
+
+    /// The URLs against which an HTTP GET request will return a release
+    /// package that corresponds to this version.
+    pub release_package_urls: Vec<String>,
+}
+
+impl ProposalTitle for ProposeToAddHostOsVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Add HostOS version: {}", self.hostos_version_id,),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<AddHostOsVersionPayload> for ProposeToAddHostOsVersionCmd {
+    async fn payload(&self, _: Url) -> AddHostOsVersionPayload {
+        AddHostOsVersionPayload {
+            hostos_version_id: self.hostos_version_id.clone(),
+            release_package_sha256_hex: self.release_package_sha256_hex.clone(),
+            release_package_urls: self.release_package_urls.clone(),
+        }
+    }
+}
+
+/// Sub-command to set HostOS version on a set of Nodes.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToManageHostOsVersionCmd {
+    /// The list of nodes on which to set the given HostOsVersion
+    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    pub node_ids: Vec<PrincipalId>,
+
+    /// Version ID. This should correspond to a HostOS version previously added
+    /// to the registry.
+    #[clap(long)]
+    pub hostos_version_id: Option<String>,
+}
+
+impl ProposalTitle for ProposeToManageHostOsVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => match &self.hostos_version_id {
+                Some(hostos_version_id) => format!(
+                    "Set HostOS version: '{}' on nodes: '{}'",
+                    hostos_version_id,
+                    shortened_pids_string(&self.node_ids)
+                ),
+                None => format!(
+                    "Unsetting HostOS version on nodes: '{}'",
+                    shortened_pids_string(&self.node_ids)
+                ),
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<UpdateNodesHostOsVersionPayload> for ProposeToManageHostOsVersionCmd {
+    async fn payload(&self, _: Url) -> UpdateNodesHostOsVersionPayload {
+        let node_ids = self
+            .node_ids
+            .clone()
+            .into_iter()
+            .map(NodeId::from)
+            .collect();
+
+        UpdateNodesHostOsVersionPayload {
+            node_ids,
+            hostos_version_id: self.hostos_version_id.clone(),
+        }
+    }
+}
+
 async fn get_firewall_rules_from_registry(
     registry_canister: &RegistryCanister,
     scope: &FirewallRulesScope,
@@ -3671,6 +4299,7 @@ async fn main() {
             SubCommand::ProposeToRemoveNodesFromSubnet(_) => (),
             SubCommand::ProposeToChangeSubnetMembership(_) => (),
             SubCommand::ProposeToChangeNnsCanister(_) => (),
+            SubCommand::ProposeToHardResetNnsRootToVersion(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToAddNnsCanister(_) => (),
             SubCommand::ProposeToBlessReplicaVersion(_) => (),
@@ -3707,6 +4336,9 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToOpenSnsTokenSwap(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
+            SubCommand::ProposeToAddHostOsVersion(_) => (),
+            SubCommand::ProposeToManageHostOsVersion(_) => (),
+            SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -3739,6 +4371,7 @@ async fn main() {
                     .as_bytes()
                     .to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -3747,6 +4380,7 @@ async fn main() {
             print_and_get_last_value::<X509PublicKeyCert>(
                 make_crypto_tls_cert_key(node_id).as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -3770,6 +4404,7 @@ async fn main() {
             print_and_get_last_value::<NodeRecord>(
                 make_node_record_key(node_id).as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -3799,6 +4434,7 @@ async fn main() {
                 let record = print_and_get_last_value::<SubnetRecordProto>(
                     make_subnet_record_key(*subnet_id).as_bytes().to_vec(),
                     &registry_canister,
+                    true,
                 )
                 .await;
                 if i + 1 != subnet_count {
@@ -3841,6 +4477,7 @@ async fn main() {
             print_and_get_last_value::<SubnetRecordProto>(
                 make_subnet_record_key(subnet_id).as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -3860,8 +4497,12 @@ async fn main() {
             let key = make_replica_version_key(&get_replica_version_cmd.replica_version_id)
                 .as_bytes()
                 .to_vec();
-            let version =
-                print_and_get_last_value::<ReplicaVersionRecord>(key, &registry_canister).await;
+            let version = print_and_get_last_value::<ReplicaVersionRecord>(
+                key,
+                &registry_canister,
+                opts.json,
+            )
+            .await;
 
             let mut success = true;
 
@@ -3950,6 +4591,7 @@ async fn main() {
             print_and_get_last_value::<BlessedReplicaVersions>(
                 make_blessed_replica_versions_key().as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -3957,6 +4599,7 @@ async fn main() {
             print_and_get_last_value::<RoutingTable>(
                 make_routing_table_record_key().as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -3964,7 +4607,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    registry_canister,
+                    vec![opts.nns_url.clone()],
                 )),
                 None,
             );
@@ -4058,6 +4701,20 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToCreateServiceNervousSystem(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_to_create_service_nervous_system(
+                cmd,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
         SubCommand::ProposeToAddNodesToSubnet(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
@@ -4137,7 +4794,7 @@ async fn main() {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             if cmd.canister_id == ROOT_CANISTER_ID {
                 propose_external_proposal_from_command::<
-                    UpgradeRootProposalPayload,
+                    UpgradeRootProposal,
                     ProposeToChangeNnsCanisterCmd,
                 >(
                     cmd,
@@ -4168,6 +4825,24 @@ async fn main() {
                 )
                 .await;
             }
+        }
+        SubCommand::ProposeToHardResetNnsRootToVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command::<
+                HardResetNnsRootToVersionPayload,
+                ProposeToHardResetNnsRootToVersionCmd,
+            >(
+                cmd,
+                NnsFunction::HardResetNnsRootToVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
         }
         SubCommand::ProposeToUninstallCode(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4293,6 +4968,7 @@ async fn main() {
             print_and_get_last_value::<ProvisionalWhitelistProto>(
                 make_provisional_whitelist_record_key().as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4334,13 +5010,14 @@ async fn main() {
                 .as_bytes()
                 .to_vec();
 
-            print_and_get_last_value::<NodeOperatorRecord>(key, &registry_canister).await;
+            print_and_get_last_value::<NodeOperatorRecord>(key, &registry_canister, opts.json)
+                .await;
         }
         SubCommand::GetNodeOperatorList => {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    registry_canister,
+                    vec![opts.nns_url.clone()],
                 )),
                 None,
             );
@@ -4357,11 +5034,15 @@ async fn main() {
                 )
                 .unwrap();
 
-            println!();
-            for key in keys {
-                let node_operator_id = key.strip_prefix(NODE_OPERATOR_RECORD_KEY_PREFIX).unwrap();
-                println!("{}", node_operator_id);
-            }
+            let records = keys
+                .iter()
+                .map(|k| k.strip_prefix(NODE_OPERATOR_RECORD_KEY_PREFIX).unwrap())
+                .collect::<Vec<_>>();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&records)
+                    .expect("Failed to serialize the records to JSON")
+            );
         }
         SubCommand::UpdateRegistryLocalStore(cmd) => {
             update_registry_local_store(opts.nns_url, cmd).await;
@@ -4524,13 +5205,14 @@ async fn main() {
             .await
         }
         SubCommand::GetDataCenter(cmd) => {
-            let (bytes, _) = registry_canister
-                .get_value(make_data_center_record_key(&cmd.dc_id).into_bytes(), None)
-                .await
-                .unwrap();
-
-            let dc = decode_registry_value::<DataCenterRecord>(bytes);
-            println!("{}", dc);
+            print_and_get_last_value::<DataCenterRecord>(
+                make_data_center_record_key(&cmd.dc_id)
+                    .into_bytes()
+                    .to_vec(),
+                &registry_canister,
+                opts.json,
+            )
+            .await;
         }
         SubCommand::ProposeToAddOrRemoveDataCenters(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4585,7 +5267,7 @@ async fn main() {
             let table = decode_registry_value::<NodeRewardsTableFlattened>(bytes);
             println!(
                 "{}",
-                serde_json::to_string(&table)
+                serde_json::to_string_pretty(&table)
                     .expect("Failed to serialize the rewards table to JSON")
             );
         }
@@ -4625,6 +5307,7 @@ async fn main() {
                     .as_bytes()
                     .to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4707,6 +5390,7 @@ async fn main() {
             print_and_get_last_value::<CanisterMigrations>(
                 make_canister_migrations_record_key().as_bytes().to_vec(),
                 &registry_canister,
+                opts.json,
             )
             .await;
         }
@@ -4814,6 +5498,67 @@ async fn main() {
             )
             .await;
         }
+        SubCommand::ProposeToAddHostOsVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::AddHostOsVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToManageHostOsVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateNodesHostOsVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::GetHostOsVersions => {
+            let registry_client = RegistryClientImpl::new(
+                Arc::new(NnsDataProvider::new(
+                    tokio::runtime::Handle::current(),
+                    vec![opts.nns_url.clone()],
+                )),
+                None,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let keys = registry_client
+                .get_key_family(
+                    HOSTOS_VERSION_KEY_PREFIX,
+                    registry_client.get_latest_version(),
+                )
+                .unwrap();
+
+            for key in keys {
+                let bytes = registry_client
+                    .get_value(&key, registry_client.get_latest_version())
+                    .unwrap()
+                    .unwrap();
+                let hostos_version_record = HostOsVersionRecord::decode(&bytes[..])
+                    .expect("Error decoding HostOsVersionRecord from registry");
+                println!("{}", hostos_version_record.hostos_version_id);
+            }
+        }
     }
 }
 
@@ -4827,10 +5572,33 @@ fn read_file_fully(path: &Path) -> Vec<u8> {
     buffer
 }
 
+fn print_value<T: Debug + serde::Serialize>(key: &String, version: u64, value: T, as_json: bool) {
+    if as_json {
+        #[derive(Serialize)]
+        struct Entry<T> {
+            key: String,
+            version: u64,
+            value: T,
+        }
+
+        let data = Entry {
+            key: key.clone(),
+            version,
+            value,
+        };
+        println!("{}", serde_json::to_string_pretty(&data).unwrap());
+    } else {
+        // Dump as debug representation
+        println!("Fetching the most recent value for key: {}", key);
+        println!("Most recent version is {:?}. Value:\n{:?}", version, value);
+    }
+}
+
 /// Fetches the last value stored under `key` in the registry and prints it.
 async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
     key: Vec<u8>,
     registry: &RegistryCanister,
+    as_json: bool,
 ) -> T {
     let value = registry.get_value(key.clone(), None).await;
     match value.clone() {
@@ -4926,14 +5694,50 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
                         hex::encode(range.end.get_ref().as_slice())
                     );
                 }
-            } else {
-                // Everything is dumped as debug representation
-                println!(
-                    "Fetching the most recent value for key: {:?}",
-                    std::str::from_utf8(&key).unwrap()
+            } else if key.starts_with(NODE_OPERATOR_RECORD_KEY_PREFIX.as_bytes()) {
+                #[derive(Debug, Serialize)]
+                pub struct NodeOperator {
+                    pub node_operator_principal_id: PrincipalId,
+                    pub node_allowance: u64,
+                    pub node_provider_principal_id: PrincipalId,
+                    pub dc_id: String,
+                    pub rewardable_nodes: std::collections::BTreeMap<String, u32>,
+                    pub ipv6: Option<String>,
+                }
+                let record = NodeOperatorRecord::decode(&bytes[..])
+                    .expect("Error decoding value from registry.");
+                let record = NodeOperator {
+                    node_operator_principal_id: PrincipalId::try_from(
+                        record.node_operator_principal_id,
+                    )
+                    .expect("Error decoding principal"),
+                    node_allowance: record.node_allowance,
+                    node_provider_principal_id: PrincipalId::try_from(
+                        record.node_provider_principal_id,
+                    )
+                    .expect("Error decoding principal"),
+                    dc_id: record.dc_id,
+                    rewardable_nodes: record.rewardable_nodes,
+                    ipv6: record.ipv6,
+                };
+                print_value(
+                    &std::str::from_utf8(&key)
+                        .expect("key is not a str")
+                        .to_string(),
+                    version,
+                    record,
+                    as_json,
                 );
+            } else {
                 let value = T::decode(&bytes[..]).expect("Error decoding value from registry.");
-                println!("Most recent version is {:?}. Value:\n{:?}", version, value);
+                print_value(
+                    &std::str::from_utf8(&key)
+                        .expect("key is not a str")
+                        .to_string(),
+                    version,
+                    value,
+                    as_json,
+                );
             }
         }
         Err(error) => {
@@ -5153,7 +5957,7 @@ async fn get_firewall_rules_for_node(
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
             tokio::runtime::Handle::current(),
-            RegistryCanister::new(vec![nns_url]),
+            vec![nns_url],
         )),
         None,
     );
@@ -5418,34 +6222,6 @@ async fn get_subnet_pk(registry: &RegistryCanister, subnet_id: SubnetId) -> Publ
             PublicKey::decode(&bytes[..]).expect("Error decoding PublicKey from registry")
         }
         Err(error) => panic!("Error getting value from registry: {:?}", error),
-    }
-}
-
-/// The proposal payload to upgrade the root canister.
-///
-/// The "authoritative" data structure is the one defined in `lifeline.mo` and
-/// this should stay in sync with it
-#[derive(CandidType, Serialize)]
-pub struct UpgradeRootProposalPayload {
-    pub wasm_module: Vec<u8>,
-    pub module_arg: Vec<u8>,
-    pub stop_upgrade_start: bool,
-}
-
-impl std::fmt::Debug for UpgradeRootProposalPayload {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut wasm_sha = Sha256::new();
-        wasm_sha.write(&self.wasm_module);
-        let wasm_sha = wasm_sha.finish();
-        let mut arg_sha = Sha256::new();
-        arg_sha.write(&self.module_arg);
-        let arg_sha = arg_sha.finish();
-
-        f.debug_struct("UpgradeRootProposalPayload")
-            .field("stop_upgrade_start", &self.stop_upgrade_start)
-            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
-            .field("module_arg_sha256", &format!("{:x?}", arg_sha))
-            .finish()
     }
 }
 

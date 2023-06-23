@@ -6,7 +6,7 @@ DEPENDENCIES = [
     "//rs/bitcoin/types/internal",
     "//rs/interfaces",
     "//rs/interfaces/registry",
-    "//rs/interfaces/bitcoin_adapter_client",
+    "//rs/interfaces/adapter_client",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -28,6 +28,7 @@ DEV_DEPENDENCIES = [
     "//rs/interfaces/registry/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
+    "@crate_index//:mockall",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

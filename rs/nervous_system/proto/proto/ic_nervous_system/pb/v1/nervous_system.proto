@@ -2,8 +2,14 @@ syntax = "proto3";
 
 package ic_nervous_system.pb.v1;
 
+import "ic_base_types/pb/v1/types.proto";
+
 message Duration {
   optional uint64 seconds = 1;
+}
+
+message GlobalTimeOfDay {
+  optional uint64 seconds_after_utc_midnight = 1;
 }
 
 message Tokens {
@@ -19,4 +25,17 @@ message Image {
 
 message Percentage {
   optional uint64 basis_points = 1;
+}
+
+// A Canister that will be transferred to an SNS.
+message Canister {
+  // The id of the canister.
+  optional ic_base_types.pb.v1.PrincipalId id = 1;
+}
+
+// Represents a set of countries. To be used in country-specific configurations,
+// e.g., to restrict the geography of an SNS swap.
+message Countries {
+  // ISO 3166-1 alpha-2 codes
+  repeated string iso_codes = 1;
 }

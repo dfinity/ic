@@ -17,7 +17,7 @@ use ic_types::p2p::build_default_gossip_config;
 
 /// Updates the subnet's configuration in the registry.
 ///
-/// This method is called by the proposals canister, after a proposal
+/// This method is called by the governance canister, after a proposal
 /// for updating a new subnet has been accepted.
 impl Registry {
     pub fn do_update_subnet(&mut self, payload: UpdateSubnetPayload) {
@@ -205,6 +205,7 @@ pub struct UpdateSubnetPayload {
     pub subnet_type: Option<SubnetType>,
 
     pub is_halted: Option<bool>,
+    pub halt_at_cup_height: Option<bool>,
 
     pub max_instructions_per_message: Option<u64>,
     pub max_instructions_per_round: Option<u64>,
@@ -298,6 +299,7 @@ fn merge_subnet_record(
         start_as_nns,
         subnet_type,
         is_halted,
+        halt_at_cup_height,
         max_instructions_per_message,
         max_instructions_per_round,
         max_instructions_per_install_code,
@@ -343,6 +345,7 @@ fn merge_subnet_record(
     }
 
     maybe_set!(subnet_record, is_halted);
+    maybe_set!(subnet_record, halt_at_cup_height);
 
     maybe_set!(subnet_record, max_instructions_per_message);
     maybe_set!(subnet_record, max_instructions_per_round);
@@ -413,6 +416,7 @@ mod tests {
             start_as_nns: Some(true),
             subnet_type: None,
             is_halted: Some(true),
+            halt_at_cup_height: Some(false),
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
@@ -420,6 +424,7 @@ mod tests {
                 canister_sandboxing: false,
                 http_requests: false,
                 sev_status: None,
+                onchain_observability: None,
             }),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
@@ -458,6 +463,7 @@ mod tests {
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            halt_at_cup_height: None,
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
@@ -496,6 +502,7 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            halt_at_cup_height: false,
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
@@ -532,6 +539,7 @@ mod tests {
             start_as_nns: Some(true),
             subnet_type: None,
             is_halted: Some(true),
+            halt_at_cup_height: Some(false),
             max_instructions_per_message: Some(6_000_000_000),
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: Some(300_000_000_000),
@@ -539,6 +547,7 @@ mod tests {
                 canister_sandboxing: false,
                 http_requests: false,
                 sev_status: None,
+                onchain_observability: None,
             }),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
@@ -579,6 +588,7 @@ mod tests {
                 start_as_nns: true,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: true,
+                halt_at_cup_height: false,
                 max_instructions_per_message: 6_000_000_000,
                 max_instructions_per_round: 8_000_000_000,
                 max_instructions_per_install_code: 300_000_000_000,
@@ -587,6 +597,7 @@ mod tests {
                         canister_sandboxing: false,
                         http_requests: false,
                         sev_status: None,
+                        onchain_observability: None,
                     }
                     .into()
                 ),
@@ -632,6 +643,7 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            halt_at_cup_height: false,
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
@@ -668,6 +680,7 @@ mod tests {
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            halt_at_cup_height: Some(true),
             max_instructions_per_message: None,
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: None,
@@ -705,6 +718,7 @@ mod tests {
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
+                halt_at_cup_height: true,
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 8_000_000_000,
                 max_instructions_per_install_code: 200_000_000_000,
@@ -757,6 +771,7 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            halt_at_cup_height: false,
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
@@ -793,6 +808,7 @@ mod tests {
             start_as_nns: None,
             subnet_type: Some(SubnetType::Application),
             is_halted: None,
+            halt_at_cup_height: None,
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
@@ -824,6 +840,7 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            halt_at_cup_height: false,
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
@@ -860,6 +877,7 @@ mod tests {
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            halt_at_cup_height: None,
             max_instructions_per_message: None,
             max_instructions_per_round: None,
             max_instructions_per_install_code: None,
@@ -897,6 +915,7 @@ mod tests {
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
+                halt_at_cup_height: false,
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 7_000_000_000,
                 max_instructions_per_install_code: 200_000_000_000,
@@ -934,6 +953,7 @@ mod tests {
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
             is_halted: false,
+            halt_at_cup_height: false,
             max_instructions_per_message: 5_000_000_000,
             max_instructions_per_round: 7_000_000_000,
             max_instructions_per_install_code: 200_000_000_000,
@@ -970,6 +990,7 @@ mod tests {
             start_as_nns: None,
             subnet_type: None,
             is_halted: None,
+            halt_at_cup_height: None,
             max_instructions_per_message: None,
             max_instructions_per_round: Some(8_000_000_000),
             max_instructions_per_install_code: None,
@@ -1007,6 +1028,7 @@ mod tests {
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
                 is_halted: false,
+                halt_at_cup_height: false,
                 max_instructions_per_message: 5_000_000_000,
                 max_instructions_per_round: 8_000_000_000,
                 max_instructions_per_install_code: 200_000_000_000,
@@ -1026,9 +1048,9 @@ mod tests {
         A proposal to add that key to the subnet must first be separately submitted."
     )]
     fn test_ecdsa_keys_cannot_be_enabled_unless_already_held() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1077,9 +1099,9 @@ mod tests {
         let subnet_holding_key_id = SubnetId::from(*TEST_USER1_PRINCIPAL);
         let subnet_to_update_id = SubnetId::from(*TEST_USER2_PRINCIPAL);
 
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1138,9 +1160,9 @@ mod tests {
                     but sev_status can only be set during subnet creation."
     )]
     fn test_sev_status_cannot_be_changed() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1160,6 +1182,7 @@ mod tests {
             canister_sandboxing: false,
             http_requests: false,
             sev_status: Some(SevFeatureStatus::SecureEnabled),
+            onchain_observability: None,
         });
 
         // Should panic because we are changing SubnetFeatures
@@ -1168,9 +1191,9 @@ mod tests {
 
     #[test]
     fn can_add_a_second_key_in_subsequent_request() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1235,9 +1258,9 @@ mod tests {
 
     #[test]
     fn test_remove_ecdsa_keys_also_removed_subnet_from_signing_subnet_list() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1325,9 +1348,9 @@ mod tests {
 
     #[test]
     fn can_disable_signing_without_removing_keys() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1412,9 +1435,9 @@ mod tests {
                     ECDSA keys: [EcdsaKeyId { curve: Secp256k1, name: \"existing_key_id\" }]"
     )]
     fn enable_and_disable_signing_lists_should_not_have_same_keys_in_single_request() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();

@@ -14,8 +14,7 @@ use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    governance::submit_external_update_proposal,
-    governance::wait_for_final_state,
+    governance::{submit_external_update_proposal, wait_for_final_state},
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };

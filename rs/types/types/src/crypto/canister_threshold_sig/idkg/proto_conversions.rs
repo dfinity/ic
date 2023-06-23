@@ -1,6 +1,4 @@
-use crate::crypto::canister_threshold_sig::error::{
-    ExtendedDerivationPathSerializationError, InitialIDkgDealingsValidationError,
-};
+use crate::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
 use crate::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgDealing, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType, InitialIDkgDealings,
@@ -9,10 +7,11 @@ use crate::crypto::canister_threshold_sig::idkg::{
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{node_id_into_protobuf, node_id_try_from_protobuf, Height, NodeIndex};
+use crate::{node_id_into_protobuf, node_id_try_from_option, Height, NodeIndex};
 use ic_base_types::{
-    subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, PrincipalId, RegistryVersion,
+    subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, RegistryVersion,
 };
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
 use ic_protobuf::registry::subnet::v1::IDkgSignedDealingTuple as IDkgSignedDealingTupleProto;
@@ -99,20 +98,11 @@ impl From<ExtendedDerivationPath> for ExtendedDerivationPathProto {
 }
 
 impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
-    type Error = ExtendedDerivationPathSerializationError;
+    type Error = ProxyDecodeError;
     fn try_from(proto: ExtendedDerivationPathProto) -> Result<Self, Self::Error> {
-        let caller_proto = proto
-            .caller
-            .as_ref()
-            .ok_or(ExtendedDerivationPathSerializationError::MissingCaller)?;
-        let caller = PrincipalId::try_from(&caller_proto.raw).map_err(|e| {
-            ExtendedDerivationPathSerializationError::InvalidCaller {
-                error: e.to_string(),
-            }
-        })?;
         Ok(ExtendedDerivationPath {
-            caller,
-            derivation_path: proto.derivation_path.clone(),
+            caller: try_from_option_field(proto.caller, "ExtendedDerivationPath::caller")?,
+            derivation_path: proto.derivation_path,
         })
     }
 }
@@ -266,19 +256,11 @@ fn idkg_transcript_operation_enum(
 fn node_id_struct(
     maybe_node_id_proto: &Option<NodeIdProto>,
 ) -> Result<NodeId, InitialIDkgDealingsValidationError> {
-    if let Some(node_id_proto) = maybe_node_id_proto {
-        Ok(
-            node_id_try_from_protobuf(node_id_proto.clone()).map_err(|e| {
-                InitialIDkgDealingsValidationError::DeserializationError {
-                    error: e.to_string(),
-                }
-            })?,
-        )
-    } else {
-        Err(InitialIDkgDealingsValidationError::DeserializationError {
-            error: "Missing NodeId".to_string(),
-        })
-    }
+    node_id_try_from_option(maybe_node_id_proto.to_owned()).map_err(|e| {
+        InitialIDkgDealingsValidationError::DeserializationError {
+            error: e.to_string(),
+        }
+    })
 }
 
 fn idkg_transcript_params_struct(

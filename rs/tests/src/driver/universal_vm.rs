@@ -66,7 +66,7 @@ impl UniversalVm {
             vm_resources: Default::default(),
             vm_allocation: Default::default(),
             required_host_features: Default::default(),
-            has_ipv4: true,
+            has_ipv4: false,
             primary_image: Default::default(),
             config: Default::default(),
         }
@@ -87,8 +87,8 @@ impl UniversalVm {
         self
     }
 
-    pub fn disable_ipv4(mut self) -> Self {
-        self.has_ipv4 = false;
+    pub fn enable_ipv4(mut self) -> Self {
+        self.has_ipv4 = true;
         self
     }
 

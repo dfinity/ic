@@ -20,6 +20,7 @@ DEPENDENCIES = [
     "//rs/registry/nns_data_provider",
     "//rs/registry/subnet_features",
     "//rs/replay",
+    "//rs/state_manager",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
@@ -43,6 +44,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/test_utilities",
+    "//rs/test_utilities/tmpdir",
     "@crate_index//:tempfile",
 ]
 
@@ -68,7 +70,11 @@ rust_binary(
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [":recovery"],
+    deps = DEPENDENCIES + [
+        "//rs/canister_sandbox/backend_lib",
+        "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
+        ":recovery",
+    ],
 )
 
 rust_test(

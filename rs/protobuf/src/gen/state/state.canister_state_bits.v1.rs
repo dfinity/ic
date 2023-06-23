@@ -222,6 +222,8 @@ pub struct ExecutionStateBits {
     pub metadata: ::core::option::Option<WasmMetadata>,
     #[prost(bytes = "vec", optional, tag = "6")]
     pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(enumeration = "NextScheduledMethod", optional, tag = "7")]
+    pub next_scheduled_method: ::core::option::Option<i32>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -373,6 +375,89 @@ pub struct ConsumedCyclesByUseCase {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterChangeFromUser {
+    #[prost(message, optional, tag = "1")]
+    pub user_id: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterChangeFromCanister {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+    #[prost(uint64, optional, tag = "2")]
+    pub canister_version: ::core::option::Option<u64>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterCreation {
+    #[prost(message, repeated, tag = "1")]
+    pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterCodeUninstall {}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterCodeDeployment {
+    #[prost(
+        enumeration = "super::super::super::types::v1::CanisterInstallMode",
+        tag = "1"
+    )]
+    pub mode: i32,
+    #[prost(bytes = "vec", tag = "2")]
+    pub module_hash: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterControllersChange {
+    #[prost(message, repeated, tag = "1")]
+    pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterChange {
+    #[prost(uint64, tag = "1")]
+    pub timestamp_nanos: u64,
+    #[prost(uint64, tag = "2")]
+    pub canister_version: u64,
+    #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
+    pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
+    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8")]
+    pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
+}
+/// Nested message and enum types in `CanisterChange`.
+pub mod canister_change {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ChangeOrigin {
+        #[prost(message, tag = "3")]
+        CanisterChangeFromUser(super::CanisterChangeFromUser),
+        #[prost(message, tag = "4")]
+        CanisterChangeFromCanister(super::CanisterChangeFromCanister),
+    }
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum ChangeDetails {
+        #[prost(message, tag = "5")]
+        CanisterCreation(super::CanisterCreation),
+        #[prost(message, tag = "6")]
+        CanisterCodeUninstall(super::CanisterCodeUninstall),
+        #[prost(message, tag = "7")]
+        CanisterCodeDeployment(super::CanisterCodeDeployment),
+        #[prost(message, tag = "8")]
+        CanisterControllersChange(super::CanisterControllersChange),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterHistory {
+    #[prost(message, repeated, tag = "1")]
+    pub changes: ::prost::alloc::vec::Vec<CanisterChange>,
+    #[prost(uint64, tag = "2")]
+    pub total_num_changes: u64,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -436,6 +521,8 @@ pub struct CanisterStateBits {
     #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_since_replica_started_by_use_cases:
         ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
+    #[prost(message, optional, tag = "37")]
+    pub canister_history: ::core::option::Option<CanisterHistory>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -470,6 +557,29 @@ impl CustomSectionType {
             CustomSectionType::Unspecified => "CUSTOM_SECTION_TYPE_UNSPECIFIED",
             CustomSectionType::Public => "CUSTOM_SECTION_TYPE_PUBLIC",
             CustomSectionType::Private => "CUSTOM_SECTION_TYPE_PRIVATE",
+        }
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum NextScheduledMethod {
+    Unspecified = 0,
+    GlobalTimer = 1,
+    Heartbeat = 2,
+    Message = 3,
+}
+impl NextScheduledMethod {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NextScheduledMethod::Unspecified => "NEXT_SCHEDULED_METHOD_UNSPECIFIED",
+            NextScheduledMethod::GlobalTimer => "NEXT_SCHEDULED_METHOD_GLOBAL_TIMER",
+            NextScheduledMethod::Heartbeat => "NEXT_SCHEDULED_METHOD_HEARTBEAT",
+            NextScheduledMethod::Message => "NEXT_SCHEDULED_METHOD_MESSAGE",
         }
     }
 }

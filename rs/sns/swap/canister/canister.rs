@@ -7,16 +7,17 @@ use dfn_core::{
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_ic00_types::CanisterStatusResultV2;
+use ic_nervous_system_clients::{
+    canister_id_record::CanisterIdRecord,
+    canister_status::CanisterStatusResultV2,
+    management_canister_client::{ManagementCanisterClient, ManagementCanisterClientImpl},
+};
 use ic_nervous_system_common::{
-    serve_logs, serve_logs_v2, serve_metrics, stable_mem_utils::BufferedStableMemReader,
+    dfn_core_stable_mem_utils::BufferedStableMemReader, serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_sns_governance::ledger::LedgerCanister;
 use ic_sns_swap::{
-    clients::{
-        ManagementCanister, ProdManagementCanister, RealNnsGovernanceClient,
-        RealSnsGovernanceClient, RealSnsRootClient,
-    },
+    clients::RealSnsRootClient,
     logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
     pb::v1::{
@@ -171,7 +172,7 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
     };
     let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
     match swap_mut()
-        .refresh_buyer_token_e8s(p, id(), &icp_ledger)
+        .refresh_buyer_token_e8s(p, arg.confirmation_text, id(), &icp_ledger)
         .await
     {
         Ok(r) => r,
@@ -193,24 +194,12 @@ fn finalize_swap() {
 #[candid_method(update, rename = "finalize_swap")]
 async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
     log!(INFO, "finalize_swap");
-    let mut sns_root_client = RealSnsRootClient::new(swap().init_or_panic().sns_root_or_panic());
-    let mut sns_governance_client =
-        RealSnsGovernanceClient::new(swap().init_or_panic().sns_governance_or_panic());
-    let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
-    let sns_ledger = create_real_icrc1_ledger(swap().init_or_panic().sns_ledger_or_panic());
-    let mut nns_governance_client =
-        RealNnsGovernanceClient::new(swap().init_or_panic().nns_governance_or_panic());
+    let mut clients = swap()
+        .init_or_panic()
+        .environment()
+        .expect("unable to create canister clients");
 
-    swap_mut()
-        .finalize(
-            now_fn,
-            &mut sns_root_client,
-            &mut sns_governance_client,
-            &icp_ledger,
-            &sns_ledger,
-            &mut nns_governance_client,
-        )
-        .await
+    swap_mut().finalize(now_fn, &mut clients).await
 }
 
 #[export_name = "canister_update error_refund_icp"]
@@ -231,14 +220,23 @@ fn get_canister_status() {
 
 #[candid_method(update, rename = "get_canister_status")]
 async fn get_canister_status_(_request: GetCanisterStatusRequest) -> CanisterStatusResultV2 {
-    do_get_canister_status(&id(), &ProdManagementCanister::default()).await
+    do_get_canister_status(id(), &ManagementCanisterClientImpl::new(None)).await
 }
 
 async fn do_get_canister_status(
-    canister_id: &CanisterId,
-    management_canister: &impl ManagementCanister,
+    canister_id: CanisterId,
+    management_canister: &impl ManagementCanisterClient,
 ) -> CanisterStatusResultV2 {
-    management_canister.canister_status(canister_id).await
+    management_canister
+        .canister_status(CanisterIdRecord::from(canister_id))
+        .await
+        .map(CanisterStatusResultV2::from)
+        .unwrap_or_else(|err| {
+            panic!(
+                "Couldn't get canister_status of {}. Err: {:#?}",
+                canister_id, err
+            )
+        })
 }
 
 /// Returns the total amount of ICP deposited by participants in the swap.
@@ -254,7 +252,7 @@ async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalRes
 }
 
 /// Restores all dapp canisters to the fallback controllers as specified
-/// in the SNS initialization process, marking the Sale as aborted in the
+/// in the SNS initialization process, marking the Swap as aborted in the
 /// process. `restore_dapp_controllers` is only callable by NNS Governance.
 #[export_name = "canister_update restore_dapp_controllers"]
 fn restore_dapp_controllers() {
@@ -262,7 +260,7 @@ fn restore_dapp_controllers() {
 }
 
 /// Restores all dapp canisters to the fallback controllers as specified
-/// in the SNS initialization process, marking the Sale as aborted in the
+/// in the SNS initialization process, marking the Swap as aborted in the
 /// process. `restore_dapp_controllers` is only callable by NNS Governance.
 #[candid_method(update, rename = "restore_dapp_controllers")]
 async fn restore_dapp_controllers_(
@@ -302,13 +300,13 @@ async fn get_init_(_request: GetInitRequest) -> GetInitResponse {
     }
 }
 
-/// Return the current derived state of the Sale
+/// Return the current derived state of the Swap
 #[export_name = "canister_query get_derived_state"]
 fn get_derived_state() {
     over_async(candid_one, get_derived_state_)
 }
 
-/// Return the current derived state of the Sale
+/// Return the current derived state of the Swap
 #[candid_method(query, rename = "get_derived_state")]
 async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
     log!(INFO, "get_derived_state");
@@ -337,13 +335,13 @@ async fn new_sale_ticket_(request: NewSaleTicketRequest) -> NewSaleTicketRespons
     swap_mut().new_sale_ticket(&request, caller(), dfn_core::api::time_nanos())
 }
 
-/// Lists direct participants in the Sale.
+/// Lists direct participants in the Swap.
 #[export_name = "canister_query list_direct_participants"]
 fn list_direct_participants() {
     over_async(candid_one, list_direct_participants_)
 }
 
-/// Lists direct participants in the Sale.
+/// Lists direct participants in the Swap.
 #[candid_method(query, rename = "list_direct_participants")]
 async fn list_direct_participants_(
     request: ListDirectParticipantsRequest,
@@ -381,23 +379,8 @@ fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPayme
 /// Tries to commit or abort the swap if the parameters have been satisfied.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
-    const NUMBER_OF_TICKETS_THRESHOLD: u64 = 100_000_000; // 100M * ~size(ticket) = ~25GB
-    const TWO_DAYS_IN_NANOSECONDS: u64 = 60 * 60 * 24 * 2 * 1_000_000_000;
-    const MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT: u64 = 100_000;
-
-    swap_mut().try_purge_old_tickets(
-        dfn_core::api::time_nanos,
-        NUMBER_OF_TICKETS_THRESHOLD,
-        TWO_DAYS_IN_NANOSECONDS,
-        MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
-    );
-    let now = now_seconds();
-    if swap_mut().try_open_after_delay(now) {
-        log!(INFO, "Sale opened at timestamp {}", now);
-    }
-    if swap_mut().try_commit_or_abort(now) {
-        log!(INFO, "Swap committed/aborted at timestamp {}", now);
-    }
+    let now_seconds = now_seconds();
+    swap_mut().run_periodic_tasks(now_seconds);
 }
 
 fn now_seconds() -> u64 {
@@ -536,7 +519,7 @@ fn canister_post_upgrade() {
     // rolls back.
     swap().rebuild_indexes().unwrap_or_else(|err| {
         panic!(
-            "Error rebuilding the Sale canister indexes. The stable memory has been exhausted: {}",
+            "Error rebuilding the Swap canister indexes. The stable memory has been exhausted: {}",
             err
         )
     });
@@ -596,7 +579,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_cf_neurons_count",
-        swap().cf_neurons_count() as f64,
+        swap().cf_neuron_count() as f64,
         "The number of Community Fund NNS Neurons in the sale",
     )?;
     w.encode_gauge(
@@ -646,8 +629,17 @@ fn main() {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
-    use ic_ic00_types::CanisterStatusType;
+    use ic_nervous_system_clients::canister_status::{
+        DefiniteCanisterSettingsArgs, DefiniteCanisterSettingsFromManagementCanister,
+    };
+    use ic_nervous_system_clients::{
+        canister_status::{
+            CanisterStatusResultFromManagementCanister, CanisterStatusResultV2, CanisterStatusType,
+        },
+        management_canister_client::{
+            MockManagementCanisterClient, MockManagementCanisterClientReply,
+        },
+    };
 
     /// A test that fails if the API was updated but the candid definition was not.
     #[test]
@@ -672,34 +664,45 @@ mod tests {
         }
     }
 
-    fn basic_canister_status() -> CanisterStatusResultV2 {
-        CanisterStatusResultV2::new(
-            CanisterStatusType::Running,
-            None,
-            Default::default(),
-            vec![],
-            Default::default(),
-            0,
-            0,
-            None,
-            0,
-            0,
-        )
-    }
-
-    struct StubManagementCanister {}
-
-    #[async_trait]
-    impl ManagementCanister for StubManagementCanister {
-        async fn canister_status(&self, _canister_id: &CanisterId) -> CanisterStatusResultV2 {
-            basic_canister_status()
-        }
-    }
-
     #[tokio::test]
     async fn test_get_canister_status() {
-        let response =
-            do_get_canister_status(&CanisterId::from_u64(1), &StubManagementCanister {}).await;
-        assert_eq!(response, basic_canister_status(),);
+        let expected_canister_status_result = CanisterStatusResultV2 {
+            status: CanisterStatusType::Running,
+            module_hash: Some(vec![0_u8]),
+            settings: DefiniteCanisterSettingsArgs {
+                controllers: vec![PrincipalId::new_user_test_id(0)],
+                compute_allocation: candid::Nat::from(0),
+                memory_allocation: candid::Nat::from(0),
+                freezing_threshold: candid::Nat::from(0),
+            },
+            memory_size: candid::Nat::from(0),
+            cycles: candid::Nat::from(0),
+            idle_cycles_burned_per_day: candid::Nat::from(0),
+        };
+
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            MockManagementCanisterClientReply::CanisterStatus(Ok(
+                CanisterStatusResultFromManagementCanister {
+                    status: CanisterStatusType::Running,
+                    module_hash: Some(vec![0_u8]),
+                    memory_size: candid::Nat::from(0),
+                    settings: DefiniteCanisterSettingsFromManagementCanister {
+                        controllers: vec![PrincipalId::new_user_test_id(0)],
+                        compute_allocation: candid::Nat::from(0),
+                        memory_allocation: candid::Nat::from(0),
+                        freezing_threshold: candid::Nat::from(0),
+                    },
+                    cycles: candid::Nat::from(0),
+                    idle_cycles_burned_per_day: candid::Nat::from(0),
+                },
+            )),
+        ]);
+
+        let actual_canister_status_result =
+            do_get_canister_status(CanisterId::from_u64(1), &management_canister_client).await;
+        assert_eq!(
+            actual_canister_status_result,
+            expected_canister_status_result
+        );
     }
 }

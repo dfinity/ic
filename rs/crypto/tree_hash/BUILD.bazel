@@ -20,10 +20,12 @@ rust_test(
     name = "tree_hash_test",
     crate = ":tree_hash",
     deps = [
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:assert_matches",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:prost",
+        "@crate_index//:rand_0_8_4",
         "@crate_index//:serde_cbor",
     ],
 )
@@ -35,6 +37,8 @@ rust_doc_test(
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:prost",
+        "@crate_index//:rand_0_8_4",
+        "@crate_index//:rand_chacha_0_3_1",
         "@crate_index//:serde_cbor",
     ],
 )

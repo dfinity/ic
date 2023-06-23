@@ -23,15 +23,6 @@ encoded in the `+ic_types::messages::ReplicaHealthStatus+` enum which is part of
 If you try to send, for example, a query request, before the replica enters `+ReplicaHealthStatus::Healthy+`, then *503 Service Unavailable*
 is returned as part of the response.
 
-=== HTTP vs HTTPS
-
-Currently we peek the first byte of the TCP stream to determine if the connection is TLS or not.
-
-An alternative to peeking the first byte of the stream is to use dedicated ports for HTTP and HTTPS. Until we
-implement client authentication we decided to keep the current solution.
-
-Only requests intended for debuging purposes, going to `+/_/.*+`, should use HTTP.
-
 === Code structure
 
 For each HTTP(s) endpoint there is a module that processes the corresponding requests (`+query.rs+`,

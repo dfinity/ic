@@ -68,7 +68,7 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::execution_state::{
-            CustomSection, CustomSectionType, WasmBinary, WasmMetadata,
+            CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
         },
         metadata_state::Stream,
         page_map::{PageIndex, PAGE_SIZE},
@@ -185,6 +185,7 @@ mod tests {
                 exports: ExportedFunctions::new(BTreeSet::new()),
                 metadata,
                 last_executed_round: ExecutionRound::from(0),
+                next_scheduled_method: NextScheduledMethod::default(),
             };
             canister_state.execution_state = Some(execution_state);
 

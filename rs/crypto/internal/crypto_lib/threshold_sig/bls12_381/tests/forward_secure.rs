@@ -13,21 +13,21 @@ use rand::{CryptoRng, Rng, RngCore};
 fn output_of_mk_sys_params_is_expected_values() {
     let sys = SysParam::global();
 
-    assert_eq!(sys.f.len(), LAMBDA_T);
-    assert_eq!(sys.f_h.len(), LAMBDA_H);
+    assert_eq!(sys.f().len(), LAMBDA_T);
+    assert_eq!(sys.f_h().len(), LAMBDA_H);
 
     fn assert_g2_equal(g2: &G2Affine, expected: &'static str) {
         assert_eq!(hex::encode(g2.serialize()), expected);
     }
 
-    assert_g2_equal(&sys.f0,
+    assert_g2_equal(sys.f0(),
                     "8422a9f8fdd31d70efea5a8fff9e0dab7707703cd0654d5b5c92a654b4cf60bbc74ea1b40b9eb6ef036f647ed196418c199c775a89be3e15c1df45cadd48e99e60ef0d7142132876eaf91c03c9f1fcabcec3a61b34e2341f38418d006e02f502");
 
-    assert_g2_equal(&sys.h,
+    assert_g2_equal(sys.h(),
                     "a130c9e5530dc7d5f4bf5d40ad719f4a0d38e58502ab63ed27d3d9bdc545f21eb9cf18462a04b0fc943e0dd537aa2f2e0b140b0db9adef851e26721ef88caf1da5b20bb3593f9fb7a4312f0c0ea868d6b08d658d08ff832ff1df8d71471b61b6");
 
     let mut sha256 = Sha256::new();
-    for val in &sys.f {
+    for val in sys.f() {
         sha256.write(&val.serialize());
     }
     assert_eq!(
@@ -36,7 +36,7 @@ fn output_of_mk_sys_params_is_expected_values() {
     );
 
     let mut sha256 = Sha256::new();
-    for val in &sys.f_h {
+    for val in sys.f_h() {
         sha256.write(&val.serialize());
     }
     assert_eq!(
@@ -77,7 +77,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
         let key_pair = kgen(&key_gen_assoc_data, sys, rng);
         keys.push(key_pair);
     }
-    let pks: Vec<_> = keys.iter().map(|key| key.0.key_value.clone()).collect();
+    let pks: Vec<_> = keys.iter().map(|key| key.0.public_key().clone()).collect();
 
     let ptext = (0..nodes).map(|_| Scalar::random(rng)).collect::<Vec<_>>();
 
@@ -142,7 +142,7 @@ fn should_decrypt_correctly_for_cheating_dealer() {
         let key_pair = kgen(&key_gen_assoc_data, sys, &mut rng);
         keys.push(key_pair);
     }
-    let pks: Vec<_> = keys.iter().map(|key| key.0.key_value.clone()).collect();
+    let pks: Vec<_> = keys.iter().map(|key| key.0.public_key().clone()).collect();
 
     let mut sij = {
         let mut sij = Vec::with_capacity(nodes);

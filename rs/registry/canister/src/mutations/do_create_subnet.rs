@@ -14,15 +14,13 @@ use serde::Serialize;
 
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
-use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
-    subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetRecord},
+    subnet::v1::{CatchUpPackageContents, EcdsaConfig, GossipConfig, SubnetRecord},
 };
-use ic_registry_keys::make_node_record_key;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
@@ -33,7 +31,7 @@ use on_wire::bytes;
 impl Registry {
     /// Adds the new subnet to the registry.
     ///
-    /// This method is called by the proposals canister, after a proposal
+    /// This method is called by the governance canister, after a proposal
     /// for creating a new subnet has been accepted.
     ///
     /// The method must get the registry version from the registry, and then
@@ -331,6 +329,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             subnet_type: val.subnet_type.into(),
 
             is_halted: val.is_halted,
+            halt_at_cup_height: false,
 
             max_instructions_per_message: val.max_instructions_per_message,
             max_instructions_per_round: val.max_instructions_per_round,
@@ -367,7 +366,7 @@ mod test {
         expected = "The requested ECDSA key 'Secp256k1:fake_key_id' was not found in any subnet"
     )]
     fn should_panic_if_ecdsa_keys_non_existing() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
         let payload = CreateSubnetPayload {
             replica_version_id: ReplicaVersion::default().into(),
             ecdsa_config: Some(EcdsaInitialConfig {
@@ -400,10 +399,10 @@ mod test {
             name: "fake_key_id".to_string(),
         };
         let signing_subnet = SubnetId::from(*TEST_USER1_PRINCIPAL);
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -454,10 +453,10 @@ mod test {
             name: "fake_key_id".to_string(),
         };
         let signing_subnet = SubnetId::from(*TEST_USER1_PRINCIPAL);
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();

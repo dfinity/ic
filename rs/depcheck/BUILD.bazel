@@ -15,7 +15,7 @@ rust_library(
 )
 
 rust_binary(
-    name = "debcheck_bin",
+    name = "depcheck_bin",
     srcs = ["src/main.rs"],
     deps = [":depcheck"] + DEPENDENCIES,
 )

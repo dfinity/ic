@@ -20,6 +20,7 @@ ExecStart=/opt/ic/bin/icx-proxy                                  \
     --ignore-url-canister-param                                  \
     --metrics-addr "[::]:9314"                                   \
     --root-key "/run/ic-node/etc/icx-proxy/root_key.der"         \
+    --ssl-root-certificate "/var/opt/nginx/ic/trusted_certs.pem" \
     # DO NOT ADD CURLY BRACES (they prevent n-arg expansion)     \
     $REPLICA_DOMAIN_ADDRS                                        \
     $DOMAINS                                                     \

@@ -5,14 +5,14 @@ use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfig, SubnetConfigs},
+    subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, EmptyBlob, InstallCodeArgs, Method, Payload,
     IC_00,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::{execution_state::NextScheduledMethod, NextExecution};
 use ic_state_machine_tests::{
     CanisterId, CanisterInstallMode, CryptoHashOfState, ErrorCode, IngressState, IngressStatus,
     MessageId, PrincipalId, StateMachine, StateMachineConfig,
@@ -109,7 +109,7 @@ fn dts_subnet_config(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> SubnetConfig {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     SubnetConfig {
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code: message_instruction_limit,
@@ -151,7 +151,7 @@ fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> StateMachine {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     StateMachine::new_with_config(StateMachineConfig::new(
         SubnetConfig {
             scheduler_config: SchedulerConfig {
@@ -243,6 +243,7 @@ fn setup_dts_install_code(
     );
 
     let canister_id = env.create_canister_with_cycles(
+        None,
         initial_balance,
         Some(
             CanisterSettingsArgsBuilder::new()
@@ -503,6 +504,9 @@ fn dts_pending_upgrade_with_heartbeat() {
     env.await_ingress(upgrade, 30).unwrap();
 
     env.advance_time(Duration::from_secs(1));
+
+    env.tick();
+
     let read = env.send_ingress(user_id, canister, "read", vec![]);
     let result = env.await_ingress(read, 10).unwrap();
 
@@ -556,7 +560,7 @@ fn dts_scheduling_of_install_code() {
     let mut canister = vec![];
 
     for i in 0..n {
-        let id = env.create_canister_with_cycles(INITIAL_CYCLES_BALANCE, settings.clone());
+        let id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, settings.clone());
         eprintln!("canister[{}] = {}", i, id);
         canister.push(id);
     }
@@ -715,7 +719,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
     let mut canister = vec![];
 
     for _ in 0..n {
-        let id = env.create_canister_with_cycles(INITIAL_CYCLES_BALANCE, settings.clone());
+        let id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, settings.clone());
         canister.push(id);
     }
 
@@ -918,7 +922,7 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
             .build(),
     );
 
-    let canister = env.create_canister_with_cycles(INITIAL_CYCLES_BALANCE, settings);
+    let canister = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, settings);
 
     // Enable the checkpoints so that the first install code message is always
     // aborted and doesn't make progress.
@@ -1847,9 +1851,9 @@ fn dts_heartbeat_works() {
         .execute_ingress(canister_id, "update", set_heartbeat)
         .unwrap();
 
-    // 3) the heartbeat and 4) the update.
+    // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
-    assert_eq!(4, base_canister_version);
+    assert_eq!(3, base_canister_version);
 
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
 
@@ -1902,9 +1906,9 @@ fn dts_heartbeat_resume_after_abort() {
 
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
 
-    // 3) the heartbeat and 4) the update.
+    // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
-    assert_eq!(4, base_canister_version);
+    assert_eq!(3, base_canister_version);
 
     env.set_checkpoints_enabled(true);
 
@@ -1969,9 +1973,9 @@ fn dts_heartbeat_with_trap() {
 
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
 
-    // 3) the heartbeat and 4) the update.
+    // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
-    assert_eq!(4, base_canister_version);
+    assert_eq!(3, base_canister_version);
 
     for _ in 1..10 {
         env.tick();
@@ -2124,9 +2128,9 @@ fn dts_global_timer_one_shot_works() {
 
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
 
-    // 3) the heartbeat and 4) the update.
+    // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
-    assert_eq!(4, base_canister_version);
+    assert_eq!(3, base_canister_version);
 
     for i in 1..10 {
         env.tick();
@@ -2150,7 +2154,7 @@ fn dts_global_timer_one_shot_works() {
 }
 
 #[test]
-fn dts_global_timer_periodic_works() {
+fn dts_heartbeat_does_not_starve_when_global_timer_is_long() {
     if should_skip_test_due_to_disabled_dts() {
         // Skip this test if DTS is not supported.
         return;
@@ -2158,7 +2162,7 @@ fn dts_global_timer_periodic_works() {
 
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(60_000),
+        NumInstructions::from(75_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2172,7 +2176,7 @@ fn dts_global_timer_periodic_works() {
 
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
-    let disable_heartbeats = wasm().trap().build();
+    let heartbeat = wasm().instruction_counter_is_at_least(150_000).build();
 
     let timer = wasm()
         .instruction_counter_is_at_least(150_000)
@@ -2181,7 +2185,7 @@ fn dts_global_timer_periodic_works() {
         .build();
 
     let set_heartbeat_and_global_timer = wasm()
-        .set_heartbeat(disable_heartbeats)
+        .set_heartbeat(heartbeat)
         .set_global_timer_method(timer)
         .api_global_timer_set(now_nanos)
         .get_global_counter()
@@ -2194,19 +2198,46 @@ fn dts_global_timer_periodic_works() {
 
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
 
-    // 3) the heartbeat and 4) the update.
+    // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
-    assert_eq!(4, base_canister_version);
+    assert_eq!(3, base_canister_version);
 
-    for i in 1..10 {
-        env.tick();
-        // Each timer takes three rounds to execute.
-        assert_eq!(i / 3, get_global_counter(&env, canister_id));
-        // TODO: RUN-599 Heartbeats starve due to the long timers.
-        assert_eq!(
-            base_canister_version + i / 3,
-            get_canister_version(&env, canister_id)
-        );
+    // Check that GlobalTimer is the next scheduled method, since
+    // we expect it to be executed next.
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .get_next_scheduled_method(),
+        NextScheduledMethod::GlobalTimer
+    );
+
+    for repetition in 0..10 {
+        // Each repetition executes one timer.
+        for timer_round in 1..4 {
+            env.tick();
+            // Each timer takes three rounds to execute.
+            assert_eq!(
+                repetition + timer_round / 3,
+                get_global_counter(&env, canister_id)
+            );
+            assert_eq!(
+                base_canister_version + 2 * repetition + timer_round / 3,
+                get_canister_version(&env, canister_id)
+            );
+        }
+
+        // Each repetition executes one heartbeat.
+        for heartbeat_round in 1..4 {
+            env.tick();
+            // get_global_counter is const hence we are executing heartbeat.
+            assert_eq!(repetition + 1, get_global_counter(&env, canister_id));
+            // Each heartbeat takes three rounds to execute.
+            assert_eq!(
+                base_canister_version + 2 * repetition + 1 + heartbeat_round / 3,
+                get_canister_version(&env, canister_id)
+            );
+        }
     }
 }
 
@@ -2364,9 +2395,9 @@ fn dts_global_timer_with_trap() {
 
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
 
-    // 3) the heartbeat and 4) the update.
+    // 3) the update.
     let base_canister_version = get_canister_version(&env, canister_id);
-    assert_eq!(4, base_canister_version);
+    assert_eq!(3, base_canister_version);
 
     for _ in 1..10 {
         env.tick();

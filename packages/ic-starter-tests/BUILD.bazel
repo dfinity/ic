@@ -9,7 +9,6 @@ rust_library(
     ],
     deps = [
         "@crate_index//:anyhow",
-        "@crate_index//:garcon",
         "@crate_index//:ic-agent",
         "@crate_index//:reqwest",
         "@crate_index//:tempfile",

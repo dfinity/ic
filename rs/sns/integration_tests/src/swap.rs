@@ -4,8 +4,7 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as LedgerInit, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 
 use ic_nervous_system_common::{
     assert_is_ok, ledger::compute_neuron_staking_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
@@ -50,13 +49,16 @@ use ic_sns_init::pb::v1::{
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
     TreasuryDistribution,
 };
-use ic_sns_swap::pb::v1::{
-    self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
-    set_dapp_controllers_call_result, set_mode_call_result, ErrorRefundIcpRequest,
-    ErrorRefundIcpResponse, GetOpenTicketResponse, GetStateRequest, GetStateResponse, Init,
-    OpenRequest, SetDappControllersCallResult, SetDappControllersResponse,
+use ic_sns_swap::{
+    pb::v1::{
+        self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
+        set_dapp_controllers_call_result, set_mode_call_result, ErrorRefundIcpRequest,
+        ErrorRefundIcpResponse, GetOpenTicketResponse, GetStateRequest, GetStateResponse, Init,
+        OpenRequest, RefreshBuyerTokensResponse, SetDappControllersCallResult,
+        SetDappControllersResponse,
+    },
+    swap::principal_to_subaccount,
 };
-use ic_sns_swap::{pb::v1::RefreshBuyerTokensResponse, swap::principal_to_subaccount};
 use ic_sns_test_utils::{
     now_seconds,
     state_test_helpers::{
@@ -2395,6 +2397,8 @@ fn swap_lifecycle_sad() {
         std::time::UNIX_EPOCH + std::time::Duration::from_secs(*SWAP_DUE_TIMESTAMP_SECONDS + 1),
     );
 
+    state_machine.tick();
+
     // Make sure the swap reached the Aborted state.
     {
         let result = swap_get_state(
@@ -2703,6 +2707,8 @@ fn test_upgrade() {
         fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
         transaction_fee_e8s: Some(10_000),
         neuron_minimum_stake_e8s: Some(1_000_000),
+        confirmation_text: None,
+        restricted_countries: None,
     })
     .unwrap();
     let canister_id = state_machine
@@ -2808,6 +2814,7 @@ fn test_deletion_of_sale_ticket() {
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
+        None,
     );
     assert_eq!(
         refresh_response.unwrap(),
@@ -2864,6 +2871,7 @@ fn test_deletion_of_sale_ticket() {
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
+        None,
     );
     assert!(refresh_response.unwrap_err().contains("smaller"));
 
@@ -2901,6 +2909,7 @@ fn test_deletion_of_sale_ticket() {
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
+        None,
     );
     assert_eq!(
         refresh_response.unwrap(),
@@ -2944,6 +2953,7 @@ fn test_deletion_of_sale_ticket() {
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
+        None,
     );
     assert_eq!(
         refresh_response.unwrap(),
@@ -3071,6 +3081,7 @@ fn test_last_man_less_than_min() {
             cycles_for_archive_creation: None,
             max_transactions_per_response: None
         },
+        max_memo_length: None,
     }))
     .unwrap();
     state_machine
@@ -3088,6 +3099,8 @@ fn test_last_man_less_than_min() {
         fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
         transaction_fee_e8s: Some(10_000),
         neuron_minimum_stake_e8s: Some(1_000_000),
+        confirmation_text: None,
+        restricted_countries: None,
     })
     .unwrap();
     state_machine
@@ -3151,6 +3164,7 @@ fn test_last_man_less_than_min() {
             &state_machine,
             &swap_id,
             &PrincipalId::new_user_test_id(user),
+            None,
         )
     };
     // /utilities
@@ -3248,6 +3262,7 @@ fn test_refresh_buyer_token() {
             &state_machine,
             &sns_canister_ids.swap(),
             &TEST_USER1_PRINCIPAL,
+            None,
         );
 
         assert_eq!(

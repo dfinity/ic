@@ -22,7 +22,8 @@ end::catalog[] */
 
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
+    NnsInstallationBuilder,
 };
 use crate::util::{block_on, runtime_from_url};
 use rand_chacha::ChaCha8Rng;
@@ -82,8 +83,8 @@ pub fn test(env: TestEnv) {
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     info!(logger, "Installing NNS canisters ...");
-    nns_node
-        .install_nns_canisters()
+    NnsInstallationBuilder::new()
+        .install(&nns_node, &env)
         .expect("Could not install NNS canisters");
     info!(logger, "NNS canisters installed successfully");
     let app_node = topology
@@ -142,26 +143,18 @@ mod holder {
             .create_canister()
             .as_provisional_create_with_amount(None)
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap()
             .0;
 
         // Install the holding canister.
         mgr.install_code(&canister_id, HOLDER_CANISTER_WASM)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect("Couldn't install?");
 
         Canister::new(rt, CanisterId::try_from(canister_id.as_slice()).unwrap())
-    }
-
-    // How `Agent` is instructed to wait for update calls.
-    fn delay() -> garcon::Delay {
-        garcon::Delay::builder()
-            .throttle(std::time::Duration::from_millis(500))
-            .timeout(std::time::Duration::from_secs(60 * 5))
-            .build()
     }
 
     pub async fn upgrade(rt: &Runtime, nns_canister_id: &CanisterId) {

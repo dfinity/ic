@@ -2,7 +2,7 @@ use super::*;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_ic00_types::EcdsaCurve;
+use ic_ic00_types::{EcdsaCurve, IC_00};
 use ic_registry_routing_table::CanisterIdRange;
 use ic_test_utilities::{
     mock_time,
@@ -15,7 +15,7 @@ use ic_test_utilities::{
         xnet::{StreamHeaderBuilder, StreamSliceBuilder},
     },
 };
-use ic_types::canister_http::Transform;
+use ic_types::{canister_http::Transform, time::current_time};
 use ic_types::{
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
     ingress::WasmResult,
@@ -447,6 +447,113 @@ fn roundtrip_encoding() {
     // Set `last_generated_canister_id` to valid, but migrated canister ID.
     system_metadata.last_generated_canister_id = Some(15.into());
     validate_roundtrip_encoding(&system_metadata);
+}
+
+#[test]
+fn system_metadata_split() {
+    // We will be splitting subnet A into A' and B. C is a third-party subnet.
+    const SUBNET_A: SubnetId = SUBNET_0;
+    const SUBNET_B: SubnetId = SUBNET_1;
+    const SUBNET_C: SubnetId = SUBNET_2;
+
+    // 2 canisters: we will retain `CANISTER_1` on `SUBNET_A` and split off
+    // `CANISTER_2` to `SUBNET_B`.
+    const CANISTER_1: CanisterId = CanisterId::from_u64(1);
+    const CANISTER_2: CanisterId = CanisterId::from_u64(2);
+
+    // Ingress history with 4 Received messages, addressed to canisters 1 and 2;
+    // `IC_00`; and respectively `SUBNET_A`.
+    let mut ingress_history = IngressHistoryState::new();
+    let time = mock_time();
+    let receivers = [
+        CANISTER_1.get(),
+        CANISTER_2.get(),
+        IC_00.get(),
+        SUBNET_A.get(),
+    ];
+    for (i, receiver) in receivers.into_iter().enumerate().rev() {
+        ingress_history.insert(
+            message_test_id(i as u64),
+            IngressStatus::Known {
+                receiver,
+                user_id: user_test_id(i as u64),
+                time,
+                state: IngressState::Received,
+            },
+            time,
+            NumBytes::from(u64::MAX),
+        );
+    }
+
+    // `CANISTER_1` remains on `SUBNET_A`.
+    let is_canister_on_subnet_a = |canister_id: &CanisterId| *canister_id == CANISTER_1;
+    // All ingress messages except the one addressed to `CANISTER_2` (including the
+    // ones for `IC_00` and `SUBNET_A`) should remain on `SUBNET_A` after the split.
+    let is_receiver_on_subnet_a = |canister_id: &CanisterId| *canister_id != CANISTER_2;
+    // Only ingress messages for `CANISTER_2` should be retained on `SUBNET_B`.
+    let is_canister_on_subnet_b = |canister_id: &CanisterId| *canister_id == CANISTER_2;
+
+    let streams = Streams {
+        streams: btreemap! { SUBNET_C => Stream::new(StreamIndexedQueue::with_begin(13.into()), 14.into()) },
+        responses_size_bytes: btreemap! { CANISTER_1 => 169 },
+    };
+
+    // Use uncommon `SubnetType::VerifiedApplication` to make it more likely to
+    // detect a regression in the subnet type assigned to subnet B.
+    let mut system_metadata = SystemMetadata::new(SUBNET_A, SubnetType::VerifiedApplication);
+    system_metadata.ingress_history = ingress_history;
+    system_metadata.streams = streams.into();
+    system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
+    system_metadata.batch_time = current_time();
+    system_metadata.subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: 2197.into(),
+        ..Default::default()
+    };
+
+    // Split off subnet A', phase 1.
+    let metadata_a_phase_1 = system_metadata.clone().split(SUBNET_A);
+
+    // Metadata should be identical, plus a split marker pointing to subnet A.
+    let mut expected = system_metadata.clone();
+    expected.split_from = Some(SUBNET_A);
+    assert_eq!(expected, metadata_a_phase_1);
+
+    // Split off subnet A', phase 2.
+    //
+    // Technically some parts of the `SystemMetadata` (such as `prev_state_hash` and
+    // `own_subnet_type`) would be replaced during loading. However, we only care
+    // that `after_split()` does not touch them.
+    let metadata_a_phase_2 = metadata_a_phase_1.after_split(is_canister_on_subnet_a);
+
+    // Expect same metadata, but with pruned ingress history and no split marker.
+    expected.ingress_history = expected
+        .ingress_history
+        .prune_after_split(is_receiver_on_subnet_a);
+    expected.split_from = None;
+    assert_eq!(expected, metadata_a_phase_2);
+
+    // Split off subnet B, phase 1.
+    let metadata_b_phase_1 = system_metadata.clone().split(SUBNET_B);
+
+    // Should only retain ingress history; plus a split marker pointing to subnet A.
+    let mut expected = SystemMetadata::new(SUBNET_B, SubnetType::VerifiedApplication);
+    expected.ingress_history = system_metadata.ingress_history;
+    expected.split_from = Some(SUBNET_A);
+    assert_eq!(expected, metadata_b_phase_1);
+
+    // Split off subnet B, phase 2.
+    //
+    // Technically some parts of the `SystemMetadata` (such as `prev_state_hash` and
+    // `own_subnet_type`) would be replaced during loading. However, we only care
+    // that `after_split()` does not touch them.
+    let metadata_b_phase_2 = metadata_b_phase_1.after_split(is_canister_on_subnet_b);
+
+    // Expect pruned ingress history and no split marker.
+    expected.split_from = None;
+    expected.ingress_history = expected
+        .ingress_history
+        .prune_after_split(is_canister_on_subnet_b);
+    assert_eq!(expected, metadata_b_phase_2);
 }
 
 #[test]
@@ -1035,7 +1142,7 @@ fn ingress_history_split() {
     // All messages should be retained.
     assert_eq!(
         ingress_history,
-        ingress_history.clone().split(is_local_canister)
+        ingress_history.clone().prune_after_split(is_local_canister)
     );
 
     // Do an actual split, with only canister_2 hosted by own_subnet_id.
@@ -1051,7 +1158,10 @@ fn ingress_history_split() {
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
     expected.forget_terminal_statuses(NumBytes::from(u64::MAX));
 
-    assert_eq!(expected, ingress_history.split(is_local_canister));
+    assert_eq!(
+        expected,
+        ingress_history.prune_after_split(is_local_canister)
+    );
 }
 
 #[derive(Clone)]

@@ -1,8 +1,7 @@
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::string::ToString;
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
+    convert::TryFrom,
+    string::ToString,
     sync::{Arc, Mutex},
 };
 
@@ -18,10 +17,11 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::{self as sns_init_pb, SnsInitPayload};
-use ic_sns_swap::pb::v1 as sns_swap_pb;
-use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Swap};
-use ic_sns_wasm::pb::v1::DeployedSns;
-use ic_sns_wasm::pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse};
+use ic_sns_swap::pb::{
+    v1 as sns_swap_pb,
+    v1::{params::NeuronBasketConstructionParameters, Swap},
+};
+use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 
 use crate::pb::v1::{
     proposal::Action, settle_community_fund_participation, ExecuteNnsFunction, GovernanceError,
@@ -51,12 +51,10 @@ const PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
     min_participants: 2,
     sns_token_e8s: 1000 * E8,
     swap_due_timestamp_seconds: 2524629600, // midnight, Jan 1, 2050
-    neuron_basket_construction_parameters: Some(
-        sns_swap_pb::params::NeuronBasketConstructionParameters {
-            count: 3,
-            dissolve_delay_interval_seconds: 7890000, // 3 months
-        },
-    ),
+    neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+        count: 3,
+        dissolve_delay_interval_seconds: 7890000, // 3 months
+    }),
     sale_delay_seconds: None,
 };
 
@@ -94,6 +92,44 @@ lazy_static! {
         );
 }
 
+struct StubIcpLedger {}
+#[async_trait]
+impl IcpLedger for StubIcpLedger {
+    async fn transfer_funds(
+        &self,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _from_subaccount: Option<Subaccount>,
+        _to: AccountIdentifier,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn account_balance(
+        &self,
+        _account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError> {
+        unimplemented!()
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
+}
+
+struct StubCMC {}
+#[async_trait]
+impl CMC for StubCMC {
+    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+        unimplemented!()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct ExpectedCallCanisterMethodCallArguments<'a> {
     target: CanisterId,
@@ -111,6 +147,7 @@ struct MockEnvironment<'a> {
             )>,
         >,
     >,
+    now: Arc<Mutex<u64>>,
 }
 
 impl Default for MockEnvironment<'_> {
@@ -134,6 +171,7 @@ impl Default for MockEnvironment<'_> {
                     .unwrap()),
                 ),
             ]))),
+            now: Arc::new(Mutex::new(0)),
         }
     }
 }
@@ -141,7 +179,7 @@ impl Default for MockEnvironment<'_> {
 #[async_trait]
 impl Environment for MockEnvironment<'_> {
     fn now(&self) -> u64 {
-        unimplemented!();
+        *self.now.lock().unwrap()
     }
 
     fn random_u64(&mut self) -> u64 {
@@ -298,6 +336,7 @@ async fn validate_open_sns_token_swap_sns_wasm_list_deployed_snses_fail() {
                     },
                     Err((None, "derp".to_string())),
                 ),]),)),
+                now: Arc::new(Mutex::new(0))
             },
         )
         .await
@@ -318,6 +357,7 @@ async fn validate_open_sns_token_swap_unknown_swap() {
                     },
                     Ok(Encode!(&ListDeployedSnsesResponse { instances: vec![] }).unwrap()),
                 )]))),
+                now: Arc::new(Mutex::new(0))
             },
         )
         .await
@@ -341,6 +381,7 @@ async fn validate_open_sns_token_swap_swap_get_state_fail() {
                         Err((None, "derp".to_string())),
                     )
                 ]),)),
+                now: Arc::new(Mutex::new(0))
             },
         )
         .await
@@ -943,7 +984,7 @@ fn protect_not_concluded_open_sns_token_swap_proposal_from_gc() {
     assert!(rejected_proposal_data.can_be_purged(now_seconds, voting_period_seconds));
 
     // Modify again to make it purge-able.
-    subject.sns_token_swap_lifecycle = Some(sns_swap_pb::Lifecycle::Aborted as i32);
+    subject.sns_token_swap_lifecycle = Some(Lifecycle::Aborted as i32);
     assert!(subject.can_be_purged(now_seconds, voting_period_seconds));
 }
 
@@ -1082,6 +1123,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             .as_ref()
             .unwrap();
 
+        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+            .swap_parameters
+            .as_ref()
+            .unwrap();
+
         assert_eq!(
             SnsInitPayload {
                 initial_token_distribution: None, // We'll look at this separately.
@@ -1149,6 +1195,13 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 wait_for_quiet_deadline_increase_seconds: unwrap_duration_seconds(
                     &original_governance_parameters.proposal_wait_for_quiet_deadline_increase
                 ),
+                dapp_canisters: Some(sns_init_pb::DappCanisters {
+                    canisters: vec![pb::Canister {
+                        id: Some(CanisterId::from_u64(1000).get()),
+                    }],
+                }),
+                confirmation_text: original_swap_parameters.confirmation_text.clone(),
+                restricted_countries: original_swap_parameters.restricted_countries.clone(),
 
                 initial_token_distribution: None,
             },
@@ -1182,7 +1235,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 
         assert_eq!(
             converted.initial_token_distribution.unwrap(),
-            sns_init_pb::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower(
+            sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower(
                 sns_init_pb::FractionalDeveloperVotingPower {
                     developer_distribution: Some(sns_init_pb::DeveloperDistribution {
                         developer_neurons: vec![sns_init_pb::NeuronDistribution {
@@ -1250,5 +1303,129 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             Ok(ok) => panic!("Invalid data was not rejected. Result: {:#?}", ok),
             Err(err) => assert!(err.contains("wait_for_quiet"), "{}", err),
         }
+    }
+}
+
+mod metrics_tests {
+    use crate::{
+        encode_metrics,
+        governance::{
+            tests::{MockEnvironment, StubCMC, StubIcpLedger},
+            Governance,
+        },
+        pb::v1::{proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally},
+    };
+    use maplit::btreemap;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn test_metrics_total_voting_power() {
+        let proposal_1 = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("Foo Foo Bar".to_string()),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "Text for this motion".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            latest_tally: Some(Tally {
+                timestamp_seconds: 0,
+                yes: 0,
+                no: 0,
+                total: 555,
+            }),
+            ..ProposalData::default()
+        };
+
+        let proposal_2 = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("Foo Foo Bar".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::default())),
+
+                ..Proposal::default()
+            }),
+            latest_tally: Some(Tally {
+                timestamp_seconds: 0,
+                yes: 0,
+                no: 0,
+                total: 1,
+            }),
+            ..ProposalData::default()
+        };
+
+        let governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {
+                    1 =>  proposal_1,
+                    2 => proposal_2
+                },
+                ..GovernanceProto::default()
+            },
+            Box::new(MockEnvironment {
+                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
+                now: Arc::new(Mutex::new(0)),
+            }),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
+
+        let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 1000);
+
+        encode_metrics(&governance, &mut writer).unwrap();
+
+        let body = writer.into_inner();
+        let s = String::from_utf8_lossy(&body);
+
+        // We assert that it is '555' instead of '1', so that we know the correct
+        // proposal action is filtered out.
+        assert!(s.contains("governance_voting_power_total 555 1000"));
+    }
+}
+
+#[test]
+fn randomly_pick_swap_start() {
+    // Generate "zillions" of outputs, and count their occurrences.
+    let mut start_time_to_count = BTreeMap::new();
+    const ITERATION_COUNT: u64 = 50_000;
+    for _ in 0..ITERATION_COUNT {
+        let GlobalTimeOfDay {
+            seconds_after_utc_midnight,
+        } = CreateServiceNervousSystem::randomly_pick_swap_start();
+
+        *start_time_to_count
+            .entry(seconds_after_utc_midnight.unwrap())
+            .or_insert(0) += 1;
+    }
+
+    // Assert that we hit all possible values.
+    let possible_values_count = SECONDS_PER_DAY / 60 / 15;
+    assert_eq!(start_time_to_count.len(), possible_values_count as usize);
+
+    // Assert that values are multiples of of 15 minutes.
+    for seconds_after_utc_midnight in start_time_to_count.keys() {
+        assert_eq!(
+            seconds_after_utc_midnight % (15 * 60),
+            0,
+            "{}",
+            seconds_after_utc_midnight
+        );
+    }
+
+    // Assert that the distribution appears to be uniform.
+    let min_occurrence_count = (0.8 * (ITERATION_COUNT / possible_values_count) as f64) as u64;
+    let max_occurrence_count = (1.2 * (ITERATION_COUNT / possible_values_count) as f64) as u64;
+    for occurrence_count in start_time_to_count.values() {
+        assert!(
+            *occurrence_count >= min_occurrence_count,
+            "{} (vs. minimum = {})",
+            occurrence_count,
+            min_occurrence_count
+        );
+        assert!(
+            *occurrence_count <= max_occurrence_count,
+            "{} (vs. maximum = {})",
+            occurrence_count,
+            max_occurrence_count
+        );
     }
 }

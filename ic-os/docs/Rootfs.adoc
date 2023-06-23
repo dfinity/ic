@@ -132,8 +132,7 @@ customization of the installation using node-specific information. This includes
 
 * keys or registration parameters for the IC node software
 
-For all of the above, the system expects a file +ic-bootstrap.tar+ - either
-already present at +/mnt+ or supplied on a removable storage medium (e.g.
+For all of the above, the system expects a file +ic-bootstrap.tar+ supplied on a removable storage medium (e.g.
 a USB stick or an optical medium).
 
 ==== Journalbeat configuration

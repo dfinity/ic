@@ -1,4 +1,4 @@
-use ic_logger::{debug, new_logger, warn, ReplicaLogger};
+use ic_logger::{debug, info, new_logger, warn, ReplicaLogger};
 use std::future::Future;
 use std::io;
 use std::io::Error;
@@ -82,6 +82,11 @@ pub async fn connect(socket_path: PathBuf, logger: ReplicaLogger) -> io::Result<
                     "Successfully (re-)connected to socket {:?}", socket_path
                 )
             }
+        })
+        .with_on_connect_fail_callback({
+            let logger = new_logger!(logger);
+            let socket_path = socket_path.clone();
+            move || info!(logger, "Failed to reconnect to socket {:?}", socket_path)
         })
         .with_retries_generator(|| {
             ExpBackoffStrategy::new(MINIMUM_DELAY, EXPONENTIAL_BACKOFF_FACTOR, JITTER_AMOUNT)

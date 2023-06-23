@@ -1,14 +1,13 @@
+use crate::pb::v1::{CanisterAuthzInfo, MethodAuthzInfo};
 use dfn_core::api::caller;
-use std::collections::{hash_map::DefaultHasher, HashMap};
-use std::hash::BuildHasherDefault;
-use std::sync::RwLock;
-
-use lazy_static::lazy_static;
-
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{AuthzChangeOp, MethodAuthzChange};
-
-use crate::pb::v1::{CanisterAuthzInfo, MethodAuthzInfo};
+use lazy_static::lazy_static;
+use std::{
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::BuildHasherDefault,
+    sync::RwLock,
+};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -131,8 +130,7 @@ mod tests {
     use super::*;
     use ic_base_types::CanisterId;
     use serial_test::serial;
-    use std::convert::TryFrom;
-    use std::str::FromStr;
+    use std::{convert::TryFrom, str::FromStr};
 
     const CANISTER_TEST_METHOD: &str = "canister_test_method";
     const USER_TEST_METHOD: &str = "user_test_method";

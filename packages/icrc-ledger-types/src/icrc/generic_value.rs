@@ -52,9 +52,13 @@ impl Value {
                     .0
                     .to_i128()
                     .expect("BUG: blocks cannot contain integers that do not fit into the 128-bit representation");
-
                 let mut buf = [0u8; INT128_BUF_SIZE];
-                let offset = sleb128(&mut buf, v);
+                //TODO: Int should only use sleb128. Due to CiboriumValue only using Integer this is however not possible right now
+                //      Unsinged Integers should be represented through Nat or Nat65: https://dfinity.atlassian.net/browse/FI-764
+                let offset = match v >= 0 {
+                    true => leb128(&mut buf, v as u128),
+                    false => sleb128(&mut buf, v),
+                };
                 Sha256::digest(&buf[0..=offset]).into()
             }
             Value::Blob(bytes) => Sha256::digest(bytes).into(),

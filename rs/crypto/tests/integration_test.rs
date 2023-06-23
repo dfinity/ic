@@ -1019,10 +1019,11 @@ fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_sec
         .build();
     let (tls_cert_without_corresponding_secret_key, _tls_cert_der) = {
         let mut csprng = ChaChaRng::from_seed([9u8; 32]);
-        let not_after = Asn1Time::days_from_now(31).expect("unable to create Asn1Time");
+        let not_before = Asn1Time::from_unix(123).expect("unable to create Asn1Time");
+        let not_after = Asn1Time::from_unix(456).expect("unable to create Asn1Time");
         let common_name = "another_common_name";
         let (x509_cert, _key_pair) =
-            generate_tls_key_pair_der(&mut csprng, common_name, &not_after)
+            generate_tls_key_pair_der(&mut csprng, common_name, &not_before, &not_after)
                 .expect("error generating TLS key pair");
         (
             ic_crypto_tls_interfaces::TlsPublicKeyCert::new_from_der(x509_cert.bytes.clone())

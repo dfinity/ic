@@ -54,7 +54,9 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
+            execution_state::{
+                CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
+            },
             ExecutionState, ExportedFunctions, Global, NumWasmPages,
         },
         metadata_state::SubnetTopology,
@@ -69,7 +71,7 @@ mod tests {
     };
     use ic_types::{CanisterId, Cycles, ExecutionRound};
     use ic_wasm_types::CanisterModule;
-    use maplit::btreemap;
+    use maplit::{btreemap, btreeset};
     use std::collections::{BTreeSet, VecDeque};
     use std::convert::TryFrom;
     use std::sync::Arc;
@@ -246,7 +248,9 @@ mod tests {
             exports: ExportedFunctions::new(BTreeSet::new()),
             metadata: WasmMetadata::new(metadata),
             last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
         };
+
         canister_state.execution_state = Some(execution_state);
 
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
@@ -618,14 +622,14 @@ mod tests {
         state.metadata.network_topology.subnets = btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
-                nodes: btreemap!{},
+                nodes: btreeset!{},
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
                 ecdsa_keys_held: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
-                nodes: btreemap!{},
+                nodes: btreeset!{},
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
                 ecdsa_keys_held: BTreeSet::new(),

@@ -9,7 +9,7 @@ load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
-def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, upgrades = True, vuln_scan = True, visibility = None):
+def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, upgrades = True, vuln_scan = True, visibility = None, ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
 
@@ -22,6 +22,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
+      ic_version: the label pointing to the target that returns IC version
     """
 
     if mode == None:
@@ -31,16 +32,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
     # -------------------- Version management --------------------
 
-    # TODO(IDX-2538): re-enable this (or any other similar) solution when everything will be ready to have ic version that is not git revision.
-    #summary_sha256sum(
-    #    name = "version.txt",
-    #    inputs = image_deps,
-    #    suffix = "-dev" if mode == "dev" else "",
-    #)
-
     copy_file(
         name = "copy_version_txt",
-        src = "//bazel:version.txt",
+        src = ic_version,
         out = "version.txt",
         allow_symlink = True,
         visibility = visibility,
@@ -64,6 +58,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
     # set root password only in dev mode
     if mode == "dev":
+        build_args.extend(["ROOT_PASSWORD=root"])
+
+    elif mode == "dev-sev":
         build_args.extend(["ROOT_PASSWORD=root"])
 
     file_build_args = {image_deps["base_image"]: "BASE_IMAGE"}
@@ -363,14 +360,18 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         zstd_compress(
             name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
-            # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-            # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-            tags = ["no-remote-cache"],
         )
 
         sha256sum(
             name = "update-img-test.tar.zst.sha256",
             srcs = [":update-img-test.tar.zst"],
+            visibility = visibility,
+        )
+
+        sha256sum2url(
+            name = "update-img-test.tar.zst.cas-url",
+            src = ":update-img-test.tar.zst.sha256",
+            visibility = visibility,
         )
 
         gzip_compress(
@@ -391,70 +392,65 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     upload_suffix = ""
     if mode == "dev":
         upload_suffix = "-dev"
+    elif mode == "dev-sev":
+        upload_suffix = "-dev-sev"
     if malicious:
         upload_suffix += "-malicious"
 
-    upload_artifacts(
-        name = "upload_disk-img",
-        inputs = [
-            ":disk-img.tar.zst",
-            ":disk-img.tar.gz",
-        ],
-        remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
-    )
-
-    output_files(
-        name = "disk-img-url",
-        target = ":upload_disk-img",
-        basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
-    )
-
-    if upgrades:
+    if upload_prefix != None:
         upload_artifacts(
-            name = "upload_update-img",
+            name = "upload_disk-img",
             inputs = [
-                ":update-img.tar.zst",
-                ":update-img.tar.gz",
-                ":update-img-test.tar.zst",
-                ":update-img-test.tar.gz",
+                ":disk-img.tar.zst",
+                ":disk-img.tar.gz",
             ],
-            remote_subdir = upload_prefix + "/update-img" + upload_suffix,
+            remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
         )
 
-    # -------------------- Bazel ergonomics --------------------
+        output_files(
+            name = "disk-img-url",
+            target = ":upload_disk-img",
+            basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+            visibility = ["//visibility:public"],
+            tags = ["manual"],
+        )
 
-    native.filegroup(
-        name = "hash_and_upload_disk-img",
-        srcs = [
-            ":upload_disk-img",
-            ":disk-img.tar.zst.sha256",
-        ],
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
-    )
+        if upgrades:
+            upload_artifacts(
+                name = "upload_update-img",
+                inputs = [
+                    ":update-img.tar.zst",
+                    ":update-img.tar.gz",
+                    ":update-img-test.tar.zst",
+                    ":update-img-test.tar.gz",
+                ],
+                remote_subdir = upload_prefix + "/update-img" + upload_suffix,
+            )
 
-    if upgrades:
+        # -------------------- Bazel ergonomics --------------------
+
         native.filegroup(
-            name = "hash_and_upload_update-img",
+            name = "hash_and_upload_disk-img",
             srcs = [
-                ":upload_update-img",
-                ":update-img.tar.zst.sha256",
+                ":upload_disk-img",
+                ":disk-img.tar.zst.sha256",
             ],
             visibility = ["//visibility:public"],
             tags = ["manual"],
         )
 
-        native.filegroup(
-            name = "hash_and_upload_update-img-test",
-            srcs = [
-                ":upload_update-img-test",
-                ":update-img-test.tar.zst.sha256",
-            ],
-            visibility = ["//visibility:public"],
-            tags = ["manual"],
-        )
+        if upgrades:
+            native.filegroup(
+                name = "hash_and_upload_update-img",
+                srcs = [
+                    ":upload_update-img",
+                    ":update-img.tar.zst.sha256",
+                ],
+                visibility = ["//visibility:public"],
+                tags = ["manual"],
+            )
+
+    # end if upload_prefix != None
 
     if upgrades:
         upgrade_outputs = [
@@ -493,7 +489,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             },
         )
 
-def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibility = None):
+def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibility = None, ic_version = "//bazel:version.txt"):
     """
     A boundary node ICOS build parameterized by mode.
 
@@ -503,6 +499,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
       mode: dev, or prod. If not specified, will use the value of `name`
       sev: if True, build an SEV-SNP enabled image
       visibility: See Bazel documentation
+      ic_version: the label pointing to the target that returns IC version
     """
     if mode == None:
         mode = name
@@ -553,9 +550,6 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
             "BUILD_TYPE=" + mode,
         ] + rootfs_args,
         file_build_args = file_build_args,
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -569,27 +563,11 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         ],
     )
 
-    # TODO(IDX-2538): re-enable this (or any other similar) solution when everything will be ready to have ic version that is not git revision.
-    #summary_sha256sum(
-    #    name = "version.txt",
-    #    inputs = image_deps,
-    #    suffix = "-dev" if mode == "dev" else "",
-    #)
-
     copy_file(
         name = "copy_version_txt",
-        src = "//bazel:version.txt",
+        src = ic_version,
         out = "version.txt",
         allow_symlink = True,
-    )
-
-    copy_file(
-        name = "copy_ic_version_id",
-        src = ":version.txt",
-        out = "ic_version_id",
-        allow_symlink = True,
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
     )
 
     ext4_image(
@@ -681,14 +659,18 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
     )
 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
+        visibility = visibility,
+    )
+
+    sha256sum2url(
+        name = "disk-img.tar.zst.cas-url",
+        src = ":disk-img.tar.zst.sha256",
+        visibility = visibility,
     )
 
     gzip_compress(
@@ -720,7 +702,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
             ":upload_disk-img",
             ":disk-img.tar.zst.sha256",
         ],
-        visibility = ["//visibility:public"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -820,15 +802,6 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
         allow_symlink = True,
     )
 
-    copy_file(
-        name = "copy_ic_version_id",
-        src = ":version.txt",
-        out = "ic_version_id",
-        allow_symlink = True,
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
-    )
-
     ext4_image(
         name = "partition-boot.tar",
         src = _dict_value_search(image_deps["rootfs"], "/"),
@@ -918,14 +891,18 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
     )
 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
+        visibility = visibility,
+    )
+
+    sha256sum2url(
+        name = "disk-img.tar.zst.cas-url",
+        src = ":disk-img.tar.zst.sha256",
+        visibility = visibility,
     )
 
     gzip_compress(

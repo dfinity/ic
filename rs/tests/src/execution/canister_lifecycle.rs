@@ -34,9 +34,7 @@ use crate::types::*;
 use crate::util::*;
 use candid::{Decode, Encode};
 use futures::future::join_all;
-use ic_agent::export::Principal;
-use ic_agent::identity::Identity;
-use ic_agent::AgentError;
+use ic_agent::{agent::RejectCode, export::Principal, identity::Identity, AgentError};
 use ic_ic00_types::{
     CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
     EmptyBlob, Payload,
@@ -46,7 +44,7 @@ use ic_types::{Cycles, PrincipalId};
 use ic_universal_canister::{call_args, management, wasm, CallInterface, UNIVERSAL_CANISTER_WASM};
 use ic_utils::call::AsyncCall;
 use ic_utils::interfaces::{management_canister::builders::InstallMode, ManagementCanister};
-use reqwest::StatusCode;
+use slog::info;
 
 pub fn create_canister_via_ingress_fails(env: TestEnv) {
     let node = env.get_first_healthy_node_snapshot();
@@ -54,7 +52,10 @@ pub fn create_canister_via_ingress_fails(env: TestEnv) {
     block_on({
         async move {
             let mgr = ManagementCanister::create(&agent);
-            assert_http_submit_fails(mgr.create_canister().call().await, StatusCode::FORBIDDEN);
+            assert_http_submit_fails(
+                mgr.create_canister().call().await,
+                RejectCode::CanisterReject,
+            );
         }
     });
 }
@@ -224,6 +225,8 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .await
                 .unwrap();
             let mgr = ManagementCanister::create(&agent);
+
+            info!(logger, "Creating Canister A and canister B");
             let canister_a =
                 UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
                     .await;
@@ -232,6 +235,7 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                     .await;
 
             // A creates C
+            info!(logger, "Canister A attempts to create canister C.");
             let canister_c = canister_a
                 .update(wasm().call(management::create_canister(
                     Cycles::from(2_000_000_000_000u64).into_parts(),
@@ -245,6 +249,10 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .unwrap();
 
             // Check that canister_a can ask for the status.
+            info!(
+                logger,
+                "Assert that canister A can ask for canister C's status."
+            );
             canister_a
                 .update(wasm().call(management::canister_status(canister_c)))
                 .await
@@ -260,6 +268,10 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .unwrap();
 
             // B cannot access C's canister status
+            info!(
+                logger,
+                "Assert that canister B cannot access canister C's status."
+            );
             assert_reject(
                 canister_b
                     .update(wasm().call(management::canister_status(canister_c)))
@@ -268,9 +280,13 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
             );
 
             // User also cannot fetch the status
+            info!(
+                logger,
+                "Assert that the user cannot access canister C's status."
+            );
             assert_http_submit_fails(
                 mgr.canister_status(&canister_c).call().await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Update the controllers to B and `user`
@@ -314,7 +330,7 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
 
             // `user` can now fetch the status too.
             mgr.canister_status(&canister_c)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
@@ -330,11 +346,19 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
                 .unwrap();
 
             // B and `user` can no longer access status.
+            info!(
+                logger,
+                "Assert that the user can no longer access canister C's status."
+            );
             assert_http_submit_fails(
                 mgr.canister_status(&canister_c).call().await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
+            info!(
+                logger,
+                "Assert that canister B can no longer access canister C's status."
+            );
             assert_reject(
                 canister_b
                     .update(wasm().call(management::canister_status(canister_c)))
@@ -526,45 +550,53 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
             let mgr = ManagementCanister::create(&agent2);
 
             // Try reinstalling code to it. Should fail.
+            info!(
+                logger,
+                "Asserting that Reinstalling code on the canister fails."
+            );
             assert_http_submit_fails(
                 mgr.install_code(&wallet_canister.canister_id(), UNIVERSAL_CANISTER_WASM)
                     .with_mode(InstallMode::Reinstall)
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Upgrading it doesn't work either.
+            info!(logger, "Asserting that upgrading the canister fails.");
             assert_http_submit_fails(
                 mgr.install_code(&wallet_canister.canister_id(), UNIVERSAL_CANISTER_WASM)
                     .with_mode(InstallMode::Upgrade)
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Nor does stopping.
+            info!(logger, "Asserting that stopping the canister fails.");
             assert_http_submit_fails(
                 mgr.stop_canister(&wallet_canister.canister_id())
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Nor does fetching the status.
+            info!(logger, "Asserting that fetching the canister status fails.");
             assert_http_submit_fails(
                 mgr.canister_status(&wallet_canister.canister_id())
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
 
             // Nor does deleting it.
+            info!(logger, "Asserting that deleting the canister fails.");
             assert_http_submit_fails(
                 mgr.delete_canister(&wallet_canister.canister_id())
                     .call()
                     .await,
-                StatusCode::FORBIDDEN,
+                RejectCode::CanisterError,
             );
         }
     });
@@ -585,13 +617,13 @@ pub fn delete_stopped_canister_succeeds(env: TestEnv) {
 
             // Stop the canister
             mgr.stop_canister(&canister.canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("canister stopping failed");
 
             // Delete the canister.
             mgr.delete_canister(&canister.canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("canister deletion failed");
 
@@ -622,7 +654,7 @@ pub fn delete_running_canister_fails(env: TestEnv) {
             // Delete the canister.
             let res = mgr
                 .delete_canister(&canister.canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await;
 
             // This should really be a CanisterReject.
@@ -645,14 +677,14 @@ pub fn canister_large_wasm_small_memory_allocation(env: TestEnv) {
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(app_node.effective_canister_id())
                 .with_memory_allocation(1u64)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("Couldn't create canister with provisional API.")
                 .0;
             // Install a large wasm with a small memory allocation, it should fail.
             let res = mgr
                 .install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await;
             assert_reject(res, RejectCode::CanisterReject);
         }
@@ -681,14 +713,14 @@ pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
                 .create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(app_node.effective_canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("Couldn't create canister with provisional API.")
                 .0;
 
             // Install the wasm with no memory allocation, it should succeed.
             mgr.install_code(&canister_id, &wasm)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
@@ -696,19 +728,19 @@ pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
             let res = mgr
                 .update_settings(&canister_id)
                 .with_memory_allocation(1_u64 << 30)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await;
             assert_reject(res, RejectCode::CanisterReject);
 
             // Install the wasm with 3GiB memory alloction, it should succeed.
             mgr.update_settings(&canister_id)
                 .with_memory_allocation(3_u64 << 30)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
             mgr.install_code(&canister_id, &wasm)
                 .with_mode(InstallMode::Reinstall)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
         }
@@ -871,7 +903,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
         let res = join_all(
             canister_principals
                 .iter()
-                .map(|c_id| mgr.stop_canister(c_id).call_and_wait(delay())),
+                .map(|c_id| mgr.stop_canister(c_id).call_and_wait()),
         )
         .await;
         res.into_iter()
@@ -880,7 +912,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
         let res = join_all(
             canister_principals
                 .iter()
-                .map(|c_id| mgr.delete_canister(c_id).call_and_wait(delay())),
+                .map(|c_id| mgr.delete_canister(c_id).call_and_wait()),
         )
         .await;
         res.into_iter()
@@ -961,7 +993,7 @@ pub fn canisters_with_low_balance_are_deallocated(env: TestEnv) {
                 .create_canister()
                 .as_provisional_create_with_amount(Some(0))
                 .with_effective_canister_id(app_node.effective_canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("Couldn't create canister with provisional API.")
                 .0;
@@ -970,13 +1002,13 @@ pub fn canisters_with_low_balance_are_deallocated(env: TestEnv) {
             // NOTE: this call succeeds because `install_code` is free.
             mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
                 .with_raw_arg(wasm().noop().build())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("Couldn't install universal canister");
 
             let canister_status = mgr
                 .canister_status(&canister_id)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap()
                 .0;
@@ -1038,7 +1070,7 @@ pub fn canisters_are_deallocated_when_their_balance_falls(env: TestEnv) {
 
             let canister_status = mgr
                 .canister_status(&canister_a.canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap()
                 .0;
@@ -1130,7 +1162,7 @@ pub fn provisional_create_canister_with_no_settings(env: TestEnv) {
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap_or_else(|err| {
                     panic!("Couldn't create canister with provisional API: {}", err)
@@ -1292,7 +1324,7 @@ pub fn controller_and_controllee_on_different_subnets(env: TestEnv) {
                 let mgr = ManagementCanister::create(&controllee_agent);
                 assert_http_submit_fails(
                     mgr.stop_canister(&controllee.canister_id()).call().await,
-                    StatusCode::FORBIDDEN,
+                    RejectCode::CanisterError,
                 );
 
                 install_via_cr(&controller, controllee.canister_id())
@@ -1401,13 +1433,13 @@ pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(env: Te
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
             let canister =
@@ -1419,7 +1451,7 @@ pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(env: Te
                 .create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await;
             assert_reject(res, RejectCode::SysFatal);
 

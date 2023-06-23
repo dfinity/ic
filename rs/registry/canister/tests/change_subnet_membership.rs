@@ -104,10 +104,10 @@ fn test_the_anonymous_user_cannot_change_subnet_membership() {
 }
 
 #[test]
-fn test_a_canister_other_than_the_proposals_canister_cannot_change_subnet_membership() {
+fn test_a_canister_other_than_the_governance_canister_cannot_change_subnet_membership() {
     local_test_on_nns_subnet(|runtime| {
         async move {
-            // An attacker got a canister that is trying to pass for the proposals
+            // An attacker got a canister that is trying to pass for the governance
             // canister...
             let attacker_canister = set_up_universal_canister(&runtime).await;
             // ... but thankfully, it does not have the right ID
@@ -145,7 +145,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_change_subnet_member
             };
 
             // The attacker canister tries to add nodes to a subnet, pretending to be the
-            // proposals canister. This should have no effect.
+            // governance canister. This should have no effect.
             assert!(
                 !forward_call_via_universal_canister(
                     &attacker_canister,
@@ -222,12 +222,12 @@ fn test_change_subnet_membership_succeeds() {
                 node_ids_remove: node_ids_to_remove,
             };
 
-            // Install the universal canister in place of the proposals canister
-            let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-            // Since it takes the id reserved for the proposal canister, it can impersonate
+            // Install the universal canister in place of the governance canister
+            let fake_governance_canister = set_up_universal_canister(&runtime).await;
+            // Since it takes the id reserved for the governance canister, it can impersonate
             // it
             assert_eq!(
-                fake_proposal_canister.canister_id(),
+                fake_governance_canister.canister_id(),
                 ic_nns_constants::GOVERNANCE_CANISTER_ID
             );
 
@@ -241,7 +241,7 @@ fn test_change_subnet_membership_succeeds() {
 
             assert!(
                 forward_call_via_universal_canister(
-                    &fake_proposal_canister,
+                    &fake_governance_canister,
                     &registry,
                     "change_subnet_membership",
                     Encode!(&payload).unwrap()

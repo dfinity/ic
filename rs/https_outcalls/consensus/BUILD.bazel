@@ -5,27 +5,30 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/interfaces",
-    "//rs/interfaces/https_outcalls_adapter_client",
+    "//rs/interfaces/adapter_client",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/replicated_state",
     "//rs/types/types",
     "@crate_index//:prometheus",
+    "@crate_index//:prost",
     "@crate_index//:slog",
 ]
 
 DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
-    "//rs/protobuf",
     "//rs/registry/subnet_type",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
+    "//rs/types/error_types",
     "@crate_index//:mockall_0_7_2",
+    "@crate_index//:proptest",
 ]
 
 rust_library(
@@ -50,5 +53,6 @@ rust_doc(
 rust_test(
     name = "ic_https_outcalls_consensus_test",
     crate = ":consensus",
+    crate_features = ["proptest"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

@@ -1,17 +1,13 @@
 type CanisterCallError = record { code : opt int32; description : text };
 type CanisterIdRecord = record { canister_id : principal };
 type CanisterStatusResult = record {
-  controller : principal;
   status : CanisterStatusType;
   memory_size : nat;
   settings : DefiniteCanisterSettings;
   module_hash : opt vec nat8;
 };
 type CanisterStatusResultV2 = record {
-  controller : principal;
-  status : CanisterStatusType_1;
-  freezing_threshold : nat;
-  balance : vec record { vec nat8; nat };
+  status : CanisterStatusType;
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
@@ -19,14 +15,12 @@ type CanisterStatusResultV2 = record {
   module_hash : opt vec nat8;
 };
 type CanisterStatusType = variant { stopped; stopping; running };
-type CanisterStatusType_1 = variant { stopped; stopping; running };
 type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
 };
 type DefiniteCanisterSettings = record { controllers : vec principal };
 type DefiniteCanisterSettingsArgs = record {
-  controller : principal;
   freezing_threshold : nat;
   controllers : vec principal;
   memory_allocation : nat;

@@ -1,5 +1,5 @@
 use ic_config::execution_environment::Config;
-use ic_config::subnet_config::SubnetConfigs;
+use ic_config::subnet_config::SubnetConfig;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::ExecutionServices;
 use ic_metrics::MetricsRegistry;
@@ -34,7 +34,7 @@ async fn query_non_existent() {
     with_test_replica_logger(|log| {
         let subnet_id = subnet_test_id(1);
         let subnet_type = SubnetType::Application;
-        let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+        let subnet_config = SubnetConfig::new(subnet_type);
         let state = initial_state(subnet_id);
         let metrics_registry = MetricsRegistry::new();
         let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());

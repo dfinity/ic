@@ -82,7 +82,7 @@ export BINARIES_DIR_FULL="$ROOT_DIR/$BINARIES_DIR"
 export CANISTERS_DIR_FULL="$ROOT_DIR/$CANISTERS_DIR"
 export DISK_DIR_FULL="$ROOT_DIR/$DISK_DIR"
 
-is_inside_container() {
+is_inside_container_or_ci() {
     [ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_URL:-}" ]
 }
 
@@ -119,7 +119,7 @@ BUILD_BINARIES_CMD=$(
     # build binaries
     mkdir -p "$BINARIES_DIR"
     $BAZEL_CMD //publish/binaries
-    bazel cquery --output=files //publish/binaries | xargs -I {} cp {} "$BINARIES_DIR"
+    bazel cquery --config=local --output=files //publish/binaries | xargs -I {} cp {} "$BINARIES_DIR"
 END
 )
 
@@ -128,7 +128,7 @@ BUILD_CANISTERS_CMD=$(
     # build canisters
     mkdir -p "$CANISTERS_DIR"
     $BAZEL_CMD //publish/canisters
-    bazel cquery --output=files //publish/canisters | xargs -I {} cp {} "$CANISTERS_DIR"
+    bazel cquery --config=local --output=files //publish/canisters | xargs -I {} cp {} "$CANISTERS_DIR"
 END
 )
 
@@ -137,15 +137,15 @@ BUILD_IMAGES_CMD=$(
     # build guestos images
     mkdir -p "${DISK_DIR}/guestos"
     $BAZEL_CMD //ic-os/guestos/envs/prod
-    bazel cquery --output=files //ic-os/guestos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/guestos"
+    bazel cquery --config=local --output=files //ic-os/guestos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/guestos"
     # build hostos images
     mkdir -p "${DISK_DIR}/hostos"
     $BAZEL_CMD //ic-os/hostos/envs/prod
-    bazel cquery --output=files //ic-os/hostos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/hostos"
+    bazel cquery --config=local --output=files //ic-os/hostos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/hostos"
     # build setupos images
     mkdir -p "${DISK_DIR}/setupos"
     $BAZEL_CMD //ic-os/setupos/envs/prod
-    bazel cquery --output=files //ic-os/setupos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/setupos"
+    bazel cquery --config=local --output=files //ic-os/setupos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/setupos"
 END
 )
 BUILD_CMD=""
@@ -154,8 +154,8 @@ if "$BUILD_BIN"; then BUILD_CMD="${BUILD_CMD}${BUILD_BINARIES_CMD}"; fi
 if "$BUILD_CAN"; then BUILD_CMD="${BUILD_CMD}${BUILD_CANISTERS_CMD}"; fi
 if "$BUILD_IMG"; then BUILD_CMD="${BUILD_CMD}${BUILD_IMAGES_CMD}"; fi
 
-if is_inside_container; then
-    echo_blue "Building already inside a container"
+if is_inside_container_or_ci; then
+    echo_blue "Building already inside a container or CI"
     eval "$BUILD_CMD"
 else
     echo_blue "Building by using a new container"

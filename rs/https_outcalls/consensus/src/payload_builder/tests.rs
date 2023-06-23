@@ -3,6 +3,7 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
+use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{
@@ -50,8 +51,6 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-
-use super::CanisterHttpPayloadBuilderImpl;
 
 /// The maximum subnet size up to which we will check the functionality of the canister http feature.
 const MAX_SUBNET_SIZE: usize = 40;
@@ -735,7 +734,7 @@ fn divergence_response_validation_test() {
 
 /// Build some test metadata and response, which is valid and can be used in
 /// different tests
-fn test_response_and_metadata(
+pub(crate) fn test_response_and_metadata(
     callback_id: u64,
 ) -> (CanisterHttpResponse, CanisterHttpResponseMetadata) {
     test_response_and_metadata_with_content(
@@ -788,7 +787,7 @@ fn test_response_and_metadata_full(
     (response, metadata)
 }
 /// Replicates the behaviour of receiving and successfully validating a share over the network
-fn add_received_shares_to_pool(
+pub(crate) fn add_received_shares_to_pool(
     pool: &mut dyn MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>,
     shares: Vec<CanisterHttpResponseShare>,
 ) {
@@ -802,12 +801,12 @@ fn add_received_shares_to_pool(
         pool.apply_changes(
             &SysTimeSource::new(),
             vec![CanisterHttpChangeAction::MoveToValidated(share)],
-        )
+        );
     }
 }
 
 /// Replicates the behaviour of adding your own share (and content) to the pool
-fn add_own_share_to_pool(
+pub(crate) fn add_own_share_to_pool(
     pool: &mut dyn MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>,
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
@@ -822,14 +821,14 @@ fn add_own_share_to_pool(
 }
 
 /// Creates a [`CanisterHttpResponseShare`] from [`CanisterHttpResponseMetadata`]
-fn metadata_to_share(
+pub(crate) fn metadata_to_share(
     from_node: u64,
     metadata: &CanisterHttpResponseMetadata,
 ) -> CanisterHttpResponseShare {
     metadata_to_share_with_signature(from_node, metadata, vec![])
 }
 
-fn metadata_to_share_with_signature(
+pub(crate) fn metadata_to_share_with_signature(
     from_node: u64,
     metadata: &CanisterHttpResponseMetadata,
     signature: Vec<u8>,
@@ -844,7 +843,7 @@ fn metadata_to_share_with_signature(
 }
 
 /// Creates a [`CanisterHttpResponseWithConsensus`] from a [`CanisterHttpResponse`] and [`CanisterHttpResponseMetadata`]
-fn response_and_metadata_to_proof(
+pub(crate) fn response_and_metadata_to_proof(
     response: &CanisterHttpResponse,
     metadata: &CanisterHttpResponseMetadata,
 ) -> CanisterHttpResponseWithConsensus {
@@ -860,7 +859,7 @@ fn response_and_metadata_to_proof(
 }
 
 /// Creates a vector of [`CanisterHttpResponseShare`]s by calling [`metadata_to_share`]
-fn metadata_to_shares(
+pub(crate) fn metadata_to_shares(
     num_nodes: usize,
     metadata: &CanisterHttpResponseMetadata,
 ) -> Vec<CanisterHttpResponseShare> {
@@ -871,7 +870,7 @@ fn metadata_to_shares(
 }
 
 /// Mock up a test node, which has the feauture enabled
-fn test_config_with_http_feature<T>(
+pub(crate) fn test_config_with_http_feature<T>(
     num_nodes: usize,
     run: impl FnOnce(CanisterHttpPayloadBuilderImpl, Arc<RwLock<CanisterHttpPoolImpl>>) -> T,
 ) -> T {
@@ -917,7 +916,7 @@ fn test_config_with_http_feature<T>(
 }
 
 /// The default validation context used in the validation tests
-fn default_validation_context() -> ValidationContext {
+pub(crate) fn default_validation_context() -> ValidationContext {
     ValidationContext {
         registry_version: RegistryVersion::new(1),
         certified_height: Height::new(0),

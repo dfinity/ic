@@ -1,7 +1,12 @@
 .benchmark-test:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-benchmark-tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_SUITE"'
+      when: always
   stage: benchmark-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
@@ -68,8 +73,6 @@ maximum-capacity-system-baseline-query:
     when: always
     paths:
       - scalability/
-  variables:
-    TESTNET: "cdmax"
   script:
     - |
       set -eExou pipefail
@@ -79,7 +82,22 @@ maximum-capacity-system-baseline-query:
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
 
-      $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=100 --increment_rps=50 --target_rps=4400 --max_rps=40000
+      # First run, no caching
+      # -------------------------------------------------
+
+      $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --use_random_payload=True --num_canisters 2 --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --datapoints 100,3500,4500,5500,7500,12000,17200,40000
+
+      TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
+      $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
+      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
+
+      # Allow the system some time to recover from previous benchmark
+      sleep 60
+
+      # Second run, with caching
+      # -------------------------------------------------
+
+      $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --num_canisters 2 --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --datapoints 100,3500,4500,5500,7500,12000,17200,40000
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -88,7 +106,9 @@ maximum-capacity-system-baseline-query:
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
 
+      # Upload results from both run (the entire folder of that GIT revision)
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
 
 # BENCHMARK SUITE maximum_capacity_system_baseline with update calls
 maximum-capacity-system-baseline-update:
@@ -124,8 +144,6 @@ maximum-capacity-large-memory-query:
     when: always
     paths:
       - scalability/
-  variables:
-    TESTNET: "cdmax"
   script:
     - |
       set -eExou pipefail
@@ -162,7 +180,7 @@ maximum-capacity-large-memory-update:
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
 
-      $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=10 --increment_rps=3 --target_rps=25 --max_rps=500
+      $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --datapoints=20,35,50,55,100,150
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -396,7 +414,12 @@ statesync-experiment:
 .benchmark-spot-test:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-benchmark-spot-tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[benchmark\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_NIGHTLY"'
+      when: always
   stage: benchmark-spot-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
@@ -576,7 +599,12 @@ xnet-nightly:
 .sns-tests:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-sns-tests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\[sns\]/'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"'
+      when: always
   stage: sns-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default

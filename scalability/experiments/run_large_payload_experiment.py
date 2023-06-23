@@ -18,6 +18,7 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("initial_kb", 250, "Initial response payload size in kb.")
 gflags.DEFINE_integer("increment_kb", 250, "Increment of response payload size in kb per iteration.")
 gflags.DEFINE_integer("max_kb", 2 * 1024, "Maximum response payload size to test.")
+gflags.DEFINE_integer("num_canisters", 1, "Number of canisters to run against.")
 
 CANISTER = "response-payload-test-canister.wasm"
 
@@ -27,10 +28,11 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
 
     def __init__(self):
         """Init with single workload generator."""
-        super().__init__(num_workload_gen=1)
-        self.install_canister(
-            self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
-        )
+        super().__init__()
+        for _ in range(FLAGS.num_canisters):
+            self.install_canister(
+                self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
+            )
 
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""
