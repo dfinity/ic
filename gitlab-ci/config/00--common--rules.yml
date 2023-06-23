@@ -68,9 +68,3 @@
 .rules-scheduled-reproducibility:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-
-.rules-pipeline-no-merge-train:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
