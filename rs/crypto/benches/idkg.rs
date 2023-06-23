@@ -2,12 +2,14 @@ use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
 use ic_base_types::NodeId;
-use ic_crypto_temp_crypto::TempCryptoComponent;
+use ic_crypto_internal_csp::Csp;
+use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     batch_sign_signed_dealings, build_params_from_previous, random_dealer_id, random_receiver_id,
     random_receiver_id_excluding, CanisterThresholdSigTestEnvironment,
 };
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::IDkgProtocol;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealings, IDkgComplaint, IDkgTranscript, IDkgTranscriptOperation,
@@ -16,7 +18,6 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
 use ic_types::crypto::AlgorithmId;
 use rand::prelude::IteratorRandom;
-use rand::thread_rng;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Formatter};
 use strum::IntoEnumIterator;
@@ -71,7 +72,12 @@ fn bench_create_dealing<M: Measurement>(
 
     group.bench_function(format!("create_dealing_{mode}"), |bench| {
         bench.iter_batched(
-            || crypto_for(random_dealer_id(&params), &env.crypto_components),
+            || {
+                crypto_for(
+                    random_dealer_id(&params, &mut ReproducibleRng::silent_new()),
+                    &env.crypto_components,
+                )
+            },
             |dealer| create_dealing(dealer, &params),
             SmallInput,
         )
@@ -89,8 +95,14 @@ fn bench_verify_dealing_public<M: Measurement>(
     group.bench_function(format!("verify_dealing_public_{mode}"), |bench| {
         bench.iter_batched(
             || {
-                let receiver = crypto_for(random_receiver_id(&params), &env.crypto_components);
-                let dealer = crypto_for(random_dealer_id(&params), &env.crypto_components);
+                let receiver = crypto_for(
+                    random_receiver_id(&params, &mut ReproducibleRng::silent_new()),
+                    &env.crypto_components,
+                );
+                let dealer = crypto_for(
+                    random_dealer_id(&params, &mut ReproducibleRng::silent_new()),
+                    &env.crypto_components,
+                );
                 let dealing = create_dealing(dealer, &params);
                 (receiver, dealing)
             },
@@ -111,8 +123,14 @@ fn bench_verify_dealing_private<M: Measurement>(
     group.bench_function(format!("verify_dealing_private_{mode}"), |bench| {
         bench.iter_batched(
             || {
-                let receiver = crypto_for(random_receiver_id(&params), &env.crypto_components);
-                let dealer = crypto_for(random_dealer_id(&params), &env.crypto_components);
+                let receiver = crypto_for(
+                    random_receiver_id(&params, &mut ReproducibleRng::silent_new()),
+                    &env.crypto_components,
+                );
+                let dealer = crypto_for(
+                    random_dealer_id(&params, &mut ReproducibleRng::silent_new()),
+                    &env.crypto_components,
+                );
                 let dealing = create_dealing(dealer, &params);
                 (receiver, dealing)
             },
@@ -131,14 +149,17 @@ fn bench_verify_initial_dealings<M: Measurement>(
     group.bench_function("verify_initial_dealings", |bench| {
         bench.iter_batched(
             || {
-                let initial_params =
-                    env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+                let initial_params = env.params_for_random_sharing(
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut ReproducibleRng::silent_new(),
+                );
                 let initial_transcript =
                     run_idkg_without_complaint(&initial_params, &env.crypto_components);
 
                 let unmasked_params = build_params_from_previous(
                     initial_params,
                     IDkgTranscriptOperation::ReshareOfMasked(initial_transcript),
+                    &mut ReproducibleRng::silent_new(),
                 );
                 let unmasked_transcript =
                     run_idkg_without_complaint(&unmasked_params, &env.crypto_components);
@@ -146,6 +167,7 @@ fn bench_verify_initial_dealings<M: Measurement>(
                 let reshare_of_unmasked_params = build_params_from_previous(
                     unmasked_params,
                     IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+                    &mut ReproducibleRng::silent_new(),
                 );
                 load_previous_transcripts_for_all_dealers(
                     &reshare_of_unmasked_params,
@@ -154,7 +176,10 @@ fn bench_verify_initial_dealings<M: Measurement>(
                 let dealings = create_dealings(&reshare_of_unmasked_params, &env.crypto_components);
 
                 let receiver = crypto_for(
-                    random_receiver_id(&reshare_of_unmasked_params),
+                    random_receiver_id(
+                        &reshare_of_unmasked_params,
+                        &mut ReproducibleRng::silent_new(),
+                    ),
                     &env.crypto_components,
                 );
                 let initial_dealings = InitialIDkgDealings::new(
@@ -183,7 +208,10 @@ fn bench_create_transcript<M: Measurement>(
     group.bench_function(format!("create_transcript_{mode}"), |bench| {
         bench.iter_batched(
             || {
-                let receiver = crypto_for(random_receiver_id(&params), &env.crypto_components);
+                let receiver = crypto_for(
+                    random_receiver_id(&params, &mut ReproducibleRng::silent_new()),
+                    &env.crypto_components,
+                );
                 let dealings = create_dealings(&params, &env.crypto_components);
                 let dealings_with_receivers_support =
                     batch_sign_signed_dealings(&params, &env.crypto_components, dealings);
@@ -209,11 +237,18 @@ fn bench_verify_transcript<M: Measurement>(
                 let dealings = create_dealings(&params, &env.crypto_components);
                 let dealings_with_receivers_support =
                     batch_sign_signed_dealings(&params, &env.crypto_components, dealings);
-                let receiver = crypto_for(random_receiver_id(&params), &env.crypto_components);
+                let receiver = crypto_for(
+                    random_receiver_id(&params, &mut ReproducibleRng::silent_new()),
+                    &env.crypto_components,
+                );
                 let transcript =
                     create_transcript(receiver, &params, &dealings_with_receivers_support);
                 let other_receiver = crypto_for(
-                    random_receiver_id_excluding(params.receivers(), receiver.get_node_id()),
+                    random_receiver_id_excluding(
+                        params.receivers(),
+                        receiver.get_node_id(),
+                        &mut ReproducibleRng::silent_new(),
+                    ),
                     &env.crypto_components,
                 );
                 (other_receiver, transcript)
@@ -238,11 +273,18 @@ fn bench_load_transcript<M: Measurement>(
                 let dealings = create_dealings(&params, &env.crypto_components);
                 let dealings_with_receivers_support =
                     batch_sign_signed_dealings(&params, &env.crypto_components, dealings);
-                let receiver = crypto_for(random_receiver_id(&params), &env.crypto_components);
+                let receiver = crypto_for(
+                    random_receiver_id(&params, &mut ReproducibleRng::silent_new()),
+                    &env.crypto_components,
+                );
                 let transcript =
                     create_transcript(receiver, &params, &dealings_with_receivers_support);
                 let other_receiver = crypto_for(
-                    random_receiver_id_excluding(params.receivers(), receiver.get_node_id()),
+                    random_receiver_id_excluding(
+                        params.receivers(),
+                        receiver.get_node_id(),
+                        &mut ReproducibleRng::silent_new(),
+                    ),
                     &env.crypto_components,
                 );
                 (other_receiver, transcript)
@@ -267,7 +309,7 @@ fn bench_retain_active_transcripts<M: Measurement>(
     let receiver_id = env
         .receivers()
         .into_iter()
-        .choose(&mut thread_rng())
+        .choose(&mut ReproducibleRng::silent_new())
         .expect("receivers cannot be empty");
     let receiver = crypto_for(receiver_id, &env.crypto_components);
     load_transcript(receiver, &key_transcript);
@@ -295,7 +337,7 @@ fn bench_retain_active_transcripts<M: Measurement>(
 }
 
 fn create_dealing(
-    dealer: &TempCryptoComponent,
+    dealer: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
     params: &IDkgTranscriptParams,
 ) -> SignedIDkgDealing {
     dealer.create_dealing(params).unwrap_or_else(|error| {
@@ -310,7 +352,7 @@ fn create_dealing(
 
 fn create_dealings(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
 ) -> BTreeMap<NodeId, SignedIDkgDealing> {
     params
         .dealers()
@@ -324,7 +366,7 @@ fn create_dealings(
 }
 
 fn verify_dealing_public(
-    receiver: &TempCryptoComponent,
+    receiver: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
     params: &IDkgTranscriptParams,
     signed_dealing: &SignedIDkgDealing,
 ) {
@@ -342,7 +384,7 @@ fn verify_dealing_public(
 }
 
 fn verify_dealing_private(
-    receiver: &TempCryptoComponent,
+    receiver: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
     params: &IDkgTranscriptParams,
     signed_dealing: &SignedIDkgDealing,
 ) {
@@ -360,7 +402,7 @@ fn verify_dealing_private(
 }
 
 fn verify_initial_dealings(
-    receiver: &TempCryptoComponent,
+    receiver: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
     params: &IDkgTranscriptParams,
     initial_dealings: &InitialIDkgDealings,
 ) {
@@ -378,7 +420,7 @@ fn verify_initial_dealings(
 }
 
 fn create_transcript(
-    receiver: &TempCryptoComponent,
+    receiver: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
     params: &IDkgTranscriptParams,
     dealings: &BatchSignedIDkgDealings,
 ) -> IDkgTranscript {
@@ -396,10 +438,13 @@ fn create_transcript(
 
 fn run_idkg_without_complaint(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
 ) -> IDkgTranscript {
     load_previous_transcripts_for_all_dealers(params, crypto_components);
-    let receiver = crypto_for(random_receiver_id(params), crypto_components);
+    let receiver = crypto_for(
+        random_receiver_id(params, &mut ReproducibleRng::silent_new()),
+        crypto_components,
+    );
     let dealings = create_dealings(params, crypto_components);
     let dealings_with_receivers_support =
         batch_sign_signed_dealings(params, crypto_components, dealings);
@@ -408,7 +453,7 @@ fn run_idkg_without_complaint(
 
 fn load_previous_transcripts_for_all_dealers(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
 ) {
     let mut transcripts_to_load = Vec::with_capacity(2);
     match params.operation_type() {
@@ -437,7 +482,7 @@ fn load_previous_transcripts_for_all_dealers(
 }
 
 fn verify_transcript(
-    receiver: &TempCryptoComponent,
+    receiver: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
     params: &IDkgTranscriptParams,
     transcript: &IDkgTranscript,
 ) {
@@ -454,7 +499,7 @@ fn verify_transcript(
 }
 
 fn load_transcript(
-    receiver: &TempCryptoComponent,
+    receiver: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
     transcript: &IDkgTranscript,
 ) -> Vec<IDkgComplaint> {
     receiver
@@ -468,7 +513,10 @@ fn load_transcript(
         })
 }
 
-fn load_pre_signature_quadruple(receiver: &TempCryptoComponent, quadruple: &PreSignatureQuadruple) {
+fn load_pre_signature_quadruple(
+    receiver: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
+    quadruple: &PreSignatureQuadruple,
+) {
     assert_eq!(
         load_transcript(receiver, quadruple.kappa_unmasked()),
         vec![]
@@ -485,7 +533,7 @@ fn load_pre_signature_quadruple(receiver: &TempCryptoComponent, quadruple: &PreS
 }
 
 fn retain_active_transcripts(
-    receiver: &TempCryptoComponent,
+    receiver: &TempCryptoComponentGeneric<Csp, ReproducibleRng>,
     active_transcripts: &HashSet<IDkgTranscript>,
 ) {
     receiver
@@ -500,13 +548,17 @@ fn retain_active_transcripts(
 }
 
 fn generate_key_transcript(env: &CanisterThresholdSigTestEnvironment) -> IDkgTranscript {
-    let masked_key_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let masked_key_params = env.params_for_random_sharing(
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        &mut ReproducibleRng::silent_new(),
+    );
     let masked_key_transcript =
         run_idkg_without_complaint(&masked_key_params, &env.crypto_components);
 
     let unmasked_key_params = build_params_from_previous(
         masked_key_params,
         IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+        &mut ReproducibleRng::silent_new(),
     );
 
     run_idkg_without_complaint(&unmasked_key_params, &env.crypto_components)
@@ -516,18 +568,24 @@ fn generate_pre_sig_quadruple(
     env: &CanisterThresholdSigTestEnvironment,
     key_transcript: IDkgTranscript,
 ) -> PreSignatureQuadruple {
-    let lambda_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let lambda_params = env.params_for_random_sharing(
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        &mut ReproducibleRng::silent_new(),
+    );
     let lambda_transcript = run_idkg_without_complaint(&lambda_params, &env.crypto_components);
 
     let kappa_transcript = {
-        let masked_kappa_params =
-            env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let masked_kappa_params = env.params_for_random_sharing(
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut ReproducibleRng::silent_new(),
+        );
         let masked_kappa_transcript =
             run_idkg_without_complaint(&masked_kappa_params, &env.crypto_components);
 
         let unmasked_kappa_params = build_params_from_previous(
             masked_kappa_params,
             IDkgTranscriptOperation::ReshareOfMasked(masked_kappa_transcript),
+            &mut ReproducibleRng::silent_new(),
         );
         run_idkg_without_complaint(&unmasked_kappa_params, &env.crypto_components)
     };
@@ -539,6 +597,7 @@ fn generate_pre_sig_quadruple(
                 kappa_transcript.clone(),
                 lambda_transcript.clone(),
             ),
+            &mut ReproducibleRng::silent_new(),
         );
 
         run_idkg_without_complaint(&kappa_times_lambda_params, &env.crypto_components)
@@ -548,6 +607,7 @@ fn generate_pre_sig_quadruple(
         let key_times_lambda_params = build_params_from_previous(
             lambda_params,
             IDkgTranscriptOperation::UnmaskedTimesMasked(key_transcript, lambda_transcript.clone()),
+            &mut ReproducibleRng::silent_new(),
         );
 
         run_idkg_without_complaint(&key_times_lambda_params, &env.crypto_components)
@@ -565,11 +625,15 @@ fn generate_pre_sig_quadruple(
 fn setup_reshare_of_masked_params(
     env: &CanisterThresholdSigTestEnvironment,
 ) -> IDkgTranscriptParams {
-    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let params = env.params_for_random_sharing(
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        &mut ReproducibleRng::silent_new(),
+    );
     let masked_transcript = run_idkg_without_complaint(&params, &env.crypto_components);
     let reshare_params = build_params_from_previous(
         params,
         IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
+        &mut ReproducibleRng::silent_new(),
     );
     load_previous_transcripts_for_all_dealers(&reshare_params, &env.crypto_components);
     reshare_params
@@ -578,17 +642,22 @@ fn setup_reshare_of_masked_params(
 fn setup_reshare_of_unmasked_params(
     env: &CanisterThresholdSigTestEnvironment,
 ) -> IDkgTranscriptParams {
-    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let params = env.params_for_random_sharing(
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        &mut ReproducibleRng::silent_new(),
+    );
     let masked_transcript = run_idkg_without_complaint(&params, &env.crypto_components);
     let unmasked_params = build_params_from_previous(
         params,
         IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
+        &mut ReproducibleRng::silent_new(),
     );
     load_previous_transcripts_for_all_dealers(&unmasked_params, &env.crypto_components);
     let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.crypto_components);
     let unmasked_reshare_params = build_params_from_previous(
         unmasked_params,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+        &mut ReproducibleRng::silent_new(),
     );
     load_previous_transcripts_for_all_dealers(&unmasked_reshare_params, &env.crypto_components);
     unmasked_reshare_params
@@ -597,13 +666,17 @@ fn setup_reshare_of_unmasked_params(
 fn setup_unmasked_times_masked_params(
     env: &CanisterThresholdSigTestEnvironment,
 ) -> IDkgTranscriptParams {
-    let masked_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let masked_params = env.params_for_random_sharing(
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        &mut ReproducibleRng::silent_new(),
+    );
     let masked_random_transcript =
         run_idkg_without_complaint(&masked_params, &env.crypto_components);
 
     let unmasked_params = build_params_from_previous(
         masked_params,
         IDkgTranscriptOperation::ReshareOfMasked(masked_random_transcript.clone()),
+        &mut ReproducibleRng::silent_new(),
     );
     load_previous_transcripts_for_all_dealers(&unmasked_params, &env.crypto_components);
     let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.crypto_components);
@@ -611,6 +684,7 @@ fn setup_unmasked_times_masked_params(
     let product_params = build_params_from_previous(
         unmasked_params,
         IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_random_transcript),
+        &mut ReproducibleRng::silent_new(),
     );
     load_previous_transcripts_for_all_dealers(&product_params, &env.crypto_components);
     product_params
@@ -634,7 +708,10 @@ impl Default for TestCase {
 
 impl TestCase {
     fn new_test_environment(&self) -> CanisterThresholdSigTestEnvironment {
-        CanisterThresholdSigTestEnvironment::new(self.num_of_nodes)
+        CanisterThresholdSigTestEnvironment::new(
+            self.num_of_nodes,
+            &mut ReproducibleRng::silent_new(),
+        )
     }
 
     fn name(&self) -> String {
@@ -666,7 +743,10 @@ enum IDkgMode {
 impl IDkgMode {
     fn setup_params(&self, env: &CanisterThresholdSigTestEnvironment) -> IDkgTranscriptParams {
         match self {
-            IDkgMode::Random => env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1),
+            IDkgMode::Random => env.params_for_random_sharing(
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                &mut ReproducibleRng::silent_new(),
+            ),
             IDkgMode::ReshareOfMasked => setup_reshare_of_masked_params(env),
             IDkgMode::ReshareOfUnmasked => setup_reshare_of_unmasked_params(env),
             IDkgMode::UnmaskedTimesMasked => setup_unmasked_times_masked_params(env),

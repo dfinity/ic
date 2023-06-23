@@ -2,7 +2,8 @@ use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
 use ic_base_types::{NodeId, PrincipalId};
-use ic_crypto_temp_crypto::TempCryptoComponent;
+use ic_crypto_internal_csp::Csp;
+use ic_crypto_temp_crypto::TempCryptoComponentGeneric;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     generate_key_transcript, generate_tecdsa_protocol_inputs, load_input_transcripts,
@@ -17,7 +18,7 @@ use ic_types::crypto::canister_threshold_sig::{
 use ic_types::crypto::AlgorithmId;
 use ic_types::Randomness;
 use rand::prelude::IteratorRandom;
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, CryptoRng, Rng};
 use std::collections::BTreeMap;
 
 criterion_main!(benches);
@@ -54,8 +55,9 @@ fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
 
 fn bench_sign_share<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, test_case: &TestCase) {
     let mut rng = thread_rng();
-    let env = test_case.new_test_environment();
-    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+    let env = test_case.new_test_environment(&mut rng);
+    let key_transcript =
+        generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
     let (_signer_index, signer_id) = key_transcript
         .receivers
         .iter()
@@ -74,6 +76,7 @@ fn bench_sign_share<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, test_case
                     seed,
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
                 );
                 load_input_transcripts(&env.crypto_components, signer_id, &inputs);
                 inputs
@@ -84,8 +87,8 @@ fn bench_sign_share<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, test_case
     });
 }
 
-fn sign_share(
-    signer: &TempCryptoComponent,
+fn sign_share<R: Rng + CryptoRng + Sync + Send + 'static>(
+    signer: &TempCryptoComponentGeneric<Csp, R>,
     inputs: &ThresholdEcdsaSigInputs,
 ) -> ThresholdEcdsaSigShare {
     signer.sign_share(inputs).unwrap_or_else(|error| {
@@ -100,8 +103,9 @@ fn sign_share(
 
 fn bench_verify_sig_share<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, test_case: &TestCase) {
     let mut rng = thread_rng();
-    let env = test_case.new_test_environment();
-    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+    let env = test_case.new_test_environment(&mut rng);
+    let key_transcript =
+        generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
 
     group.bench_function("verify_sig_share", |bench| {
         bench.iter_batched_ref(
@@ -114,13 +118,16 @@ fn bench_verify_sig_share<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, tes
                     seed,
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
                 );
-                let signer_id = random_receiver_for_inputs(&inputs);
+                let signer_id = random_receiver_for_inputs(&inputs, &mut rng);
                 let signer = crypto_for(signer_id, &env.crypto_components);
                 load_input_transcripts(&env.crypto_components, signer_id, &inputs);
                 let sig_share = sign_share(signer, &inputs);
-                let verifier =
-                    crypto_for(random_receiver_for_inputs(&inputs), &env.crypto_components);
+                let verifier = crypto_for(
+                    random_receiver_for_inputs(&inputs, &mut rng),
+                    &env.crypto_components,
+                );
                 (verifier, signer_id, inputs, sig_share)
             },
             |(verifier, signer_id, inputs, sig_share)| {
@@ -131,8 +138,8 @@ fn bench_verify_sig_share<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, tes
     });
 }
 
-fn verify_sig_share(
-    verifier: &TempCryptoComponent,
+fn verify_sig_share<R: Rng + CryptoRng + Sync + Send + 'static>(
+    verifier: &TempCryptoComponentGeneric<Csp, R>,
     signer: NodeId,
     inputs: &ThresholdEcdsaSigInputs,
     share: &ThresholdEcdsaSigShare,
@@ -154,9 +161,11 @@ fn bench_combine_sig_shares<M: Measurement>(
     test_case: &TestCase,
 ) {
     let mut rng = thread_rng();
-    let env = test_case.new_test_environment();
-    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
-    let combiner = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers);
+    let env = test_case.new_test_environment(&mut rng);
+    let key_transcript =
+        generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
+    let combiner =
+        random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, &mut rng);
 
     group.bench_function("combine_sig_shares", |bench| {
         bench.iter_batched_ref(
@@ -169,6 +178,7 @@ fn bench_combine_sig_shares<M: Measurement>(
                     seed,
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
                 );
                 let sig_shares = sig_share_from_each_receiver(&env, &inputs);
                 (inputs, sig_shares)
@@ -179,8 +189,8 @@ fn bench_combine_sig_shares<M: Measurement>(
     });
 }
 
-fn combine_sig_shares(
-    combiner: &TempCryptoComponent,
+fn combine_sig_shares<R: Rng + CryptoRng + Sync + Send + 'static>(
+    combiner: &TempCryptoComponentGeneric<Csp, R>,
     inputs: &ThresholdEcdsaSigInputs,
     shares: &BTreeMap<NodeId, ThresholdEcdsaSigShare>,
 ) -> ThresholdEcdsaCombinedSignature {
@@ -200,10 +210,13 @@ fn bench_verify_combined_sig<M: Measurement>(
     test_case: &TestCase,
 ) {
     let mut rng = thread_rng();
-    let env = test_case.new_test_environment();
-    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
-    let combiner = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers);
-    let verifier = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers);
+    let env = test_case.new_test_environment(&mut rng);
+    let key_transcript =
+        generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
+    let combiner =
+        random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, &mut rng);
+    let verifier =
+        random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, &mut rng);
 
     group.bench_function("verify_combined_sig", |bench| {
         bench.iter_batched_ref(
@@ -216,6 +229,7 @@ fn bench_verify_combined_sig<M: Measurement>(
                     seed,
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
                 );
                 let sig_shares = sig_share_from_each_receiver(&env, &inputs);
                 let signature = combine_sig_shares(&combiner, &inputs, &sig_shares);
@@ -227,8 +241,8 @@ fn bench_verify_combined_sig<M: Measurement>(
     });
 }
 
-fn verify_combined_sig(
-    verifier: &TempCryptoComponent,
+fn verify_combined_sig<R: Rng + CryptoRng + Sync + Send + 'static>(
+    verifier: &TempCryptoComponentGeneric<Csp, R>,
     inputs: &ThresholdEcdsaSigInputs,
     signature: &ThresholdEcdsaCombinedSignature,
 ) {
@@ -272,8 +286,11 @@ impl Default for TestCase {
 }
 
 impl TestCase {
-    fn new_test_environment(&self) -> CanisterThresholdSigTestEnvironment {
-        CanisterThresholdSigTestEnvironment::new(self.num_of_nodes)
+    fn new_test_environment<R: Rng + CryptoRng>(
+        &self,
+        rng: &mut R,
+    ) -> CanisterThresholdSigTestEnvironment {
+        CanisterThresholdSigTestEnvironment::new(self.num_of_nodes, rng)
     }
 
     fn name(&self) -> String {
