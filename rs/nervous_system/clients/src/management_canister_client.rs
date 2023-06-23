@@ -26,7 +26,7 @@ pub trait ManagementCanisterClient {
     async fn canister_status(
         &self,
         canister_id_record: CanisterIdRecord,
-    ) -> Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)>;
+    ) -> Result<CanisterStatusResultFromManagementCanister, (i32, String)>;
 
     /// A call to the `update_settings` management canister endpoint.
     async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (i32, String)>;
@@ -61,7 +61,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
     async fn canister_status(
         &self,
         canister_id_record: CanisterIdRecord,
-    ) -> Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)> {
+    ) -> Result<CanisterStatusResultFromManagementCanister, (i32, String)> {
         let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
             let args = Encode!(&canister_id_record).unwrap_or_default();
             ProxiedCanisterCallsTracker::start_tracking(
@@ -73,7 +73,7 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
             )
         });
 
-        canister_status(canister_id_record).await
+        canister_status::<Rt>(canister_id_record).await
     }
 
     async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (i32, String)> {
@@ -132,7 +132,7 @@ pub enum MockManagementCanisterClientCall {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MockManagementCanisterClientReply {
-    CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)>),
+    CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),
     UpdateSettings(Result<(), (i32, String)>),
 }
 
@@ -141,7 +141,7 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
     async fn canister_status(
         &self,
         canister_id_record: CanisterIdRecord,
-    ) -> Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)> {
+    ) -> Result<CanisterStatusResultFromManagementCanister, (i32, String)> {
         self.calls
             .lock()
             .unwrap()

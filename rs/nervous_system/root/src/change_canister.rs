@@ -1,6 +1,6 @@
 use crate::LOG_PREFIX;
 use candid::{CandidType, Deserialize, Encode};
-use dfn_core::api::{call, CanisterId};
+use dfn_core::api::CanisterId;
 use ic_crypto_sha::Sha256;
 use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, IC_00};
 use ic_nervous_system_clients::{
@@ -10,6 +10,7 @@ use ic_nervous_system_clients::{
     },
 };
 use ic_nervous_system_common::MethodAuthzChange;
+use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
 
 /// The payload to a proposal to upgrade a canister.
@@ -207,7 +208,10 @@ pub struct StopOrStartCanisterProposal {
     pub action: CanisterAction,
 }
 
-pub async fn change_canister(proposal: ChangeCanisterProposal) {
+pub async fn change_canister<Rt>(proposal: ChangeCanisterProposal)
+where
+    Rt: Runtime,
+{
     assert!(
         proposal.authz_changes.is_empty(),
         "authz_changes is obsolete and must be empty. proposal: {:?}",
@@ -218,7 +222,7 @@ pub async fn change_canister(proposal: ChangeCanisterProposal) {
     let stop_before_installing = proposal.stop_before_installing;
 
     if stop_before_installing {
-        stop_canister(canister_id).await;
+        stop_canister::<Rt>(canister_id).await;
     }
 
     // Ship code to the canister.
@@ -236,7 +240,7 @@ pub async fn change_canister(proposal: ChangeCanisterProposal) {
 
     // Restart the canister, if needed
     if stop_before_installing {
-        start_canister(canister_id).await;
+        start_canister::<Rt>(canister_id).await;
     }
 
     // Check the result of the install_code
@@ -266,13 +270,15 @@ pub async fn install_code(proposal: ChangeCanisterProposal) -> ic_cdk::api::call
     .await
 }
 
-pub async fn start_canister(canister_id: CanisterId) {
+pub async fn start_canister<Rt>(canister_id: CanisterId)
+where
+    Rt: Runtime,
+{
     // start_canister returns the candid empty type, which cannot be parsed using
     // dfn_candid::candid
-    let res: Result<(), (Option<i32>, String)> = call(
+    let res: Result<(), (i32, String)> = Rt::call(
         CanisterId::ic_00(),
         "start_canister",
-        dfn_candid::candid_multi_arity,
         (CanisterIdRecord::from(canister_id),),
     )
     .await;
@@ -286,13 +292,15 @@ pub async fn start_canister(canister_id: CanisterId) {
 ///
 /// Warning: there's no guarantee that this ever finishes!
 /// TODO(IC-1099)
-pub async fn stop_canister(canister_id: CanisterId) {
+pub async fn stop_canister<Rt>(canister_id: CanisterId)
+where
+    Rt: Runtime,
+{
     // stop_canister returns the candid empty type, which cannot be parsed using
     // dfn_candid::candid
-    let res: Result<(), (Option<i32>, String)> = call(
+    let res: Result<(), (i32, String)> = Rt::call(
         CanisterId::ic_00(),
         "stop_canister",
-        dfn_candid::candid_multi_arity,
         (CanisterIdRecord::from(canister_id),),
     )
     .await;
@@ -302,7 +310,7 @@ pub async fn stop_canister(canister_id: CanisterId) {
 
     loop {
         let status: CanisterStatusResultFromManagementCanister =
-            canister_status(CanisterIdRecord::from(canister_id))
+            canister_status::<Rt>(CanisterIdRecord::from(canister_id))
                 .await
                 .unwrap();
 

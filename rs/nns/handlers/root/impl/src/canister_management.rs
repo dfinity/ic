@@ -11,6 +11,7 @@ use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracke
 use ic_nervous_system_root::change_canister::{
     start_canister, stop_canister, AddCanisterProposal, CanisterAction, StopOrStartCanisterProposal,
 };
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
     registry::{encode_or_panic, get_value, mutate_registry},
     types::CallCanisterProposal,
@@ -165,8 +166,8 @@ async fn try_to_create_and_install_canister(
 // Stops or starts any NNS canister.
 pub async fn stop_or_start_nns_canister(proposal: StopOrStartCanisterProposal) {
     match proposal.action {
-        CanisterAction::Start => start_canister(proposal.canister_id).await,
-        CanisterAction::Stop => stop_canister(proposal.canister_id).await,
+        CanisterAction::Start => start_canister::<DfnRuntime>(proposal.canister_id).await,
+        CanisterAction::Stop => stop_canister::<DfnRuntime>(proposal.canister_id).await,
     }
 }
 

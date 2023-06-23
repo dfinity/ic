@@ -1,8 +1,8 @@
 use crate::canister_id_record::CanisterIdRecord;
 use candid::{CandidType, Deserialize};
-use dfn_core::api::call;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_ic00_types::IC_00;
+use ic_nervous_system_runtime::Runtime;
 use num_traits::cast::ToPrimitive;
 
 impl TryFrom<PrincipalId> for CanisterIdRecord {
@@ -127,16 +127,15 @@ impl CanisterStatusResultFromManagementCanister {
     }
 }
 
-pub async fn canister_status(
+pub async fn canister_status<Rt>(
     canister_id_record: CanisterIdRecord,
-) -> Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)> {
-    call(
-        IC_00,
-        "canister_status",
-        dfn_candid::candid::<CanisterStatusResultFromManagementCanister, (CanisterIdRecord,)>,
-        (canister_id_record,),
-    )
-    .await
+) -> Result<CanisterStatusResultFromManagementCanister, (i32, String)>
+where
+    Rt: Runtime,
+{
+    Rt::call(IC_00, "canister_status", (canister_id_record,))
+        .await
+        .map(|response: (CanisterStatusResultFromManagementCanister,)| response.0)
 }
 
 /// Copy-and-paste of types from ic00_types, without deprecated fields.

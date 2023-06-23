@@ -27,6 +27,7 @@ ic-ic00-types = { path = "../../types/ic00_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
+ic-nervous-system-runtime = { path = "../runtime" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 ic-nns-constants = { path = "../../nns/constants" }
@@ -39,7 +40,8 @@ serde_json = "1.0.40"
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!
-build-info-build = { version = "0.0.26", default-features = false, features = [] }
+build-info-build = { version = "0.0.26", default-features = false, features = [
+] }
 
 [dev-dependencies]
 ic-nns-governance = { path = "../../nns/governance" }

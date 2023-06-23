@@ -1294,7 +1294,7 @@ mod tests {
 
         let management_canister_client = MockManagementCanisterClient::new(vec![
             MockManagementCanisterClientReply::CanisterStatus(Err((
-                None,
+                0,
                 "You don't control that canister.".to_string(),
             ))),
         ]);
@@ -2947,7 +2947,7 @@ mod tests {
                 ]),
             )),
             MockManagementCanisterClientReply::CanisterStatus(Err((
-                Some(0),
+                0,
                 "Error calling status on dapp".to_string(),
             ))),
             MockManagementCanisterClientReply::CanisterStatus(Ok(
@@ -3183,7 +3183,7 @@ mod tests {
                 ]),
             )),
             MockManagementCanisterClientReply::CanisterStatus(Err((
-                Some(0),
+                0,
                 "Error calling status on dapp".to_string(),
             ))),
             MockManagementCanisterClientReply::CanisterStatus(Ok(

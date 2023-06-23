@@ -47,6 +47,7 @@ ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
+ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }
 lazy_static = "1.4.0"

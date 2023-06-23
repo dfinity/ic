@@ -10,6 +10,7 @@ use ic_nervous_system_root::{
     change_canister::{change_canister, ChangeCanisterProposal},
     LOG_PREFIX,
 };
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::registry::{
@@ -439,7 +440,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
             println!("{}", message);
             return Err(message);
         }
-        change_canister(payload).await;
+        change_canister::<DfnRuntime>(payload).await;
         Ok(())
     } else if proposal.is_byzantine_majority_no() {
         PROPOSALS.with(|proposals| proposals.borrow_mut().remove(&proposer));

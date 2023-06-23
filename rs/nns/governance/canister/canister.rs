@@ -24,6 +24,7 @@ use ic_nervous_system_common::{
     ledger::IcpLedgerCanister,
     MethodAuthzChange,
 };
+use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger, check_caller_is_root},
     pb::v1::{CanisterAuthzInfo, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
@@ -267,7 +268,7 @@ fn canister_init_(init_payload: GovernanceProto) {
             init_payload,
             Box::new(CanisterEnv::new()),
             Box::new(IcpLedgerCanister::new(LEDGER_CANISTER_ID)),
-            Box::new(CMCCanister::new()),
+            Box::new(CMCCanister::<DfnRuntime>::new()),
         ));
     }
     governance()
