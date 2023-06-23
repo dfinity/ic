@@ -1,98 +1,26 @@
-build-determinism-binaries:
+build-determinism:
   extends:
     - .bazel-build-k8s
     - .bazel-rules-pipeline
-  stage: build-determinism-test
+  stage: test
   needs:
     - job: bazel-test-all
       artifacts: false
     - job: build-ic
       artifacts: false
-  variables:
-    PATH0: "release"
-    PATH1: "build-ic/release"
-  script:
-    - |
-      set -eExuo pipefail
-      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
-
-build-determinism-canisters:
-  extends:
-    - .bazel-build-k8s
-    - .bazel-rules-pipeline
-  stage: build-determinism-test
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-    - job: build-ic
-      artifacts: false
-  variables:
-    PATH0: "canisters"
-    PATH1: "build-ic/canisters"
-  script:
-    - |
-      set -eExuo pipefail
-      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
-
-build-determinism-guest-update-img:
-  extends:
-    - .bazel-build-k8s
-    - .bazel-rules-pipeline
-  stage: build-determinism-test
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-    - job: build-ic
-      artifacts: false
-  artifacts:
-    paths:
-      - artifacts
-  variables:
-    PATH0: "guest-os/update-img"
-    PATH1: "build-ic/guest-os"
-  script:
-    - |
-      set -eExuo pipefail
-      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
-
-build-determinism-host-update-img:
-  extends:
-    - .bazel-build-k8s
-    - .bazel-rules-pipeline
-  stage: build-determinism-test
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-    - job: build-ic
-      artifacts: false
-  artifacts:
-    paths:
-      - artifacts
-  variables:
-    PATH0: "host-os/update-img"
-    PATH1: "build-ic/host-os"
-  script:
-    - |
-      set -eExuo pipefail
-      ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
-
-build-determinism-setupos-img:
-  extends:
-    - .bazel-build-k8s
-    - .bazel-rules-pipeline
-  stage: build-determinism-test
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-    - job: build-ic
-      artifacts: false
-  artifacts:
-    paths:
-      - artifacts
-  variables:
-    PATH0: "setup-os/disk-img"
-    PATH1: "build-ic/setup-os"
-    SETUPOS_FLAG: "true"
+  parallel:
+    matrix:
+      - PATH0: "release"
+        PATH1: "build-ic/release"
+      - PATH0: "canisters"
+        PATH1: "build-ic/canisters"
+      - PATH0: "guest-os/update-img"
+        PATH1: "build-ic/guest-os"
+      - PATH0: "host-os/update-img"
+        PATH1: "build-ic/host-os"
+      - PATH0: "setup-os/disk-img"
+        PATH1: "build-ic/setup-os"
+        SETUPOS_FLAG: "true"
   script:
     - |
       set -eExuo pipefail
