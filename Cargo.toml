@@ -192,6 +192,8 @@ members = [
   "rs/orchestrator/registry_replicator",
   "rs/p2p",
   "rs/p2p/peer_manager",
+  "rs/p2p/quic_transport",
+  "rs/p2p/state_sync_manager",
   "rs/p2p/experimental/prototype",
   "rs/replica/setup_ic_network",
   "rs/phantom_newtype",
