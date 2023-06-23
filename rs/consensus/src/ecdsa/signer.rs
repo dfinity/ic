@@ -618,6 +618,7 @@ mod tests {
         generate_key_transcript, generate_tecdsa_protocol_inputs, load_input_transcripts,
         run_tecdsa_protocol, CanisterThresholdSigTestEnvironment,
     };
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::time_source::{SysTimeSource, TimeSource};
     use ic_test_utilities::types::ids::{subnet_test_id, user_test_id, NODE_1, NODE_2, NODE_3};
@@ -832,11 +833,12 @@ mod tests {
 
     #[test]
     fn test_crypto_verify_signature_share() {
+        let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
-                let env = CanisterThresholdSigTestEnvironment::new(1);
+                let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
                 let key_transcript =
-                    generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+                    generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
                 let derivation_path = ExtendedDerivationPath {
                     caller: user_test_id(1).get(),
                     derivation_path: vec![],
@@ -848,6 +850,7 @@ mod tests {
                     Randomness::from([0; 32]),
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
                 );
                 let crypto = env.crypto_components.into_values().next().unwrap();
                 let (_, signer) = create_signer_dependencies_with_crypto(
@@ -1194,14 +1197,15 @@ mod tests {
     // Tests aggregating signature shares into a complete signature
     #[test]
     fn test_ecdsa_get_completed_signature() {
+        let mut rng = reproducible_rng();
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, _) = create_signer_dependencies(pool_config, logger.clone());
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let req_id = create_request_id(&mut uid_generator, Height::from(10));
-                let env = CanisterThresholdSigTestEnvironment::new(3);
+                let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
                 let key_transcript =
-                    generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+                    generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
                 let derivation_path = ExtendedDerivationPath {
                     caller: user_test_id(1).get(),
                     derivation_path: vec![],
@@ -1213,6 +1217,7 @@ mod tests {
                     Randomness::from([0; 32]),
                     &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
                 );
 
                 // Set up the transcript creation request
@@ -1270,7 +1275,7 @@ mod tests {
                 // Signature completion should succeed now.
                 let r1 = sig_builder.get_completed_signature(&req_id);
                 // Compare to combined signature returned by crypto environment
-                let r2 = run_tecdsa_protocol(&env, &sig_inputs);
+                let r2 = run_tecdsa_protocol(&env, &sig_inputs, &mut rng);
                 assert_matches!(r1, Some(s) if s == r2);
 
                 // If resolving the transcript refs fails, no signature should be completed

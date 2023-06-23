@@ -1,8 +1,10 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
+use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, NodeIndex, Seed};
-use ic_crypto_temp_crypto::TempCryptoComponent;
+use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{
     BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
@@ -33,12 +35,13 @@ use std::sync::Arc;
 
 pub mod dummy_values;
 
-pub fn create_params_for_dealers(
+pub fn create_params_for_dealers<R: RngCore + CryptoRng>(
     dealer_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,
+    rng: &mut R,
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
-        random_transcript_id(),
+        random_transcript_id(rng),
         dealer_set.clone(),
         dealer_set.clone(),
         RegistryVersion::from(0),
@@ -48,9 +51,9 @@ pub fn create_params_for_dealers(
     .expect("Should be able to create IDKG params")
 }
 
-pub fn mock_unmasked_transcript_type() -> IDkgTranscriptType {
+pub fn mock_unmasked_transcript_type<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptType {
     IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        random_transcript_id(),
+        random_transcript_id(rng),
     ))
 }
 
@@ -58,9 +61,10 @@ pub fn mock_masked_transcript_type() -> IDkgTranscriptType {
     IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random)
 }
 
-pub fn mock_transcript(
+pub fn mock_transcript<R: RngCore + CryptoRng>(
     receivers: Option<BTreeSet<NodeId>>,
     transcript_type: IDkgTranscriptType,
+    rng: &mut R,
 ) -> IDkgTranscript {
     let receivers = match receivers {
         Some(receivers) => receivers,
@@ -74,7 +78,7 @@ pub fn mock_transcript(
     };
 
     IDkgTranscript {
-        transcript_id: random_transcript_id(),
+        transcript_id: random_transcript_id(rng),
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(314),
         verified_dealings: BTreeMap::new(),
@@ -86,7 +90,7 @@ pub fn mock_transcript(
 
 pub fn create_signed_dealing(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     dealer_id: NodeId,
 ) -> SignedIDkgDealing {
     let dealer = crypto_for(dealer_id, crypto_components);
@@ -101,7 +105,7 @@ pub fn create_signed_dealing(
 
 pub fn create_and_verify_signed_dealing(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     dealer_id: NodeId,
 ) -> SignedIDkgDealing {
     let signed_dealing = create_signed_dealing(params, crypto_components, dealer_id);
@@ -178,7 +182,7 @@ pub fn swap_two_dealings_in_transcript(
 
 pub fn create_and_verify_signed_dealings(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
 ) -> BTreeMap<NodeId, SignedIDkgDealing> {
     params
         .dealers()
@@ -193,7 +197,7 @@ pub fn create_and_verify_signed_dealings(
 
 pub fn batch_sign_signed_dealing(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     signed_dealing: SignedIDkgDealing,
 ) -> BatchSignedIDkgDealing {
     let signers = params.receivers().get();
@@ -207,7 +211,7 @@ pub fn batch_sign_signed_dealing(
 
 pub fn batch_signature_from_signers(
     registry_version: RegistryVersion,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     signed_dealing: SignedIDkgDealing,
     signers: &BTreeSet<NodeId>,
 ) -> BatchSignedIDkgDealing {
@@ -230,7 +234,7 @@ pub fn batch_signature_from_signers(
 
 pub fn batch_sign_signed_dealings(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     signed_dealings: BTreeMap<NodeId, SignedIDkgDealing>,
 ) -> BatchSignedIDkgDealings {
     signed_dealings
@@ -254,7 +258,7 @@ pub fn add_support_from_all_receivers(
 
 pub fn create_transcript(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     dealings: &BatchSignedIDkgDealings,
     creator_id: NodeId,
 ) -> IDkgTranscript {
@@ -270,7 +274,7 @@ pub fn create_transcript(
 
 pub fn load_transcript(
     transcript: &IDkgTranscript,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     loader_id: NodeId,
 ) {
     crypto_for(loader_id, crypto_components)
@@ -281,7 +285,7 @@ pub fn load_transcript(
 }
 
 pub fn load_input_transcripts(
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     loader_id: NodeId,
     inputs: &ThresholdEcdsaSigInputs,
 ) {
@@ -310,7 +314,7 @@ pub fn load_input_transcripts(
 
 pub fn load_previous_transcripts_and_create_signed_dealing(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     loader_id: NodeId,
 ) -> SignedIDkgDealing {
     match params.operation_type() {
@@ -330,7 +334,7 @@ pub fn load_previous_transcripts_and_create_signed_dealing(
 
 pub fn load_previous_transcripts_and_create_signed_dealings(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
 ) -> BTreeMap<NodeId, SignedIDkgDealing> {
     params
         .dealers()
@@ -350,9 +354,10 @@ pub fn load_previous_transcripts_and_create_signed_dealings(
 /// Load previous transcripts on each node (if resharing or multiplying),
 /// create all dealings, multi-sign them, and build a transcript from those
 /// multi-signed dealings.
-pub fn run_idkg_and_create_and_verify_transcript(
+pub fn run_idkg_and_create_and_verify_transcript<R: RngCore + CryptoRng>(
     params: &IDkgTranscriptParams,
-    crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
+    crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
+    rng: &mut R,
 ) -> IDkgTranscript {
     let dealings = load_previous_transcripts_and_create_signed_dealings(params, crypto_components);
     let multisigned_dealings = batch_sign_signed_dealings(params, crypto_components, dealings);
@@ -363,50 +368,63 @@ pub fn run_idkg_and_create_and_verify_transcript(
         &multisigned_dealings,
         *transcript_creator,
     );
-    assert!(crypto_for(random_receiver_id(params), crypto_components)
-        .verify_transcript(params, &transcript)
-        .is_ok());
+    assert!(
+        crypto_for(random_receiver_id(params, rng), crypto_components)
+            .verify_transcript(params, &transcript)
+            .is_ok()
+    );
     transcript
 }
 
-pub fn generate_key_transcript(
+pub fn generate_key_transcript<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     algorithm_id: AlgorithmId,
+    rng: &mut R,
 ) -> IDkgTranscript {
-    let masked_key_params = env.params_for_random_sharing(algorithm_id);
+    let masked_key_params = env.params_for_random_sharing(algorithm_id, rng);
 
     let masked_key_transcript =
-        run_idkg_and_create_and_verify_transcript(&masked_key_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&masked_key_params, &env.crypto_components, rng);
 
     let unmasked_key_params = build_params_from_previous(
         masked_key_params,
         IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+        rng,
     );
 
-    run_idkg_and_create_and_verify_transcript(&unmasked_key_params, &env.crypto_components)
+    run_idkg_and_create_and_verify_transcript(&unmasked_key_params, &env.crypto_components, rng)
 }
 
-pub fn generate_presig_quadruple(
+pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     algorithm_id: AlgorithmId,
     key_transcript: &IDkgTranscript,
+    rng: &mut R,
 ) -> PreSignatureQuadruple {
-    let lambda_params = env.params_for_random_sharing(algorithm_id);
+    let lambda_params = env.params_for_random_sharing(algorithm_id, rng);
     let lambda_transcript =
-        run_idkg_and_create_and_verify_transcript(&lambda_params, &env.crypto_components);
+        run_idkg_and_create_and_verify_transcript(&lambda_params, &env.crypto_components, rng);
 
     let kappa_transcript = {
-        let masked_kappa_params = env.params_for_random_sharing(algorithm_id);
+        let masked_kappa_params = env.params_for_random_sharing(algorithm_id, rng);
 
-        let masked_kappa_transcript =
-            run_idkg_and_create_and_verify_transcript(&masked_kappa_params, &env.crypto_components);
+        let masked_kappa_transcript = run_idkg_and_create_and_verify_transcript(
+            &masked_kappa_params,
+            &env.crypto_components,
+            rng,
+        );
 
         let unmasked_kappa_params = build_params_from_previous(
             masked_kappa_params,
             IDkgTranscriptOperation::ReshareOfMasked(masked_kappa_transcript),
+            rng,
         );
 
-        run_idkg_and_create_and_verify_transcript(&unmasked_kappa_params, &env.crypto_components)
+        run_idkg_and_create_and_verify_transcript(
+            &unmasked_kappa_params,
+            &env.crypto_components,
+            rng,
+        )
     };
 
     let kappa_times_lambda_transcript = {
@@ -416,11 +434,13 @@ pub fn generate_presig_quadruple(
                 kappa_transcript.clone(),
                 lambda_transcript.clone(),
             ),
+            rng,
         );
 
         run_idkg_and_create_and_verify_transcript(
             &kappa_times_lambda_params,
             &env.crypto_components,
+            rng,
         )
     };
 
@@ -431,9 +451,14 @@ pub fn generate_presig_quadruple(
                 key_transcript.clone(),
                 lambda_transcript.clone(),
             ),
+            rng,
         );
 
-        run_idkg_and_create_and_verify_transcript(&key_times_lambda_params, &env.crypto_components)
+        run_idkg_and_create_and_verify_transcript(
+            &key_times_lambda_params,
+            &env.crypto_components,
+            rng,
+        )
     };
 
     PreSignatureQuadruple::new(
@@ -448,12 +473,13 @@ pub fn generate_presig_quadruple(
 /// Creates a new `IDkgTranscriptParams` with all information copied from a
 /// previous one, except the operation (as given) and the Id
 /// (randomly-generated, to avoid collisions).
-pub fn build_params_from_previous(
+pub fn build_params_from_previous<R: RngCore + CryptoRng>(
     previous_params: IDkgTranscriptParams,
     operation_type: IDkgTranscriptOperation,
+    rng: &mut R,
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
-        random_transcript_id(),
+        random_transcript_id(rng),
         previous_params.dealers().get().clone(),
         previous_params.receivers().get().clone(),
         previous_params.registry_version(),
@@ -464,7 +490,7 @@ pub fn build_params_from_previous(
 }
 
 pub struct CanisterThresholdSigTestEnvironment {
-    pub crypto_components: BTreeMap<NodeId, TempCryptoComponent>,
+    pub crypto_components: BTreeMap<NodeId, TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
     pub registry_data: Arc<ProtoRegistryDataProvider>,
     pub registry: Arc<FakeRegistryClient>,
     pub newest_registry_version: RegistryVersion,
@@ -473,10 +499,10 @@ pub struct CanisterThresholdSigTestEnvironment {
 
 impl CanisterThresholdSigTestEnvironment {
     /// Creates a new test environment with the given number of nodes.
-    pub fn new(num_of_nodes: usize) -> Self {
+    pub fn new<R: RngCore + CryptoRng>(num_of_nodes: usize, rng: &mut R) -> Self {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-        let registry_version = random_registry_version();
+        let registry_version = random_registry_version(rng);
 
         let mut env = Self {
             crypto_components: BTreeMap::new(),
@@ -486,12 +512,13 @@ impl CanisterThresholdSigTestEnvironment {
             in_memory_loggers: BTreeMap::new(),
         };
 
-        for node_id in n_random_node_ids(num_of_nodes) {
+        for node_id in n_random_node_ids(num_of_nodes, rng) {
             let in_memory_logger = InMemoryReplicaLogger::new();
             env.create_crypto_component_with_sign_mega_and_multisign_keys_in_registry(
                 node_id,
                 registry_version,
                 ReplicaLogger::from(&in_memory_logger),
+                rng,
             );
             env.in_memory_loggers.insert(node_id, in_memory_logger);
         }
@@ -502,11 +529,15 @@ impl CanisterThresholdSigTestEnvironment {
 
     /// Returns an `IDkgTranscriptParams` appropriate for creating a random
     /// sharing in this environment.
-    pub fn params_for_random_sharing(&self, algorithm_id: AlgorithmId) -> IDkgTranscriptParams {
+    pub fn params_for_random_sharing<R: RngCore + CryptoRng>(
+        &self,
+        algorithm_id: AlgorithmId,
+        rng: &mut R,
+    ) -> IDkgTranscriptParams {
         let nodes: BTreeSet<NodeId> = self.crypto_components.keys().copied().collect();
 
         IDkgTranscriptParams::new(
-            random_transcript_id(),
+            random_transcript_id(rng),
             nodes.clone(),
             nodes,
             self.newest_registry_version,
@@ -520,11 +551,12 @@ impl CanisterThresholdSigTestEnvironment {
         self.crypto_components.keys().cloned().collect()
     }
 
-    fn create_crypto_component_with_sign_mega_and_multisign_keys_in_registry(
+    fn create_crypto_component_with_sign_mega_and_multisign_keys_in_registry<R: Rng + CryptoRng>(
         &mut self,
         node_id: NodeId,
         registry_version: RegistryVersion,
         logger: ReplicaLogger,
+        rng: &mut R,
     ) {
         if self.crypto_components.contains_key(&node_id) {
             return;
@@ -541,6 +573,7 @@ impl CanisterThresholdSigTestEnvironment {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
+            .with_rng(ReproducibleRng::from_rng(rng))
             .build();
         let node_keys = temp_crypto
             .current_node_public_keys()
@@ -572,26 +605,35 @@ impl CanisterThresholdSigTestEnvironment {
     }
 }
 
-pub fn random_receiver_for_inputs(inputs: &ThresholdEcdsaSigInputs) -> NodeId {
+pub fn random_receiver_for_inputs<R: RngCore + CryptoRng>(
+    inputs: &ThresholdEcdsaSigInputs,
+    rng: &mut R,
+) -> NodeId {
     *inputs
         .receivers()
         .get()
         .iter()
-        .choose(&mut thread_rng())
+        .choose(rng)
         .expect("receivers is empty")
 }
 
 /// Returns a randomly-generate `NodeId` that is *not* in `exclusions`.
-pub fn random_node_id_excluding(exclusions: &BTreeSet<NodeId>) -> NodeId {
-    *random_node_ids_excluding(exclusions, 1)
+pub fn random_node_id_excluding<R: RngCore + CryptoRng>(
+    exclusions: &BTreeSet<NodeId>,
+    rng: &mut R,
+) -> NodeId {
+    *random_node_ids_excluding(exclusions, 1, rng)
         .iter()
         .next()
         .expect("we know this is non-empty")
 }
 
 /// Returns `n` randomly-generate `NodeId`s that are *not* in `exclusions`.
-pub fn random_node_ids_excluding(exclusions: &BTreeSet<NodeId>, n: usize) -> BTreeSet<NodeId> {
-    let rng = &mut thread_rng();
+pub fn random_node_ids_excluding<R: RngCore + CryptoRng>(
+    exclusions: &BTreeSet<NodeId>,
+    n: usize,
+    rng: &mut R,
+) -> BTreeSet<NodeId> {
     let mut node_ids = BTreeSet::new();
     while node_ids.len() < n {
         let candidate = node_id(rng.gen());
@@ -615,13 +657,11 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
     nodes
 }
 
-fn random_registry_version() -> RegistryVersion {
-    RegistryVersion::new(thread_rng().gen_range(1..u32::MAX) as u64)
+fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersion {
+    RegistryVersion::new(rng.gen_range(1..u32::MAX) as u64)
 }
 
-fn random_transcript_id() -> IDkgTranscriptId {
-    let mut rng = thread_rng();
-
+fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
     let id = rng.gen::<u64>();
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
     let height = Height::from(rng.gen::<u64>());
@@ -629,8 +669,7 @@ fn random_transcript_id() -> IDkgTranscriptId {
     IDkgTranscriptId::new(subnet, id, height)
 }
 
-fn n_random_node_ids(n: usize) -> BTreeSet<NodeId> {
-    let rng = &mut thread_rng();
+fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
     let mut node_ids = BTreeSet::new();
     while node_ids.len() < n {
         node_ids.insert(NodeId::from(PrincipalId::new_node_test_id(rng.gen())));
@@ -644,15 +683,22 @@ fn crypto_for<T>(node_id: NodeId, crypto_components: &BTreeMap<NodeId, T>) -> &T
         .unwrap_or_else(|| panic!("missing crypto component for {:?}", node_id))
 }
 
-pub fn random_receiver_id(params: &IDkgTranscriptParams) -> NodeId {
-    *random_receiver_id_excluding_set(params.receivers(), &BTreeSet::new(), &mut thread_rng())
+pub fn random_receiver_id<R: RngCore + CryptoRng>(
+    params: &IDkgTranscriptParams,
+    rng: &mut R,
+) -> NodeId {
+    *random_receiver_id_excluding_set(params.receivers(), &BTreeSet::new(), rng)
         .expect("receivers is empty")
 }
 
-pub fn random_receiver_id_excluding(receivers: &IDkgReceivers, exclusion: NodeId) -> NodeId {
+pub fn random_receiver_id_excluding<R: RngCore + CryptoRng>(
+    receivers: &IDkgReceivers,
+    exclusion: NodeId,
+    rng: &mut R,
+) -> NodeId {
     let mut excluded_receivers = BTreeSet::new();
     excluded_receivers.insert(exclusion);
-    *random_receiver_id_excluding_set(receivers, &excluded_receivers, &mut thread_rng())
+    *random_receiver_id_excluding_set(receivers, &excluded_receivers, rng)
         .expect("the only possible receiver is excluded")
 }
 
@@ -668,17 +714,23 @@ pub fn random_receiver_id_excluding_set<'a, R: CryptoRng + RngCore>(
     Some(acceptable_receivers[rng.gen_range(0..acceptable_receivers.len())])
 }
 
-pub fn random_dealer_id(params: &IDkgTranscriptParams) -> NodeId {
+pub fn random_dealer_id<R: RngCore + CryptoRng>(
+    params: &IDkgTranscriptParams,
+    rng: &mut R,
+) -> NodeId {
     *params
         .dealers()
         .get()
         .iter()
-        .choose(&mut thread_rng())
+        .choose(rng)
         .expect("dealers is empty")
 }
 
-pub fn random_dealer_id_excluding(transcript: &IDkgTranscript, exclusion: NodeId) -> NodeId {
-    let mut rng = thread_rng();
+pub fn random_dealer_id_excluding<R: RngCore + CryptoRng>(
+    transcript: &IDkgTranscript,
+    exclusion: NodeId,
+    rng: &mut R,
+) -> NodeId {
     let excluded_index = transcript
         .index_for_dealer_id(exclusion)
         .expect("excluded node not a dealer");
@@ -689,32 +741,36 @@ pub fn random_dealer_id_excluding(transcript: &IDkgTranscript, exclusion: NodeId
         .filter(|x| x != &excluded_index)
         .collect::<Vec<u32>>();
 
-    let node_index = dealer_indexes.choose(&mut rng).expect("dealing is empty");
+    let node_index = dealer_indexes.choose(rng).expect("dealing is empty");
     transcript
         .dealer_id_for_index(*node_index)
         .expect("dealer index not in transcript")
 }
 
-pub fn n_random_dealer_indexes(transcript: &IDkgTranscript, n: usize) -> Vec<NodeIndex> {
-    let mut rng = thread_rng();
-
+pub fn n_random_dealer_indexes<R: RngCore + CryptoRng>(
+    transcript: &IDkgTranscript,
+    n: usize,
+    rng: &mut R,
+) -> Vec<NodeIndex> {
     assert!(transcript.verified_dealings.len() >= n);
 
     transcript
         .verified_dealings
         .keys()
         .cloned()
-        .choose_multiple(&mut rng, n)
+        .choose_multiple(rng, n)
 }
 
-pub fn random_crypto_component_not_in_receivers(
+pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     receivers: &IDkgReceivers,
-) -> TempCryptoComponent {
-    let node_id = random_node_id_excluding(receivers.get());
+    rng: &mut R,
+) -> TempCryptoComponentGeneric<Csp, ReproducibleRng> {
+    let node_id = random_node_id_excluding(receivers.get(), rng);
     TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(node_id)
+        .with_rng(ReproducibleRng::from_rng(rng))
         .build()
 }
 
@@ -749,15 +805,16 @@ pub enum CorruptSignedIDkgDealingError {
     NoReceivers,
 }
 
-pub fn generate_tecdsa_protocol_inputs(
+pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     key_transcript: &IDkgTranscript,
     message_hash: &[u8],
     nonce: Randomness,
     derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
+    rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple = generate_presig_quadruple(env, algorithm_id, key_transcript);
+    let quadruple = generate_presig_quadruple(env, algorithm_id, key_transcript, rng);
 
     ThresholdEcdsaSigInputs::new(
         derivation_path,
@@ -769,16 +826,18 @@ pub fn generate_tecdsa_protocol_inputs(
     .expect("failed to create signature inputs")
 }
 
-pub fn run_tecdsa_protocol(
+pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     env: &CanisterThresholdSigTestEnvironment,
     sig_inputs: &ThresholdEcdsaSigInputs,
+    rng: &mut R,
 ) -> ThresholdEcdsaCombinedSignature {
     let sig_shares = sig_share_from_each_receiver(env, sig_inputs);
     // Verify that each signature share can be verified
-    let verifier_id = random_node_id_excluding(sig_inputs.receivers().get());
+    let verifier_id = random_node_id_excluding(sig_inputs.receivers().get(), rng);
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
+        .with_rng(ReproducibleRng::from_rng(rng))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         assert!(verifier_crypto_component
@@ -789,6 +848,7 @@ pub fn run_tecdsa_protocol(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
+        .with_rng(ReproducibleRng::from_rng(rng))
         .build();
     combiner_crypto_component
         .combine_sig_shares(sig_inputs, &sig_shares)

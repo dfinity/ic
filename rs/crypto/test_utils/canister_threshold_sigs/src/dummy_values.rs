@@ -8,6 +8,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::BasicSignature;
 use ic_types::{Height, NodeId, PrincipalId, SubnetId};
+use rand::{CryptoRng, Rng};
 use std::collections::BTreeSet;
 
 pub fn dummy_idkg_transcript_id_for_tests(id: u64) -> IDkgTranscriptId {
@@ -49,10 +50,15 @@ pub fn dummy_dealings(
     dealings
 }
 
-pub fn dummy_initial_idkg_dealing_for_tests() -> InitialIDkgDealings {
+pub fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
+    rng: &mut R,
+) -> InitialIDkgDealings {
     let previous_receivers = set_of_nodes(&[35, 36, 37, 38]);
-    let previous_transcript =
-        mock_transcript(Some(previous_receivers), mock_unmasked_transcript_type());
+    let previous_transcript = mock_transcript(
+        Some(previous_receivers),
+        mock_unmasked_transcript_type(rng),
+        rng,
+    );
     let dealers = set_of_nodes(&[35, 36, 38]);
 
     // For a Resharing Unmasked transcript, the dealer set should be a subset of the previous receiver set.
@@ -61,6 +67,7 @@ pub fn dummy_initial_idkg_dealing_for_tests() -> InitialIDkgDealings {
     let params = create_params_for_dealers(
         &dealers,
         IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
+        rng,
     );
     let dealings = dummy_dealings(params.transcript_id(), &dealers);
 

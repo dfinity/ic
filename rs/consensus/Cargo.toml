@@ -53,6 +53,7 @@ ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-replicated-state = { path = "../replicated_state" }
+ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
 ic-utils = { path = "../utils" }

@@ -456,8 +456,12 @@ mod verify_ed25519 {
         let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
         let csp = &fixtures[0].csp;
 
-        let wrong_msg = utils::random_message(&mut rng);
-        assert_ne!(msg, wrong_msg);
+        let wrong_msg = loop {
+            let tmp_msg = utils::random_message(&mut rng);
+            if tmp_msg != msg {
+                break tmp_msg;
+            }
+        };
 
         assert_matches!(
             csp.verify_batch(&key_sig_pairs[..], &wrong_msg[..], AlgorithmId::Ed25519),
