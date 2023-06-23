@@ -500,8 +500,8 @@ http_file(
 http_file(
     name = "mainnet_nns_cycles-minting-canister",
     downloaded_file_path = "cycles-minting-canister.wasm.gz",
-    sha256 = "d9b64cbf4fbc05d4f6a7128a5d116a4b3d22706109461bed9385961234443cb8",
-    url = "https://download.dfinity.systems/ic/18dc31ca64a4ead42c5d4222e647dce7124eb90e/canisters/cycles-minting-canister.wasm.gz",
+    sha256 = "fc1655302a81cd1b7148a6f66479b2830bd0d567d04780720e7bdd6c5b124fb5",
+    url = "https://download.dfinity.systems/ic/e813c43a337a26c026c2f2ec19099bd2036e7280/canisters/cycles-minting-canister.wasm.gz",
 )
 
 http_file(
