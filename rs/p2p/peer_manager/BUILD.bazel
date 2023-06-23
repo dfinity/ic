@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 package(default_visibility = [
     "//rs/p2p:__subpackages__",
@@ -16,6 +16,16 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/protobuf",
+    "//rs/registry/fake",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/test_utilities",
+    "//rs/test_utilities/logger",
+    "//rs/test_utilities/registry",
+]
+
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
@@ -24,10 +34,18 @@ ALIASES = {}
 
 rust_library(
     name = "peer_manager",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_peer_manager",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "peer_manager_integration_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":peer_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
