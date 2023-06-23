@@ -115,6 +115,11 @@ impl Scalar {
         Self::from_u64(v as u64)
     }
 
+    /// Create a scalar from a small integer value + 1
+    pub fn from_node_index(v: u32) -> Self {
+        Self::from_u64(v as u64 + 1)
+    }
+
     /// Create a scalar from a small integer value
     pub fn from_isize(v: isize) -> Self {
         if v < 0 {
@@ -366,6 +371,18 @@ impl Scalar {
         }
         // le_bytes[32..64] left as zero
 
+        let s = ic_bls12_381::Scalar::from_bytes_wide(&le_bytes);
+        le_bytes.zeroize();
+        Self::new(s)
+    }
+
+    /// Decode a scalar as a big-endian byte string, reducing modulo group order
+    pub fn from_bytes_wide(input: &[u8; 64]) -> Self {
+        let mut le_bytes = {
+            let mut buf = *input;
+            buf.reverse();
+            buf
+        };
         let s = ic_bls12_381::Scalar::from_bytes_wide(&le_bytes);
         le_bytes.zeroize();
         Self::new(s)
@@ -915,6 +932,12 @@ macro_rules! define_affine_and_projective_types {
             precomputed: Option<Arc<paste! { [<$affine PrecomputedTable>] }>>,
         }
 
+        impl AsRef<$affine> for $affine {
+            fn as_ref(&self) -> &Self{
+                return &self
+            }
+        }
+
         impl Eq for $affine {}
 
         impl PartialEq for $affine {
@@ -1152,6 +1175,12 @@ macro_rules! define_affine_and_projective_types {
         #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
         pub struct $projective {
             value: ic_bls12_381::$projective
+        }
+
+        impl AsRef<$projective> for $projective {
+            fn as_ref(&self) -> &Self {
+                return &self
+            }
         }
 
         impl $projective {
@@ -1673,12 +1702,15 @@ macro_rules! declare_muln_vartime_affine_impl_for {
             /// Warning: this function leaks information about the scalars via
             /// memory-based side channels. Do not use this function with secret
             /// scalars.
-            pub fn muln_affine_vartime(points: &[$affine], scalars: &[Scalar]) -> Self {
+            pub fn muln_affine_vartime<T: AsRef<$affine>>(
+                points: &[T],
+                scalars: &[Scalar],
+            ) -> Self {
                 let count = std::cmp::min(points.len(), scalars.len());
                 let mut proj_points = Vec::with_capacity(count);
 
                 for i in 0..count {
-                    proj_points.push(<$proj>::from(&points[i]));
+                    proj_points.push(<$proj>::from(points[i].as_ref()));
                 }
 
                 Self::muln_vartime(&proj_points[..], scalars)
