@@ -1,4 +1,5 @@
 use crate::framework::file_tree_artifact_mgr::ArtifactChunkingTestImpl;
+use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
@@ -7,11 +8,10 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::Transport;
 use ic_logger::{debug, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_subnet_type::SubnetType;
-use ic_replica_setup_ic_network::{
-    create_networking_stack, init_artifact_pools, P2PStateSyncClient,
-};
+use ic_replica_setup_ic_network::{setup_consensus_and_p2p, P2PStateSyncClient};
 use ic_test_utilities::{
     consensus::make_catch_up_package_with_empty_transcript,
     crypto::fake_tls_handshake::FakeTlsHandshake,
@@ -30,7 +30,7 @@ use ic_test_utilities_metrics::fetch_int_gauge;
 use ic_test_utilities_registry::FakeLocalStoreCertifiedTimeReader;
 use ic_types::replica_config::ReplicaConfig;
 use parking_lot::Mutex;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tempfile::Builder;
 
@@ -95,19 +95,21 @@ fn execute_test(
             subnet_config.cycles_account_manager_config,
         ));
 
-        let artifact_pools = init_artifact_pools(
-            node_id,
+        let cup = make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id);
+
+        let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             subnet_id,
-            artifact_pool_config,
+            pb::CatchUpPackage::from(&cup),
+            artifact_pool_config.clone(),
             metrics_registry.clone(),
             log.clone(),
-            make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id),
-        );
+        )));
 
-        let (_, p2p_runner) = create_networking_stack(
+        let (_, p2p_runner) = setup_consensus_and_p2p(
             &metrics_registry,
             log.clone(),
             rt_handle,
+            artifact_pool_config,
             transport_config,
             Default::default(),
             node_id,
@@ -117,6 +119,8 @@ fn execute_test(
             sev_handshake,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
+            consensus_pool,
+            cup,
             no_state_sync_client,
             xnet_payload_builder as Arc<_>,
             self_validating_payload_builder as Arc<_>,
@@ -126,7 +130,6 @@ fn execute_test(
             Arc::clone(&fake_crypto) as Arc<_>,
             registry.clone(),
             ingress_hist_reader,
-            artifact_pools,
             cycles_account_manager,
             fake_local_store_certified_time_reader,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
@@ -258,19 +261,20 @@ fn execute_test_chunking_pool(
         let fake_local_store_certified_time_reader =
             Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source));
 
-        let artifact_pools = init_artifact_pools(
-            node_id,
+        let cup = make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id);
+        let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
             subnet_id,
-            artifact_pool_config,
+            pb::CatchUpPackage::from(&cup),
+            artifact_pool_config.clone(),
             metrics_registry.clone(),
             log.clone(),
-            make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id),
-        );
+        )));
 
-        let (_, p2p_runner) = create_networking_stack(
+        let (_, p2p_runner) = setup_consensus_and_p2p(
             &metrics_registry,
             log.clone(),
             rt_handle,
+            artifact_pool_config,
             transport_config,
             Default::default(),
             node_id,
@@ -280,6 +284,8 @@ fn execute_test_chunking_pool(
             sev_handshake,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
+            consensus_pool,
+            cup,
             state_sync_client,
             xnet_payload_builder,
             self_validating_payload_builder,
@@ -289,7 +295,6 @@ fn execute_test_chunking_pool(
             Arc::clone(&fake_crypto) as Arc<_>,
             registry.clone(),
             ingress_hist_reader,
-            artifact_pools,
             cycles_account_manager,
             fake_local_store_certified_time_reader,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),

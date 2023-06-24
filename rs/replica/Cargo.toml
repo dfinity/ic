@@ -8,6 +8,7 @@ edition = "2021"
 base64 = "0.11.0"
 clap = { version = "3.1.6", features = ["derive"] }
 hex = "0.4.2"
+ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
