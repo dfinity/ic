@@ -39,6 +39,7 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/artifact_manager",
+    "//rs/artifact_pool",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/https_outcalls/client",

@@ -4,6 +4,7 @@ load("//bazel:defs.bzl", "rust_bench")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/artifact_pool",
     "//rs/async_utils",
     "//rs/bitcoin/client",
     "//rs/bitcoin/consensus",

@@ -32,6 +32,7 @@ tower = "0.4.12"
 
 [dev-dependencies]
 ic-artifact-manager = { path = "../artifact_manager" }
+ic-artifact-pool = { path = "../artifact_pool" }
 ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
