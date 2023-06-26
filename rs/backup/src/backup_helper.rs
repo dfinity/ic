@@ -1,26 +1,28 @@
-use crate::notification_client::NotificationClient;
-use crate::util::{block_on, sleep_secs};
-use ic_recovery::command_helper::exec_cmd;
-use ic_recovery::error::RecoveryError;
-use ic_recovery::file_sync_helper::download_binary;
+use crate::{
+    notification_client::NotificationClient,
+    util::{block_on, sleep_secs},
+};
+use ic_recovery::{
+    command_helper::exec_cmd, error::RecoveryError, file_sync_helper::download_binary,
+};
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
-use ic_registry_client_helpers::node::NodeRegistry;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_types::{ReplicaVersion, SubnetId};
 
 use chrono::{DateTime, Utc};
-use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::{seq::SliceRandom, thread_rng};
 use slog::{debug, error, info, warn, Logger};
-use std::collections::BTreeMap;
-use std::ffi::OsStr;
-use std::fs::{create_dir_all, read_dir, remove_dir_all, DirEntry, File};
-use std::io::Write;
-use std::net::IpAddr;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::{
+    collections::BTreeMap,
+    ffi::OsStr,
+    fs::{create_dir_all, read_dir, remove_dir_all, DirEntry, File},
+    io::Write,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 
 const RETRIES_RSYNC_HOST: u64 = 5;
 const RETRIES_BINARY_DOWNLOAD: u64 = 3;
@@ -196,7 +198,7 @@ impl BackupHelper {
                 &self.log,
                 replica_version.clone(),
                 binary_name.to_string(),
-                self.binary_dir(replica_version),
+                &self.binary_dir(replica_version),
             ));
             if res.is_ok() {
                 return Ok(());

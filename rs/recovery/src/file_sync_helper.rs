@@ -23,7 +23,7 @@ pub async fn download_binary(
     logger: &Logger,
     replica_version: ReplicaVersion,
     binary_name: String,
-    target_dir: PathBuf,
+    target_dir: &Path,
 ) -> RecoveryResult<PathBuf> {
     let binary_url = format!(
         "https://download.dfinity.systems/ic/{}/release/{}.gz",
