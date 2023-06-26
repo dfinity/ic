@@ -2,6 +2,10 @@
 
 ## Unreleased 
 
+## 1.8.2
+
+- Re-enable response verification v2
+
 ## 1.8.1
 
 - Temporarily disable response verification v2 until asset canister v0.14.1 is sufficiently circulated

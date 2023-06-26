@@ -7,7 +7,7 @@ import {
 } from '../../http-interface/canister_http_interface_types';
 import initResponseVerification, {
   InitOutput,
-  // getMaxVerificationVersion,
+  getMaxVerificationVersion,
 } from '@dfinity/response-verification';
 
 export const shouldFetchRootKey = Boolean(process.env.FORCE_FETCH_ROOT_KEY);
@@ -85,10 +85,7 @@ export async function updateRequestApiGateway(
 export async function createHttpRequest(
   request: Request
 ): Promise<HttpRequest> {
-  // const certificateVersion = getMaxVerificationVersion();
-  // temporarily force response verification v1 until we are satisifed
-  // that asset canister v0.14.1 has been sufficiently circulated on mainnet
-  const certificateVersion = 1;
+  const certificateVersion = getMaxVerificationVersion();
   const url = new URL(request.url);
 
   const requestHeaders: [string, string][] = [['Host', url.hostname]];
