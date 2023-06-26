@@ -870,12 +870,12 @@ impl CyclesAccountManager {
             // Defaults to maximum response size.
             None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
         };
-        let total_bytes = response_size + request_size.get();
-        self.scale_cost(
-            self.config.http_request_baseline_fee
-                + self.config.http_request_per_byte_fee * total_bytes,
-            subnet_size,
-        )
+
+        (self.config.http_request_linear_baseline_fee
+            + self.config.http_request_quadratic_baseline_fee * (subnet_size as u64)
+            + self.config.http_request_per_byte_fee * request_size.get()
+            + self.config.http_response_per_byte_fee * response_size)
+            * (subnet_size as u64)
     }
 }
 
@@ -962,6 +962,30 @@ mod tests {
         assert_ne!(
             CyclesAccountManagerConfig::system_subnet().reference_subnet_size,
             0
+        );
+    }
+
+    #[test]
+    fn http_requets_fee_scale() {
+        let subnet_size: u64 = 34;
+        let reference_subnet_size: u64 = 13;
+        let request_size = NumBytes::from(17);
+        let cycles_account_manager = create_cycles_account_manager(reference_subnet_size as usize);
+
+        // Check the fee for a 13-node subnet.
+        assert_eq!(
+            cycles_account_manager.http_request_fee(
+                request_size,
+                None,
+                reference_subnet_size as usize,
+            ),
+            Cycles::from(1_603_786_800u64) * reference_subnet_size
+        );
+
+        // Check the fee for a 34-node subnet.
+        assert_eq!(
+            cycles_account_manager.http_request_fee(request_size, None, subnet_size as usize),
+            Cycles::from(1_605_046_800u64) * subnet_size
         );
     }
 }

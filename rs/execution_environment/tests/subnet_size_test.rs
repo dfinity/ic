@@ -621,12 +621,11 @@ fn calculate_http_request_cost(
         // Defaults to maximum response size.
         None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
     };
-    let total_bytes = response_size + request_size.get();
-    scale_cost(
-        config,
-        config.http_request_baseline_fee + config.http_request_per_byte_fee * total_bytes,
-        subnet_size,
-    )
+    (config.http_request_linear_baseline_fee
+        + config.http_request_quadratic_baseline_fee * (subnet_size as u64)
+        + config.http_request_per_byte_fee * request_size.get()
+        + config.http_response_per_byte_fee * response_size)
+        * (subnet_size as u64)
 }
 
 fn calculate_sign_with_ecdsa_cost(
@@ -660,8 +659,10 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             /// explicit exception for requests originating from the NNS when the
             /// charging occurs.
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
-            http_request_baseline_fee: Cycles::new(0),
+            http_request_linear_baseline_fee: Cycles::new(0),
+            http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
+            http_response_per_byte_fee: Cycles::new(0),
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
@@ -681,8 +682,10 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             gib_storage_per_second_fee: Cycles::new(127_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
-            http_request_baseline_fee: Cycles::new(400_000_000),
-            http_request_per_byte_fee: Cycles::new(100_000),
+            http_request_linear_baseline_fee: Cycles::new(3_000_000),
+            http_request_quadratic_baseline_fee: Cycles::new(60_000),
+            http_request_per_byte_fee: Cycles::new(400),
+            http_response_per_byte_fee: Cycles::new(800),
         },
     }
 }
