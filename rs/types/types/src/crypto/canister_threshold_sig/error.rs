@@ -220,9 +220,6 @@ pub enum IDkgCreateDealingError {
     SecretSharesNotFound {
         commitment_string: String,
     },
-    AlgorithmMismatchWithSKS {
-        algorithm_id: AlgorithmId,
-    },
     TransientInternalError {
         internal_error: String,
     },
