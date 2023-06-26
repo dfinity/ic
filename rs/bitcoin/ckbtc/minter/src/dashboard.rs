@@ -58,6 +58,11 @@ pub fn build_dashboard() -> Vec<u8> {
             </head>
             <body>
               <div class='background'><div class='content'>
+                <h2>ckBTC Minter Dashboard</h2>
+                <p>
+                    On the <a href=\"https://internetcomputer.org/ckbtc/\" target=\"_blank\">ckBTC</a> minter dashboard,
+                    you can find all the information about the minter's current state, the available UTXOs, outgoing transactions, current parameters, and the logs.
+                </p>
                 <h3>Metadata</h3>
                 {}
                 <h3>Pending retrieve BTC requests</h3>
