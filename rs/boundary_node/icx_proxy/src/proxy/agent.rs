@@ -20,7 +20,7 @@ use ic_agent::{
     export::Principal,
     Agent, AgentError,
 };
-// use ic_response_verification::MAX_VERIFICATION_VERSION;
+use ic_response_verification::MAX_VERIFICATION_VERSION;
 use ic_utils::interfaces::http_request::HeaderField;
 use ic_utils::{
     call::{AsyncCall, SyncCall},
@@ -287,10 +287,7 @@ async fn process_request_inner(
             http_request.uri.to_string().as_str(),
             header_fields.clone(),
             &http_request.body,
-            // Some(&u16::from(MAX_VERIFICATION_VERSION)),
-            // temporarily force response verification v1 until we are satisifed
-            // that asset canister v0.14.1 has been sufficiently circulated on mainnet
-            Some(&1),
+            Some(&u16::from(MAX_VERIFICATION_VERSION)),
         )
         .call()
         .await;
