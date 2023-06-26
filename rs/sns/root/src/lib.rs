@@ -34,9 +34,12 @@ const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 // The number of dapp canisters that can be registered with the SNS Root
 const DAPP_CANISTER_REGISTRATION_LIMIT: usize = 100;
 
-impl From<(Option<i32>, String)> for CanisterCallError {
-    fn from((code, description): (Option<i32>, String)) -> Self {
-        Self { code, description }
+impl From<(i32, String)> for CanisterCallError {
+    fn from((code, description): (i32, String)) -> Self {
+        Self {
+            code: Some(code),
+            description,
+        }
     }
 }
 
@@ -731,13 +734,7 @@ async fn get_swap_status(env: &impl Environment, swap_id: PrincipalId) -> Canist
             Encode!(&GetCanisterStatusRequest {}).unwrap(),
         )
         .await
-        .map_err(|(code, msg)| {
-            format!(
-                "Could not get swap status from swap: {}: {}",
-                code.unwrap_or_default(),
-                msg
-            )
-        })
+        .map_err(|(code, msg)| format!("Could not get swap status from swap: {}: {}", code, msg))
         .and_then(|bytes| {
             Decode!(&bytes, CanisterStatusResultV2)
                 .map_err(|e| format!("Could not decode response: {:?}", e))
@@ -858,7 +855,7 @@ mod tests {
             expected_canister: CanisterId,
             expected_method: String,
             expected_bytes: Option<Vec<u8>>,
-            result: Result<Vec<u8>, (Option<i32>, String)>,
+            result: Result<Vec<u8>, (i32, String)>,
         },
     }
 
@@ -879,7 +876,7 @@ mod tests {
             canister_id: CanisterId,
             method_name: &str,
             arg: Vec<u8>,
-        ) -> Result<Vec<u8>, (Option<i32>, String)> {
+        ) -> Result<Vec<u8>, (i32, String)> {
             let mut calls = self.calls.lock().unwrap();
             let result = match calls.pop_front().unwrap() {
                 EnvironmentCall::CallCanister {
@@ -2420,7 +2417,7 @@ mod tests {
             },
             LedgerCanisterClientCall::Archives {
                 result: Err(CanisterCallError {
-                    code: None,
+                    code: Some(1),
                     description: "This is an error".to_string(),
                 }),
             },
@@ -2440,7 +2437,7 @@ mod tests {
             },
             LedgerCanisterClientCall::Archives {
                 result: Err(CanisterCallError {
-                    code: None,
+                    code: Some(1),
                     description: "This is also an error".to_string(),
                 }),
             },
@@ -2947,7 +2944,7 @@ mod tests {
                 ]),
             )),
             MockManagementCanisterClientReply::CanisterStatus(Err((
-                0,
+                1,
                 "Error calling status on dapp".to_string(),
             ))),
             MockManagementCanisterClientReply::CanisterStatus(Ok(
@@ -3183,7 +3180,7 @@ mod tests {
                 ]),
             )),
             MockManagementCanisterClientReply::CanisterStatus(Err((
-                0,
+                1,
                 "Error calling status on dapp".to_string(),
             ))),
             MockManagementCanisterClientReply::CanisterStatus(Ok(

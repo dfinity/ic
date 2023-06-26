@@ -26,7 +26,18 @@ pub trait Runtime {
     where
         In: ArgumentEncoder + Send,
         Out: for<'a> ArgumentDecoder<'a>;
+
+    // Invokes a Candid `method` on another canister identified by `id`, while
+    // passing raw bytes as input/output.
+    // The implementation must clean up its local variables despite a trap in
+    // its callback.
+    async fn call_bytes_with_cleanup(
+        id: CanisterId,
+        method: &str,
+        args: &[u8],
+    ) -> Result<Vec<u8>, (i32, String)>;
 }
+
 pub struct DfnRuntime;
 
 #[async_trait]
@@ -54,6 +65,16 @@ impl Runtime for DfnRuntime {
     {
         // dfn_core::api::call_with_cleanup always returns `Some(code)` when it fails so unwrap_or_default is fine.
         dfn_core::api::call_with_cleanup(id, method, dfn_candid::candid_multi_arity, args)
+            .await
+            .map_err(|(code, msg)| (code.unwrap_or_default(), msg))
+    }
+
+    async fn call_bytes_with_cleanup(
+        id: CanisterId,
+        method: &str,
+        args: &[u8],
+    ) -> Result<Vec<u8>, (i32, String)> {
+        dfn_core::api::call_bytes_with_cleanup(id, method, args, dfn_core::api::Funds::zero())
             .await
             .map_err(|(code, msg)| (code.unwrap_or_default(), msg))
     }
