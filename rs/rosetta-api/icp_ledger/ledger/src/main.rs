@@ -632,7 +632,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
             arg.token_name,
         ),
         LedgerCanisterPayload::Upgrade(_) => {
-            ic_cdk::trap("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
+            trap_with("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
         }
     }
 }
@@ -662,7 +662,7 @@ fn main() {
                         arg.token_name,
                     ),
                     Err(old_err) =>
-                        ic_cdk::trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
+                    trap_with(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
                 }
             }
         }
@@ -676,7 +676,7 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
 
     if let Some(args) = args {
         match args {
-            LedgerCanisterPayload::Init(_) => ic_cdk::trap("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
+            LedgerCanisterPayload::Init(_) => trap_with("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
             LedgerCanisterPayload::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
                     ledger.upgrade(upgrade_args);
@@ -822,7 +822,7 @@ async fn icrc1_transfer(
         subaccount: arg.from_subaccount,
     };
     match arg.memo.as_ref() {
-        Some(memo) if memo.0.len() > MEMO_SIZE_BYTES => ic_cdk::trap("the memo field is too large"),
+        Some(memo) if memo.0.len() > MEMO_SIZE_BYTES => trap_with("the memo field is too large"),
         _ => {}
     };
     let amount = match arg.amount.0.to_u64() {
