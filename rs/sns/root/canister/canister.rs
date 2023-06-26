@@ -233,8 +233,8 @@ fn change_canister() {
     // spawn to do the real work in the background.
     over(candid_one, |proposal: ChangeCanisterProposal| {
         assert_change_canister_proposal_is_valid(&proposal);
-        dfn_core::api::futures::spawn(ic_nervous_system_root::change_canister::change_canister::<
-            DfnRuntime,
+        CanisterRuntime::spawn_future(ic_nervous_system_root::change_canister::change_canister::<
+            CanisterRuntime,
         >(proposal));
     });
 }

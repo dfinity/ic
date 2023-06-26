@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use ic_base_types::CanisterId;
+use std::future::Future;
 
 // A trait to help parameterize the switch from dfn_core to ic_cdk. It should
 // no longer exist after the switch is completed for all NNS/SNS canisters.
@@ -36,6 +37,9 @@ pub trait Runtime {
         method: &str,
         args: &[u8],
     ) -> Result<Vec<u8>, (i32, String)>;
+
+    // Spawns a future.
+    fn spawn_future<F: 'static + Future<Output = ()>>(future: F);
 }
 
 pub struct DfnRuntime;
@@ -77,5 +81,9 @@ impl Runtime for DfnRuntime {
         dfn_core::api::call_bytes_with_cleanup(id, method, args, dfn_core::api::Funds::zero())
             .await
             .map_err(|(code, msg)| (code.unwrap_or_default(), msg))
+    }
+
+    fn spawn_future<F: 'static + Future<Output = ()>>(future: F) {
+        dfn_core::api::futures::spawn(future);
     }
 }
