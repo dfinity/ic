@@ -337,6 +337,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5.7",
                 features = ["print"],
             ),
+            "ethnum": crate.spec(
+                version = "^1.3.2",
+            ),
             "exec": crate.spec(
                 version = "^0.3.1",
             ),
