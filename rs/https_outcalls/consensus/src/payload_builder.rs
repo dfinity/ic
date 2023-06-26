@@ -167,6 +167,7 @@ impl CanisterHttpPayloadBuilderImpl {
         }
 
         // Payload size should not be bigger than MAX_CANISTER_HTTP_PAYLOAD_SIZE
+        // TODO: Remove when switching to new interface
         let max_payload_size = std::cmp::min(
             byte_limit,
             NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
@@ -427,6 +428,7 @@ impl CanisterHttpPayloadBuilderImpl {
         }
 
         // Check size of the payload
+        // TODO: Remove when switching to the new interface
         let payload_size = payload
             .responses
             .iter()
@@ -626,6 +628,10 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
+        let max_size = std::cmp::min(
+            max_size,
+            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
+        );
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = self.get_canister_http_payload_impl(height, context, delivered_ids, max_size);
         parse::payload_to_bytes(&payload, max_size)
@@ -638,7 +644,20 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
-        let payload_len = payload.len() as u64;
+        if payload.is_empty() {
+            return Ok(());
+        }
+
+        if payload.len() > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
+            return Err(ValidationError::Permanent(
+                PayloadPermanentError::CanisterHttpPayloadValidationError(
+                    CanisterHttpPermanentValidationError::PayloadTooBig {
+                        expected: MAX_CANISTER_HTTP_PAYLOAD_SIZE,
+                        received: payload.len(),
+                    },
+                ),
+            ));
+        }
 
         let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
         let payload = parse::bytes_to_payload(payload).map_err(|e| {
@@ -647,10 +666,7 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             ))
         })?;
         self.validate_canister_http_payload_impl(height, &payload, context, delivered_ids)
-            .map(|num_bytes| {
-                // TODO: Remove after switching to new interface. We can enforce size constraint on the serialized payload
-                assert!(num_bytes.get() <= payload_len);
-            })
+            .map(|_| ())
             .map_err(|err| match err {
                 ValidationError::Permanent(err) => ValidationError::Permanent(
                     PayloadPermanentError::CanisterHttpPayloadValidationError(err),
