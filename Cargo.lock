@@ -11790,7 +11790,6 @@ dependencies = [
  "dfn_protobuf",
  "ic-base-types",
  "ic-canister-log",
- "ic-cdk 0.6.10",
  "ic-constants",
  "ic-icrc1",
  "ic-icrc1-ledger-sm-tests",
