@@ -20,8 +20,8 @@ ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /opt/bin/buildevents && \
     chmod +x /opt/bin/buildevents
 
-ARG motoko_version=0.5.10
-RUN curl -fsSL https://download.dfinity.systems/motoko/${motoko_version}/x86_64-linux/motoko-${motoko_version}.tar.gz | tar -xz -C /opt/bin && chmod +x /opt/bin/moc
+ARG motoko_version=0.9.1
+RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 ARG sdk_version=0.12.0
 ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
@@ -30,11 +30,11 @@ RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/down
     tar -zxf /tmp/sdk/dfx.tar.gz -C /opt/bin && \
     chmod +x /opt/bin/dfx
 
-ARG idl2json_sha=bcb27ac567eba7a7c14c9d70aedd3fb777af281b
-RUN curl -fsSL https://download.dfinity.systems/idl2json/bcb27ac567eba7a7c14c9d70aedd3fb777af281b/idl2json-linux-amd64.gz | gunzip > /opt/bin/idl2json && chmod +x /opt/bin/idl2json
+RUN curl -fsSL https://github.com/dfinity/idl2json/releases/download/v0.8.6/idl2json-linux-x86_64.tar.gz -O && \
+    tar -xzf idl2json-linux-x86_64.tar.gz -C /opt/bin && chmod +x /opt/bin/idl2json
 
-ARG cdk_opt_sha=5807d2f7b523f630eddd69acd4b245a8b129eff9
-RUN curl --fail -sL https://download.dfinity.systems/cdk-rs/${cdk_opt_sha}/ic-cdk-optimizer-linux-amd64.gz | gunzip > /opt/bin/ic-cdk-optimizer && \
+RUN curl -fsSL https://github.com/dfinity/cdk-rs/releases/download/0.3.6/ic-cdk-optimizer-0.3.6-ubuntu-20.04.tar.gz -O && \
+    tar -xzf ic-cdk-optimizer-0.3.6-ubuntu-20.04.tar.gz && mv ic-cdk-optimizer-0.3.6-ubuntu-20.04/ic-cdk-optimizer /opt/bin/ && \
     chmod 0755 /opt/bin/ic-cdk-optimizer
 
 ARG rocksdb_sha=0a9a05ae12943b1529ef1eabbca5ce5a71c986bf
