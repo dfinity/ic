@@ -6,7 +6,7 @@ use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     state_test_helpers::{self, create_canister, setup_nns_canisters},
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 
 pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION as u128;
 
@@ -14,7 +14,7 @@ pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION as u128;
 pub fn set_up_state_machine_with_nns(allowed_principals: Vec<PrincipalId>) -> StateMachine {
     // We don't want the underlying warnings of the StateMachine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachine::new();
+    let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
@@ -25,7 +25,6 @@ pub fn set_up_state_machine_with_nns(allowed_principals: Vec<PrincipalId>) -> St
         .build();
 
     setup_nns_canisters(&machine, nns_init_payload);
-
     machine
 }
 

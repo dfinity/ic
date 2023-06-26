@@ -1,6 +1,5 @@
 use candid::Encode;
 use dfn_candid::candid;
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
@@ -36,6 +35,7 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_config::Config;
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
+use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use registry_canister::mutations::common::decode_registry_value;

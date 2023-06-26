@@ -35,16 +35,17 @@ use ic_registry_transport::{
     },
     serialize_get_value_request, Error,
 };
-use ic_test_utilities::types::ids::{node_test_id, subnet_test_id, user_test_id};
-use ic_types::{crypto::KeyPurpose, p2p::build_default_gossip_config, NodeId, ReplicaVersion};
+use ic_test_utilities::types::ids::{subnet_test_id, user_test_id};
+use ic_types::crypto::{CurrentNodePublicKeys, KeyPurpose};
+use ic_types::p2p::build_default_gossip_config;
+use ic_types::{NodeId, ReplicaVersion};
 use maplit::btreemap;
 use on_wire::bytes;
 use prost::Message;
-use registry_canister::mutations::{
-    common::decode_registry_value,
-    node_management::do_add_node::{
-        connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload,
-    },
+use registry_canister::mutations::common::decode_registry_value;
+use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
+use registry_canister::mutations::node_management::do_add_node::{
+    connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload,
 };
 use std::convert::TryFrom;
 
@@ -223,9 +224,11 @@ pub fn routing_table_mutation(rt: &RoutingTable) -> RegistryMutation {
 /// unique within this registry instance.
 pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
     let node_operator_pid = user_test_id(TEST_ID);
-    let node_pid = node_test_id(TEST_ID);
     let subnet_pid = subnet_test_id(TEST_ID);
-    let node = {
+
+    let (valid_pks, node_id) = new_node_keys_and_node_id();
+
+    let node_record = {
         let ip_addr = format!("128.0.{mutation_id}.1");
         let protocol = Protocol::Http1 as i32;
         let xnet_connection_endpoint = ConnectionEndpoint {
@@ -261,7 +264,7 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
         subnets: vec![subnet_pid.get().to_vec()],
     };
     let system_subnet = SubnetRecord {
-        membership: vec![node_pid.get().to_vec()],
+        membership: vec![node_id.get().to_vec()],
         subnet_type: i32::from(SubnetType::System),
         replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
@@ -269,7 +272,7 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
         ..Default::default()
     };
 
-    vec![
+    let mut mutations = vec![
         insert(
             make_subnet_list_record_key().as_bytes(),
             encode_or_panic(&subnet_list),
@@ -280,10 +283,6 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
         ),
         routing_table_mutation(&RoutingTable::default()),
         insert(
-            make_node_record_key(node_pid).as_bytes(),
-            encode_or_panic(&node),
-        ),
-        insert(
             make_replica_version_key(replica_version_id).as_bytes(),
             encode_or_panic(&replica_version),
         ),
@@ -291,7 +290,80 @@ pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
             make_blessed_replica_versions_key().as_bytes(),
             encode_or_panic(&blessed_replica_version),
         ),
-    ]
+    ];
+    mutations.append(&mut make_add_node_registry_mutations(
+        node_id,
+        node_record,
+        valid_pks,
+    ));
+    mutations
+}
+
+// NOTE: the secret keys corresponding to the public keys returned by this helper are lost
+//   when the helper completes (they are erased when `_temp_dir` goes out of scope).
+//   This is intended, as this helper is for creating a valid registry.
+pub fn new_node_keys_and_node_id() -> (ValidNodePublicKeys, NodeId) {
+    let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
+    let npks = generate_node_keys_once(&config, None).unwrap_or_else(|_| {
+        panic!(
+            "Generation of new node keys with CryptoConfig {:?} failed",
+            &config
+        )
+    });
+    let node_id = npks.node_id();
+    (npks, node_id)
+}
+
+pub fn new_current_node_crypto_keys_mutations(
+    node_id: NodeId,
+    npks: CurrentNodePublicKeys,
+) -> Vec<RegistryMutation> {
+    let mut mutations: Vec<RegistryMutation> = vec![];
+    if let Some(pk) = &npks.node_signing_public_key {
+        mutations.push(insert(
+            make_crypto_node_key(node_id, KeyPurpose::NodeSigning),
+            encode_or_panic(pk),
+        ));
+    };
+    if let Some(pk) = &npks.committee_signing_public_key {
+        mutations.push(insert(
+            make_crypto_node_key(node_id, KeyPurpose::CommitteeSigning),
+            encode_or_panic(pk),
+        ));
+    };
+    if let Some(pk) = &npks.dkg_dealing_encryption_public_key {
+        mutations.push(insert(
+            make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption),
+            encode_or_panic(pk),
+        ));
+    };
+    if let Some(pk) = &npks.idkg_dealing_encryption_public_key {
+        mutations.push(insert(
+            make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
+            encode_or_panic(pk),
+        ));
+    };
+    if let Some(pk) = &npks.tls_certificate {
+        mutations.push(insert(
+            make_crypto_tls_cert_key(node_id),
+            encode_or_panic(pk),
+        ));
+    };
+    mutations
+}
+
+pub fn new_node_crypto_keys_mutations(
+    node_id: NodeId,
+    npks: ValidNodePublicKeys,
+) -> Vec<RegistryMutation> {
+    let current_npks = CurrentNodePublicKeys {
+        node_signing_public_key: Some(npks.node_signing_key().clone()),
+        committee_signing_public_key: Some(npks.committee_signing_key().clone()),
+        tls_certificate: Some(npks.tls_certificate().clone()),
+        dkg_dealing_encryption_public_key: Some(npks.dkg_dealing_encryption_key().clone()),
+        idkg_dealing_encryption_public_key: Some(npks.idkg_dealing_encryption_key().clone()),
+    };
+    new_current_node_crypto_keys_mutations(node_id, current_npks)
 }
 
 /// Make a `NodeOperatorRecord` from the provided `PrincipalId`.
@@ -327,33 +399,38 @@ fn make_node_record(node_operator_record: &NodeOperatorRecord) -> NodeRecord {
     }
 }
 
+fn get_new_node_id_and_mutations(nor: &NodeOperatorRecord) -> (NodeId, Vec<RegistryMutation>) {
+    let (valid_pks, node_id) = new_node_keys_and_node_id();
+    let nr = make_node_record(nor);
+    let mutations = make_add_node_registry_mutations(node_id, nr, valid_pks);
+    (node_id, mutations)
+}
+
 /// Setup the registry with a single subnet (containing all the ranges) which
 /// has 7 nodes, whose node operator keys we control for testing.
 pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let nns_subnet_id = subnet_test_id(1);
 
-    let nor1 = make_node_operator_record(*TEST_USER1_PRINCIPAL);
-    let nor2 = make_node_operator_record(*TEST_USER2_PRINCIPAL);
-    let nor3 = make_node_operator_record(*TEST_USER3_PRINCIPAL);
-    let nor4 = make_node_operator_record(*TEST_USER4_PRINCIPAL);
-    let nor5 = make_node_operator_record(*TEST_USER5_PRINCIPAL);
-    let nor6 = make_node_operator_record(*TEST_USER6_PRINCIPAL);
-    let nor7 = make_node_operator_record(*TEST_USER7_PRINCIPAL);
+    let mut node_operator: Vec<NodeOperatorRecord> = vec![];
+    for principal_id in &[
+        *TEST_USER1_PRINCIPAL,
+        *TEST_USER2_PRINCIPAL,
+        *TEST_USER3_PRINCIPAL,
+        *TEST_USER4_PRINCIPAL,
+        *TEST_USER5_PRINCIPAL,
+        *TEST_USER6_PRINCIPAL,
+        *TEST_USER7_PRINCIPAL,
+    ] {
+        node_operator.push(make_node_operator_record(*principal_id));
+    }
 
-    let nr1 = make_node_record(&nor1);
-    let nr1_pid = node_test_id(1);
-    let nr2 = make_node_record(&nor2);
-    let nr2_pid = node_test_id(2);
-    let nr3 = make_node_record(&nor3);
-    let nr3_pid = node_test_id(3);
-    let nr4 = make_node_record(&nor4);
-    let nr4_pid = node_test_id(4);
-    let nr5 = make_node_record(&nor5);
-    let nr5_pid = node_test_id(5);
-    let nr6 = make_node_record(&nor6);
-    let nr6_pid = node_test_id(6);
-    let nr7 = make_node_record(&nor7);
-    let nr7_pid = node_test_id(7);
+    let mut add_node_mutations = vec![];
+    let mut node_id = vec![];
+    for nor in &node_operator {
+        let (id, mut mutations) = get_new_node_id_and_mutations(nor);
+        node_id.push(id);
+        add_node_mutations.append(&mut mutations);
+    }
 
     let replica_version_id = ReplicaVersion::default().to_string();
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
@@ -370,15 +447,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         subnets: vec![nns_subnet_id.get().to_vec()],
     };
     let system_subnet = SubnetRecord {
-        membership: vec![
-            nr1_pid.get().to_vec(),
-            nr2_pid.get().to_vec(),
-            nr3_pid.get().to_vec(),
-            nr4_pid.get().to_vec(),
-            nr5_pid.get().to_vec(),
-            nr6_pid.get().to_vec(),
-            nr7_pid.get().to_vec(),
-        ],
+        membership: node_id.iter().map(|id| id.get().to_vec()).collect(),
         subnet_type: i32::from(SubnetType::System),
         replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
@@ -417,7 +486,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         ),
     ];
 
-    for nor in &[nor1, nor2, nor3, nor4, nor5, nor6, nor7] {
+    for nor in &node_operator {
         mutations.push(insert(
             make_node_operator_record_key(
                 PrincipalId::try_from(&nor.node_operator_principal_id).unwrap(),
@@ -427,21 +496,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         ));
     }
 
-    for (pid, nr) in &[
-        (nr1_pid, nr1),
-        (nr2_pid, nr2),
-        (nr3_pid, nr3),
-        (nr4_pid, nr4),
-        (nr5_pid, nr5),
-        (nr6_pid, nr6),
-        (nr7_pid, nr7),
-    ] {
-        mutations.push(insert(
-            make_node_record_key(*pid).as_bytes(),
-            encode_or_panic(nr),
-        ));
-    }
-
+    mutations.append(&mut add_node_mutations);
     mutations
 }
 
@@ -507,19 +562,10 @@ pub fn prepare_registry_with_two_node_sets(
     let mut node_mutations = Vec::<RegistryMutation>::default();
     let node_ids: Vec<NodeId> = (0..num_nodes_in_subnet2 + num_nodes_in_subnet1)
         .map(|id| {
-            let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-            let node_pks =
-                generate_node_keys_once(&config, None).expect("error generating node public keys");
-            let node_id = node_pks.node_id();
-            mutations.push(insert(
-                make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(node_pks.dkg_dealing_encryption_key()),
-            ));
-            node_mutations.push(insert(
-                make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(node_pks.dkg_dealing_encryption_key()),
-            ));
-
+            let (node_pks, node_id) = new_node_keys_and_node_id();
+            let mut crypto_keys_mutations = new_node_crypto_keys_mutations(node_id, node_pks);
+            mutations.append(&mut crypto_keys_mutations.clone());
+            node_mutations.append(&mut crypto_keys_mutations);
             let node_key = make_node_record_key(node_id);
             // Connection endpoints must be well-formed and most must be unique
             let effective_id = 1 + INITIAL_MUTATION_ID + (id as u8);

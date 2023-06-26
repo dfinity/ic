@@ -379,6 +379,11 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_current_time(self) -> Self {
+        let time = Time::try_from(SystemTime::now()).expect("Current time conversion failed");
+        Self { time, ..self }
+    }
+
     pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
         Self {
             subnet_type,

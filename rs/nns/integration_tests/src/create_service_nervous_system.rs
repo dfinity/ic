@@ -30,7 +30,7 @@ use ic_nns_test_utils::{
         nns_list_proposals, nns_wait_for_proposal_execution, set_controllers, setup_nns_canisters,
     },
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use lazy_static::lazy_static;
 use maplit::hashset;
 use std::collections::{HashMap, HashSet};
@@ -49,7 +49,7 @@ const ONE_TRILLION: u128 = 1_000_000_000_000;
 fn test_several_proposals() {
     // Step 1: Prepare the world.
 
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     // Step 1.1: Boot up NNS.
     let nns_init_payload = NnsInitPayloadsBuilder::new()

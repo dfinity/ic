@@ -4,6 +4,7 @@ use dfn_candid::candid;
 use ic_base_types::{subnet_id_try_from_protobuf, PrincipalId, SubnetId};
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_nns_common::registry::encode_or_panic;
+use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
@@ -45,21 +46,20 @@ fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
 #[test]
 fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
     local_test_on_nns_subnet(|runtime| async move {
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(999));
-        let initial_subnet_record = SubnetRecord {
-            membership: vec![PrincipalId::new_node_test_id(999).to_vec()],
-            subnet_type: i32::from(SubnetType::System),
-            replica_version_id: ReplicaVersion::default().into(),
-            unit_delay_millis: 600,
-            gossip_config: Some(build_default_gossip_config()),
-            ..Default::default()
-        };
+        // TEST_ID is used as subnet_id also when creating the initial registry state below.
+        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(TEST_ID));
 
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
+        )
+        .await;
+
+        let initial_subnet_record = get_value_or_panic::<SubnetRecord>(
+            &registry,
+            make_subnet_record_key(subnet_id).as_bytes(),
         )
         .await;
 

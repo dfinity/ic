@@ -3,33 +3,28 @@
 use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_ic00_types::{DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
-use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
 };
-use ic_nns_test_utils::registry::get_value_or_panic;
+use ic_nns_test_utils::registry::{get_value_or_panic, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::routing_table::v1 as pb;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_catch_up_package_contents_key, make_crypto_node_key, make_node_record_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_catch_up_package_contents_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
-use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
-use ic_types::crypto::KeyPurpose;
 use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
+use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::{
     connection_endpoint_from_string, flow_endpoint_from_string,
 };
@@ -170,41 +165,26 @@ pub fn prepare_registry_with_nodes(
     let mut mutations = vec![];
     let node_ids: Vec<NodeId> = (0..node_count)
         .map(|id| {
-            let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-            let node_pks =
-                generate_node_keys_once(&config, None).expect("error generating node public keys");
-            let node_id = node_pks.node_id();
-            mutations.push(insert(
-                make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(node_pks.dkg_dealing_encryption_key()),
-            ));
-            mutations.push(insert(
-                make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
-                encode_or_panic(node_pks.node_signing_key()),
-            ));
-            mutations.push(insert(
-                make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-                encode_or_panic(node_pks.idkg_dealing_encryption_key()),
-            ));
-
-            let node_key = make_node_record_key(node_id);
+            let (valid_pks, node_id) = new_node_keys_and_node_id();
             let effective_id = starting_mutation_id + (id as u8);
-            mutations.push(insert(
-                node_key.as_bytes(),
-                encode_or_panic(&NodeRecord {
-                    xnet: Some(connection_endpoint_from_string(&format!(
-                        "128.0.{effective_id}.1:1234"
-                    ))),
-                    http: Some(connection_endpoint_from_string(&format!(
-                        "128.0.{effective_id}.1:4321"
-                    ))),
-                    p2p_flow_endpoints: vec![&format!("123,128.0.{effective_id}.1:10000")]
-                        .iter()
-                        .map(|x| flow_endpoint_from_string(x))
-                        .collect(),
-                    node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
-                    ..Default::default()
-                }),
+            let node_record = NodeRecord {
+                xnet: Some(connection_endpoint_from_string(&format!(
+                    "128.0.{effective_id}.1:1234"
+                ))),
+                http: Some(connection_endpoint_from_string(&format!(
+                    "128.0.{effective_id}.1:4321"
+                ))),
+                p2p_flow_endpoints: vec![&format!("123,128.0.{effective_id}.1:10000")]
+                    .iter()
+                    .map(|x| flow_endpoint_from_string(x))
+                    .collect(),
+                node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
+                ..Default::default()
+            };
+            mutations.append(&mut make_add_node_registry_mutations(
+                node_id,
+                node_record,
+                valid_pks,
             ));
             node_id
         })

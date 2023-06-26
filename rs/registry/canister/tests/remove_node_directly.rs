@@ -1,8 +1,6 @@
 use dfn_candid::candid;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
-use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
@@ -10,6 +8,7 @@ use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::{
     get_committee_signing_key, get_dkg_dealing_key, get_idkg_dealing_encryption_key,
     get_node_record, get_node_signing_key, get_transport_tls_certificate,
+    new_node_keys_and_node_id,
 };
 use ic_nns_test_utils::{
     itest_helpers::{local_test_on_nns_subnet, set_up_registry_canister},
@@ -239,10 +238,7 @@ fn node_cannot_be_removed_if_in_subnet() {
 }
 
 fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateRequest) {
-    let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-    let valid_pks =
-        generate_node_keys_once(&config, None).expect("error generating node public keys");
-    let node_id = valid_pks.node_id();
+    let (valid_pks, node_id) = new_node_keys_and_node_id();
     let mut mutations = make_add_node_registry_mutations(node_id, node_record.clone(), valid_pks);
     // Insert the node's operator
     mutations.push(RegistryMutation {
@@ -255,7 +251,6 @@ fn init_mutation(node_record: &NodeRecord) -> (NodeId, RegistryAtomicMutateReque
             ..Default::default()
         }),
     });
-
     (
         node_id,
         RegistryAtomicMutateRequest {

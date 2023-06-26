@@ -1,23 +1,21 @@
 use crate::mutations::common::encode_or_panic;
 use crate::mutations::do_create_subnet::CreateSubnetPayload;
+use crate::mutations::node_management::common::make_add_node_registry_mutations;
 use crate::mutations::node_management::do_add_node::{
     connection_endpoint_from_string, flow_endpoint_from_string,
 };
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
-use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_nns_test_utils::registry::invariant_compliant_mutation;
+use ic_nns_test_utils::registry::{invariant_compliant_mutation, new_node_keys_and_node_id};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_keys::make_subnet_record_key;
-use ic_registry_keys::{make_crypto_node_key, make_node_record_key, make_subnet_list_record_key};
 use ic_registry_transport::pb::v1::{
     registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
 };
-use ic_registry_transport::{insert, upsert};
-use ic_types::crypto::KeyPurpose;
+use ic_registry_transport::upsert;
 use ic_types::ReplicaVersion;
 
 pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
@@ -93,33 +91,26 @@ pub fn prepare_registry_with_nodes(
     let mut mutations = Vec::<RegistryMutation>::default();
     let node_ids: Vec<NodeId> = (0..nodes)
         .map(|id| {
-            let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-            let node_pks =
-                generate_node_keys_once(&config, None).expect("error generating node public keys");
-            let node_id = node_pks.node_id();
-            mutations.push(insert(
-                make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(node_pks.dkg_dealing_encryption_key()),
-            ));
-
-            let node_key = make_node_record_key(node_id);
+            let (valid_pks, node_id) = new_node_keys_and_node_id();
             let effective_id: u8 = start_mutation_id + (id as u8);
-            mutations.push(insert(
-                node_key.as_bytes(),
-                encode_or_panic(&NodeRecord {
-                    xnet: Some(connection_endpoint_from_string(&format!(
-                        "128.0.{effective_id}.1:1234"
-                    ))),
-                    http: Some(connection_endpoint_from_string(&format!(
-                        "128.0.{effective_id}.1:4321"
-                    ))),
-                    p2p_flow_endpoints: vec![&format!("123,128.0.{effective_id}.1:10000")]
-                        .iter()
-                        .map(|x| flow_endpoint_from_string(x))
-                        .collect(),
-                    node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
-                    ..Default::default()
-                }),
+            let node_record = NodeRecord {
+                xnet: Some(connection_endpoint_from_string(&format!(
+                    "128.0.{effective_id}.1:1234"
+                ))),
+                http: Some(connection_endpoint_from_string(&format!(
+                    "128.0.{effective_id}.1:4321"
+                ))),
+                p2p_flow_endpoints: vec![&format!("123,128.0.{effective_id}.1:10000")]
+                    .iter()
+                    .map(|x| flow_endpoint_from_string(x))
+                    .collect(),
+                node_operator_id: PrincipalId::new_user_test_id(999).into_vec(),
+                ..Default::default()
+            };
+            mutations.append(&mut make_add_node_registry_mutations(
+                node_id,
+                node_record,
+                valid_pks,
             ));
             node_id
         })
@@ -129,6 +120,5 @@ pub fn prepare_registry_with_nodes(
         mutations,
         preconditions: vec![],
     };
-
     (mutate_request, node_ids)
 }

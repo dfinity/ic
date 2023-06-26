@@ -15,6 +15,7 @@ use crate::{
     registry::Registry,
 };
 
+use crate::invariants::crypto::check_node_crypto_keys_soft_invariants;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
 
 impl Registry {
@@ -71,6 +72,15 @@ impl Registry {
         let mut result = check_node_operator_invariants(&snapshot, false);
 
         // Crypto invariants
+        // "soft" checks log the results of the checks, but do not block the operation.
+        // The flag `soft_checks_do_block` is used for easy CI-testing,
+        // and should be removed once the invariants are fully enforced.
+        let soft_checks_do_block = false;
+        if soft_checks_do_block {
+            result = result.and(check_node_crypto_keys_soft_invariants(&snapshot));
+        } else {
+            let _result = check_node_crypto_keys_soft_invariants(&snapshot);
+        }
         result = result.and(check_node_crypto_keys_invariants(&snapshot));
 
         // Routing Table invariants

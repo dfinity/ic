@@ -211,7 +211,6 @@ mod test {
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
-    use ic_registry_transport::insert;
     use ic_test_utilities::types::ids::subnet_test_id;
     use std::ops::Add;
 
@@ -434,7 +433,7 @@ mod test {
 
         let mut now = SystemTime::now();
 
-        // add nodes
+        // Update nodes' IDKG encryption public keys.
         registry.maybe_apply_mutation_internal(
             node_ids
                 .iter()
@@ -446,7 +445,7 @@ mod test {
                             .unwrap()
                             .as_millis() as u64,
                     );
-                    insert(
+                    update(
                         make_crypto_node_key(*id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
                         encode_or_panic(&idkg_public_key),
                     )

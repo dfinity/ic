@@ -35,6 +35,7 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-certified-map",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ipnet",
