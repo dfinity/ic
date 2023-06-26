@@ -19,14 +19,17 @@ notify-gitlab-success:
   dependencies: []  # don't copy artifacts from other jobs
   script:
     - |
-      if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
-          MESSAGE="✔ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🫑🫑🫑"
-      else
-          MESSAGE="✅ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🎉🎉🎉"
-      fi
-      cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
+      # TODO(IDX-2856): remove this top level "if" whe we will not need to run the job for shedule pipelines.
+      if [[ "$CI_PIPELINE_SOURCE" == "push" ]] && [[ "$CI_COMMIT_REF_NAME" =~ ^rc--.* ]]; then
+        if [[ "${CI_COMMIT_MESSAGE,,}" =~ hotfix ]]; then
+            MESSAGE="✔ Hotfix pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🫑🫑🫑"
+        else
+            MESSAGE="✅ Release candidate pipeline <$CI_PIPELINE_URL|$CI_COMMIT_REF_NAME> succeeded. 🎉🎉🎉"
+        fi
+        cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
+        buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
           "${MESSAGE}" --channel "release-management-alerts"
+      fi
 
 notify-gitlab-failure:
   extends:
