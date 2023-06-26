@@ -374,11 +374,19 @@ pub struct CyclesAccountManagerConfig {
     /// Amount to charge for an ECDSA signature.
     pub ecdsa_signature_fee: Cycles,
 
-    /// Baseline cost to charge for HTTP request.
-    pub http_request_baseline_fee: Cycles,
+    /// A linear factor of the baseline cost to be charged for HTTP requests per node.
+    /// The cost of an HTTP request is represented by a quadratic function due to the communication complexity of the subnet.
+    pub http_request_linear_baseline_fee: Cycles,
 
-    /// Fee per byte for networking and consensus work done for a http request or response.
+    /// A quadratic factor of the baseline cost to be charged for HTTP requests per node.
+    /// The cost of an HTTP request is represented by a quadratic function due to the communication complexity of the subnet.
+    pub http_request_quadratic_baseline_fee: Cycles,
+
+    /// Fee per byte for networking and consensus work done for an HTTP request per node.
     pub http_request_per_byte_fee: Cycles,
+
+    /// Fee per byte for networking and consensus work done for an HTTP response per node.
+    pub http_response_per_byte_fee: Cycles,
 }
 
 impl CyclesAccountManagerConfig {
@@ -405,8 +413,10 @@ impl CyclesAccountManagerConfig {
             gib_storage_per_second_fee: Cycles::new(127_000),
             duration_between_allocation_charges: Duration::from_secs(10),
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
-            http_request_baseline_fee: Cycles::new(400_000_000),
-            http_request_per_byte_fee: Cycles::new(100_000),
+            http_request_linear_baseline_fee: Cycles::new(3_000_000),
+            http_request_quadratic_baseline_fee: Cycles::new(60_000),
+            http_request_per_byte_fee: Cycles::new(400),
+            http_response_per_byte_fee: Cycles::new(800),
         }
     }
 
@@ -433,8 +443,10 @@ impl CyclesAccountManagerConfig {
             /// - zero cost if called from NNS subnet
             /// - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
-            http_request_baseline_fee: Cycles::new(0),
+            http_request_linear_baseline_fee: Cycles::new(0),
+            http_request_quadratic_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),
+            http_response_per_byte_fee: Cycles::new(0),
         }
     }
 }
