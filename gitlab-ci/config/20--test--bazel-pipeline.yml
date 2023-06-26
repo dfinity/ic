@@ -141,14 +141,6 @@ bazel-config-check-all-rebuild:
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/..."
 
-bazel-cache-perf-test-linux:
-  extends:
-    - bazel-test-all
-    - .bazel-rules-post-master
-  needs:
-    - job: bazel-test-all
-      artifacts: false
-
 bazel-test-all-rebuild:
   extends:
     - .bazel-test-all
@@ -200,11 +192,3 @@ macos-openssl-static-binaries:
         otool -L "$BIN"
         exit 1
       fi
-
-bazel-cache-perf-test-macos:
-  extends:
-    - bazel-build-macos
-    - .bazel-rules-post-master
-  needs:
-    - job: bazel-build-macos
-      artifacts: false
