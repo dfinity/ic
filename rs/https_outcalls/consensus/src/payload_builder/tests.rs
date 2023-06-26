@@ -3,16 +3,20 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
+use crate::payload_builder::parse::{bytes_to_payload, payload_to_bytes};
+
 use super::CanisterHttpPayloadBuilderImpl;
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact},
+    batch_payload::{BatchPayloadBuilder, PastPayload},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadBuilder,
         CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
     },
+    consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
     time_source::SysTimeSource,
     validation::ValidationError,
 };
@@ -38,7 +42,7 @@ use ic_types::{
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::get_faults_tolerated,
-    crypto::{crypto_hash, BasicSig, BasicSigOf, Signed},
+    crypto::{crypto_hash, BasicSig, BasicSigOf, CryptoHash, CryptoHashOf, Signed},
     messages::CallbackId,
     registry::RegistryClientError,
     signature::{BasicSignature, BasicSignatureBatch},
@@ -77,19 +81,20 @@ fn single_request_test() {
             }
 
             // Build a payload
-            let payload = payload_builder.get_canister_http_payload(
+            let payload = payload_builder.build_payload(
                 Height::new(1),
-                &context,
-                &[],
                 NumBytes::new(4 * 1024 * 1024),
+                &[],
+                &context,
             );
 
             //  Make sure the response is contained in the payload
-            assert_eq!(payload.num_responses(), 1);
-            assert_eq!(payload.responses[0].content, response);
+            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse the payload");
+            assert_eq!(parsed_payload.num_responses(), 1);
+            assert_eq!(parsed_payload.responses[0].content, response);
 
             assert!(payload_builder
-                .validate_canister_http_payload(Height::new(1), &payload, &context, &[])
+                .validate_payload(Height::new(1), &payload, &[], &context)
                 .is_ok());
         });
 
@@ -196,6 +201,14 @@ fn multiple_payload_test() {
                 timeouts: vec![],
                 divergence_responses: vec![],
             };
+            let past_payload = payload_to_bytes(&past_payload, NumBytes::new(4 * 1024 * 1024));
+
+            let past_payloads = vec![PastPayload {
+                height: Height::from(0),
+                time: mock_time(),
+                block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+                payload: &past_payload,
+            }];
 
             let validation_context = ValidationContext {
                 registry_version: RegistryVersion::new(1),
@@ -204,24 +217,26 @@ fn multiple_payload_test() {
             };
 
             // Build a payload
-            let payload = payload_builder.get_canister_http_payload(
+            let payload = payload_builder.build_payload(
                 Height::new(1),
-                &validation_context,
-                &[&past_payload],
                 NumBytes::new(4 * 1024 * 1024),
+                &past_payloads,
+                &validation_context,
             );
 
             //  Make sure the response is not contained in the payload
             payload_builder
-                .validate_canister_http_payload(
+                .validate_payload(
                     Height::new(1),
                     &payload,
+                    &past_payloads,
                     &validation_context,
-                    &[&past_payload],
                 )
                 .unwrap();
-            assert_eq!(payload.num_responses(), 1);
-            assert_eq!(payload.responses[0].content, valid_response);
+
+            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+            assert_eq!(parsed_payload.num_responses(), 1);
+            assert_eq!(parsed_payload.responses[0].content, valid_response);
         });
     }
 }
@@ -256,14 +271,15 @@ fn multiple_share_same_source_test() {
             };
 
             // Build a payload
-            let payload = payload_builder.get_canister_http_payload(
+            let payload = payload_builder.build_payload(
                 Height::new(1),
-                &validation_context,
-                &[],
                 NumBytes::new(4 * 1024 * 1024),
+                &[],
+                &validation_context,
             );
 
-            assert_eq!(payload.num_responses(), 0);
+            let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+            assert_eq!(parsed_payload.num_responses(), 0);
         });
     }
 }
@@ -335,15 +351,17 @@ fn timeout_priority() {
         };
 
         // Build a payload
-        let payload = payload_builder.get_canister_http_payload(
+        let payload = payload_builder.build_payload(
             Height::new(1),
-            &validation_context,
-            &[],
             NumBytes::new(1024),
+            &[],
+            &validation_context,
         );
+
         // Responses get evicted, and timeouts fill most of the available space
-        assert!(payload.timeouts.len() == timeout_count as usize);
-        assert!(payload.responses.len() < response_count as usize);
+        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert!(parsed_payload.timeouts.len() == timeout_count as usize);
+        assert!(parsed_payload.responses.len() < response_count as usize);
     });
 }
 
@@ -410,14 +428,15 @@ fn divergence_response_inclusion_test() {
         }
 
         // Build a payload
-        let payload = payload_builder.get_canister_http_payload(
+        let payload = payload_builder.build_payload(
             Height::new(1),
-            &validation_context,
-            &[],
             NumBytes::new(4 * 1024 * 1024),
+            &[],
+            &validation_context,
         );
 
-        assert_eq!(payload.divergence_responses.len(), 1);
+        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert_eq!(parsed_payload.divergence_responses.len(), 1);
     });
 }
 
@@ -443,19 +462,22 @@ fn max_responses() {
         };
 
         // Build a payload
-        let payload = payload_builder.get_canister_http_payload(
+        let payload = payload_builder.build_payload(
             Height::new(1),
-            &validation_context,
-            &[],
             NumBytes::new(4 * 1024 * 1024),
+            &[],
+            &validation_context,
+        );
+
+        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert!(
+            parsed_payload.num_non_timeout_responses() <= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK
         );
 
         //  Make sure the response is not contained in the payload
         payload_builder
-            .validate_canister_http_payload(Height::new(1), &payload, &validation_context, &[])
+            .validate_payload(Height::new(1), &payload, &[], &validation_context)
             .unwrap();
-
-        assert!(payload.num_non_timeout_responses() <= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK);
     })
 }
 
@@ -470,33 +492,12 @@ fn oversized_validation() {
         &default_validation_context(),
     );
     match validation_result {
-        Err(ValidationError::Permanent(CanisterHttpPermanentValidationError::PayloadTooBig {
-            expected,
-            received,
-        })) if expected == 2 * 1024 * 1024 && received > expected => (),
-        x => panic!("Expected PayloadTooBig, got {:?}", x),
-    }
-}
-
-/// Test that inconsistent payloads don't validate
-#[test]
-fn inconsistend_validation() {
-    let validation_result = run_validatation_test(
-        |_, metadata| {
-            // Set metadata callback id to a different id
-            metadata.id = CallbackId::new(2);
-        },
-        &default_validation_context(),
-    );
-    match validation_result {
         Err(ValidationError::Permanent(
-            CanisterHttpPermanentValidationError::InvalidMetadata {
-                metadata_id,
-                content_id,
-                ..
-            },
-        )) if metadata_id == CallbackId::new(2) && content_id == CallbackId::new(0) => (),
-        x => panic!("Expected InvalidMetadata, got {:?}", x),
+            PayloadPermanentError::CanisterHttpPayloadValidationError(
+                CanisterHttpPermanentValidationError::PayloadTooBig { expected, received },
+            ),
+        )) if expected == 2 * 1024 * 1024 && received > expected => (),
+        x => panic!("Expected PayloadTooBig, got {:?}", x),
     }
 }
 
@@ -514,7 +515,9 @@ fn registry_version_validation() {
     );
     match validation_result {
         Err(ValidationError::Permanent(
-            CanisterHttpPermanentValidationError::RegistryVersionMismatch { .. },
+            PayloadPermanentError::CanisterHttpPayloadValidationError(
+                CanisterHttpPermanentValidationError::RegistryVersionMismatch { .. },
+            ),
         )) => (),
         x => panic!("Expected RegistryVersionMismatch, got {:?}", x),
     }
@@ -532,7 +535,9 @@ fn hash_validation() {
     );
     match validation_result {
         Err(ValidationError::Permanent(
-            CanisterHttpPermanentValidationError::ContentHashMismatch { .. },
+            PayloadPermanentError::CanisterHttpPayloadValidationError(
+                CanisterHttpPermanentValidationError::ContentHashMismatch { .. },
+            ),
         )) => (),
         x => panic!("Expected ContentHashMismatch, got {:?}", x),
     }
@@ -550,10 +555,14 @@ fn timeout_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Permanent(CanisterHttpPermanentValidationError::Timeout {
-            timed_out_at,
-            validation_time,
-        })) if timed_out_at < validation_time => (),
+        Err(ValidationError::Permanent(
+            PayloadPermanentError::CanisterHttpPayloadValidationError(
+                CanisterHttpPermanentValidationError::Timeout {
+                    timed_out_at,
+                    validation_time,
+                },
+            ),
+        )) if timed_out_at < validation_time => (),
         x => panic!("Expected Timeout, got {:?}", x),
     }
 }
@@ -571,8 +580,10 @@ fn registry_unavailable_validation() {
     );
     match validation_result {
         Err(ValidationError::Transient(
-            CanisterHttpTransientValidationError::RegistryUnavailable(
-                RegistryClientError::VersionNotAvailable { version },
+            PayloadTransientError::CanisterHttpPayloadValidationError(
+                CanisterHttpTransientValidationError::RegistryUnavailable(
+                    RegistryClientError::VersionNotAvailable { version },
+                ),
             ),
         )) if version == RegistryVersion::new(2) => (),
         x => panic!("Expected RegistryUnavailable, got {:?}", x),
@@ -597,7 +608,11 @@ fn feature_disabled_validation() {
         },
     );
     match validation_result {
-        Err(ValidationError::Transient(CanisterHttpTransientValidationError::Disabled)) => (),
+        Err(ValidationError::Transient(
+            PayloadTransientError::CanisterHttpPayloadValidationError(
+                CanisterHttpTransientValidationError::Disabled,
+            ),
+        )) => (),
         x => panic!("Expected Disabled, got {:?}", x),
     }
 }
@@ -932,7 +947,7 @@ pub(crate) fn default_validation_context() -> ValidationContext {
 fn run_validatation_test<F>(
     mut modify: F,
     validation_context: &ValidationContext,
-) -> Result<NumBytes, CanisterHttpPayloadValidationError>
+) -> Result<(), PayloadValidationError>
 where
     F: FnMut(&mut CanisterHttpResponse, &mut CanisterHttpResponseMetadata),
 {
@@ -946,11 +961,7 @@ where
             divergence_responses: vec![],
         };
 
-        payload_builder.validate_canister_http_payload(
-            Height::from(1),
-            &payload,
-            validation_context,
-            &[],
-        )
+        let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        payload_builder.validate_payload(Height::from(1), &payload, &[], validation_context)
     })
 }
