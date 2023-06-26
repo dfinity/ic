@@ -3,7 +3,7 @@ use dfn_candid::{candid, candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
 use dfn_core::{
-    api::{caller, data_certificate, print, set_certified_data, trap_with},
+    api::{caller, data_certificate, print, set_certified_data, time_nanos, trap_with},
     over, over_async, over_async_may_reject, over_init, printer, setup, stable,
 };
 use dfn_protobuf::protobuf;
@@ -238,7 +238,7 @@ async fn icrc1_send(
         .unwrap()
         .minting_account_id
         .expect("Minting canister id not initialized");
-    let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+    let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
     let (operation, effective_fee) = if to == minting_acc {
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
             return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadFee {
@@ -818,7 +818,7 @@ async fn icrc1_transfer(
 ) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
     let to = AccountIdentifier::from(arg.to);
     let from_account = Account {
-        owner: ic_cdk::api::caller(),
+        owner: caller().into(),
         subaccount: arg.from_subaccount,
     };
     match arg.memo.as_ref() {

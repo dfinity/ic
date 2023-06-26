@@ -1,4 +1,4 @@
-use dfn_core::api::now;
+use dfn_core::api::{now, trap_with};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
 use ic_ledger_canister_core::blockchain::Blockchain;
@@ -419,7 +419,7 @@ impl Ledger {
         }
         if let Some(icrc1_minting_account) = args.icrc1_minting_account {
             if Some(AccountIdentifier::from(icrc1_minting_account)) != self.minting_account_id {
-                ic_cdk::trap(
+                trap_with(
                     "The icrc1 minting account is not the same as the minting account set during initialization",
                 );
             }
