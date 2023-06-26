@@ -277,3 +277,72 @@ fn should_basic_signing_protocol_work() -> Result<(), ThresholdEcdsaError> {
 
     Ok(())
 }
+
+#[test]
+fn invalid_signatures_are_rejected() -> Result<(), ThresholdEcdsaError> {
+    let nodes = 13;
+    let threshold = (nodes + 2) / 3;
+    let number_of_dealings_corrupted = 0;
+
+    let mut rng = reproducible_rng();
+    let random_seed = Seed::from_rng(&mut rng);
+
+    let setup = SignatureProtocolSetup::new(
+        EccCurveType::K256,
+        nodes,
+        threshold,
+        number_of_dealings_corrupted,
+        random_seed,
+    )?;
+
+    let alg = setup.alg();
+
+    let signed_message = rng.gen::<[u8; 32]>().to_vec();
+    let random_beacon = Randomness::from(rng.gen::<[u8; 32]>());
+
+    let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
+    let proto =
+        SignatureProtocolExecution::new(setup, signed_message, random_beacon, derivation_path);
+
+    let shares = proto.generate_shares()?;
+
+    let sig = proto.generate_signature(&shares).unwrap();
+
+    assert_eq!(proto.verify_signature(&sig), Ok(()));
+
+    let sig = sig.serialize();
+
+    assert_eq!(sig.len() % 2, 0);
+
+    let half_sig = sig.len() / 2;
+
+    let sig_with_r_eq_zero = {
+        let mut sig_with_r_eq_zero = sig.clone();
+        sig_with_r_eq_zero[..half_sig].fill(0);
+        ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_r_eq_zero).unwrap()
+    };
+
+    assert!(proto.verify_signature(&sig_with_r_eq_zero).is_err());
+
+    let sig_with_s_eq_zero = {
+        let mut sig_with_s_eq_zero = sig.clone();
+        sig_with_s_eq_zero[half_sig..].fill(0);
+        ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_s_eq_zero).unwrap()
+    };
+
+    assert!(proto.verify_signature(&sig_with_s_eq_zero).is_err());
+
+    let sig_with_high_s = {
+        let s = EccScalar::deserialize(EccCurveType::K256, &sig[half_sig..])
+            .unwrap()
+            .negate();
+
+        let mut sig_with_high_s = sig;
+        sig_with_high_s[half_sig..].copy_from_slice(&s.serialize());
+        ThresholdEcdsaCombinedSigInternal::deserialize(alg, &sig_with_high_s).unwrap()
+    };
+
+    assert!(proto.verify_signature(&sig_with_high_s).is_err());
+
+    Ok(())
+}
