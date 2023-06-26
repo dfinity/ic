@@ -37,7 +37,7 @@ use ic_sns_wasm::pb::v1::{
     GetNextSnsVersionRequest, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
     SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsWasm,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::Cycles;
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -67,7 +67,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     let wallet_canister_id = CanisterId::from_u64(11);
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachine::new();
+    let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
@@ -328,7 +328,7 @@ fn upgrade_swap(
 fn upgrade_archive_sns_canister_via_sns_wasms() {
     let canister_type = SnsCanisterType::Archive;
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachine::new();
+    let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
@@ -577,7 +577,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
 #[test]
 fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachine::new();
+    let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
@@ -888,7 +888,7 @@ fn test_custom_upgrade_path_for_sns() {
     let wallet_canister_id = CanisterId::from_u64(11);
 
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachine::new();
+    let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
@@ -1088,7 +1088,7 @@ fn test_custom_upgrade_path_for_sns() {
 #[test]
 fn insert_upgrade_path_entries_only_callable_by_governance_when_access_controls_enabled() {
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachine::new();
+    let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_sns_wasm_access_controls(true)
@@ -1123,7 +1123,7 @@ fn insert_upgrade_path_entries_only_callable_by_governance_when_access_controls_
 #[test]
 fn insert_upgrade_path_entries_callable_by_anyone_when_access_controls_disabled() {
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
-    let machine = StateMachine::new();
+    let machine = StateMachineBuilder::new().with_current_time().build();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_sns_wasm_access_controls(false)

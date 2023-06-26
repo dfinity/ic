@@ -460,7 +460,7 @@ where
 
 /// Same as local_test but running a custom Config and applying initial Registry
 /// mutations
-pub fn local_test_with_config_with_mutations<Fut, Out, F>(
+pub fn local_test_with_config_with_mutations_on_system_subnet<Fut, Out, F>(
     config: Config,
     mutations: Vec<RegistryMutation>,
     run: F,

@@ -5,6 +5,7 @@ use ic_nns_common::registry::encode_or_panic;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, NNS_SUBNET_ID,
 };
+use ic_nns_test_utils::registry::new_node_keys_and_node_id;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet,
@@ -19,12 +20,13 @@ use ic_protobuf::registry::{
 };
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, update};
-use ic_test_utilities::types::ids::{node_test_id, user_test_id};
+use ic_test_utilities::types::ids::user_test_id;
 use ic_types::{p2p::build_default_gossip_config, ReplicaVersion};
+use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_delete_subnet::DeleteSubnetPayload,
 };
@@ -32,8 +34,8 @@ use registry_canister::{
 #[test]
 fn test_subnet_is_only_deleted_when_appropriate() {
     local_test_on_nns_subnet(|runtime| async move {
-        let node_pid_2 = node_test_id(997);
-        let node_pid_3 = node_test_id(998);
+        let (valid_pks_2, node_pid_2) = new_node_keys_and_node_id();
+        let (valid_pks_3, node_pid_3) = new_node_keys_and_node_id();
         let node_operator_pid = user_test_id(999);
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(999));
         let application_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(997));
@@ -108,51 +110,54 @@ fn test_subnet_is_only_deleted_when_appropriate() {
             ],
         };
 
+        let mut mutations = vec![
+            insert(
+                make_subnet_record_key(application_subnet_id).as_bytes(),
+                encode_or_panic(&application_subnet),
+            ),
+            insert(
+                make_catch_up_package_contents_key(application_subnet_id).as_bytes(),
+                encode_or_panic(&application_subnet_cup),
+            ),
+            insert(
+                make_crypto_threshold_signing_pubkey_key(application_subnet_id).as_bytes(),
+                encode_or_panic(&application_subnet_pk),
+            ),
+            insert(
+                make_catch_up_package_contents_key(second_system_subnet_id).as_bytes(),
+                encode_or_panic(&second_system_subnet_cup),
+            ),
+            insert(
+                make_crypto_threshold_signing_pubkey_key(second_system_subnet_id).as_bytes(),
+                encode_or_panic(&second_system_subnet_pk),
+            ),
+            insert(
+                make_subnet_record_key(second_system_subnet_id).as_bytes(),
+                encode_or_panic(&second_system_subnet),
+            ),
+            update(
+                make_subnet_list_record_key().as_bytes(),
+                encode_or_panic(&subnet_list),
+            ),
+        ];
+
+        mutations.append(&mut make_add_node_registry_mutations(
+            node_pid_2,
+            node_2,
+            valid_pks_2,
+        ));
+        mutations.append(&mut make_add_node_registry_mutations(
+            node_pid_3,
+            node_3,
+            valid_pks_3,
+        ));
+
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(init_mutation)
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
-                    mutations: vec![
-                        insert(
-                            make_node_record_key(node_pid_2).as_bytes(),
-                            encode_or_panic(&node_2),
-                        ),
-                        insert(
-                            make_node_record_key(node_pid_3).as_bytes(),
-                            encode_or_panic(&node_3),
-                        ),
-                        insert(
-                            make_subnet_record_key(application_subnet_id).as_bytes(),
-                            encode_or_panic(&application_subnet),
-                        ),
-                        insert(
-                            make_catch_up_package_contents_key(application_subnet_id).as_bytes(),
-                            encode_or_panic(&application_subnet_cup),
-                        ),
-                        insert(
-                            make_crypto_threshold_signing_pubkey_key(application_subnet_id)
-                                .as_bytes(),
-                            encode_or_panic(&application_subnet_pk),
-                        ),
-                        insert(
-                            make_catch_up_package_contents_key(second_system_subnet_id).as_bytes(),
-                            encode_or_panic(&second_system_subnet_cup),
-                        ),
-                        insert(
-                            make_crypto_threshold_signing_pubkey_key(second_system_subnet_id)
-                                .as_bytes(),
-                            encode_or_panic(&second_system_subnet_pk),
-                        ),
-                        insert(
-                            make_subnet_record_key(second_system_subnet_id).as_bytes(),
-                            encode_or_panic(&second_system_subnet),
-                        ),
-                        update(
-                            make_subnet_list_record_key().as_bytes(),
-                            encode_or_panic(&subnet_list),
-                        ),
-                    ],
+                    mutations,
                     preconditions: vec![],
                 })
                 .build(),

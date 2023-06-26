@@ -282,7 +282,6 @@ impl Registry {
             LOG_PREFIX,
             mutations.len()
         );
-
         self.verify_mutations_internal(&mutations);
         self.apply_mutations(mutations);
     }

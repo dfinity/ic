@@ -11,8 +11,8 @@ use crate::{
 };
 use candid::Encode;
 use canister_test::{
-    local_test_with_config_e, local_test_with_config_with_mutations, Canister, Project, Runtime,
-    Wasm,
+    local_test_with_config_e, local_test_with_config_with_mutations_on_system_subnet, Canister,
+    Project, Runtime, Wasm,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use dfn_candid::{candid_one, CandidOne};
@@ -680,8 +680,8 @@ where
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_with_mutations(config, mutations, run)
-        .expect("local_test_with_config_with_mutations failed")
+    local_test_with_config_with_mutations_on_system_subnet(config, mutations, run)
+        .expect("local_test_with_config_with_mutations_on_system_subnet failed")
 }
 
 /// Encapsulates different test scenarios, with diferent upgrade modes.

@@ -21,7 +21,7 @@ use ic_nns_test_utils::{
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Params as SnsSwapParams};
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::Cycles;
 use lazy_static::lazy_static;
 
@@ -40,7 +40,7 @@ const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
 fn test_only_one_sns_token_swap_proposal_can_be_open() {
     // Step 1: Prepare the world.
 
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     // The canister id the wallet canister will have.
     let wallet_canister_id = CanisterId::from_u64(11);

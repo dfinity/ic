@@ -14557,6 +14557,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-canister-client-sender",
+ "ic-cdk 0.7.4",
  "ic-certified-map",
  "ic-config",
  "ic-crypto-node-key-generation",

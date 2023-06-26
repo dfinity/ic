@@ -19,6 +19,7 @@ dfn_http_metrics = { path = "../../rust_canisters/dfn_http_metrics" }
 futures = "0.3.21"
 ic-base-types = { path = "../../types/base_types/" }
 ic-certified-map = "0.3.1"
+ic-cdk = "0.7.0"
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }

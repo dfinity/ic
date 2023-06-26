@@ -70,7 +70,7 @@ use ic_sns_test_utils::{
     },
 };
 use ic_sns_wasm::pb::v1::SnsCanisterIds;
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::{ingress::WasmResult, Cycles};
 
 use icp_ledger::{
@@ -88,18 +88,13 @@ use std::{
 };
 const ONE_TRILLION: u128 = 1_000_000_000_000;
 const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
+const SALE_DURATION_SECONDS: u64 = 13 * SECONDS_PER_DAY;
 
 const DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR: f64 = 0.0;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 
 lazy_static! {
     static ref INITIAL_ICP_BALANCE: ExplosiveTokens = ExplosiveTokens::from_e8s(100 * E8);
-    static ref SWAP_DUE_TIMESTAMP_SECONDS: u64 = StateMachine::new()
-        .time()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        + 13 * SECONDS_PER_DAY;
     static ref DEFAULT_TRANSFER_FEE: ExplosiveTokens =
         ExplosiveTokens::from(DEFAULT_TRANSFER_FEE_TOKENS);
 }
@@ -499,9 +494,7 @@ fn begin_swap(
                 // neurons.
                 min_participant_icp_e8s: E8 * 5 / 4,
                 max_participant_icp_e8s: INITIAL_ICP_BALANCE.get_e8s(),
-
-                swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
-
+                swap_due_timestamp_seconds: swap_due_from_now_timestamp_seconds(state_machine),
                 sns_token_e8s,
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
                     count: neuron_basket_count,
@@ -709,7 +702,6 @@ fn craft_community_fund_neuron(maturity_e8s_equivalent: u64) -> nns_governance_p
             controller, /* nonce = */ 0,
         )),
     );
-
     nns_governance_pb::Neuron {
         id: Some(nns_common_pb::NeuronId {
             id: thread_rng().gen(),
@@ -719,6 +711,15 @@ fn craft_community_fund_neuron(maturity_e8s_equivalent: u64) -> nns_governance_p
         maturity_e8s_equivalent,
         ..COMMUNITY_FUND_NEURON_TEMPLATE.clone()
     }
+}
+
+fn swap_due_from_now_timestamp_seconds(state_machine: &StateMachine) -> u64 {
+    state_machine
+        .time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("Failed timestamp computation")
+        .as_secs()
+        + SALE_DURATION_SECONDS
 }
 
 // Swap should succeed when there are many large Community Fund neurons (i.e. CF
@@ -1239,7 +1240,7 @@ fn do_nothing_special_before_proposal_is_adopted(_state_machine: &mut StateMachi
 fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to_normal_mode_after_sale(
 ) {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     let direct_participant_principal_ids = generate_principal_ids(5);
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(70 * E8);
@@ -1516,7 +1517,7 @@ fn assert_successful_swap_finalizes_correctly(
     let neuron_basket_count = 3;
 
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
     let (
         sns_canister_ids,
         community_fund_neurons,
@@ -2292,7 +2293,7 @@ fn swap_lifecycle_sad() {
     let neuron_basket_count = 3;
 
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
     let (
         sns_canister_ids,
         community_fund_neurons,
@@ -2393,9 +2394,8 @@ fn swap_lifecycle_sad() {
     // refresh_buyer_tokens is intentionally NOT called here.
 
     // Advance time well into the future so that the swap fails due to no participants.
-    state_machine.set_time(
-        std::time::UNIX_EPOCH + std::time::Duration::from_secs(*SWAP_DUE_TIMESTAMP_SECONDS + 1),
-    );
+    let after_swap_due = swap_due_from_now_timestamp_seconds(&state_machine) + 10;
+    state_machine.set_time(std::time::UNIX_EPOCH + std::time::Duration::from_secs(after_swap_due));
 
     state_machine.tick();
 
@@ -2739,7 +2739,7 @@ fn test_upgrade() {
 #[test]
 fn test_deletion_of_sale_ticket() {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(70 * E8);
@@ -2969,7 +2969,7 @@ fn test_deletion_of_sale_ticket() {
 #[test]
 fn test_get_sale_parameters() {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
@@ -2996,7 +2996,7 @@ fn test_get_sale_parameters() {
 #[test]
 fn test_list_community_fund_participants() {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
     let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
@@ -3120,7 +3120,7 @@ fn test_last_man_less_than_min() {
             max_icp_e8s,
             min_participant_icp_e8s,
             max_participant_icp_e8s,
-            swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
+            swap_due_timestamp_seconds: swap_due_from_now_timestamp_seconds(&state_machine),
             sns_token_e8s: 10_000_000,
             neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
                 count: 1,
@@ -3193,7 +3193,7 @@ fn test_last_man_less_than_min() {
 #[test]
 fn test_refresh_buyer_token() {
     // Step 1: Prepare the world.
-    let mut state_machine = StateMachine::new();
+    let mut state_machine = StateMachineBuilder::new().with_current_time().build();
 
     let direct_participant_principal_ids = vec![
         *TEST_USER1_PRINCIPAL,
