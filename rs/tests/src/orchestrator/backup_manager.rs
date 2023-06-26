@@ -23,39 +23,44 @@ Success::
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::HasIcPrepDir;
-use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::subnet_recovery::{enable_ecdsa_on_nns, run_ecdsa_signature_test};
-use crate::util::{MessageCanister, UniversalCanister};
 use crate::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::{HasIcPrepDir, TestEnv},
+        test_env_api::*,
+    },
     orchestrator::utils::{
         rw_message::install_nns_and_check_progress,
         ssh_access::{
             generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
             wait_until_authentication_is_granted, AuthMean,
         },
+        subnet_recovery::{enable_ecdsa_on_nns, run_ecdsa_signature_test},
         upgrade::{
             assert_assigned_replica_version, bless_public_replica_version,
             get_assigned_replica_version, update_subnet_replica_version, UpdateImageType,
         },
     },
-    util::{block_on, get_nns_node},
+    util::{block_on, get_nns_node, MessageCanister, UniversalCanister},
 };
-use ic_backup::backup_helper::{last_checkpoint, ls_path};
-use ic_backup::config::{ColdStorage, Config, SubnetConfig};
-use ic_backup::util::sleep_secs;
+use ic_backup::{
+    backup_helper::{last_checkpoint, ls_path},
+    config::{ColdStorage, Config, SubnetConfig},
+    util::sleep_secs,
+};
 use ic_base_types::SubnetId;
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::{debug, error, info, Logger};
-use std::ffi::OsStr;
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::net::IpAddr;
-use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::{
+    ffi::OsStr,
+    fs::{self, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -488,7 +493,7 @@ fn download_binary_file(
         log,
         replica_version.clone(),
         binary.to_string(),
-        binaries_dir.to_path_buf(),
+        binaries_dir,
     ))
     .expect("error downloading binaty");
 }

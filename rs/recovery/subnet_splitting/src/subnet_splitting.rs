@@ -4,7 +4,8 @@ use crate::{
         get_propose_to_prepare_canister_migration_command,
         get_propose_to_reroute_canister_ranges_command,
     },
-    steps::{CopyWorkDirStep, SplitStateStep, StateSplitStrategy},
+    state_tool_helper::StateToolHelper,
+    steps::{ComputeExpectedManifestsStep, CopyWorkDirStep, SplitStateStep, StateSplitStrategy},
 };
 
 use clap::Parser;
@@ -44,6 +45,7 @@ pub(crate) enum StepType {
     HaltSourceSubnetAtCupHeight,
     RerouteCanisterRanges,
     DownloadStateFromSourceSubnet,
+    ComputeExpectedManifestsStep,
     CopyDir,
     SplitOutSourceState,
     SplitOutDestinationState,
@@ -106,6 +108,7 @@ pub(crate) struct SubnetSplitting {
     recovery_args: RecoveryArgs,
     neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
+    state_tool_helper: StateToolHelper,
     logger: Logger,
 }
 
@@ -123,14 +126,22 @@ impl SubnetSplitting {
         subnet_args: SubnetSplittingArgs,
     ) -> Self {
         let recovery = Recovery::new(logger.clone(), recovery_args.clone(), neuron_args.clone())
-            .expect("Failed to init recovery");
+            .expect("Failed to initialize recovery");
         recovery.init_registry_local_store();
+        let state_tool_helper = StateToolHelper::new(
+            recovery.binary_dir.clone(),
+            recovery_args.replica_version.clone(),
+            logger.clone(),
+        )
+        .expect("Failed to initialize state tool helper");
+
         Self {
             step_iterator: StepType::iter().peekable(),
             params: subnet_args,
             recovery_args,
             neuron_args,
             recovery,
+            state_tool_helper,
             logger,
         }
     }
@@ -148,6 +159,7 @@ impl SubnetSplitting {
         SplitStateStep {
             subnet_id: self.subnet_id(target_subnet),
             state_split_strategy,
+            state_tool_helper: self.state_tool_helper.clone(),
             work_dir: self.work_dir(target_subnet),
             logger: self.recovery.logger.clone(),
         }
@@ -396,6 +408,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             .into(),
 
             StepType::Cleanup => self.recovery.get_cleanup_step().into(),
+            StepType::ComputeExpectedManifestsStep => ComputeExpectedManifestsStep {
+                recovery_dir: self.recovery.recovery_dir.clone(),
+                state_tool_helper: self.state_tool_helper.clone(),
+                source_subnet_id: self.params.source_subnet_id,
+                destination_subnet_id: self.params.destination_subnet_id,
+                canister_id_ranges_to_move: self.params.canister_id_ranges_to_move.clone(),
+            }
+            .into(),
         };
 
         Ok(step)

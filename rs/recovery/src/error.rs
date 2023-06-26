@@ -21,6 +21,7 @@ pub enum RecoveryError {
     ParsingError(serde_json::Error),
     SerializationError(serde_json::Error),
     UnexpectedError(String),
+    StateToolError(String),
     CheckpointError(String, CheckpointError),
     StepSkipped,
 }
@@ -88,6 +89,7 @@ impl fmt::Display for RecoveryError {
             RecoveryError::CheckpointError(msg, e) => {
                 write!(f, "Checkpoint error, message: {}, error: {}", msg, e)
             }
+            RecoveryError::StateToolError(msg) => write!(f, "State tool error, message: {}", msg),
         }
     }
 }

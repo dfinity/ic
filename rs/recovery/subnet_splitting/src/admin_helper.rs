@@ -1,3 +1,5 @@
+use crate::utils::canister_id_range_to_string;
+
 use ic_base_types::SubnetId;
 use ic_recovery::admin_helper::{
     quote, AdminHelper, CommandHelper, IcAdmin, SSH_READONLY_ACCESS_ARG, SUMMARY_ARG,
@@ -116,10 +118,6 @@ pub(crate) fn get_halt_subnet_at_cup_height_command(
     }
 
     ic_admin
-}
-
-fn canister_id_range_to_string(canister_id_range: &CanisterIdRange) -> String {
-    format!("{}:{}", canister_id_range.start, canister_id_range.end)
 }
 
 #[cfg(test)]

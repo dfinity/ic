@@ -1,3 +1,5 @@
+use crate::state_tool_helper::StateToolHelper;
+
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
@@ -11,6 +13,9 @@ use ic_state_manager::split::resolve_ranges_and_split;
 use slog::Logger;
 
 use std::path::PathBuf;
+
+const MANIFEST_FILE_NAME: &str = "manifest.data";
+const EXPECTED_MANIFESTS_FILE_NAME: &str = "expected_manifests.data";
 
 pub(crate) struct CopyWorkDirStep {
     pub(crate) from: PathBuf,
@@ -68,6 +73,7 @@ impl StateSplitStrategy {
 pub(crate) struct SplitStateStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) state_split_strategy: StateSplitStrategy,
+    pub(crate) state_tool_helper: StateToolHelper,
     pub(crate) work_dir: PathBuf,
     pub(crate) logger: Logger,
 }
@@ -106,6 +112,61 @@ impl Step for SplitStateStep {
         )
         .map_err(RecoveryError::OutputError)?;
 
+        let (max_name, _) = Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir)?;
+        let max_checkpoint = checkpoints_dir.join(max_name);
+        let manifest_path = max_checkpoint.join(MANIFEST_FILE_NAME);
+
+        self.state_tool_helper
+            .compute_manifest(&max_checkpoint, &manifest_path)?;
+        self.state_tool_helper.verify_manifest(&manifest_path)?;
+
         Recovery::remove_all_but_highest_checkpoints(&checkpoints_dir, &self.logger).map(|_| ())
+    }
+}
+
+pub(crate) struct ComputeExpectedManifestsStep {
+    pub(crate) recovery_dir: PathBuf,
+    pub(crate) state_tool_helper: StateToolHelper,
+    pub(crate) source_subnet_id: SubnetId,
+    pub(crate) destination_subnet_id: SubnetId,
+    pub(crate) canister_id_ranges_to_move: Vec<CanisterIdRange>,
+}
+
+impl ComputeExpectedManifestsStep {
+    fn checkpoints(&self) -> PathBuf {
+        self.recovery_dir
+            .join("working_dir")
+            .join(IC_STATE_DIR)
+            .join(CHECKPOINTS)
+    }
+}
+
+impl Step for ComputeExpectedManifestsStep {
+    fn descr(&self) -> String {
+        format!(
+            "Compute the expected manifests of the states resulting from splitting the manifest \
+            at {} between {} (hosting all canisters in {:?}) and {} (all remaining canisters)",
+            self.checkpoints().display(),
+            self.destination_subnet_id,
+            self.canister_id_ranges_to_move,
+            self.source_subnet_id,
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let checkpoints_dir = self.checkpoints();
+        let (max_name, _) = Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir)?;
+        let max_checkpoint = checkpoints_dir.join(max_name);
+        let manifest_path = self.recovery_dir.join(MANIFEST_FILE_NAME);
+
+        self.state_tool_helper
+            .compute_manifest(&max_checkpoint, &manifest_path)?;
+        self.state_tool_helper.split_manifest(
+            &manifest_path,
+            self.source_subnet_id,
+            self.destination_subnet_id,
+            &self.canister_id_ranges_to_move,
+            &self.recovery_dir.join(EXPECTED_MANIFESTS_FILE_NAME),
+        )
     }
 }

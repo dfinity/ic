@@ -181,7 +181,7 @@ impl Recovery {
                     &r.logger,
                     version,
                     String::from("ic-admin"),
-                    r.binary_dir.clone(),
+                    &r.binary_dir,
                 ))?;
             } else {
                 info!(r.logger, "No ic-admin version provided, skipping download.");
