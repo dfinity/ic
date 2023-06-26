@@ -1,10 +1,7 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
-use dfn_core::{
-    api::{call_bytes_with_cleanup, now, Funds},
-    call, over, over_async, over_init,
-};
+use dfn_core::{api::now, over, over_async, over_init};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -16,7 +13,7 @@ use ic_nervous_system_common::{
     serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::{DfnRuntime, Runtime};
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -34,6 +31,8 @@ use std::{cell::RefCell, time::SystemTime};
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
+type CanisterRuntime = DfnRuntime;
+
 struct CanisterEnvironment {}
 
 #[async_trait]
@@ -50,8 +49,8 @@ impl Environment for CanisterEnvironment {
         canister_id: CanisterId,
         method_name: &str,
         arg: Vec<u8>,
-    ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        call_bytes_with_cleanup(canister_id, method_name, &arg, Funds::zero()).await
+    ) -> Result<Vec<u8>, (i32, String)> {
+        CanisterRuntime::call_bytes_with_cleanup(canister_id, method_name, &arg).await
     }
 
     fn canister_id(&self) -> CanisterId {
@@ -74,8 +73,9 @@ impl RealLedgerCanisterClient {
 #[async_trait]
 impl LedgerCanisterClient for RealLedgerCanisterClient {
     async fn archives(&self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
-        call(self.ledger_canister_id, "archives", candid_one, ())
+        CanisterRuntime::call(self.ledger_canister_id, "archives", ())
             .await
+            .map(|(archives,): (Vec<ArchiveInfo>,)| archives)
             .map_err(CanisterCallError::from)
     }
 }
@@ -185,7 +185,7 @@ async fn get_sns_canisters_summary_(
     let canister_env = CanisterEnvironment {};
     SnsRootCanister::get_sns_canisters_summary(
         &STATE,
-        &ManagementCanisterClientImpl::<DfnRuntime>::new(None),
+        &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
         &create_ledger_client(),
         &canister_env,
         update_canister_list,
@@ -271,7 +271,7 @@ async fn register_dapp_canister_(
     };
     let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
         &STATE,
-        &ManagementCanisterClientImpl::<DfnRuntime>::new(None),
+        &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
         dfn_core::api::id(),
         request,
     )
@@ -302,7 +302,7 @@ async fn register_dapp_canisters_(
 ) -> RegisterDappCanistersResponse {
     SnsRootCanister::register_dapp_canisters(
         &STATE,
-        &ManagementCanisterClientImpl::<DfnRuntime>::new(None),
+        &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
         dfn_core::api::id(),
         request,
     )
@@ -335,7 +335,7 @@ fn set_dapp_controllers() {
 async fn set_dapp_controllers_(request: SetDappControllersRequest) -> SetDappControllersResponse {
     SnsRootCanister::set_dapp_controllers(
         &STATE,
-        &ManagementCanisterClientImpl::<DfnRuntime>::new(None),
+        &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
         dfn_core::api::id(),
         dfn_core::api::caller(),
         &request,
