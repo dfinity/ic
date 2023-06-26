@@ -6,6 +6,10 @@ notify-gitlab-success:
   extends:
     - .ubuntu-cargo-k8s
   rules:
+    # Run on schedule pipelines as several Honeycomb alert rules rely on this.
+    # TODO(IDX-2856): Disable when alerts will be send from superset.
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: on_success
     # Send a slack notification on rc--* pipeline succees.
     # Limit to "push" pipeline source so that GitLab doesn't send spurious alerts for manual or
     # scheduled pipelines that developers may create off the rc branch.
