@@ -970,7 +970,82 @@ mod validate_pks_and_sks {
     }
 
     #[test]
-    fn should_return_public_key_invalid() {
+    fn should_return_public_key_invalid_when_validating_public_key() {
+        let tests = vec![
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    node_signing_public_key: Some(invalid_node_signing_public_key()),
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(
+                    "invalid node signing key: verification failed".to_string(),
+                )),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    committee_signing_public_key: Some(invalid_committee_signing_public_key()),
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(
+                    "invalid committee signing key: Malformed MultiBls12_381 public key"
+                        .to_string(),
+                )),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    tls_certificate: Some(tls_certificate_with_invalid_not_before_time()),
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(
+                    "invalid TLS certificate: failed to parse DER".to_string(),
+                )),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    dkg_dealing_encryption_public_key: Some(invalid_dkg_dealing_encryption_key()),
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(
+                    "invalid DKG dealing encryption key: verification failed".to_string(),
+                )),
+            },
+            // No `ParameterizedTest` for the iDKG dealing encryption key, since the same checks
+            // are performed for computing the `KeyId` as in `RequiredNodePublicKeys::validate()`.
+            // Therefore, there is no way to produce an invalid iDKG dealing encryption key that
+            // passes the first check, but fails the second.
+        ];
+
+        for test in tests {
+            let mut sks = MockSecretKeyStore::new();
+            sks.expect_contains().return_const(true);
+            let vault = LocalCspVault::builder_for_test()
+                .with_mock_stores()
+                .with_public_key_store(public_key_store_containing_exactly(test.input))
+                .with_node_secret_key_store(sks)
+                .build();
+
+            let result = vault.validate_pks_and_sks();
+
+            assert_matches!((result, test.expected),
+                (Err(ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(expected)),
+                )
+                | (Err(ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(expected)),
+                )
+                | (Err(ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(expected)),
+                )
+                | (Err(ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(expected)),
+                )
+                if actual.starts_with(&expected)
+            );
+        }
+    }
+
+    #[test]
+    fn should_return_public_key_invalid_when_computing_key_id() {
         let tests = vec![
             ParameterizedTest {
                 input: LocalNodePublicKeys {
@@ -1366,6 +1441,54 @@ mod validate_pks_and_sks {
 
     fn invalid_tls_certificate() -> X509PublicKeyCert {
         X509PublicKeyCert::default()
+    }
+
+    fn invalid_node_signing_public_key() -> PublicKey {
+        PublicKey {
+            // Point not on curve, from `ic_crypto_internal_basic_sig_ed25519::api::tests::verify_public_key::should_fail_public_key_verification_if_point_is_not_on_curve`
+            key_value: vec![
+                2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ],
+            ..valid_node_signing_public_key()
+        }
+    }
+
+    fn invalid_committee_signing_public_key() -> PublicKey {
+        PublicKey {
+            key_value: vec![
+                0u8;
+                ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes::SIZE
+            ],
+            ..valid_committee_signing_public_key()
+        }
+    }
+
+    fn tls_certificate_with_invalid_not_before_time() -> X509PublicKeyCert {
+        X509PublicKeyCert {
+            // Tweaked certificate from `ic_crypto_test_utils_keys::public_keys::valid_tls_certificate`
+            certificate_der: hex::decode(
+                "3082015630820108a00302010202140098d0747d24ca04a2f036d8665402b4ea78483030\
+                0506032b6570304a3148304606035504030c3f34696e71622d327a63766b2d663679716c2d736f\
+                776f6c2d76673365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b3570\
+                2d6161653020170d3939393930343138313231345a180f39393939313233313233353935395a30\
+                4a3148304606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d766733\
+                65732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d616165302a30\
+                0506032b6570032100246acd5f38372411103768e91169dadb7370e99909a65639186ac6d1c36f\
+                3735300506032b6570034100d37e5ccfc32146767e5fd73343649f5b5564eb78e6d8d424d8f012\
+                40708bc537a2a9bcbcf6c884136d18d2b475706d7bb905f52faf28707735f1d90ab654380b",
+            )
+            .expect("should successfully decode hex cert"),
+        }
+    }
+
+    fn invalid_dkg_dealing_encryption_key() -> PublicKey {
+        let mut dkg_dealing_encryption_key = valid_dkg_dealing_encryption_public_key();
+        if let Some(proof_data) = &mut dkg_dealing_encryption_key.proof_data {
+            let index = &proof_data.len() - 1;
+            proof_data[index] ^= 0xff;
+        }
+        dkg_dealing_encryption_key
     }
 
     #[derive(Debug, Clone)]
