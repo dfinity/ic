@@ -1452,9 +1452,8 @@ impl NnsInstallationBuilder {
             let timeout_result =
                 tokio::time::timeout(self.installation_timeout, install_future).await;
             if timeout_result.is_err() {
-                warn!(
-                    log,
-                    "NNS canisters were not installed within timeout of {} sec",
+                panic!(
+                    "nns canisters were not installed within timeout of {} sec",
                     self.installation_timeout.as_secs()
                 );
             }
