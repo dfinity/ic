@@ -1,15 +1,20 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = [
-    "//rs/p2p/memory_transport:__subpackages__",
     "//rs/p2p/quic_transport:__subpackages__",
     "//rs/p2p/state_sync_manager:__subpackages__",
 ])
 
 DEPENDENCIES = [
     "//rs/types/types",
+    "//rs/p2p/quic_transport",
+    "@crate_index//:axum",
     "@crate_index//:bytes",
+    "@crate_index//:futures",
     "@crate_index//:http",
+    "@crate_index//:prost",
+    "@crate_index//:tokio",
+    "@crate_index//:tower",
 ]
 
 MACRO_DEPENDENCIES = [
@@ -19,10 +24,11 @@ MACRO_DEPENDENCIES = [
 ALIASES = {}
 
 rust_library(
-    name = "quic_transport",
+    name = "memory_transport",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_name = "ic_quic_transport",
+    crate_name = "ic_memory_transport",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
