@@ -37,6 +37,7 @@ impl sandbox_service::SandboxService for DummySandboxService {
                 wasm_metadata: WasmMetadata::default(),
                 compilation_cost: NumInstructions::from(0),
                 imports_details: WasmImportsDetails::default(),
+                reserved_exports: 0,
             },
         )))))
     }
