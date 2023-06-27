@@ -16,7 +16,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 #[cfg(target_os = "linux")]
 use ic_logger::warn;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
@@ -721,6 +721,7 @@ impl WasmExecutor for SandboxedExecutionController {
         canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
+        logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let _create_exe_state_timer = self
             .metrics
@@ -831,6 +832,14 @@ impl WasmExecutor for SandboxedExecutionController {
             .sandboxed_execution_replica_create_exe_state_finish_duration
             .start_timer();
         observe_metrics(&self.metrics, &serialized_module.imports_details);
+        if serialized_module.reserved_exports > 0 {
+            info!(
+                logger,
+                "Canister {} has {} reserved exports.",
+                canister_id,
+                serialized_module.reserved_exports
+            );
+        }
 
         cache_opened_wasm(
             &mut wasm_binary.embedder_cache.lock().unwrap(),
@@ -1647,7 +1656,7 @@ mod tests {
 
         use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
         let controller = SandboxedExecutionController::new(
-            logger,
+            logger.clone(),
             &MetricsRegistry::new(),
             &EmbeddersConfig::default(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -1663,6 +1672,7 @@ mod tests {
                 PathBuf::new(),
                 canister_id,
                 Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
+                &logger,
             )
             .unwrap();
         let sandbox_pid = match controller
