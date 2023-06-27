@@ -112,11 +112,8 @@ impl RegistryHelper {
     }
 
     /// Polls the [RegistryReplicator] for the most recent version of the registry and then
-    /// extracts the appropriate entries based on the provided closure.
-    fn get<T>(
-        &self,
-        field_extractor: impl Fn(RegistryVersion, &RegistryClientImpl) -> RegistryClientResult<T>,
-    ) -> VersionedRecoveryResult<T> {
+    /// gets the latest registry version.
+    pub fn latest_registry_version(&self) -> RecoveryResult<RegistryVersion> {
         match self.polling_strategy {
             RegistryPollingStrategy::WithEveryRead => {
                 block_on(self.registry_replicator.poll(vec![self.nns_url.clone()])).map_err(
@@ -135,7 +132,16 @@ impl RegistryHelper {
             RecoveryError::RegistryError(format!("Failed to poll the newest registry: {}", err))
         })?;
 
-        let registry_version = self.registry_client.get_latest_version();
+        Ok(self.registry_client.get_latest_version())
+    }
+
+    /// Polls the [RegistryReplicator] for the most recent version of the registry and then
+    /// extracts the appropriate entries based on the provided closure.
+    fn get<T>(
+        &self,
+        field_extractor: impl Fn(RegistryVersion, &RegistryClientImpl) -> RegistryClientResult<T>,
+    ) -> VersionedRecoveryResult<T> {
+        let registry_version = self.latest_registry_version()?;
 
         let field =
             field_extractor(registry_version, self.registry_client.as_ref()).map_err(|err| {

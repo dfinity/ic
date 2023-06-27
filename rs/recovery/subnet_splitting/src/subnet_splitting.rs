@@ -11,7 +11,7 @@ use crate::{
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_recovery::{
-    cli::{consent_given, read_optional},
+    cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
@@ -22,9 +22,10 @@ use ic_recovery::{
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
 use serde::{Deserialize, Serialize};
-use slog::Logger;
+use slog::{info, warn, Logger};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
+use url::Url;
 
 use std::{iter::Peekable, net::IpAddr, path::PathBuf};
 
@@ -282,6 +283,31 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
             StepType::HaltSourceSubnetAtCupHeight => {
+                let url = match self.recovery.registry_helper.latest_registry_version() {
+                    Ok(registry_version) => {
+                        format!(
+                            "https://grafana.mainnet.dfinity.network/d/cB-qtJX4k/subnet-splitting-pre-flight?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
+                            self.params.destination_subnet_id, registry_version
+                        )
+                    }
+                    Err(err) => {
+                        warn!(
+                            self.logger,
+                            "Failed to get the latest registry version: {}", err
+                        );
+                        format!(
+                            "https://grafana.mainnet.dfinity.network/d/cB-qtJX4k/subnet-splitting-pre-flight?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}",
+                            self.params.destination_subnet_id
+                        )
+                    }
+                };
+
+                print_url_and_ask_for_confirmation(
+                    &self.logger,
+                    url,
+                    "Please check the dashboard to see if it is safe to begin subnet splitting",
+                );
+
                 if self.params.pub_key.is_none() {
                     self.params.pub_key = read_optional(
                         &self.logger,
@@ -318,6 +344,34 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                         "Enter IP of node in the Destination Subnet with admin access: ",
                     );
                 }
+            }
+
+            StepType::UnhaltDestinationSubnet | StepType::CompleteCanisterMigration => {
+                let url = match self.recovery.registry_helper.latest_registry_version() {
+                    Ok(registry_version) => {
+                        format!(
+                            "https://grafana.mainnet.dfinity.network/d/K08U69_4k/subnet-splitting?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}&var-registry_version={}",
+                            self.params.source_subnet_id, registry_version
+                        )
+                    }
+                    Err(err) => {
+                        warn!(
+                            self.logger,
+                            "Failed to get the latest registry version: {}", err
+                        );
+                        format!(
+                            "https://grafana.mainnet.dfinity.network/d/K08U69_4k/subnet-splitting?var-datasource=IC+Metrics&var-ic=mercury&var-ic_subnet={}",
+                            self.params.source_subnet_id,
+                        )
+                    }
+                };
+
+                print_url_and_ask_for_confirmation(
+                    &self.logger,
+                    url,
+                    "Please check the dashboard to see if it is safe to unhalt the \
+                    destination subnet and/or remove the canister migrations entry",
+                );
             }
 
             _ => (),
@@ -451,5 +505,22 @@ impl HasRecoveryState for SubnetSplitting {
             neuron_args: self.neuron_args.clone(),
             subcommand_args: self.params.clone(),
         })
+    }
+}
+
+fn print_url_and_ask_for_confirmation(
+    logger: &Logger,
+    url: String,
+    text_to_display: impl std::fmt::Display,
+) {
+    match Url::parse(&url) {
+        Ok(url) => {
+            info!(logger, "{}", text_to_display);
+            info!(logger, "{}", url);
+            wait_for_confirmation(logger);
+        }
+        Err(err) => {
+            warn!(logger, "Failed to parse url {}: {}", url, err);
+        }
     }
 }
