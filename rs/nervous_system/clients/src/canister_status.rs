@@ -133,7 +133,7 @@ pub async fn canister_status<Rt>(
 where
     Rt: Runtime,
 {
-    Rt::call(IC_00, "canister_status", (canister_id_record,))
+    Rt::call_with_cleanup(IC_00, "canister_status", (canister_id_record,))
         .await
         .map(|response: (CanisterStatusResultFromManagementCanister,)| response.0)
 }

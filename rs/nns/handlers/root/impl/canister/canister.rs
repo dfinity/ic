@@ -78,18 +78,6 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
         .await
         .map(CanisterStatusResult::from);
 
-    /*
-    TODO NNS1-2197 - Remove this un-needed call to get the canister_status of NNS Root(this canister)
-      when this call stack does not rely on panics to indicate errors. This call is made to commit the
-      open status call counter to canister memory.
-     */
-    let _unused_canister_status_response =
-        ic_nervous_system_clients::canister_status::canister_status::<DfnRuntime>(
-            CanisterIdRecord::from(ROOT_CANISTER_ID),
-        )
-        .await
-        .map(CanisterStatusResult::from);
-
     canister_status_response.unwrap()
 }
 
