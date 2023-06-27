@@ -73,7 +73,7 @@ impl RealLedgerCanisterClient {
 #[async_trait]
 impl LedgerCanisterClient for RealLedgerCanisterClient {
     async fn archives(&self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
-        CanisterRuntime::call(self.ledger_canister_id, "archives", ())
+        CanisterRuntime::call_with_cleanup(self.ledger_canister_id, "archives", ())
             .await
             .map(|(archives,): (Vec<ArchiveInfo>,)| archives)
             .map_err(CanisterCallError::from)

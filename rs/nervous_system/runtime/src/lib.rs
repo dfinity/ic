@@ -11,7 +11,11 @@ pub trait Runtime {
     // Whether cleanup is done (call drop() on local variables in the context
     // upon a trap in its callback) depends on the specific Runtime
     // implementation.
-    async fn call<In, Out>(id: CanisterId, method: &str, args: In) -> Result<Out, (i32, String)>
+    async fn call_without_cleanup<In, Out>(
+        id: CanisterId,
+        method: &str,
+        args: In,
+    ) -> Result<Out, (i32, String)>
     where
         In: ArgumentEncoder + Send,
         Out: for<'a> ArgumentDecoder<'a>;
@@ -47,7 +51,11 @@ pub struct DfnRuntime;
 #[async_trait]
 impl Runtime for DfnRuntime {
     // This method does not do clean up.
-    async fn call<In, Out>(id: CanisterId, method: &str, args: In) -> Result<Out, (i32, String)>
+    async fn call_without_cleanup<In, Out>(
+        id: CanisterId,
+        method: &str,
+        args: In,
+    ) -> Result<Out, (i32, String)>
     where
         In: ArgumentEncoder + Send,
         Out: for<'a> ArgumentDecoder<'a>,
