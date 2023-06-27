@@ -23,6 +23,7 @@ pub enum RecoveryError {
     UnexpectedError(String),
     StateToolError(String),
     CheckpointError(String, CheckpointError),
+    RegistryError(String),
     StepSkipped,
 }
 
@@ -89,6 +90,7 @@ impl fmt::Display for RecoveryError {
             RecoveryError::CheckpointError(msg, e) => {
                 write!(f, "Checkpoint error, message: {}, error: {}", msg, e)
             }
+            RecoveryError::RegistryError(msg) => write!(f, "Registry error, message: {}", msg),
             RecoveryError::StateToolError(msg) => write!(f, "State tool error, message: {}", msg),
         }
     }

@@ -7,13 +7,13 @@ use crate::{
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
+    registry_helper::RegistryHelper,
     steps::Step,
     util,
     util::subnet_id_from_str,
     NeuronArgs, RecoveryArgs,
 };
 use core::fmt::Debug;
-use ic_registry_client::client::RegistryClientImpl;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use serde::{de::DeserializeOwned, Serialize};
 use slog::{info, warn, Logger};
@@ -22,7 +22,6 @@ use std::{
     fmt::Display,
     io::{stdin, stdout, Write},
     str::FromStr,
-    sync::Arc,
 };
 use strum::EnumMessage;
 
@@ -153,32 +152,35 @@ pub fn execute_steps<
         steps.resume(next_step);
     }
 
-    while let Some((_, step)) = steps.next() {
+    while let Some((_step_type, step)) = steps.next() {
         execute_step_after_consent(logger, step);
+
         if let Err(e) = steps.get_state().and_then(|state| state.save()) {
             warn!(logger, "Failed to save the recovery state: {}", e);
         }
     }
 }
 
-pub fn execute_step_after_consent(logger: &Logger, step: Box<dyn Step>) {
+fn execute_step_after_consent(logger: &Logger, step: Box<dyn Step>) {
     info!(logger, "{}", step.descr());
-    if consent_given(logger, "Execute now?") {
-        loop {
-            match step.exec() {
-                Ok(()) => break,
-                Err(e) => {
-                    warn!(logger, "Error: {}", e);
-                    if !consent_given(logger, "Retry now?") {
-                        break;
-                    }
+    if !consent_given(logger, "Execute now?") {
+        return;
+    }
+
+    loop {
+        match step.exec() {
+            Ok(()) => break,
+            Err(e) => {
+                warn!(logger, "Error: {}", e);
+                if !consent_given(logger, "Retry now?") {
+                    break;
                 }
             }
         }
     }
 }
 
-pub fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) {
+fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) {
     info!(logger, "NNS Url: {}", args.nns_url);
     info!(logger, "Starting recovery of subnet with ID:");
     info!(logger, "-> {:?}", subnet_id);
@@ -187,14 +189,10 @@ pub fn print_summary(logger: &Logger, args: &RecoveryArgs, subnet_id: SubnetId) 
     info!(logger, "Creating recovery directory in {:?}", args.dir);
 }
 
-pub fn print_height_info(
-    logger: &Logger,
-    registry_client: Arc<RegistryClientImpl>,
-    subnet_id: SubnetId,
-) {
+pub fn print_height_info(logger: &Logger, registry_helper: &RegistryHelper, subnet_id: SubnetId) {
     info!(logger, "Collecting node heights from metrics...");
     info!(logger, "Select a node with highest finalization height:");
-    match get_node_heights_from_metrics(logger, registry_client, subnet_id) {
+    match get_node_heights_from_metrics(logger, registry_helper, subnet_id) {
         Ok(heights) => info!(logger, "{:#?}", heights),
         Err(err) => warn!(logger, "Failed to query height info: {:?}", err),
     }

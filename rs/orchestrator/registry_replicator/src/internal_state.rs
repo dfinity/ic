@@ -20,15 +20,13 @@ use ic_registry_keys::{
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_types::{crypto::threshold_sig::ThresholdSigPublicKey, Time};
-use ic_types::{NodeId, RegistryVersion, SubnetId};
-use std::collections::BTreeMap;
-use std::convert::TryFrom;
-use std::fmt::Debug;
-use std::net::IpAddr;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
+use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey, NodeId, RegistryVersion, SubnetId, Time,
+};
+use std::{
+    collections::BTreeMap, convert::TryFrom, fmt::Debug, net::IpAddr, str::FromStr, sync::Arc,
+    time::Duration,
+};
 use url::Url;
 
 const MAX_CONSECUTIVE_FAILURES: i64 = 3;
@@ -199,7 +197,7 @@ impl InternalState {
     }
 
     /// Iff at version `latest_version` the node id of this node appears on a
-    /// subnet record that has the `start_as_nns`-flag set, this function will
+    /// subnet record that has the `start_as_nns` flag set, this function will
     /// adjust the registry such that the aforementioned subnet will become the
     /// new NNS subnet.
     ///
@@ -319,7 +317,7 @@ impl InternalState {
                 && k.key != subnet_record_key
         });
 
-        // remove the start_nns flag on the subnet record
+        // remove the start_as_nns flag on the subnet record
         new_nns_subnet_record.start_as_nns = false;
         // force subnet type to be a system subnet
         new_nns_subnet_record.subnet_type = SubnetType::System as i32;

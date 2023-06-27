@@ -15,6 +15,7 @@ use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
+    registry_helper::RegistryPollingStrategy,
     steps::{AdminStep, Step, UploadAndRestartStep, WaitForCUPStep},
     NeuronArgs, Recovery, RecoveryArgs, CHECKPOINTS, IC_REGISTRY_LOCAL_STORE, IC_STATE_DIR,
 };
@@ -26,6 +27,7 @@ use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 
 use std::{iter::Peekable, net::IpAddr, path::PathBuf};
+
 const DESTINATION_WORK_DIR: &str = "destination_work_dir";
 
 #[derive(
@@ -125,9 +127,15 @@ impl SubnetSplitting {
         neuron_args: Option<NeuronArgs>,
         subnet_args: SubnetSplittingArgs,
     ) -> Self {
-        let recovery = Recovery::new(logger.clone(), recovery_args.clone(), neuron_args.clone())
-            .expect("Failed to initialize recovery");
-        recovery.init_registry_local_store();
+        let recovery = Recovery::new(
+            logger.clone(),
+            recovery_args.clone(),
+            neuron_args.clone(),
+            recovery_args.nns_url.clone(),
+            RegistryPollingStrategy::WithEveryRead,
+        )
+        .expect("Failed to initialize recovery");
+
         let state_tool_helper = StateToolHelper::new(
             recovery.binary_dir.clone(),
             recovery_args.replica_version.clone(),

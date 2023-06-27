@@ -6,32 +6,22 @@
 //! reproducible) description of the step, as well as its potential automatic
 //! execution.
 use crate::{
-    cli::wait_for_confirmation,
-    file_sync_helper::{read_file, remove_dir},
+    cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
 use error::{RecoveryError, RecoveryResult};
-use file_sync_helper::{create_dir, download_binary, read_dir, write_bytes};
+use file_sync_helper::{create_dir, download_binary, read_dir};
 use futures::future::join_all;
-use ic_base_types::{CanisterId, NodeId, PrincipalId};
-use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
+use ic_base_types::{CanisterId, NodeId};
 use ic_cup_explorer::get_catchup_content;
-use ic_logger::ReplicaLogger;
-use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetListRecord};
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl, ThresholdSigPublicKey};
-use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
-use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key};
-use ic_registry_local_store::LocalStoreImpl;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_replicator::RegistryReplicator;
-use ic_registry_subnet_features::EcdsaConfig;
+use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
     player::StateParams,
 };
 use ic_types::{messages::HttpStatusResponse, Height, ReplicaVersion, SubnetId};
-use prost::Message;
+use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
@@ -40,7 +30,6 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
     str::FromStr,
-    sync::Arc,
     thread,
     time::{self, Duration, SystemTime},
 };
@@ -60,6 +49,7 @@ pub mod nns_recovery_failover_nodes;
 pub mod nns_recovery_same_nodes;
 pub mod recovery_iterator;
 pub mod recovery_state;
+pub mod registry_helper;
 pub mod replay_helper;
 pub(crate) mod ssh_helper;
 pub mod steps;
@@ -129,11 +119,9 @@ pub struct Recovery {
     pub data_dir: PathBuf,
     pub work_dir: PathBuf,
     pub local_store_path: PathBuf,
-    pub nns_pem: PathBuf,
 
     pub admin_helper: AdminHelper,
-    pub registry_client: Arc<RegistryClientImpl>,
-    pub local_store: Arc<LocalStoreImpl>,
+    pub registry_helper: RegistryHelper,
 
     pub key_file: Option<PathBuf>,
     ssh_confirmation: bool,
@@ -148,6 +136,8 @@ impl Recovery {
         logger: Logger,
         args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
+        registry_nns_url: Url,
+        registry_polling_strategy: RegistryPollingStrategy,
     ) -> RecoveryResult<Self> {
         let ssh_confirmation = !args.test_mode;
         let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
@@ -156,41 +146,50 @@ impl Recovery {
         let work_dir = recovery_dir.join("working_dir");
         let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
         let nns_pem = recovery_dir.join("nns.pem");
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
-        let registry_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
-        let r = Self {
-            recovery_dir,
-            binary_dir: binary_dir.clone(),
-            data_dir,
-            work_dir,
-            local_store_path,
-            nns_pem,
-            admin_helper: AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args),
-            registry_client,
-            local_store,
-            key_file: args.key_file,
-            ssh_confirmation,
-            logger,
-        };
 
-        r.create_dirs()?;
+        Recovery::create_dirs(&[&binary_dir, &data_dir, &work_dir, &local_store_path])?;
+
+        let registry_helper = RegistryHelper::new(
+            logger.clone(),
+            registry_nns_url,
+            local_store_path.clone(),
+            nns_pem.as_path(),
+            registry_polling_strategy,
+        );
+
+        if ssh_confirmation {
+            wait_for_confirmation(&logger);
+        }
 
         if !binary_dir.join("ic-admin").exists() {
             if let Some(version) = args.replica_version {
                 block_on(download_binary(
-                    &r.logger,
+                    &logger,
                     version,
                     String::from("ic-admin"),
-                    &r.binary_dir,
+                    &binary_dir,
                 ))?;
             } else {
-                info!(r.logger, "No ic-admin version provided, skipping download.");
+                info!(logger, "No ic-admin version provided, skipping download.");
             }
         } else {
-            info!(r.logger, "ic-admin exists, skipping download.");
+            info!(logger, "ic-admin exists, skipping download.");
         }
 
-        Ok(r)
+        let admin_helper = AdminHelper::new(binary_dir.clone(), args.nns_url, neuron_args);
+
+        Ok(Self {
+            recovery_dir,
+            binary_dir,
+            data_dir,
+            work_dir,
+            local_store_path,
+            admin_helper,
+            registry_helper,
+            key_file: args.key_file,
+            ssh_confirmation,
+            logger,
+        })
     }
 
     /// Construct a [Url] for the NNS endpoint of the given node IP
@@ -206,149 +205,12 @@ impl Recovery {
     }
 
     // Create directories used to store downloaded states, binaries and results
-    fn create_dirs(&self) -> RecoveryResult<()> {
-        create_dir(&self.binary_dir)?;
-        create_dir(&self.data_dir)?;
-        create_dir(&self.work_dir)?;
-        create_dir(&self.local_store_path)
-    }
-
-    pub fn init_registry_local_store(&self) {
-        self.init_registry_local_store_with_url(&self.admin_helper.nns_url);
-    }
-
-    pub fn init_registry_local_store_with_url(&self, nns_url: &Url) {
-        if !self.nns_pem.exists() {
-            if let Err(e) = self.download_nns_pem(nns_url) {
-                warn!(self.logger, "Failed to download NNS public key: {:?}", e);
-                return;
-            }
-        } else {
-            info!(
-                self.logger,
-                "nns.pem exists, skipping download of NNS public key"
-            );
+    fn create_dirs(dirs: &[&Path]) -> RecoveryResult<()> {
+        for dir in dirs {
+            create_dir(dir)?;
         }
 
-        info!(self.logger, "Syncing registry local store");
-        let key = match parse_threshold_sig_key(&self.nns_pem) {
-            Ok(k) => k,
-            Err(e) => {
-                warn!(self.logger, "Failed to read nns.pem: {:?}", e);
-                return;
-            }
-        };
-
-        match read_file(&self.nns_pem) {
-            Ok(s) => {
-                info!(self.logger, "Continuing with public key:\n{}", s);
-                let k2 = include_str!("../ic_public_key.pem");
-                if k2 == s {
-                    info!(
-                        self.logger,
-                        "Downloaded key and included NNS public key are equal!"
-                    )
-                } else {
-                    warn!(
-                        self.logger,
-                        "Downloaded key is NOT equal to included NNS public key"
-                    )
-                }
-            }
-            Err(e) => {
-                warn!(self.logger, "Failed to read nns.pem: {:?}", e);
-            }
-        }
-        if self.ssh_confirmation {
-            wait_for_confirmation(&self.logger);
-        }
-
-        let replica_logger = ReplicaLogger::from(self.logger.clone());
-        let replicator = RegistryReplicator::new_with_clients(
-            replica_logger,
-            self.local_store.clone(),
-            self.registry_client.clone(),
-            Duration::from_secs(10),
-        );
-
-        block_on(replicator.initialize_local_store(vec![nns_url.clone()], Some(key)));
-    }
-
-    fn download_nns_pem(&self, nns_url: &Url) -> RecoveryResult<()> {
-        info!(self.logger, "Downloading NNS public key...");
-        let registry = RegistryCanister::new(vec![nns_url.clone()]);
-
-        let subnet_list_key = make_subnet_list_record_key().as_bytes().to_vec();
-        let list = match block_on(registry.get_value(subnet_list_key, None)) {
-            Ok((bytes, _)) => SubnetListRecord::decode(&bytes[..]).map_err(|e| {
-                RecoveryError::UnexpectedError(format!(
-                    "Error decoding subnet list from registry: {:?}",
-                    e
-                ))
-            })?,
-            Err(error) => {
-                return Err(RecoveryError::UnexpectedError(format!(
-                    "Error getting value from registry: {:?}",
-                    error
-                )))
-            }
-        };
-
-        let maybe_id = list.subnets.get(0).map(|x| {
-            SubnetId::from(
-                PrincipalId::try_from(x.clone().as_slice()).expect("failed parsing principal id"),
-            )
-        });
-
-        let k = match maybe_id {
-            Some(nns_subnet_id) => make_crypto_threshold_signing_pubkey_key(nns_subnet_id)
-                .as_bytes()
-                .to_vec(),
-            None => {
-                return Err(RecoveryError::UnexpectedError(
-                    "No subnets in list".to_string(),
-                ))
-            }
-        };
-
-        let pk = match block_on(registry.get_value(k, None)) {
-            Ok((bytes, _)) => PublicKey::decode(&bytes[..]).map_err(|e| {
-                RecoveryError::UnexpectedError(format!(
-                    "Error decoding PublicKey from registry: {:?}",
-                    e
-                ))
-            })?,
-            Err(error) => {
-                return Err(RecoveryError::UnexpectedError(format!(
-                    "Error getting value from registry: {:?}",
-                    error
-                )))
-            }
-        };
-
-        let key = ThresholdSigPublicKey::try_from(pk).map_err(|e| {
-            RecoveryError::UnexpectedError(format!(
-                "failed to parse threshold signature PK from protobuf: {:?}",
-                e
-            ))
-        })?;
-        let der_bytes = public_key_to_der(&key.into_bytes()).map_err(|e| {
-            RecoveryError::UnexpectedError(format!(
-                "failed to encode threshold signature PK into DER: {:?}",
-                e
-            ))
-        })?;
-
-        let mut bytes = vec![];
-        bytes.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\n");
-        for chunk in base64::encode(&der_bytes[..]).as_bytes().chunks(64) {
-            bytes.extend_from_slice(chunk);
-            bytes.extend_from_slice(b"\n");
-        }
-        bytes.extend_from_slice(b"-----END PUBLIC KEY-----\n");
-
-        let path = self.nns_pem.as_ref();
-        write_bytes(path, bytes)
+        Ok(())
     }
 
     /// Removes all the checkpoints except the "highest" one.
@@ -427,7 +289,7 @@ impl Recovery {
         DownloadCertificationsStep {
             logger: self.logger.clone(),
             subnet_id,
-            registry_client: self.registry_client.clone(),
+            registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
@@ -590,7 +452,7 @@ impl Recovery {
         ValidateReplayStep {
             logger: self.logger.clone(),
             subnet_id,
-            registry_client: self.registry_client.clone(),
+            registry_helper: self.registry_helper.clone(),
             work_dir: self.work_dir.clone(),
             extra_batches,
         }
@@ -709,20 +571,6 @@ impl Recovery {
         }
     }
 
-    pub fn get_ecdsa_config(&self, subnet_id: SubnetId) -> RecoveryResult<Option<EcdsaConfig>> {
-        let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
-        rt.block_on(async {
-            if let Err(err) = self.registry_client.poll_once() {
-                return Err(format!("couldn't poll the registry: {:?}", err));
-            };
-            let version = self.registry_client.get_latest_version();
-            self.registry_client
-                .get_ecdsa_config(subnet_id, version)
-                .map_err(|err| err.to_string())
-        })
-        .map_err(RecoveryError::UnexpectedError)
-    }
-
     /// Return an [AdminStep] step updating the recovery CUP of the given
     /// subnet.
     pub fn update_recovery_cup(
@@ -735,19 +583,22 @@ impl Recovery {
         ecdsa_subnet_id: Option<SubnetId>,
     ) -> RecoveryResult<impl Step> {
         let key_ids = ecdsa_subnet_id
-            .map(|id| match self.get_ecdsa_config(id) {
-                Ok(Some(config)) => config.key_ids,
-                Ok(None) => vec![],
-                Err(err) => {
-                    warn!(
+            .map(|id| match self.registry_helper.get_ecdsa_config(id) {
+                Ok((_registry_version, Some(config))) => config.key_ids,
+                Ok((registry_version, None)) => {
+                    info!(
                         self.logger,
-                        "{}",
-                        format!("Failed to get ECDSA config: {:?}", err)
+                        "No ECDSA config at registry version {}", registry_version
                     );
+                    vec![]
+                }
+                Err(err) => {
+                    warn!(self.logger, "Failed to get ECDSA config: {}", err);
                     vec![]
                 }
             })
             .unwrap_or_default();
+
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
@@ -814,17 +665,9 @@ impl Recovery {
 
     /// Gets the replica version from the endpoint even if it is unhealthy.
     pub fn get_assigned_replica_version_any_health(url: Url) -> RecoveryResult<String> {
-        let version = match block_on(Recovery::get_replica_status(url)) {
-            Ok(status) => status,
-            Err(err) => return Err(err),
-        }
-        .impl_version;
-        match version {
-            Some(ver) => Ok(ver),
-            None => Err(RecoveryError::invalid_output_error(
-                "No version found in status",
-            )),
-        }
+        let version = block_on(Recovery::get_replica_status(url))?.impl_version;
+
+        version.ok_or_else(|| RecoveryError::invalid_output_error("No version found in status"))
     }
 
     // Wait until the recovery CUP as specified in the replay output is present on the given node
@@ -963,7 +806,7 @@ impl Recovery {
     pub fn get_upload_cup_and_tar_step(&self, subnet_id: SubnetId) -> impl Step {
         UploadCUPAndTar {
             logger: self.logger.clone(),
-            registry_client: self.registry_client.clone(),
+            registry_helper: self.registry_helper.clone(),
             subnet_id,
             work_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
@@ -988,7 +831,8 @@ impl Recovery {
         }
     }
 
-    /// Return a [DownloadRegistryStoreStep] to download the registry store containing entries for the given [SubnetId] from the given download node
+    /// Return a [DownloadRegistryStoreStep] to download the registry store containing entries for
+    /// the given [SubnetId] from the given download node
     pub fn get_download_registry_store_step(
         &self,
         download_node: IpAddr,
@@ -1073,10 +917,10 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
 /// Grabs metrics from all nodes and greps for the certification and finalization heights.
 pub fn get_node_heights_from_metrics(
     logger: &Logger,
-    registry_client: Arc<RegistryClientImpl>,
+    registry_helper: &RegistryHelper,
     subnet_id: SubnetId,
 ) -> RecoveryResult<Vec<NodeMetrics>> {
-    let ips = get_member_ips(registry_client, subnet_id)?;
+    let ips = get_member_ips(registry_helper, subnet_id)?;
     let metrics: Vec<NodeMetrics> =
         block_on(join_all(ips.iter().map(|ip| get_node_metrics(logger, ip))))
             .into_iter()
@@ -1094,34 +938,26 @@ pub fn get_node_heights_from_metrics(
 
 /// Lookup IP addresses of all members of the given subnet
 pub fn get_member_ips(
-    registry_client: Arc<RegistryClientImpl>,
+    registry_helper: &RegistryHelper,
     subnet_id: SubnetId,
 ) -> RecoveryResult<Vec<IpAddr>> {
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime");
-    let result = rt
-        .block_on(async {
-            if let Err(err) = registry_client.poll_once() {
-                return Err(format!("couldn't poll the registry: {:?}", err));
-            };
-            let version = registry_client.get_latest_version();
-            match registry_client.get_node_ids_on_subnet(subnet_id, version) {
-                Ok(Some(node_ids)) => Ok(node_ids
-                    .into_iter()
-                    .filter_map(|node_id| {
-                        registry_client
-                            .get_transport_info(node_id, version)
-                            .unwrap_or_default()
-                    })
-                    .collect::<Vec<_>>()),
-                other => Err(format!(
-                    "no node ids found in the registry for subnet_id={}: {:?}",
-                    subnet_id, other
-                )),
-            }
-        })
-        .map_err(RecoveryError::UnexpectedError)?;
-    result
+    let (registry_version, node_ids) = registry_helper.get_node_ids_on_subnet(subnet_id)?;
+
+    let Some(node_ids) = node_ids else {
+        return Err(RecoveryError::RegistryError(format!(
+            "no node ids found in the registry version {} for subnet_id {}",
+            registry_version, subnet_id
+        )));
+    };
+
+    node_ids
         .into_iter()
+        .filter_map(|node_id| {
+            registry_helper
+                .registry_client()
+                .get_transport_info(node_id, registry_version)
+                .unwrap_or_default()
+        })
         .filter_map(|node_record| {
             node_record.http.map(|http| {
                 http.ip_addr.parse().map_err(|err| {
