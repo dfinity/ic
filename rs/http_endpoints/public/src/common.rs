@@ -199,6 +199,8 @@ pub(crate) async fn get_latest_certified_state(
     let paths = &mut [Path::from(Label::from("time"))];
     let labeled_tree = match sparse_labeled_tree_from_paths(paths) {
         Ok(labeled_tree) => labeled_tree,
+        // This error is not recoverable and should never happen, because the
+        // path is valid and required to start the HTTP endpoint.
         Err(TooLongPathError {}) => panic!("bug: failed to convert path to LabeledTree"),
     };
     state_reader_executor

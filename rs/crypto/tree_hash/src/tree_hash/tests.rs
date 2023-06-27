@@ -6,6 +6,7 @@ use crate::{lookup_path, tree_hash, LookupStatus, MixedHashTreeConversionError};
 use assert_matches::assert_matches;
 use ic_crypto_sha::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::Rng;
 use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
@@ -1755,6 +1756,126 @@ fn sparse_labeled_tree_deep_path() {
 }
 
 #[test]
+fn sparse_labeled_tree_one_path_max_depth() {
+    let path = Path::from_iter(vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1]);
+
+    let result = sparse_labeled_tree_from_paths(&[path]);
+
+    let mut expected_tree = LabeledTree::Leaf(());
+    for _ in 0..MAX_HASH_TREE_DEPTH - 1 {
+        expected_tree = LabeledTree::SubTree(flatmap!(Label::from("dummy_label") => expected_tree));
+    }
+
+    assert_eq!(result, Ok(expected_tree));
+}
+
+#[test]
+fn sparse_labeled_tree_many_paths_max_depth() {
+    const TREE_WIDTH: usize = 100;
+    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
+
+    let mut paths = Vec::with_capacity(TREE_WIDTH);
+    for i in 0..TREE_WIDTH {
+        paths.push(Path::from_iter(
+            vec![Label::from("a".repeat(i))]
+                .iter()
+                .chain(subpath.iter()),
+        ));
+    }
+    let result = sparse_labeled_tree_from_paths(&paths[..]);
+
+    let mut expected_subtree = LabeledTree::Leaf(());
+    for _ in 0..MAX_HASH_TREE_DEPTH - 2 {
+        expected_subtree =
+            LabeledTree::SubTree(flatmap!(Label::from("dummy_label") => expected_subtree));
+    }
+    let mut flatmap = FlatMap::with_capacity(TREE_WIDTH);
+    for i in 0..TREE_WIDTH {
+        flatmap
+            .try_append(Label::from("a".repeat(i)), expected_subtree.clone())
+            .expect("failed to append");
+    }
+    let expected_tree = LabeledTree::SubTree(flatmap);
+
+    assert_eq!(result, Ok(expected_tree));
+}
+
+#[test]
+fn sparse_labeled_tree_one_path_too_deep() {
+    for depth in [
+        MAX_HASH_TREE_DEPTH,
+        MAX_HASH_TREE_DEPTH + 1,
+        10 * MAX_HASH_TREE_DEPTH,
+    ] {
+        let path = Path::from_iter(vec![Label::from("dummy_label"); depth]);
+        assert_eq!(
+            Err(TooLongPathError),
+            sparse_labeled_tree_from_paths(&[path])
+        );
+    }
+}
+
+#[test]
+fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
+    const TREE_WIDTH: usize = 100;
+    let ok_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
+    let too_long_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1];
+
+    let rng = &mut reproducible_rng();
+    let target_index = rng.gen_range(0..TREE_WIDTH);
+
+    let mut paths = Vec::with_capacity(TREE_WIDTH);
+
+    let get_subpath = |i| {
+        let path = if i == target_index {
+            too_long_subpath.clone()
+        } else {
+            ok_subpath.clone()
+        };
+        let path: Vec<_> = vec![Label::from("a".repeat(i))]
+            .iter()
+            .chain(path.iter())
+            .cloned()
+            .collect();
+        path
+    };
+
+    for i in 0..TREE_WIDTH {
+        paths.push(Path::from_iter(get_subpath(i)));
+    }
+
+    assert_eq!(
+        Err(TooLongPathError),
+        sparse_labeled_tree_from_paths(&paths[..])
+    );
+}
+
+#[test]
+fn sparse_labeled_tree_one_path_max_depth_does_not_panic_on_drop() {
+    let path = Path::from_iter(vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1]);
+    let tree = sparse_labeled_tree_from_paths(&[path]);
+    drop(tree);
+}
+
+#[test]
+fn sparse_labeled_tree_many_paths_max_depth_does_not_panic_on_drop() {
+    const TREE_WIDTH: usize = 100;
+    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
+
+    let mut paths = Vec::with_capacity(TREE_WIDTH);
+    for i in 0..TREE_WIDTH {
+        paths.push(Path::from_iter(
+            vec![Label::from("a".repeat(i))]
+                .iter()
+                .chain(subpath.iter()),
+        ));
+    }
+
+    let tree = sparse_labeled_tree_from_paths(&paths[..]);
+    drop(tree);
+}
+
+#[test]
 fn sparse_labeled_tree_duplicate_paths() {
     let (segment1, segment2, segment3) = (Label::from("0"), Label::from("1"), Label::from("2"));
 
@@ -2806,7 +2927,6 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: RngCore + Cr
     labeled_tree: &LabeledTree<Vec<u8>>,
     rng: &mut R,
 ) {
-    use rand::Rng;
     let builder = test_utils::hash_tree_builder_from_labeled_tree(labeled_tree);
 
     // split the tree into paths with exactly one leaf or empty subtree at the end
