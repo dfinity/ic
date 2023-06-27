@@ -12,8 +12,7 @@ use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact},
     batch_payload::{BatchPayloadBuilder, PastPayload},
     canister_http::{
-        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadBuilder,
-        CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
+        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
     },
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
@@ -400,14 +399,15 @@ fn divergence_response_inclusion_test() {
         };
 
         // Build a payload
-        let payload = payload_builder.get_canister_http_payload(
+        let payload = payload_builder.build_payload(
             Height::new(1),
-            &validation_context,
-            &[],
             NumBytes::new(4 * 1024 * 1024),
+            &[],
+            &validation_context,
         );
 
-        assert_eq!(payload.divergence_responses.len(), 0);
+        let parsed_payload = bytes_to_payload(&payload).expect("Failed to parse payload");
+        assert_eq!(parsed_payload.divergence_responses.len(), 0);
 
         // But that if we actually get divergence, we report it
         {
@@ -628,17 +628,26 @@ fn duplicate_validation() {
             timeouts: vec![],
             divergence_responses: vec![],
         };
+        let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
+        let past_payloads = vec![PastPayload {
+            height: Height::new(1),
+            time: mock_time(),
+            block_hash: CryptoHashOf::from(CryptoHash(vec![])),
+            payload: &payload,
+        }];
 
-        let validation_result = payload_builder.validate_canister_http_payload(
+        let validation_result = payload_builder.validate_payload(
             Height::from(1),
             &payload,
+            &past_payloads,
             &default_validation_context(),
-            &[&payload],
         );
 
         match validation_result {
             Err(ValidationError::Permanent(
-                CanisterHttpPermanentValidationError::DuplicateResponse(id),
+                PayloadPermanentError::CanisterHttpPayloadValidationError(
+                    CanisterHttpPermanentValidationError::DuplicateResponse(id),
+                ),
             )) if id == CallbackId::new(0) => (),
             x => panic!("Expected DuplicateResponse, got {:?}", x),
         }
@@ -672,12 +681,13 @@ fn divergence_response_validation_test() {
                         .collect(),
                 }],
             };
+            let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
 
-            let validation_result = payload_builder.validate_canister_http_payload(
+            let validation_result = payload_builder.validate_payload(
                 Height::from(1),
                 &payload,
+                &[],
                 &default_validation_context(),
-                &[&payload],
             );
 
             assert!(validation_result.is_ok());
@@ -691,18 +701,20 @@ fn divergence_response_validation_test() {
                         .collect(),
                 }],
             };
+            let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
 
-            let validation_result = payload_builder.validate_canister_http_payload(
+            let validation_result = payload_builder.validate_payload(
                 Height::from(1),
                 &payload,
+                &[],
                 &default_validation_context(),
-                &[&payload],
             );
 
             match validation_result {
-            Err(CanisterHttpPayloadValidationError::Permanent(
-                CanisterHttpPermanentValidationError::DivergenceProofDoesNotMeetDivergenceCriteria,
-            )) => (),
+            Err(ValidationError::Permanent(
+                PayloadPermanentError::CanisterHttpPayloadValidationError(
+                    CanisterHttpPermanentValidationError::DivergenceProofDoesNotMeetDivergenceCriteria
+            ))) => (),
             x => panic!(
                 "Expected DivergenceProofDoesNotMeetDivergenceCriteria, got {:?}",
                 x
@@ -726,18 +738,20 @@ fn divergence_response_validation_test() {
                         .collect(),
                 }],
             };
+            let payload = payload_to_bytes(&payload, NumBytes::new(4 * 1024 * 1024));
 
-            let validation_result = payload_builder.validate_canister_http_payload(
+            let validation_result = payload_builder.validate_payload(
                 Height::from(1),
                 &payload,
+                &[],
                 &default_validation_context(),
-                &[&payload],
             );
 
             match validation_result {
-            Err(CanisterHttpPayloadValidationError::Permanent(
-                CanisterHttpPermanentValidationError::DivergenceProofContainsMultipleCallbackIds,
-            )) => (),
+            Err(ValidationError::Permanent(
+                PayloadPermanentError::CanisterHttpPayloadValidationError(
+                    CanisterHttpPermanentValidationError::DivergenceProofContainsMultipleCallbackIds
+            ))) => (),
             x => panic!(
                 "Expected DivergenceProofContainsMultipleCallbackIds, got {:?}",
                 x
