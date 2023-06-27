@@ -1,3 +1,4 @@
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_ic00_types::{CanisterIdRecord, EmptyBlob, Method, Payload, IC_00};
 use ic_replica_tests as utils;
 use ic_test_utilities::assert_utils::assert_balance_equals;
@@ -5,7 +6,6 @@ use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::Cycles;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(2_000_000u128);
-const CANISTER_CREATION_FEE: Cycles = Cycles::new(1_000_000_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 
 #[test]
@@ -80,7 +80,8 @@ fn can_deposit_cycles_via_the_management_canister() {
         let canister_id = test.create_universal_canister_with_args(vec![], num_cycles);
 
         // Create another canister with some cycles and ICP tokens.
-        let cycles_for_new_canister = CANISTER_CREATION_FEE + Cycles::new(100_000_000);
+        let config = CyclesAccountManagerConfig::application_subnet();
+        let cycles_for_new_canister = config.canister_creation_fee + Cycles::new(100_000_000);
         let new_canister_id_payload = test
             .ingress(
                 canister_id,

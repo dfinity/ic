@@ -79,7 +79,6 @@ use prometheus::IntCounter;
 
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 
-const CANISTER_CREATION_FEE: Cycles = Cycles::new(100_000_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -1026,6 +1025,7 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             compute_allocation_used: state.total_compute_allocation(),
         };
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
 
         assert_eq!(
             canister_manager.create_canister(
@@ -1041,7 +1041,8 @@ fn create_canister_fails_if_not_enough_cycles_are_sent_with_the_request() {
             (
                 Err(CanisterManagerError::CreateCanisterNotEnoughCycles {
                     sent: Cycles::new(100),
-                    required: CANISTER_CREATION_FEE
+                    required: cycles_account_manager
+                        .canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE),
                 }),
                 Cycles::new(100),
             ),
@@ -2836,13 +2837,15 @@ fn installing_a_canister_with_not_enough_cycles_fails() {
         };
         let sender = canister_test_id(1).get();
         let sender_subnet_id = subnet_test_id(1);
+        let cycles_account_manager = Arc::new(CyclesAccountManagerBuilder::new().build());
         let canister_id = canister_manager
             .create_canister(
                 canister_change_origin_from_principal(&sender),
                 sender_subnet_id,
                 // Give the new canister a relatively small number of cycles so it doesn't have
                 // enough to be installed.
-                CANISTER_CREATION_FEE + Cycles::new(100),
+                cycles_account_manager.canister_creation_fee(SMALL_APP_SUBNET_MAX_SIZE)
+                    + Cycles::new(100),
                 CanisterSettings::default(),
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,

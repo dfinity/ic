@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::Encode;
+use ic_config::subnet_config::CyclesAccountManagerConfig;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::{
@@ -18,7 +19,6 @@ use std::{collections::BTreeSet, mem::size_of, str::FromStr};
 
 const BALANCE_EPSILON: u64 = 1_000_000;
 const NUM_CYCLES: u128 = 1_000_000_000;
-const CANISTER_CREATION_FEE: Cycles = Cycles::new(1_000_000_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 
 #[test]
@@ -497,7 +497,8 @@ fn can_create_canister_with_cycles_from_another_canister() {
             test.canister_state(&canister_id).system_state.balance();
 
         // Create another canister with some cycles.
-        let cycles_for_new_canister = CANISTER_CREATION_FEE + Cycles::new(100_000_000);
+        let config = CyclesAccountManagerConfig::application_subnet();
+        let cycles_for_new_canister = config.canister_creation_fee + Cycles::new(100_000_000);
         let new_canister_id_payload = test
             .ingress(
                 canister_id,
