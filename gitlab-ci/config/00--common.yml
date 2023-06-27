@@ -150,7 +150,7 @@ after_script:
     - .ic-build-legacy-image
   variables:
     # This MUST match the directory used in our `build-ic.sh` script
-    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
+    RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
 
 .macos-cargo-native:
   extends:
