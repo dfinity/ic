@@ -7963,6 +7963,7 @@ dependencies = [
  "ic-nervous-system-runtime",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-stable-structures",
  "icp-ledger",
  "icrc-ledger-types",
  "json5",
@@ -10073,9 +10074,9 @@ dependencies = [
 
 [[package]]
 name = "ic-stable-structures"
-version = "0.5.3"
+version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c0c68bf2fb590e3c3b4e0719383fb2cdceb308cd62df9fef571323b418f7e1c"
+checksum = "b4e026318236de13568edafd85534ad29910908bf08cdcf177d4403fd4a5f6c4"
 
 [[package]]
 name = "ic-starter"
