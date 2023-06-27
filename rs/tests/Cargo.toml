@@ -518,10 +518,6 @@ name = "ic-systest-upgrade-with-alternative-urls"
 path = "consensus/orchestrator/upgrade_with_alternative_urls.rs"
 
 [[bin]]
-name = "ic-systest-distributed"
-path = "testing_verification/distributed_test.rs"
-
-[[bin]]
 name = "ic-systest-query-workload-long-test"
 path = "networking/query_workload_long_test.rs"
 

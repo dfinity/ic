@@ -14,7 +14,7 @@ use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::HasIcDependencies;
 use crate::driver::test_env_api::{
     get_ssh_session_from_env, retry, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-    SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
 };
 use crate::driver::test_setup::GroupSetup;
 use anyhow::{bail, Result};
@@ -338,7 +338,7 @@ impl SshSession for DeployedUniversalVm {
     }
 
     fn block_on_ssh_session(&self) -> Result<Session> {
-        retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
+        retry(self.env.logger(), SSH_RETRY_TIMEOUT, RETRY_BACKOFF, || {
             self.get_ssh_session()
         })
     }

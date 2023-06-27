@@ -79,28 +79,32 @@ pub fn config(env: TestEnv) {
 }
 
 fn get_bitcoind_log(env: &TestEnv) {
-    let f = || -> Result<(), anyhow::Error> {
-        let r = {
-            let universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME)?;
-            let session = universal_vm.get_ssh_session()?;
+    let universal_vm = env
+        .get_deployed_universal_vm(UNIVERSAL_VM_NAME)
+        .expect("Failed to get universal VM");
+    let session = universal_vm
+        .block_on_ssh_session()
+        .expect("Failed to establish SSH session");
 
-            // Give log file user permission to copy it from the host.
-            universal_vm.block_on_bash_script_from_session(
-                &session,
-                "sudo chown -R $(id -u):$(id -g) /tmp/regtest/debug.log",
-            )?;
+    // Give log file user permission to copy it from the host.
+    universal_vm
+        .block_on_bash_script_from_session(
+            &session,
+            "sudo chown -R $(id -u):$(id -g) /tmp/regtest/debug.log",
+        )
+        .expect("Failed to execute bash script from session");
 
-            // Log file is mapped from docker container to tmp directory.
-            let (mut remote_file, _) = session.scp_recv(Path::new("/tmp/regtest/debug.log"))?;
+    // Log file is mapped from docker container to tmp directory.
+    let (mut remote_file, _) = session
+        .scp_recv(Path::new("/tmp/regtest/debug.log"))
+        .expect("Failed to receive from scp");
 
-            let mut buf = String::new();
-            remote_file.read_to_string(&mut buf)?;
-            std::fs::write(env.base_path().join("bitcoind.log"), buf)
-        };
-        r.map_err(|e| e.into())
-    };
-
-    retry(env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, f).expect("Failed to get bitcoind logs");
+    let mut buf = String::new();
+    remote_file
+        .read_to_string(&mut buf)
+        .expect("Failed to read file into buffer");
+    std::fs::write(env.base_path().join("bitcoind.log"), buf)
+        .expect("Failed to write bitcoind log file");
 }
 
 pub fn get_balance(env: TestEnv) {
