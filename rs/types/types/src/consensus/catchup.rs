@@ -145,6 +145,14 @@ impl<T> HasCommittee for CatchUpContentT<T> {
 /// only trusted if the threshold public key is trusted.
 pub type CatchUpPackage = Signed<CatchUpContent, ThresholdSignature<CatchUpContent>>;
 
+impl CatchUpPackage {
+    /// Return if this CUP is unsigned. This is true for
+    /// Genesis or recovery CUPs.
+    pub fn is_unsigned(&self) -> bool {
+        self.signature.signature.as_ref().0.is_empty()
+    }
+}
+
 /// CatchUpContentHash is the type of a hashed `CatchUpContent`
 pub type CatchUpContentHash = CryptoHashOf<CatchUpContent>;
 

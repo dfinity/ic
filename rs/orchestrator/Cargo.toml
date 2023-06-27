@@ -23,6 +23,7 @@ ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-dashboard = { path = "./dashboard" }
 ic-http-utils = { path = "../http_utils" }
+ic-ic00-types = { path = "../types/ic00_types" }
 ic-image-upgrader = { path = "./image_upgrader" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
@@ -60,7 +61,10 @@ url = "2.1.1"
 [dev-dependencies]
 assert_cmd = "0.12"
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
+ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
+ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-registry-client-fake = { path = "../registry/fake" }
+ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 mockall = "0.8.3"
