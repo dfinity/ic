@@ -261,14 +261,16 @@ mod tests {
     use crate::mutations::firewall::{
         AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
     };
+    use crate::registry::Registry;
+    use ic_base_types::{NodeId, PrincipalId, SubnetId};
     use ic_protobuf::registry::firewall::v1::{
         FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
     };
     use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
 
-    fn firewall_mutations_test(mutation_id: u8, scope: FirewallRulesScope) {
-        let mut registry = invariant_compliant_registry(mutation_id);
+    const MUTATION_ID: u8 = 0;
 
+    fn firewall_mutations_test(scope: FirewallRulesScope, registry: &mut Registry) {
         // Add initial rules
         let mut expected_result = FirewallRuleSet {
             entries: Vec::<FirewallRule>::new(),
@@ -565,12 +567,27 @@ mod tests {
 
     #[test]
     fn firewall_mutations_all_scope_types() {
-        firewall_mutations_test(0, FirewallRulesScope::Global);
-        firewall_mutations_test(0, FirewallRulesScope::ReplicaNodes);
-        // TODO(NNS1-2274): fix the tests below: we cannot use TEST_ID here, as a valid registry
-        //   does not have a principal with such a node id.
-        // let id = PrincipalId::new_node_test_id(TEST_ID);
-        // firewall_mutations_test(0, FirewallRulesScope::Subnet(SubnetId::from(id)));
-        // firewall_mutations_test(0, FirewallRulesScope::Node(NodeId::from(id)));
+        let mut registry = invariant_compliant_registry(MUTATION_ID);
+        firewall_mutations_test(FirewallRulesScope::Global, &mut registry);
+        let mut registry = invariant_compliant_registry(MUTATION_ID);
+        firewall_mutations_test(FirewallRulesScope::ReplicaNodes, &mut registry);
+
+        let mut registry = invariant_compliant_registry(MUTATION_ID);
+        let subnet_id: SubnetId =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets[0].clone())
+                .unwrap()
+                .into();
+        firewall_mutations_test(FirewallRulesScope::Subnet(subnet_id), &mut registry);
+
+        let mut registry = invariant_compliant_registry(MUTATION_ID);
+        let subnet_id: SubnetId =
+            PrincipalId::try_from(registry.get_subnet_list_record().subnets[0].clone())
+                .unwrap()
+                .into();
+        let node_id: NodeId =
+            PrincipalId::try_from(registry.get_subnet_or_panic(subnet_id).membership[0].clone())
+                .unwrap()
+                .into();
+        firewall_mutations_test(FirewallRulesScope::Node(node_id), &mut registry);
     }
 }
