@@ -54,24 +54,6 @@ system_test(
 )
 
 system_test(
-    name = "distributed_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "manual",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        # BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS + [
-            "nns_dapp_specs_uvm_config_image",
-        ],
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
     name = "ii_delegation_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

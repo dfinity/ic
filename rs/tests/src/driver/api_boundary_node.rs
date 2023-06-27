@@ -20,7 +20,7 @@ use crate::{
         test_env_api::{
             get_ssh_session_from_env, retry, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
             HasDependencies, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            IcNodeContainer, RetrieveIpv4Addr, SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
         },
         test_setup::GroupSetup,
     },
@@ -611,7 +611,7 @@ impl SshSession for ApiBoundaryNodeSnapshot {
     }
 
     fn block_on_ssh_session(&self) -> Result<Session> {
-        retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
+        retry(self.env.logger(), SSH_RETRY_TIMEOUT, RETRY_BACKOFF, || {
             self.get_ssh_session()
         })
     }

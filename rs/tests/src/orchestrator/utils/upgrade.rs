@@ -112,7 +112,7 @@ pub(crate) async fn get_blessed_replica_versions(
 
 /// Reads the replica version from an unassigned node.
 pub(crate) fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<String> {
-    let sess = endpoint.get_ssh_session()?;
+    let sess = endpoint.block_on_ssh_session()?;
     let version_file = Path::new("/opt/ic/share/version.txt");
     let mut chan = sess.scp_recv(version_file)?.0;
     let mut version = String::new();

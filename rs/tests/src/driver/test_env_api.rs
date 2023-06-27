@@ -571,26 +571,18 @@ impl IcNodeSnapshot {
     }
 
     /// Is it accessible via ssh with the `admin` user.
-    pub fn can_login_as_admin_via_ssh(&self) -> Result<bool> {
-        let sess = self.get_ssh_session()?;
+    /// Waits until connection is ready.
+    pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
+        let sess = self.block_on_ssh_session()?;
         let mut channel = sess.channel_session()?;
         channel.exec("echo ready")?;
         let mut s = String::new();
         channel.read_to_string(&mut s)?;
-        Ok(s.trim() == "ready")
-    }
-
-    /// Waits until the [can_login_as_admin_via_ssh] returns `true`.
-    pub fn await_can_login_as_admin_via_ssh(&self) -> Result<()> {
-        retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-            self.can_login_as_admin_via_ssh().and_then(|s| {
-                if !s {
-                    bail!("Not ready!")
-                } else {
-                    Ok(())
-                }
-            })
-        })
+        if s.trim() == "ready" {
+            Ok(())
+        } else {
+            bail!("Failed receive from ssh session")
+        }
     }
 
     pub fn subnet_id(&self) -> Option<SubnetId> {
