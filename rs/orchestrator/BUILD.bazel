@@ -43,6 +43,7 @@ rust_library(
         "//rs/registry/proto_data_provider",
         "//rs/registry/routing_table",
         "//rs/sys",
+        "//rs/types/ic00_types",
         "//rs/types/types",
         "//rs/utils",
         "@crate_index//:candid",
@@ -84,7 +85,10 @@ rust_test(
     crate = ":lib",
     deps = [
         "//rs/crypto/temp_crypto",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/registry/fake",
+        "//rs/test_utilities",
         "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
         "@crate_index//:assert_cmd",

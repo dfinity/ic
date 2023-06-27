@@ -1,4 +1,4 @@
-use prometheus::{IntCounter, IntGauge, IntGaugeVec};
+use prometheus::{IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
 
@@ -15,6 +15,7 @@ pub struct OrchestratorMetrics {
     pub reboot_duration: IntGauge,
     pub orchestrator_info: IntGaugeVec,
     pub key_rotation_status: IntGaugeVec,
+    pub ecdsa_key_changed_errors: IntCounterVec,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -76,6 +77,11 @@ impl OrchestratorMetrics {
                 "orchestrator_key_rotation_status",
                 "The current key rotation status.",
                 &["status"],
+            ),
+            ecdsa_key_changed_errors: metrics_registry.int_counter_vec(
+                "orchestrator_tecdsa_key_changed_errors_total",
+                "Critical error counter monitoring changed tECDSA public keys",
+                &["key_id"],
             ),
         }
     }

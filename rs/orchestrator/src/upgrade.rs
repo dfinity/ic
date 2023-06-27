@@ -4,16 +4,19 @@ use crate::metrics::OrchestratorMetrics;
 use crate::registry_helper::RegistryHelper;
 use crate::replica_process::ReplicaProcess;
 use async_trait::async_trait;
+use ic_crypto::get_tecdsa_master_public_key;
 use ic_http_utils::file_downloader::FileDownloader;
+use ic_ic00_types::EcdsaKeyId;
 use ic_image_upgrader::error::{UpgradeError, UpgradeResult};
 use ic_image_upgrader::ImageUpgrader;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::{CatchUpPackage, HasHeight};
+use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -24,6 +27,7 @@ use std::sync::{Arc, Mutex};
 /// within.
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
+    metrics: Arc<OrchestratorMetrics>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
     cup_provider: Arc<CatchUpPackageProvider>,
     replica_version: ReplicaVersion,
@@ -56,6 +60,7 @@ impl Upgrade {
     ) -> Self {
         let value = Self {
             registry,
+            metrics,
             replica_process,
             cup_provider,
             node_id,
@@ -68,16 +73,18 @@ impl Upgrade {
             prepared_upgrade_version: None,
             orchestrator_data_directory,
         };
-        if let Err(e) = value.report_reboot_time(metrics) {
+        if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
         }
         value.confirm_boot().await;
         value
     }
 
-    fn report_reboot_time(&self, metrics: Arc<OrchestratorMetrics>) -> OrchestratorResult<()> {
+    fn report_reboot_time(&self) -> OrchestratorResult<()> {
         let elapsed_time = self.get_time_since_last_reboot_trigger()?;
-        metrics.reboot_duration.set(elapsed_time.as_secs() as i64);
+        self.metrics
+            .reboot_duration
+            .set(elapsed_time.as_secs() as i64);
         Ok(())
     }
 
@@ -113,7 +120,7 @@ impl Upgrade {
             };
 
         // When we arrived here, we are an assigned node.
-        let old_cup_height = local_cup.as_ref().map(|cup| cup.content.height());
+        let old_cup_height = local_cup.as_ref().map(HasHeight::height);
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necessary.
@@ -122,10 +129,23 @@ impl Upgrade {
             .get_latest_cup(local_cup_proto, subnet_id)
             .await?;
 
+        // If we replaced the previous local CUP, compare potential tECDSA public keys with the
+        // ones in the new CUP, to make sure they haven't changed. Raise an alert if they did.
+        if let Some(old_cup) = local_cup {
+            if old_cup.height() < latest_cup.height() {
+                compare_tecdsa_public_keys(
+                    &old_cup,
+                    &latest_cup,
+                    self.metrics.as_ref(),
+                    &self.logger,
+                );
+            }
+        }
+
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
         // recovery scenario. Check if we're in an NNS subnet recovery case and download
         // the new registry if needed.
-        if latest_cup.signature.signature.get_ref().0.is_empty() {
+        if latest_cup.is_unsigned() {
             info!(
                 self.logger,
                 "The latest CUP (registry version={}, height={}) is unsigned: a subnet genesis/recovery is in progress",
@@ -304,9 +324,8 @@ impl Upgrade {
         cup: &CatchUpPackage,
         old_cup_height: Option<Height>,
     ) {
-        let is_unsigned_cup = cup.signature.signature.get_ref().0.is_empty();
         let new_height = cup.content.height();
-        if is_unsigned_cup && old_cup_height.is_some() && Some(new_height) > old_cup_height {
+        if cup.is_unsigned() && old_cup_height.is_some() && Some(new_height) > old_cup_height {
             info!(
                 self.logger,
                 "Found higher unsigned CUP, restarting replica for subnet recovery..."
@@ -591,4 +610,271 @@ fn reexec_current_process(logger: &ReplicaLogger) -> OrchestratorError {
     );
     let error = exec::Command::new(&args[0]).args(&args[1..]).exec();
     OrchestratorError::ExecError(PathBuf::new(), error)
+}
+
+/// Return the threshold ECDSA master public key of the given CUP, if it exists.
+fn get_tecdsa_key(cup: &CatchUpPackage) -> Option<(EcdsaKeyId, MasterEcdsaPublicKey)> {
+    let ecdsa = cup.content.block.get_value().payload.as_ref().as_ecdsa()?;
+    let transcript_ref = ecdsa.key_transcript.current.as_ref()?;
+    let transcript = ecdsa
+        .idkg_transcripts
+        .get(&transcript_ref.transcript_id())?;
+
+    get_tecdsa_master_public_key(transcript)
+        .ok()
+        .map(|key| (ecdsa.key_transcript.key_id.clone(), key))
+}
+
+/// Get tECDSA public keys of both CUPs and make sure previous keys weren't changed
+/// or deleted. Raise an alert if they were.
+fn compare_tecdsa_public_keys(
+    old_cup: &CatchUpPackage,
+    new_cup: &CatchUpPackage,
+    metrics: &OrchestratorMetrics,
+    log: &ReplicaLogger,
+) {
+    let Some(old_key) = get_tecdsa_key(old_cup) else {
+        return;
+    };
+    let new_key = get_tecdsa_key(new_cup);
+    if Some(&old_key) != new_key.as_ref() {
+        error!(
+            log,
+            "Threshold ECDSA public key has changed! Old: {:?}, New: {:?}", old_key, new_key,
+        );
+        metrics
+            .ecdsa_key_changed_errors
+            .with_label_values(&[&old_key.0.name])
+            .inc();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        generate_key_transcript, CanisterThresholdSigTestEnvironment,
+    };
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_ic00_types::EcdsaCurve;
+    use ic_metrics::MetricsRegistry;
+    use ic_test_utilities::{
+        consensus::fake::{Fake, FakeContent},
+        mock_time,
+        types::ids::subnet_test_id,
+    };
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::{
+        batch::ValidationContext,
+        consensus::{
+            ecdsa::{self, EcdsaKeyTranscript, EcdsaUIDGenerator, TranscriptAttributes},
+            Block, CatchUpContent, HashedBlock, HashedRandomBeacon, Payload, RandomBeacon,
+            RandomBeaconContent, Rank,
+        },
+        crypto::{
+            canister_threshold_sig::idkg::IDkgTranscript, AlgorithmId, CryptoHash, CryptoHashOf,
+        },
+        signature::ThresholdSignature,
+    };
+
+    fn make_cup(
+        h: Height,
+        key_id: &str,
+        key_transcript: Option<&IDkgTranscript>,
+    ) -> CatchUpPackage {
+        let unmasked = key_transcript.map(|t| {
+            ecdsa::UnmaskedTranscriptWithAttributes::new(
+                t.to_attributes(),
+                ecdsa::UnmaskedTranscript::try_from((h, t)).unwrap(),
+            )
+        });
+
+        let idkg_transcripts = key_transcript
+            .map(|t| BTreeMap::from_iter(vec![(t.transcript_id, t.clone())]))
+            .unwrap_or_default();
+
+        let ecdsa = ecdsa::EcdsaPayload {
+            signature_agreements: BTreeMap::new(),
+            ongoing_signatures: BTreeMap::new(),
+            available_quadruples: BTreeMap::new(),
+            quadruples_in_creation: BTreeMap::new(),
+            uid_generator: EcdsaUIDGenerator::new(subnet_test_id(0), h),
+            idkg_transcripts,
+            ongoing_xnet_reshares: BTreeMap::new(),
+            xnet_reshare_agreements: BTreeMap::new(),
+            key_transcript: EcdsaKeyTranscript {
+                current: unmasked,
+                next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
+                key_id: EcdsaKeyId {
+                    curve: EcdsaCurve::Secp256k1,
+                    name: key_id.to_string(),
+                },
+            },
+        };
+
+        let block = Block::new(
+            CryptoHashOf::from(CryptoHash(Vec::new())),
+            Payload::new(
+                ic_types::crypto::crypto_hash,
+                (ic_types::consensus::dkg::Summary::fake(), Some(ecdsa)).into(),
+            ),
+            h,
+            Rank(46),
+            ValidationContext {
+                registry_version: RegistryVersion::from(101),
+                certified_height: Height::from(42),
+                time: mock_time(),
+            },
+        );
+
+        CatchUpPackage {
+            content: CatchUpContent::new(
+                HashedBlock::new(ic_types::crypto::crypto_hash, block),
+                HashedRandomBeacon::new(
+                    ic_types::crypto::crypto_hash,
+                    RandomBeacon::fake(RandomBeaconContent::new(
+                        h,
+                        CryptoHashOf::from(CryptoHash(Vec::new())),
+                    )),
+                ),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ),
+            signature: ThresholdSignature::fake(),
+        }
+    }
+
+    fn get_ecdsa_key_changed_metric(key: &str, metrics: &OrchestratorMetrics) -> u64 {
+        metrics
+            .ecdsa_key_changed_errors
+            .get_metric_with_label_values(&[key])
+            .unwrap()
+            .get()
+    }
+
+    #[test]
+    fn test_ecdsa_key_deletion_raises_alert() {
+        with_test_replica_logger(|log| {
+            let rng = &mut reproducible_rng();
+            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
+            let key = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let key_id = "some_key";
+
+            let c1 = make_cup(Height::from(10), key_id, Some(&key));
+            let c2 = make_cup(Height::from(100), key_id, None);
+
+            let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
+
+            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+
+            assert_eq!(before + 1, after);
+        });
+    }
+
+    #[test]
+    fn test_ecdsa_key_change_raises_alert() {
+        with_test_replica_logger(|log| {
+            let rng = &mut reproducible_rng();
+            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
+            let key1 = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let key2 = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let key_id = "some_key";
+
+            let c1 = make_cup(Height::from(10), key_id, Some(&key1));
+            let c2 = make_cup(Height::from(100), key_id, Some(&key2));
+
+            let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
+
+            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+
+            assert_eq!(before + 1, after);
+        });
+    }
+
+    #[test]
+    fn test_ecdsa_key_unchanged_does_not_raise_alert() {
+        with_test_replica_logger(|log| {
+            let rng = &mut reproducible_rng();
+            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
+            let key = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let key_id = "some_key";
+
+            let c1 = make_cup(Height::from(10), key_id, Some(&key));
+            let c2 = make_cup(Height::from(100), key_id, Some(&key));
+
+            let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
+
+            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+
+            assert_eq!(before, after);
+        });
+    }
+
+    #[test]
+    fn test_ecdsa_key_id_change_raises_alert() {
+        with_test_replica_logger(|log| {
+            let rng = &mut reproducible_rng();
+            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
+            let key = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let key_id1 = "some_key1";
+            let key_id2 = "some_key2";
+
+            let c1 = make_cup(Height::from(10), key_id1, Some(&key));
+            let c2 = make_cup(Height::from(100), key_id2, Some(&key));
+
+            let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
+
+            let before = get_ecdsa_key_changed_metric(key_id1, &metrics);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            let after = get_ecdsa_key_changed_metric(key_id1, &metrics);
+
+            assert_eq!(before + 1, after);
+        });
+    }
+
+    #[test]
+    fn test_ecdsa_key_created_does_not_raise_alert() {
+        with_test_replica_logger(|log| {
+            let rng = &mut reproducible_rng();
+            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
+            let key = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let key_id = "some_key";
+
+            let c1 = make_cup(Height::from(10), key_id, None);
+            let c2 = make_cup(Height::from(100), key_id, Some(&key));
+
+            let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
+
+            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+
+            assert_eq!(before, after);
+        });
+    }
+
+    #[test]
+    fn test_ecdsa_no_keys_created_does_not_raise_alert() {
+        with_test_replica_logger(|log| {
+            let key_id = "some_key";
+
+            let c1 = make_cup(Height::from(10), key_id, None);
+            let c2 = make_cup(Height::from(100), key_id, None);
+
+            let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
+
+            let before = get_ecdsa_key_changed_metric(key_id, &metrics);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            let after = get_ecdsa_key_changed_metric(key_id, &metrics);
+
+            assert_eq!(before, after);
+        });
+    }
 }

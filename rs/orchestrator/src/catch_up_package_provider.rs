@@ -310,7 +310,6 @@ impl CatchUpPackageProvider {
                 registry_version,
             ))?;
 
-        let unsigned = latest_cup.signature.signature.get_ref().0.is_empty();
         let height = Some(latest_cup.content.height());
         // We recreate the local registry CUP everytime to avoid incompatibility issues. Without
         // this recreation, we might run into the following problem: assume the orchestrator of
@@ -323,7 +322,7 @@ impl CatchUpPackageProvider {
         //
         // By re-creating the unsigned CUP every time we realize it's the newest one, we instead
         // recreate the CUP on all orchestrators of the version B before starting the replica.
-        if height > local_cup_height || height == local_cup_height && unsigned {
+        if height > local_cup_height || height == local_cup_height && latest_cup.is_unsigned() {
             self.persist_cup(&latest_cup_proto)?;
         }
         Ok((latest_cup_proto, latest_cup))
