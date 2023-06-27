@@ -14,7 +14,7 @@
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
-  "initializeCommand": "mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history",
+  "initializeCommand": "mkdir -p ~/.aws ~/.ssh ~/.cache ~/.local/share/fish && touch ~/.zsh_history ~/.bash_history",
   "mounts": [
     {
       "source": "${localEnv:HOME}/.cache",
