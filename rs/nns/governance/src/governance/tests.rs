@@ -1,19 +1,14 @@
-use std::{
-    collections::{HashMap, VecDeque},
-    convert::TryFrom,
-    string::ToString,
-    sync::{Arc, Mutex},
+use super::*;
+use crate::pb::v1::{
+    proposal::Action, settle_community_fund_participation, ExecuteNnsFunction, GovernanceError,
+    Neuron, OpenSnsTokenSwap, Proposal, ProposalData, ProposalStatus,
+    SettleCommunityFundParticipation, Tally,
 };
-
 use async_trait::async_trait;
 use candid::{Decode, Encode};
-use lazy_static::lazy_static;
-use maplit::hashmap;
-
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
+use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY};
+use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::{self as sns_init_pb, SnsInitPayload};
@@ -22,14 +17,17 @@ use ic_sns_swap::pb::{
     v1::{params::NeuronBasketConstructionParameters, Swap},
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
-
-use crate::pb::v1::{
-    proposal::Action, settle_community_fund_participation, ExecuteNnsFunction, GovernanceError,
-    Neuron, OpenSnsTokenSwap, Proposal, ProposalData, ProposalStatus,
-    SettleCommunityFundParticipation, Tally,
+use lazy_static::lazy_static;
+use maplit::hashmap;
+use std::{
+    collections::{HashMap, VecDeque},
+    convert::TryFrom,
+    string::ToString,
+    sync::{Arc, Mutex},
 };
 
-use super::*;
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 
 #[test]
 fn test_time_warp() {
@@ -1076,6 +1074,7 @@ mod settle_community_fund_participation_tests {
 
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use ic_nervous_system_proto::pb::v1 as pb;
+    use ic_sns_init::pb::v1::sns_init_payload;
     use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1};
 
     use super::*;

@@ -52,7 +52,7 @@ use ic_nns_governance::{
         AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
         NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, RewardNodeProviders,
     },
-    proposal_submission::{
+    proposals::proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
         decode_make_proposal_response,
     },

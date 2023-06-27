@@ -6,9 +6,10 @@ use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::governance::{HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES};
 use ic_nns_governance::{
-    governance::{Environment, Governance},
+    governance::{
+        Environment, Governance, HeapGrowthPotential, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
+    },
     pb::v1::{
         governance_error::ErrorType,
         manage_neuron::{
@@ -21,8 +22,7 @@ use ic_nns_governance::{
         Proposal,
     },
 };
-use icp_ledger::Subaccount;
-use icp_ledger::{AccountIdentifier, Tokens};
+use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use maplit::hashmap;
 use std::convert::TryFrom;
 
