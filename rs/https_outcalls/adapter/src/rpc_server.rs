@@ -20,7 +20,7 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use std::{collections::HashMap, net::SocketAddr};
+use std::{collections::HashMap, fmt, net::SocketAddr};
 use tonic::{Request, Response, Status};
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
@@ -145,22 +145,33 @@ impl CanisterHttpService for CanisterHttp {
                 *http_req_clone.uri_mut() = http_req.uri().clone();
                 // If we fail to connect through IPv6 we retry with socks.
                 match self.client.request(http_req).await {
-                    Err(e) if e.is_connect() => {
+                    Err(direct_err) if direct_err.is_connect() => {
                         self.metrics.requests_socks.inc();
-                        self.socks_client.request(http_req_clone).await
+                        self.socks_client
+                            .request(http_req_clone)
+                            .await
+                            .map_err(|socks_err| {
+                                RequestError::DirectAndSocks((direct_err, socks_err))
+                            })
                     }
-                    resp => resp,
+                    resp => resp.map_err(|err| RequestError::Direct(err)),
                 }
             } else {
                 self.metrics.requests_socks.inc();
-                self.socks_client.request(http_req).await
+                self.socks_client
+                    .request(http_req)
+                    .await
+                    .map_err(|err| RequestError::Socks(err))
             }
         } else {
             let mut http_req = hyper::Request::new(Body::from(req.body));
             *http_req.headers_mut() = headers;
             *http_req.method_mut() = method;
             *http_req.uri_mut() = uri.clone();
-            self.client.request(http_req).await
+            self.client
+                .request(http_req)
+                .await
+                .map_err(|err| RequestError::Direct(err))
         }
         .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
@@ -170,7 +181,11 @@ impl CanisterHttpService for CanisterHttp {
                 .inc();
             Status::new(
                 tonic::Code::Unavailable,
-                format!("Failed to connect: {}", err),
+                format!(
+                    "Connecting to {:.50} failed: {}",
+                    uri.host().unwrap_or(""),
+                    err,
+                ),
             )
         })?;
         self.metrics
@@ -263,6 +278,32 @@ impl CanisterHttpService for CanisterHttp {
             headers,
             content: body_bytes.to_vec(),
         }))
+    }
+}
+
+enum RequestError {
+    Direct(hyper::Error),
+    Socks(hyper::Error),
+    DirectAndSocks((hyper::Error, hyper::Error)),
+}
+
+impl fmt::Display for RequestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Direct(direct_err) => {
+                write!(f, "Request failed: {}", direct_err)
+            }
+            Self::Socks(direct_err) => {
+                write!(f, "Request through socks proxy failed: {}", direct_err)
+            }
+            Self::DirectAndSocks((direct_err, socks_err)) => {
+                write!(
+                    f,
+                    "Request failed to connect: {} fallback to socks also failed: {}",
+                    direct_err, socks_err
+                )
+            }
+        }
     }
 }
 
