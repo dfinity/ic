@@ -4339,6 +4339,7 @@ async fn main() {
             SubCommand::ProposeToAddHostOsVersion(_) => (),
             SubCommand::ProposeToManageHostOsVersion(_) => (),
             SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
+            SubCommand::ProposeToSetBitcoinConfig(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
