@@ -673,35 +673,94 @@ fn execution_state_test_partial_eq() {
 #[test]
 fn canister_history_operations() {
     let mut canister_history = CanisterHistory::default();
+    let mut total_num_changes = 0;
+    let mut reference_change_entries: Vec<CanisterChange> = vec![];
+    let num_requested_changes = (MAX_CANISTER_HISTORY_CHANGES as usize) + 42;
 
     for i in 0..8 {
-        canister_history.add_canister_change(CanisterChange::new(
+        let c = CanisterChange::new(
             42,
             0,
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
             CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
-        ));
+        );
+        canister_history.add_canister_change(c.clone());
+        reference_change_entries.push(c);
+        // keep only the last MAX_CANISTER_HISTORY_CHANGES changes
+        reference_change_entries = reference_change_entries
+            .into_iter()
+            .rev()
+            .take(MAX_CANISTER_HISTORY_CHANGES as usize)
+            .rev()
+            .collect();
+        assert_eq!(
+            canister_history
+                .get_changes(num_requested_changes)
+                .map(|c| (*c.clone()).clone())
+                .collect::<Vec<CanisterChange>>(),
+            reference_change_entries
+        );
+        total_num_changes += 1;
+        assert_eq!(canister_history.get_total_num_changes(), total_num_changes);
     }
 
     canister_history.clear();
+    reference_change_entries.clear();
 
     for i in 0..(MAX_CANISTER_HISTORY_CHANGES + 8) {
-        canister_history.add_canister_change(CanisterChange::new(
+        let c = CanisterChange::new(
             42,
             0,
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
             CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
-        ));
+        );
+        canister_history.add_canister_change(c.clone());
+        reference_change_entries.push(c);
+        // keep only the last MAX_CANISTER_HISTORY_CHANGES changes
+        reference_change_entries = reference_change_entries
+            .into_iter()
+            .rev()
+            .take(MAX_CANISTER_HISTORY_CHANGES as usize)
+            .rev()
+            .collect();
+        assert_eq!(
+            canister_history
+                .get_changes(num_requested_changes)
+                .map(|c| (*c.clone()).clone())
+                .collect::<Vec<CanisterChange>>(),
+            reference_change_entries
+        );
+        total_num_changes += 1;
+        assert_eq!(canister_history.get_total_num_changes(), total_num_changes);
     }
 
     canister_history.clear();
+    reference_change_entries.clear();
 
     for i in 0..(MAX_CANISTER_HISTORY_CHANGES + 8) {
-        canister_history.add_canister_change(CanisterChange::new(
+        let c = CanisterChange::new(
             42,
             0,
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
             CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
-        ));
+        );
+        canister_history.add_canister_change(c.clone());
+        reference_change_entries.push(c);
+        // keep only the last MAX_CANISTER_HISTORY_CHANGES changes
+        reference_change_entries = reference_change_entries
+            .into_iter()
+            .rev()
+            .take(MAX_CANISTER_HISTORY_CHANGES as usize)
+            .rev()
+            .collect();
+        assert_eq!(
+            canister_history
+                .get_changes(num_requested_changes)
+                .map(|c| (*c.clone()).clone())
+                .collect::<Vec<CanisterChange>>(),
+            reference_change_entries
+        );
+        total_num_changes += 1;
+        assert_eq!(canister_history.get_total_num_changes(), total_num_changes);
     }
 }

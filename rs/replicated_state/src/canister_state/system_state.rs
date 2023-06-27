@@ -200,7 +200,7 @@ impl CanisterHistory {
     /// by dropping the oldest entry if necessary.
     pub fn add_canister_change(&mut self, canister_change: CanisterChange) {
         let changes = Arc::make_mut(&mut self.changes);
-        if self.total_num_changes >= MAX_CANISTER_HISTORY_CHANGES {
+        if changes.len() >= MAX_CANISTER_HISTORY_CHANGES as usize {
             let change_size = changes
                 .pop_front()
                 .as_ref()
