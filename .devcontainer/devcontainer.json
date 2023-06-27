@@ -1,12 +1,20 @@
 {
-  "image": "dfinity/ic-build:6cef3a74a91521a4ded657aa62af44388d1841f8d69b06fb0129caedf99fb2c8",
+  "image": "dfinity/ic-build:93840650a4491db0e9917f901a30522cff963b20c21804b2368616c03db089c5",
   "remoteUser": "ubuntu",
+  "privileged": true,
   "runArgs": [
     "--hostname",
-    "devenv-container"
+    "devenv-container",
+    "--network",
+    "host",
+    "--cgroupns",
+    "host",
+    "--add-host",
+    "devenv-container:127.0.0.1"
   ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
+  "initializeCommand": "mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history",
   "mounts": [
     {
       "source": "${localEnv:HOME}/.cache",
@@ -24,13 +32,18 @@
       "type": "bind"
     },
     {
-      "source": "${localEnv:HOME}/.config",
-      "target": "/home/ubuntu/.config",
+      "source": "${localEnv:HOME}/.bash_history",
+      "target": "/home/ubuntu/.bash_history",
       "type": "bind"
     },
     {
-      "source": "${localEnv:HOME}/.local",
-      "target": "/home/ubuntu/.local",
+      "source": "${localEnv:HOME}/.zsh_history",
+      "target": "/home/ubuntu/.zsh_history",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.local/share/fish",
+      "target": "/home/ubuntu/.local/share/fish",
       "type": "bind"
     },
     {
@@ -42,10 +55,6 @@
   "containerEnv": {
     "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}",
     "TERM": "xterm-256color"
-  },
-  "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/ic/bin",
-    "PYTHONPATH": "${containerEnv:PYTHONPATH}:/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies"
   },
   "customizations": {
     "vscode": {

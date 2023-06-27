@@ -8,7 +8,7 @@ COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hos
 
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
-    curl build-essential git gnupg node-json5 uuid-dev zsh clang iproute2 shellcheck \
+    curl build-essential git gnupg node-json5 uuid-dev zsh fish clang iproute2 shellcheck \
     # GitLab CI \
     sudo gosu jq rclone time qemu-system-x86 \
     # Test \
@@ -83,6 +83,9 @@ ARG BUF_BIN="/usr/local/bin"
 ARG BUF_VERSION="1.21.0"
 RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" \
     -o "${BUF_BIN}/buf" && chmod +x "${BUF_BIN}/buf"
+
+# Add zshrc generated from zsh-newuser-install (option 2)
+COPY --chown=ubuntu:ubuntu ./gitlab-ci/container/files/zshrc /home/ubuntu/.zshrc
 
 # Add yq
 ARG YQ_BIN="/usr/local/bin/yq"

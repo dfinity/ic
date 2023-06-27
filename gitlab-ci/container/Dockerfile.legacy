@@ -30,11 +30,11 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev libsystemd-dev uuid-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
         policycoreutils python-is-python3 python3 python3-pip python3-cbor shellcheck \
-        sudo docker-ce-cli ripgrep patchelf cpio nodejs npm gosu pigz zsh hub less \
+        sudo docker-ce-cli ripgrep patchelf cpio nodejs npm gosu pigz zsh fish hub less \
         ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake \
         grub-efi-amd64-bin podman buildah lvm2 fuse-overlayfs google-cloud-cli
 
-COPY --from=docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/docker-buildx
+COPY --from=docker.io/docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 
 # Add the `${USER}` user, and the required folders
 ARG USER=ubuntu
@@ -123,6 +123,9 @@ COPY ./gitlab-ci/container/files/known_hosts /home/${USER}/.ssh/known_hosts
 
 COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
 WORKDIR /
+
+# Add zshrc generated from zsh-newuser-install (option 2)
+COPY --chown=ubuntu:ubuntu ./gitlab-ci/container/files/zshrc /home/ubuntu/.zshrc
 
 USER 0
 
