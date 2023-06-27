@@ -97,7 +97,7 @@ pub enum ExecutionResponse {
 }
 
 /// The data structure returned by
-/// `ExecutionEnvironment.execute_canister_message()`.
+/// `ExecutionEnvironment.execute_canister_input()`.
 #[derive(Debug)]
 pub enum ExecuteMessageResult {
     Finished {
