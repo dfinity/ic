@@ -11,7 +11,7 @@ use ic_nns_governance::pb::v1::manage_neuron_response::MakeProposalResponse;
 use ic_nns_governance::pb::v1::{
     manage_neuron_response, ManageNeuronResponse, Proposal, ProposalInfo,
 };
-use ic_nns_governance::proposal_submission::create_make_proposal_payload;
+use ic_nns_governance::proposals::proposal_submission::create_make_proposal_payload;
 use slog::{debug, Logger};
 
 use super::lib::NeuronDetails;

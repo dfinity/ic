@@ -5,7 +5,7 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::{
     pb::v1::{manage_neuron_response::Command, NnsFunction},
-    proposal_submission::create_external_update_proposal_candid,
+    proposals::proposal_submission::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
     common::{build_root_wasm, modify_wasm_bytes, NnsInitPayloadsBuilder},

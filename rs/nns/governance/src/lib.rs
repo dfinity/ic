@@ -133,7 +133,7 @@ pub mod governance;
 pub mod init;
 mod neuron;
 pub mod pb;
-pub mod proposal_submission;
+pub mod proposals;
 mod reward;
 
 use crate::governance::Governance;

@@ -11,7 +11,7 @@ use ic_nns_governance::{
         manage_neuron_response::Command as CommandResponse,
         ManageNeuron, ManageNeuronResponse, NnsFunction, ProposalStatus, Vote,
     },
-    proposal_submission::create_external_update_proposal_candid,
+    proposals::proposal_submission::create_external_update_proposal_candid,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
