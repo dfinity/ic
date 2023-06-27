@@ -36,9 +36,12 @@ use ic_types::{
     Height, RegistryVersion,
 };
 use prost::Message;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    net::TcpStream,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 use tokio::{
     runtime::Runtime,
@@ -651,4 +654,58 @@ fn test_status_code_when_ingress_filter_fails() {
     }));
 
     assert_eq!(expected_response, response);
+}
+
+/// This test verifies that the endpoint can be shutdown gracefully by dropping the runtime.
+/// If the shutdown process is not graceful, the test will timeout and fail as dropping the
+/// runtime will block until all tasks (including the endpoint) are completed.
+#[test]
+fn test_graceful_shutdown_of_the_endpoint() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mock_state_manager: ic_interfaces_state_manager_mocks::MockStateManager =
+        basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let _ = start_http_endpoint(
+        rt.handle().clone(),
+        config,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
+    );
+
+    let agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
+
+    rt.block_on(wait_for_status_healthy(&agent)).unwrap();
+
+    let connection_to_endpoint = TcpStream::connect(addr);
+    assert!(
+        connection_to_endpoint.is_ok(),
+        "Connecting to endpoint failed: {:?}.",
+        connection_to_endpoint
+    );
+
+    // If the shutdown of the endpoint is not "graceful" then the test will timeout
+    // because the thread initiating the shutdown blocks until all spawned work has
+    // been stopped. This is not ideal.
+    // It is unclear if it is possible to set a deadline on the drop operation in order
+    // to fail the test instead of timing out.
+    drop(rt);
+
+    let connection_to_endpoint = TcpStream::connect(addr);
+    assert!(
+        connection_to_endpoint.is_err(),
+        "Connected to endpoint after shutting down the runtime."
+    );
 }
