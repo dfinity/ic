@@ -28,5 +28,5 @@ pub async fn update_settings<Rt>(update_settings: UpdateSettings) -> Result<(), 
 where
     Rt: Runtime,
 {
-    Rt::call(IC_00, "update_settings", (update_settings,)).await
+    Rt::call_with_cleanup(IC_00, "update_settings", (update_settings,)).await
 }
