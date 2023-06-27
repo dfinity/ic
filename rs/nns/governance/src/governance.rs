@@ -1,4 +1,3 @@
-use crate::proposals::create_service_nervous_system::create_service_nervous_system_proposals_is_enabled;
 use crate::{
     governance::manage_neuron_request::{
         execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
@@ -32,6 +31,7 @@ use crate::{
         RewardNodeProviders, SetSnsTokenSwapOpenTimeWindow, SettleCommunityFundParticipation,
         SwapBackgroundInformation, Tally, Topic, UpdateNodeProvider, Vote, WaitForQuietState,
     },
+    proposals::create_service_nervous_system::create_service_nervous_system_proposals_is_enabled,
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -4399,97 +4399,98 @@ impl Governance {
         proposal_id: u64,
         create_service_nervous_system: &CreateServiceNervousSystem,
     ) {
-        // This ensures that we do not forget to set the proposal status.
-        let main = async /* -> Result<(), GovernanceError> */ {
-            // Step 1: Convert proposal into main request object.
-            let sns_init_payload = match SnsInitPayload::try_from(create_service_nervous_system.clone()) {
-                Ok(ok) => ok,
-                Err(err) => {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        format!(
-                            "Failed to convert proposal to SnsInitPayload: {}",
-                            err,
-                        ),
-                    ))
-                }
-            };
-
-            // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
-            let request = DeployNewSnsRequest {
-                sns_init_payload: Some(sns_init_payload),
-            };
-            let request = match Encode!(&request) {
-                Ok(ok) => ok,
-                Err(err) => {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "Failed to encode request for deploy_new_sns Candid \
-                             method call: {}\nrequest: {:#?}",
-                            err, request,
-                        ),
-                    ));
-                }
-            };
-            let deploy_new_sns_result = self.env.call_canister_method(
-                SNS_WASM_CANISTER_ID,
-                "deploy_new_sns",
-                request,
-            )
+        let execute_create_service_nervous_system_result = self
+            .execute_create_service_nervous_system_proposal(create_service_nervous_system)
             .await;
-
-            // Step 3: Inspect call result.
-            let deploy_new_sns_response: Vec<u8> = match deploy_new_sns_result {
-                Ok(ok) => ok,
-                Err(err) => {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "Failed to send deploy_new_sns request to SNS_WASM canister: {:?}",
-                            err,
-                        ),
-                    ));
-                }
-            };
-
-            // Step 4: Decode response.
-            let deploy_new_sns_response = match Decode!(&deploy_new_sns_response, DeployNewSnsResponse) {
-                Ok(ok) => ok,
-                Err(err) => {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "Failed to send deploy_new_sns request to SNS_WASM canister: {}",
-                            err,
-                        ),
-                    ));
-                }
-            };
-
-            if deploy_new_sns_response.error.is_some() {
-                return Err(GovernanceError::new_with_message(
-                        ErrorType::External,
-                        format!(
-                            "deploy_new_sns response contained an error: {:#?}",
-                            deploy_new_sns_response,
-                        ),
-                ));
-            }
-
-            // subnet_id and canisters fields in deploy_new_sns_response are not
-            // used. Would probably make sense to stick them on the
-            // ProposalData...
-            println!("deploy_new_sns succeeded: {:#?}", deploy_new_sns_response);
-
-            Ok(())
-        }; // end main.
-
-        let execute_create_service_nervous_system_result = main.await;
         self.set_proposal_execution_status(
             proposal_id,
             execute_create_service_nervous_system_result,
         );
+    }
+
+    async fn execute_create_service_nervous_system_proposal(
+        &mut self,
+        create_service_nervous_system: &CreateServiceNervousSystem,
+    ) -> Result<(), GovernanceError> {
+        // Step 1: Convert proposal into main request object.
+        let sns_init_payload = match SnsInitPayload::try_from(create_service_nervous_system.clone())
+        {
+            Ok(ok) => ok,
+            Err(err) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Failed to convert proposal to SnsInitPayload: {}", err,),
+                ))
+            }
+        };
+
+        // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
+        let request = DeployNewSnsRequest {
+            sns_init_payload: Some(sns_init_payload),
+        };
+        let request = match Encode!(&request) {
+            Ok(ok) => ok,
+            Err(err) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Failed to encode request for deploy_new_sns Candid \
+                             method call: {}\nrequest: {:#?}",
+                        err, request,
+                    ),
+                ));
+            }
+        };
+        let deploy_new_sns_result = self
+            .env
+            .call_canister_method(SNS_WASM_CANISTER_ID, "deploy_new_sns", request)
+            .await;
+
+        // Step 3: Inspect call result.
+        let deploy_new_sns_response: Vec<u8> = match deploy_new_sns_result {
+            Ok(ok) => ok,
+            Err(err) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Failed to send deploy_new_sns request to SNS_WASM canister: {:?}",
+                        err,
+                    ),
+                ));
+            }
+        };
+
+        // Step 4: Decode response.
+        let deploy_new_sns_response = match Decode!(&deploy_new_sns_response, DeployNewSnsResponse)
+        {
+            Ok(ok) => ok,
+            Err(err) => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Failed to send deploy_new_sns request to SNS_WASM canister: {}",
+                        err,
+                    ),
+                ));
+            }
+        };
+
+        if deploy_new_sns_response.error.is_some() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "deploy_new_sns response contained an error: {:#?}",
+                    deploy_new_sns_response,
+                ),
+            ));
+        }
+
+        // subnet_id and canisters fields in deploy_new_sns_response are not
+        // used. Would probably make sense to stick them on the
+        // ProposalData...
+        println!("deploy_new_sns succeeded: {:#?}", deploy_new_sns_response);
+
+        Ok(())
     }
 
     /// Mark all Neurons controlled by the given principals as having passed
