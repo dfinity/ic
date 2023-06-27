@@ -73,7 +73,7 @@ For more information, run `./nns_dev_testnet.sh` without arguments.
 #### Run the entire script
 
 ```
-DIR=/tmp/$USER-nns-test/ ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
+DIR=/tmp/$USER-nns-test ./nns_dev_testnet.sh small02
 ```
 
 #### Run only the full step 1 of the script.
@@ -82,12 +82,12 @@ Sometimes, during testnet setup or when developing the script, you may want to o
 read the script source for current descriptions.
 
 ```
-DIR=/tmp/$USER-nns-test/ STEPS='1' ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
+DIR=/tmp/$USER-nns-test STEPS='1' ./nns_dev_testnet.sh small02
 ```
 
 #### Within step 1, run only sub-steps 3 and 4 of nns_state_deployment.sh.
 ```
-DIR=/tmp/$USER-nns-test/ STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
+DIR=/tmp/$USER-nns-test STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_dev_testnet.sh small02
 ```
 
 ### Interacting Afterward
