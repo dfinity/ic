@@ -25,6 +25,7 @@ use std::{
 pub mod cmc;
 pub mod dfn_core_stable_mem_utils;
 pub mod ledger;
+pub mod memory_manager_upgrade_storage;
 
 pub const BASIS_POINTS_PER_UNITY: u64 = 10_000;
 

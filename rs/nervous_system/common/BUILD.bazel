@@ -23,10 +23,12 @@ DEPENDENCIES = [
     "@crate_index//:bytes",
     "@crate_index//:by_address",
     "@crate_index//:candid",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:json5",
     "@crate_index//:maplit",
     "@crate_index//:priority-queue",
+    "@crate_index//:prost",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -43,7 +45,6 @@ BUILD_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//rs/nns/governance",
     "@crate_index//:proptest",
-    "@crate_index//:prost",
     "@crate_index//:serde_bytes",
 ]
 
