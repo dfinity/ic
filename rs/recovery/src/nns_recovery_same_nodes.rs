@@ -3,6 +3,7 @@ use crate::{
     error::RecoveryError,
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
+    registry_helper::RegistryPollingStrategy,
     RecoveryArgs, RecoveryResult, CUPS_DIR,
 };
 use clap::Parser;
@@ -81,9 +82,11 @@ impl NNSRecoverySameNodes {
             logger.clone(),
             recovery_args.clone(),
             /*neuron_args=*/ None,
+            recovery_args.nns_url.clone(),
+            RegistryPollingStrategy::OnlyOnInit,
         )
         .expect("Failed to init recovery");
-        recovery.init_registry_local_store();
+
         let new_state_dir = recovery.work_dir.join("new_ic_state");
         create_dir(&new_state_dir).expect("Failed to create state directory for upload.");
         Self {
@@ -124,7 +127,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             StepType::StopReplica => {
                 print_height_info(
                     &self.logger,
-                    self.recovery.registry_client.clone(),
+                    &self.recovery.registry_helper,
                     self.params.subnet_id,
                 );
 

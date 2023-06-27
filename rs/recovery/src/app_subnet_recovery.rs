@@ -5,6 +5,7 @@ use crate::{
     },
     error::RecoveryError,
     recovery_iterator::RecoveryIterator,
+    registry_helper::RegistryPollingStrategy,
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
 };
 use clap::Parser;
@@ -106,9 +107,15 @@ impl AppSubnetRecovery {
         subnet_args: AppSubnetRecoveryArgs,
         interactive: bool,
     ) -> Self {
-        let recovery = Recovery::new(logger.clone(), recovery_args.clone(), neuron_args.clone())
-            .expect("Failed to init recovery");
-        recovery.init_registry_local_store();
+        let recovery = Recovery::new(
+            logger.clone(),
+            recovery_args.clone(),
+            neuron_args.clone(),
+            recovery_args.nns_url.clone(),
+            RegistryPollingStrategy::OnlyOnInit,
+        )
+        .expect("Failed to init recovery");
+
         Self {
             step_iterator: StepType::iter().peekable(),
             params: subnet_args,
@@ -167,7 +174,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                 // but we might have a preference between nodes of the same finalization height.
                 print_height_info(
                     &self.logger,
-                    self.recovery.registry_client.clone(),
+                    &self.recovery.registry_helper,
                     self.params.subnet_id,
                 );
 

@@ -8843,6 +8843,7 @@ dependencies = [
  "ic-http-utils",
  "ic-ic00-types",
  "ic-interfaces",
+ "ic-interfaces-registry",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",

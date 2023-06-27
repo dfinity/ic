@@ -1,14 +1,13 @@
-use std::fmt::Debug;
-use std::iter::Peekable;
-
-use crate::{app_subnet_recovery, nns_recovery_failover_nodes, nns_recovery_same_nodes};
 use crate::{
-    app_subnet_recovery::AppSubnetRecovery, error::RecoveryError,
-    nns_recovery_failover_nodes::NNSRecoveryFailoverNodes,
-    nns_recovery_same_nodes::NNSRecoverySameNodes, steps::Step, RecoveryResult,
+    app_subnet_recovery, app_subnet_recovery::AppSubnetRecovery, error::RecoveryError,
+    nns_recovery_failover_nodes, nns_recovery_failover_nodes::NNSRecoveryFailoverNodes,
+    nns_recovery_same_nodes, nns_recovery_same_nodes::NNSRecoverySameNodes, steps::Step,
+    RecoveryResult,
 };
 use slog::{info, warn, Logger};
 use strum::EnumMessage;
+
+use std::{fmt::Debug, iter::Peekable};
 
 pub trait RecoveryIterator<
     StepType: Copy + Debug + PartialEq + EnumMessage,

@@ -3,7 +3,9 @@ use crate::{
     command_helper::exec_cmd,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::{create_dir, read_dir, remove_dir, rsync, rsync_with_retries},
-    get_member_ips, get_node_heights_from_metrics, replay_helper,
+    get_member_ips, get_node_heights_from_metrics,
+    registry_helper::RegistryHelper,
+    replay_helper,
     ssh_helper::SshHelper,
     util::{block_on, parse_hex_str},
     Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
@@ -14,13 +16,10 @@ use ic_base_types::CanisterId;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
-use ic_registry_client::client::RegistryClientImpl;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{artifact::CertificationMessage, Height, SubnetId};
 use slog::{debug, info, warn, Logger};
-use std::{
-    collections::HashMap, net::IpAddr, path::PathBuf, process::Command, sync::Arc, thread, time,
-};
+use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -63,7 +62,7 @@ impl Step for AdminStep {
 pub struct DownloadCertificationsStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
-    pub registry_client: Arc<RegistryClientImpl>,
+    pub registry_helper: RegistryHelper,
     pub work_dir: PathBuf,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -81,7 +80,7 @@ impl Step for DownloadCertificationsStep {
     fn exec(&self) -> RecoveryResult<()> {
         let user = if self.admin { ADMIN } else { READONLY };
         let cert_path = format!("{IC_DATA_PATH}/{IC_CERTIFICATIONS_PATH}");
-        let ips = get_member_ips(self.registry_client.clone(), self.subnet_id)?;
+        let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
         let downloaded_at_least_once = ips.iter().fold(false, |success, ip| {
             let data_src = format!("{user}@[{ip}]:{cert_path}");
             let target = self.work_dir.join("certifications").join(ip.to_string());
@@ -450,7 +449,7 @@ impl Step for ReplayStep {
 pub struct ValidateReplayStep {
     pub logger: Logger,
     pub subnet_id: SubnetId,
-    pub registry_client: Arc<RegistryClientImpl>,
+    pub registry_helper: RegistryHelper,
     pub work_dir: PathBuf,
     pub extra_batches: u64,
 }
@@ -464,11 +463,8 @@ impl Step for ValidateReplayStep {
         let latest_height =
             replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
 
-        let heights = get_node_heights_from_metrics(
-            &self.logger,
-            self.registry_client.clone(),
-            self.subnet_id,
-        )?;
+        let heights =
+            get_node_heights_from_metrics(&self.logger, &self.registry_helper, self.subnet_id)?;
         let cert_height = &heights
             .iter()
             .max_by_key(|v| v.certification_height)
@@ -810,7 +806,7 @@ impl Step for CopyIcStateStep {
 
 pub struct UploadCUPAndTar {
     pub logger: Logger,
-    pub registry_client: Arc<RegistryClientImpl>,
+    pub registry_helper: RegistryHelper,
     pub subnet_id: SubnetId,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -852,7 +848,7 @@ impl Step for UploadCUPAndTar {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let ips = get_member_ips(self.registry_client.clone(), self.subnet_id)?;
+        let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
 
         ips.into_iter()
             .map(|ip| {

@@ -4,6 +4,7 @@ use crate::{
     command_helper::pipe_all,
     error::RecoveryError,
     recovery_iterator::RecoveryIterator,
+    registry_helper::RegistryPollingStrategy,
     NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use clap::Parser;
@@ -107,9 +108,15 @@ impl NNSRecoveryFailoverNodes {
         subnet_args: NNSRecoveryFailoverNodesArgs,
         interactive: bool,
     ) -> Self {
-        let recovery = Recovery::new(logger.clone(), recovery_args.clone(), neuron_args.clone())
-            .expect("Failed to init recovery");
-        recovery.init_registry_local_store_with_url(&subnet_args.validate_nns_url);
+        let recovery = Recovery::new(
+            logger.clone(),
+            recovery_args.clone(),
+            neuron_args.clone(),
+            subnet_args.validate_nns_url.clone(),
+            RegistryPollingStrategy::OnlyOnInit,
+        )
+        .expect("Failed to init recovery");
+
         let new_registry_local_store = recovery.work_dir.join(IC_REGISTRY_LOCAL_STORE);
         Self {
             step_iterator: StepType::iter().peekable(),
@@ -156,7 +163,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
             StepType::StopReplica => {
                 print_height_info(
                     &self.logger,
-                    self.recovery.registry_client.clone(),
+                    &self.recovery.registry_helper,
                     self.params.subnet_id,
                 );
 

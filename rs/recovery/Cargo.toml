@@ -19,6 +19,7 @@ ic-cup-explorer = { path = "../cup_explorer" }
 ic-logger = { path = "../monitoring/logger" }
 ic-http-utils = { path = "../http_utils" }
 ic-interfaces = { path = "../interfaces" }
+ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
