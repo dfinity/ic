@@ -381,7 +381,7 @@ fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPayme
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
     let now_seconds = now_seconds();
-    swap_mut().run_periodic_tasks(now_seconds);
+    swap_mut().heartbeat(now_seconds);
 }
 
 fn now_seconds() -> u64 {

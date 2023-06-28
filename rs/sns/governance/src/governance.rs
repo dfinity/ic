@@ -4323,7 +4323,7 @@ impl Governance {
     }
 
     /// Runs periodic tasks that are not directly triggered by user input.
-    pub async fn run_periodic_tasks(&mut self) {
+    pub async fn heartbeat(&mut self) {
         measure_span(self.profiling_information, "process_proposals", || {
             self.process_proposals()
         });
@@ -4339,7 +4339,7 @@ impl Governance {
         );
 
         // Getting the total governance token supply from the ledger is expensive enough
-        // that we don't want to do it on every call to `run_periodic_tasks`. So
+        // that we don't want to do it on every call to `heartbeat`. So
         // we only fetch it when it's needed, which is when rewards should be
         // distributed
         if should_distribute_rewards {
@@ -7039,7 +7039,7 @@ mod tests {
         // Assert that the rewards should not be distributed, and trigger the periodic tasks to
         // try to distribute them.
         assert!(!governance.should_distribute_rewards());
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         // Get the latest reward event and assert that its equal to the initial reward event. This
         // puts governance in the state that the OC-SNS was in for NNS1-2105.
@@ -7076,11 +7076,11 @@ mod tests {
             current_version.into()
         );
 
-        // Check that both conditions in `run_periodic_tasks` will be triggered on this heartbeat
+        // Check that both conditions in `heartbeat` will be triggered on this heartbeat
         // and run the tasks.
         assert!(governance.should_distribute_rewards());
         assert!(governance.should_check_upgrade_status());
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         // These asserts would fail before the change in NNS1-2105. Now, even though
         // there was an attempt to distribute rewards, the status of the upgrade was still checked.
@@ -7167,7 +7167,7 @@ mod tests {
         );
         // After we run our periodic tasks, the version should be marked as failed because of time
         // constraint.
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         // A failed deployment is when pending is erased but deployed_version is not updated.
         assert!(governance.proto.pending_version.is_none());
@@ -7273,7 +7273,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
@@ -7398,7 +7398,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         // We still have pending version
         assert_eq!(
@@ -7531,7 +7531,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_ne!(
@@ -7650,7 +7650,7 @@ mod tests {
         );
 
         // After we run our periodic tasks, the version should be marked as successful
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_ne!(
@@ -7776,7 +7776,7 @@ mod tests {
 
         assert_eq!(governance.proto.deployed_version, None);
         // After we run our periodic tasks, the version should be marked as successful
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         // This is set to the running version to avoid non-recoverable state
@@ -7884,7 +7884,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should succeed
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
@@ -7962,7 +7962,7 @@ mod tests {
             current_version.into()
         );
         // After we run our periodic tasks, the version should be marked as successful
-        governance.run_periodic_tasks().now_or_never();
+        governance.heartbeat().now_or_never();
 
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
