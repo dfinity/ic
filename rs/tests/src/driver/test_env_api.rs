@@ -174,6 +174,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh2::Session;
+use std::cmp::max;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs;
@@ -257,10 +258,21 @@ impl std::fmt::Display for TopologySnapshot {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         writeln!(
             f,
-            "\n============================== IC TopologySnapshot, registry version {} ==============================",
+            "\n============================================== IC TopologySnapshot, registry version {} ==============================================",
             self.registry_version
         )
         .unwrap();
+        let max_length_ipv6: usize = max(
+            self.subnets()
+                .flat_map(|s| s.nodes())
+                .map(|n| n.get_ip_addr().to_string().len())
+                .max()
+                .unwrap_or(0),
+            self.unassigned_nodes()
+                .map(|s| s.get_ip_addr().to_string().len())
+                .max()
+                .unwrap_or(0),
+        );
         self.subnets().enumerate().for_each(|(idx, s)| {
             writeln!(
                 f,
@@ -271,15 +283,34 @@ impl std::fmt::Display for TopologySnapshot {
             )
             .unwrap();
             s.nodes().enumerate().for_each(|(idx, n)| {
-                writeln!(f, "\tNode id={}, index={}", n.node_id, idx).unwrap();
+                writeln!(
+                    f,
+                    "\tNode id={}, ipv6={:<width$}, index={}",
+                    n.node_id,
+                    n.get_ip_addr(),
+                    idx,
+                    width = max_length_ipv6,
+                )
+                .unwrap();
             });
         });
+        if self.unassigned_nodes().count() > 0 {
+            writeln!(f, "Unassigned nodes:").unwrap();
+        }
         self.unassigned_nodes().enumerate().for_each(|(idx, n)| {
-            writeln!(f, "Unassigned node id={}, index={}", n.node_id, idx).unwrap()
+            writeln!(
+                f,
+                "\tNode id={}, ipv6={:<width$}, index={}",
+                n.node_id,
+                n.get_ip_addr(),
+                idx,
+                width = max_length_ipv6,
+            )
+            .unwrap()
         });
         writeln!(
             f,
-            "====================================================================================================="
+            "====================================================================================================================================="
         )
         .unwrap();
         Ok(())
