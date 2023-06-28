@@ -1,5 +1,5 @@
 {
-  "checksum": "b34153a865fc5ea70a25e0ca5234daeb324dfa6672717394ffaf9ef2cb65f015",
+  "checksum": "941a604b29cc9607015760617720dba622ff30e135fb09a76406a2abfa4b5171",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21589,7 +21589,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e"
+            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
           },
           "strip_prefix": "interface"
         }

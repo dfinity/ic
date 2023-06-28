@@ -334,7 +334,7 @@ impl CkBtcMinterState {
             kyt_principal,
         }: InitArgs,
     ) {
-        self.btc_network = btc_network;
+        self.btc_network = btc_network.into();
         self.ecdsa_key_name = ecdsa_key_name;
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
@@ -1027,7 +1027,7 @@ fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) ->
 impl From<InitArgs> for CkBtcMinterState {
     fn from(args: InitArgs) -> Self {
         Self {
-            btc_network: args.btc_network,
+            btc_network: args.btc_network.into(),
             ecdsa_key_name: args.ecdsa_key_name,
             ecdsa_public_key: None,
             min_confirmations: args

@@ -17,7 +17,7 @@ use candid::Encode;
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_btc_interface::{Config, Fees, Flag, Network, NetworkSnakeCase};
+use ic_btc_interface::{Config, Fees, Flag, Network};
 use ic_canister_client::Sender;
 use ic_cdk::export::Principal;
 use ic_ckbtc_kyt::{
@@ -297,7 +297,7 @@ pub(crate) async fn install_minter(
 ) -> CanisterId {
     info!(&logger, "Installing minter ...");
     let args = CkbtcMinterInitArgs {
-        btc_network: Network::Regtest,
+        btc_network: Network::Regtest.into(),
         /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
         /// a testing key for testnet and mainnet
         ecdsa_key_name: TEST_KEY_LOCAL.parse().unwrap(),
@@ -377,19 +377,19 @@ pub(crate) async fn install_bitcoin_canister(
     logger: &Logger,
     env: &TestEnv,
 ) -> CanisterId {
-    install_bitcoin_canister_with_network(runtime, logger, env, NetworkSnakeCase::Regtest).await
+    install_bitcoin_canister_with_network(runtime, logger, env, Network::Regtest).await
 }
 
 pub(crate) async fn install_bitcoin_canister_with_network(
     runtime: &Runtime,
     logger: &Logger,
     env: &TestEnv,
-    network: NetworkSnakeCase,
+    network: Network,
 ) -> CanisterId {
     info!(&logger, "Installing bitcoin canister ...");
     let canister_id = match network {
-        NetworkSnakeCase::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
-        NetworkSnakeCase::Regtest | NetworkSnakeCase::Testnet => BITCOIN_TESTNET_CANISTER_ID,
+        Network::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
+        Network::Regtest | Network::Testnet => BITCOIN_TESTNET_CANISTER_ID,
     };
     let mut bitcoin_canister =
         create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
@@ -411,6 +411,8 @@ pub(crate) async fn install_bitcoin_canister_with_network(
             send_transaction_per_byte: 0,
         },
         api_access: Flag::Enabled,
+        disable_api_if_not_fully_synced: Flag::Disabled,
+        watchdog_canister: None,
     };
 
     install_rust_canister_from_path(

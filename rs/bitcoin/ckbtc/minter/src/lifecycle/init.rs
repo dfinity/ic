@@ -15,10 +15,42 @@ pub enum MinterArg {
     Upgrade(Option<UpgradeArgs>),
 }
 
+// TODO: Use `ic_btc_interface::Network` directly.
+// The Bitcoin canister's network enum no longer has snake-case versions
+// (refer to [PR171](https://github.com/dfinity/bitcoin-canister/pull/171)),
+// instead it uses lower-case candid variants.
+// A temporary fix for ckbtc minter is to create a new enum with capital letter variants.
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize, Hash)]
+pub enum BtcNetwork {
+    Mainnet,
+    Testnet,
+    Regtest,
+}
+
+impl From<BtcNetwork> for Network {
+    fn from(network: BtcNetwork) -> Self {
+        match network {
+            BtcNetwork::Mainnet => Network::Mainnet,
+            BtcNetwork::Testnet => Network::Testnet,
+            BtcNetwork::Regtest => Network::Regtest,
+        }
+    }
+}
+
+impl From<Network> for BtcNetwork {
+    fn from(network: Network) -> Self {
+        match network {
+            Network::Mainnet => BtcNetwork::Mainnet,
+            Network::Testnet => BtcNetwork::Testnet,
+            Network::Regtest => BtcNetwork::Regtest,
+        }
+    }
+}
+
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct InitArgs {
     /// The bitcoin network that the minter will connect to
-    pub btc_network: Network,
+    pub btc_network: BtcNetwork,
 
     /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
     /// a testing key for testnet and mainnet

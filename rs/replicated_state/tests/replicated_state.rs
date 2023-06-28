@@ -1,5 +1,5 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_btc_interface::NetworkSnakeCase;
+use ic_btc_interface::Network;
 use ic_btc_types_internal::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
     GetSuccessorsResponseComplete,
@@ -549,7 +549,7 @@ fn insert_bitcoin_response() {
         .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
             payload: GetSuccessorsRequestInitial {
-                network: NetworkSnakeCase::Regtest,
+                network: Network::Regtest,
                 anchor: vec![],
                 processed_block_hashes: vec![],
             },

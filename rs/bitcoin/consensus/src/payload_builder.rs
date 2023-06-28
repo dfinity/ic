@@ -1,5 +1,5 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
-use ic_btc_interface::NetworkSnakeCase;
+use ic_btc_interface::Network;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
 };
@@ -142,10 +142,8 @@ impl BitcoinPayloadBuilder {
             }
 
             let adapter_client = match request.network() {
-                NetworkSnakeCase::Mainnet => &self.bitcoin_mainnet_adapter_client,
-                NetworkSnakeCase::Testnet | NetworkSnakeCase::Regtest => {
-                    &self.bitcoin_testnet_adapter_client
-                }
+                Network::Mainnet => &self.bitcoin_mainnet_adapter_client,
+                Network::Testnet | Network::Regtest => &self.bitcoin_testnet_adapter_client,
             };
 
             // Send request to the adapter.

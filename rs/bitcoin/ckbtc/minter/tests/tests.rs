@@ -103,7 +103,7 @@ fn install_ledger(env: &StateMachine) -> CanisterId {
 
 fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
     let args = CkbtcMinterInitArgs {
-        btc_network: Network::Regtest,
+        btc_network: Network::Regtest.into(),
         /// The name of the [EcdsaKeyId]. Use "dfx_test_key" for local replica and "test_key_1" for
         /// a testing key for testnet and mainnet
         ecdsa_key_name: "dfx_test_key".parse().unwrap(),
@@ -379,7 +379,7 @@ fn test_minter() {
 
     let env = StateMachine::new();
     let args = MinterArg::Init(CkbtcMinterInitArgs {
-        btc_network: Network::Regtest,
+        btc_network: Network::Regtest.into(),
         ecdsa_key_name: "master_ecdsa_public_key".into(),
         retrieve_btc_min_amount: 100_000,
         ledger_id: CanisterId::from_u64(0),
@@ -486,7 +486,7 @@ impl CkBtcSetup {
             minter_id,
             minter_wasm(),
             Encode!(&MinterArg::Init(CkbtcMinterInitArgs {
-                btc_network: Network::Mainnet,
+                btc_network: Network::Mainnet.into(),
                 ecdsa_key_name: "master_ecdsa_public_key".to_string(),
                 retrieve_btc_min_amount: 100_000,
                 ledger_id,
