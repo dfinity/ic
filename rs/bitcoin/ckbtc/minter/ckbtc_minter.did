@@ -189,9 +189,10 @@ type Utxo = record {
 
 type BitcoinAddress = variant {
     p2wpkh_v0 : blob;
+    p2wsh_v0 : blob;
+    p2tr_v1 : blob;
     p2pkh : blob;
     p2sh : blob;
-    p2tr : blob;
 };
 
 type MinterInfo = record {
