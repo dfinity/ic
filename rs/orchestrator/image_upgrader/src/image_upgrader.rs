@@ -101,8 +101,8 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
     /// Path to the image image download and unpacking destination.
     fn image_path(&self) -> &PathBuf;
     /// Optional data path, used for storing latest reboot time. Default is None.
-    fn data_dir(&self) -> &Option<PathBuf> {
-        &None
+    fn data_dir(&self) -> Option<&PathBuf> {
+        None
     }
     /// Return the logger to be passed to the upgrade functions.
     fn log(&self) -> &ReplicaLogger;

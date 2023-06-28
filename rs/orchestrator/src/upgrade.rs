@@ -18,8 +18,11 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_types::consensus::{CatchUpPackage, HasHeight};
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::{Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+
+const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 
 /// Provides function to continuously check the Registry to determine if this
 /// node should upgrade to a new release package, and if so, downloads and
@@ -39,7 +42,7 @@ pub(crate) struct Upgrade {
     node_id: NodeId,
     /// The replica version that is prepared by 'prepare_upgrade' to upgrade to.
     pub prepared_upgrade_version: Option<ReplicaVersion>,
-    pub orchestrator_data_directory: Option<PathBuf>,
+    pub orchestrator_data_directory: PathBuf,
 }
 
 impl Upgrade {
@@ -56,7 +59,7 @@ impl Upgrade {
         registry_replicator: Arc<RegistryReplicator>,
         release_content_dir: PathBuf,
         logger: ReplicaLogger,
-        orchestrator_data_directory: Option<PathBuf>,
+        orchestrator_data_directory: PathBuf,
     ) -> Self {
         let value = Self {
             registry,
@@ -75,6 +78,12 @@ impl Upgrade {
         };
         if let Err(e) = value.report_reboot_time() {
             warn!(logger, "Cannot report the reboot time: {}", e);
+        }
+        if let Err(e) = report_ecdsa_key_changed_metric(
+            value.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
+            &value.metrics,
+        ) {
+            warn!(logger, "Cannot report ECDSA key changed metric: {}", e);
         }
         value.confirm_boot().await;
         value
@@ -137,6 +146,7 @@ impl Upgrade {
                     &old_cup,
                     &latest_cup,
                     self.metrics.as_ref(),
+                    self.orchestrator_data_directory.join(KEY_CHANGES_FILENAME),
                     &self.logger,
                 );
             }
@@ -167,10 +177,13 @@ impl Upgrade {
             subnet_id,
             &latest_cup,
         ) {
+            // Reset the key changed errors counter to not raise alerts in other subnets
+            self.metrics.ecdsa_key_changed_errors.reset();
             self.stop_replica()?;
             remove_node_state(
                 self.replica_config_file.clone(),
                 self.cup_provider.get_cup_path(),
+                self.orchestrator_data_directory.clone(),
             )
             .map_err(OrchestratorError::UpgradeError)?;
             info!(self.logger, "Subnet state removed");
@@ -394,8 +407,8 @@ impl ImageUpgrader<ReplicaVersion, Option<SubnetId>> for Upgrade {
         &self.image_path
     }
 
-    fn data_dir(&self) -> &Option<PathBuf> {
-        &self.orchestrator_data_directory
+    fn data_dir(&self) -> Option<&PathBuf> {
+        Some(&self.orchestrator_data_directory)
     }
 
     fn get_release_package_urls_and_hash(
@@ -504,9 +517,13 @@ fn should_node_become_unassigned(
     true
 }
 
-// Deletes the subnet state consisting of the consensus pool, execution state
-// and the local CUP.
-fn remove_node_state(replica_config_file: PathBuf, cup_path: PathBuf) -> Result<(), String> {
+// Deletes the subnet state consisting of the consensus pool, execution state,
+// the local CUP and the persisted error metric of threshold key changes.
+fn remove_node_state(
+    replica_config_file: PathBuf,
+    cup_path: PathBuf,
+    orchestrator_data_directory: PathBuf,
+) -> Result<(), String> {
     use ic_config::{Config, ConfigSource};
     use std::fs::{remove_dir_all, remove_file};
     let tmpdir = tempfile::Builder::new()
@@ -597,6 +614,21 @@ fn remove_node_state(replica_config_file: PathBuf, cup_path: PathBuf) -> Result<
     remove_file(&cup_path)
         .map_err(|err| format!("Couldn't delete the CUP at {:?}: {:?}", cup_path, err))?;
 
+    let key_changed_metric = orchestrator_data_directory.join(KEY_CHANGES_FILENAME);
+    if key_changed_metric.try_exists().map_err(|err| {
+        format!(
+            "Failed to check if {:?} exists, because {:?}",
+            key_changed_metric, err
+        )
+    })? {
+        remove_file(&key_changed_metric).map_err(|err| {
+            format!(
+                "Couldn't delete the key changes metric at {:?}: {:?}",
+                key_changed_metric, err
+            )
+        })?;
+    }
+
     Ok(())
 }
 
@@ -631,22 +663,62 @@ fn compare_tecdsa_public_keys(
     old_cup: &CatchUpPackage,
     new_cup: &CatchUpPackage,
     metrics: &OrchestratorMetrics,
+    path: PathBuf,
     log: &ReplicaLogger,
 ) {
     let Some(old_key) = get_tecdsa_key(old_cup) else {
         return;
     };
     let new_key = get_tecdsa_key(new_cup);
+    let mut changes = BTreeMap::new();
+    // Get the metric here already, which will initialize it with zero
+    // even if keys haven't changed.
+    let metric = metrics
+        .ecdsa_key_changed_errors
+        .get_metric_with_label_values(&[&old_key.0.name])
+        .expect("Failed to get ECDSA key changed metric");
     if Some(&old_key) != new_key.as_ref() {
         error!(
             log,
             "Threshold ECDSA public key has changed! Old: {:?}, New: {:?}", old_key, new_key,
         );
+        metric.inc();
+        changes.insert(old_key.0.name, metric.get());
+    }
+    // We persist the latest value of the changed metrics, such that we can re-apply them
+    // after the restart. As any increase in the value is enough to trigger the alert, it
+    // is fine to reset the metric of keys that haven't changed.
+    if let Err(e) = persist_ecdsa_key_changed_metric(path, changes) {
+        warn!(log, "Failed to persist ECDSA key changed metric: {}", e)
+    }
+}
+
+/// Persist the given map of ecdsa key changed metrics in `path`.
+fn persist_ecdsa_key_changed_metric(
+    path: PathBuf,
+    changes: BTreeMap<String, u64>,
+) -> OrchestratorResult<()> {
+    let file = std::fs::File::create(path).map_err(OrchestratorError::key_monitoring_error)?;
+    serde_cbor::to_writer(file, &changes).map_err(OrchestratorError::key_monitoring_error)
+}
+
+/// Increment the `ecdsa_key_changed_errors` metric by the values persisted in the given file.
+fn report_ecdsa_key_changed_metric(
+    path: PathBuf,
+    metrics: &OrchestratorMetrics,
+) -> OrchestratorResult<()> {
+    let file = std::fs::File::open(path).map_err(OrchestratorError::key_monitoring_error)?;
+    let key_changes: BTreeMap<String, u64> =
+        serde_cbor::from_reader(file).map_err(OrchestratorError::key_monitoring_error)?;
+
+    for (key, count) in key_changes {
         metrics
             .ecdsa_key_changed_errors
-            .with_label_values(&[&old_key.0.name])
-            .inc();
+            .with_label_values(&[&key])
+            .inc_by(count);
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -657,7 +729,7 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, CanisterThresholdSigTestEnvironment,
     };
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_ic00_types::EcdsaCurve;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
@@ -678,6 +750,7 @@ mod tests {
         },
         signature::ThresholdSignature,
     };
+    use tempfile::{tempdir, TempDir};
 
     fn make_cup(
         h: Height,
@@ -753,12 +826,38 @@ mod tests {
             .get()
     }
 
+    struct Setup {
+        env: CanisterThresholdSigTestEnvironment,
+        rng: ReproducibleRng,
+        tmp: TempDir,
+    }
+
+    impl Setup {
+        fn new() -> Self {
+            let tmp = tempdir().expect("Unable to create temp directory");
+            let mut rng = reproducible_rng();
+            let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
+            Self { env, rng, tmp }
+        }
+
+        fn generate_key_transcript(&mut self) -> IDkgTranscript {
+            generate_key_transcript(
+                &self.env,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                &mut self.rng,
+            )
+        }
+
+        fn path(&self) -> PathBuf {
+            self.tmp.path().join(KEY_CHANGES_FILENAME)
+        }
+    }
+
     #[test]
     fn test_ecdsa_key_deletion_raises_alert() {
         with_test_replica_logger(|log| {
-            let rng = &mut reproducible_rng();
-            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
-            let key = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let mut setup = Setup::new();
+            let key = setup.generate_key_transcript();
             let key_id = "some_key";
 
             let c1 = make_cup(Height::from(10), key_id, Some(&key));
@@ -767,20 +866,25 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
             let after = get_ecdsa_key_changed_metric(key_id, &metrics);
 
             assert_eq!(before + 1, after);
+
+            let metrics_new = OrchestratorMetrics::new(&MetricsRegistry::new());
+            report_ecdsa_key_changed_metric(setup.path(), &metrics_new).unwrap();
+            let after_restart = get_ecdsa_key_changed_metric(key_id, &metrics);
+
+            assert_eq!(after_restart, after);
         });
     }
 
     #[test]
     fn test_ecdsa_key_change_raises_alert() {
         with_test_replica_logger(|log| {
-            let rng = &mut reproducible_rng();
-            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
-            let key1 = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
-            let key2 = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let mut setup = Setup::new();
+            let key1 = setup.generate_key_transcript();
+            let key2 = setup.generate_key_transcript();
             let key_id = "some_key";
 
             let c1 = make_cup(Height::from(10), key_id, Some(&key1));
@@ -789,7 +893,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
             let after = get_ecdsa_key_changed_metric(key_id, &metrics);
 
             assert_eq!(before + 1, after);
@@ -799,9 +903,8 @@ mod tests {
     #[test]
     fn test_ecdsa_key_unchanged_does_not_raise_alert() {
         with_test_replica_logger(|log| {
-            let rng = &mut reproducible_rng();
-            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
-            let key = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let mut setup = Setup::new();
+            let key = setup.generate_key_transcript();
             let key_id = "some_key";
 
             let c1 = make_cup(Height::from(10), key_id, Some(&key));
@@ -810,7 +913,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
             let after = get_ecdsa_key_changed_metric(key_id, &metrics);
 
             assert_eq!(before, after);
@@ -820,9 +923,8 @@ mod tests {
     #[test]
     fn test_ecdsa_key_id_change_raises_alert() {
         with_test_replica_logger(|log| {
-            let rng = &mut reproducible_rng();
-            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
-            let key = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let mut setup = Setup::new();
+            let key = setup.generate_key_transcript();
             let key_id1 = "some_key1";
             let key_id2 = "some_key2";
 
@@ -832,7 +934,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_ecdsa_key_changed_metric(key_id1, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
             let after = get_ecdsa_key_changed_metric(key_id1, &metrics);
 
             assert_eq!(before + 1, after);
@@ -842,9 +944,8 @@ mod tests {
     #[test]
     fn test_ecdsa_key_created_does_not_raise_alert() {
         with_test_replica_logger(|log| {
-            let rng = &mut reproducible_rng();
-            let env = CanisterThresholdSigTestEnvironment::new(1, rng);
-            let key = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+            let mut setup = Setup::new();
+            let key = setup.generate_key_transcript();
             let key_id = "some_key";
 
             let c1 = make_cup(Height::from(10), key_id, None);
@@ -853,7 +954,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
             let after = get_ecdsa_key_changed_metric(key_id, &metrics);
 
             assert_eq!(before, after);
@@ -863,6 +964,7 @@ mod tests {
     #[test]
     fn test_ecdsa_no_keys_created_does_not_raise_alert() {
         with_test_replica_logger(|log| {
+            let setup = Setup::new();
             let key_id = "some_key";
 
             let c1 = make_cup(Height::from(10), key_id, None);
@@ -871,7 +973,7 @@ mod tests {
             let metrics = OrchestratorMetrics::new(&MetricsRegistry::new());
 
             let before = get_ecdsa_key_changed_metric(key_id, &metrics);
-            compare_tecdsa_public_keys(&c1, &c2, &metrics, &log);
+            compare_tecdsa_public_keys(&c1, &c2, &metrics, setup.path(), &log);
             let after = get_ecdsa_key_changed_metric(key_id, &metrics);
 
             assert_eq!(before, after);

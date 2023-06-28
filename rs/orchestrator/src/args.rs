@@ -59,7 +59,7 @@ pub struct OrchestratorArgs {
     /// The path to directory that is dedicated to data specific to the orchstrator.
     /// If not provided, the relevant data are not persisted to the disk.
     #[clap(long, parse(from_os_str))]
-    pub(crate) orchestrator_data_directory: Option<PathBuf>,
+    pub(crate) orchestrator_data_directory: PathBuf,
 }
 
 impl OrchestratorArgs {
