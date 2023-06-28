@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:futures",
+    "@crate_index//:ic-cdk",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:num-traits",
     "@crate_index//:prost",
@@ -37,6 +38,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     "//rs/nervous_system/common/build_metadata",
     "@crate_index//:async-trait",
+    "@crate_index//:ic-cdk-macros",
 ]
 
 BUILD_DEPENDENCIES = [
