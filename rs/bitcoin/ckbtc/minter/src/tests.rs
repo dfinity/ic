@@ -736,7 +736,7 @@ proptest! {
         accounts in pvec(arb_account(), 5),
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest,
+            btc_network: Network::Regtest.into(),
             ecdsa_key_name: "".to_string(),
             retrieve_btc_min_amount: 0,
             ledger_id: CanisterId::from_u64(42),
@@ -760,7 +760,7 @@ proptest! {
         limit in 1..25usize,
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest,
+            btc_network: Network::Regtest.into(),
             ecdsa_key_name: "".to_string(),
             retrieve_btc_min_amount: 5_000u64,
             ledger_id: CanisterId::from_u64(42),
@@ -803,7 +803,7 @@ proptest! {
         resubmission_chain_length in 1..=5,
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
-            btc_network: Network::Regtest,
+            btc_network: Network::Regtest.into(),
             ecdsa_key_name: "".to_string(),
             retrieve_btc_min_amount: 100_000,
             ledger_id: CanisterId::from_u64(42),

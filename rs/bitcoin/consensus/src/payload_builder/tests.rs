@@ -1,5 +1,5 @@
 use crate::BitcoinPayloadBuilder;
-use ic_btc_interface::NetworkSnakeCase as Network;
+use ic_btc_interface::Network;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,

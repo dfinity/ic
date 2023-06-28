@@ -5,7 +5,7 @@
 //! only for serialization/deserialization of the ReplicatedState.
 
 use candid::CandidType;
-use ic_btc_interface::NetworkSnakeCase as Network;
+use ic_btc_interface::Network;
 use ic_protobuf::{
     bitcoin::v1,
     proxy::{try_from_option_field, ProxyDecodeError},

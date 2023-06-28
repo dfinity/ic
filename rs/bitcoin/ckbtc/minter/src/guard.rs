@@ -124,11 +124,10 @@ pub fn retrieve_btc_guard(p: Principal) -> Result<Guard<RetrieveBtcUpdates>, Gua
 mod tests {
     use crate::{
         guard::{GuardError, MAX_CONCURRENT},
-        lifecycle::init::{init, InitArgs},
+        lifecycle::init::{init, BtcNetwork, InitArgs},
         state::read_state,
     };
     use ic_base_types::CanisterId;
-    use ic_btc_interface::Network;
     use ic_cdk::export::Principal;
 
     use super::{balance_update_guard, TimerLogicGuard};
@@ -139,7 +138,7 @@ mod tests {
 
     fn test_state_args() -> InitArgs {
         InitArgs {
-            btc_network: Network::Regtest,
+            btc_network: BtcNetwork::Regtest,
             ecdsa_key_name: "".to_string(),
             retrieve_btc_min_amount: 0,
             ledger_id: CanisterId::from_u64(42),
