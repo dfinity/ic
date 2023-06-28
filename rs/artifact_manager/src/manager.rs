@@ -82,7 +82,7 @@ impl ArtifactManager for ArtifactManagerImpl {
     /// to be processed by the corresponding artifact client based on the
     /// artifact type.
     ///
-    ///The method returns an `OnArtifactError::NotProcessed` if no clients
+    /// The method returns an `OnArtifactError::NotProcessed` if no clients
     /// were able to process it or an `OnArtifactError::ArtifactPoolError`
     /// if any other error has occurred.
     fn on_artifact(
@@ -276,7 +276,6 @@ where
                     received: advert.into(),
                     expected: expected.into(),
                 })?;
-                self.pool_reader.check_artifact_acceptance(&message)?;
                 // this sends to an unbounded channel, which is what we want here
                 self.sender
                     .send(UnvalidatedArtifact {

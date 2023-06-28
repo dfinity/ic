@@ -65,6 +65,7 @@ use ic_types::{
     consensus::{BlockPayload, ConsensusMessageAttribute, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
+    replica_version::ReplicaVersion,
     Height, Time,
 };
 pub use metrics::ValidatorMetrics;
@@ -94,6 +95,23 @@ enum ConsensusSubcomponent {
 /// subnet has not managed to get a certified statement from the
 /// registry for longer than this, the subnet should halt.
 pub const HALT_AFTER_REGISTRY_UNREACHABLE: Duration = Duration::from_secs(60 * 60);
+
+/// Describe expected version and artifact version when there is a mismatch.
+#[derive(Debug)]
+pub(crate) struct ReplicaVersionMismatch {}
+
+/// The function checks if the version of the given artifact matches the default
+/// protocol version and returns an error if it does not.
+pub(crate) fn check_protocol_version(
+    version: &ReplicaVersion,
+) -> Result<(), ReplicaVersionMismatch> {
+    let expected_version = ReplicaVersion::default();
+    if version != &expected_version {
+        Err(ReplicaVersionMismatch {})
+    } else {
+        Ok(())
+    }
+}
 
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the
 /// Consensus trait by calling each subcomponent in round-robin manner.

@@ -3,51 +3,13 @@
 mod setup;
 
 use assert_matches::assert_matches;
-use ic_interfaces::{artifact_manager::OnArtifactError, artifact_pool::ArtifactPoolError};
+use ic_interfaces::artifact_manager::OnArtifactError;
 use ic_test_utilities::{
     consensus::{fake::*, make_genesis},
     types::ids::node_test_id,
 };
-use ic_types::{
-    artifact::ArtifactKind, artifact_kind::ConsensusArtifact, consensus::*, ReplicaVersion,
-};
+use ic_types::{artifact::ArtifactKind, artifact_kind::ConsensusArtifact, consensus::*};
 use setup::run_test;
-use std::convert::TryFrom;
-
-#[test]
-fn test_artifact_version() {
-    run_test(|manager| {
-        // Positive case
-        let cup = make_genesis(ic_types::consensus::dkg::Summary::fake());
-        let block1 = BlockProposal::fake(cup.content.block.into_inner(), node_test_id(0));
-        let msg1 = block1.clone().into_message();
-        let result = manager.on_artifact(
-            msg1.clone().into(),
-            ConsensusArtifact::message_to_advert(&msg1).into(),
-            &node_test_id(0),
-        );
-        assert_matches!(result, Ok(()));
-
-        // Negative case
-        let next_version = ReplicaVersion::try_from(format!("{}.1234", block1.version())).unwrap();
-        let block2 = BlockProposal::fake(
-            block1.content.as_ref().fake_version(next_version),
-            node_test_id(1),
-        );
-        let msg2 = block2.into_message();
-        let result = manager.on_artifact(
-            msg2.clone().into(),
-            ConsensusArtifact::message_to_advert(&msg2).into(),
-            &node_test_id(0),
-        );
-        assert_matches!(
-            result,
-            Err(OnArtifactError::ArtifactPoolError(
-                ArtifactPoolError::ArtifactReplicaVersionError(_),
-            ),)
-        );
-    });
-}
 
 #[test]
 fn test_artifact_advert_match() {

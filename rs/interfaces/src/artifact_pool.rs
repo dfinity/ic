@@ -1,10 +1,8 @@
 //! The artifact pool public interface that defines the Consensus-P2P API.
 //! Consensus clients must implement the traits in this file in order to use the IC P2P protocol.
 use crate::time_source::TimeSource;
-use derive_more::From;
 use ic_types::{
     artifact::{Advert, ArtifactKind, PriorityFn},
-    replica_version::ReplicaVersion,
     CountBytes, NodeId, Time,
 };
 use serde::{Deserialize, Serialize};
@@ -106,27 +104,6 @@ pub trait ValidatedPoolReader<T: ArtifactKind> {
         &self,
         filter: &T::Filter,
     ) -> Box<dyn Iterator<Item = T::Message> + '_>;
-}
-
-/// Contains different errors that can happen on artifact acceptance check.
-/// In our P2P protocol none of the errors from 'ArtifactPoolError' are
-/// handled by the caller. So the enum is used only for tracking different
-/// rejection reasons.
-#[derive(Debug, From)]
-pub enum ArtifactPoolError {
-    /// Message has expired.
-    MessageExpired,
-    /// Message expiry is too far in the future.
-    MessageExpiryTooLong,
-    /// Error when artifact version is not accepted.
-    ArtifactReplicaVersionError(ReplicaVersionMismatch),
-}
-
-/// Describe expected version and artifact version when there is a mismatch.
-#[derive(Debug)]
-pub struct ReplicaVersionMismatch {
-    pub expected: ReplicaVersion,
-    pub artifact: ReplicaVersion,
 }
 
 /// Validated artifact

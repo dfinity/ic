@@ -2,7 +2,7 @@
 //! component into the consensus algorithm that is implemented within this
 //! crate.
 
-use crate::consensus::dkg_key_manager::DkgKeyManager;
+use crate::consensus::{check_protocol_version, dkg_key_manager::DkgKeyManager};
 use crate::ecdsa::{
     make_bootstrap_summary, payload_builder::get_ecdsa_config_if_enabled,
     utils::inspect_ecdsa_initializations,
@@ -216,6 +216,10 @@ impl DkgImpl {
         } else {
             return ChangeSet::new();
         };
+
+        if check_protocol_version(&message.content.version).is_err() {
+            return ChangeSet::from(ChangeAction::RemoveFromUnvalidated((*message).clone()));
+        }
 
         let message_dkg_id = message.content.dkg_id;
 
@@ -1448,24 +1452,24 @@ pub fn make_registry_cup_from_cup_contents(
         .as_ref()
         .map(|v| RegistryVersion::from(v.registry_version))
         .unwrap_or(registry_version);
-    let block = Block::new_with_replica_version(
-        replica_version.clone(),
-        Id::from(CryptoHash(Vec::new())),
-        Payload::new(crypto_hash, (dkg_summary, ecdsa_summary).into()),
-        cup_height,
-        Rank(0),
-        ValidationContext {
+    let block = Block {
+        version: replica_version.clone(),
+        parent: Id::from(CryptoHash(Vec::new())),
+        payload: Payload::new(crypto_hash, (dkg_summary, ecdsa_summary).into()),
+        height: cup_height,
+        rank: Rank(0),
+        context: ValidationContext {
             certified_height: cup_height,
             registry_version: block_registry_version,
             time: Time::from_nanos_since_unix_epoch(cup_contents.time),
         },
-    );
+    };
     let random_beacon = Signed {
-        content: RandomBeaconContent::new_with_replica_version(
-            replica_version,
-            cup_height,
-            Id::from(CryptoHash(Vec::new())),
-        ),
+        content: RandomBeaconContent {
+            version: replica_version,
+            height: cup_height,
+            parent: Id::from(CryptoHash(Vec::new())),
+        },
         signature: ThresholdSignature {
             signer: low_dkg_id,
             signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
