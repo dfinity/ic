@@ -51,6 +51,9 @@ pub enum OrchestratorError {
 
     /// Generic error while handling reboot time
     RebootTimeError(String),
+
+    /// Generic error while monitoring key changes
+    ThresholdKeyMonitoringError(String),
 }
 
 impl OrchestratorError {
@@ -60,6 +63,10 @@ impl OrchestratorError {
 
     pub(crate) fn invalid_configuration_error(msg: impl ToString) -> Self {
         OrchestratorError::InvalidConfigurationError(msg.to_string())
+    }
+
+    pub(crate) fn key_monitoring_error(msg: impl ToString) -> Self {
+        OrchestratorError::ThresholdKeyMonitoringError(msg.to_string())
     }
 }
 
@@ -93,6 +100,13 @@ impl fmt::Display for OrchestratorError {
             }
             OrchestratorError::RebootTimeError(msg) => {
                 write!(f, "Failed to read or write reboot time: {}", msg)
+            }
+            OrchestratorError::ThresholdKeyMonitoringError(msg) => {
+                write!(
+                    f,
+                    "Failed to read or write threshold key changed metric: {}",
+                    msg
+                )
             }
             OrchestratorError::SubnetMissingError(subnet_id, registry_version) => write!(
                 f,
