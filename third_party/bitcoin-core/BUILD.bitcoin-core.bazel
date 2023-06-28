@@ -1,0 +1,22 @@
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+
+filegroup(
+    name = "all_srcs",
+    srcs = glob(
+        include = ["**"],
+        exclude = ["*.bazel"],
+    ),
+)
+
+configure_make(
+    name = "bitcoin-core",
+    args = ["-j 12"],
+    autogen = True,
+    configure_in_place = True,
+    configure_options = ["--disable-tests"],
+    copts = ["-UNDEBUG"],
+    lib_source = ":all_srcs",
+    out_binaries = ["bitcoind"],
+    out_headers_only = True,
+    visibility = ["//visibility:public"],
+)

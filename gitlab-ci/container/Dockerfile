@@ -9,6 +9,8 @@ COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hos
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
     curl build-essential git gnupg node-json5 uuid-dev zsh fish clang iproute2 shellcheck \
+    # Bitcoin core (for bitcoin adapter integration test) \
+    libtool libevent-dev libboost-dev \
     # GitLab CI \
     sudo gosu jq rclone time qemu-system-x86 \
     # Test \
