@@ -5,6 +5,7 @@
 # This file should only include other YAML files used to create the root parent pipeline.
 
 include:
+  - local: /gitlab-ci/config/rosetta.yml
   - local: /gitlab-ci/config/main.yml
   - local: /gitlab-ci/config/00--common.yml
   - local: /gitlab-ci/config/20--build-boundary-node-service-worker.yml
@@ -22,8 +23,6 @@ include:
   - local: /gitlab-ci/config/30--cargo-build.yml
   - local: /gitlab-ci/config/40--rust-test--benchmarks.yml
   - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
-  - local: /gitlab-ci/config/46--rosetta-release.yml
-  - local: /gitlab-ci/config/46--rosetta-api-docker-image.yml
   - local: /gitlab-ci/config/54--host-os-test--host-os-upgrade-test.yml
   - local: /gitlab-ci/config/55--determinism-test.yml
   - local: /gitlab-ci/config/55--determinism-test-release.yml
