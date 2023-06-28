@@ -24,6 +24,7 @@ pub enum RecoveryError {
     StateToolError(String),
     CheckpointError(String, CheckpointError),
     RegistryError(String),
+    ValidationFailed(String),
     StepSkipped,
 }
 
@@ -92,6 +93,9 @@ impl fmt::Display for RecoveryError {
             }
             RecoveryError::RegistryError(msg) => write!(f, "Registry error, message: {}", msg),
             RecoveryError::StateToolError(msg) => write!(f, "State tool error, message: {}", msg),
+            RecoveryError::ValidationFailed(msg) => {
+                write!(f, "Validation failed, message: {}", msg)
+            }
         }
     }
 }
