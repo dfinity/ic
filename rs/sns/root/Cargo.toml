@@ -21,6 +21,8 @@ futures = "0.3.21"
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-cdk = "0.7.0"
+ic-cdk-macros = "0.6.10"
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-metrics-encoder = "1"

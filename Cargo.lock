@@ -5242,19 +5242,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-cdk"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1faa7b42964694fb38d7f62172e0d8261381e39ce85b4d6b519929f7cad9b4fb"
-dependencies = [
- "candid",
- "ic-cdk-macros",
- "ic0",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
 name = "ic-cdk-macros"
 version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8126,7 +8113,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
- "ic-cdk 0.8.1",
+ "ic-cdk 0.7.4",
 ]
 
 [[package]]
@@ -9920,6 +9907,8 @@ dependencies = [
  "ic-base-types",
  "ic-canister-log",
  "ic-canisters-http-types",
+ "ic-cdk 0.7.4",
+ "ic-cdk-macros",
  "ic-ic00-types",
  "ic-icrc1",
  "ic-metrics-encoder",

@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use candid::candid_method;
-use dfn_candid::{candid, candid_one, CandidOne};
-use dfn_core::{api::now, over, over_async, over_init};
+use dfn_core::api::now;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
@@ -13,7 +13,7 @@ use ic_nervous_system_common::{
     serve_logs, serve_logs_v2, serve_metrics,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
-use ic_nervous_system_runtime::{DfnRuntime, Runtime};
+use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -31,7 +31,7 @@ use std::{cell::RefCell, time::SystemTime};
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
-type CanisterRuntime = DfnRuntime;
+type CanisterRuntime = CdkRuntime;
 
 struct CanisterEnvironment {}
 
@@ -94,12 +94,12 @@ thread_local! {
     static STATE: RefCell<SnsRootCanister> = RefCell::new(Default::default());
 }
 
-#[export_name = "canister_init"]
-fn canister_init() {
-    over_init(|CandidOne(arg)| canister_init_(arg))
+#[candid_method(init)]
+#[init]
+fn init(args: SnsRootCanister) {
+    canister_init_(args);
 }
 
-#[candid_method(init)]
 fn canister_init_(init_payload: SnsRootCanister) {
     dfn_core::printer::hook();
     log!(INFO, "canister_init: Begin...");
@@ -114,9 +114,8 @@ fn canister_init_(init_payload: SnsRootCanister) {
     log!(INFO, "canister_init: Done!");
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[pre_upgrade]
 fn canister_pre_upgrade() {
-    dfn_core::printer::hook();
     log!(INFO, "canister_pre_upgrade: Begin...");
 
     STATE.with(move |state| {
@@ -131,9 +130,8 @@ fn canister_pre_upgrade() {
     log!(INFO, "canister_pre_upgrade: Done!");
 }
 
-#[export_name = "canister_post_upgrade"]
+#[post_upgrade]
 fn canister_post_upgrade() {
-    dfn_core::printer::hook();
     log!(INFO, "canister_POST_upgrade: Begin...");
 
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
@@ -149,15 +147,11 @@ fn canister_post_upgrade() {
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
-#[export_name = "canister_update canister_status"]
-fn canister_status() {
+#[candid_method(update)]
+#[update]
+async fn canister_status(id: CanisterIdRecord) -> CanisterStatusResult {
     log!(INFO, "canister_status");
-    over_async(candid_one, canister_status_);
-}
-
-#[candid_method(update, rename = "canister_status")]
-async fn canister_status_(id: CanisterIdRecord) -> CanisterStatusResult {
-    ic_nervous_system_clients::canister_status::canister_status::<DfnRuntime>(id)
+    ic_nervous_system_clients::canister_status::canister_status::<CanisterRuntime>(id)
         .await
         .map(CanisterStatusResult::from)
         .unwrap()
@@ -166,16 +160,12 @@ async fn canister_status_(id: CanisterIdRecord) -> CanisterStatusResult {
 /// Return the canister status of all SNS canisters that this root canister
 /// is part of, as well as of all registered dapp canisters (See
 /// SnsRootCanister::register_dapp_canister).
-#[export_name = "canister_update get_sns_canisters_summary"]
-fn get_sns_canisters_summary() {
-    log!(INFO, "get_sns_canisters_summary");
-    over_async(candid_one, get_sns_canisters_summary_)
-}
-
-#[candid_method(update, rename = "get_sns_canisters_summary")]
-async fn get_sns_canisters_summary_(
+#[candid_method(update)]
+#[update]
+async fn get_sns_canisters_summary(
     request: GetSnsCanistersSummaryRequest,
 ) -> GetSnsCanistersSummaryResponse {
+    log!(INFO, "get_sns_canisters_summary");
     let update_canister_list = request.update_canister_list.unwrap_or(false);
     // Only governance can set this parameter to true
     if update_canister_list {
@@ -197,14 +187,10 @@ async fn get_sns_canisters_summary_(
 /// Return the `PrincipalId`s of all SNS canisters that this root canister
 /// is part of, as well as of all registered dapp canisters (See
 /// SnsRootCanister::register_dapp_canister).
-#[export_name = "canister_query list_sns_canisters"]
-fn list_sns_canisters() {
+#[candid_method(query)]
+#[query]
+fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResponse {
     log!(INFO, "list_sns_canisters");
-    over(candid_one, list_sns_canisters_)
-}
-
-#[candid_method(query, rename = "list_sns_canisters")]
-fn list_sns_canisters_(_request: ListSnsCanistersRequest) -> ListSnsCanistersResponse {
     STATE.with(|sns_root_canister| {
         sns_root_canister
             .borrow()
@@ -212,8 +198,9 @@ fn list_sns_canisters_(_request: ListSnsCanistersRequest) -> ListSnsCanistersRes
     })
 }
 
-#[export_name = "canister_update change_canister"]
-fn change_canister() {
+#[candid_method(update)]
+#[update]
+fn change_canister(proposal: ChangeCanisterProposal) {
     log!(INFO, "change_canister");
     assert_eq_governance_canister_id(dfn_core::api::caller());
 
@@ -231,12 +218,10 @@ fn change_canister() {
     //
     // To implement "acknowledge without actually completing the work", we use
     // spawn to do the real work in the background.
-    over(candid_one, |proposal: ChangeCanisterProposal| {
-        assert_change_canister_proposal_is_valid(&proposal);
-        CanisterRuntime::spawn_future(ic_nervous_system_root::change_canister::change_canister::<
-            CanisterRuntime,
-        >(proposal));
-    });
+    assert_change_canister_proposal_is_valid(&proposal);
+    CanisterRuntime::spawn_future(ic_nervous_system_root::change_canister::change_canister::<
+        CanisterRuntime,
+    >(proposal));
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used
@@ -255,17 +240,13 @@ fn change_canister() {
 /// Registered dapp canisters are used by at least two methods:
 ///   1. get_sns_canisters_summary
 ///   2. set_dapp_controllers.
-#[export_name = "canister_update register_dapp_canister"]
-fn register_dapp_canister() {
-    log!(INFO, "register_dapp_canister");
-    assert_eq_governance_canister_id(dfn_core::api::caller());
-    over_async(candid_one, register_dapp_canister_);
-}
-
-#[candid_method(update, rename = "register_dapp_canister")]
-async fn register_dapp_canister_(
+#[candid_method(update)]
+#[update]
+async fn register_dapp_canister(
     request: RegisterDappCanisterRequest,
 ) -> RegisterDappCanisterResponse {
+    log!(INFO, "register_dapp_canister");
+    assert_eq_governance_canister_id(dfn_core::api::caller());
     let request = RegisterDappCanistersRequest {
         canister_ids: request.canister_id.into_iter().collect(),
     };
@@ -289,17 +270,13 @@ async fn register_dapp_canister_(
 /// Registered dapp canisters are used by at least two methods:
 ///   1. get_sns_canisters_summary
 ///   2. set_dapp_controllers.
-#[export_name = "canister_update register_dapp_canisters"]
-fn register_dapp_canisters() {
-    log!(INFO, "register_dapp_canisters");
-    assert_eq_governance_canister_id(dfn_core::api::caller());
-    over_async(candid_one, register_dapp_canisters_);
-}
-
-#[candid_method(update, rename = "register_dapp_canisters")]
-async fn register_dapp_canisters_(
+#[candid_method(update)]
+#[update]
+async fn register_dapp_canisters(
     request: RegisterDappCanistersRequest,
 ) -> RegisterDappCanistersResponse {
+    log!(INFO, "register_dapp_canisters");
+    assert_eq_governance_canister_id(dfn_core::api::caller());
     SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
@@ -325,14 +302,10 @@ async fn register_dapp_canisters_(
 /// added after the message is sent but before it is processed. This
 /// functionality may be removed in the future: see NNS1-1989. Only the Sale
 /// canister can use this functionality.
-#[export_name = "canister_update set_dapp_controllers"]
-fn set_dapp_controllers() {
+#[candid_method(update)]
+#[update]
+async fn set_dapp_controllers(request: SetDappControllersRequest) -> SetDappControllersResponse {
     log!(INFO, "set_dapp_controllers");
-    over_async(candid_one, set_dapp_controllers_);
-}
-
-#[candid_method(update, rename = "set_dapp_controllers")]
-async fn set_dapp_controllers_(request: SetDappControllersRequest) -> SetDappControllersResponse {
     SnsRootCanister::set_dapp_controllers(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
@@ -368,32 +341,19 @@ fn assert_eq_governance_canister_id(id: PrincipalId) {
     });
 }
 
-/// The canister's heartbeat.
-#[export_name = "canister_heartbeat"]
-fn canister_heartbeat() {
-    let future = canister_heartbeat_();
-
-    // The canister_heartbeat must be synchronous, so it cannot .await the future.
-    dfn_core::api::futures::spawn(future);
-}
-
-/// Asynchronous method called for the canister_heartbeat that injects dependencies
-/// to heartbeat.
-async fn canister_heartbeat_() {
+#[heartbeat]
+async fn heartbeat() {
+    // Asynchronous method called for the canister_heartbeat that injects
+    // dependencies to run_periodic_tasks.
     let now = CanisterEnvironment {}.now();
     let ledger_client = create_ledger_client();
 
     SnsRootCanister::heartbeat(&STATE, &ledger_client, now).await
 }
 
-/// Resources to serve for a given http_request
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    over(candid_one, serve_http)
-}
-
-/// Serve an HttpRequest made to this canister
-pub fn serve_http(request: HttpRequest) -> HttpResponse {
+// Resources to serve for a given http_request
+#[query]
+fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
         "/metrics" => serve_metrics(encode_metrics),
         "/logs" => serve_logs_v2(request, &INFO, &ERROR),
@@ -419,9 +379,9 @@ fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::
 /// We include the .did file as committed, which means it is included verbatim in
 /// the .wasm; using `candid::export_service` here would involve unnecessary
 /// runtime computation.
-#[export_name = "canister_query __get_candid_interface_tmp_hack"]
-fn expose_candid() {
-    over(candid, |_: ()| include_str!("root.did").to_string())
+#[query]
+fn __get_candid_interface_tmp_hack() -> String {
+    include_str!("root.did").to_string()
 }
 
 #[cfg(any(target_arch = "wasm32", test))]
