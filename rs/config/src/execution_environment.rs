@@ -300,7 +300,7 @@ impl Default for Config {
                 testnet_canister_id: Some(bitcoin_testnet_canister_id),
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
-            composite_queries: FlagStatus::Disabled,
+            composite_queries: FlagStatus::Enabled,
             query_caching: FlagStatus::Enabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
             min_sandbox_count: embedders::DEFAULT_MIN_SANDBOX_COUNT,
