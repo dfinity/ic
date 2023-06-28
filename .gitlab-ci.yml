@@ -5,8 +5,8 @@
 # This file should only include other YAML files used to create the root parent pipeline.
 
 include:
+  - local: /gitlab-ci/config/main.yml
   - local: /gitlab-ci/config/00--common.yml
-  - local: /gitlab-ci/config/10--init--github-integration.yml
   - local: /gitlab-ci/config/20--build-boundary-node-service-worker.yml
   - local: /gitlab-ci/config/20--test--after-script.yml
   - local: /gitlab-ci/config/20--test--bazel-fuzzers.yml
