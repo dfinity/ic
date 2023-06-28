@@ -15,19 +15,19 @@ use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
-    registry_helper::RegistryPollingStrategy,
+    registry_helper::{RegistryPollingStrategy, VersionedRecoveryResult},
     steps::{AdminStep, Step, UploadAndRestartStep, WaitForCUPStep},
     NeuronArgs, Recovery, RecoveryArgs, CHECKPOINTS, IC_REGISTRY_LOCAL_STORE, IC_STATE_DIR,
 };
-use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
 use serde::{Deserialize, Serialize};
-use slog::{info, warn, Logger};
+use slog::{error, info, warn, Logger};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
 
-use std::{iter::Peekable, net::IpAddr, path::PathBuf};
+use std::{collections::HashMap, iter::Peekable, net::IpAddr, path::PathBuf};
 
 const DESTINATION_WORK_DIR: &str = "destination_work_dir";
 
@@ -283,6 +283,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
             StepType::HaltSourceSubnetAtCupHeight => {
+                read_registry(&self.logger, "Canister Migrations", || {
+                    self.recovery.registry_helper.get_canister_migrations()
+                });
+
                 let url = match self.recovery.registry_helper.latest_registry_version() {
                     Ok(registry_version) => {
                         format!(
@@ -316,7 +320,36 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 }
             }
 
+            StepType::RerouteCanisterRanges => {
+                read_registry(&self.logger, "Source Subnet Record", || {
+                    self.recovery
+                        .registry_helper
+                        .get_subnet_record(self.params.source_subnet_id)
+                })
+            }
+
             StepType::DownloadStateFromSourceSubnet => {
+                let get_ranges = |routing_table: RoutingTable| {
+                    HashMap::from([
+                        (
+                            "source subnet canister ranges",
+                            routing_table.ranges(self.params.source_subnet_id),
+                        ),
+                        (
+                            "destination subnet canister ranges",
+                            routing_table.ranges(self.params.destination_subnet_id),
+                        ),
+                    ])
+                };
+
+                read_registry(&self.logger, "Routing Table", || {
+                    self.recovery.registry_helper.get_routing_table().map(
+                        |(registry_version, routing_table)| {
+                            (registry_version, routing_table.map(get_ranges))
+                        },
+                    )
+                });
+
                 if self.params.download_node_source.is_none() {
                     self.params.download_node_source =
                         read_optional(&self.logger, "Enter download IP on the Source Subnet:");
@@ -345,6 +378,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     );
                 }
             }
+
+            StepType::Cleanup => read_registry(&self.logger, "Canister Migrations", || {
+                self.recovery.registry_helper.get_canister_migrations()
+            }),
 
             StepType::UnhaltDestinationSubnet | StepType::CompleteCanisterMigration => {
                 let url = match self.recovery.registry_helper.latest_registry_version() {
@@ -505,6 +542,26 @@ impl HasRecoveryState for SubnetSplitting {
             neuron_args: self.neuron_args.clone(),
             subcommand_args: self.params.clone(),
         })
+    }
+}
+
+fn read_registry<T: std::fmt::Debug>(
+    logger: &Logger,
+    label: &str,
+    querier: impl Fn() -> VersionedRecoveryResult<T>,
+) {
+    loop {
+        match querier() {
+            Ok((registry_version, value)) => info!(
+                logger,
+                "{} at registry version {}: {:?}", label, registry_version, value,
+            ),
+            Err(err) => error!(logger, "Failed getting {}, error: {}", label, err),
+        }
+
+        if !consent_given(logger, "Read registry again?") {
+            break;
+        }
     }
 }
 
