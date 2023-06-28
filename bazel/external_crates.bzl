@@ -416,6 +416,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "http-body": crate.spec(
                 version = "^0.4",
             ),
+            "http-serde": crate.spec(
+                version = "^1.1.2",
+            ),
             "httparse": crate.spec(
                 version = "^1.5.1",
             ),
@@ -797,6 +800,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "quickcheck": crate.spec(
                 version = "^1.0.3",
             ),
+            "quinn": crate.spec(
+                version = "^0.10.0",
+                features = [
+                    "ring",
+                ],
+            ),
             "quote": crate.spec(
                 version = "^1.0",
             ),
@@ -1124,6 +1133,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.7.4",
                 features = [
                     "codec",
+                    "time",
                 ],
             ),
             "toml": crate.spec(

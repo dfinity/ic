@@ -282,7 +282,6 @@ impl Transport for PeerTransport {
     ) -> Result<Response<Bytes>, TransportError> {
         if peer == &self.node_id {
             return Err(TransportError::Disconnected {
-                peer_id: self.node_id,
                 connection_error: Some("Can't connect to self".to_string()),
             });
         }
@@ -296,7 +295,7 @@ impl Transport for PeerTransport {
     }
 
     /// Unreliable broadcast to all peers that transport currently is connected to.
-    fn broadcast(&self, request: Request<Bytes>) -> Result<(), TransportError> {
+    fn broadcast(&self, request: Request<Bytes>) {
         // The request will be cloned here and if there is an extension attached it can't be cloned.
         assert!(request.extensions().is_empty());
 
@@ -326,7 +325,6 @@ impl Transport for PeerTransport {
                 let _ = oneshot_rx.await;
             });
         }
-        Ok(())
     }
 }
 

@@ -162,8 +162,7 @@ impl StateSyncManager {
 
     fn handle_advert_tick(&mut self) {
         if let Some(state_id) = self.state_sync.latest_state() {
-            let _ = self
-                .transport
+            self.transport
                 .broadcast(build_advert_handler_request(&state_id));
         }
     }

@@ -1,5 +1,5 @@
 {
-  "checksum": "21df076551e8e7e9fbbf27e652bc4c01edad8e8631bbfeed1a6f973a43ee1e77",
+  "checksum": "03cf3a6f0e5578d9139b9f1822b0d9f8f2c63391dee87bdfd6a585e4154caa45",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -317,7 +317,7 @@
               "target": "futures_core"
             },
             {
-              "id": "h2 0.3.19",
+              "id": "h2 0.3.20",
               "target": "h2"
             },
             {
@@ -13664,7 +13664,7 @@
               "target": "glob"
             },
             {
-              "id": "h2 0.3.19",
+              "id": "h2 0.3.20",
               "target": "h2"
             },
             {
@@ -13686,6 +13686,10 @@
             {
               "id": "http-body 0.4.5",
               "target": "http_body"
+            },
+            {
+              "id": "http-serde 1.1.2",
+              "target": "http_serde"
             },
             {
               "id": "httparse 1.8.0",
@@ -14083,6 +14087,10 @@
             {
               "id": "quickcheck 1.0.3",
               "target": "quickcheck"
+            },
+            {
+              "id": "quinn 0.10.1",
+              "target": "quinn"
             },
             {
               "id": "quote 1.0.28",
@@ -19315,13 +19323,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "h2 0.3.19": {
+    "h2 0.3.20": {
       "name": "h2",
-      "version": "0.3.19",
+      "version": "0.3.20",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/h2/0.3.19/download",
-          "sha256": "d357c7ae988e7d2182f7d7871d0b963962420b0678b0997ce7de72001aeab782"
+          "url": "https://crates.io/api/v1/crates/h2/0.3.20/download",
+          "sha256": "97ec8491ebaf99c8eaa73058b045fe58073cd6be7f596ac993ced0b0a0c01049"
         }
       },
       "targets": [
@@ -19393,7 +19401,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.19"
+        "version": "0.3.20"
       },
       "license": "MIT"
     },
@@ -20438,6 +20446,52 @@
       },
       "license": "MIT"
     },
+    "http-serde 1.1.2": {
+      "name": "http-serde",
+      "version": "1.1.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/http-serde/1.1.2/download",
+          "sha256": "0e272971f774ba29341db2f686255ff8a979365a26fb9e4277f6b6d9ec0cdd5e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "http_serde",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "http_serde",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "serde 1.0.164",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.1.2"
+      },
+      "license": "Apache-2.0 OR MIT"
+    },
     "http-types 2.12.0": {
       "name": "http-types",
       "version": "2.12.0",
@@ -20915,7 +20969,7 @@
               "target": "futures_util"
             },
             {
-              "id": "h2 0.3.19",
+              "id": "h2 0.3.20",
               "target": "h2"
             },
             {
@@ -37343,6 +37397,241 @@
       },
       "license": "Unlicense/MIT"
     },
+    "quinn 0.10.1": {
+      "name": "quinn",
+      "version": "0.10.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/quinn/0.10.1/download",
+          "sha256": "21252f1c0fc131f1b69182db8f34837e8a69737b8251dff75636a9be0518c324"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "quinn",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "quinn",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "log",
+          "native-certs",
+          "ring",
+          "runtime-tokio",
+          "rustls",
+          "tls-rustls"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.4.0",
+              "target": "bytes"
+            },
+            {
+              "id": "pin-project-lite 0.2.9",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "quinn-proto 0.10.1",
+              "target": "quinn_proto",
+              "alias": "proto"
+            },
+            {
+              "id": "quinn-udp 0.4.0",
+              "target": "quinn_udp",
+              "alias": "udp"
+            },
+            {
+              "id": "rustc-hash 1.1.0",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "rustls 0.21.2",
+              "target": "rustls"
+            },
+            {
+              "id": "thiserror 1.0.40",
+              "target": "thiserror"
+            },
+            {
+              "id": "tokio 1.28.2",
+              "target": "tokio"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.10.1"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "quinn-proto 0.10.1": {
+      "name": "quinn-proto",
+      "version": "0.10.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/quinn-proto/0.10.1/download",
+          "sha256": "85af4ed6ee5a89f26a26086e9089a6643650544c025158449a3626ebf72884b3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "quinn_proto",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "quinn_proto",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "log",
+          "native-certs",
+          "ring",
+          "rustls",
+          "rustls-native-certs",
+          "tls-rustls"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.4.0",
+              "target": "bytes"
+            },
+            {
+              "id": "rand 0.8.5",
+              "target": "rand"
+            },
+            {
+              "id": "ring 0.16.20",
+              "target": "ring"
+            },
+            {
+              "id": "rustc-hash 1.1.0",
+              "target": "rustc_hash"
+            },
+            {
+              "id": "rustls 0.21.2",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-native-certs 0.6.3",
+              "target": "rustls_native_certs"
+            },
+            {
+              "id": "slab 0.4.8",
+              "target": "slab"
+            },
+            {
+              "id": "thiserror 1.0.40",
+              "target": "thiserror"
+            },
+            {
+              "id": "tinyvec 1.6.0",
+              "target": "tinyvec"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.10.1"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "quinn-udp 0.4.0": {
+      "name": "quinn-udp",
+      "version": "0.4.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/quinn-udp/0.4.0/download",
+          "sha256": "6df19e284d93757a9fb91d63672f7741b129246a669db09d1c0063071debc0c0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "quinn_udp",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "quinn_udp",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "log"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bytes 1.4.0",
+              "target": "bytes"
+            },
+            {
+              "id": "libc 0.2.147",
+              "target": "libc"
+            },
+            {
+              "id": "socket2 0.5.3",
+              "target": "socket2"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            }
+          ],
+          "selects": {
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.48.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.4.0"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "quote 0.3.15": {
       "name": "quote",
       "version": "0.3.15",
@@ -39752,7 +40041,7 @@
                 "target": "encoding_rs"
               },
               {
-                "id": "h2 0.3.19",
+                "id": "h2 0.3.20",
                 "target": "h2"
               },
               {
@@ -41541,6 +41830,7 @@
           "default",
           "log",
           "logging",
+          "quic",
           "tls12"
         ],
         "deps": {
@@ -49816,7 +50106,7 @@
               "target": "futures_util"
             },
             {
-              "id": "h2 0.3.19",
+              "id": "h2 0.3.20",
               "target": "h2"
             },
             {
@@ -52710,8 +53000,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -52734,8 +53024,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
