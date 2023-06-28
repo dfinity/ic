@@ -64,6 +64,13 @@ fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin
             },
             network: network_to_btc_network(network),
         },
+        BitcoinAddress::P2wshV0(script_hash) => bitcoin::Address {
+            payload: Payload::WitnessProgram {
+                version: WitnessVersion::V0,
+                program: script_hash.to_vec(),
+            },
+            network: network_to_btc_network(network),
+        },
         BitcoinAddress::P2pkh(pkhash) => bitcoin::Address {
             payload: Payload::PubkeyHash(bitcoin::PubkeyHash::from_hash(
                 bitcoin::hashes::Hash::from_slice(pkhash).unwrap(),
@@ -76,7 +83,7 @@ fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin
             )),
             network: network_to_btc_network(network),
         },
-        BitcoinAddress::P2tr(pkhash) => bitcoin::Address {
+        BitcoinAddress::P2trV1(pkhash) => bitcoin::Address {
             payload: Payload::WitnessProgram {
                 version: WitnessVersion::V1,
                 program: pkhash.to_vec(),
@@ -339,6 +346,8 @@ fn arb_signed_input() -> impl Strategy<Value = tx::SignedInput> {
 fn arb_address() -> impl Strategy<Value = BitcoinAddress> {
     prop_oneof![
         uniform20(any::<u8>()).prop_map(BitcoinAddress::P2wpkhV0),
+        uniform32(any::<u8>()).prop_map(BitcoinAddress::P2wshV0),
+        uniform32(any::<u8>()).prop_map(BitcoinAddress::P2trV1),
         uniform20(any::<u8>()).prop_map(BitcoinAddress::P2pkh),
         uniform20(any::<u8>()).prop_map(BitcoinAddress::P2sh),
     ]

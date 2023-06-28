@@ -27,6 +27,7 @@ pub const SIGHASH_ALL: u32 = 1;
 mod ops {
     pub const PUSH_20: u8 = 0x14;
     pub const PUSH_32: u8 = 0x20;
+    pub const OP_PUSHNUM_1: u8 = 0x51;
     pub const DUP: u8 = 0x76;
     pub const HASH160: u8 = 0xa9;
     pub const EQUAL: u8 = 0x87;
@@ -242,9 +243,10 @@ pub struct TxOut {
 pub fn encode_address_scipt_pubkey(btc_address: &BitcoinAddress, buf: &mut impl Buffer) {
     match btc_address {
         BitcoinAddress::P2wpkhV0(pkhash) => encode_p2wpkh_script_pubkey(pkhash, buf),
+        BitcoinAddress::P2wshV0(pkhash) => encode_p2wsh_script(pkhash, buf),
         BitcoinAddress::P2pkh(pkhash) => encode_sighash_script_code(pkhash, buf),
         BitcoinAddress::P2sh(pkhash) => encode_p2sh_script_code(pkhash, buf),
-        BitcoinAddress::P2tr(pkash) => encode_p2tr_script_pubkey(pkash, buf),
+        BitcoinAddress::P2trV1(pk) => encode_p2tr_script_pubkey(pk, buf),
     }
 }
 
@@ -502,7 +504,13 @@ fn encode_p2wpkh_script_pubkey(pkhash: &[u8; 20], buf: &mut impl Buffer) {
 }
 
 fn encode_p2tr_script_pubkey(pkhash: &[u8; 32], buf: &mut impl Buffer) {
-    buf.write(&[34, 1, ops::PUSH_32]);
+    // https://docs.rs/bitcoin/latest/src/bitcoin/address.rs.html#389
+    buf.write(&[34, ops::OP_PUSHNUM_1, ops::PUSH_32]);
+    buf.write(&pkhash[..]);
+}
+
+fn encode_p2wsh_script(pkhash: &[u8; 32], buf: &mut impl Buffer) {
+    buf.write(&[34, 0, ops::PUSH_32]);
     buf.write(&pkhash[..]);
 }
 
