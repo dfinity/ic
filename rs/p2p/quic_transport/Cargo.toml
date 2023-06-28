@@ -7,7 +7,28 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.36"
+axum = "0.6.12"
+bincode = "1.2.1"
 bytes = "1.0.1"
+futures = "0.3.10"
 http = "0.2.9"
+http-serde = "1.1.2"
+ic-async-utils = { path = "../../async_utils" }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-crypto-utils-tls = { path = "../../crypto/utils/tls" }
+ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
+ic-interfaces = { path = "../../interfaces" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-types = { path = "../../types/types" }
-
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-peer-manager = { path = "../../p2p/peer_manager" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+prometheus = { version = "0.12.0", features = [ "process" ] }
+quinn = { version = "0.10.0", features = ["ring"]}
+serde = { version = "1.0.99", features = [ "derive" ] }
+slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+tokio = { version = "1.15.0", features = ["full"] }
+tokio-rustls = "0.24.0"
+tokio-util = { version = "0.7.4", features = ["codec", "time"] }
+tower = { version = "0.4.12", features = ["reconnect"] }
