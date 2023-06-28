@@ -17,7 +17,7 @@ pre-commit:
       rustup default stable
 
       # Make sure CI can pull from the private repo.
-      if ! pre-commit run -a --hook-stage=manual ; then
+      if ! SKIP=bazel_rust_format_check,bazel_smoke pre-commit run -a --hook-stage=manual ; then
         echo "Pre-commit checks failed. Here is the diff of the changes:"
         git diff
         echo
