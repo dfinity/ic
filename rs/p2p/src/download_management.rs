@@ -74,10 +74,6 @@ use crate::{
     peer_context::{GossipChunkRequestTracker, PeerContext, PeerContextMap},
     P2PError, P2PErrorCode, P2PResult,
 };
-use ic_interfaces::{
-    artifact_manager::OnArtifactError::ArtifactPoolError,
-    artifact_pool::ArtifactPoolError::ArtifactReplicaVersionError,
-};
 use ic_interfaces_transport::TransportPayload;
 use ic_logger::{info, trace, warn};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
@@ -387,14 +383,6 @@ impl GossipImpl {
             .on_artifact(completed_artifact, advert, &peer_id)
         {
             Ok(_) => (),
-            // If this Replica is running an unexpected version, it will log
-            // an unhelpfully large volume of `ArtifactReplicaVersionError`s.
-            // Here we set the log rate at a more appropriate level.
-            Err(ArtifactPoolError(ArtifactReplicaVersionError(err))) => warn!(
-                every_n_seconds => 5,
-                self.log,
-                "Artifact is not processed successfully by Artifact Manager: {:?}", err
-            ),
             Err(err) => warn!(
                 self.log,
                 "Artifact is not processed successfully by Artifact Manager: {:?}", err

@@ -4,6 +4,7 @@
 
 use crate::{
     consensus::{
+        check_protocol_version,
         metrics::ValidatorMetrics,
         status::{self, Status},
         ConsensusMessageId,
@@ -35,8 +36,8 @@ use ic_types::{
     consensus::{
         Block, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage, CatchUpShareContent,
         Committee, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasCommittee,
-        HasHeight, HasRank, Notarization, NotarizationContent, RandomBeacon, RandomBeaconShare,
-        RandomTape, RandomTapeShare, Rank,
+        HasHeight, HasRank, HasVersion, Notarization, NotarizationContent, RandomBeacon,
+        RandomBeaconShare, RandomTape, RandomTapeShare, Rank,
     },
     crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
     registry::RegistryClientError,
@@ -749,8 +750,13 @@ impl Validator {
     ) -> Option<ChangeAction>
     where
         Signed<T, S>: SignatureVerify + ConsensusMessageHashable + Clone,
-        T: NotaryIssued,
+        T: NotaryIssued + HasVersion,
     {
+        if check_protocol_version(notary_issued.content.version()).is_err() {
+            return Some(ChangeAction::RemoveFromUnvalidated(
+                notary_issued.into_message(),
+            ));
+        }
         // This is checked before entering this function.
         debug_assert!(notary_issued.height() > pool_reader.get_finalized_height());
         if notary_issued.content.is_duplicate(pool_reader) {
@@ -811,25 +817,33 @@ impl Validator {
                     .get_by_height(proposal.height())
                     .find(|notarization| &notarization.content.block == proposal.content.get_hash())
                 {
-                    // Verify notarization signature before checking block validity.
-                    let verification = self.verify_signature(pool_reader, &notarization);
-                    if let Err(ValidationError::Permanent(e)) = verification {
-                        change_set.push(ChangeAction::HandleInvalid(
+                    if check_protocol_version(notarization.content.version()).is_err() {
+                        change_set.push(ChangeAction::RemoveFromUnvalidated(
                             notarization.into_message(),
-                            format!("{:?}", e),
                         ));
-                    } else if verification.is_ok() {
-                        if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                            self.metrics.observe_block(pool_reader, &proposal);
-                            known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
-                            change_set
-                                .push(ChangeAction::MoveToValidated(notarization.into_message()));
+                    } else {
+                        // Verify notarization signature before checking block validity.
+                        let verification = self.verify_signature(pool_reader, &notarization);
+                        if let Err(ValidationError::Permanent(e)) = verification {
+                            change_set.push(ChangeAction::HandleInvalid(
+                                notarization.into_message(),
+                                format!("{:?}", e),
+                            ));
+                        } else if verification.is_ok() {
+                            if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                                self.metrics.observe_block(pool_reader, &proposal);
+                                known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                                change_set
+                                    .push(ChangeAction::MoveToValidated(proposal.into_message()));
+                                change_set.push(ChangeAction::MoveToValidated(
+                                    notarization.into_message(),
+                                ));
+                            }
+                            // If the parent is notarized, this block and its notarization are
+                            // validated. If not, this block currently cannot be
+                            // validated through parent either.
+                            continue;
                         }
-                        // If the parent is notarized, this block and its notarization are
-                        // validated. If not, this block currently cannot be
-                        // validated through parent either.
-                        continue;
                     }
                     // Note that transient errors on notarization signature
                     // verification should cause fall through, and the block
@@ -872,21 +886,28 @@ impl Validator {
                     continue;
                 }
 
-                match self.check_block_validity(pool_reader, &proposal) {
-                    Ok(()) => {
-                        self.metrics.observe_block(pool_reader, &proposal);
-                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
-                    }
-                    Err(ValidationError::Permanent(err)) => change_set.push(
-                        ChangeAction::HandleInvalid(proposal.into_message(), format!("{:?}", err)),
-                    ),
-                    Err(ValidationError::Transient(err)) => {
-                        if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
-                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                                  self.log,
-                                  "Couldn't check the block validity: {:?}", err
-                            );
+                if check_protocol_version(proposal.content.version()).is_err() {
+                    change_set.push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()));
+                } else {
+                    match self.check_block_validity(pool_reader, &proposal) {
+                        Ok(()) => {
+                            self.metrics.observe_block(pool_reader, &proposal);
+                            known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
+                        }
+                        Err(ValidationError::Permanent(err)) => {
+                            change_set.push(ChangeAction::HandleInvalid(
+                                proposal.into_message(),
+                                format!("{:?}", err),
+                            ))
+                        }
+                        Err(ValidationError::Transient(err)) => {
+                            if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
+                                warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                                      self.log,
+                                      "Couldn't check the block validity: {:?}", err
+                                );
+                            }
                         }
                     }
                 }
@@ -1070,7 +1091,9 @@ impl Validator {
             .random_beacon()
             .get_by_height(last_beacon.content.height().increment())
             .filter_map(|beacon| {
-                if last_hash != beacon.content.parent {
+                if check_protocol_version(&beacon.content.version).is_err() {
+                    Some(ChangeAction::RemoveFromUnvalidated(beacon.into_message()))
+                } else if last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
                         "The parent hash of the beacon is not correct".to_string(),
@@ -1117,7 +1140,9 @@ impl Validator {
             .random_beacon_share()
             .get_by_height(next_height)
             .filter_map(|beacon| {
-                if last_hash != beacon.content.parent {
+                if check_protocol_version(&beacon.content.version).is_err() {
+                    Some(ChangeAction::RemoveFromUnvalidated(beacon.into_message()))
+                } else if last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
                         "The parent hash of the beacon was not correct".to_string(),
@@ -1172,7 +1197,9 @@ impl Validator {
             .get_by_height_range(range)
             .filter_map(|tape| {
                 let height = tape.height();
-                if height == Height::from(0) {
+                if check_protocol_version(&tape.content.version).is_err() {
+                    Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
+                } else if height == Height::from(0) {
                     // tape of height 0 is considered invalid
                     Some(ChangeAction::HandleInvalid(
                         tape.into_message(),
@@ -1234,7 +1261,9 @@ impl Validator {
             .get_by_height_range(range)
             .filter_map(|tape| {
                 let height = tape.height();
-                if height == Height::from(0) {
+                if check_protocol_version(&tape.content.version).is_err() {
+                    Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
+                } else if height == Height::from(0) {
                     // tape of height 0 is considered invalid
                     Some(ChangeAction::HandleInvalid(
                         tape.into_message(),
@@ -1302,7 +1331,11 @@ impl Validator {
             .filter_map(|catch_up_package| {
                 // Such heights should not make it into this loop.
                 debug_assert!(catch_up_package.height() > catch_up_height);
-                if !catch_up_package.check_integrity() {
+                if check_protocol_version(&catch_up_package.content.version).is_err() {
+                    return Some(ChangeAction::RemoveFromUnvalidated(
+                        catch_up_package.into_message(),
+                    ));
+                } else if !catch_up_package.check_integrity() {
                     return Some(ChangeAction::HandleInvalid(
                         catch_up_package.into_message(),
                         "CatchUpPackage integrity check failed".to_string(),
@@ -1360,7 +1393,9 @@ impl Validator {
         shares
             .filter_map(|share| {
                 debug_assert!(share.height() > catch_up_height);
-                if !share.check_integrity() {
+                if check_protocol_version(&share.content.version).is_err() {
+                    return Some(ChangeAction::RemoveFromUnvalidated(share.into_message()));
+                } else if !share.check_integrity() {
                     return Some(ChangeAction::HandleInvalid(
                         share.into_message(),
                         "CatchUpPackageShare integrity check failed".to_string(),
@@ -1608,12 +1643,12 @@ pub mod test {
     use ic_types::{
         consensus::{
             CatchUpPackageShare, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
-            NotarizationShare, RandomTapeContent,
+            NotarizationShare, RandomBeaconContent, RandomTapeContent,
         },
         crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
         replica_config::ReplicaConfig,
         signature::ThresholdSignature,
-        CryptoHashOfState, Time,
+        CryptoHashOfState, ReplicaVersion, Time,
     };
     use std::{
         borrow::Borrow,
@@ -1751,6 +1786,10 @@ pub mod test {
             pool.advance_round_normal_operation_no_cup_n(1);
             pool.insert_unvalidated(cup_share_data_height.clone());
             pool.insert_unvalidated(cup_share_summary_height.clone());
+            let mut cup_from_old_replica_version = cup_share_summary_height.clone();
+            cup_from_old_replica_version.content.version =
+                ReplicaVersion::try_from("old_version").unwrap();
+            pool.insert_unvalidated(cup_from_old_replica_version.clone());
 
             let validator = Validator::new(
                 replica_config,
@@ -1771,12 +1810,15 @@ pub mod test {
 
             // Check that the change set contains exactly the one `CatchUpPackageShare` we
             // expect it to.
-            assert_eq!(change_set.len(), 2);
+            assert_eq!(change_set.len(), 3);
             assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
                 if s == &cup_share_data_height && m.contains("DataPayloadBlockInCatchUpPackageShare")
             );
             assert_matches!(&change_set[1], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
                 if s == &cup_share_summary_height
+            );
+            assert_matches!(&change_set[2], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::CatchUpPackageShare(s))
+                if s == &cup_from_old_replica_version
             );
         })
     }
@@ -1914,6 +1956,13 @@ pub mod test {
             let beacon_2 = RandomBeacon::from_parent(&beacon_1);
             let share_3 = RandomBeaconShare::fake(&beacon_2, replica_config.node_id);
             pool.insert_unvalidated(share_3.clone());
+            let mut share_with_old_version = share_3.clone();
+            share_with_old_version.content = RandomBeaconContent {
+                version: ReplicaVersion::try_from("old_version").unwrap(),
+                height: share_3.content.height,
+                parent: share_3.content.parent.clone(),
+            };
+            pool.insert_unvalidated(share_with_old_version.clone());
 
             // share_3 cannot validate due to missing parent
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
@@ -1931,10 +1980,16 @@ pub mod test {
 
             // share_3 now validates
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 1);
+            assert_eq!(changeset.len(), 2);
             assert_eq!(
                 changeset[0],
                 ChangeAction::MoveToValidated(ConsensusMessage::RandomBeaconShare(share_3))
+            );
+            assert_eq!(
+                changeset[1],
+                ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomBeaconShare(
+                    share_with_old_version
+                ))
             )
         })
     }
@@ -2013,8 +2068,14 @@ pub mod test {
             // validated
             let tape_1 = RandomTape::fake(RandomTapeContent::new(Height::from(1)));
             pool.insert_validated(tape_1);
+
+            let mut old_replica_version_share = share_2.clone();
+            old_replica_version_share.content.version =
+                ReplicaVersion::try_from("old_version").unwrap();
+            pool.insert_unvalidated(old_replica_version_share.clone());
+
             let changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 2);
+            assert_eq!(changeset.len(), 3);
             assert_eq!(
                 changeset[1],
                 ChangeAction::MoveToValidated(ConsensusMessage::RandomTapeShare(share_2))
@@ -2022,6 +2083,12 @@ pub mod test {
             assert_eq!(
                 changeset[0],
                 ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomTapeShare(share_1))
+            );
+            assert_eq!(
+                changeset[2],
+                ChangeAction::RemoveFromUnvalidated(ConsensusMessage::RandomTapeShare(
+                    old_replica_version_share
+                ))
             );
 
             // Accept changes
@@ -2171,6 +2238,123 @@ pub mod test {
             let valid_results = validator.on_state_change(&PoolReader::new(&pool));
             assert_block_valid(&valid_results, &block_proposal);
         });
+    }
+
+    #[test]
+    fn test_block_validation_with_old_replica_version() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let prior_height = Height::from(5);
+            let certified_height = Height::from(1);
+            let committee: Vec<_> = (0..4).map(node_test_id).collect();
+            let (
+                mut payload_builder,
+                membership,
+                state_manager,
+                message_routing,
+                crypto,
+                data_provider,
+                registry_client,
+                mut pool,
+                dkg_pool,
+                time_source,
+                replica_config,
+            ) = setup_dependencies(pool_config, &committee);
+            Arc::get_mut(&mut payload_builder)
+                .unwrap()
+                .expect_validate_payload()
+                .withf(move |_, _, payloads, _| {
+                    // Assert that payloads are from blocks between:
+                    // `certified_height` and the current height (`prior_height`)
+                    payloads.len() as u64 == (prior_height - certified_height).get()
+                })
+                .returning(|_, _, _, _| Ok(()));
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(certified_height);
+
+            add_subnet_record(
+                &data_provider,
+                11,
+                replica_config.subnet_id,
+                SubnetRecordBuilder::from(&[]).build(),
+            );
+            registry_client.update_to_latest_version();
+
+            // Create a block chain with some length that will not be finalized
+            pool.insert_beacon_chain(&pool.make_next_beacon(), prior_height);
+            let block_chain = pool.insert_block_chain(prior_height);
+
+            // Create and insert the block whose validation we will be testing
+            let parent = block_chain.last().unwrap();
+            let mut test_block: Block = pool.make_next_block_from_parent(parent.as_ref()).into();
+            let rank = Rank(1);
+            let node_id = get_block_maker_by_rank(
+                membership.borrow(),
+                &PoolReader::new(&pool),
+                test_block.height(),
+                &committee,
+                rank,
+            );
+
+            test_block.context.registry_version = RegistryVersion::from(11);
+            test_block.context.certified_height = Height::from(1);
+            test_block.version = ReplicaVersion::try_from("old_version").unwrap();
+            test_block.rank = rank;
+
+            let block_proposal = BlockProposal::fake(test_block.clone(), node_id);
+            pool.insert_unvalidated(block_proposal.clone());
+
+            // Finalize some blocks to ensure that:
+            // certified_height + 1 != finalized_height
+            // We can then correctly assert that the payloads we pass to
+            // `payload_builder.validate_payload()` are from blocks after
+            // certified_height, and not finalized_height
+            pool.finalize(&block_chain[0]);
+            pool.finalize(&block_chain[1]);
+            pool.finalize(&block_chain[2]);
+
+            let validator = Validator::new(
+                replica_config.clone(),
+                membership,
+                registry_client.clone(),
+                crypto,
+                payload_builder,
+                state_manager,
+                message_routing,
+                dkg_pool,
+                no_op_logger(),
+                ValidatorMetrics::new(MetricsRegistry::new()),
+                Arc::clone(&time_source) as Arc<_>,
+            );
+
+            // ensure that the validator initially does not validate anything, as it is not
+            // time for rank 1 yet
+            assert!(validator
+                .on_state_change(&PoolReader::new(&pool))
+                .is_empty(),);
+
+            // After sufficiently advancing the time, ensure that the validator validates
+            // the block
+            let delay = get_block_maker_delay(
+                &no_op_logger(),
+                registry_client.as_ref(),
+                replica_config.subnet_id,
+                PoolReader::new(&pool)
+                    .registry_version(test_block.height())
+                    .unwrap(),
+                rank,
+            )
+            .unwrap();
+            time_source
+                .set_time(time_source.get_relative_time() + delay)
+                .unwrap();
+            let results = validator.on_state_change(&PoolReader::new(&pool));
+            assert_eq!(results.len(), 1);
+            assert_matches!(&results[0], ChangeAction::RemoveFromUnvalidated(ConsensusMessage::BlockProposal(b))
+                if b == &block_proposal
+            );
+        })
     }
 
     #[test]
@@ -2802,6 +2986,10 @@ pub mod test {
             let finalization = pool.validated().finalization().get_highest().unwrap();
             let catch_up_package = pool.make_catch_up_package(finalization.height());
             pool.insert_unvalidated(catch_up_package.clone());
+            let mut old_replica_version_cup = catch_up_package.clone();
+            old_replica_version_cup.content.version =
+                ReplicaVersion::try_from("old_version").unwrap();
+            pool.insert_unvalidated(old_replica_version_cup.clone());
 
             state_manager
                 .get_mut()
@@ -2827,7 +3015,13 @@ pub mod test {
             );
 
             let mut changeset = validator.on_state_change(&PoolReader::new(&pool));
-            assert_eq!(changeset.len(), 1);
+            assert_eq!(changeset.len(), 2);
+            assert_eq!(
+                changeset.pop(),
+                Some(ChangeAction::RemoveFromUnvalidated(
+                    ConsensusMessage::CatchUpPackage(old_replica_version_cup)
+                ))
+            );
             assert_eq!(
                 changeset.pop(),
                 Some(ChangeAction::MoveToValidated(

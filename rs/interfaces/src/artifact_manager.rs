@@ -1,6 +1,6 @@
 //! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
 use crate::{
-    artifact_pool::{ArtifactPoolError, ProcessingResult, UnvalidatedArtifact},
+    artifact_pool::{ProcessingResult, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use derive_more::From;
@@ -32,7 +32,6 @@ pub trait AdvertBroadcaster {
 pub enum OnArtifactError {
     NotProcessed,
     AdvertMismatch(AdvertMismatchError),
-    ArtifactPoolError(ArtifactPoolError),
     MessageConversionfailed(p2p::GossipAdvert),
 }
 
@@ -45,19 +44,6 @@ pub struct AdvertMismatchError {
 /// An abstraction of artifact processing for a sub-type of the overall
 /// 'Artifact' type.
 pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
-    /// When a new artifact is received, `check_artifact_acceptance` function is
-    /// called to perform basic pre-processing.
-    /// Note that this function should not modify the artifact pool.
-    ///
-    /// If it passes the pre-processing, the same artifact should be
-    /// returned, which will then be passed on to the corresponding
-    /// 'ArtifactProcessor' component afterwards. Otherwise it will be rejected.
-    ///
-    /// The default implementation is to accept unconditionally.
-    fn check_artifact_acceptance(&self, _msg: &Artifact::Message) -> Result<(), ArtifactPoolError> {
-        Ok(())
-    }
-
     /// Checks if the node already has the artifact in the pool by its
     /// identifier.
     fn has_artifact(&self, msg_id: &Artifact::Id) -> bool;

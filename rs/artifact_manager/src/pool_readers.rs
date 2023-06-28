@@ -3,9 +3,7 @@
 
 use ic_interfaces::{
     artifact_manager::ArtifactClient,
-    artifact_pool::{
-        ArtifactPoolError, PriorityFnAndFilterProducer, ReplicaVersionMismatch, ValidatedPoolReader,
-    },
+    artifact_pool::{PriorityFnAndFilterProducer, ValidatedPoolReader},
 };
 use ic_types::{
     artifact::*,
@@ -14,12 +12,10 @@ use ic_types::{
     chunkable::*,
     consensus::{
         certification::CertificationMessage, dkg::Message as DkgMessage, ConsensusMessage,
-        HasVersion,
     },
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     single_chunked::*,
-    ReplicaVersion,
 };
 use std::sync::{Arc, RwLock};
 
@@ -42,36 +38,11 @@ impl<Pool, T> ConsensusClient<Pool, T> {
     }
 }
 
-/// The function checks if the version of the given artifact matches the default
-/// protocol version and returns an error if it does not.
-fn check_protocol_version<T: HasVersion>(artifact: &T) -> Result<(), ReplicaVersionMismatch> {
-    let version = artifact.version();
-    let expected_version = ReplicaVersion::default();
-    if version != &expected_version {
-        Err(ReplicaVersionMismatch {
-            expected: expected_version,
-            artifact: version.clone(),
-        })
-    } else {
-        Ok(())
-    }
-}
-
 impl<
         Pool: ValidatedPoolReader<ConsensusArtifact> + Send + Sync,
         T: PriorityFnAndFilterProducer<ConsensusArtifact, Pool> + 'static,
     > ArtifactClient<ConsensusArtifact> for ConsensusClient<Pool, T>
 {
-    /// The method checks if the protocol version in the *Consensus* message is
-    /// correct.
-    ///
-    /// If the version is correct, the message is returned in an
-    /// `ArtifactAcceptance` enum.
-    fn check_artifact_acceptance(&self, msg: &ConsensusMessage) -> Result<(), ArtifactPoolError> {
-        check_protocol_version(msg)?;
-        Ok(())
-    }
-
     /// The method returns `true` if and only if the *Consensus* pool contains
     /// the given *Consensus* message ID.
     fn has_artifact(&self, msg_id: &ConsensusMessageId) -> bool {
@@ -275,15 +246,6 @@ impl<
         T: PriorityFnAndFilterProducer<DkgArtifact, Pool> + 'static,
     > ArtifactClient<DkgArtifact> for DkgClient<Pool, T>
 {
-    /// The method checks if the protocol version is correct.
-    ///
-    /// If this is the case, the artifact is returned wrapped in an
-    /// `ArtifactAcceptance` enum.
-    fn check_artifact_acceptance(&self, msg: &DkgMessage) -> Result<(), ArtifactPoolError> {
-        check_protocol_version(msg)?;
-        Ok(())
-    }
-
     /// The method checks if the DKG pool contains a DKG message with the given
     /// ID.
     fn has_artifact(&self, msg_id: &DkgMessageId) -> bool {

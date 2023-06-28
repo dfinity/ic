@@ -18,7 +18,7 @@ pub type Message = BasicSigned<DealingContent>;
 /// Holds the content of a DKG dealing
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DealingContent {
-    version: ReplicaVersion,
+    pub version: ReplicaVersion,
     /// the cryptographic data of the dealing
     pub dealing: NiDkgDealing,
     /// The id of the DKG instance this dealing belongs to
@@ -30,19 +30,6 @@ impl DealingContent {
     pub fn new(dealing: NiDkgDealing, dkg_id: NiDkgId) -> Self {
         DealingContent {
             version: ReplicaVersion::default(),
-            dealing,
-            dkg_id,
-        }
-    }
-
-    /// Create a new DealingContent with replica version
-    pub fn new_with_replica_version(
-        version: ReplicaVersion,
-        dealing: NiDkgDealing,
-        dkg_id: NiDkgId,
-    ) -> Self {
-        DealingContent {
-            version,
             dealing,
             dkg_id,
         }
@@ -71,11 +58,11 @@ impl TryFrom<pb::DkgMessage> for Message {
     type Error = ProxyDecodeError;
     fn try_from(message: pb::DkgMessage) -> Result<Self, Self::Error> {
         Ok(Self {
-            content: DealingContent::new_with_replica_version(
-                ReplicaVersion::try_from(message.replica_version)?,
-                bincode::deserialize(&message.dealing)?,
-                try_from_option_field(message.dkg_id, "DkgId not found")?,
-            ),
+            content: DealingContent {
+                version: ReplicaVersion::try_from(message.replica_version)?,
+                dealing: bincode::deserialize(&message.dealing)?,
+                dkg_id: try_from_option_field(message.dkg_id, "DkgId not found")?,
+            },
             signature: BasicSignature {
                 signature: BasicSigOf::from(BasicSig(message.signature)),
                 signer: node_id_try_from_option(message.signer)?,
