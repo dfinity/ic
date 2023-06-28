@@ -6,13 +6,17 @@ use crate::{
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
 use ic_interfaces_registry::RegistryClientResult;
-use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetListRecord};
+use ic_protobuf::registry::{
+    crypto::v1::PublicKey,
+    subnet::v1::{SubnetListRecord, SubnetRecord},
+};
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl, ThresholdSigPublicKey};
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{routing_table::RoutingTableRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_replicator::RegistryReplicator;
+use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::EcdsaConfig;
 use prost::Message;
 use slog::{error, info, warn, Logger};
@@ -24,7 +28,7 @@ use std::{
     time::Duration,
 };
 
-type VersionedRecoveryResult<T> = RecoveryResult<(RegistryVersion, Option<T>)>;
+pub type VersionedRecoveryResult<T> = RecoveryResult<(RegistryVersion, Option<T>)>;
 
 #[derive(Clone)]
 /// Enum instructing when we should call [RegistryReplicator::poll].
@@ -108,6 +112,27 @@ impl RegistryHelper {
     pub fn get_ecdsa_config(&self, subnet_id: SubnetId) -> VersionedRecoveryResult<EcdsaConfig> {
         self.get(|registry_version, registry_client| {
             registry_client.get_ecdsa_config(subnet_id, registry_version)
+        })
+    }
+
+    /// Returns the [SubnetRecord] of the given subnet.
+    pub fn get_subnet_record(&self, subnet_id: SubnetId) -> VersionedRecoveryResult<SubnetRecord> {
+        self.get(|registry_version, registry_client| {
+            registry_client.get_subnet_record(subnet_id, registry_version)
+        })
+    }
+
+    /// Returns the list of canister migrations.
+    pub fn get_canister_migrations(&self) -> VersionedRecoveryResult<CanisterMigrations> {
+        self.get(|registry_version, registry_client| {
+            registry_client.get_canister_migrations(registry_version)
+        })
+    }
+
+    /// Returns the [RoutingTable].
+    pub fn get_routing_table(&self) -> VersionedRecoveryResult<RoutingTable> {
+        self.get(|registry_version, registry_client| {
+            registry_client.get_routing_table(registry_version)
         })
     }
 
