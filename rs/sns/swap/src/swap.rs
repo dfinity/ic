@@ -592,7 +592,7 @@ impl Swap {
     // --- state modifying methods ---------------------------------------------
     //
 
-    pub fn run_periodic_tasks(&mut self, now_seconds: u64) {
+    pub fn heartbeat(&mut self, now_seconds: u64) {
         const NUMBER_OF_TICKETS_THRESHOLD: u64 = 100_000_000; // 100M * ~size(ticket) = ~25GB
         const TWO_DAYS_IN_NANOSECONDS: u64 = 60 * 60 * 24 * 2 * 1_000_000_000;
         const MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT: u64 = 100_000;

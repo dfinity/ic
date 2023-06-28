@@ -289,13 +289,13 @@ fn test_disburse_maturity_succeeds_to_self() {
 
     // Advance time by a few days, but without triggering disbursal finalization.
     env.gov_fixture.advance_time_by(6 * ONE_DAY_SECONDS);
-    env.gov_fixture.run_periodic_tasks();
+    env.gov_fixture.heartbeat();
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
 
     // Advance more, to hit 7-day period, and to trigger disbursal finalization.
     env.gov_fixture.advance_time_by(ONE_DAY_SECONDS + 10);
-    env.gov_fixture.run_periodic_tasks();
+    env.gov_fixture.heartbeat();
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 0);
 
@@ -389,13 +389,13 @@ fn test_disburse_maturity_succeeds_to_other() {
 
     // Advance time by a few days, but without triggering disbursal finalization.
     env.gov_fixture.advance_time_by(6 * ONE_DAY_SECONDS);
-    env.gov_fixture.run_periodic_tasks();
+    env.gov_fixture.heartbeat();
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
 
     // Advance more, to hit 7-day period, and to trigger disbursal finalization.
     env.gov_fixture.advance_time_by(ONE_DAY_SECONDS + 10);
-    env.gov_fixture.run_periodic_tasks();
+    env.gov_fixture.heartbeat();
     let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
     assert_eq!(neuron.disburse_maturity_in_progress.len(), 0);
 
@@ -487,8 +487,8 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
         let balance_before_disbursal = env
             .gov_fixture
             .get_account_balance(&destination_account, TargetLedger::Sns);
-        // Each call to run_periodic_tasks() "consumes" one entry of disburse_maturity_in_progress.
-        env.gov_fixture.run_periodic_tasks();
+        // Each call to heartbeat() "consumes" one entry of disburse_maturity_in_progress.
+        env.gov_fixture.heartbeat();
         let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
         assert_eq!(
             neuron.disburse_maturity_in_progress.len(),
@@ -2527,7 +2527,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
         .create();
 
     // This is supposed to cause Governance to poll CMC for the maturity modulation.
-    canister_fixture.run_periodic_tasks();
+    canister_fixture.heartbeat();
 
     // Get the Neuron and assert its maturity is set as expected
     let neuron = canister_fixture.get_neuron(&neuron_id);
@@ -2573,7 +2573,7 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     assert_eq!(neuron.maturity_e8s_equivalent, 0);
 
     canister_fixture.advance_time_by(7 * SECONDS_PER_DAY + 1);
-    canister_fixture.run_periodic_tasks();
+    canister_fixture.heartbeat();
 
     // Assert that the Neuron owner's account balance has increased the expected amount
     let account_balance_after_disbursal =

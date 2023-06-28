@@ -378,12 +378,12 @@ fn canister_heartbeat() {
 }
 
 /// Asynchronous method called for the canister_heartbeat that injects dependencies
-/// to run_periodic_tasks.
+/// to heartbeat.
 async fn canister_heartbeat_() {
     let now = CanisterEnvironment {}.now();
     let ledger_client = create_ledger_client();
 
-    SnsRootCanister::run_periodic_tasks(&STATE, &ledger_client, now).await
+    SnsRootCanister::heartbeat(&STATE, &ledger_client, now).await
 }
 
 /// Resources to serve for a given http_request

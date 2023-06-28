@@ -601,7 +601,7 @@ fn get_maturity_modulation_(
 /// The canister's heartbeat.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
-    let future = governance_mut().run_periodic_tasks();
+    let future = governance_mut().heartbeat();
 
     // The canister_heartbeat must be synchronous, so we cannot .await the future.
     dfn_core::api::futures::spawn(future);

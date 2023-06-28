@@ -599,7 +599,7 @@ impl SnsRootCanister {
     }
 
     /// Runs periodic tasks that are not directly triggered by user input.
-    pub async fn run_periodic_tasks(
+    pub async fn heartbeat(
         self_ref: &'static LocalKey<RefCell<Self>>,
         ledger_client: &impl LedgerCanisterClient,
         current_timestamp_seconds: u64,
@@ -2542,7 +2542,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_run_periodic_tasks() {
+    async fn test_heartbeat() {
         // Step 1: Prepare the world.
         thread_local! {
             static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
@@ -2581,7 +2581,7 @@ mod tests {
             .as_secs();
 
         // Step 2: Call the code under test.
-        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &ledger_canister_client, now).await;
+        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, now).await;
 
         // Step 3: Inspect results.
         assert_archive_poll_state_change(
@@ -2592,8 +2592,7 @@ mod tests {
 
         // Running periodic tasks one second in the future should
         // result in no change to state.
-        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &ledger_canister_client, now + 1)
-            .await;
+        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, now + 1).await;
 
         assert_archive_poll_state_change(
             &SNS_ROOT_CANISTER,
@@ -2603,7 +2602,7 @@ mod tests {
 
         // Running periodic tasks one dat in the future should
         // result in a new poll.
-        SnsRootCanister::run_periodic_tasks(
+        SnsRootCanister::heartbeat(
             &SNS_ROOT_CANISTER,
             &ledger_canister_client,
             now + ONE_DAY_SECONDS,
@@ -2758,7 +2757,7 @@ mod tests {
             };
 
         // Step 2: Call the code under test.
-        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &ledger_canister_client, now).await;
+        SnsRootCanister::heartbeat(&SNS_ROOT_CANISTER, &ledger_canister_client, now).await;
 
         // We should now have a single Archive canister registered.
         assert_archive_poll_state_change(
