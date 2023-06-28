@@ -18,15 +18,15 @@ pub fn parse_hex_str(string: &str) -> RecoveryResult<u64> {
     })
 }
 
-pub fn subnet_id_from_str(s: &str) -> Result<SubnetId, String> {
+pub fn subnet_id_from_str(s: &str) -> RecoveryResult<SubnetId> {
     PrincipalId::from_str(s)
-        .map_err(|e| format!("Unable to parse subnet_id {:?}", e))
+        .map_err(|e| RecoveryError::UnexpectedError(format!("Unable to parse subnet_id {:?}", e)))
         .map(SubnetId::from)
 }
 
-pub fn node_id_from_str(s: &str) -> Result<NodeId, String> {
+pub fn node_id_from_str(s: &str) -> RecoveryResult<NodeId> {
     PrincipalId::from_str(s)
-        .map_err(|e| format!("Unable to parse node_id {:?}", e))
+        .map_err(|e| RecoveryError::UnexpectedError(format!("Unable to parse node_id {:?}", e)))
         .map(NodeId::from)
 }
 

@@ -16348,6 +16348,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-replay",
  "ic-state-manager",
+ "ic-test-utilities-tmpdir",
  "ic-types",
  "serde",
  "slog",

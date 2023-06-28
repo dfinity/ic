@@ -4,8 +4,11 @@ use crate::{
         get_propose_to_prepare_canister_migration_command,
         get_propose_to_reroute_canister_ranges_command,
     },
+    layout::Layout,
     state_tool_helper::StateToolHelper,
     steps::{ComputeExpectedManifestsStep, CopyWorkDirStep, SplitStateStep, StateSplitStrategy},
+    target_subnet::TargetSubnet,
+    utils::get_state_hash,
 };
 
 use clap::Parser;
@@ -17,19 +20,16 @@ use ic_recovery::{
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::{RegistryPollingStrategy, VersionedRecoveryResult},
     steps::{AdminStep, Step, UploadAndRestartStep, WaitForCUPStep},
-    NeuronArgs, Recovery, RecoveryArgs, CHECKPOINTS, IC_REGISTRY_LOCAL_STORE, IC_STATE_DIR,
+    NeuronArgs, Recovery, RecoveryArgs, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
-use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
 use serde::{Deserialize, Serialize};
 use slog::{error, info, warn, Logger};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
 use url::Url;
 
-use std::{collections::HashMap, iter::Peekable, net::IpAddr, path::PathBuf};
-
-const DESTINATION_WORK_DIR: &str = "destination_work_dir";
+use std::{collections::HashMap, iter::Peekable, net::IpAddr};
 
 #[derive(
     Debug,
@@ -112,13 +112,8 @@ pub(crate) struct SubnetSplitting {
     neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
     state_tool_helper: StateToolHelper,
+    layout: Layout,
     logger: Logger,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-enum TargetSubnet {
-    Source,
-    Destination,
 }
 
 impl SubnetSplitting {
@@ -149,6 +144,7 @@ impl SubnetSplitting {
             params: subnet_args,
             recovery_args,
             neuron_args,
+            layout: Layout::new(&recovery),
             recovery,
             state_tool_helper,
             logger,
@@ -169,7 +165,8 @@ impl SubnetSplitting {
             subnet_id: self.subnet_id(target_subnet),
             state_split_strategy,
             state_tool_helper: self.state_tool_helper.clone(),
-            work_dir: self.work_dir(target_subnet),
+            layout: self.layout.clone(),
+            target_subnet,
             logger: self.recovery.logger.clone(),
         }
     }
@@ -183,25 +180,13 @@ impl SubnetSplitting {
     }
 
     fn propose_cup(&self, target_subnet: TargetSubnet) -> RecoveryResult<impl Step> {
-        let checkpoints_dir = self
-            .work_dir(target_subnet)
-            .join(IC_STATE_DIR)
-            .join(CHECKPOINTS);
+        let checkpoints_dir = self.layout.checkpoints_dir(target_subnet);
 
         let (max_name, max_height) =
             Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir)?;
 
         let max_checkpoint_dir = checkpoints_dir.join(max_name);
-        let manifest = &manifest_from_path(&max_checkpoint_dir).map_err(|e| {
-            RecoveryError::CheckpointError(
-                format!(
-                    "Failed to read the manifest from path {}",
-                    max_checkpoint_dir.display()
-                ),
-                e,
-            )
-        })?;
-        let state_hash = hex::encode(manifest_hash(manifest));
+        let state_hash = get_state_hash(&max_checkpoint_dir)?;
 
         self.recovery.update_recovery_cup(
             self.subnet_id(target_subnet),
@@ -218,8 +203,8 @@ impl SubnetSplitting {
             Some(node_ip) => Ok(UploadAndRestartStep {
                 logger: self.recovery.logger.clone(),
                 node_ip,
-                work_dir: self.work_dir(target_subnet),
-                data_src: self.work_dir(target_subnet).join(IC_STATE_DIR),
+                work_dir: self.layout.work_dir(target_subnet),
+                data_src: self.layout.ic_state_dir(target_subnet),
                 require_confirmation: true,
                 key_file: self.recovery.key_file.clone(),
                 check_ic_replay_height: false,
@@ -233,7 +218,7 @@ impl SubnetSplitting {
             Some(node_ip) => Ok(WaitForCUPStep {
                 logger: self.recovery.logger.clone(),
                 node_ip,
-                work_dir: self.work_dir(target_subnet),
+                work_dir: self.layout.work_dir(target_subnet),
             }),
             None => Err(RecoveryError::StepSkipped),
         }
@@ -250,15 +235,6 @@ impl SubnetSplitting {
         match target_subnet {
             TargetSubnet::Source => self.params.source_subnet_id,
             TargetSubnet::Destination => self.params.destination_subnet_id,
-        }
-    }
-
-    fn work_dir(&self, target_subnet: TargetSubnet) -> PathBuf {
-        match target_subnet {
-            TargetSubnet::Source => self.recovery.work_dir.clone(),
-            TargetSubnet::Destination => {
-                self.recovery.work_dir.with_file_name(DESTINATION_WORK_DIR)
-            }
         }
     }
 }
@@ -465,8 +441,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                     .into()
             }
             StepType::CopyDir => CopyWorkDirStep {
-                from: self.work_dir(TargetSubnet::Source),
-                to: self.work_dir(TargetSubnet::Destination),
+                layout: self.layout.clone(),
                 logger: self.recovery.logger.clone(),
             }
             .into(),
@@ -508,7 +483,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
 
             StepType::Cleanup => self.recovery.get_cleanup_step().into(),
             StepType::ComputeExpectedManifestsStep => ComputeExpectedManifestsStep {
-                recovery_dir: self.recovery.recovery_dir.clone(),
+                layout: self.layout.clone(),
                 state_tool_helper: self.state_tool_helper.clone(),
                 source_subnet_id: self.params.source_subnet_id,
                 destination_subnet_id: self.params.destination_subnet_id,
