@@ -145,7 +145,7 @@ pub const MAX_NEURON_RECENT_BALLOTS: usize = 100;
 pub const REWARD_DISTRIBUTION_PERIOD_SECONDS: u64 = ONE_DAY_SECONDS;
 
 /// The maximum number of neurons supported.
-pub const MAX_NUMBER_OF_NEURONS: usize = 200_000;
+pub const MAX_NUMBER_OF_NEURONS: usize = 220_000;
 
 /// The maximum number results returned by the method `list_proposals`.
 pub const MAX_LIST_PROPOSAL_RESULTS: u32 = 100;
@@ -155,7 +155,7 @@ const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
 
 /// The max number of unsettled proposals -- that is proposals for which ballots
 /// are still stored.
-pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 700;
+pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 600;
 
 /// The max number of open manage neuron proposals.
 pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 100000;
