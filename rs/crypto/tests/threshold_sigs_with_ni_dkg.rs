@@ -531,6 +531,10 @@ mod non_interactive_distributed_key_generation {
 
         // Now attempt to reshare off of transcript0, should fail in create_dealing:
         let reshare_config = RandomNiDkgConfig::reshare(transcript0, 1..=2, max_subnet_size);
+        // Update the environment with the reshare config, which creates crypto components for the
+        // new nodes, and registers their NI-DKG dealing encryption keys in the registry.
+        env.update_for_config(reshare_config.get());
+        env.registry.reload();
 
         for dealer in reshare_config.get().dealers().get() {
             let result =
@@ -538,7 +542,7 @@ mod non_interactive_distributed_key_generation {
 
             assert_matches!(
                 result,
-                Err(DkgCreateDealingError::FsEncryptionPublicKeyNotInRegistry(_))
+                Err(DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore(_))
             );
         }
     }
