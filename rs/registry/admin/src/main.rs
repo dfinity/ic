@@ -1,7 +1,7 @@
 //! Command-line utility to help submitting proposals to modify the IC's NNS.
 use anyhow::anyhow;
 use async_trait::async_trait;
-use candid::{CandidType, Decode, Encode};
+use candid::{CandidType, Decode, Encode, Principal};
 use clap::Parser;
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
@@ -3678,6 +3678,9 @@ struct ProposeToSetBitcoinConfig {
 
     #[clap(long, help = "Enables/disables access to the Bitcoin canister's API.")]
     pub api_access: Option<bool>,
+
+    #[clap(long, help = "Sets/clears the watchdog canister principal.")]
+    pub watchdog_canister: Option<Option<PrincipalId>>,
 }
 
 impl ProposalTitle for ProposeToSetBitcoinConfig {
@@ -3703,6 +3706,9 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
             api_access: self
                 .api_access
                 .map(|flag| if flag { Flag::Enabled } else { Flag::Disabled }),
+            watchdog_canister: self
+                .watchdog_canister
+                .map(|principal_id| principal_id.map(Principal::from)),
             ..Default::default()
         };
 
