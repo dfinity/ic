@@ -52,7 +52,7 @@ use ic_types::{
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
 use ic_utils::thread::JoinOnDrop;
-use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use prost::Message;
 use std::convert::{From, TryFrom};
 use std::fs::File;
@@ -131,6 +131,7 @@ pub struct StateManagerMetrics {
     manifest_metrics: ManifestMetrics,
     tip_handler_queue_length: IntGauge,
     decode_slice_status: IntCounterVec,
+    height_update_time_seconds: Histogram,
 }
 
 #[derive(Clone)]
@@ -323,6 +324,12 @@ impl StateManagerMetrics {
                 decode_slice_status.with_label_values(&[op, status]);
             }
         }
+        let height_update_time_seconds = metrics_registry.histogram(
+            "state_manager_height_update_time_seconds",
+            "Time between invocations of commit_and_certify that update height.",
+            // 1s, 2s, 5s, 10s, …, 100s, 200s, 500s
+            decimal_buckets(0, 2),
+        );
 
         Self {
             state_manager_error_count,
@@ -342,6 +349,7 @@ impl StateManagerMetrics {
             manifest_metrics: ManifestMetrics::new(metrics_registry),
             tip_handler_queue_length,
             decode_slice_status,
+            height_update_time_seconds,
         }
     }
 
@@ -718,6 +726,7 @@ pub struct StateManagerImpl {
     _tip_thread_handle: JoinOnDrop<()>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
+    latest_height_update_time: Arc<Mutex<Instant>>,
 }
 
 fn load_checkpoint(
@@ -1541,6 +1550,7 @@ impl StateManagerImpl {
             _tip_thread_handle,
             fd_factory,
             malicious_flags,
+            latest_height_update_time: Arc::new(Mutex::new(Instant::now())),
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -2951,6 +2961,17 @@ impl StateManager for StateManagerImpl {
 
             let latest_height = update_latest_height(&self.latest_state_height, height);
             self.metrics.max_resident_height.set(latest_height as i64);
+            {
+                let mut last_height_update_time = self
+                    .latest_height_update_time
+                    .lock()
+                    .expect("Failed to lock last height update time.");
+                let now = Instant::now();
+                self.metrics
+                    .height_update_time_seconds
+                    .observe((now - *last_height_update_time).as_secs_f64());
+                *last_height_update_time = now;
+            }
         }
 
         self.metrics

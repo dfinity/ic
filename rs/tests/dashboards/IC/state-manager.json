@@ -42,7 +42,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 249,
-  "iteration": 1665417849380,
+  "iteration": 1687438763258,
   "links": [
     {
       "asDropdown": true,
@@ -506,88 +506,90 @@
       }
     },
     {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
       "datasource": {
         "type": "prometheus",
         "uid": "000000001"
       },
-      "fill": 0,
-      "fillGradient": 0,
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
       "gridPos": {
         "h": 8,
         "w": 12,
         "x": 12,
         "y": 16
       },
-      "hiddenSeries": false,
-      "id": 8,
-      "legend": {
-        "avg": false,
-        "current": false,
-        "max": false,
-        "min": false,
-        "show": false,
-        "total": false,
-        "values": false
-      },
-      "lines": true,
-      "linewidth": 1,
-      "nullPointMode": "null",
+      "id": 18,
       "options": {
-        "alertThreshold": true
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
-      "percentage": false,
-      "pluginVersion": "8.5.11",
-      "pointradius": 2,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": false,
       "targets": [
         {
-          "exemplar": true,
-          "expr": "label_replace(\n  state_manager_state_size_bytes{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"},\n  \"instance\", \"$1:...:$2\", \"instance\", \"\\\\[?([0-9a-zA-Z]+).*:([0-9a-zA-Z]+)\\\\]?:[0-9]+\"\n)",
-          "interval": "",
-          "legendFormat": "{{instance}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "expr": "label_replace(\n  quantile by (ic, ic_subnet) (\n    0.7,\n    histogram_quantile (\n      1.0,\n      rate(state_manager_height_update_time_seconds{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[40s])\n    )\n  ),\n  \"ic_subnet\", \"$1\", \"ic_subnet\", \"([a-z0-9]+)-.*\"\n)",
           "refId": "A"
         }
       ],
-      "thresholds": [],
-      "timeRegions": [],
-      "title": "State Size",
-      "tooltip": {
-        "shared": true,
-        "sort": 0,
-        "value_type": "individual"
-      },
-      "type": "graph",
-      "xaxis": {
-        "mode": "time",
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:297",
-          "format": "bytes",
-          "logBase": 1,
-          "show": true
-        },
-        {
-          "$$hashKey": "object:298",
-          "format": "short",
-          "logBase": 1,
-          "show": true
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
+      "title": "Height Update Time, max",
+      "type": "timeseries"
     },
     {
       "aliasColors": {},
@@ -691,7 +693,7 @@
         "y": 24
       },
       "hiddenSeries": false,
-      "id": 14,
+      "id": 8,
       "legend": {
         "avg": false,
         "current": false,
@@ -719,7 +721,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "label_replace(\n  histogram_quantile(0.9,\n    rate(state_manager_checkpoint_op_duration_seconds_bucket{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",op=\"hash_tree\"}[$period])\n  ),\n  \"instance\", \"$1:...:$2\", \"instance\", \"\\\\[?([0-9a-zA-Z]+).*:([0-9a-zA-Z]+)\\\\]?:[0-9]+\"\n)",
+          "expr": "label_replace(\n  state_manager_state_size_bytes{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"},\n  \"instance\", \"$1:...:$2\", \"instance\", \"\\\\[?([0-9a-zA-Z]+).*:([0-9a-zA-Z]+)\\\\]?:[0-9]+\"\n)",
           "interval": "",
           "legendFormat": "{{instance}}",
           "refId": "A"
@@ -727,7 +729,95 @@
       ],
       "thresholds": [],
       "timeRegions": [],
-      "title": "Hash Tree Time p90",
+      "title": "State Size",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:297",
+          "format": "bytes",
+          "logBase": 1,
+          "show": true
+        },
+        {
+          "$$hashKey": "object:298",
+          "format": "short",
+          "logBase": 1,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "fill": 0,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "hiddenSeries": false,
+      "id": 14,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": false,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "8.5.11",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "exemplar": true,
+          "expr": "label_replace(\n    rate(state_manager_checkpoint_op_duration_seconds_sum{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",op=\"hash_tree\"}[$period])/rate(state_manager_checkpoint_op_duration_seconds_count{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\",op=\"hash_tree\"}[$period])\n,\n  \"instance\", \"$1:...:$2\", \"instance\", \"\\\\[?([0-9a-zA-Z]+).*:([0-9a-zA-Z]+)\\\\]?:[0-9]+\"\n)",
+          "interval": "",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Hash Tree Time",
       "tooltip": {
         "shared": true,
         "sort": 0,
@@ -758,7 +848,7 @@
       }
     }
   ],
-  "refresh": false,
+  "refresh": "10s",
   "schemaVersion": 36,
   "style": "dark",
   "tags": [
@@ -937,6 +1027,6 @@
   "timezone": "utc",
   "title": "State Manager",
   "uid": "state-manager",
-  "version": 17,
+  "version": 19,
   "weekStart": ""
 }
