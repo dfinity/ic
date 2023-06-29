@@ -1,5 +1,5 @@
 {
-  "checksum": "941a604b29cc9607015760617720dba622ff30e135fb09a76406a2abfa4b5171",
+  "checksum": "0181cebfc16af9247b7b77684beb6b9e82e9945a3a365bb2ea0b8b6cfa429791",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21642,7 +21642,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e"
+            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
           },
           "strip_prefix": "test-utils"
         }
@@ -53024,18 +53024,6 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -53050,6 +53038,18 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

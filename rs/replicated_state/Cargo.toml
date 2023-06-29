@@ -40,7 +40,7 @@ uuid = { version = "1.2.1", features = ["v4", "serde"] }
 assert_matches = "1.3.0"
 criterion = "0.3"
 criterion-time = { path = "../criterion_time" }
-ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
+ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
 ic-test-utilities = { path = "../test_utilities" }
 maplit = "1.0.2"
 serde_cbor = "0.11.1"

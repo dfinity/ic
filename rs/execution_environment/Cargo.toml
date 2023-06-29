@@ -58,7 +58,7 @@ canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { version = "0.5", features = ["html_reports"] }
 execution-environment-bench = { path = "benches/lib" }
 iai = "0.1"
-ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
+ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
 ic-crypto-sha = { path = "../crypto/sha" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-state-machine-tests = { path = "../state_machine_tests" }
