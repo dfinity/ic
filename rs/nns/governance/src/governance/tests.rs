@@ -14,7 +14,7 @@ use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::{self as sns_init_pb, SnsInitPayload};
 use ic_sns_swap::pb::{
     v1 as sns_swap_pb,
-    v1::{params::NeuronBasketConstructionParameters, Swap},
+    v1::{NeuronBasketConstructionParameters, Swap},
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use lazy_static::lazy_static;

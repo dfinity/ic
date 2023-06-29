@@ -26,9 +26,9 @@ use ic_sns_root::pb::v1::{
     RegisterDappCanistersResponse,
 };
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, params::NeuronBasketConstructionParameters, ErrorRefundIcpResponse,
-    FinalizeSwapResponse, GetBuyerStateResponse, GetBuyersTotalResponse, GetLifecycleResponse,
-    GetOpenTicketResponse, GetSaleParametersResponse, ListCommunityFundParticipantsResponse,
+    self as swap_pb, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateResponse,
+    GetBuyersTotalResponse, GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
+    ListCommunityFundParticipantsResponse, NeuronBasketConstructionParameters,
     NewSaleTicketResponse, NotifyPaymentFailureResponse, OpenRequest, OpenResponse, Params,
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };

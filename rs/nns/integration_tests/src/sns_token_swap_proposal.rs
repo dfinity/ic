@@ -20,7 +20,7 @@ use ic_nns_test_utils::{
     },
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Params as SnsSwapParams};
+use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params as SnsSwapParams};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_types::Cycles;
 use lazy_static::lazy_static;

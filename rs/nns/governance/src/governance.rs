@@ -7679,6 +7679,18 @@ fn is_information_about_swap_from_different_sources_consistent(
                 neuron_minimum_stake_e8s: _,
                 confirmation_text: _,
                 restricted_countries: _,
+                min_participants: _,
+                min_icp_e8s: _,
+                max_icp_e8s: _,
+                min_participant_icp_e8s: _,
+                max_participant_icp_e8s: _,
+                swap_start_timestamp_seconds: _,
+                swap_due_timestamp_seconds: _,
+                sns_token_e8s: _,
+                neuron_basket_construction_parameters: _,
+                nns_proposal_id: _,
+                neurons_fund_participants: _,
+                should_auto_finalize: _,
             } = swap_init;
 
             (

@@ -89,9 +89,7 @@ use ic_nns_governance::{
     },
 };
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
-use ic_sns_swap::pb::v1::{
-    self as sns_swap_pb, params::NeuronBasketConstructionParameters, Params,
-};
+use ic_sns_swap::pb::v1::{self as sns_swap_pb, NeuronBasketConstructionParameters, Params};
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
@@ -10643,6 +10641,18 @@ lazy_static! {
         neuron_minimum_stake_e8s: Some(123_456_789),
         confirmation_text: None,
         restricted_countries: None,
+        min_participants: None, // TODO[NNS1-2339]
+        min_icp_e8s: None, // TODO[NNS1-2339]
+        max_icp_e8s: None, // TODO[NNS1-2339]
+        min_participant_icp_e8s: None, // TODO[NNS1-2339]
+        max_participant_icp_e8s: None, // TODO[NNS1-2339]
+        swap_start_timestamp_seconds: None, // TODO[NNS1-2339]
+        swap_due_timestamp_seconds: None, // TODO[NNS1-2339]
+        sns_token_e8s: None, // TODO[NNS1-2339]
+        neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
+        nns_proposal_id: None, // TODO[NNS1-2339]
+        neurons_fund_participants: None, // TODO[NNS1-2339]
+        should_auto_finalize: None, // TODO[NNS1-2339]
     };
 }
 
@@ -10658,7 +10668,7 @@ lazy_static! {
         min_participants: 1,
         swap_due_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS + 2 * ONE_DAY_SECONDS,
         neuron_basket_construction_parameters: Some(
-            sns_swap_pb::params::NeuronBasketConstructionParameters {
+            sns_swap_pb::NeuronBasketConstructionParameters {
                 count: BASKET_COUNT,
                 dissolve_delay_interval_seconds: 7890000, // 3 months
             },

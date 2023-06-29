@@ -51,11 +51,10 @@ use ic_sns_init::pb::v1::{
 };
 use ic_sns_swap::{
     pb::v1::{
-        self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
-        set_dapp_controllers_call_result, set_mode_call_result, ErrorRefundIcpRequest,
-        ErrorRefundIcpResponse, GetOpenTicketResponse, GetStateRequest, GetStateResponse, Init,
-        OpenRequest, RefreshBuyerTokensResponse, SetDappControllersCallResult,
-        SetDappControllersResponse,
+        self as swap_pb, error_refund_icp_response, set_dapp_controllers_call_result,
+        set_mode_call_result, ErrorRefundIcpRequest, ErrorRefundIcpResponse, GetOpenTicketResponse,
+        GetStateRequest, GetStateResponse, Init, NeuronBasketConstructionParameters, OpenRequest,
+        RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersResponse,
     },
     swap::principal_to_subaccount,
 };
@@ -2709,6 +2708,18 @@ fn test_upgrade() {
         neuron_minimum_stake_e8s: Some(1_000_000),
         confirmation_text: None,
         restricted_countries: None,
+        min_participants: None,                      // TODO[NNS1-2339]
+        min_icp_e8s: None,                           // TODO[NNS1-2339]
+        max_icp_e8s: None,                           // TODO[NNS1-2339]
+        min_participant_icp_e8s: None,               // TODO[NNS1-2339]
+        max_participant_icp_e8s: None,               // TODO[NNS1-2339]
+        swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
+        swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
+        sns_token_e8s: None,                         // TODO[NNS1-2339]
+        neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
+        nns_proposal_id: None,                       // TODO[NNS1-2339]
+        neurons_fund_participants: None,             // TODO[NNS1-2339]
+        should_auto_finalize: None,                  // TODO[NNS1-2339]
     })
     .unwrap();
     let canister_id = state_machine
@@ -3101,6 +3112,18 @@ fn test_last_man_less_than_min() {
         neuron_minimum_stake_e8s: Some(1_000_000),
         confirmation_text: None,
         restricted_countries: None,
+        min_participants: None,                      // TODO[NNS1-2339]
+        min_icp_e8s: None,                           // TODO[NNS1-2339]
+        max_icp_e8s: None,                           // TODO[NNS1-2339]
+        min_participant_icp_e8s: None,               // TODO[NNS1-2339]
+        max_participant_icp_e8s: None,               // TODO[NNS1-2339]
+        swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
+        swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
+        sns_token_e8s: None,                         // TODO[NNS1-2339]
+        neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
+        nns_proposal_id: None,                       // TODO[NNS1-2339]
+        neurons_fund_participants: None,             // TODO[NNS1-2339]
+        should_auto_finalize: None,                  // TODO[NNS1-2339]
     })
     .unwrap();
     state_machine

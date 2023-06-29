@@ -1,4 +1,4 @@
-/// The 'swap' canister smart contract is used to perform a type of
+/// The `swap` canister smart contract is used to perform a type of
 /// single-price auction (SNS/ICP) of one token type SNS for another token
 /// type ICP (this is typically ICP, but can be treated as a variable) at a
 /// specific date/time in the future.
@@ -31,11 +31,12 @@
 /// never be greater than `max_icp_e8s`.)
 ///
 ///
-/// The dramatis personae of the 'swap' canister are as follows:
+/// The dramatis personae of the `swap` canister are as follows:
 ///
 /// - The swap canister itself.
 ///
-/// - The NNS governance canister - which is the only principal that can open the swap.
+/// - The NNS governance canister - which is the only principal that can open
+///    the swap.
 ///
 /// - The governance canister of the SNS to be decentralized.
 ///
@@ -100,8 +101,8 @@
 /// swap cannot possibly succeed, e.g., because the ICP ceiling has
 /// been reached and the minimum number of participants has not been.
 ///
-/// The 'swap' canister can be deleted when all tokens registered with the
-/// 'swap' canister have been disbursed to their rightful owners.
+/// The `swap` canister can be deleted when all tokens registered with the
+/// `swap` canister have been disbursed to their rightful owners.
 ///
 /// The logic of this canister is based on the following principles.
 ///
@@ -111,27 +112,36 @@
 /// one exception, viz., the timestamp field for the start of a
 /// transfer is reset if the transfer fails).
 ///
-/// Data flow for the community fund.
+/// Data flow for the Neurons' Fund.
 ///
 /// - A SNS is created.
-/// - Proposal to open a decentralization swap for the SNS is submitted to the NNS.
+/// - Proposal to open a decentralization swap for the SNS is submitted to
+///    the NNS.
 ///    - ProposalToOpenDecentralizationSale
-///      - The Community Fund investment amount
+///      - The Neurons' Fund investment amount
 ///      - The parameters of the decentralization swap (`Params`).
 ///    - Call to open swap:
 ///      - Parameters
-///      - CF Investments
+///      - Neurons' Fund investments
 ///      - NNS Proposal ID of the NNS proposal to open the swap.
 /// - On accept of proposal to open decentralization swap:
-///    - Compute the maturity contribution of each CF neuron and deduct this amount from the CF neuron.
-///    - The swap is informed about the corresponding amount of ICP (`CfParticipant`) in the call to open.
+///    - Compute the maturity contribution of each Neurons' Fund neuron and deduct
+///      this amount from the Neurons' Fund neuron.
+///    - The swap is informed about the corresponding amount of ICP
+///      (`CfParticipant`) in the call to open.
 ///    - Call back to NNS governance after the swap is committed or aborted:
 ///      - On committed swap:
-///        - Ask the NNS to mint the right amount of ICP for the SNS corresponding to the CF investment (the NNS governance canister keeps track of the total).
+///        - Ask the NNS to mint the right amount of ICP for the SNS corresponding
+///          to the Neurons' Fund investment (the NNS governance canister keeps
+///          track of the total).
 ///      - On aborted swap:
-///        - Send the information about CF participants (`CfParticipant`) back to NNS governance which will return it to the corresponding neurons. Assign the control of the dapp (now under the SNS control) back to the specified principals.
+///        - Send the information about Neurons' Fund participants
+///          (`CfParticipant`) back to NNS governance which will return it to
+///          the corresponding neurons. Assign the control of the dapp (now under
+///          the SNS control) back to the specified principals.
 /// - On reject of proposal to open decentralization swap:
-///    - Assign the control of the dapp (now under the SNS control) back to the specified principals.
+///    - Assign the control of the dapp (now under the SNS control) back to the
+///      specified principals.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -152,7 +162,7 @@ pub struct Swap {
     /// thereafter.
     #[prost(message, optional, tag = "4")]
     pub params: ::core::option::Option<Params>,
-    /// Community fund participation.  Specified in the transition from
+    /// Neurons' Fund participation.  Specified in the transition from
     /// PENDING to OPEN and immutable thereafter.
     #[prost(message, repeated, tag = "5")]
     pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
@@ -184,15 +194,16 @@ pub struct Swap {
     #[prost(bool, optional, tag = "10")]
     pub finalize_swap_in_progress: ::core::option::Option<bool>,
     /// The timestamp for the actual opening of the swap, with an optional delay
-    /// (specified via params.sale_delay_seconds) after the adoption of the swap proposal.
-    /// Gets set when NNS calls open() upon the adoption of the swap proposal.
+    /// (specified via params.sale_delay_seconds) after the adoption of the swap
+    /// proposal. Gets set when NNS calls `open` upon the adoption of
+    /// the swap proposal.
     #[prost(uint64, optional, tag = "11")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
     /// This ticket id counter keeps track of the latest ticket id. Whenever a new
     /// ticket is created this counter is incremented. It ensures that ticket ids
-    /// are unique. The ticket IDs are sequential and next_ticket_id is assigned to a
-    /// users new ticket upon successfully requesting a new ticket. It is incremented
-    /// after a user requests a new ticket successfully.
+    /// are unique. The ticket IDs are sequential and next_ticket_id is assigned to
+    /// a  users new ticket upon successfully requesting a new ticket. It is
+    /// incremented after a user requests a new ticket successfully.
     #[prost(uint64, optional, tag = "12")]
     pub next_ticket_id: ::core::option::Option<u64>,
     /// The last time the purge_old_tickets routine was completed.
@@ -251,15 +262,105 @@ pub struct Init {
     #[prost(uint64, optional, tag = "14")]
     pub neuron_minimum_stake_e8s: ::core::option::Option<u64>,
     /// An optional text that swap participants should confirm before they may
-    /// participate in the swap. If the field is set, its value should be plain text
-    /// with at least 1 and at most 1,000 characters.
+    /// participate in the swap. If the field is set, its value should be plain
+    /// text with at least 1 and at most 1,000 characters.
     #[prost(string, optional, tag = "15")]
     pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
     /// An optional set of countries that should not participate in the swap.
     #[prost(message, optional, tag = "16")]
     pub restricted_countries: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Countries>,
+    /// The minimum number of buyers that must participate for the swap
+    /// to take place. Must be greater than zero.
+    #[prost(uint32, optional, tag = "17")]
+    pub min_participants: ::core::option::Option<u32>,
+    /// The total number of ICP that is required for this token swap to
+    /// take place. This number divided by the number of SNS tokens being
+    /// offered gives the seller's reserve price for the swap, i.e., the
+    /// minimum number of ICP per SNS tokens that the seller of SNS
+    /// tokens is willing to accept. If this amount is not achieved, the
+    /// swap will be aborted (instead of committed) when the due date/time
+    /// occurs. Must be smaller than or equal to `max_icp_e8s`.
+    #[prost(uint64, optional, tag = "18")]
+    pub min_icp_e8s: ::core::option::Option<u64>,
+    /// The number of ICP that is "targeted" by this token swap. If this
+    /// amount is achieved with sufficient participation, the swap will be
+    /// triggered immediately, without waiting for the due date
+    /// (`end_timestamp_seconds`). This means that an investor knows the minimum
+    /// number of SNS tokens received per invested ICP. If this amount is achieved
+    /// without reaching sufficient_participation, the swap will abort without
+    /// waiting for the due date. Must be at least
+    /// `min_participants * min_participant_icp_e8s`.
+    #[prost(uint64, optional, tag = "19")]
+    pub max_icp_e8s: ::core::option::Option<u64>,
+    /// The minimum amount of ICP that each buyer must contribute to
+    /// participate. Must be greater than zero.
+    #[prost(uint64, optional, tag = "20")]
+    pub min_participant_icp_e8s: ::core::option::Option<u64>,
+    /// The maximum amount of ICP that each buyer can contribute. Must be
+    /// greater than or equal to `min_participant_icp_e8s` and less than
+    /// or equal to `max_icp_e8s`. Can effectively be disabled by
+    /// setting it to `max_icp_e8s`.
+    #[prost(uint64, optional, tag = "21")]
+    pub max_participant_icp_e8s: ::core::option::Option<u64>,
+    /// The date/time when the swap should start.
+    #[prost(uint64, optional, tag = "22")]
+    pub swap_start_timestamp_seconds: ::core::option::Option<u64>,
+    /// The date/time when the swap is due, i.e., it will automatically
+    /// end and commit or abort depending on whether the parameters have
+    /// been fulfilled.
+    #[prost(uint64, optional, tag = "23")]
+    pub swap_due_timestamp_seconds: ::core::option::Option<u64>,
+    /// The number of tokens (of `init.sns_ledger_canister_id`) that are
+    /// being offered. The tokens are held in escrow for the SNS
+    /// governance canister.
+    ///
+    /// Invariant for the OPEN state:
+    /// ```text
+    /// state.sns_token_e8s <= token_ledger.balance_of(<swap-canister>)
+    /// ```
+    #[prost(uint64, optional, tag = "24")]
+    pub sns_token_e8s: ::core::option::Option<u64>,
+    /// The construction parameters for the basket of neurons created for all
+    /// investors in the decentralization swap. Each investor, whether via
+    /// the Neurons' Fund or direct, will receive `count` Neurons with
+    /// increasing dissolve delays. The total number of Tokens swapped for
+    /// by the investor will be evenly distributed across the basket. This is
+    /// effectively a vesting schedule to ensure there is a gradual release of
+    /// SNS Tokens available to all investors instead of being liquid immediately.
+    /// See `NeuronBasketConstructionParameters` for more details on how
+    /// the basket is configured.
+    #[prost(message, optional, tag = "25")]
+    pub neuron_basket_construction_parameters:
+        ::core::option::Option<NeuronBasketConstructionParameters>,
+    /// The ID of the NNS proposal submitted to launch this SNS decentralization
+    /// swap.
+    #[prost(uint64, optional, tag = "26")]
+    pub nns_proposal_id: ::core::option::Option<u64>,
+    /// The Neurons' Fund participants of this SNS decentralization swap.
+    #[prost(message, optional, tag = "27")]
+    pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,
+    /// Controls whether swap finalization should be attempted automatically in the
+    /// canister heartbeat. If set to false, `finalize_swap` must be called
+    /// manually. Note: it is safe to call `finalize_swap` multiple times
+    /// (regardless of the value of this field).
+    #[prost(bool, optional, tag = "28")]
+    pub should_auto_finalize: ::core::option::Option<bool>,
 }
-/// Represents one NNS neuron from the community fund participating in this swap.
+/// Represents multiple Neurons' Fund participants.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronsFundParticipants {
+    #[prost(message, repeated, tag = "1")]
+    pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
+}
+/// Represents one NNS neuron from the Neurons' Fund participating in this swap.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -273,12 +374,12 @@ pub struct CfNeuron {
     /// The NNS neuron ID of the participating neuron.
     #[prost(fixed64, tag = "1")]
     pub nns_neuron_id: u64,
-    /// The amount of ICP that the community fund invests associated
+    /// The amount of ICP that the Neurons' Fund invests associated
     /// with this neuron.
     #[prost(uint64, tag = "2")]
     pub amount_icp_e8s: u64,
 }
-/// Represent CF participant, possibly with several neurons.
+/// Represents a Neurons' Fund participant, possibly with several neurons.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -289,15 +390,36 @@ pub struct CfNeuron {
     ::prost::Message,
 )]
 pub struct CfParticipant {
-    /// The principal that can vote on behalf of these CF neurons.
+    /// The principal that can vote on behalf of these Neurons' Fund neurons.
     #[prost(string, tag = "1")]
     pub hotkey_principal: ::prost::alloc::string::String,
     /// Information about the participating neurons. Must not be empty.
     #[prost(message, repeated, tag = "2")]
     pub cf_neurons: ::prost::alloc::vec::Vec<CfNeuron>,
 }
-/// The parameters of the swap, provided in the call to 'open'. Cannot
-/// be modified after the call to 'open'.
+/// The construction parameters for the basket of neurons created for all
+/// investors in the decentralization swap.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronBasketConstructionParameters {
+    /// The number of neurons each investor will receive after the
+    /// decentralization swap. The total tokens swapped for will be
+    /// evenly distributed across the `count` neurons.
+    #[prost(uint64, tag = "1")]
+    pub count: u64,
+    /// The amount of additional time it takes for the next neuron to dissolve.
+    #[prost(uint64, tag = "2")]
+    pub dissolve_delay_interval_seconds: u64,
+}
+/// The parameters of the swap, provided in the call to `open`. Cannot
+/// be modified after the call to `open`.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -347,7 +469,7 @@ pub struct Params {
     #[prost(uint64, tag = "6")]
     pub swap_due_timestamp_seconds: u64,
     /// The number of tokens (of `init.sns_ledger_canister_id`) that are
-    /// being offered. The tokens are held in escrow for the the SNS
+    /// being offered. The tokens are held in escrow for the SNS
     /// governance canister.
     ///
     /// Invariant for the OPEN state:
@@ -358,7 +480,7 @@ pub struct Params {
     pub sns_token_e8s: u64,
     /// The construction parameters for the basket of neurons created for all
     /// investors in the decentralization swap. Each investor, whether via
-    /// the CommunityFund or direct, will receive `count` Neurons with
+    /// the Neurons' Fund or direct, will receive `count` Neurons with
     /// increasing dissolve delays. The total number of Tokens swapped for
     /// by the investor will be evenly distributed across the basket. This is
     /// effectively a vesting schedule to ensure there is a gradual release of
@@ -367,35 +489,11 @@ pub struct Params {
     /// the basket is configured.
     #[prost(message, optional, tag = "8")]
     pub neuron_basket_construction_parameters:
-        ::core::option::Option<params::NeuronBasketConstructionParameters>,
+        ::core::option::Option<NeuronBasketConstructionParameters>,
     /// An optional delay, so that the actual swap does not get opened immediately
     /// after the adoption of the swap proposal.
     #[prost(uint64, optional, tag = "9")]
     pub sale_delay_seconds: ::core::option::Option<u64>,
-}
-/// Nested message and enum types in `Params`.
-pub mod params {
-    /// The construction parameters for the basket of neurons created for all
-    /// investors in the decentralization swap.
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct NeuronBasketConstructionParameters {
-        /// The number of neurons each investor will receive after the
-        /// decentralization swap. The total tokens swapped for will be
-        /// evenly distributed across the `count` neurons.
-        #[prost(uint64, tag = "1")]
-        pub count: u64,
-        /// The amount of additional time it takes for the next neuron to dissolve.
-        #[prost(uint64, tag = "2")]
-        pub dissolve_delay_interval_seconds: u64,
-    }
 }
 #[derive(
     candid::CandidType,
@@ -407,8 +505,8 @@ pub mod params {
     ::prost::Message,
 )]
 pub struct TransferableAmount {
-    /// The amount in e8s equivalent that the participant committed to the Swap, which is held by the swap canister until
-    /// the swap is committed or aborted.
+    /// The amount in e8s equivalent that the participant committed to the Swap,
+    /// which is held by the swap canister until the swap is committed or aborted.
     #[prost(uint64, tag = "1")]
     pub amount_e8s: u64,
     /// When the transfer to refund or commit funds starts.
@@ -417,7 +515,8 @@ pub struct TransferableAmount {
     /// When the transfer to refund or commit succeeds.
     #[prost(uint64, tag = "3")]
     pub transfer_success_timestamp_seconds: u64,
-    /// The amount that was successfully transferred when swap commits or aborts (minus fees).
+    /// The amount that was successfully transferred when swap commits or aborts
+    /// (minus fees).
     #[prost(uint64, optional, tag = "4")]
     pub amount_transferred_e8s: ::core::option::Option<u64>,
     /// The fee charged when transferring from the swap canister;
@@ -473,7 +572,7 @@ pub struct DirectInvestment {
     #[prost(string, tag = "1")]
     pub buyer_principal: ::prost::alloc::string::String,
 }
-/// Information about a community fund investment. The NNS Governance
+/// Information about a Neurons' Fund investment. The NNS Governance
 /// canister is the controller of these neurons.
 #[derive(
     candid::CandidType,
@@ -521,8 +620,8 @@ pub struct SnsNeuronRecipe {
     /// Attributes of the Neuron to be created from the SnsNeuronRecipe
     #[prost(message, optional, tag = "4")]
     pub neuron_attributes: ::core::option::Option<sns_neuron_recipe::NeuronAttributes>,
-    /// The status of the SnsNeuronRecipe's creation within SNS Governance. This field is
-    /// used as a journal between calls of finalize().
+    /// The status of the SnsNeuronRecipe's creation within SNS Governance. This
+    /// field is used as a journal between calls of `finalize`.
     #[prost(enumeration = "sns_neuron_recipe::ClaimedStatus", optional, tag = "5")]
     pub claimed_status: ::core::option::Option<i32>,
     #[prost(oneof = "sns_neuron_recipe::Investor", tags = "2, 3")]
@@ -542,23 +641,25 @@ pub mod sns_neuron_recipe {
     )]
     pub struct NeuronAttributes {
         /// The memo to be used when calculating the Neuron's staking account
-        /// in the SNS Ledger. See `nervous_system_common::compute_neuron_staking_subaccount`.
-        /// The memo is used along with the a principal_id of the "controller" of the
-        /// neuron. In the case of the decentralization sale, that will either be the PrincipalId
-        /// of NNS Governance canister for CommunityFund investors, or the PrincipalId of the
-        /// direct investor.
+        /// in the SNS Ledger.
+        /// See `nervous_system_common::compute_neuron_staking_subaccount`.
+        /// The memo is used along with the a principal_id of the "controller" of
+        /// the neuron. In the case of the decentralization sale, that will either be
+        /// the PrincipalId of NNS Governance canister for Neurons' Fund investors,
+        /// or the PrincipalId of the direct investor.
         #[prost(uint64, tag = "1")]
         pub memo: u64,
         /// The dissolve delay in seconds that the Neuron will be created with.
         #[prost(uint64, tag = "2")]
         pub dissolve_delay_seconds: u64,
-        /// The list of NeuronIds that the created Neuron will follow on all SNS Proposal
-        /// Actions known to governance at the time. Additional followees and following
-        /// relations can be added after neuron creation.
+        /// The list of NeuronIds that the created Neuron will follow on all SNS
+        /// proposal actions known to governance at the time. Additional followees
+        /// and following relations can be added after neuron creation.
         ///
-        /// TODO NNS1-1589 - Due to the dependency cycle, the Swap canister's protobuf cannot directly
-        /// depend on SNS Governance NeuronId type. The followees NeuronId's are
-        /// of a duplicated type, which is converted to SNS governance NeuronId at the time
+        /// TODO\[NNS1-1589\] Due to the dependency cycle, the `swap` canister's
+        /// protobuf cannot directly depend on SNS Governance NeuronId type.
+        /// The followees NeuronId's are of a duplicated type, which is converted to
+        /// SNS governance NeuronId at the time.
         /// of claiming.
         #[prost(message, repeated, tag = "3")]
         pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
@@ -591,7 +692,8 @@ pub mod sns_neuron_recipe {
         /// be retried in the future.
         Failed = 3,
         /// The Neuron is invalid and was not created in SNS Governance. This neuron
-        /// cannot be retried without manual intervention to update its NeuronParameters.
+        /// cannot be retried without manual intervention to update its
+        /// `NeuronParameters`.
         Invalid = 4,
     }
     impl ClaimedStatus {
@@ -642,7 +744,7 @@ pub struct OpenRequest {
     /// The parameters of the swap.
     #[prost(message, optional, tag = "1")]
     pub params: ::core::option::Option<Params>,
-    /// Community fund participation.
+    /// Neurons' Fund participation.
     #[prost(message, repeated, tag = "2")]
     pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
     /// The ID of the proposal whose execution consists of calling this method.
@@ -758,16 +860,17 @@ pub struct GetBuyersTotalResponse {
 pub struct DerivedState {
     #[prost(uint64, tag = "1")]
     pub buyer_total_icp_e8s: u64,
-    /// Current number of non-community-fund swap participants
+    /// Current number of non-Neurons' Fund swap participants
     #[prost(uint64, optional, tag = "3")]
     pub direct_participant_count: ::core::option::Option<u64>,
-    /// Current number of community-fund swap participants. In particular, it's the
-    /// number of unique controllers of the neurons participating in the CF.
+    /// Current number of Neurons' Fund swap participants. In particular, it's the
+    /// number of unique controllers of the neurons participating
+    /// in the Neurons' Fund.
     #[prost(uint64, optional, tag = "4")]
     pub cf_participant_count: ::core::option::Option<u64>,
-    /// Current number of community-fund neurons participating in the swap
-    /// May be greater than cf_participant_count if multiple neurons in the CF have
-    /// the same controller.
+    /// Current number of Neurons' Fund neurons participating in the swap
+    /// May be greater than cf_participant_count if multiple neurons in
+    /// the Neurons' Fund have the same controller.
     #[prost(uint64, optional, tag = "5")]
     pub cf_neuron_count: ::core::option::Option<u64>,
     /// Current approximate rate SNS tokens per ICP.
@@ -804,7 +907,7 @@ pub struct SetOpenTimeWindowResponse {}
 /// Informs the swap canister that a buyer has sent funds to participate in the
 /// swap.
 ///
-/// Only in lifecycle state 'open'.
+/// Only in lifecycle state `open`.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -818,9 +921,9 @@ pub struct RefreshBuyerTokensRequest {
     /// If not specified, the caller is used.
     #[prost(string, tag = "1")]
     pub buyer: ::prost::alloc::string::String,
-    /// To accept the swap participation confirmation, a participant should send the
-    /// confirmation text via refresh_buyer_tokens, matching the text set during SNS
-    /// initialization.
+    /// To accept the swap participation confirmation, a participant should send
+    /// the confirmation text via refresh_buyer_tokens, matching the text set
+    /// during SNS initialization.
     #[prost(string, optional, tag = "2")]
     pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
 }
@@ -1195,7 +1298,8 @@ pub mod governance_error {
         Unavailable = 2,
         /// The caller is not authorized to perform this operation.
         NotAuthorized = 3,
-        /// Some entity required for the operation (for example, a neuron) was not found.
+        /// Some entity required for the operation (for example, a neuron) was
+        /// not found.
         NotFound = 4,
         /// The command was missing or invalid. This is a permanent error.
         InvalidCommand = 5,
@@ -1239,10 +1343,10 @@ pub mod governance_error {
         /// rejected regardless of changes in the system's state (e.g. increasing
         /// the neuron's dissolve delay will not make the proposal acceptable).
         InvalidProposal = 16,
-        /// The neuron attempted to join the community fund while already
+        /// The neuron attempted to join the Neurons' Fund while already
         /// a member.
         AlreadyJoinedCommunityFund = 17,
-        /// The neuron attempted to leave the community fund but is not a member.
+        /// The neuron attempted to leave the Neurons' Fund but is not a member.
         NotInTheCommunityFund = 18,
     }
     impl ErrorType {
@@ -1317,8 +1421,9 @@ pub mod settle_community_fund_participation {
         #[prost(message, optional, tag = "1")]
         pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
     }
-    /// When this happens, maturity needs to be restored to CF neurons. The amounts
-    /// to be refunded can be found in the ProposalData's cf_participants field.
+    /// When this happens, maturity needs to be restored to Neurons' Fund neurons.
+    /// The amounts to be refunded can be found in the ProposalData's
+    /// `cf_participants` field.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1347,8 +1452,8 @@ pub mod settle_community_fund_participation {
         Aborted(Aborted),
     }
 }
-/// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
-/// (the account that holds the neuron's staked tokens).
+/// The id of a specific neuron, which equals the neuron's subaccount on
+/// the ledger canister (the account that holds the neuron's staked tokens).
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -1584,16 +1689,17 @@ pub struct GetDerivedStateRequest {}
 pub struct GetDerivedStateResponse {
     #[prost(uint64, optional, tag = "1")]
     pub buyer_total_icp_e8s: ::core::option::Option<u64>,
-    /// Current number of non-community-fund swap participants
+    /// Current number of non-Neurons' Fund swap participants
     #[prost(uint64, optional, tag = "3")]
     pub direct_participant_count: ::core::option::Option<u64>,
-    /// Current number of community-fund swap participants. In particular, it's the
-    /// number of unique controllers of the neurons participating in the CF.
+    /// Current number of Neurons' Fund swap participants. In particular, it's the
+    /// number of unique controllers of the neurons participating
+    /// in the Neurons' Fund.
     #[prost(uint64, optional, tag = "4")]
     pub cf_participant_count: ::core::option::Option<u64>,
-    /// Current number of community-fund neurons participating in the swap
-    /// May be greater than cf_participant_count if multiple neurons in the CF have
-    /// the same controller.
+    /// Current number of Neurons' Fund neurons participating in the swap
+    /// May be greater than cf_participant_count if multiple neurons in
+    /// the Neurons' Fund have the same controller.
     #[prost(uint64, optional, tag = "5")]
     pub cf_neuron_count: ::core::option::Option<u64>,
     #[prost(double, optional, tag = "2")]
@@ -1621,12 +1727,13 @@ pub struct Icrc1Account {
 ///
 /// How this is used: before any money is sent, a user's agent must first look
 /// for an existing ticket. If one does not exist, then, a new one is created
-/// for the current participation that is now being attempted (for the first time).
+/// for the current participation that is now being attempted (for
+/// the first time).
 ///
 /// If there is already a ticket, then the new participation must be aborted.
-/// The surprise existence of the ticket indicates that there is a pending participation.
-/// In this case the user's agent must attempt to perform the same participation as
-/// stated in the ticket before doing anything else.
+/// The surprise existence of the ticket indicates that there is a pending
+/// participation. In this case the user's agent must attempt to perform the same
+/// participation as stated in the ticket before doing anything else.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -1690,7 +1797,8 @@ pub mod get_open_ticket_response {
         ::prost::Message,
     )]
     pub struct Ok {
-        /// If there is an open swap ticket for the caller then this field contains it
+        /// If there is an open swap ticket for the caller then this field
+        /// contains it.
         #[prost(message, optional, tag = "1")]
         pub ticket: ::core::option::Option<super::Ticket>,
     }
@@ -1879,7 +1987,8 @@ pub mod new_sale_ticket_response {
             /// When this is the `error_type`, then the field invalid_user_amount
             /// is set and describes minimum and maximum amounts.
             InvalidUserAmount = 4,
-            /// The specified subaccount is not a valid subaccount (length != 32 bytes).
+            /// The specified subaccount is not a valid subaccount
+            /// (length != 32 bytes).
             InvalidSubaccount = 5,
             /// The specified principal is forbidden from creating tickets.
             InvalidPrincipal = 6,
@@ -1921,7 +2030,7 @@ pub mod new_sale_ticket_response {
 /// Request struct for the method `list_direct_participants`. This method
 /// paginates over all direct participants in the decentralization swap.
 /// Direct participants are participants who did not participate via the
-/// CommunityFund.
+/// Neurons' Fund.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -1932,8 +2041,10 @@ pub mod new_sale_ticket_response {
     ::prost::Message,
 )]
 pub struct ListDirectParticipantsRequest {
-    /// The limit of the number of Participants returned in each page, in range [0, 30,000].
-    /// If no value, or a value outside of this range is requested, 30,000 will be used.
+    /// The limit of the number of Participants returned in each page, in range
+    /// [0, 30,000].
+    /// If no value, or a value outside of this range is requested, 30,000 will be
+    /// used.
     #[prost(uint32, optional, tag = "1")]
     pub limit: ::core::option::Option<u32>,
     /// Skip the first `offset` elements when constructing the response.
@@ -1951,12 +2062,14 @@ pub struct ListDirectParticipantsRequest {
     ::prost::Message,
 )]
 pub struct ListDirectParticipantsResponse {
-    /// The list of Participants returned from the invocation of `list_direct_participants`.
-    /// The list is a page of all the buyers in the Swap canister at the time of the
-    /// method call. The size of the page is equal to either
+    /// The list of Participants returned from the invocation of
+    /// `list_direct_participants`.
+    /// The list is a page of all the buyers in the Swap canister at the time of
+    /// the method call. The size of the page is equal to either:
     /// - the max page size (30,000),
     /// - the corresponding `ListDirectParticipantsRequest.limit`,
-    /// - the remaining Participants, if there are fewer than `limit` participants left
+    /// - the remaining Participants, if there are fewer than `limit` participants
+    ///    left.
     ///
     /// Pagination through the entire list of participants is complete if
     /// len(participants) < `ListDirectParticipantsRequest.limit`.
@@ -2041,7 +2154,7 @@ pub struct ListCommunityFundParticipantsResponse {
     #[prost(message, repeated, tag = "1")]
     pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
 }
-/// Request for the method 'list_sns_neuron_recipes'
+/// Request for the method `list_sns_neuron_recipes`
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2060,7 +2173,7 @@ pub struct ListSnsNeuronRecipesRequest {
     #[prost(uint64, optional, tag = "2")]
     pub offset: ::core::option::Option<u64>,
 }
-/// Response for the method 'list_sns_neuron_recipes'
+/// Response for the method `list_sns_neuron_recipes`
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -2085,7 +2198,7 @@ pub struct ListSnsNeuronRecipesResponse {
     ::prost::Message,
 )]
 pub struct NotifyPaymentFailureRequest {}
-/// Response for the method 'notfiy_payment_failure'
+/// Response for the method `notfiy_payment_failure`
 /// Returns the ticket if a ticket was found for the caller and the ticket
 /// was removed successfully. Returns None if no ticket was found for the caller.
 #[derive(

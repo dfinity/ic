@@ -29,7 +29,7 @@ use ic_nns_governance::pb::v1::{
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
-use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Params};
+use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_types::crypto::{AlgorithmId, UserPublicKey};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_universal_canister::{

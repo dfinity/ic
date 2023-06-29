@@ -107,7 +107,7 @@ use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
-use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
+use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
     SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,

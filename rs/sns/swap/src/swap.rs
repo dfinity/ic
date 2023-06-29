@@ -4,9 +4,8 @@ use crate::{
     logs::{ERROR, INFO},
     memory,
     pb::v1::{
-        get_open_ticket_response, new_sale_ticket_response,
-        params::NeuronBasketConstructionParameters,
-        restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
+        get_open_ticket_response, new_sale_ticket_response, restore_dapp_controllers_response,
+        set_dapp_controllers_call_result, set_mode_call_result,
         set_mode_call_result::SetModeResult,
         settle_community_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
@@ -17,11 +16,11 @@ use crate::{
         GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
         ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
         ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
-        ListSnsNeuronRecipesResponse, NeuronId as SaleNeuronId, NewSaleTicketRequest,
-        NewSaleTicketResponse, OpenRequest, OpenResponse, Participant, RefreshBuyerTokensResponse,
-        RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
-        SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
-        TransferableAmount,
+        ListSnsNeuronRecipesResponse, NeuronBasketConstructionParameters, NeuronId as SaleNeuronId,
+        NewSaleTicketRequest, NewSaleTicketResponse, OpenRequest, OpenResponse, Participant,
+        RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
+        SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap,
+        SweepResult, Ticket, TransferableAmount,
     },
     types::{ScheduledVestingEvent, TransferResult},
 };
@@ -2854,8 +2853,8 @@ mod tests {
 
     use super::*;
     use crate::pb::v1::{
-        new_sale_ticket_response::Ok, params::NeuronBasketConstructionParameters, CfNeuron,
-        CfParticipant, Params,
+        new_sale_ticket_response::Ok, CfNeuron, CfParticipant, NeuronBasketConstructionParameters,
+        Params,
     };
     use candid::Principal;
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS};
@@ -2881,6 +2880,18 @@ mod tests {
             neuron_minimum_stake_e8s: Some(0),
             confirmation_text: None,
             restricted_countries: None,
+            min_participants: None,                      // TODO[NNS1-2339]
+            min_icp_e8s: None,                           // TODO[NNS1-2339]
+            max_icp_e8s: None,                           // TODO[NNS1-2339]
+            min_participant_icp_e8s: None,               // TODO[NNS1-2339]
+            max_participant_icp_e8s: None,               // TODO[NNS1-2339]
+            swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
+            swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
+            sns_token_e8s: None,                         // TODO[NNS1-2339]
+            neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
+            nns_proposal_id: None,                       // TODO[NNS1-2339]
+            neurons_fund_participants: None,             // TODO[NNS1-2339]
+            should_auto_finalize: None,                  // TODO[NNS1-2339]
         });
     }
 
@@ -3467,6 +3478,18 @@ mod tests {
                     neuron_minimum_stake_e8s: Some(10_010_000),
                     confirmation_text: None,
                     restricted_countries: None,
+                    min_participants: None, // TODO[NNS1-2339]
+                    min_icp_e8s: None, // TODO[NNS1-2339]
+                    max_icp_e8s: None, // TODO[NNS1-2339]
+                    min_participant_icp_e8s: None, // TODO[NNS1-2339]
+                    max_participant_icp_e8s: None, // TODO[NNS1-2339]
+                    swap_start_timestamp_seconds: None, // TODO[NNS1-2339]
+                    swap_due_timestamp_seconds: None, // TODO[NNS1-2339]
+                    sns_token_e8s: None, // TODO[NNS1-2339]
+                    neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
+                    nns_proposal_id: None, // TODO[NNS1-2339]
+                    neurons_fund_participants: None, // TODO[NNS1-2339]
+                    should_auto_finalize: None, // TODO[NNS1-2339]
                 }),
                 params: Some(Params {
                     min_participants: 1,
@@ -3706,6 +3729,18 @@ mod tests {
                 neuron_minimum_stake_e8s: Some(0),
                 confirmation_text: None,
                 restricted_countries: None,
+                min_participants: None,
+                min_icp_e8s: None,                           // TODO[NNS1-2339]
+                max_icp_e8s: None,                           // TODO[NNS1-2339]
+                min_participant_icp_e8s: None,               // TODO[NNS1-2339]
+                max_participant_icp_e8s: None,               // TODO[NNS1-2339]
+                swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
+                swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
+                sns_token_e8s: None,                         // TODO[NNS1-2339]
+                neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
+                nns_proposal_id: None,                       // TODO[NNS1-2339]
+                neurons_fund_participants: None,             // TODO[NNS1-2339]
+                should_auto_finalize: None,                  // TODO[NNS1-2339]
             }),
             params: Some(Params {
                 min_participants: 0,

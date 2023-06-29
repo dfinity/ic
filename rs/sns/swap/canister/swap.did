@@ -73,16 +73,28 @@ type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type GovernanceError = record { error_message : text; error_type : int32 };
 type Icrc1Account = record { owner : opt principal; subaccount : opt vec nat8 };
 type Init = record {
+  nns_proposal_id : opt nat64;
   sns_root_canister_id : text;
+  min_participant_icp_e8s : opt nat64;
+  neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   fallback_controller_principal_ids : vec text;
+  max_icp_e8s : opt nat64;
   neuron_minimum_stake_e8s : opt nat64;
   confirmation_text : opt text;
+  swap_start_timestamp_seconds : opt nat64;
+  swap_due_timestamp_seconds : opt nat64;
+  min_participants : opt nat32;
+  sns_token_e8s : opt nat64;
   nns_governance_canister_id : text;
   transaction_fee_e8s : opt nat64;
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
+  neurons_fund_participants : opt NeuronsFundParticipants;
+  should_auto_finalize : opt bool;
+  max_participant_icp_e8s : opt nat64;
   sns_governance_canister_id : text;
   restricted_countries : opt Countries;
+  min_icp_e8s : opt nat64;
 };
 type InvalidUserAmount = record {
   min_amount_icp_e8s_included : nat64;
@@ -95,9 +107,6 @@ type Investor = variant {
 type ListCommunityFundParticipantsRequest = record {
   offset : opt nat64;
   limit : opt nat32;
-};
-type ListCommunityFundParticipantsResponse = record {
-  cf_participants : vec CfParticipant;
 };
 type ListDirectParticipantsRequest = record {
   offset : opt nat32;
@@ -121,6 +130,7 @@ type NeuronBasketConstructionParameters = record {
   count : nat64;
 };
 type NeuronId = record { id : vec nat8 };
+type NeuronsFundParticipants = record { cf_participants : vec CfParticipant };
 type NewSaleTicketRequest = record {
   subaccount : opt vec nat8;
   amount_icp_e8s : nat64;
@@ -225,7 +235,7 @@ service : (Init) -> {
   get_sale_parameters : (record {}) -> (GetSaleParametersResponse) query;
   get_state : (record {}) -> (GetStateResponse) query;
   list_community_fund_participants : (ListCommunityFundParticipantsRequest) -> (
-      ListCommunityFundParticipantsResponse,
+      NeuronsFundParticipants,
     ) query;
   list_direct_participants : (ListDirectParticipantsRequest) -> (
       ListDirectParticipantsResponse,

@@ -44,10 +44,10 @@ use ic_sns_swap::{
     environment::CanisterClients,
     memory,
     pb::v1::{
-        params::NeuronBasketConstructionParameters,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
         Lifecycle::{Aborted, Adopted, Committed, Open, Pending, Unspecified},
-        SetDappControllersRequest, SetDappControllersResponse, *,
+        NeuronBasketConstructionParameters, SetDappControllersRequest, SetDappControllersResponse,
+        *,
     },
     swap::{
         apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
@@ -101,6 +101,18 @@ fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
         restricted_countries: Some(Countries {
             iso_codes: vec!["CH".to_string()],
         }),
+        min_participants: None,                      // TODO[NNS1-2339]
+        min_icp_e8s: None,                           // TODO[NNS1-2339]
+        max_icp_e8s: None,                           // TODO[NNS1-2339]
+        min_participant_icp_e8s: None,               // TODO[NNS1-2339]
+        max_participant_icp_e8s: None,               // TODO[NNS1-2339]
+        swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
+        swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
+        sns_token_e8s: None,                         // TODO[NNS1-2339]
+        neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
+        nns_proposal_id: None,                       // TODO[NNS1-2339]
+        neurons_fund_participants: None,             // TODO[NNS1-2339]
+        should_auto_finalize: None,                  // TODO[NNS1-2339]
     };
     assert_is_ok!(result.validate());
     result

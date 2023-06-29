@@ -854,8 +854,8 @@ impl TryInto<NeuronId> for SaleNeuronId {
 mod tests {
     use crate::{
         pb::v1::{
-            params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Init,
-            ListDirectParticipantsResponse, OpenRequest, Params, Participant,
+            CfNeuron, CfParticipant, Init, ListDirectParticipantsResponse,
+            NeuronBasketConstructionParameters, OpenRequest, Params, Participant,
         },
         swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
