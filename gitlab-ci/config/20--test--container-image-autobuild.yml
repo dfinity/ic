@@ -31,6 +31,9 @@ container-autobuild-protected:
         docker push docker.io/dfinity/ic-build-legacy:latest
         docker push docker.io/dfinity/ic-build:"$TAG"
         docker push docker.io/dfinity/ic-build:latest
+        # clean-up
+        docker image prune -f
+        docker container prune -f
       fi
 
 container-autobuild:
@@ -84,6 +87,9 @@ container-autobuild:
       docker login -u gitlab-ci-token -p "$GITLAB_API_TOKEN" registry.gitlab.com
       docker push "$IMG_NAME_FULL"
       docker push "$IMG_BAZEL_NAME_FULL"
+      # clean-up
+      docker image prune -f
+      docker container prune -f
 
       # update gitlab's docker image tags
       pushd gitlab-ci/config
@@ -108,12 +114,3 @@ container-autobuild:
           "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" \
           || true
       git push --set-upstream origin HEAD:"$CI_COMMIT_REF_NAME"
-
-      # try to free some space if above 80%
-      DISK_UTIL=$(df / | tail -1 | awk '{print 0+$5}')
-      if [ "$DISK_UTIL" -gt 80 ]; then
-          df -h /
-          docker container prune -f
-          docker image prune -f
-      fi
-      df -h /
