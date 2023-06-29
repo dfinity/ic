@@ -349,6 +349,7 @@ class DfinityGitLabConfig:
         """Dump the script generated for the provided job_name."""
         job = self.ci_cfg_expanded[job_name]
         before_script = job.get("before_script", [])
+        job_stage = job.get("stage", "test")
         if isinstance(before_script, list):
             before_script = "\n".join(before_script)
         script = job.get("script", [])
@@ -406,7 +407,7 @@ function shell_wrapper_simulated() {{
 exit 0
 """.format(
             vars=vars,
-            job_stage=job["stage"],
+            job_stage=job_stage,
             job_name=job_name,
             before_script=before_script,
             script=script,
