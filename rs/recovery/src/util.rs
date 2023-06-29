@@ -1,7 +1,11 @@
-use crate::error::{RecoveryError, RecoveryResult};
+use crate::{
+    error::{RecoveryError, RecoveryResult},
+    file_sync_helper::write_bytes,
+};
+
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use slog::{o, Drain, Logger};
-use std::{future::Future, str::FromStr};
+use std::{future::Future, path::Path, str::FromStr};
 use tokio::runtime::Runtime;
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
@@ -35,4 +39,16 @@ pub fn make_logger() -> Logger {
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
     slog::Logger::root(drain, o!())
+}
+
+pub fn write_public_key_to_file(der_bytes: &[u8], path: &Path) -> RecoveryResult<()> {
+    let mut bytes = vec![];
+    bytes.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\n");
+    for chunk in base64::encode(der_bytes).as_bytes().chunks(64) {
+        bytes.extend_from_slice(chunk);
+        bytes.extend_from_slice(b"\n");
+    }
+    bytes.extend_from_slice(b"-----END PUBLIC KEY-----\n");
+
+    write_bytes(path, bytes)
 }

@@ -25,6 +25,7 @@ pub enum RecoveryError {
     CheckpointError(String, CheckpointError),
     RegistryError(String),
     ValidationFailed(String),
+    AgentError(String),
     StepSkipped,
 }
 
@@ -58,6 +59,10 @@ impl RecoveryError {
             format!("Failed to download from {} to {:?}", url, target),
             e,
         )
+    }
+
+    pub fn validation_failed(message: impl Display, error: impl Display) -> Self {
+        RecoveryError::ValidationFailed(format!("{}: {}", message, error))
     }
 }
 
@@ -96,6 +101,7 @@ impl fmt::Display for RecoveryError {
             RecoveryError::ValidationFailed(msg) => {
                 write!(f, "Validation failed, message: {}", msg)
             }
+            RecoveryError::AgentError(msg) => write!(f, "ic-agent error, message: {}", msg),
         }
     }
 }
