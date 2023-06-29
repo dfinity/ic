@@ -548,7 +548,7 @@ for sns_init_pb::NeuronDistribution
 }
 
 impl TryFrom<NeuronBasketConstructionParameters>
-    for sns_swap_pb::params::NeuronBasketConstructionParameters
+    for sns_swap_pb::NeuronBasketConstructionParameters
 {
     type Error = String;
 
@@ -560,7 +560,7 @@ impl TryFrom<NeuronBasketConstructionParameters>
             dissolve_delay_interval,
         } = neuron_basket_construction_parameters;
 
-        let params = sns_swap_pb::params::NeuronBasketConstructionParameters {
+        let params = sns_swap_pb::NeuronBasketConstructionParameters {
             count: count.ok_or("`count` should not be None")?,
             dissolve_delay_interval_seconds: dissolve_delay_interval
                 .ok_or("`dissolve_delay_interval` should not be None")?

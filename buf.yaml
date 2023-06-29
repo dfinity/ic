@@ -21,3 +21,5 @@ lint:
 breaking:
   use:
     - WIRE
+  except:
+    - FIELD_SAME_TYPE # TODO[NNS1-2353]

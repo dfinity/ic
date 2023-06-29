@@ -11,9 +11,9 @@ use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
 use ic_sns_swap::{
     pb::v1::{
-        get_open_ticket_response, new_sale_ticket_response,
-        params::NeuronBasketConstructionParameters, BuyerState, GetLifecycleResponse, Init,
-        Lifecycle, NewSaleTicketResponse, OpenResponse, Params, RefreshBuyerTokensResponse, Ticket,
+        get_open_ticket_response, new_sale_ticket_response, BuyerState, GetLifecycleResponse, Init,
+        Lifecycle, NeuronBasketConstructionParameters, NewSaleTicketResponse, OpenResponse, Params,
+        RefreshBuyerTokensResponse, Ticket,
     },
     swap::principal_to_subaccount,
 };
@@ -190,6 +190,18 @@ impl PaymentProtocolTestSetup {
             neuron_minimum_stake_e8s: Some(*DEFAULT_NEURON_MINIMUM_STAKE),
             confirmation_text: None,
             restricted_countries: None,
+            min_participants: None,                      // TODO[NNS1-2339]
+            min_icp_e8s: None,                           // TODO[NNS1-2339]
+            max_icp_e8s: None,                           // TODO[NNS1-2339]
+            min_participant_icp_e8s: None,               // TODO[NNS1-2339]
+            max_participant_icp_e8s: None,               // TODO[NNS1-2339]
+            swap_start_timestamp_seconds: None,          // TODO[NNS1-2339]
+            swap_due_timestamp_seconds: None,            // TODO[NNS1-2339]
+            sns_token_e8s: None,                         // TODO[NNS1-2339]
+            neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
+            nns_proposal_id: None,                       // TODO[NNS1-2339]
+            neurons_fund_participants: None,             // TODO[NNS1-2339]
+            should_auto_finalize: None,                  // TODO[NNS1-2339]
         }
     }
 
