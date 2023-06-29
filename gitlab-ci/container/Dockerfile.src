@@ -5,8 +5,8 @@
 # If you need to build something from source, this is the place to do it (but you probably don't)
 
 # https://hub.docker.com/_/ubuntu
-# focal-20220922
-FROM ubuntu@sha256:e722c7335fdd0ce77044ab5942cb1fbd2b5f60d1f5416acfcdb0814b2baf7898
+# focal-20230605
+FROM ubuntu@sha256:554e40b15453c788ec799badf0f1ad05c3e5c735b53f940feb8f27cf2ec570c5
 
 RUN apt -y update && \
     DEBIAN_FRONTEND=noninteractive apt -y install curl unzip gpg build-essential cmake git libjemalloc-dev libsnappy-dev zlib1g-dev libbz2-dev liblz4-dev libzstd-dev

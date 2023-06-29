@@ -1,7 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# focal-20230301
-FROM ubuntu@sha256:3626dff0d616e8ee7065a9ac8c7117e904a4178725385910eeecd7f1872fc12d
-
+# focal-20230605
+FROM ubuntu@sha256:554e40b15453c788ec799badf0f1ad05c3e5c735b53f940feb8f27cf2ec570c5
 ENV TZ=UTC
 
 COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
