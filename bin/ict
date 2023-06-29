@@ -11,7 +11,7 @@ ICT_DIR="${CURRENT_SCRIPT_DIR}/../rs/tests/ict"
 CHECKSUM_FILE="${CURRENT_SCRIPT_DIR}/checksum.txt" # holds the resulting hash of all files in the ict directory
 BAZEL_ICT_TARGET="//rs/tests/ict:ict"
 # Path to this binary is hard coded, as getting it from Bazel is a bit slow (~0.5 sec) for a good interactivity.
-ICT_BIN="bazel-out/k8-opt/bin/rs/tests/ict/ict_/ict"
+ICT_BIN="$CURRENT_SCRIPT_DIR/../bazel-out/k8-opt/bin/rs/tests/ict/ict_/ict"
 
 if [ "$(hostname)" != "devenv-container" ]; then
     echo -e "${BOLD}${RED}This script can only be executed within a devenv-container. Make sure you first executed:\n/ic$ ./gitlab-ci/container/container-run.sh${NC}"
