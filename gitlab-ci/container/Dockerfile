@@ -77,8 +77,8 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 
 # Install all python requirements
 COPY ./requirements.txt /tmp/requirements.txt
-RUN pip3 install --ignore-installed -r /tmp/requirements.txt
-RUN pip3 install pre-commit
+RUN sudo pip3 install --ignore-installed -r /tmp/requirements.txt
+RUN sudo pip3 install pre-commit
 
 # Add buf
 ARG BUF_BIN="/usr/local/bin"
