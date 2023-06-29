@@ -27,6 +27,14 @@ criterion_group!(benches, crypto_tecdsa_benchmarks);
 fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
     let test_cases = vec![
         TestCase {
+            num_of_nodes: 1,
+            ..TestCase::default()
+        },
+        TestCase {
+            num_of_nodes: 4,
+            ..TestCase::default()
+        },
+        TestCase {
             num_of_nodes: 13,
             ..TestCase::default()
         },

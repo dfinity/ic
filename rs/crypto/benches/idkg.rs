@@ -12,12 +12,14 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::IDkgProtocol;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealings, IDkgComplaint, IDkgTranscript, IDkgTranscriptOperation,
+    BatchSignedIDkgDealings, IDkgComplaint, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation,
     IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
 use ic_types::crypto::AlgorithmId;
 use rand::prelude::IteratorRandom;
+use rand::RngCore;
+use rsa::rand_core::CryptoRng;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Formatter};
 use strum::IntoEnumIterator;
@@ -28,6 +30,14 @@ criterion_group!(benches, crypto_idkg_benchmarks);
 
 fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
     let test_cases = vec![
+        TestCase {
+            num_of_nodes: 1,
+            ..TestCase::default()
+        },
+        TestCase {
+            num_of_nodes: 4,
+            ..TestCase::default()
+        },
         TestCase {
             num_of_nodes: 13,
             ..TestCase::default()
@@ -243,13 +253,11 @@ fn bench_verify_transcript<M: Measurement>(
                 );
                 let transcript =
                     create_transcript(receiver, &params, &dealings_with_receivers_support);
-                let other_receiver = crypto_for(
-                    random_receiver_id_excluding(
-                        params.receivers(),
-                        receiver.get_node_id(),
-                        &mut ReproducibleRng::silent_new(),
-                    ),
+                let other_receiver = other_receiver_or_same_if_only_one(
+                    params.receivers(),
+                    receiver.get_node_id(),
                     &env.crypto_components,
+                    &mut ReproducibleRng::silent_new(),
                 );
                 (other_receiver, transcript)
             },
@@ -279,13 +287,11 @@ fn bench_load_transcript<M: Measurement>(
                 );
                 let transcript =
                     create_transcript(receiver, &params, &dealings_with_receivers_support);
-                let other_receiver = crypto_for(
-                    random_receiver_id_excluding(
-                        params.receivers(),
-                        receiver.get_node_id(),
-                        &mut ReproducibleRng::silent_new(),
-                    ),
+                let other_receiver = other_receiver_or_same_if_only_one(
+                    params.receivers(),
+                    receiver.get_node_id(),
                     &env.crypto_components,
+                    &mut ReproducibleRng::silent_new(),
                 );
                 (other_receiver, transcript)
             },
@@ -620,6 +626,25 @@ fn generate_pre_sig_quadruple(
         key_times_lambda_transcript,
     )
     .unwrap_or_else(|error| panic!("failed to create pre-signature quadruple: {:?}", error))
+}
+
+fn other_receiver_or_same_if_only_one<'a, R: RngCore + CryptoRng, T>(
+    receivers: &IDkgReceivers,
+    exclusion: NodeId,
+    crypto_components: &'a BTreeMap<NodeId, T>,
+    rng: &mut R,
+) -> &'a T {
+    match receivers.get().len() {
+        0 => panic!("IDkgReceivers is guaranteed to be non-empty"),
+        1 => crypto_for(
+            *receivers.get().first().expect("one node"),
+            crypto_components,
+        ),
+        _ => crypto_for(
+            random_receiver_id_excluding(receivers, exclusion, rng),
+            crypto_components,
+        ),
+    }
 }
 
 fn setup_reshare_of_masked_params(
