@@ -12,6 +12,10 @@ build:lint --config=clippy
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
 build --java_runtime_version=remotejdk_17
 
+# Build Buddy wrapper has issues merging stdout and stderr when bazel uses curses.
+# See VER-2371
+build --curses=no --progress_report_interval=30
+
 common --experimental_allow_tags_propagation
 build --nosandbox_default_allow_network
 build --incompatible_strict_action_env # use an environment with a static value for PATH and do not inherit LD_LIBRARY_PATH
