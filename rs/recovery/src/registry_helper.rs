@@ -1,7 +1,7 @@
 use crate::{
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{read_file, write_bytes},
-    util::block_on,
+    file_sync_helper::read_file,
+    util::{block_on, write_public_key_to_file},
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
@@ -256,15 +256,7 @@ fn download_nns_pem(nns_url: &Url, nns_pem_path: &Path, logger: &Logger) -> Reco
         ))
     })?;
 
-    let mut bytes = vec![];
-    bytes.extend_from_slice(b"-----BEGIN PUBLIC KEY-----\n");
-    for chunk in base64::encode(&der_bytes[..]).as_bytes().chunks(64) {
-        bytes.extend_from_slice(chunk);
-        bytes.extend_from_slice(b"\n");
-    }
-    bytes.extend_from_slice(b"-----END PUBLIC KEY-----\n");
-
-    write_bytes(nns_pem_path, bytes)
+    write_public_key_to_file(&der_bytes, nns_pem_path)
 }
 
 fn get_value_from_registry_canister(

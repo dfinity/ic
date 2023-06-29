@@ -1,4 +1,5 @@
 use crate::{
+    agent_helper::AgentHelper,
     layout::Layout,
     state_tool_helper::StateToolHelper,
     target_subnet::TargetSubnet,
@@ -10,12 +11,15 @@ use ic_metrics::MetricsRegistry;
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::rsync,
+    replay_helper,
     steps::Step,
+    util::block_on,
     Recovery, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::split::resolve_ranges_and_split;
 use slog::{info, Logger};
+use url::Url;
 
 pub(crate) struct CopyWorkDirStep {
     pub(crate) layout: Layout,
@@ -127,9 +131,7 @@ impl Step for SplitStateStep {
         info!(self.logger, "Validating the manifest");
         self.state_tool_helper
             .verify_manifest(&manifest_path)
-            .map_err(|err| {
-                RecoveryError::ValidationFailed(format!("Manifest verification failed: {}", err))
-            })?;
+            .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
 
         let expected_state_hash = find_expected_state_hash_for_subnet_id(
             self.layout.expected_manifests_file(),
@@ -189,5 +191,62 @@ impl Step for ComputeExpectedManifestsStep {
             &self.canister_id_ranges_to_move,
             self.layout.expected_manifests_file(),
         )
+    }
+}
+
+pub(crate) struct ValidateCUPStep {
+    pub(crate) subnet_id: SubnetId,
+    pub(crate) nns_url: Url,
+    pub(crate) layout: Layout,
+    pub(crate) logger: Logger,
+}
+
+impl Step for ValidateCUPStep {
+    fn descr(&self) -> String {
+        format!(
+            "Validate the CUP downloaded from the source subnet {} and preserve the subnet's \
+            public key and the state tree (with only relevant paths) so it can be verified \
+            independently.",
+            self.subnet_id
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let work_dir = self.layout.work_dir(TargetSubnet::Source);
+
+        // 1. Get the subnet's public key using `ic-agent` and persist it at the disk
+        let agent_helper = AgentHelper::new(
+            &self.nns_url,
+            self.layout.nns_public_key_file(),
+            self.logger.clone(),
+        )?;
+
+        let pruned_state_tree = agent_helper.read_subnet_data(self.subnet_id)?;
+        agent_helper
+            .validate_state_tree(&pruned_state_tree)
+            .map_err(|err| {
+                RecoveryError::validation_failed("Failed to validate the state tree", err)
+            })?;
+
+        pruned_state_tree.save_to_file(self.layout.pruned_state_tree_file())?;
+        pruned_state_tree
+            .save_public_key_to_file(&self.layout.subnet_public_key_file(self.subnet_id))?;
+
+        // 2. Run ic-replay to verify the CUP
+        block_on(replay_helper::replay(
+            self.subnet_id,
+            work_dir.join("ic.json5"),
+            /*canister_caller_id=*/ None,
+            self.layout.data_dir(TargetSubnet::Source),
+            Some(ic_replay::cmd::SubCommand::VerifySubnetCUP(
+                ic_replay::cmd::VerifySubnetCUPCmd {
+                    cup_file: self.layout.cup_file(TargetSubnet::Source),
+                    public_key_file: self.layout.subnet_public_key_file(self.subnet_id),
+                },
+            )),
+            work_dir.join("cup_validation_result.txt"),
+        ))
+        .map(|_| ())
+        .map_err(|err| RecoveryError::validation_failed("Failed to validate CUP", err))
     }
 }

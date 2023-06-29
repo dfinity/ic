@@ -16330,7 +16330,9 @@ version = "0.1.0"
 dependencies = [
  "clap 3.2.23",
  "hex",
+ "ic-agent",
  "ic-base-types",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-metrics",
  "ic-protobuf",
  "ic-recovery",
@@ -16340,6 +16342,7 @@ dependencies = [
  "ic-test-utilities-tmpdir",
  "ic-types",
  "serde",
+ "serde_cbor",
  "slog",
  "strum 0.24.1",
  "strum_macros 0.24.3",

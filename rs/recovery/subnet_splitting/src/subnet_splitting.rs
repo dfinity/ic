@@ -6,7 +6,10 @@ use crate::{
     },
     layout::Layout,
     state_tool_helper::StateToolHelper,
-    steps::{ComputeExpectedManifestsStep, CopyWorkDirStep, SplitStateStep, StateSplitStrategy},
+    steps::{
+        ComputeExpectedManifestsStep, CopyWorkDirStep, SplitStateStep, StateSplitStrategy,
+        ValidateCUPStep,
+    },
     target_subnet::TargetSubnet,
     utils::get_state_hash,
 };
@@ -48,6 +51,7 @@ pub(crate) enum StepType {
     HaltSourceSubnetAtCupHeight,
     RerouteCanisterRanges,
     DownloadStateFromSourceSubnet,
+    ValidateSourceSubnetCup,
     ComputeExpectedManifestsStep,
     CopyDir,
     SplitOutSourceState,
@@ -488,6 +492,13 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 source_subnet_id: self.params.source_subnet_id,
                 destination_subnet_id: self.params.destination_subnet_id,
                 canister_id_ranges_to_move: self.params.canister_id_ranges_to_move.clone(),
+            }
+            .into(),
+            StepType::ValidateSourceSubnetCup => ValidateCUPStep {
+                subnet_id: self.params.source_subnet_id,
+                nns_url: self.recovery_args.nns_url.clone(),
+                layout: self.layout.clone(),
+                logger: self.logger.clone(),
             }
             .into(),
         };
