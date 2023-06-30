@@ -12,5 +12,5 @@ pub struct AllowanceArgs {
 pub struct Allowance {
     pub allowance: Nat,
     #[serde(default)]
-    pub expired_at: Option<u64>,
+    pub expires_at: Option<u64>,
 }

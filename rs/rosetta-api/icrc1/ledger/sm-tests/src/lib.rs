@@ -9,6 +9,8 @@ use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::BlockRange;
 use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
@@ -48,6 +50,8 @@ pub const NAT_META_KEY: &str = "test:nat";
 pub const NAT_META_VALUE: u128 = u128::MAX;
 pub const INT_META_KEY: &str = "test:int";
 pub const INT_META_VALUE: i128 = i128::MIN;
+
+const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_nanos() as u64;
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct InitArgs {
@@ -368,6 +372,53 @@ pub fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Valu
     .expect("failed to decode metadata response")
     .into_iter()
     .collect()
+}
+
+fn send_approval(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: Principal,
+    arg: &ApproveArgs,
+) -> Result<BlockIndex, ApproveError> {
+    Decode!(
+        &env.execute_ingress_as(
+            PrincipalId(from),
+            ledger,
+            "icrc2_approve",
+            Encode!(arg)
+            .unwrap()
+        )
+        .expect("failed to apply approval")
+        .bytes(),
+        Result<Nat, ApproveError>
+    )
+    .expect("failed to decode approve response")
+    .map(|n| n.0.to_u64().unwrap())
+}
+
+fn get_allowance(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: Principal,
+    account: impl Into<Account>,
+    spender: impl Into<Account>,
+) -> Allowance {
+    let arg = AllowanceArgs {
+        account: account.into(),
+        spender: spender.into(),
+    };
+    Decode!(
+        &env.execute_ingress_as(
+            PrincipalId(from),
+            ledger,
+            "icrc2_allowance",
+            Encode!(&arg).unwrap()
+        )
+        .expect("failed to transfer funds")
+        .bytes(),
+        Allowance
+    )
+    .expect("failed to decode allowance response")
 }
 
 fn arb_amount() -> impl Strategy<Value = u64> {
@@ -1796,4 +1847,380 @@ pub fn icrc1_test_block_transformation<T>(
             Transaction::try_from(block_post_upgrade.clone()).unwrap()
         );
     }
+}
+
+fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
+    ApproveArgs {
+        from_subaccount: None,
+        spender: spender.into(),
+        amount: Nat::from(amount),
+        expected_allowance: None,
+        expires_at: None,
+        fee: Some(Nat::from(FEE)),
+        memo: None,
+        created_at_time: None,
+    }
+}
+
+pub fn test_approve_smoke<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let from_sub_1 = Account {
+        owner: from.0,
+        subaccount: Some([1; 32]),
+    };
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000), (from_sub_1, 100_000)],
+    );
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+
+    let default_expiration = Some(system_time_to_nanos(env.time()) + DEFAULT_APPROVAL_EXPIRATION);
+
+    // Standard approval.
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 2);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    assert_eq!(allowance.expires_at, default_expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+
+    // Approval for a subaccount.
+    approve_args.from_subaccount = Some([1; 32]);
+    approve_args.amount = Nat::from(1_000_000);
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 3);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance_sub_1 = get_allowance(&env, canister_id, from.0, from_sub_1, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    assert_eq!(allowance.expires_at, default_expiration);
+    assert_eq!(allowance_sub_1.allowance.0.to_u64().unwrap(), 1_000_000);
+    assert_eq!(allowance_sub_1.expires_at, default_expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, from_sub_1), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_approve_expiration<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000)],
+    );
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+
+    // Approval with expiration in the past.
+    approve_args.expires_at =
+        Some(system_time_to_nanos(env.time()) - Duration::from_secs(5 * 3600).as_nanos() as u64);
+    assert_eq!(
+        send_approval(&env, canister_id, from.0, &approve_args),
+        Err(ApproveError::Expired {
+            ledger_time: system_time_to_nanos(env.time())
+        })
+    );
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
+    assert_eq!(allowance.expires_at, None);
+    assert_eq!(balance_of(&env, canister_id, from.0), 100_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+
+    // Correct expiration.
+    let expiration =
+        system_time_to_nanos(env.time()) + Duration::from_secs(5 * 3600).as_nanos() as u64;
+    approve_args.expires_at = Some(expiration);
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 1);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    assert_eq!(allowance.expires_at, Some(expiration));
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+
+    // Decrease expiration.
+    let new_expiration = expiration - Duration::from_secs(3600).as_nanos() as u64;
+    approve_args.expires_at = Some(new_expiration);
+    approve_args.amount = Nat::from(40_000);
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 2);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 40_000);
+    assert_eq!(allowance.expires_at, Some(new_expiration));
+    assert_eq!(balance_of(&env, canister_id, from.0), 80_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+
+    // Increase expiration.
+    let new_expiration = expiration + Duration::from_secs(3600).as_nanos() as u64;
+    approve_args.expires_at = Some(new_expiration);
+    approve_args.amount = Nat::from(300_000);
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 3);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 300_000);
+    assert_eq!(allowance.expires_at, Some(new_expiration));
+    assert_eq!(balance_of(&env, canister_id, from.0), 70_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_approve_self<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000)],
+    );
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+
+    // Self approval not allowed.
+    approve_args.spender = from.0.into();
+    let err = env
+        .execute_ingress_as(
+            from,
+            canister_id,
+            "icrc2_approve",
+            Encode!(&approve_args).unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(err.description().ends_with("self approval is not allowed"));
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
+    assert_eq!(allowance.expires_at, None);
+    assert_eq!(balance_of(&env, canister_id, from.0), 100_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_approve_expected_allowance<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000)],
+    );
+
+    let default_expiration = Some(system_time_to_nanos(env.time()) + DEFAULT_APPROVAL_EXPIRATION);
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+
+    send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+
+    // Wrong expected_allowance.
+    approve_args.expires_at = None;
+    approve_args.amount = Nat::from(400_000);
+    approve_args.expected_allowance = Some(Nat::from(100_000));
+    assert_eq!(
+        send_approval(&env, canister_id, from.0, &approve_args),
+        Err(ApproveError::AllowanceChanged {
+            current_allowance: Nat::from(150_000)
+        })
+    );
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    assert_eq!(allowance.expires_at, default_expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+
+    // Wrong expected_allowance - above u64::MAX
+    approve_args.expires_at = None;
+    approve_args.amount = Nat::from(400_000);
+    approve_args.expected_allowance = Some(Nat::from(u128::MAX));
+    assert_eq!(
+        send_approval(&env, canister_id, from.0, &approve_args),
+        Err(ApproveError::AllowanceChanged {
+            current_allowance: Nat::from(150_000)
+        })
+    );
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    assert_eq!(allowance.expires_at, default_expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+
+    // Correct expected_allowance.
+    approve_args.amount = Nat::from(400_000);
+    approve_args.expected_allowance = Some(Nat::from(150_000));
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 2);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 400_000);
+    assert_eq!(allowance.expires_at, default_expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 80_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_approve_cant_pay_fee<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 5_000)],
+    );
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+
+    // Not enough funds to pay the fee.
+    approve_args.expected_allowance = None;
+    assert_eq!(
+        send_approval(&env, canister_id, from.0, &approve_args),
+        Err(ApproveError::InsufficientFunds {
+            balance: Nat::from(5_000)
+        })
+    );
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
+    assert_eq!(allowance.expires_at, None);
+    assert_eq!(balance_of(&env, canister_id, from.0), 5_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_approve_cap<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000)],
+    );
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+
+    let default_expiration = Some(system_time_to_nanos(env.time()) + DEFAULT_APPROVAL_EXPIRATION);
+
+    // Approve more than u64::MAX tokens - approval capped at u64::MAX.
+    approve_args.amount = Nat::from(u128::MAX);
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 1);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), u64::MAX);
+    assert_eq!(allowance.expires_at, default_expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_approve_pruning<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let from_sub_1 = Account {
+        owner: from.0,
+        subaccount: Some([1; 32]),
+    };
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000), (from_sub_1, 100_000)],
+    );
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+
+    // Approval expiring 1 hour from now.
+    let expiration =
+        Some(system_time_to_nanos(env.time()) + Duration::from_secs(3600).as_nanos() as u64);
+    approve_args.expires_at = expiration;
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 2);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    assert_eq!(allowance.expires_at, expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+
+    // Test expired approval pruning, advance time 2 hours.
+    env.advance_time(Duration::from_secs(2 * 3600));
+    let expiration =
+        Some(system_time_to_nanos(env.time()) + Duration::from_secs(3600).as_nanos() as u64);
+    approve_args.from_subaccount = Some([1; 32]);
+    approve_args.expires_at = expiration;
+    approve_args.amount = Nat::from(100_000);
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 3);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance_sub_1 = get_allowance(&env, canister_id, from.0, from_sub_1, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
+    assert_eq!(allowance.expires_at, None);
+    assert_eq!(allowance_sub_1.allowance.0.to_u64().unwrap(), 100_000);
+    assert_eq!(allowance_sub_1.expires_at, expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, from_sub_1), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_approve_max_expiration<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000)],
+    );
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+
+    let default_expiration = Some(system_time_to_nanos(env.time()) + DEFAULT_APPROVAL_EXPIRATION);
+
+    // Approval expiring 10 days from now, it should be capped at 1 week.
+    let expiration = Some(
+        system_time_to_nanos(env.time()) + Duration::from_secs(3600 * 24 * 10).as_nanos() as u64,
+    );
+    approve_args.expires_at = expiration;
+    approve_args.amount = Nat::from(140_000);
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 1);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 140_000);
+    assert_eq!(allowance.expires_at, default_expiration);
+    assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
 }
