@@ -1,11 +1,20 @@
 use super::{principal_to_u256, Persist, PersistStatus, Persister, RouteSubnet, Routes};
-use crate::snapshot::{CanisterRange, Node, RoutingTable, Subnet};
+
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
+    sync::Arc,
+};
+
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use candid::Principal;
 use ethnum::u256;
+use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
 use ic_protobuf::registry::subnet::v1::SubnetType;
-use std::sync::Arc;
+use ic_test_utilities::types::ids::node_test_id;
+
+use crate::snapshot::{CanisterRange, Node, RoutingTable, Subnet};
 
 #[test]
 fn test_principal_to_u256() -> Result<(), Error> {
@@ -41,16 +50,20 @@ fn test_principal_to_u256() -> Result<(), Error> {
     Ok(())
 }
 
-fn node() -> Node {
+fn node(i: u64) -> Node {
     Node {
-        id: Principal::from_text("y7s52-3xjam-aaaaa-aaaap-2ai").unwrap(),
-        addr: "192.168.0.1".to_string(),
+        id: node_test_id(1001 + i).get().0,
+        addr: IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
         port: 8080,
-        tls_certificate_der: vec![],
+        tls_certificate: valid_tls_certificate().certificate_der,
     }
 }
 
-fn generate_test_routing_table(nodes: usize) -> RoutingTable {
+fn generate_test_routing_table(offset: u64) -> RoutingTable {
+    let node1 = node(1 + offset);
+    let node2 = node(2 + offset);
+    let node3 = node(3 + offset);
+
     let subnet1 = Subnet {
         id: Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
             .unwrap(),
@@ -65,7 +78,7 @@ fn generate_test_routing_table(nodes: usize) -> RoutingTable {
                 end: Principal::from_text("jlzvg-byp77-7qcai").unwrap(),
             },
         ],
-        nodes: vec![node(); nodes],
+        nodes: vec![node1.clone()],
     };
 
     let subnet2 = Subnet {
@@ -82,7 +95,7 @@ fn generate_test_routing_table(nodes: usize) -> RoutingTable {
                 end: Principal::from_text("ca5tg-macd7-776ai-b").unwrap(),
             },
         ],
-        nodes: vec![node(); nodes],
+        nodes: vec![node2.clone()],
     };
 
     let subnet3 = Subnet {
@@ -93,50 +106,55 @@ fn generate_test_routing_table(nodes: usize) -> RoutingTable {
             start: Principal::from_text("zdpgc-saqaa-aacai").unwrap(),
             end: Principal::from_text("fij4j-bi777-7qcai").unwrap(),
         }],
-        nodes: vec![node(); nodes],
+        nodes: vec![node3.clone()],
     };
 
     RoutingTable {
         registry_version: 1,
         nns_subnet_id: Principal::from_text("fscpm-uiaaa-aaaaa-aaaap-yai").unwrap(),
         subnets: vec![subnet1, subnet2, subnet3],
+        nodes: HashMap::from([
+            (node1.id.to_string(), node1),
+            (node2.id.to_string(), node2),
+            (node3.id.to_string(), node3),
+        ]),
     }
 }
 
-fn generate_test_routes(nodes: usize) -> Routes {
+fn generate_test_routes(offset: u64) -> Routes {
     let subnet1 = RouteSubnet {
         id: "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe".to_string(),
         range_start: principal_to_u256("f7crg-kabae").unwrap(),
         range_end: principal_to_u256("sxiki-5ygae-aq").unwrap(),
-        nodes: vec![node(); nodes],
+        nodes: vec![node(1 + offset)],
     };
 
     let subnet2 = RouteSubnet {
         id: "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe".to_string(),
         range_start: principal_to_u256("sqjm4-qahae-aq").unwrap(),
         range_end: principal_to_u256("sqjm4-qahae-aq").unwrap(),
-        nodes: vec![node(); nodes],
+        nodes: vec![node(2 + offset)],
     };
 
     let subnet3 = RouteSubnet {
         id: "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe".to_string(),
         range_start: principal_to_u256("t5his-7iiae-aq").unwrap(),
         range_end: principal_to_u256("jlzvg-byp77-7qcai").unwrap(),
-        nodes: vec![node(); nodes],
+        nodes: vec![node(1 + offset)],
     };
 
     let subnet4 = RouteSubnet {
         id: "snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae".to_string(),
         range_start: principal_to_u256("zdpgc-saqaa-aacai").unwrap(),
         range_end: principal_to_u256("fij4j-bi777-7qcai").unwrap(),
-        nodes: vec![node(); nodes],
+        nodes: vec![node(3 + offset)],
     };
 
     let subnet5 = RouteSubnet {
         id: "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe".to_string(),
         range_start: principal_to_u256("6l3jn-7icca-aaaai-b").unwrap(),
         range_end: principal_to_u256("ca5tg-macd7-776ai-b").unwrap(),
-        nodes: vec![node(); nodes],
+        nodes: vec![node(2 + offset)],
     };
 
     Routes {
@@ -152,8 +170,8 @@ fn generate_test_routes(nodes: usize) -> Routes {
 
 #[tokio::test]
 async fn test_persist() -> Result<(), Error> {
-    let routes = generate_test_routes(3);
-    let routing_table = generate_test_routing_table(3);
+    let routes = generate_test_routes(0);
+    let routing_table = generate_test_routing_table(0);
 
     let rt_init = ArcSwapOption::const_empty();
     let mut persister = Persister::new(&rt_init);
@@ -175,6 +193,7 @@ async fn test_persist() -> Result<(), Error> {
         registry_version: 1,
         nns_subnet_id: Principal::from_text("fscpm-uiaaa-aaaaa-aaaap-yai").unwrap(),
         subnets: vec![],
+        nodes: HashMap::new(),
     };
 
     let result = persister.persist(empty_table).await.unwrap();
@@ -183,12 +202,12 @@ async fn test_persist() -> Result<(), Error> {
     assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
 
     // Generate different table
-    let routing_table = generate_test_routing_table(5);
+    let routing_table = generate_test_routing_table(1);
     let result = persister.persist(routing_table).await.unwrap();
     // Check if it was updated
     assert!(matches!(result, PersistStatus::Completed));
     // Check if the routing table matches expected one
-    let routes_new = generate_test_routes(5);
+    let routes_new = generate_test_routes(1);
     assert_eq!(&routes_new, rt_init.load_full().unwrap().as_ref());
 
     Ok(())
@@ -196,7 +215,7 @@ async fn test_persist() -> Result<(), Error> {
 
 #[test]
 fn test_lookup() -> Result<(), Error> {
-    let r = generate_test_routes(1);
+    let r = generate_test_routes(0);
 
     assert_eq!(
         r.lookup("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap().id,
