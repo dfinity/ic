@@ -9,7 +9,6 @@ pre-commit:
   needs: []  # don't wait on other jobs
   tags:
     - dfinity-ic # overwritting so we do not inherit the zh tag
-  stage: test
   script:
     - |
       set -eEuo pipefail

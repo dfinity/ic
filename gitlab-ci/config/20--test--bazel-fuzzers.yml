@@ -5,15 +5,14 @@ bazel-build-fuzzers:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing"
     BAZEL_COMMAND: "build"
     BAZEL_TARGETS: "//rs/..."
-    
+
 bazel-build-fuzzers-weekly:
-  extends: 
+  extends:
     - .bazel-test-all
     - .ic-build-legacy-image
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-fuzzers-to-clusterfuzz"'
   needs: []  # don't wait on other jobs
-  stage: test
   script:
     - |
       set -euo pipefail
@@ -24,7 +23,7 @@ bazel-build-fuzzers-weekly:
       gsutil -m cp libfuzzer_linux_*.zip gs://ic_fuzzer_builds
 
 bazel-build-fuzzers-archives:
-  extends: 
+  extends:
     - .bazel-test-all
     - .ic-build-legacy-image
   rules:
@@ -34,7 +33,6 @@ bazel-build-fuzzers-archives:
         - bin/build-all-fuzzers.sh
         - bazel/fuzz_testing.bzl
   needs: []  # don't wait on other jobs
-  stage: test
   script:
     - |
       set -euo pipefail

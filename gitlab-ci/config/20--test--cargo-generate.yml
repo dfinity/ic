@@ -3,7 +3,6 @@ cargo-lock-generate:
     - .ubuntu-cargo-k8s
     - .cargo-rules
   needs: []  # don't wait on other jobs
-  stage: test
   script:
     - |
       echo "Running a tiny cargo check (should always succeed), just to make sure Cargo.lock is up to date"

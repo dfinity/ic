@@ -8,7 +8,6 @@ test-testnet-deployment:
   needs:
     - job: bazel-test-all
       artifacts: false
-  stage: test
   resource_group: $TESTNET
   variables:
     TESTNET : "small14"

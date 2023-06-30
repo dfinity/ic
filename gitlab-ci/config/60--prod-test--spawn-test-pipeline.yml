@@ -1,6 +1,5 @@
 prod-nightly-pipeline:
   extends: .rules-rollout-pipeline-auto
-  stage: prod-tests
   variables:
     CD_ENV: "NIGHTLY"
     TESTNET1: "cdnightly"
@@ -17,7 +16,6 @@ prod-nightly-pipeline:
 
 prod-hotfix-pipeline:
   extends: .rules-prod-hotfix-pipeline
-  stage: prod-tests
   variables:
     CD_ENV: "HOTFIX"
     TESTNET1: "cdhotfix01"
@@ -35,7 +33,6 @@ prod-hourly-triggered:
   # https://docs.gitlab.com/ee/api/pipeline_triggers.html
   extends: .rules-rollout-pipeline-run-on-trigger
   needs: []
-  stage: prod-tests
   variables:
     CD_ENV: "HOURLY"
     TESTNET: "cdrc03"
@@ -51,7 +48,6 @@ prod-nightly-triggered:
   # https://docs.gitlab.com/ee/api/pipeline_triggers.html
   extends: .rules-rollout-pipeline-run-on-trigger
   needs: []
-  stage: prod-tests
   variables:
     CD_ENV: "NIGHTLY"
     TESTNET1: "cdnightly"
@@ -71,7 +67,6 @@ prod-hotfix-triggered:
   # https://docs.gitlab.com/ee/api/pipeline_triggers.html
   extends: .rules-rollout-pipeline-run-on-trigger
   needs: []
-  stage: prod-tests
   variables:
     CD_ENV: "HOTFIX"
     TESTNET1: "cdhotfix01"

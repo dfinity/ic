@@ -2,7 +2,6 @@
   extends:
     - .ubuntu-k8s
     - .rules-scheduled-reproducibility
-  stage: test
   needs:
     - job: build-ic-release
   script:

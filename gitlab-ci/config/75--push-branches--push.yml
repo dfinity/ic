@@ -4,7 +4,6 @@ test-push-branch:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       when: on_success
-  stage: push-branches
   dependencies: []  # don't copy artifacts from other jobs
   script:
     - |
@@ -23,7 +22,6 @@ cut-release-candidate:
     - .ubuntu-cargo-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "release-candidate-cut"'
-  stage: push-branches
   dependencies: []  # don't copy artifacts from other jobs
   script:
     - |
