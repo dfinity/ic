@@ -3,6 +3,7 @@ Utilities for building IC replica and canisters.
 """
 
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("//publish:defs.bzl", "release_nostrip_binary")
 
 _COMPRESS_CONCURENCY = 16
 
@@ -155,14 +156,28 @@ def rust_bench(name, env = {}, data = [], **kwargs):
       data: data dependencies required to run the benchmark.
       **kwargs: see docs for `rust_binary`.
     """
-    binary_name = "_" + name + "_bin"
-    rust_binary(name = binary_name, **kwargs)
+
+    # The initial binary is a regular rust_binary with rustc flags as in the
+    # current build configuration.
+    binary_name_initial = "_" + name + "_bin_default"
+    rust_binary(name = binary_name_initial, **kwargs)
+
+    # The "publish" binary has the same compiler flags applied as for production build.
+    binary_name_publish = "_" + name + "_bin_publish"
+    release_nostrip_binary(
+        name = binary_name_publish,
+        binary = binary_name_initial,
+        testonly = kwargs.get("testonly", False),
+    )
+
+    # The benchmark binary is a shell script that runs the binary
+    # (similar to how `cargo bench` runs the benchmark binary).
     native.sh_binary(
         srcs = ["//bazel:generic_rust_bench.sh"],
-        # Allow benchmark targets to use test-only libraries.
         name = name,
+        # Allow benchmark targets to use test-only libraries.
         testonly = kwargs.get("testonly", False),
-        env = dict(env.items() + {"BAZEL_DEFS_BENCH_BIN": "$(location :%s)" % binary_name}.items()),
-        data = data + [":" + binary_name],
+        env = dict(env.items() + {"BAZEL_DEFS_BENCH_BIN": "$(location :%s)" % binary_name_publish}.items()),
+        data = data + [":" + binary_name_publish],
         tags = kwargs.get("tags", []) + ["rust_bench"],
     )
