@@ -21,20 +21,33 @@ use crate::{
     updates::get_btc_address,
 };
 
+/// The argument of the [update_balance] endpoint.
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct UpdateBalanceArgs {
+    /// The owner of the account on the ledger.
+    /// The minter uses the caller principal if the owner is None.
     pub owner: Option<Principal>,
+    /// The desired subaccount on the ledger, if any.
     pub subaccount: Option<Subaccount>,
 }
 
+/// The outcome of UTXO processing.
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum UtxoStatus {
+    /// The utxo value does not cover the KYT check cost.
     ValueTooSmall(Utxo),
+    /// The KYT check found issues with the deposited UTXO.
     Tainted(Utxo),
+    /// The deposited UTXO passed the KYT check, but the minter failed to mint ckBTC on the ledger.
+    /// The caller should retry the [update_balance] call.
     Checked(Utxo),
+    /// The minter accepted the UTXO and minted ckBTC tokens on the ledger.
     Minted {
+        /// The MINT transaction index on the ledger.
         block_index: u64,
+        /// The minted amount (UTXO value minus fees).
         minted_amount: u64,
+        /// The UTXO that caused the balance update.
         utxo: Utxo,
     },
 }
@@ -45,13 +58,17 @@ pub enum ErrorCode {
 
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub enum UpdateBalanceError {
+    /// The minter experiences temporary issues, try the call again later.
     TemporarilyUnavailable(String),
+    /// There is a concurrent [update_balance] invocation from the same caller.
     AlreadyProcessing,
+    /// The minter didn't discover new UTXOs with enough confirmations.
     NoNewUtxos {
         /// If there are new UTXOs that do not have enough
         /// confirmations yet, this field will contain the number of
         /// confirmations as observed by the minter.
         current_confirmations: Option<u32>,
+        /// The minimum number of UTXO confirmation required for the minter to accept a UTXO.
         required_confirmations: u32,
     },
     GenericError {
@@ -135,7 +152,7 @@ pub async fn update_balance(
 
     if satoshis_to_mint == 0 {
         // We bail out early if there are no UTXOs to avoid creating a new entry
-        // in the UTXOs map.  If we allowed empty entries, malicious callers
+        // in the UTXOs map. If we allowed empty entries, malicious callers
         // could exhaust the canister memory.
 
         // We get the entire list of UTXOs again with a zero

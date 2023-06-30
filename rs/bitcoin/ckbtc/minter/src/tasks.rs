@@ -78,7 +78,10 @@ impl TaskQueue {
     /// execution.
     pub fn pop_if_ready(&mut self, now: u64) -> Option<Task> {
         if self.queue.first()?.execute_at <= now {
-            let task = self.queue.pop_first().unwrap();
+            let task = self
+                .queue
+                .pop_first()
+                .expect("unreachable: couldn't pop from a non-empty queue");
             self.deadline_by_task.remove(&task.task_type);
             Some(task)
         } else {

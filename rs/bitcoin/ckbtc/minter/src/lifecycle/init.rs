@@ -71,7 +71,7 @@ pub struct InitArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_confirmations: Option<u32>,
 
-    /// Flag that indicates if the minter is in read-only mode.
+    /// The mode controlling access to the minter.
     #[serde(default)]
     pub mode: Mode,
 

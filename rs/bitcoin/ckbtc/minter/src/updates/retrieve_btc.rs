@@ -19,6 +19,7 @@ use num_traits::cast::ToPrimitive;
 
 const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
 
+/// The arguments of the [retrieve_btc] endpoint.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct RetrieveBtcArgs {
     // amount to retrieve in satoshi
@@ -290,9 +291,12 @@ async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcErr
     }
 }
 
+/// The outcome of an address KYT check.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum BtcAddressCheckStatus {
+    /// The KYT check did not find any issues with the address.
     Clean,
+    /// The KYT check found issues with the address in question.
     Tainted,
 }
 

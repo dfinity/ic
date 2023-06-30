@@ -55,11 +55,18 @@ thread_local! {
 // A pending retrieve btc request
 #[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetrieveBtcRequest {
+    /// The amount to convert to BTC.
+    /// The minter withdraws BTC tranfer fees from this amount.
     pub amount: u64,
+    /// The destination BTC address.
     pub address: BitcoinAddress,
+    /// The BURN transaction index on the ledger.
+    /// Serves as a unique request identifier.
     pub block_index: u64,
+    /// The time at which the minter accepted the request.
     pub received_at: u64,
-    /// The KYT provider is optional because old retrieve_btc requests
+    /// The KYT provider that validated this request.
+    /// The field is optional because old retrieve_btc requests
     /// didn't go through the KYT check.
     #[serde(rename = "kyt_provider")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -75,6 +82,7 @@ pub struct ChangeOutput {
     pub value: u64,
 }
 
+/// Represents a transaction sent to the Bitcoin network.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
@@ -93,6 +101,7 @@ pub struct SubmittedBtcTransaction {
     pub fee_per_vbyte: Option<u64>,
 }
 
+/// Pairs a retrieve_btc request with its outcome.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FinalizedBtcRetrieval {
     /// The original retrieve_btc request that initiated the transaction.
@@ -101,6 +110,7 @@ pub struct FinalizedBtcRetrieval {
     pub state: FinalizedStatus,
 }
 
+/// The outcome of a retrieve_btc request.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FinalizedStatus {
     /// The request amount was to low to cover the fees.
@@ -112,28 +122,45 @@ pub enum FinalizedStatus {
     },
 }
 
+/// The status of a Bitcoin transaction that the minter hasn't yet sent to the Bitcoin network.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InFlightStatus {
+    /// Awaiting signatures for transaction inputs.
     Signing,
+    /// Awaiting the Bitcoin canister to accept the transaction.
     Sending { txid: [u8; 32] },
 }
 
+/// The status of a retrieve_btc request.
 #[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Deserialize)]
 pub enum RetrieveBtcStatus {
+    /// The minter has no data for this request.
+    /// The request id is either invalid or too old.
     Unknown,
+    /// The request is in the batch queue.
     Pending,
+    /// Waiting for a signature on a transaction satisfy this request.
     Signing,
+    /// Sending the transaction satisfying this request.
     Sending { txid: [u8; 32] },
+    /// Awaiting for confirmations on the transaction satisfying this request.
     Submitted { txid: [u8; 32] },
+    /// The retrieval amount was too low. Satisfying the request is impossible.
     AmountTooLow,
+    /// Confirmed a transaction satisfying this request.
     Confirmed { txid: [u8; 32] },
 }
 
+/// Controls which operations the minter can perform.
 #[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
 pub enum Mode {
+    /// Minter's state is read-only.
     ReadOnly,
+    /// Only the specified principals can modify the minter's state.
     RestrictedTo(Vec<Principal>),
+    /// Only the specified principals can deposit BTC.
     DepositsRestrictedTo(Vec<Principal>),
+    /// No restrictions on the minter interactions.
     GeneralAvailability,
 }
 
@@ -179,9 +206,12 @@ impl Default for Mode {
     }
 }
 
+/// The outcome of a UTXO KYT check.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
 pub enum UtxoCheckStatus {
+    /// The KYT check did not reveal any problems.
     Clean,
+    /// The UTXO in question is tainted.
     Tainted,
 }
 
