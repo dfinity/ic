@@ -1,15 +1,6 @@
 // TODO: remove
 #![allow(unused)]
 
-use std::{
-    fs::File,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::PathBuf,
-    str::FromStr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
@@ -30,6 +21,14 @@ use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
 use lazy_static::lazy_static;
 use nns::Load;
 use prometheus::{labels, Registry as MetricsRegistry};
+use std::{
+    fs::File,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info};
 use url::Url;
@@ -40,7 +39,7 @@ use crate::{
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
     metrics::{MetricParams, WithMetrics},
     nns::Loader,
-    snapshot::Runner as SnapshotRunner,
+    snapshot::{HTTPClientHelper, Runner as SnapshotRunner},
     tls::{CustomAcceptor, Provisioner, TokenSetter, WithLoad, WithStore},
 };
 
@@ -60,6 +59,9 @@ const SERVICE_NAME: &str = "ic-boundary";
 const SECOND: Duration = Duration::from_secs(1);
 const MINUTE: Duration = Duration::from_secs(60);
 const DAY: Duration = Duration::from_secs(24 * 3600);
+
+static ROUTES: ArcSwapOption<persist::Routes> = ArcSwapOption::const_empty();
+static ROUTING_TABLE: ArcSwapOption<snapshot::RoutingTable> = ArcSwapOption::const_empty();
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]
@@ -127,8 +129,6 @@ lazy_static! {
     .unwrap();
 }
 
-static ROUTES: ArcSwapOption<persist::Routes> = ArcSwapOption::const_empty();
-
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
@@ -143,8 +143,6 @@ async fn main() -> Result<(), Error> {
 
     let metrics = &*METRICS;
 
-    let routing_table = ArcSwapOption::const_empty();
-
     info!(
         msg = format!("Starting {SERVICE_NAME}"),
         metrics_addr = cli.metrics_addr.to_string().as_str(),
@@ -156,6 +154,25 @@ async fn main() -> Result<(), Error> {
         pkey_path: cli.tls_pkey_path,
     };
     let tls_loader = Arc::new(tls_loader);
+
+    // HTTP Client
+    let tls_verifier = Arc::new(HTTPClientHelper::new(&ROUTING_TABLE));
+    let dns_resolver = Arc::new(HTTPClientHelper::new(&ROUTING_TABLE));
+
+    let rustls_config = rustls::ClientConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap()
+        .with_custom_certificate_verifier(tls_verifier);
+
+    let http_client = reqwest::Client::builder()
+        // TODO re-enable
+        // .timeout(Duration::from_secs(cli.http_timeout))
+        // .connect_timeout(Duration::from_secs(cli.http_timeout_connect))
+        .use_preconfigured_tls(rustls_config)
+        .dns_resolver(dns_resolver)
+        .build()?;
 
     // ACME
     let acme_http_client = hyper::Client::builder().build(
@@ -317,7 +334,7 @@ async fn main() -> Result<(), Error> {
         });
 
     // Snapshots
-    let snapshot_runner = SnapshotRunner::new(&routing_table, registry_client);
+    let snapshot_runner = SnapshotRunner::new(&ROUTING_TABLE, registry_client);
     let snapshot_runner = WithMetrics(
         snapshot_runner,
         MetricParams::new(SERVICE_NAME, "run_snapshot"),
@@ -328,7 +345,7 @@ async fn main() -> Result<(), Error> {
     // Checks
     let persister = persist::Persister::new(&ROUTES);
 
-    let check_runner = CheckRunner::new(&routing_table, persister);
+    let check_runner = CheckRunner::new(&ROUTING_TABLE, persister);
     let check_runner = WithMetrics(check_runner, MetricParams::new(SERVICE_NAME, "run_check"));
     let check_runner = WithThrottle(check_runner, ThrottleParams::new(10 * SECOND));
     let mut check_runner = check_runner;

@@ -1,14 +1,15 @@
-use crate::{
-    snapshot::{Node, RoutingTable},
-    Run,
-};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
-use std::sync::Arc;
+
+use crate::{
+    snapshot::{Node, RoutingTable},
+    Run,
+};
 
 pub enum PersistStatus {
     Completed,
@@ -18,6 +19,10 @@ pub enum PersistStatus {
 
 // Converts byte slice principal to a u256
 fn principal_bytes_to_u256(p: &[u8]) -> u256 {
+    if p.len() > 29 {
+        panic!("Principal length should be <30 bytes");
+    }
+
     // Since Principal length can be anything in 0..29 range - prepend it with zeros to 32
     let pad = 32 - p.len();
     let mut padded: [u8; 32] = [0; 32];
@@ -35,12 +40,11 @@ fn principal_to_u256(p: &str) -> Result<u256, Error> {
     Ok(principal_bytes_to_u256(p))
 }
 
-// Principals are 2^232 max so we can use the u256 type to effectively store them
+// Principals are 2^232 max so we can use the u256 type to efficiently store them
 // Under the hood u256 is using two u128
 // This is more efficient than lexographically sorted hexadecimal strings as done in JS router
 // Currently the largest canister_id range is somewhere around 2^40 - so probably using one u128 would work for a long time
 // But going u256 makes it future proof and according to spec
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteSubnet {
     id: String,
@@ -84,7 +88,7 @@ impl Routes {
 
         let subnet = self.subnets[idx].clone();
         if canister_id_u256 < subnet.range_start || canister_id_u256 > subnet.range_end {
-            return Err(anyhow!("Route for canister '{}' not found", canister_id));
+            return Err(anyhow!("Route for canister '{canister_id}' not found"));
         }
 
         Ok(subnet)

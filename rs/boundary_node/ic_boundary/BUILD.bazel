@@ -24,11 +24,13 @@ DEPENDENCIES = [
     "@crate_index//:async-scoped",
     "@crate_index//:axum-server",
     "@crate_index//:axum",
+    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:clap_4_0_0",
     "@crate_index//:ethnum",
     "@crate_index//:futures-util",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:hyper",
     "@crate_index//:hyper-rustls",
     "@crate_index//:instant-acme",
@@ -36,7 +38,10 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:prometheus",
     "@crate_index//:rcgen",
+    "@crate_index//:reqwest",
+    "@crate_index//:rustls",
     "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:tempfile",
@@ -47,7 +52,7 @@ DEPENDENCIES = [
     "@crate_index//:tracing",
     "@crate_index//:url",
     "@crate_index//:wiremock",
-    "@crate_index//:x509-parser",
+    "@crate_index//:x509_parser_0_15",
 ]
 
 MACRO_DEPENDENCIES = [

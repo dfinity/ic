@@ -905,6 +905,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "rustls": crate.spec(
                 version = "^0.21.0",
+                features = [
+                    "dangerous_configuration",
+                ],
             ),
             "rustls-native-certs": crate.spec(
                 version = "^0.6.2",
@@ -1276,6 +1279,11 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "x509-parser": crate.spec(
                 version = "^0.12.0",
+            ),
+            "x509-parser_0_15": crate.spec(
+                package = "x509-parser",
+                version = "^0.15.0",
+                features = ["verify"],
             ),
             "yansi": crate.spec(
                 version = "^0.5.0",
