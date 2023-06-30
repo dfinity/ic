@@ -4,7 +4,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use slog::{info, o, Drain, Logger};
+use slog::{info, o, warn, Drain, Logger};
 use slog_async::OverflowStrategy;
 use std::fs::{self, File};
 use std::os::unix::prelude::AsRawFd;
@@ -16,6 +16,8 @@ use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_P
 use crate::driver::pot_dsl::TestPath;
 
 use crate::driver::constants::{SSH_USERNAME, SUBREPORT_LOG_PREFIX};
+
+use super::farm::HostFeature;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
 
@@ -203,6 +205,26 @@ impl HasTestPath for TestEnv {
 
     fn test_path(&self) -> TestPath {
         self.read_json_object(TEST_PATH).unwrap()
+    }
+}
+
+pub trait RequiredHostFeaturesFromCmdLine {
+    fn read_host_features(&self, context: &str) -> Option<Vec<HostFeature>>;
+}
+
+impl RequiredHostFeaturesFromCmdLine for TestEnv {
+    fn read_host_features(&self, context: &str) -> Option<Vec<HostFeature>> {
+        if let Ok(host_features_from_command_line) = Vec::<HostFeature>::try_read_attribute(self) {
+            warn!(
+                self.logger(),
+                "Using host features supplied on the command line ({:?}) for {}, overriding others.",
+                &host_features_from_command_line,
+                context
+            );
+            Some(host_features_from_command_line)
+        } else {
+            None
+        }
     }
 }
 

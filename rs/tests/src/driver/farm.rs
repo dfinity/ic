@@ -6,6 +6,8 @@ use std::{
 };
 
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
+use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
+use crate::driver::test_env_api::HasIcDependencies;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ic_crypto_sha::Sha256;
@@ -45,6 +47,7 @@ pub struct Farm {
     pub base_url: Url,
     pub logger: Logger,
     client: Client,
+    pub override_host_features: Option<Vec<HostFeature>>,
 }
 
 impl Farm {
@@ -55,8 +58,22 @@ impl Farm {
             .expect("This should not fail.");
         Farm {
             base_url,
-            client,
             logger,
+            client,
+            override_host_features: None,
+        }
+    }
+
+    pub fn from_test_env(env: &TestEnv, context: &str) -> Self {
+        let client = reqwest::blocking::ClientBuilder::new()
+            .timeout(TIMEOUT_SETTINGS.max_http_timeout)
+            .build()
+            .expect("This should not fail.");
+        Farm {
+            base_url: env.get_farm_url().unwrap(),
+            logger: env.logger(),
+            client,
+            override_host_features: env.read_host_features(context),
         }
     }
 
@@ -72,9 +89,13 @@ impl Farm {
         group_base_name: &str,
         group_name: &str,
         ttl: Duration,
-        spec: GroupSpec,
+        mut spec: GroupSpec,
         env: &TestEnv,
     ) -> FarmResult<()> {
+        spec.required_host_features = self
+            .override_host_features
+            .clone()
+            .unwrap_or_else(|| spec.required_host_features.clone());
         let path = format!("group/{}", group_name);
         let ttl = ttl.as_secs() as u32;
         let spec = spec.add_meta(env, group_base_name);
@@ -86,7 +107,15 @@ impl Farm {
 
     /// creates a vm under the group `group_name` and returns the associated
     /// IpAddr
-    pub fn create_vm(&self, group_name: &str, vm: CreateVmRequest) -> FarmResult<VMCreateResponse> {
+    pub fn create_vm(
+        &self,
+        group_name: &str,
+        mut vm: CreateVmRequest,
+    ) -> FarmResult<VMCreateResponse> {
+        vm.required_host_features = self
+            .override_host_features
+            .clone()
+            .unwrap_or_else(|| vm.required_host_features.clone());
         let path = format!("group/{}/vm/{}", group_name, &vm.name);
         let rb = Self::json(self.post(&path), &vm);
         let resp = self.retry_until_success_long(rb)?;
@@ -507,9 +536,16 @@ impl<'de> Deserialize<'de> for HostFeature {
                     "host=<host-name>",
                     AMD_SEV_SNP,
                     SNS_LOAD_TEST,
+                    PERFORMANCE,
                 ],
             ))
         }
+    }
+}
+
+impl TestEnvAttribute for Vec<HostFeature> {
+    fn attribute_name() -> String {
+        String::from("required_host_features")
     }
 }
 
