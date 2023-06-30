@@ -5,6 +5,8 @@ use ic_crypto_internal_basic_sig_iccsa::types::SignatureBytes;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 
+mod root_of_trust;
+
 pub fn verify_canister_sig<S: Signable>(
     registry: &dyn RegistryClient,
     signature: &CanisterSigOf<S>,

@@ -105,3 +105,25 @@ impl From<ThresholdSigPublicKey> for PublicKeyProto {
         }
     }
 }
+
+/// The Internet Computer's root of trust.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct IcRootOfTrust(ThresholdSigPublicKey);
+
+impl From<ThresholdSigPublicKey> for IcRootOfTrust {
+    fn from(public_key: ThresholdSigPublicKey) -> Self {
+        IcRootOfTrust(public_key)
+    }
+}
+
+/// Retrieves the Internet Computer's root of trust.
+///
+/// # Security
+/// The root of trust is used to verify canister signatures o given subnet.
+/// Providing the wrong root of trust could lead to accepting signatures that
+/// should not have been accepted and would be a major security bug.
+pub trait RootOfTrustProvider {
+    type Error;
+
+    fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error>;
+}

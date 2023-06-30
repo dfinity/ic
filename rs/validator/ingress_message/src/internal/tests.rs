@@ -1069,3 +1069,18 @@ mod registry {
             .expect("error retrieving root public key")
     }
 }
+
+mod root_of_trust {
+    use crate::internal::{nns_root_public_key, ConstantRootOfTrustProvider};
+    use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
+
+    #[test]
+    fn should_retrieve_root_of_trust() {
+        let root_of_trust = nns_root_public_key();
+        let provider = ConstantRootOfTrustProvider::new(root_of_trust);
+
+        let result = provider.root_of_trust();
+
+        assert_eq!(result, Ok(IcRootOfTrust::from(root_of_trust)));
+    }
+}
