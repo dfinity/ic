@@ -102,8 +102,8 @@ use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor, JoinGuard},
     artifact_pool::{
-        ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, ProcessingResult,
-        UnvalidatedArtifact, ValidatedPoolReader,
+        ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
     canister_http::CanisterHttpChangeSet,
     certification::ChangeSet as CertificationChangeSet,
@@ -260,15 +260,14 @@ fn process_messages<Artifact: ArtifactKind + 'static, S: Fn(Advert<Artifact>) + 
     mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
 ) {
-    let mut last_on_state_change_result = ProcessingResult::StateUnchanged;
+    let mut last_on_state_change_result = false;
     while !shutdown.load(SeqCst) {
         // TODO: assess impact of continued processing in same
         // iteration if StateChanged
-        let recv_timeout = match last_on_state_change_result {
-            ProcessingResult::StateChanged => Duration::from_millis(0),
-            ProcessingResult::StateUnchanged => {
-                Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
-            }
+        let recv_timeout = if last_on_state_change_result {
+            Duration::from_millis(0)
+        } else {
+            Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
         };
         let recv_artifact = receiver.recv_timeout(recv_timeout);
         let batched_artifacts = match recv_artifact {

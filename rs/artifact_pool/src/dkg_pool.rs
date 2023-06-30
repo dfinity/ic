@@ -4,8 +4,7 @@ use crate::{
 };
 use ic_interfaces::{
     artifact_pool::{
-        ChangeResult, MutablePool, ProcessingResult, UnvalidatedArtifact, ValidatedArtifact,
-        ValidatedPoolReader,
+        ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
     },
     dkg::{ChangeAction, ChangeSet, DkgPool},
     time_source::TimeSource,
@@ -126,11 +125,7 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
         _time_source: &dyn TimeSource,
         change_set: ChangeSet,
     ) -> ChangeResult<DkgArtifact> {
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
+        let changed = !change_set.is_empty();
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
@@ -291,7 +286,7 @@ mod test {
         // ensure we have 2 validated and 2 unvalidated artifacts
         assert_eq!(result.adverts.len(), 2);
         assert!(result.purged.is_empty());
-        assert_eq!(result.changed, ProcessingResult::StateChanged);
+        assert!(result.changed);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
 
@@ -303,7 +298,7 @@ mod test {
         );
         assert_eq!(result.purged.len(), 1);
         assert!(result.adverts.is_empty());
-        assert_eq!(result.changed, ProcessingResult::StateChanged);
+        assert!(result.changed);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
 
@@ -314,7 +309,7 @@ mod test {
         );
         assert_eq!(result.purged.len(), 1);
         assert!(result.adverts.is_empty());
-        assert_eq!(result.changed, ProcessingResult::StateChanged);
+        assert!(result.changed);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);
     }

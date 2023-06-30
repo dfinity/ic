@@ -6,8 +6,8 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
     artifact_pool::{
-        ChangeResult, HasTimestamp, MutablePool, PriorityFnAndFilterProducer, ProcessingResult,
-        UnvalidatedArtifact, ValidatedPoolReader,
+        ChangeResult, HasTimestamp, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
@@ -291,11 +291,7 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
         _time_source: &dyn TimeSource,
         change_set: ChangeSet,
     ) -> ChangeResult<IngressArtifact> {
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
+        let changed = !change_set.is_empty();
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for change_action in change_set {
@@ -689,7 +685,7 @@ mod tests {
                 assert!(result.purged.is_empty());
                 assert_eq!(result.adverts.len(), 1);
                 assert_eq!(result.adverts[0].id, message_id0);
-                assert_eq!(result.changed, ProcessingResult::StateChanged);
+                assert!(result.changed);
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
                 assert_eq!(
@@ -753,7 +749,7 @@ mod tests {
                 assert!(result.purged.is_empty());
                 // adverts are only created for own node id
                 assert_eq!(result.adverts.len(), initial_count / nodes);
-                assert_eq!(result.changed, ProcessingResult::StateChanged);
+                assert!(result.changed);
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
@@ -761,7 +757,7 @@ mod tests {
                 let result = ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
                 assert!(result.adverts.is_empty());
                 assert_eq!(result.purged.len(), initial_count - non_expired_count);
-                assert_eq!(result.changed, ProcessingResult::StateChanged);
+                assert!(result.changed);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
             })
         })

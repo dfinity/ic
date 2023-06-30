@@ -30,17 +30,6 @@ pub trait ChangeSetProducer<Pool>: Send {
     fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
 }
 
-/// The result of a single 'process_changes' call can result in either:
-/// - new changes applied to the state. So 'process_changes' should be
-///   immediately called again.
-/// - no change applied and state was unchanged. So calling 'process_changes' is
-///   not immediately required.
-#[derive(Debug, PartialEq, Eq)]
-pub enum ProcessingResult {
-    StateChanged,
-    StateUnchanged,
-}
-
 /// Ids of validated artifacts that were purged during the pool mutation, and adverts
 /// of artifacts that were validated during the pool mutation. As some changes (i.e.
 /// to the unvalidated section) might not generate adverts or purged IDs, `changed`
@@ -48,7 +37,12 @@ pub enum ProcessingResult {
 pub struct ChangeResult<Artifact: ArtifactKind> {
     pub purged: Vec<Artifact::Id>,
     pub adverts: Vec<Advert<Artifact>>,
-    pub changed: ProcessingResult,
+    /// The result of a single 'apply_changes' call can result in either:
+    /// - new changes applied to the state. So 'on_state_change' + 'apply_changes' should be
+    ///   immediately called again.
+    /// - no change applied and state was unchanged. So calling 'on_state_change' + 'apply_changes' is
+    ///   not immediately required.
+    pub changed: bool,
 }
 
 /// Defines the canonical way for mutating an artifact pool.

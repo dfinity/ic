@@ -10,8 +10,7 @@
 use crate::metrics::{EcdsaPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::artifact_pool::{
-    ChangeResult, IntoInner, MutablePool, ProcessingResult, UnvalidatedArtifact,
-    ValidatedPoolReader,
+    ChangeResult, IntoInner, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
@@ -395,11 +394,7 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
     ) -> ChangeResult<EcdsaArtifact> {
         let mut unvalidated_ops = EcdsaPoolSectionOps::new();
         let mut validated_ops = EcdsaPoolSectionOps::new();
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
+        let changed = !change_set.is_empty();
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
@@ -602,7 +597,7 @@ mod tests {
                 let result = ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
                 assert!(result.purged.is_empty());
                 assert_eq!(result.adverts[0].id, support.message_id());
-                assert_eq!(result.changed, ProcessingResult::StateChanged);
+                assert!(result.changed);
             }
         }
 
@@ -889,7 +884,7 @@ mod tests {
                 assert!(result.purged.is_empty());
                 // No adverts are created for moved dealings and dealing support
                 assert!(result.adverts.is_empty());
-                assert_eq!(result.changed, ProcessingResult::StateChanged);
+                assert!(result.changed);
                 check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
             })
         })
@@ -946,7 +941,7 @@ mod tests {
                 );
                 assert!(result.adverts.is_empty());
                 assert_eq!(result.purged, vec![msg_id_1]);
-                assert_eq!(result.changed, ProcessingResult::StateChanged);
+                assert!(result.changed);
                 check_state(&ecdsa_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
                 let result = ecdsa_pool.apply_changes(
@@ -955,11 +950,11 @@ mod tests {
                 );
                 assert!(result.adverts.is_empty());
                 assert_eq!(result.purged, vec![msg_id_2]);
-                assert_eq!(result.changed, ProcessingResult::StateChanged);
+                assert!(result.changed);
                 check_state(&ecdsa_pool, &[msg_id_3], &[]);
 
                 let result = ecdsa_pool.apply_changes(&SysTimeSource::new(), vec![]);
-                assert_eq!(result.changed, ProcessingResult::StateUnchanged);
+                assert!(!result.changed);
             })
         })
     }
@@ -991,7 +986,7 @@ mod tests {
                 );
                 assert!(result.purged.is_empty());
                 assert!(result.adverts.is_empty());
-                assert_eq!(result.changed, ProcessingResult::StateChanged);
+                assert!(result.changed);
                 check_state(&ecdsa_pool, &[], &[]);
             })
         })

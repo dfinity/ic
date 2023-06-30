@@ -8,8 +8,7 @@ use crate::{
 };
 use ic_interfaces::{
     artifact_pool::{
-        ChangeResult, MutablePool, ProcessingResult, UnvalidatedArtifact, ValidatedArtifact,
-        ValidatedPoolReader,
+        ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
     },
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     time_source::TimeSource,
@@ -121,11 +120,7 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
         _time_source: &dyn TimeSource,
         change_set: CanisterHttpChangeSet,
     ) -> ChangeResult<CanisterHttpArtifact> {
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
+        let changed = !change_set.is_empty();
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {

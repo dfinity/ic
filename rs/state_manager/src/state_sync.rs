@@ -8,7 +8,7 @@ use crate::{
 use ic_base_types::NodeId;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor},
-    artifact_pool::{ProcessingResult, UnvalidatedArtifact},
+    artifact_pool::UnvalidatedArtifact,
     state_sync_client::StateSyncClient,
     time_source::{SysTimeSource, TimeSource},
 };
@@ -307,7 +307,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
         &self,
         _time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<StateSyncMessage>>,
-    ) -> (Vec<Advert<StateSyncArtifact>>, ProcessingResult) {
+    ) -> (Vec<Advert<StateSyncArtifact>>, bool) {
         // Processes received state sync artifacts.
         for UnvalidatedArtifact {
             message,
@@ -351,7 +351,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
             self.state_manager.states.write().last_advertised = artifact.id.height;
         }
 
-        (artifacts, ProcessingResult::StateUnchanged)
+        (artifacts, false)
     }
 }
 
