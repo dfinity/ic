@@ -8,11 +8,12 @@ use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, ROOT_SUBNET_ID_KEY};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider, ThresholdSigPublicKey};
 use ic_types::messages::{HttpRequest, ReadState, SignedIngressContent, UserQuery};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{PrincipalId, RegistryVersion, SubnetId, Time};
 use ic_validator::validate_request_target;
+use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -356,5 +357,27 @@ impl TimeSource for TimeProvider {
                         .expect("SystemTime is before UNIX EPOCH!")
             }
         }
+    }
+}
+
+pub struct ConstantRootOfTrustProvider {
+    root_of_trust: IcRootOfTrust,
+}
+
+impl ConstantRootOfTrustProvider {
+    #[allow(dead_code)]
+    //TODO CRP-2046: use this to instantiate provider
+    fn new<T: Into<IcRootOfTrust>>(root_of_trust: T) -> Self {
+        Self {
+            root_of_trust: root_of_trust.into(),
+        }
+    }
+}
+
+impl RootOfTrustProvider for ConstantRootOfTrustProvider {
+    type Error = Infallible;
+
+    fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error> {
+        Ok(self.root_of_trust)
     }
 }
