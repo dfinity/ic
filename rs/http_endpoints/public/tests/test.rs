@@ -305,7 +305,7 @@ fn test_unathorized_call() {
     let mock_consensus_cache = basic_consensus_pool_cache();
     let mock_registry_client = basic_registry_client();
 
-    let (mut ingress_filter, mut ingress_sender, _) = start_http_endpoint(
+    let (mut ingress_filter, _ingress_rx, _) = start_http_endpoint(
         rt.handle().clone(),
         config,
         Arc::new(mock_state_manager),
@@ -322,14 +322,6 @@ fn test_unathorized_call() {
 
     let canister1 = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
     let canister2 = Principal::from_text("224lq-3aaaa-aaaaf-ase7a-cai").unwrap();
-
-    // Ingress sender mock that returns empty Ok(()) response.
-    rt.spawn(async move {
-        loop {
-            let (_, resp) = ingress_sender.next_request().await.unwrap();
-            resp.send_response(Ok(()))
-        }
-    });
 
     // Ingress filter mock that returns empty Ok(()) response.
     rt.spawn(async move {

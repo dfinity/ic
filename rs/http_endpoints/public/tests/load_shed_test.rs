@@ -384,7 +384,7 @@ fn test_load_shedding_update_call() {
 
     let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
 
-    let (mut ingress_filter, mut ingress_sender, _) = start_http_endpoint(
+    let (mut ingress_filter, _ingress_rx, _) = start_http_endpoint(
         rt.handle().clone(),
         config,
         Arc::new(mock_state_manager),
@@ -414,14 +414,6 @@ fn test_load_shedding_update_call() {
             .await;
         load_shedder_returned_clone.notify_one();
         resp
-    });
-
-    // Ingress sender mock that returns empty Ok(()) response.
-    rt.spawn(async move {
-        loop {
-            let (_, resp) = ingress_sender.next_request().await.unwrap();
-            resp.send_response(Ok(()))
-        }
     });
 
     // Mock ingress filter

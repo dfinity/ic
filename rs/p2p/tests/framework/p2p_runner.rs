@@ -4,6 +4,7 @@ use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_icos_sev::Sev;
+use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::Transport;
 use ic_logger::{debug, info, ReplicaLogger};
@@ -105,7 +106,7 @@ fn execute_test(
             log.clone(),
         )));
 
-        let (_, p2p_runner) = setup_consensus_and_p2p(
+        let (_, _, p2p_runner) = setup_consensus_and_p2p(
             &metrics_registry,
             log.clone(),
             rt_handle,
@@ -134,6 +135,7 @@ fn execute_test(
             fake_local_store_certified_time_reader,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
             0,
+            Arc::new(SysTimeSource::new()),
         );
 
         let mut p2p_test_context = P2PTestContext::new(
@@ -270,7 +272,7 @@ fn execute_test_chunking_pool(
             log.clone(),
         )));
 
-        let (_, p2p_runner) = setup_consensus_and_p2p(
+        let (_, _, p2p_runner) = setup_consensus_and_p2p(
             &metrics_registry,
             log.clone(),
             rt_handle,
@@ -299,6 +301,7 @@ fn execute_test_chunking_pool(
             fake_local_store_certified_time_reader,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
             0,
+            Arc::new(SysTimeSource::new()),
         );
         let mut p2p_test_context = P2PTestContext::new(
             node_num,

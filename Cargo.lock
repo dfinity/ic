@@ -7054,7 +7054,6 @@ dependencies = [
  "ic-crypto-utils-threshold-sig-der",
  "ic-error-types",
  "ic-interfaces",
- "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
@@ -7073,6 +7072,7 @@ dependencies = [
  "ic-types",
  "ic-validator",
  "maplit",
+ "mockall 0.11.4",
  "native-tls",
  "pretty_assertions 0.7.2",
  "prometheus 0.12.0",
@@ -7713,14 +7713,6 @@ name = "ic-interfaces-certified-stream-store"
 version = "0.8.0"
 dependencies = [
  "ic-types",
-]
-
-[[package]]
-name = "ic-interfaces-p2p"
-version = "0.8.0"
-dependencies = [
- "ic-types",
- "tower",
 ]
 
 [[package]]
@@ -8673,7 +8665,6 @@ dependencies = [
  "ic-https-outcalls-adapter-client",
  "ic-icos-sev",
  "ic-interfaces",
- "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-transport",
  "ic-interfaces-transport-mocks",
@@ -9349,6 +9340,7 @@ dependencies = [
  "canister-test",
  "clap 3.2.23",
  "criterion 0.3.6",
+ "crossbeam-channel",
  "hex",
  "ic-artifact-pool",
  "ic-async-utils",
@@ -9372,7 +9364,6 @@ dependencies = [
  "ic-interfaces",
  "ic-interfaces-adapter-client",
  "ic-interfaces-certified-stream-store",
- "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
  "ic-logger",
@@ -9425,6 +9416,7 @@ dependencies = [
 name = "ic-replica-setup-ic-network"
 version = "0.8.0"
 dependencies = [
+ "crossbeam-channel",
  "ic-artifact-manager",
  "ic-artifact-pool",
  "ic-config",
@@ -9437,7 +9429,6 @@ dependencies = [
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-adapter-client",
- "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-transport",
@@ -9464,6 +9455,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
+ "crossbeam-channel",
  "futures",
  "ic-async-utils",
  "ic-base-types",
@@ -9478,7 +9470,6 @@ dependencies = [
  "ic-execution-environment",
  "ic-ic00-types",
  "ic-interfaces",
- "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
@@ -9511,7 +9502,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tonic",
- "tower",
  "wat",
 ]
 
@@ -10532,7 +10522,6 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
- "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",

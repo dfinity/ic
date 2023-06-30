@@ -1,3 +1,4 @@
+use crossbeam::channel::Receiver;
 use hyper::{
     client::conn::{handshake, SendRequest},
     Body, Method, Request, StatusCode,
@@ -8,13 +9,16 @@ use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
-use ic_interfaces::consensus_pool::ConsensusPoolCache;
-use ic_interfaces::execution_environment::{IngressFilterService, QueryExecutionService};
-use ic_interfaces_p2p::{IngressError, IngressIngestionService};
+use ic_interfaces::{
+    artifact_pool::UnvalidatedArtifact,
+    consensus_pool::ConsensusPoolCache,
+    execution_environment::{IngressFilterService, QueryExecutionService},
+    ingress_pool::IngressPoolThrottler,
+    time_source::SysTimeSource,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_interfaces_state_manager::Labeled;
-use ic_interfaces_state_manager::StateReader;
+use ic_interfaces_state_manager::{Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -60,15 +64,15 @@ use ic_types::{
     signature::ThresholdSignature,
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
+use mockall::{mock, predicate::*};
 use prost::Message;
-use std::{collections::BTreeMap, net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, net::SocketAddr, sync::Arc, sync::RwLock, time::Duration};
 use tokio::net::{TcpSocket, TcpStream};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
-pub type IngressIngestionHandle = Handle<SignedIngress, Result<(), IngressError>>;
 pub type QueryExecutionHandle =
     Handle<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse>;
 
@@ -117,26 +121,6 @@ fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
             }
         },
     );
-    (BoxCloneService::new(infallible_service), handle)
-}
-
-fn setup_ingress_ingestion_mock() -> (IngressIngestionService, IngressIngestionHandle) {
-    let (service, handle) = tower_test::mock::pair::<SignedIngress, Result<(), IngressError>>();
-
-    let infallible_service = tower::service_fn(move |request: SignedIngress| {
-        let mut service_clone = service.clone();
-        async move {
-            Ok::<Result<(), IngressError>, std::convert::Infallible>({
-                service_clone
-                    .ready()
-                    .await
-                    .expect("Mocking Infallible service. Waiting for readiness failed.")
-                    .call(request)
-                    .await
-                    .expect("Mocking Infallible service and can therefore not return an error.")
-            })
-        }
-    });
     (BoxCloneService::new(infallible_service), handle)
 }
 
@@ -360,6 +344,13 @@ pub async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body
     (request_sender, response.status())
 }
 
+mock! {
+    IngressPoolThrottler {}
+
+    impl IngressPoolThrottler for IngressPoolThrottler {
+        fn exceeds_threshold(&self) -> bool;
+    }
+}
 pub fn start_http_endpoint(
     rt: tokio::runtime::Handle,
     config: Config,
@@ -369,30 +360,39 @@ pub fn start_http_endpoint(
     pprof_collector: Arc<dyn PprofCollector>,
 ) -> (
     IngressFilterHandle,
-    IngressIngestionHandle,
+    Receiver<UnvalidatedArtifact<SignedIngress>>,
     QueryExecutionHandle,
 ) {
     let metrics = MetricsRegistry::new();
     let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
-    let (ingress_ingestion, ingress_ingestion_handler) = setup_ingress_ingestion_mock();
     let (query_exe, query_exe_handler) = setup_query_execution_mock();
     // Run test on "nns" to avoid fetching root delegation
     let subnet_id = subnet_test_id(1);
     let nns_subnet_id = subnet_test_id(1);
+    let node_id = node_test_id(1);
 
     let tls_handshake = Arc::new(MockTlsHandshake::new());
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
+    let time_source = Arc::new(SysTimeSource::new());
+    let (ingress_tx, ingress_rx) = crossbeam::channel::unbounded();
+    let mut ingress_pool_throtller = MockIngressPoolThrottler::new();
+    ingress_pool_throtller
+        .expect_exceeds_threshold()
+        .returning(|| false);
     start_server(
         rt,
         &metrics,
         config,
         ingress_filter,
-        ingress_ingestion,
         query_exe,
+        Arc::new(RwLock::new(ingress_pool_throtller)),
+        ingress_tx,
+        time_source,
         state_manager,
         registry_client,
         tls_handshake,
         sig_verifier,
+        node_id,
         subnet_id,
         nns_subnet_id,
         no_op_logger(),
@@ -401,9 +401,5 @@ pub fn start_http_endpoint(
         MaliciousFlags::default(),
         pprof_collector,
     );
-    (
-        ingress_filter_handle,
-        ingress_ingestion_handler,
-        query_exe_handler,
-    )
+    (ingress_filter_handle, ingress_rx, query_exe_handler)
 }
