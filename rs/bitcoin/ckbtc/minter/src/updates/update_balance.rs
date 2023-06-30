@@ -1,4 +1,5 @@
 use crate::logs::{P0, P1};
+use crate::memo::MintMemo;
 use crate::state::{mutate_state, read_state, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
@@ -211,7 +212,13 @@ pub async fn update_balance(
             continue;
         }
         let amount = utxo.value - kyt_fee;
-        match mint(amount, &utxo.outpoint.txid, caller_account).await {
+        let memo = MintMemo::Convert {
+            txid: Some(&utxo.outpoint.txid),
+            vout: Some(utxo.outpoint.vout),
+            kyt_fee: Some(kyt_fee),
+        };
+
+        match mint(amount, caller_account, crate::memo::encode(&memo).into()).await {
             Ok(block_index) => {
                 log!(
                     P1,
@@ -309,9 +316,8 @@ async fn kyt_check_utxo(
 }
 
 /// Mint an amount of ckBTC to an Account.
-async fn mint(amount: u64, txid: &[u8], to: Account) -> Result<u64, UpdateBalanceError> {
-    const MAX_MEMO_LENGTH: usize = 32;
-    debug_assert!(txid.len() <= MAX_MEMO_LENGTH);
+async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError> {
+    debug_assert!(memo.0.len() <= crate::CKBTC_LEDGER_MEMO_SIZE as usize);
     let client = ICRC1Client {
         runtime: CdkRuntime,
         ledger_canister_id: state::read_state(|s| s.ledger_id.get().into()),
@@ -322,7 +328,7 @@ async fn mint(amount: u64, txid: &[u8], to: Account) -> Result<u64, UpdateBalanc
             to,
             fee: None,
             created_at_time: None,
-            memo: Some(Memo::from(txid.to_vec())),
+            memo: Some(memo),
             amount: Nat::from(amount),
         })
         .await

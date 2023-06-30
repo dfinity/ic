@@ -1,5 +1,5 @@
 {
-  "checksum": "57f2c87a0a270dbca493df47fc342c7b2518d5bac4881e5936b452307028eada",
+  "checksum": "da626696f0febdcf020cc4aff81b31a467014464371a302b4f33f94c5d726e31",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -198,7 +198,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -369,7 +369,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -432,7 +432,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -549,7 +549,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -635,7 +635,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -977,7 +977,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -2496,7 +2496,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -2794,7 +2794,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -2856,7 +2856,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -2902,7 +2902,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -3012,7 +3012,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -3078,7 +3078,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -3311,7 +3311,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -3359,7 +3359,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -3573,7 +3573,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -3589,11 +3589,11 @@
               "target": "rustls"
             },
             {
-              "id": "rustls-pemfile 1.0.2",
+              "id": "rustls-pemfile 1.0.3",
               "target": "rustls_pemfile"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -4388,7 +4388,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -4519,7 +4519,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -5033,13 +5033,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "bitflags 2.3.2": {
+    "bitflags 2.3.3": {
       "name": "bitflags",
-      "version": "2.3.2",
+      "version": "2.3.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bitflags/2.3.2/download",
-          "sha256": "6dbe3c979c178231552ecba20214a8272df4e09f232a87aef4320cf06539aded"
+          "url": "https://crates.io/api/v1/crates/bitflags/2.3.3/download",
+          "sha256": "630be753d4e58660abd17930c71b647fe46c27ea6b63cc59e1e3851406972e42"
         }
       },
       "targets": [
@@ -5062,7 +5062,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "2.3.2"
+        "version": "2.3.3"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -5477,7 +5477,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -5527,7 +5527,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -6088,7 +6088,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -6361,7 +6361,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -6984,7 +6984,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -7038,7 +7038,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -8357,13 +8357,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.3.8": {
+    "clap 4.3.9": {
       "name": "clap",
-      "version": "4.3.8",
+      "version": "4.3.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.3.8/download",
-          "sha256": "d9394150f5b4273a1763355bd1c2ec54cc5a2593f790587bcd6b2c947cfa9211"
+          "url": "https://crates.io/api/v1/crates/clap/4.3.9/download",
+          "sha256": "bba77a07e4489fb41bd90e8d4201c3eb246b3c2c9ea2ba0bddd6c1d1df87db7d"
         }
       },
       "targets": [
@@ -8410,7 +8410,7 @@
         "deps": {
           "common": [
             {
-              "id": "clap_builder 4.3.8",
+              "id": "clap_builder 4.3.9",
               "target": "clap_builder"
             },
             {
@@ -8430,17 +8430,17 @@
           ],
           "selects": {}
         },
-        "version": "4.3.8"
+        "version": "4.3.9"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_builder 4.3.8": {
+    "clap_builder 4.3.9": {
       "name": "clap_builder",
-      "version": "4.3.8",
+      "version": "4.3.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_builder/4.3.8/download",
-          "sha256": "9a78fbdd3cc2914ddf37ba444114bc7765bbdcb55ec9cbe6fa054f0137400717"
+          "url": "https://crates.io/api/v1/crates/clap_builder/4.3.9/download",
+          "sha256": "2c9b4a88bb4bc35d3d6f65a21b0f0bafe9c894fa00978de242c555ec28bea1c0"
         }
       },
       "targets": [
@@ -8496,7 +8496,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.3.8"
+        "version": "4.3.9"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -8546,7 +8546,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -8603,7 +8603,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -9065,7 +9065,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio",
               "alias": "tokio_dep"
             },
@@ -9183,7 +9183,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -9237,7 +9237,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -10746,7 +10746,7 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -11804,7 +11804,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -12090,7 +12090,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -12144,7 +12144,7 @@
               "target": "darling_core"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -12353,7 +12353,7 @@
               "target": "retain_mut"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -12483,7 +12483,7 @@
         "deps": {
           "common": [
             {
-              "id": "uuid 1.3.4",
+              "id": "uuid 1.4.0",
               "target": "uuid"
             }
           ],
@@ -12811,7 +12811,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -12861,7 +12861,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -12943,7 +12943,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -13035,7 +13035,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -13519,7 +13519,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.3.8",
+              "id": "clap 4.3.9",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -13708,7 +13708,7 @@
               "target": "humantime_serde"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -13817,7 +13817,7 @@
               "target": "intmap"
             },
             {
-              "id": "ipnet 2.7.2",
+              "id": "ipnet 2.8.0",
               "target": "ipnet"
             },
             {
@@ -13905,6 +13905,10 @@
               "target": "maplit"
             },
             {
+              "id": "minicbor 0.19.1",
+              "target": "minicbor"
+            },
+            {
               "id": "mio 0.7.14",
               "target": "mio"
             },
@@ -13947,7 +13951,7 @@
               "target": "num_bigint"
             },
             {
-              "id": "num-bigint-dig 0.8.2",
+              "id": "num-bigint-dig 0.8.3",
               "target": "num_bigint_dig"
             },
             {
@@ -14093,7 +14097,7 @@
               "target": "quinn"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -14189,7 +14193,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "rustls-pemfile 1.0.2",
+              "id": "rustls-pemfile 1.0.3",
               "target": "rustls_pemfile"
             },
             {
@@ -14370,7 +14374,7 @@
               "target": "tiny_http"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -14450,7 +14454,7 @@
               "target": "url"
             },
             {
-              "id": "uuid 1.3.4",
+              "id": "uuid 1.4.0",
               "target": "uuid"
             },
             {
@@ -14582,6 +14586,10 @@
             {
               "id": "indoc 1.0.9",
               "target": "indoc"
+            },
+            {
+              "id": "minicbor-derive 0.13.0",
+              "target": "minicbor_derive"
             },
             {
               "id": "num-derive 0.3.3",
@@ -14911,7 +14919,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -15310,7 +15318,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -15723,7 +15731,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -15781,7 +15789,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -16994,7 +17002,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -17399,7 +17407,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -18283,7 +18291,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -18625,7 +18633,7 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 2.3.2",
+              "id": "bitflags 2.3.3",
               "target": "bitflags"
             },
             {
@@ -19010,7 +19018,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -19060,7 +19068,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -19110,7 +19118,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -19386,7 +19394,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -20758,7 +20766,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -20786,7 +20794,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -20909,13 +20917,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "hyper 0.14.26": {
+    "hyper 0.14.27": {
       "name": "hyper",
-      "version": "0.14.26",
+      "version": "0.14.27",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/hyper/0.14.26/download",
-          "sha256": "ab302d72a6f11a3b910431ff93aae7e773078c769f0a3ef15fb9ec692ed147d4"
+          "url": "https://crates.io/api/v1/crates/hyper/0.14.27/download",
+          "sha256": "ffb1cfd654a8219eaef89881fdb3bb3b1cdc5fa75ded05d6933b2b382e395468"
         }
       },
       "targets": [
@@ -21001,7 +21009,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -21020,7 +21028,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.14.26"
+        "version": "0.14.27"
       },
       "license": "MIT"
     },
@@ -21071,7 +21079,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -21087,7 +21095,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -21152,7 +21160,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -21168,7 +21176,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -21231,7 +21239,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -21243,7 +21251,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -21285,7 +21293,7 @@
         "deps": {
           "common": [
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -21293,7 +21301,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -21343,7 +21351,7 @@
               "target": "bytes"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -21351,7 +21359,7 @@
               "target": "native_tls"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -21471,7 +21479,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -21558,7 +21566,7 @@
                 "target": "rustls"
               },
               {
-                "id": "tokio 1.28.2",
+                "id": "tokio 1.29.0",
                 "target": "tokio"
               }
             ]
@@ -21890,7 +21898,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -23912,7 +23920,7 @@
               "target": "base64"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -24275,13 +24283,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "ipnet 2.7.2": {
+    "ipnet 2.8.0": {
       "name": "ipnet",
-      "version": "2.7.2",
+      "version": "2.8.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ipnet/2.7.2/download",
-          "sha256": "12b6ee2129af8d4fb011108c73d99a1b83a85977f23b82460c0ae2e25bb4b57f"
+          "url": "https://crates.io/api/v1/crates/ipnet/2.8.0/download",
+          "sha256": "28b29a3cd74f0f4598934efe3aeba42bae0eb4680554128851ebbecb02af14e6"
         }
       },
       "targets": [
@@ -24304,10 +24312,11 @@
           "**"
         ],
         "crate_features": [
-          "default"
+          "default",
+          "std"
         ],
         "edition": "2018",
-        "version": "2.7.2"
+        "version": "2.8.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -25602,7 +25611,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -25735,7 +25744,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -27808,7 +27817,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -28727,6 +28736,144 @@
       },
       "license": "MIT"
     },
+    "minicbor 0.19.1": {
+      "name": "minicbor",
+      "version": "0.19.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/minicbor/0.19.1/download",
+          "sha256": "d7005aaf257a59ff4de471a9d5538ec868a21586534fff7f85dd97d4043a6139"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "minicbor",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "cbor-display",
+            "crate_root": "src/bin/cbor-display.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "minicbor",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "alloc",
+          "derive",
+          "minicbor-derive"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "minicbor 0.19.1",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "minicbor-derive 0.13.0",
+              "target": "minicbor_derive"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.19.1"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "BlueOak-1.0.0"
+    },
+    "minicbor-derive 0.13.0": {
+      "name": "minicbor-derive",
+      "version": "0.13.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/minicbor-derive/0.13.0/download",
+          "sha256": "1154809406efdb7982841adb6311b3d095b46f78342dd646736122fe6b19e267"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "minicbor_derive",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "minicbor_derive",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "alloc"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "proc-macro2 1.0.63",
+              "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.29",
+              "target": "quote"
+            },
+            {
+              "id": "syn 1.0.109",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.0"
+      },
+      "license": "BlueOak-1.0.0"
+    },
     "minimal-lexical 0.2.1": {
       "name": "minimal-lexical",
       "version": "0.2.1",
@@ -29526,7 +29673,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -29580,7 +29727,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -29634,7 +29781,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -30809,13 +30956,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "num-bigint-dig 0.8.2": {
+    "num-bigint-dig 0.8.3": {
       "name": "num-bigint-dig",
-      "version": "0.8.2",
+      "version": "0.8.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/num-bigint-dig/0.8.2/download",
-          "sha256": "2399c9463abc5f909349d8aa9ba080e0b88b3ce2885389b60b993f39b1a56905"
+          "url": "https://crates.io/api/v1/crates/num-bigint-dig/0.8.3/download",
+          "sha256": "53ba502077159ace3aa56c25449a007173a406607a94ef665247246191eb38b1"
         }
       },
       "targets": [
@@ -30874,7 +31021,7 @@
               "target": "libm"
             },
             {
-              "id": "num-bigint-dig 0.8.2",
+              "id": "num-bigint-dig 0.8.3",
               "target": "build_script_build"
             },
             {
@@ -30909,7 +31056,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.8.2"
+        "version": "0.8.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -30998,7 +31145,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -31605,7 +31752,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -32188,7 +32335,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -33322,7 +33469,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-targets 0.48.0",
+                "id": "windows-targets 0.48.1",
                 "target": "windows_targets"
               }
             ]
@@ -34087,7 +34234,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -34403,7 +34550,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -36006,7 +36153,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -36095,7 +36242,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             }
           ],
@@ -36949,7 +37096,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -37250,7 +37397,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -37467,7 +37614,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -37711,13 +37858,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "quote 1.0.28": {
+    "quote 1.0.29": {
       "name": "quote",
-      "version": "1.0.28",
+      "version": "1.0.29",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/quote/1.0.28/download",
-          "sha256": "1b9ab9c7eadfd8df19006f1cf1a4aed13540ed5cbc047010ece5826e10825488"
+          "url": "https://crates.io/api/v1/crates/quote/1.0.29/download",
+          "sha256": "573015e8ab27661678357f27dc26460738fd2b6c86e46f386fde94cb5d913105"
         }
       },
       "targets": [
@@ -37762,14 +37909,14 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.28"
+        "version": "1.0.29"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -39333,7 +39480,7 @@
               "target": "sha1_smol"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -39598,7 +39745,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -40049,7 +40196,7 @@
                 "target": "http_body"
               },
               {
-                "id": "hyper 0.14.26",
+                "id": "hyper 0.14.27",
                 "target": "hyper"
               },
               {
@@ -40061,7 +40208,7 @@
                 "target": "hyper_tls"
               },
               {
-                "id": "ipnet 2.7.2",
+                "id": "ipnet 2.8.0",
                 "target": "ipnet"
               },
               {
@@ -40094,11 +40241,11 @@
                 "target": "rustls"
               },
               {
-                "id": "rustls-pemfile 1.0.2",
+                "id": "rustls-pemfile 1.0.3",
                 "target": "rustls_pemfile"
               },
               {
-                "id": "tokio 1.28.2",
+                "id": "tokio 1.29.0",
                 "target": "tokio"
               },
               {
@@ -40631,7 +40778,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "uuid 1.3.4",
+              "id": "uuid 1.4.0",
               "target": "uuid"
             }
           ],
@@ -40694,7 +40841,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -40926,7 +41073,7 @@
               "target": "digest"
             },
             {
-              "id": "num-bigint-dig 0.8.2",
+              "id": "num-bigint-dig 0.8.3",
               "target": "num_bigint_dig",
               "alias": "num_bigint"
             },
@@ -41307,7 +41454,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -41899,7 +42046,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustls-pemfile 1.0.2",
+              "id": "rustls-pemfile 1.0.3",
               "target": "rustls_pemfile"
             }
           ],
@@ -41929,13 +42076,13 @@
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
-    "rustls-pemfile 1.0.2": {
+    "rustls-pemfile 1.0.3": {
       "name": "rustls-pemfile",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustls-pemfile/1.0.2/download",
-          "sha256": "d194b56d58803a43635bdc398cd17e383d6f71f9182b9a192c127ca42494a59b"
+          "url": "https://crates.io/api/v1/crates/rustls-pemfile/1.0.3/download",
+          "sha256": "2d3987094b1d07b653b7dfdc3f70ce9a1da9c51ac18c1b06b662e4f9a0e9f4b2"
         }
       },
       "targets": [
@@ -41967,7 +42114,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.2"
+        "version": "1.0.3"
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
@@ -43292,7 +43439,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -43613,7 +43760,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -43827,7 +43974,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -44003,7 +44150,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -44126,7 +44273,7 @@
               "target": "static_assertions"
             },
             {
-              "id": "uuid 1.3.4",
+              "id": "uuid 1.4.0",
               "target": "uuid"
             }
           ],
@@ -45676,7 +45823,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -46452,7 +46599,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -46511,7 +46658,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -46613,7 +46760,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -46676,7 +46823,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -46869,7 +47016,7 @@
               "target": "stable_deref_trait"
             },
             {
-              "id": "uuid 1.3.4",
+              "id": "uuid 1.4.0",
               "target": "uuid"
             }
           ],
@@ -47154,7 +47301,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -47226,7 +47373,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -47585,7 +47732,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -47659,7 +47806,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -48088,7 +48235,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -48335,7 +48482,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -49044,13 +49191,13 @@
       },
       "license": "MIT OR Apache-2.0 OR Zlib"
     },
-    "tokio 1.28.2": {
+    "tokio 1.29.0": {
       "name": "tokio",
-      "version": "1.28.2",
+      "version": "1.29.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio/1.28.2/download",
-          "sha256": "94d7b1cfd2aa4011f2de74c2c4c63665e27a71006b0a192dcd2710272e73dfa2"
+          "url": "https://crates.io/api/v1/crates/tokio/1.29.0/download",
+          "sha256": "374442f06ee49c3a28a8fc9f01a2596fed7559c6b99b31279c3261778e77d84f"
         }
       },
       "targets": [
@@ -49132,21 +49279,21 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "build_script_build"
             }
           ],
           "selects": {
-            "cfg(docsrs)": [
-              {
-                "id": "windows-sys 0.48.0",
-                "target": "windows_sys"
-              }
-            ],
             "cfg(not(any(target_arch = \"wasm32\", target_arch = \"wasm64\")))": [
               {
                 "id": "socket2 0.4.9",
                 "target": "socket2"
+              }
+            ],
+            "cfg(tokio_taskdump)": [
+              {
+                "id": "backtrace 0.3.67",
+                "target": "backtrace"
               }
             ],
             "cfg(unix)": [
@@ -49177,7 +49324,7 @@
           ],
           "selects": {}
         },
-        "version": "1.28.2"
+        "version": "1.29.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -49230,7 +49377,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -49276,7 +49423,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -49326,7 +49473,7 @@
               "target": "native_tls"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -49392,7 +49539,7 @@
               "target": "openssl_sys"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -49452,7 +49599,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -49508,7 +49655,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -49646,7 +49793,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -49700,7 +49847,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -49754,7 +49901,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -49814,7 +49961,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -49888,7 +50035,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -50118,7 +50265,7 @@
               "target": "http_body"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -50139,7 +50286,7 @@
               "alias": "prost1"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -50240,7 +50387,7 @@
               "target": "prost_build"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -50340,7 +50487,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -50613,7 +50760,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -50791,7 +50938,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -51267,7 +51414,7 @@
               "target": "idna"
             },
             {
-              "id": "ipnet 2.7.2",
+              "id": "ipnet 2.8.0",
               "target": "ipnet"
             },
             {
@@ -51291,7 +51438,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -51394,7 +51541,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -52698,13 +52845,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "uuid 1.3.4": {
+    "uuid 1.4.0": {
       "name": "uuid",
-      "version": "1.3.4",
+      "version": "1.4.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/uuid/1.3.4/download",
-          "sha256": "0fa2982af2eec27de306107c027578ff7f423d65f7250e40ce0fea8f45248b81"
+          "url": "https://crates.io/api/v1/crates/uuid/1.4.0/download",
+          "sha256": "d023da39d1fde5a8a3fe1f3e01ca9632ada0a63e9797de55a879d6e2236277be"
         }
       },
       "targets": [
@@ -52748,7 +52895,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.3.4"
+        "version": "1.4.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -53012,8 +53159,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -53024,8 +53171,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -53244,7 +53391,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -53361,7 +53508,7 @@
               "target": "http"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -53389,7 +53536,7 @@
               "target": "pin_project"
             },
             {
-              "id": "rustls-pemfile 1.0.2",
+              "id": "rustls-pemfile 1.0.3",
               "target": "rustls_pemfile"
             },
             {
@@ -53409,7 +53556,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             },
             {
@@ -53682,7 +53829,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -53792,7 +53939,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -53845,7 +53992,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -56280,7 +56427,6 @@
           "Win32_Networking",
           "Win32_Networking_WinSock",
           "Win32_Security",
-          "Win32_Security_Authorization",
           "Win32_Storage",
           "Win32_Storage_FileSystem",
           "Win32_System",
@@ -56302,7 +56448,7 @@
         "deps": {
           "common": [
             {
-              "id": "windows-targets 0.48.0",
+              "id": "windows-targets 0.48.1",
               "target": "windows_targets"
             }
           ],
@@ -56423,13 +56569,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "windows-targets 0.48.0": {
+    "windows-targets 0.48.1": {
       "name": "windows-targets",
-      "version": "0.48.0",
+      "version": "0.48.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/windows-targets/0.48.0/download",
-          "sha256": "7b1eb6f0cd7c80c79759c929114ef071b87354ce476d9d94271031c0497adfd5"
+          "url": "https://crates.io/api/v1/crates/windows-targets/0.48.1/download",
+          "sha256": "05d4b17490f70499f20b9e791dcf6a299785ce8af4d709018206dc5b4953e95f"
         }
       },
       "targets": [
@@ -56454,7 +56600,7 @@
         "deps": {
           "common": [],
           "selects": {
-            "cfg(all(target_arch = \"aarch64\", target_env = \"gnu\", target_abi = \"llvm\", not(windows_raw_dylib)))": [
+            "aarch64-pc-windows-gnullvm": [
               {
                 "id": "windows_aarch64_gnullvm 0.48.0",
                 "target": "windows_aarch64_gnullvm"
@@ -56484,22 +56630,22 @@
                 "target": "windows_x86_64_gnu"
               }
             ],
-            "cfg(all(target_arch = \"x86_64\", target_env = \"gnu\", target_abi = \"llvm\", not(windows_raw_dylib)))": [
-              {
-                "id": "windows_x86_64_gnullvm 0.48.0",
-                "target": "windows_x86_64_gnullvm"
-              }
-            ],
             "cfg(all(target_arch = \"x86_64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
               {
                 "id": "windows_x86_64_msvc 0.48.0",
                 "target": "windows_x86_64_msvc"
               }
+            ],
+            "x86_64-pc-windows-gnullvm": [
+              {
+                "id": "windows_x86_64_gnullvm 0.48.0",
+                "target": "windows_x86_64_gnullvm"
+              }
             ]
           }
         },
         "edition": "2018",
-        "version": "0.48.0"
+        "version": "0.48.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -57540,7 +57686,7 @@
               "target": "http_types"
             },
             {
-              "id": "hyper 0.14.26",
+              "id": "hyper 0.14.27",
               "target": "hyper"
             },
             {
@@ -57564,7 +57710,7 @@
               "target": "serde_json"
             },
             {
-              "id": "tokio 1.28.2",
+              "id": "tokio 1.29.0",
               "target": "tokio"
             }
           ],
@@ -58154,7 +58300,7 @@
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.28",
+              "id": "quote 1.0.29",
               "target": "quote"
             },
             {
@@ -58384,7 +58530,7 @@
     "cc 1.0.79",
     "cddl 0.9.1",
     "clap 3.2.25",
-    "clap 4.3.8",
+    "clap 4.3.9",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
@@ -58392,6 +58538,7 @@
     "inferno 0.11.15",
     "lalrpop 0.19.12",
     "leb128 0.2.5",
+    "minicbor 0.19.1",
     "pretty-bytes 0.2.2",
     "rcgen 0.10.0",
     "wait-timeout 0.2.0",
@@ -58445,7 +58592,6 @@
       "x86_64-linux-android",
       "x86_64-unknown-freebsd"
     ],
-    "cfg(all(target_arch = \"aarch64\", target_env = \"gnu\", target_abi = \"llvm\", not(windows_raw_dylib)))": [],
     "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
       "aarch64-pc-windows-msvc"
     ],
@@ -58476,7 +58622,6 @@
     "cfg(all(target_arch = \"x86_64\", target_env = \"gnu\", not(target_abi = \"llvm\"), not(windows_raw_dylib)))": [
       "x86_64-unknown-linux-gnu"
     ],
-    "cfg(all(target_arch = \"x86_64\", target_env = \"gnu\", target_abi = \"llvm\", not(windows_raw_dylib)))": [],
     "cfg(all(target_arch = \"x86_64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
       "x86_64-pc-windows-msvc"
     ],
@@ -58749,7 +58894,6 @@
       "x86_64-unknown-freebsd",
       "x86_64-unknown-linux-gnu"
     ],
-    "cfg(docsrs)": [],
     "cfg(not(all(target_arch = \"arm\", target_os = \"none\")))": [
       "aarch64-apple-darwin",
       "aarch64-apple-ios",
@@ -59076,6 +59220,7 @@
       "i686-pc-windows-msvc",
       "x86_64-pc-windows-msvc"
     ],
+    "cfg(tokio_taskdump)": [],
     "cfg(tracing_unstable)": [],
     "cfg(unix)": [
       "aarch64-apple-darwin",
