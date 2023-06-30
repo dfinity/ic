@@ -441,10 +441,11 @@ http_archive(
     name = "ic-hs",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
-filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibility = ["//visibility:public"])
+filegroup(name = "artifacts", srcs = glob(["build/*"]), visibility = ["//visibility:public"])
+exports_files(["test-data"])
       """,
-    sha256 = "2b8cf324a10e1da98f5bd6469d9932653aaddf11d6f789b3a2fae82608684764",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-f698974a-x86_64-linux.tar.gz"],
+    sha256 = "2ebb806022b85c9aa67f61dd489ced8d2d9462b2a7debc748724643c2772cd03",
+    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-f802ac37-x86_64-linux.tar.gz"],
 )
 
 # Deployed NNS canisters

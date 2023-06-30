@@ -222,7 +222,7 @@ symlink_dir(
     name = "ic-hs",
     targets = {
         "@ic-hs//:build/ic-ref-test": "ic-ref-test",
-        "@ic-hs//:test-data/universal-canister.wasm": "universal-canister.wasm",
+        "@ic-hs//:test-data": "test-data",
     },
 )
 

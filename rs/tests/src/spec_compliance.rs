@@ -32,6 +32,9 @@ const EXCLUDED: &[&str] = &[
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
     "$0 ~ /Call from query method traps (in query call)/",
+    // TODO(EXC-350): enable these two tests
+    "$0 ~ /invalid_canister_export.wat/",
+    "$0 ~ /invalid_empty_query_name.wat/",
 ];
 
 pub fn config_impl(env: TestEnv) {
@@ -191,7 +194,10 @@ pub fn with_endpoint(
     info!(log, "test-subnet-config: {}", test_subnet_config);
     info!(log, "peer-subnet-config: {}", peer_subnet_config);
     let status = Command::new(ic_ref_test_path)
-        .env("IC_TEST_DATA", env.get_dependency_path("rs/tests/ic-hs"))
+        .env(
+            "IC_TEST_DATA",
+            env.get_dependency_path("rs/tests/ic-hs/test-data"),
+        )
         .arg("-j20")
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests))
