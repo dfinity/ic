@@ -8252,6 +8252,7 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",
+ "ic-stable-structures",
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "icp-ledger",

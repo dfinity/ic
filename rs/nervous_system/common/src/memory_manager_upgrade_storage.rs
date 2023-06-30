@@ -436,7 +436,6 @@ mod test {
         memory.borrow_mut().append(&mut size);
         memory.borrow_mut().append(&mut vec);
 
-        // Make a writer that will allocate a large buffer so we can fill up the memory.
         let mut reader = SizeAwareReader::new(&memory, 100, 0);
         let decoded = Governance::decode(&mut reader).expect("Decode failed");
         assert_eq!(gov, decoded);
@@ -529,7 +528,7 @@ mod test {
 
         store_protobuf(&memory, &gov).expect("Storing failed in test");
 
-        // Currently this is  an unknown value
+        // Currently this is an unknown value for StorageEncoding
         memory.write(0, &[254]);
 
         assert_is_err!(load_protobuf::<_, Governance>(&memory));

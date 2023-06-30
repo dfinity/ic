@@ -106,6 +106,7 @@ ALIASES = {}
 
 DEV_DATA = [
     ":governance-mem-test-canister",
+    ":governance-memory-migration-test-canister",
     ":mem-utils-test-canister",
     "//rs/canister_sandbox",
     "//rs/canister_sandbox/sandbox_launcher",
@@ -146,6 +147,7 @@ DEV_ENV = {
     "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
     "MEM_UTILS_TEST_CANISTER_WASM_PATH": "$(rootpath :mem-utils-test-canister)",
     "GOVERNANCE_MEM_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-mem-test-canister)",
+    "GOVERNANCE_MEMORY_MIGRATION_TEST_CANISTER_WASM_PATH": "$(rootpath :governance-memory-migration-test-canister)",
     "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
     "SNS_GOVERNANCE_CANISTER_WASM_PATH": "$(rootpath //rs/sns/governance:sns-governance-canister)",
     "SNS_ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/sns/root:sns-root-canister)",
@@ -178,6 +180,15 @@ rust_canister(
 rust_canister(
     name = "governance-mem-test-canister",
     srcs = ["test_canisters/governance_mem_test_canister.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":test_canisters/empty.did",
+    deps = DEPENDENCIES + [":integration_tests"],
+)
+
+rust_canister(
+    name = "governance-memory-migration-test-canister",
+    srcs = ["test_canisters/governance_memory_migration_test_canister.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/empty.did",

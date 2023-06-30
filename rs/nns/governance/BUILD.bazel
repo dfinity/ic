@@ -39,6 +39,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:itertools",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
@@ -188,8 +189,8 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [
-        ":governance--test_feature",
         ":build_script",
+        ":governance--test_feature",
     ],
 )
 
@@ -198,12 +199,12 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**/*.rs"]) + [
         ":protos",
-        "//rs/types/base_types:protos",
         "//rs/nervous_system/proto:protos",
         "//rs/nns/common:protos",
         "//rs/rosetta-api/icp_ledger:protos",
         "//rs/sns/root:protos",
         "//rs/sns/swap:protos",
+        "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/nns/governance",
     deps = [
