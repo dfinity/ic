@@ -47,13 +47,10 @@ def docker_build(args, dockerfile):
 
     image_hash = None
 
-    proc = subprocess.Popen(docker_args)
-    proc.wait()
+    proc = subprocess.run(docker_args)
     proc_call_info = f"Docker args: {docker_args}, cwd: {os.getcwd()}"
     if proc.returncode != 0:
-        for line in proc.stderr:
-            print(line.decode("utf-8"), end="")
-            raise RuntimeError("Docker build failed. " + proc_call_info)
+        raise RuntimeError("Docker build failed. " + proc_call_info)
     atexit.register(lambda: os.remove(image_id_filename))
 
     hash_line = None
