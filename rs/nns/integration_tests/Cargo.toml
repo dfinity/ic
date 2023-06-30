@@ -11,6 +11,10 @@ path = "test_canisters/mem_utils_test.rs"
 name = "governance-mem-test-canister"
 path = "test_canisters/governance_mem_test_canister.rs"
 
+[[bin]]
+name = "governance-memory-migration-test-canister"
+path = "test_canisters/governance_memory_migration_test_canister.rs"
+
 # Dependencies required to compile the test canisters.
 [dependencies]
 async-trait = "0.1.42"

@@ -15,13 +15,15 @@ use dfn_candid::{candid, candid_one};
 use dfn_core::{
     api::{arg_data, call_with_callbacks, caller, now, reject_message},
     over, over_async, println,
+    stable::stable64_read,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{
     cmc::CMCCanister,
-    dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
+    dfn_core_stable_mem_utils::BufferedStableMemReader,
     ledger::IcpLedgerCanister,
+    memory_manager_upgrade_storage::{load_protobuf, store_protobuf},
     MethodAuthzChange,
 };
 use ic_nervous_system_runtime::DfnRuntime;
@@ -54,10 +56,28 @@ use ic_nns_governance::{
         RewardNodeProviders, SettleCommunityFundParticipation, UpdateNodeProvider, Vote,
     },
 };
+use ic_stable_structures::{
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    DefaultMemoryImpl,
+};
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{borrow::Cow, boxed::Box, str::FromStr, time::SystemTime};
+use std::{borrow::Cow, boxed::Box, cell::RefCell, ops::Deref, str::FromStr, time::SystemTime};
+
+/// Constants to define memory segments.  Must not change.
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+thread_local! {
+
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+        MemoryManager::init(DefaultMemoryImpl::default())
+    );
+
+    // The memory where the governance reads and writes its state during an upgrade.
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+}
 
 /// Size of the buffer for stable memory reads and writes.
 ///
@@ -280,14 +300,12 @@ fn canister_init_(init_payload: GovernanceProto) {
 fn canister_pre_upgrade() {
     println!("{}Executing pre upgrade", LOG_PREFIX);
 
-    let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
+    UPGRADES_MEMORY.with(|um| {
+        let memory = um.borrow();
 
-    governance()
-        .proto
-        .encode(&mut writer)
-        .expect("Error. Couldn't serialize canister pre-upgrade.");
-
-    writer.flush(); // or `drop(writer)`
+        store_protobuf(memory.deref(), &governance().proto)
+            .expect("Failed to encode protobuf pre_upgrade");
+    });
 }
 
 #[export_name = "canister_post_upgrade"]
@@ -295,23 +313,38 @@ fn canister_post_upgrade() {
     dfn_core::printer::hook();
     println!("{}Executing post upgrade", LOG_PREFIX);
 
-    let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
+    // Look for MemoryManager magic bytes
+    let mut magic_bytes = [0u8; 3];
+    stable64_read(&mut magic_bytes, 0, 3);
+    let mut mgr_version_byte = [0u8; 1];
+    stable64_read(&mut mgr_version_byte, 3, 1);
 
-    match GovernanceProto::decode(reader) {
-        Err(err) => {
-            println!(
-                "Error deserializing canister state post-upgrade. \
-             CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
-                err
-            );
-            Err(err)
-        }
-        Ok(proto) => {
-            canister_init_(proto);
-            Ok(())
-        }
-    }
-    .expect("Couldn't upgrade canister.");
+    // For the version of MemoryManager we are using, the version byte will be 1
+    // We use the magic bytes, along with this, to identify if we are before or after the migration
+    // to MemoryManager.  Previously, the first 4 bytes contained a size.  b"MBR\1" evaluates to
+    // 22169421 bytes (which is ~22MB, and is much smaller than governance in mainnet (about 500MB))
+    // Meaning there is no real possibility of these bytes being misinterpreted
+    // TODO NNS1-2357 Remove conditional after deploying the updated version to production
+    let proto = if &magic_bytes == b"MGR" && mgr_version_byte[0] == 1 {
+        UPGRADES_MEMORY
+            .with(|um| {
+                let result: Result<GovernanceProto, _> =
+                    load_protobuf(um.borrow().deref());
+                result
+            })
+            .expect(
+                "Error deserializing canister state post-upgrade with MemoryManager memory segment. \
+             CANISTER MIGHT HAVE BROKEN STATE!!!!.",
+            )
+    } else {
+        let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
+        GovernanceProto::decode(reader).expect(
+            "Error deserializing canister state post-upgrade. \
+             CANISTER MIGHT HAVE BROKEN STATE!!!!.",
+        )
+    };
+
+    canister_init_(proto);
 }
 
 #[cfg(feature = "test")]
