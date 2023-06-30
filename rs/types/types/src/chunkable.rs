@@ -118,3 +118,14 @@ impl TryFrom<pb::ArtifactChunk> for ArtifactChunk {
         })
     }
 }
+
+impl From<ArtifactChunk> for pb::StateSyncChunkResponse {
+    fn from(chunk: ArtifactChunk) -> Self {
+        match chunk.artifact_chunk_data {
+            ArtifactChunkData::UnitChunkData(artifact) => Self {
+                data: serialize(&artifact).unwrap(),
+            },
+            ArtifactChunkData::SemiStructuredChunkData(chunk_data) => Self { data: chunk_data },
+        }
+    }
+}

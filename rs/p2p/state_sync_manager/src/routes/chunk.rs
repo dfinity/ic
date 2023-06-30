@@ -10,7 +10,7 @@ use axum::{
 use bytes::BytesMut;
 use ic_interfaces::state_sync_client::StateSyncClient;
 use ic_logger::ReplicaLogger;
-use ic_protobuf::{p2p::v1 as pb, proxy::ProxyDecodeError};
+use ic_protobuf::p2p::v1 as pb;
 use ic_types::{
     artifact::StateSyncArtifactId,
     chunkable::{ArtifactChunk, ChunkId},
@@ -50,22 +50,22 @@ pub(crate) async fn state_sync_chunk_handler(
         .with_label_values(&["chunk"])
         .start_timer();
 
-    let payload = pb::GossipChunkRequest::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-
-    let id: StateSyncArtifactId =
-        bincode::deserialize(&payload.artifact_id).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let chunk_id = ChunkId::new(payload.chunk_id);
+    // Parse payload
+    let pb::StateSyncChunkRequest { id, chunk_id } =
+        pb::StateSyncChunkRequest::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let artifact_id: StateSyncArtifactId = id.map(From::from).ok_or(StatusCode::BAD_REQUEST)?;
+    let chunk_id = ChunkId::from(chunk_id);
 
     // TODO: (NET-1442) move this to threadpool
     let jh = tokio::task::spawn_blocking(move || {
         state
             .state_sync
-            .chunk(&id, chunk_id)
+            .chunk(&artifact_id, chunk_id)
             .ok_or(StatusCode::NO_CONTENT)
     });
     let chunk = jh.await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
 
-    let pb_chunk: pb::ArtifactChunk = chunk.into();
+    let pb_chunk: pb::StateSyncChunkResponse = chunk.into();
     let mut raw = BytesMut::with_capacity(pb_chunk.encoded_len());
     pb_chunk.encode(&mut raw).expect("Allocated enough memory");
 
@@ -76,10 +76,9 @@ pub(crate) fn build_chunk_handler_request(
     artifact_id: StateSyncArtifactId,
     chunk_id: ChunkId,
 ) -> Request<Bytes> {
-    let pb = pb::GossipChunkRequest {
-        artifact_id: bincode::serialize(&artifact_id).unwrap(),
+    let pb = pb::StateSyncChunkRequest {
+        id: Some(artifact_id.into()),
         chunk_id: chunk_id.get(),
-        integrity_hash: vec![],
     };
 
     let mut raw = BytesMut::with_capacity(pb.encoded_len());
@@ -104,22 +103,20 @@ pub(crate) fn parse_chunk_handler_response(
         .expect("Transport attaches peer id");
     match parts.status {
         StatusCode::OK => {
-            let proto =
-                pb::ArtifactChunk::decode(body).map_err(|e| DownloadChunkError::RequestError {
-                    peer_id,
-                    chunk_id,
-                    err: e.to_string(),
-                })?;
-            let mut chunk: ArtifactChunk = proto.try_into().map_err(|e: ProxyDecodeError| {
+            let pb = pb::StateSyncChunkResponse::decode(body).map_err(|e| {
                 DownloadChunkError::RequestError {
                     peer_id,
                     chunk_id,
                     err: e.to_string(),
                 }
             })?;
-            // The TryFrom implementation always sets the chunk_id to zero.
-            // Fix this by adding the correct chunk id.
-            chunk.chunk_id = chunk_id;
+
+            let chunk = ArtifactChunk {
+                chunk_id,
+                witness: Vec::new(),
+                artifact_chunk_data:
+                    ic_types::chunkable::ArtifactChunkData::SemiStructuredChunkData(pb.data),
+            };
             Ok(chunk)
         }
         StatusCode::NO_CONTENT => Err(DownloadChunkError::NoContent { peer_id }),

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package p2p.v1;
+
+message StateSyncId {
+  uint64 height = 1;
+  bytes hash = 2;
+}
+
+message StateSyncChunkRequest {
+  StateSyncId id = 1;
+  uint32 chunk_id = 2;
+}
+
+message StateSyncChunkResponse {
+  bytes data = 1;
+}

@@ -10301,7 +10301,6 @@ dependencies = [
  "async-trait",
  "axum",
  "base64 0.11.0",
- "bincode",
  "bytes",
  "futures",
  "ic-async-utils",
