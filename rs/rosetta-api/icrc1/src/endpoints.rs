@@ -3,34 +3,87 @@ use candid::types::number::Nat;
 use candid::CandidType;
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use icrc_ledger_types::icrc1::transfer::TransferError;
+use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{
     Approve, Burn, Mint, Transaction, Transfer, TransferFrom,
 };
 use serde::Deserialize;
 
-pub fn convert_transfer_error(err: CoreTransferError) -> TransferError {
-    use ic_ledger_canister_core::ledger::TransferError as LTE;
-    use TransferError as TE;
+pub fn convert_transfer_error(err: CoreTransferError) -> EndpointsTransferError {
+    EndpointsTransferError(err)
+}
 
-    match err {
-        LTE::BadFee { expected_fee } => TE::BadFee {
-            expected_fee: Nat::from(expected_fee.get_e8s()),
-        },
-        LTE::InsufficientFunds { balance } => TE::InsufficientFunds {
-            balance: Nat::from(balance.get_e8s()),
-        },
-        LTE::TxTooOld { .. } => TE::TooOld,
-        LTE::TxCreatedInFuture { ledger_time } => TE::CreatedInFuture {
-            ledger_time: ledger_time.as_nanos_since_unix_epoch(),
-        },
-        LTE::TxThrottled => TE::TemporarilyUnavailable,
-        LTE::TxDuplicate { duplicate_of } => TE::Duplicate {
-            duplicate_of: Nat::from(duplicate_of),
-        },
-        LTE::InsufficientAllowance { .. } => todo!(),
-        LTE::ExpiredApproval { .. } => todo!(),
-        LTE::AllowanceChanged { .. } => todo!(),
-        LTE::SelfApproval { .. } => todo!(),
+pub struct EndpointsTransferError(pub CoreTransferError);
+
+impl From<EndpointsTransferError> for TransferError {
+    fn from(err: EndpointsTransferError) -> Self {
+        use ic_ledger_canister_core::ledger::TransferError as LTE;
+        use TransferError as TE;
+
+        match err.0 {
+            LTE::BadFee { expected_fee } => TE::BadFee {
+                expected_fee: Nat::from(expected_fee.get_e8s()),
+            },
+            LTE::InsufficientFunds { balance } => TE::InsufficientFunds {
+                balance: Nat::from(balance.get_e8s()),
+            },
+            LTE::TxTooOld { .. } => TE::TooOld,
+            LTE::TxCreatedInFuture { ledger_time } => TE::CreatedInFuture {
+                ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+            },
+            LTE::TxThrottled => TE::TemporarilyUnavailable,
+            LTE::TxDuplicate { duplicate_of } => TE::Duplicate {
+                duplicate_of: Nat::from(duplicate_of),
+            },
+            LTE::InsufficientAllowance { .. } => {
+                unimplemented!("InsufficientAllowance error should not happen for transfer")
+            }
+            LTE::ExpiredApproval { .. } => {
+                unimplemented!("ExpiredApproval error should not happen for transfer")
+            }
+            LTE::AllowanceChanged { .. } => {
+                unimplemented!("AllowanceChanged error should not happen for transfer")
+            }
+            LTE::SelfApproval { .. } => {
+                unimplemented!("SelfApproval error should not happen for transfer")
+            }
+        }
+    }
+}
+
+impl From<EndpointsTransferError> for ApproveError {
+    fn from(err: EndpointsTransferError) -> Self {
+        use ic_ledger_canister_core::ledger::TransferError as LTE;
+        use ApproveError as AE;
+
+        match err.0 {
+            LTE::BadFee { expected_fee } => AE::BadFee {
+                expected_fee: Nat::from(expected_fee.get_e8s()),
+            },
+            LTE::InsufficientFunds { balance } => AE::InsufficientFunds {
+                balance: Nat::from(balance.get_e8s()),
+            },
+            LTE::TxTooOld { .. } => AE::TooOld,
+            LTE::TxCreatedInFuture { ledger_time } => AE::CreatedInFuture {
+                ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+            },
+            LTE::TxThrottled => AE::TemporarilyUnavailable,
+            LTE::TxDuplicate { duplicate_of } => AE::Duplicate {
+                duplicate_of: Nat::from(duplicate_of),
+            },
+            LTE::InsufficientAllowance { .. } => {
+                unimplemented!("InsufficientAllowance error should not happen for approval")
+            }
+            LTE::ExpiredApproval { ledger_time } => AE::Expired {
+                ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+            },
+            LTE::AllowanceChanged { current_allowance } => AE::AllowanceChanged {
+                current_allowance: Nat::from(current_allowance.get_e8s()),
+            },
+            LTE::SelfApproval { .. } => {
+                unimplemented!("self approval not implemented for ApproveError")
+            }
+        }
     }
 }
 

@@ -1,7 +1,9 @@
 use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, runtime::Runtime};
 use ic_base_types::CanisterId;
 use ic_canister_log::{log, Sink};
-use ic_ledger_core::approvals::{Approvals, ApproveError, InsufficientAllowance};
+use ic_ledger_core::approvals::{
+    Approvals, ApproveError, InsufficientAllowance, PrunableApprovals,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
@@ -59,7 +61,7 @@ impl From<ApproveError> for TxApplyError {
 
 pub trait LedgerContext {
     type AccountId: std::hash::Hash + Ord + Eq + Clone;
-    type Approvals: Approvals<AccountId = Self::AccountId>;
+    type Approvals: Approvals<AccountId = Self::AccountId> + PrunableApprovals;
     type BalancesStore: BalancesStore<AccountId = Self::AccountId> + Default;
 
     fn balances(&self) -> &Balances<Self::BalancesStore>;
@@ -182,6 +184,8 @@ pub enum TransferError {
     SelfApproval,
 }
 
+const APPROVE_PRUNE_LIMIT: usize = 100;
+
 /// Adds a new block with the specified transaction to the ledger.
 pub fn apply_transaction<L>(
     ledger: &mut L,
@@ -200,6 +204,8 @@ where
     if num_pruned == 0 && throttle(ledger, now) {
         return Err(TransferError::TxThrottled);
     }
+
+    ledger.approvals_mut().prune(now, APPROVE_PRUNE_LIMIT);
 
     let maybe_time_and_hash = transaction
         .created_at_time()

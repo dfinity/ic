@@ -155,6 +155,46 @@ fn check_memo_max_len() {
 }
 
 #[test]
+fn test_approve_smoke() {
+    ic_icrc1_ledger_sm_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_expiration() {
+    ic_icrc1_ledger_sm_tests::test_approve_expiration(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_self() {
+    ic_icrc1_ledger_sm_tests::test_approve_self(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_expected_allowance() {
+    ic_icrc1_ledger_sm_tests::test_approve_expected_allowance(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_cant_pay_fee() {
+    ic_icrc1_ledger_sm_tests::test_approve_cant_pay_fee(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_cap() {
+    ic_icrc1_ledger_sm_tests::test_approve_cap(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_pruning() {
+    ic_icrc1_ledger_sm_tests::test_approve_pruning(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_max_expiration() {
+    ic_icrc1_ledger_sm_tests::test_approve_max_expiration(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_block_transformation() {
     ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
         std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())

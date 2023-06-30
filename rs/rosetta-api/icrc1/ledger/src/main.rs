@@ -12,9 +12,9 @@ use ic_icrc1_ledger::{Ledger, LedgerArgument};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
 };
-use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
-use icrc_ledger_types::icrc1::account::Account;
+use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp, tokens::Tokens};
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
@@ -24,11 +24,17 @@ use icrc_ledger_types::{
         transactions::{GetTransactionsRequest, GetTransactionsResponse},
     },
 };
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc2::allowance::{Allowance, AllowanceArgs},
+};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
+use std::time::Duration;
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
+const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_nanos() as u64;
 
 thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = RefCell::new(None);
@@ -416,6 +422,98 @@ fn get_data_certificate() -> DataCertificate {
         certificate: ic_cdk::api::data_certificate().map(ByteBuf::from),
         hash_tree: ByteBuf::from(tree_buf),
     }
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    let block_idx = Access::with_ledger_mut(|ledger| {
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+
+        let from_account = Account {
+            owner: ic_cdk::api::caller(),
+            subaccount: arg.from_subaccount,
+        };
+        if from_account.owner == arg.spender.owner {
+            ic_cdk::trap("self approval is not allowed")
+        }
+        match arg.memo.as_ref() {
+            Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
+                ic_cdk::trap("the memo field is too large")
+            }
+            _ => {}
+        };
+        let amount = arg.amount.0.to_u64().unwrap_or(u64::MAX);
+        let expected_allowance = match arg.expected_allowance {
+            Some(n) => match n.0.to_u64() {
+                Some(n) => Some(Tokens::from_e8s(n)),
+                None => {
+                    let current_allowance = ledger
+                        .approvals()
+                        .allowance(&from_account, &arg.spender, now)
+                        .amount;
+                    return Err(ApproveError::AllowanceChanged {
+                        current_allowance: Nat::from(current_allowance.get_e8s()),
+                    });
+                }
+            },
+            None => None,
+        };
+
+        let default_expiration = TimeStamp::from_nanos_since_unix_epoch(
+            ic_cdk::api::time() + DEFAULT_APPROVAL_EXPIRATION,
+        );
+
+        let expected_fee_tokens = ledger.transfer_fee();
+        let expected_fee = Nat::from(expected_fee_tokens.get_e8s());
+        if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
+            return Err(ApproveError::BadFee { expected_fee });
+        }
+
+        let tx = Transaction {
+            operation: Operation::Approve {
+                from: from_account,
+                spender: arg.spender,
+                amount,
+                expected_allowance,
+                expires_at: Some(
+                    arg.expires_at
+                        .map(TimeStamp::from_nanos_since_unix_epoch)
+                        .map(|expires_at| expires_at.min(default_expiration))
+                        .unwrap_or(default_expiration),
+                ),
+                fee: arg.fee.map(|_| expected_fee_tokens.get_e8s()),
+            },
+            created_at_time: arg.created_at_time,
+            memo: arg.memo,
+        };
+
+        let (block_idx, _) = apply_transaction(ledger, tx, now, expected_fee_tokens)
+            .map_err(convert_transfer_error)?;
+        Ok(block_idx)
+    })?;
+
+    // NB. we need to set the certified data before the first async call to make sure that the
+    // blockchain state agrees with the certificate while archiving is in progress.
+    ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
+
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
+    Ok(Nat::from(block_idx))
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
+    Access::with_ledger(|ledger| {
+        let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+        let allowance = ledger
+            .approvals()
+            .allowance(&arg.account, &arg.spender, now);
+        Allowance {
+            allowance: Nat::from(allowance.amount.get_e8s()),
+            expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
+        }
+    })
 }
 
 candid::export_service!();
