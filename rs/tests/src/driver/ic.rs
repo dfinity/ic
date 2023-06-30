@@ -4,7 +4,7 @@ use crate::driver::{
     node_software_version::NodeSoftwareVersion,
     resource::{allocate_resources, get_resource_request, ResourceGroup},
     test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{HasIcDependencies, HasRegistryLocalStore, HasTopologySnapshot},
+    test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
     test_setup::GroupSetup,
 };
 use anyhow::Result;
@@ -177,6 +177,7 @@ impl InternetComputer {
 
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
         // propagate required host features and resource settings to all vms
+        let farm = Farm::from_test_env(env, "Internet Computer");
         for subnet in self.subnets.iter_mut() {
             for node in subnet.nodes.iter_mut() {
                 node.required_host_features = node
@@ -200,15 +201,17 @@ impl InternetComputer {
 
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
-        let logger = env.logger();
         let group_setup = GroupSetup::read_attribute(env);
-        let farm_base_url = env.get_farm_url()?;
-        let farm = Farm::new(farm_base_url, logger.clone());
         let group_name: String = group_setup.farm_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);
-        let init_ic = init_ic(self, env, &logger, self.use_specified_ids_allocation_range)?;
+        let init_ic = init_ic(
+            self,
+            env,
+            &env.logger(),
+            self.use_specified_ids_allocation_range,
+        )?;
 
         // save initial registry snapshot for this pot
         let local_store_path = env

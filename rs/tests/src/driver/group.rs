@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use crate::driver::{
-    farm::Farm,
+    farm::{Farm, HostFeature},
     task_scheduler::TaskScheduler,
     test_env_api::{FarmBaseUrl, HasGroupSetup},
     {
@@ -87,18 +87,25 @@ pub struct CliArgs {
 
     #[clap(
         long = "include-tests",
-        help = r#"Execute only those test functions, which contain a substring and skip all the others."#
+        help = "Execute only those test functions, which contain a substring and skip all the others."
     )]
     pub filter_tests: Option<String>,
 
-    #[clap(long = "group-base-name", help = r#"Group base name."#)]
+    #[clap(long = "group-base-name", help = "Group base name.")]
     pub group_base_name: String,
 
     #[clap(
         long = "farm-base-url",
-        help = r#"Use a custom url for the Farm webservice."#
+        help = "Use a custom url for the Farm webservice."
     )]
     pub farm_base_url: Option<url::Url>,
+    #[clap(
+        long = "set-required-host-features",
+        help = "Require all host machines to have these features. Override others.",
+        value_delimiter = ',',
+        value_parser = CliArgs::parse_host_feature
+    )]
+    pub required_host_features: Option<Vec<HostFeature>>,
 }
 
 impl CliArgs {
@@ -116,6 +123,12 @@ impl CliArgs {
             }
             _ => None,
         }
+    }
+
+    /// Convert stringified HostFeatures to HostFeatures.
+    fn parse_host_feature(s: &str) -> Result<HostFeature, serde_json::Error> {
+        let quoted_feature = format!("\"{}\"", s.trim());
+        serde_json::from_str::<HostFeature>(&quoted_feature)
     }
 }
 
@@ -688,6 +701,9 @@ impl SystemTestGroup {
         if is_parent_process {
             let root_env = group_ctx.get_root_env().unwrap();
             FarmBaseUrl::new_or_default(args.farm_base_url).write_attribute(&root_env);
+            if let Some(required_args) = args.required_host_features {
+                required_args.write_attribute(&root_env);
+            }
             if self.with_farm {
                 root_env.create_group_setup(group_ctx.group_base_name.clone());
             }

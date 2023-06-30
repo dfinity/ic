@@ -11,7 +11,6 @@ use crate::driver::resource::{
 };
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
-use crate::driver::test_env_api::HasIcDependencies;
 use crate::driver::test_env_api::{
     get_ssh_session_from_env, retry, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr,
     SshSession, RETRY_BACKOFF, SSH_RETRY_TIMEOUT,
@@ -108,10 +107,8 @@ impl UniversalVm {
     }
 
     pub fn start(&self, env: &TestEnv) -> Result<()> {
-        let farm_base_url = env.get_farm_url()?;
+        let farm = Farm::from_test_env(env, "universal VM");
         let pot_setup = GroupSetup::read_attribute(env);
-        let logger = env.logger();
-        let farm = Farm::new(farm_base_url, logger.clone());
         let res_request =
             get_resource_request_for_universal_vm(self, &pot_setup, &pot_setup.farm_group_name)?;
         let resource_group = allocate_resources(&farm, &res_request)?;
@@ -165,10 +162,10 @@ impl UniversalVm {
 
             if upload {
                 let file_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
-                info!(logger, "Uploaded image: {}", file_id);
+                info!(env.logger(), "Uploaded image: {}", file_id);
             } else {
                 info!(
-                    logger,
+                    env.logger(),
                     "Image: {} was already uploaded, no need to upload it again", file_id,
                 );
             }

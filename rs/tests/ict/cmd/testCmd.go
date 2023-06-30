@@ -18,6 +18,7 @@ type Config struct {
 	keepAlive    bool
 	filterTests  string
 	farmBaseUrl  string
+	requiredHostFeatures string
 }
 
 func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) error {
@@ -49,6 +50,9 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		if len(cfg.farmBaseUrl) > 0 {
 			command = append(command, "--test_arg=--farm-base-url="+cfg.farmBaseUrl)
 		}
+		if len(cfg.requiredHostFeatures) > 0 {
+			command = append(command, "--test_arg=--set-required-host-features="+cfg.requiredHostFeatures)
+		}
 		if cfg.keepAlive {
 			keepAlive := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(DEFAULT_TEST_KEEPALIVE_MINS*60))
 			command = append(command, keepAlive)
@@ -74,7 +78,7 @@ func NewTestCmd() *cobra.Command {
 		Use:     "test <system_test_target> [flags] [-- <bazel_args>]",
 		Aliases: []string{"system_test", "t"},
 		Short:   "Run system_test target with Bazel",
-		Example: "  ict test //rs/tests/testing_verification:basic_health_test\n  ict test basic_health_test --dry-run -- --test_tmpdir=./tmp --test_output=errors",
+		Example: "  ict test //rs/tests/testing_verification:basic_health_test\n  ict test basic_health_test --dry-run -- --test_tmpdir=./tmp --test_output=errors\n  ict test //rs/tests/testing_verification:basic_health_test --set-required-host-features \"performance,host=dm1-dll01.dm1.dfinity.network\"",
 		Args:    cobra.MinimumNArgs(1),
 		RunE:    TestCommandWithConfig(&cfg),
 	}
@@ -83,6 +87,7 @@ func NewTestCmd() *cobra.Command {
 	testCmd.Flags().BoolVarP(&cfg.keepAlive, "keepalive", "k", false, fmt.Sprintf("Keep test system alive for %d minutes.", DEFAULT_TEST_KEEPALIVE_MINS))
 	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "include-tests", "i", "", "Execute only those test functions which contain a substring.")
 	testCmd.PersistentFlags().StringVarP(&cfg.farmBaseUrl, "farm-url", "", "", "Use a custom url for the Farm webservice.")
+	testCmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, SNS-load-test, performance], separated by comma (see Examples).")
 	testCmd.SetOut(os.Stdout)
 	return testCmd
 }
