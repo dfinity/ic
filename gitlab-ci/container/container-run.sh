@@ -91,23 +91,31 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${HOME}/.cache",target="/home/ubuntu/.cache"
     --mount type=bind,source="${HOME}/.ssh",target="/home/ubuntu/.ssh"
     --mount type=bind,source="${HOME}/.aws",target="/home/ubuntu/.aws"
+    --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
     --mount type=tmpfs,destination=/var/sysimage
 )
 
-if [ -e "${HOME}/.bash_history" ]; then
-    PODMAN_RUN_ARGS+=(
-        --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
-    )
-fi
-if [ -e "${HOME}/.local/share/fish" ]; then
-    PODMAN_RUN_ARGS+=(
-        --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
-    )
-fi
-if [ -e "${HOME}/.zsh_history" ]; then
-    PODMAN_RUN_ARGS+=(
-        --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
-    )
+if [ "$(id -u)" = "1000" ]; then
+    if [ -e "${HOME}/.bash_history" ]; then
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
+        )
+    fi
+    if [ -e "${HOME}/.local/share/fish" ]; then
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="${HOME}/.local/share/fish",target="/home/ubuntu/.local/share/fish"
+        )
+    fi
+    if [ -e "${HOME}/.zsh_history" ]; then
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="${HOME}/.zsh_history",target="/home/ubuntu/.zsh_history"
+        )
+    fi
+
+    USHELL=$(getent passwd "$USER" | cut -d : -f 7)
+    if [[ "$USHELL" != *"/bash" ]] && [[ "$USHELL" != *"/zsh" ]] && [[ "$USHELL" != *"/fish" ]]; then
+        USHELL=/usr/bin/bash
+    fi
 fi
 
 if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
@@ -125,13 +133,9 @@ mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
 # privileged rootful podman is required due to requirements of IC-OS guest build
 # additionally, we need to use hosts's cgroups and network
 if [ $# -eq 0 ]; then
-    SHELL=$(getent passwd "$USER" | cut -d : -f 7)
-    if [[ "$SHELL" != *"/bash" ]] && [[ "$SHELL" != *"/zsh" ]] && [[ "$SHELL" != *"/fish" ]]; then
-        SHELL=/usr/bin/bash
-    fi
     set -x
     sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
-        "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" $SHELL
+        "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" ${USHELL:-/usr/bin/bash}
     set +x
 else
     set -x
