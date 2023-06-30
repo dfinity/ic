@@ -310,7 +310,14 @@ impl<'a> TxSigHasher<'a> {
         }
     }
 
-    pub fn encode_sighash_data(&self, index: usize, pkhash: &[u8; 20], buf: &mut impl Buffer) {
+    pub fn encode_sighash_data(
+        &self,
+        input: &UnsignedInput,
+        pkhash: &[u8; 20],
+        buf: &mut impl Buffer,
+    ) {
+        debug_assert!(self.tx.inputs.contains(input));
+
         // Double SHA256 of the serialization of:
         //      1. nVersion of the transaction (4-byte little endian)
         TX_VERSION.encode(buf);
@@ -318,7 +325,6 @@ impl<'a> TxSigHasher<'a> {
         buf.write(&self.hash_prevouts[..]);
         //      3. hashSequence (32-byte hash)
         buf.write(&self.hash_sequence[..]);
-        let input = &self.tx.inputs[index];
         //      4. outpoint (32-byte hash + 4-byte little endian)
         input.previous_output.encode(buf);
         //      5. scriptCode of the input (serialized as scripts inside CTxOuts)
@@ -341,9 +347,7 @@ impl<'a> TxSigHasher<'a> {
     /// # Panics
     ///
     /// This function panics if the `index` is invalid transaction input index.
-    pub fn sighash(&self, index: usize, pkhash: &[u8; 20]) -> [u8; 32] {
-        assert!(index < self.tx.inputs.len());
-
+    pub fn sighash(&self, input: &UnsignedInput, pkhash: &[u8; 20]) -> [u8; 32] {
         // Spec:
         // https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki#specification
         //
@@ -351,7 +355,7 @@ impl<'a> TxSigHasher<'a> {
         // https://github.com/bitcoin/bitcoin/blob/5668ccec1d3785632caf4b74c1701019ecc88f41/src/script/interpreter.cpp#L1567-L1633
 
         let mut hasher = Sha256::new();
-        self.encode_sighash_data(index, pkhash, &mut hasher);
+        self.encode_sighash_data(input, pkhash, &mut hasher);
         Sha256::hash(&hasher.finish())
     }
 }

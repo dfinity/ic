@@ -542,7 +542,7 @@ proptest! {
             let mut buf = Vec::<u8>::new();
             let pkhash = tx::hash160(pubkey);
 
-            sighasher.encode_sighash_data(i, &pkhash, &mut buf);
+            sighasher.encode_sighash_data(&arb_tx.inputs[i], &pkhash, &mut buf);
 
             let mut btc_buf = Vec::<u8>::new();
             let script_code = p2wpkh_script_code(&pkhash);
@@ -550,7 +550,7 @@ proptest! {
                 .expect("failed to encode sighash data");
             prop_assert_eq!(hex::encode(&buf), hex::encode(&btc_buf));
 
-            let sighash = sighasher.sighash(i, &pkhash);
+            let sighash = sighasher.sighash(&arb_tx.inputs[i], &pkhash);
             let btc_sighash = btc_sighasher.segwit_signature_hash(i, &script_code, utxo.value, bitcoin::EcdsaSighashType::All).unwrap();
             prop_assert_eq!(hex::encode(sighash), hex::encode(btc_sighash));
         }

@@ -108,8 +108,8 @@ pub fn derive_public_key(ecdsa_public_key: &ECDSAPublicKey, account: &Account) -
             .map(DerivationIndex)
             .collect(),
     )
-    .key_derivation(&ecdsa_public_key.public_key, &ecdsa_public_key.chain_code)
-    .unwrap(); // the derivation should always be possible
+    .public_key_derivation(&ecdsa_public_key.public_key, &ecdsa_public_key.chain_code)
+    .expect("bug: failed to derive an ECDSA public key from valid inputs");
     ECDSAPublicKey {
         public_key: derived_public_key,
         chain_code: derived_chain_code,
@@ -142,18 +142,23 @@ fn encode_bech32(network: Network, hash: &[u8], version: WitnessVersion) -> Stri
     use bech32::u5;
 
     let hrp = hrp(network);
-    let witness_version: u5 = u5::try_from_u8(version as u8).unwrap();
+    let witness_version: u5 =
+        u5::try_from_u8(version as u8).expect("bug: witness version must be smaller than 32");
     let data: Vec<u5> = std::iter::once(witness_version)
         .chain(
             bech32::convert_bits(hash, 8, 5, true)
-                .unwrap()
+                .expect("bug: bech32 bit conversion failed on valid inputs")
                 .into_iter()
-                .map(|b| u5::try_from_u8(b).unwrap()),
+                .map(|b| {
+                    u5::try_from_u8(b).expect("bug: bech32 bit conversion produced invalid outputs")
+                }),
         )
         .collect();
     match version {
-        WitnessVersion::V0 => bech32::encode(hrp, data, bech32::Variant::Bech32).unwrap(),
-        WitnessVersion::V1 => bech32::encode(hrp, data, bech32::Variant::Bech32m).unwrap(),
+        WitnessVersion::V0 => bech32::encode(hrp, data, bech32::Variant::Bech32)
+            .expect("bug: bech32 encoding failed on valid inputs"),
+        WitnessVersion::V1 => bech32::encode(hrp, data, bech32::Variant::Bech32m)
+            .expect("bug: bech32m encoding failed on valid inputs"),
     }
 }
 

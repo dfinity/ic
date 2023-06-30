@@ -2,6 +2,7 @@
 
 use crate::logs::P0;
 use crate::tx;
+use crate::ECDSAPublicKey;
 use candid::{CandidType, Principal};
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
@@ -11,7 +12,8 @@ use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
 use ic_ic00_types::{
-    DerivationPath, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply,
+    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
+    SignWithECDSAArgs, SignWithECDSAReply,
 };
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -239,6 +241,32 @@ pub async fn send_transaction(
         },
     )
     .await
+}
+
+/// Fetches the ECDSA public key of the canister.
+pub async fn ecdsa_public_key(
+    key_name: String,
+    derivation_path: DerivationPath,
+) -> Result<ECDSAPublicKey, CallError> {
+    // Retrieve the public key of this canister at the given derivation path
+    // from the ECDSA API.
+    call(
+        "ecdsa_public_key",
+        /*payment=*/ 0,
+        &ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path,
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: key_name,
+            },
+        },
+    )
+    .await
+    .map(|response: ECDSAPublicKeyResponse| ECDSAPublicKey {
+        public_key: response.public_key,
+        chain_code: response.chain_code,
+    })
 }
 
 /// Signs a message hash using the tECDSA API.

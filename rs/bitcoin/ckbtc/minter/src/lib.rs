@@ -166,7 +166,7 @@ fn compute_min_withdrawal_amount(median_fee_rate_e3s: MillisatoshiPerByte) -> u6
         + 100_000
 }
 
-/// Returns an estimate for transaction fees in millisatoshi per vbyte.  Returns
+/// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
 /// None if the bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
 pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
@@ -209,10 +209,6 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
 /// Constructs and sends out signed bitcoin transactions for pending retrieve
 /// requests.
 async fn submit_pending_requests() {
-    if state::read_state(|s| s.pending_retrieve_btc_requests.is_empty()) {
-        return;
-    }
-
     // We make requests if we have old requests in the queue or if have enough
     // requests to fill a batch.
     if !state::read_state(|s| s.can_form_a_batch(MIN_PENDING_REQUESTS, ic_cdk::api::time())) {
@@ -224,25 +220,8 @@ async fn submit_pending_requests() {
         subaccount: None,
     };
 
-    updates::get_btc_address::init_ecdsa_public_key().await;
-
-    let (main_address, ecdsa_public_key) = match state::read_state(|s| {
-        s.ecdsa_public_key.clone().map(|key| {
-            (
-                address::account_to_bitcoin_address(&key, &main_account),
-                key,
-            )
-        })
-    }) {
-        Some((address, key)) => (address, key),
-        None => {
-            log!(
-                P0,
-                "unreachable: have retrieve BTC requests but the ECDSA key is not initialized",
-            );
-            return;
-        }
-    };
+    let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
+    let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
 
     let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte().await {
         Some(fee) => fee,
@@ -450,8 +429,7 @@ async fn finalize_requests() {
         return;
     }
 
-    updates::get_btc_address::init_ecdsa_public_key().await;
-
+    let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
     let now = ic_cdk::api::time();
 
     // The list of transactions that are likely to be finalized, indexed by the transaction id.
@@ -471,17 +449,6 @@ async fn finalize_requests() {
         return;
     }
 
-    let ecdsa_public_key = match state::read_state(|s| s.ecdsa_public_key.clone()) {
-        Some(key) => key,
-        None => {
-            log!(
-                P0,
-                "unreachable: have retrieve BTC requests but the ECDSA key is not initialized",
-            );
-            return;
-        }
-    };
-
     let main_account = Account {
         owner: ic_cdk::id(),
         subaccount: None,
@@ -491,7 +458,7 @@ async fn finalize_requests() {
     let new_utxos = fetch_main_utxos(&main_account, &main_address).await;
 
     // Transactions whose change outpoint is present in the newly fetched UTXOs
-    // can be finalized.  Note that all new minter transactions must have a
+    // can be finalized. Note that all new minter transactions must have a
     // change output because minter always charges a fee for converting tokens.
     let confirmed_transactions: Vec<_> =
         state::read_state(|s| finalized_txids(&s.submitted_transactions, &new_utxos));
@@ -730,7 +697,15 @@ fn filter_output_accounts(
         .map(|input| {
             (
                 input.previous_output.clone(),
-                *state.outpoint_account.get(&input.previous_output).unwrap(),
+                *state
+                    .outpoint_account
+                    .get(&input.previous_output)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "bug: missing account for output point {:?}",
+                            input.previous_output
+                        )
+                    }),
             )
         })
         .collect()
@@ -791,7 +766,7 @@ pub async fn sign_transaction(
 
     let mut signed_inputs = Vec::with_capacity(unsigned_tx.inputs.len());
     let sighasher = tx::TxSigHasher::new(&unsigned_tx);
-    for (i, input) in unsigned_tx.inputs.iter().enumerate() {
+    for input in &unsigned_tx.inputs {
         let outpoint = &input.previous_output;
 
         let account = output_account
@@ -802,7 +777,7 @@ pub async fn sign_transaction(
         let pubkey = ByteBuf::from(derive_public_key(ecdsa_public_key, account).public_key);
         let pkhash = tx::hash160(&pubkey);
 
-        let sighash = sighasher.sighash(i, &pkhash);
+        let sighash = sighasher.sighash(input, &pkhash);
         let sec1_signature =
             management::sign_with_ecdsa(key_name.clone(), DerivationPath::new(path), sighash)
                 .await?;
@@ -846,7 +821,7 @@ pub enum BuildTxError {
     /// The withdrawal amount is too low to pay the transfer fee.
     AmountTooLow,
     /// Withdrawal amount of at least one request is too low to cover its share
-    /// of the fees.  Similar to `AmountTooLow`, but applies to a single
+    /// of the fees. Similar to `AmountTooLow`, but applies to a single
     /// request in a batch.
     DustOutput {
         address: BitcoinAddress,
@@ -1199,7 +1174,7 @@ pub fn estimate_fee(
     let input_count = match maybe_amount {
         Some(amount) => {
             // We simulate the algorithm that selects UTXOs for the
-            // specified amount.  If the withdrawal rate is low, we
+            // specified amount. If the withdrawal rate is low, we
             // should get the exact number of inputs that the minter
             // will use.
             let mut utxos = available_utxos.clone();

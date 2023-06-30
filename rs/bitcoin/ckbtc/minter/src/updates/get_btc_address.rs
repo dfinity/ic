@@ -5,9 +5,7 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_canister_log::log;
-use ic_ic00_types::{
-    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
-};
+use ic_ic00_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde::Serialize;
 
@@ -44,40 +42,18 @@ pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
     })
 }
 
-/// Fetches the ECDSA public key of the canister
-async fn ecdsa_public_key(key_name: String, derivation_path: DerivationPath) -> ECDSAPublicKey {
-    // Retrieve the public key of this canister at the given derivation path
-    // from the ECDSA API.
-    let res: (ECDSAPublicKeyResponse,) = ic_cdk::call(
-        Principal::management_canister(),
-        "ecdsa_public_key",
-        (ECDSAPublicKeyArgs {
-            canister_id: None,
-            derivation_path,
-            key_id: EcdsaKeyId {
-                curve: EcdsaCurve::Secp256k1,
-                name: key_name,
-            },
-        },),
-    )
-    .await
-    .unwrap();
-
-    ECDSAPublicKey {
-        public_key: res.0.public_key,
-        chain_code: res.0.chain_code,
-    }
-}
-
 /// Initializes the Minter ECDSA public key. This function must be called
 /// before any endpoint runs its logic.
-pub async fn init_ecdsa_public_key() {
-    if read_state(|s| s.ecdsa_public_key.is_some()) {
-        return;
-    }
+pub async fn init_ecdsa_public_key() -> ECDSAPublicKey {
+    if let Some(key) = read_state(|s| s.ecdsa_public_key.clone()) {
+        return key;
+    };
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     log!(P1, "Fetching the ECDSA public key {}", &key_name);
-    let ecdsa_public_key = ecdsa_public_key(key_name, DerivationPath::new(vec![])).await;
+    let ecdsa_public_key =
+        crate::management::ecdsa_public_key(key_name, DerivationPath::new(vec![]))
+            .await
+            .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to retrieve ECDSA public key: {e}")));
     log!(
         P1,
         "ECDSA public key set to {}, chain code to {}",
@@ -85,8 +61,9 @@ pub async fn init_ecdsa_public_key() {
         hex::encode(&ecdsa_public_key.chain_code)
     );
     mutate_state(|s| {
-        s.ecdsa_public_key = Some(ecdsa_public_key);
+        s.ecdsa_public_key = Some(ecdsa_public_key.clone());
     });
+    ecdsa_public_key
 }
 
 #[cfg(test)]
