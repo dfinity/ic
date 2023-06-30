@@ -17,7 +17,6 @@ host-os-upgrade-test:
   needs:
     - job: bazel-test-all
       artifacts: false
-  stage: test
   tags:
     - dfinity-ic
   variables:

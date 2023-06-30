@@ -41,7 +41,6 @@
   extends:
     - .bazel-rules-pipeline
     - .bazel-build-k8s
-  stage: test
   needs: []
   artifacts:
     when: always

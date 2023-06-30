@@ -2,7 +2,6 @@ check-bins-linux:
   extends:
     - .ubuntu-k8s
     - .bazel-rules-pipeline-no-merge-train
-  stage: test
   needs:
     - job: linux-openssl-static-binaries
       artifacts: false

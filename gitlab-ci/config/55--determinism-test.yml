@@ -2,7 +2,6 @@ build-determinism:
   extends:
     - .bazel-build-k8s
     - .bazel-rules-pipeline
-  stage: test
   needs:
     - job: bazel-test-all
       artifacts: false

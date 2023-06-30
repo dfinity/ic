@@ -1,27 +1,7 @@
-stages:             # Files from the given stage should be prefixed with:
-  - automation          # temp
-  - init                # 10--
-  - test                # 20--
-  - deploy              # only required for gitlab pages (job "pages" needs to be in "deploy" stage)
-  - cargo-build         # 30--
-  - cargo-test          # 40--
-  - guest-os-build      # 46--
-  - guest-os-test       # 47--
-  - host-os-test        # 54--
-  - prod-tests          # 60--
-    # Shard prod tests into 5 groups, because there are 5 'cdnightly' testnet environments.
-    # The stages are purely for visual convenience when rendering the pipeline in the GitLab UI.
-  - prod-tests-01
-  - prod-tests-02
-  - prod-tests-03
-  - prod-tests-04
-  - prod-tests-05
-  - benchmark-tests
-  - benchmark-spot-tests
-  - sns-tests
-  - push-branches       # 75--
-  - npm-release         # 80--
-  - finalize            # 100--
+stages:
+  - init
+  - test
+  - finalize
 
 default:
   # Retry config copied from:

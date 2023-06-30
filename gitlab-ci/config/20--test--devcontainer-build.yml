@@ -6,7 +6,6 @@ devcontainer-build:
       changes:
         - .devcontainer/*
   needs: []
-  stage: test
   script:
     - |
       set -euo pipefail

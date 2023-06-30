@@ -3,7 +3,6 @@ no-interrupt:
     - .ubuntu-cargo-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
-  stage: init
   interruptible: False
   script:
     - echo "This pipeline is not interruptible"
@@ -13,7 +12,6 @@ cargo-audit:
     - .ubuntu-cargo-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "cargo-audit"'
-  stage: init
   script:
     - cd rs; cargo audit
 

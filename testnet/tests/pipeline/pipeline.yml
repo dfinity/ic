@@ -16,7 +16,6 @@
       # gets included in any case.
     - if: '$CD_ENV == $cd_target_env && ($DEBUG_PIPELINE != "true" || $cd_debug_target == "true") && $CD_ENV != "BENCHMARK_SUITE"'
       when: always
-  stage: prod-tests
   dependencies: []  # don't copy artifacts from other jobs by default
   variables:
     SHELL_WRAPPER: "/usr/bin/time"
@@ -59,7 +58,6 @@
 # Find traces here: https://ui.honeycomb.io/dfinity/datasets/gitlab-ci-dfinity/result/G8UcQLcnfd3/a/3wQM1irQAYr/GitLab-Release-Candidate-Pipeline-Status?tab=traces
 # The overall dashboard is available here: https://ui.honeycomb.io/dfinity/board/58LbKzZgjTA/GitLab-Release-Candidate-Performance
 .prod-nightly-test-group-2:
-  stage: prod-tests-02
   extends: .prod-nightly-test
   variables:
     TESTNET: $TESTNET2
@@ -185,7 +183,6 @@ rejoin-hotfix:
 ingress-manager-proptests-nightly:
   extends:
     - .prod-test
-  stage: prod-tests
   variables:
     cd_target_env: "NIGHTLY"
   timeout: 70 minutes

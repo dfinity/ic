@@ -7,7 +7,6 @@
       allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_SUITE"'
       when: always
-  stage: benchmark-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
   variables:
@@ -420,7 +419,6 @@ statesync-experiment:
       allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "BENCHMARK_NIGHTLY"'
       when: always
-  stage: benchmark-spot-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
   variables:
@@ -605,7 +603,6 @@ xnet-nightly:
       allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "SNS_CD"'
       when: always
-  stage: sns-tests
   resource_group: $TESTNET
   dependencies: []  # don't copy artifacts from other jobs by default
   variables:

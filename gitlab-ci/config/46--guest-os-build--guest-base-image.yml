@@ -41,7 +41,6 @@
   extends:
     - .ubuntu-k8s
     - .rules-build-base-images
-  stage: guest-os-build
   needs: []
   artifacts:
     paths:
@@ -181,7 +180,6 @@ build-base-images-ref-update:
   extends:
     - .ubuntu-k8s
     - .rules-build-base-images
-  stage: guest-os-build
   needs:
     - build-guestos-base
     - build-guestos-base-dev

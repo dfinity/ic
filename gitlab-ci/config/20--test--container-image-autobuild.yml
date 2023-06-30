@@ -8,7 +8,6 @@ container-autobuild-protected:
         - gitlab-ci/container/TAG
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
   needs: []
-  stage: test
   script:
     - |
       # use docker on protected runner
@@ -44,7 +43,6 @@ container-autobuild:
         - gitlab-ci/container/**/*
         - gitlab-ci/config/20--test--container-image-autobuild.yml
   needs: []
-  stage: test
   script:
     - |
       set -euo pipefail
