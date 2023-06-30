@@ -155,7 +155,7 @@ const E8S_PER_ICP: u64 = TOKEN_SUBDIVIDABLE_BY;
 
 /// The max number of unsettled proposals -- that is proposals for which ballots
 /// are still stored.
-pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 600;
+pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 200;
 
 /// The max number of open manage neuron proposals.
 pub const MAX_NUMBER_OF_OPEN_MANAGE_NEURON_PROPOSALS: usize = 100000;
