@@ -13,12 +13,15 @@ use ic_ckbtc_minter::state::{Mode, RetrieveBtcStatus};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
-use ic_ckbtc_minter::{Log, MinterInfo, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY};
+use ic_ckbtc_minter::{
+    Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
+};
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_state_machine_tests::{Cycles, StateMachine, StateMachineBuilder, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -433,6 +436,7 @@ fn install_bitcoin_mock_canister(env: &StateMachine) {
 struct CkBtcSetup {
     pub env: StateMachine,
     pub caller: PrincipalId,
+    pub kyt_provider: PrincipalId,
     pub bitcoin_id: CanisterId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
@@ -476,7 +480,7 @@ impl CkBtcSetup {
                     max_transactions_per_response: None,
                 },
                 fee_collector_account: None,
-                max_memo_length: None,
+                max_memo_length: Some(CKBTC_LEDGER_MEMO_SIZE),
             }))
             .unwrap(),
         )
@@ -501,13 +505,14 @@ impl CkBtcSetup {
         .expect("failed to install the minter");
 
         let caller = PrincipalId::new_user_test_id(1);
+        let kyt_provider = PrincipalId::new_user_test_id(2);
 
         env.install_existing_canister(
             kyt_id,
             kyt_wasm(),
             Encode!(&LifecycleArg::InitArg(KytInitArg {
                 minter_id: minter_id.into(),
-                maintainers: vec![caller.into()],
+                maintainers: vec![kyt_provider.into()],
                 mode: KytMode::AcceptAll,
             }))
             .unwrap(),
@@ -522,7 +527,7 @@ impl CkBtcSetup {
         .expect("failed to set fee percentiles");
 
         env.execute_ingress_as(
-            caller,
+            kyt_provider,
             kyt_id,
             "set_api_key",
             Encode!(&SetApiKeyArg {
@@ -534,6 +539,7 @@ impl CkBtcSetup {
 
         Self {
             env,
+            kyt_provider,
             caller,
             bitcoin_id,
             ledger_id,
@@ -684,6 +690,18 @@ impl CkBtcSetup {
                 utxo,
             }]
         );
+    }
+
+    pub fn get_transactions(&self, arg: GetTransactionsRequest) -> GetTransactionsResponse {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(self.ledger_id, "get_transactions", Encode!(&arg).unwrap())
+                    .expect("failed to query get_transactions on the ledger")
+            ),
+            GetTransactionsResponse
+        )
+        .unwrap()
     }
 
     pub fn balance_of(&self, account: impl Into<Account>) -> Nat {
@@ -1328,4 +1346,93 @@ fn test_taproot_transaction_finalization() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+}
+
+#[test]
+fn test_ledger_memo() {
+    let ckbtc = CkBtcSetup::new();
+
+    // Step 1: deposit ckBTC
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: (1..=32).collect::<Vec<u8>>(),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+
+    ckbtc.deposit_utxo(user, utxo);
+
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+
+    let get_transaction_request = GetTransactionsRequest {
+        start: 0.into(),
+        length: 1.into(),
+    };
+    let res = ckbtc.get_transactions(get_transaction_request);
+    let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
+
+    use ic_ckbtc_minter::memo::MintMemo;
+    let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
+    assert_eq!(
+        decoded_data,
+        MintMemo::Convert {
+            txid: Some(&(1..=32).collect::<Vec<u8>>()),
+            vout: Some(1),
+            kyt_fee: Some(KYT_FEE),
+        }
+    );
+
+    // Step 2: request a withdrawal
+
+    let withdrawal_amount = 50_000_000;
+    let withdrawal_account = ckbtc.withdrawal_account(user.into());
+    ckbtc.transfer(user, withdrawal_account, withdrawal_amount);
+    let btc_address = "bc1q34aq5drpuwy3wgl9lhup9892qp6svr8ldzyy7c".to_string();
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc(btc_address.clone(), withdrawal_amount)
+        .expect("retrieve_btc failed");
+
+    let get_transaction_request = GetTransactionsRequest {
+        start: block_index.into(),
+        length: 1.into(),
+    };
+    let res = ckbtc.get_transactions(get_transaction_request);
+    let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
+    use ic_ckbtc_minter::memo::{BurnMemo, Status};
+
+    let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
+    assert_eq!(
+        decoded_data,
+        BurnMemo::Convert {
+            address: Some(&btc_address),
+            kyt_fee: Some(KYT_FEE),
+            status: Some(Status::Accepted),
+        },
+        "memo not found in burn"
+    );
+
+    ckbtc
+        .env
+        .execute_ingress(ckbtc.minter_id, "distribute_kyt_fee", Encode!().unwrap())
+        .expect("failed to transfer funds");
+
+    let get_transaction_request = GetTransactionsRequest {
+        start: 3.into(),
+        length: 1.into(),
+    };
+    let res = ckbtc.get_transactions(get_transaction_request);
+    let memo = res.transactions[0].mint.clone().unwrap().memo.unwrap();
+    assert_eq!(
+        ckbtc.kyt_provider,
+        res.transactions[0].mint.clone().unwrap().to.owner.into()
+    );
+    let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
+    assert_eq!(decoded_data, MintMemo::Kyt);
 }

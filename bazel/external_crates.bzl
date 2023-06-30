@@ -614,6 +614,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "maplit": crate.spec(
                 version = "^1.0.2",
             ),
+            "minicbor": crate.spec(
+                version = "^0.19.1",
+                features = ["alloc", "derive"],
+            ),
+            "minicbor-derive": crate.spec(
+                version = "^0.13.0",
+            ),
             "mio": crate.spec(
                 version = "^0.7",
                 features = [

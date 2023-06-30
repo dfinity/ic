@@ -2,6 +2,7 @@ use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::comp
 use crate::logs::P0;
 use crate::logs::P1;
 use crate::management::fetch_withdrawal_alerts;
+use crate::memo::{BurnMemo, Status};
 use crate::tasks::{schedule_now, TaskType};
 use crate::{
     address::{account_to_bitcoin_address, BitcoinAddress, ParseAddressError},
@@ -14,6 +15,7 @@ use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::cast::ToPrimitive;
 
@@ -144,7 +146,13 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
 
     match status {
         BtcAddressCheckStatus::Tainted => {
-            let block_index = burn_ckbtcs(caller, kyt_fee).await?;
+            let burn_memo = BurnMemo::Convert {
+                address: Some(&args.address),
+                kyt_fee: Some(kyt_fee),
+                status: Some(Status::Rejected),
+            };
+            let block_index =
+                burn_ckbtcs(caller, kyt_fee, crate::memo::encode(&burn_memo).into()).await?;
             log!(
                 P1,
                 "rejected an attempt to withdraw {} BTC to address {} due to failed KYT check (burnt {} ckBTC in block {})",
@@ -174,8 +182,13 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         }
         BtcAddressCheckStatus::Clean => {}
     }
-
-    let block_index = burn_ckbtcs(caller, args.amount).await?;
+    let burn_memo = BurnMemo::Convert {
+        address: Some(&args.address),
+        kyt_fee: Some(kyt_fee),
+        status: Some(Status::Accepted),
+    };
+    let block_index =
+        burn_ckbtcs(caller, args.amount, crate::memo::encode(&burn_memo).into()).await?;
     let request = RetrieveBtcRequest {
         // NB. We charge the KYT fee from the retrieve amount.
         amount: args.amount - kyt_fee,
@@ -227,7 +240,9 @@ async fn balance_of(user: Principal) -> Result<u64, RetrieveBtcError> {
     Ok(result)
 }
 
-async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcError> {
+async fn burn_ckbtcs(user: Principal, amount: u64, memo: Memo) -> Result<u64, RetrieveBtcError> {
+    debug_assert!(memo.0.len() <= crate::CKBTC_LEDGER_MEMO_SIZE as usize);
+
     let client = ICRC1Client {
         runtime: CdkRuntime,
         ledger_canister_id: read_state(|s| s.ledger_id.get().into()),
@@ -243,7 +258,7 @@ async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcErr
             },
             fee: None,
             created_at_time: None,
-            memo: None,
+            memo: Some(memo),
             amount: Nat::from(amount),
         })
         .await

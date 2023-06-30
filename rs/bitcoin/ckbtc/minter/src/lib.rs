@@ -7,7 +7,7 @@ use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
 use ic_ic00_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::TransferError;
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferError};
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -21,6 +21,7 @@ pub mod guard;
 pub mod lifecycle;
 pub mod logs;
 pub mod management;
+pub mod memo;
 pub mod metrics;
 pub mod queries;
 pub mod signature;
@@ -53,6 +54,11 @@ pub const MIN_RELAY_FEE_PER_VBYTE: MillisatoshiPerByte = 1_000;
 
 /// The minimum time the minter should wait before replacing a stuck transaction.
 pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// The maximum memo size of a transaction on the ckBTC ledger.
+/// The ckBTC minter requires at least 69 bytes, we choose 80
+/// to have some room for future modifications.
+pub const CKBTC_LEDGER_MEMO_SIZE: u16 = 80;
 
 #[derive(Clone, serde::Serialize, Deserialize, Debug)]
 pub enum Priority {
@@ -1019,7 +1025,9 @@ pub async fn distribute_kyt_fees() {
         CallError(i32, String),
     }
 
-    async fn mint(amount: u64, to: candid::Principal) -> Result<u64, MintError> {
+    async fn mint(amount: u64, to: candid::Principal, memo: Memo) -> Result<u64, MintError> {
+        debug_assert!(memo.0.len() <= CKBTC_LEDGER_MEMO_SIZE as usize);
+
         let client = ICRC1Client {
             runtime: CdkRuntime,
             ledger_canister_id: state::read_state(|s| s.ledger_id.get().into()),
@@ -1033,7 +1041,7 @@ pub async fn distribute_kyt_fees() {
                 },
                 fee: None,
                 created_at_time: None,
-                memo: None,
+                memo: Some(memo),
                 amount: candid::Nat::from(amount),
             })
             .await
@@ -1043,7 +1051,8 @@ pub async fn distribute_kyt_fees() {
 
     let fees_to_distribute = state::read_state(|s| s.owed_kyt_amount.clone());
     for (provider, amount) in fees_to_distribute {
-        match mint(amount, provider).await {
+        let memo = crate::memo::MintMemo::Kyt;
+        match mint(amount, provider, crate::memo::encode(&memo).into()).await {
             Ok(block_index) => {
                 state::mutate_state(|s| {
                     if let Err(state::Overdraft(overdraft)) =

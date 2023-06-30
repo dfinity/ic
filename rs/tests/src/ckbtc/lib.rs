@@ -25,6 +25,7 @@ use ic_ckbtc_kyt::{
 };
 use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
+use ic_ckbtc_minter::CKBTC_LEDGER_MEMO_SIZE;
 use ic_config::{
     execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
     subnet_config::ECDSA_SIGNATURE_FEE,
@@ -281,7 +282,7 @@ pub(crate) async fn install_ledger(
             max_transactions_per_response: None,
         },
         fee_collector_account: None,
-        max_memo_length: None,
+        max_memo_length: Some(CKBTC_LEDGER_MEMO_SIZE),
     });
     install_icrc1_ledger(env, canister, &init_args).await;
     canister.canister_id()
