@@ -16,13 +16,12 @@ use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManager
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets};
 use ic_metrics::{MetricsRegistry, Timer};
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     ecdsa_keys::EcdsaKeysRegistry,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     routing_table::RoutingTableRegistry,
-    subnet::{SubnetListRegistry, SubnetRegistry},
+    subnet::{get_node_ids_from_subnet_record, SubnetListRegistry, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
@@ -31,9 +30,8 @@ use ic_replicated_state::{NetworkTopology, ReplicatedState, SubnetTopology};
 use ic_types::{
     batch::Batch,
     malicious_flags::MaliciousFlags,
-    registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
-    Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    Height, NumBytes, RegistryVersion, SubnetId,
 };
 use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]
@@ -46,6 +44,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
+    fmt::Display,
     time::Instant,
 };
 
@@ -82,6 +81,7 @@ const METRIC_CANISTER_HISTORY_MEMORY_USAGE_BYTES: &str = "mr_canister_history_me
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
+const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -267,6 +267,8 @@ pub(crate) struct MessageRoutingMetrics {
     /// Critical error: subnet has no canister allocation range to generate new
     /// canister IDs from.
     critical_error_no_canister_allocation_range: IntCounter,
+    /// Critical error: reading from the registry failed during processing a batch.
+    critical_error_failed_to_read_registry: IntCounter,
     /// Number of timed out requests.
     pub timed_out_requests_total: IntCounter,
 }
@@ -320,6 +322,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_MISSING_SUBNET_SIZE),
             critical_error_no_canister_allocation_range: metrics_registry
                 .error_counter(CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE),
+            critical_error_failed_to_read_registry: metrics_registry
+                .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
             timed_out_requests_total: metrics_registry.int_counter(
                 METRIC_TIMED_OUT_REQUESTS_TOTAL,
                 "Count of timed out requests.",
@@ -368,6 +372,26 @@ struct BatchProcessorImpl {
     log: ReplicaLogger,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
+}
+
+fn read_failed_error<W: Display, E: Display>(what: W, err: E) -> String {
+    format!("Failed to read '{}', err: {}", what, err)
+}
+
+fn read_failed_for_subnet_error<W: Display, E: Display>(
+    what: W,
+    subnet_id: SubnetId,
+    err: E,
+) -> String {
+    read_failed_error(format!("{} of subnet {}", what, subnet_id), err)
+}
+
+fn not_found_error<W: Display>(what: W) -> String {
+    format!("'{}' not found", what)
+}
+
+fn not_found_for_subnet_error<W: Display>(what: W, subnet_id: SubnetId) -> String {
+    not_found_error(format!("{} of subnet {}", what, subnet_id))
 }
 
 impl BatchProcessorImpl {
@@ -430,45 +454,26 @@ impl BatchProcessorImpl {
             .set(canister_history_memory_usage.get() as i64);
     }
 
-    // Retrieve the `ProvisionalWhitelist` from the registry.  We do this at the
-    // start of the "deterministic state machine" to ensure that we do not start
-    // any processing till we have all the necessary information required to
-    // finish it.
+    /// Reads registry contents required by `BatchProcessorImpl::process_batch()`.
     //
-    // # Warning
-    // If the registry is unavailable, this method keeps trying again forever until
-    // the registry becomes available.
-    fn get_provisional_whitelist(&self, registry_version: RegistryVersion) -> ProvisionalWhitelist {
-        let provisional_whitelist = loop {
-            match self.registry.get_provisional_whitelist(registry_version) {
-                Ok(record) => break record,
-                Err(err) => {
-                    warn!(
-                        self.log,
-                        "Unable to read the provisional whitelist: {}. Trying again...",
-                        err.to_string(),
-                    );
-                }
-            }
-            sleep(std::time::Duration::from_millis(100));
-        };
-        provisional_whitelist.unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()))
-    }
-
-    // Populates a `NetworkTopology` from the registry at a specific version.
-    //
-    // # Warning
-    // If the registry is unavailable, this method keeps trying again forever until
-    // the registry becomes available.
-    fn populate_network_topology(&self, registry_version: RegistryVersion) -> NetworkTopology {
+    /// # Warning
+    /// If the registry is unavailable, this method loops until it becomes
+    /// available. If registry contents are invalid, the method loops forever.
+    fn read_registry(
+        &self,
+        registry_version: RegistryVersion,
+        own_subnet_id: SubnetId,
+    ) -> (NetworkTopology, SubnetFeatures, RegistryExecutionSettings) {
         loop {
-            match self.try_to_populate_network_topology(registry_version) {
-                Ok(network_topology) => break network_topology,
+            match self.try_to_read_registry(registry_version, own_subnet_id) {
+                Ok(result) => return result,
                 Err(err) => {
+                    self.metrics.critical_error_failed_to_read_registry.inc();
                     warn!(
                         self.log,
-                        "Unable to populate network topology: {}. Trying again...",
-                        err.to_string(),
+                        "Unable to read registry @ version {}: {:?}. Trying again...",
+                        registry_version,
+                        err
                     );
                 }
             }
@@ -476,38 +481,137 @@ impl BatchProcessorImpl {
         }
     }
 
-    // Tries to populate a `NetworkTopology` from the registry.
+    /// Loads the `NetworkTopology`, `SubnetFeatures` and execution settings from
+    /// the registry.
+    ///
+    /// All of the above are required for deterministic processing, so if any
+    /// entry is missing or cannot be decoded; or reading the registry fails; the
+    /// call fails and returns an error.
+    fn try_to_read_registry(
+        &self,
+        registry_version: RegistryVersion,
+        own_subnet_id: SubnetId,
+    ) -> Result<(NetworkTopology, SubnetFeatures, RegistryExecutionSettings), String> {
+        let network_topology = self.try_to_populate_network_topology(registry_version)?;
+
+        let provisional_whitelist = self
+            .registry
+            .get_provisional_whitelist(registry_version)
+            .map_err(|err| read_failed_error("provisional whitelist", err))?
+            .unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()));
+
+        let subnet_record = self
+            .registry
+            .get_subnet_record(own_subnet_id, registry_version)
+            .map_err(|err| read_failed_for_subnet_error("subnet record", own_subnet_id, err))?
+            .ok_or_else(|| not_found_for_subnet_error("subnet record", own_subnet_id))?;
+        let subnet_features = subnet_record.features.unwrap_or_default().into();
+        let max_number_of_canisters = subnet_record.max_number_of_canisters;
+        let max_ecdsa_queue_size = subnet_record
+            .ecdsa_config
+            .map(|c| c.max_queue_size)
+            .unwrap_or(0);
+
+        let subnet_size = if subnet_record.membership.is_empty() {
+            self.metrics.critical_error_missing_subnet_size.inc();
+            warn!(
+                self.log,
+                "{}: [EXC-1168] Unable to get subnet size from network topology. Cycles accounting may no longer be accurate.",
+                CRITICAL_ERROR_MISSING_SUBNET_SIZE
+            );
+            SMALL_APP_SUBNET_MAX_SIZE
+        } else {
+            subnet_record
+                .membership
+                .iter()
+                .collect::<BTreeSet<_>>()
+                .len()
+        };
+
+        Ok((
+            network_topology,
+            subnet_features,
+            RegistryExecutionSettings {
+                max_number_of_canisters,
+                provisional_whitelist,
+                max_ecdsa_queue_size,
+                subnet_size,
+            },
+        ))
+    }
+
+    /// Tries to populate a `NetworkTopology` from the registry at a specific version.
     fn try_to_populate_network_topology(
         &self,
         registry_version: RegistryVersion,
-    ) -> Result<NetworkTopology, RegistryClientError> {
+    ) -> Result<NetworkTopology, String> {
         // Return the list of subnets present in the registry. If no subnet list is
         // defined, as could be the case in tests, an empty `Vec` is returned.
-        let subnet_ids_record = self.registry.get_subnet_ids(registry_version)?;
+        let subnet_ids_record = self
+            .registry
+            .get_subnet_ids(registry_version)
+            .map_err(|err| read_failed_error("subnet ids", err))?;
         let subnet_ids = subnet_ids_record.unwrap_or_default();
 
         // Populate subnet topologies.
         let mut subnets = BTreeMap::new();
 
         for subnet_id in &subnet_ids {
-            let mut nodes: BTreeSet<NodeId> = BTreeSet::new();
-
-            // Return the list of nodes present in the registry. If no nodes are
-            // defined, as could be the case in tests, an empty `Vec` is returned.
-            let node_ids_record = self
+            let public_key = self
                 .registry
-                .get_node_ids_on_subnet(*subnet_id, registry_version)?;
-            let node_ids = node_ids_record.unwrap_or_default();
+                .get_initial_dkg_transcripts(*subnet_id, registry_version)
+                .map_err(|err| {
+                    read_failed_for_subnet_error("initial DKG transcripts", *subnet_id, err)
+                })?
+                .value
+                .map(|transcripts| {
+                    ic_crypto_utils_threshold_sig_der::public_key_to_der(
+                        &transcripts.high_threshold.public_key().into_bytes(),
+                    )
+                })
+                .transpose()?
+                .ok_or_else(|| {
+                    not_found_for_subnet_error("public key in transcript", *subnet_id)
+                })?;
 
-            for node_id in node_ids {
-                nodes.insert(node_id);
-            }
+            // Read the subnet record.
+            let subnet_record = self
+                .registry
+                .get_subnet_record(*subnet_id, registry_version)
+                .map_err(|err| read_failed_for_subnet_error("subnet record", *subnet_id, err))?
+                .ok_or_else(|| not_found_for_subnet_error("subnet record", *subnet_id))?;
 
-            let public_key =
-                get_subnet_public_key(Arc::clone(&self.registry), *subnet_id, registry_version)?;
-            let subnet_type = self.get_subnet_type(*subnet_id, registry_version);
-            let subnet_features = self.get_subnet_features(*subnet_id, registry_version);
-            let ecdsa_keys_held = self.get_ecdsa_keys_held(*subnet_id, registry_version);
+            let nodes = get_node_ids_from_subnet_record(&subnet_record)
+                .map_err(|err| {
+                    read_failed_for_subnet_error("node IDs from the subnet record", *subnet_id, err)
+                })?
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            let subnet_type: SubnetType = subnet_record
+                .subnet_type
+                .try_into()
+                .map_err(|err| read_failed_for_subnet_error("subnet type", *subnet_id, err))?;
+            let subnet_features: SubnetFeatures = subnet_record.features.unwrap_or_default().into();
+            let ecdsa_keys_held = subnet_record
+                .ecdsa_config
+                .map(|ecdsa_config| {
+                    ecdsa_config
+                        .key_ids
+                        .into_iter()
+                        .map(|k| {
+                            EcdsaKeyId::try_from(k).map_err(|err| {
+                                read_failed_for_subnet_error(
+                                    "ECDSA key from the subnet record",
+                                    *subnet_id,
+                                    err,
+                                )
+                            })
+                        })
+                        .collect::<Result<BTreeSet<_>, _>>()
+                })
+                .transpose()?
+                .unwrap_or_default();
+
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -520,17 +624,26 @@ impl BatchProcessorImpl {
             );
         }
 
-        let routing_table_record = self.registry.get_routing_table(registry_version)?;
+        let routing_table_record = self
+            .registry
+            .get_routing_table(registry_version)
+            .map_err(|err| read_failed_error("routing table", err))?;
         let routing_table = routing_table_record.unwrap_or_default();
         let canister_migrations = self
             .registry
-            .get_canister_migrations(registry_version)?
+            .get_canister_migrations(registry_version)
+            .map_err(|err| read_failed_error("canister migrations", err))?
             .unwrap_or_default();
-        let nns_subnet_id = self.get_nns_subnet_id(registry_version);
 
+        let nns_subnet_id = self
+            .registry
+            .get_root_subnet_id(registry_version)
+            .map_err(|err| read_failed_error("NNS subnet id", err))?
+            .ok_or_else(|| not_found_error("NNS subnet id"))?;
         let ecdsa_signing_subnets = self
             .registry
-            .get_ecdsa_signing_subnets(registry_version)?
+            .get_ecdsa_signing_subnets(registry_version)
+            .map_err(|err| read_failed_error("ECDSA signing subnets", err))?
             .unwrap_or_default();
 
         Ok(NetworkTopology {
@@ -543,120 +656,6 @@ impl BatchProcessorImpl {
             bitcoin_mainnet_canister_id: self.bitcoin_config.mainnet_canister_id,
         })
     }
-
-    fn get_nns_subnet_id(&self, registry_version: RegistryVersion) -> SubnetId {
-        // Note: The following assumes that root == NNS subnet.
-        match self.registry.get_root_subnet_id(registry_version) {
-            Ok(Some(subnet_id)) => subnet_id,
-            Ok(None) => unreachable!("Could not find the NNS subnet id"),
-            Err(err) => unreachable!("Could not find the NNS subnet id: {}", err),
-        }
-    }
-
-    fn get_subnet_record(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> SubnetRecord {
-        loop {
-            match self.registry.get_subnet_record(subnet_id, registry_version) {
-                Ok(subnet_record) => {
-                    break match subnet_record {
-                        Some(record) => record,
-                        // This can only happen if the registry is corrupted, so better to crash.
-                        None => fatal!(
-                            self.log,
-                            "Failed to find a subnet record for subnet: {} in the registry.",
-                            subnet_id
-                        ),
-                    };
-                }
-                Err(err) => {
-                    warn!(
-                        self.log,
-                        "Unable to read the subnet record: {}. Trying again...",
-                        err.to_string(),
-                    );
-                }
-            }
-            sleep(std::time::Duration::from_millis(100));
-        }
-    }
-
-    fn get_subnet_type(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> SubnetType {
-        let record = self.get_subnet_record(subnet_id, registry_version);
-        SubnetType::try_from(record.subnet_type).expect("Could not parse SubnetType")
-    }
-
-    fn get_subnet_features(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> SubnetFeatures {
-        let record = self.get_subnet_record(subnet_id, registry_version);
-        record.features.unwrap_or_default().into()
-    }
-
-    fn get_ecdsa_keys_held(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> BTreeSet<EcdsaKeyId> {
-        let record = self.get_subnet_record(subnet_id, registry_version);
-        record
-            .ecdsa_config
-            .map(|ecdsa_config| {
-                ecdsa_config
-                    .key_ids
-                    .into_iter()
-                    .map(|k| {
-                        EcdsaKeyId::try_from(k).expect("Could not read EcdsaKeyId from protobuf")
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    fn get_max_number_of_canisters(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> u64 {
-        let record = self.get_subnet_record(subnet_id, registry_version);
-        record.max_number_of_canisters
-    }
-
-    fn get_max_ecdsa_queue_size(
-        &self,
-        subnet_id: SubnetId,
-        registry_version: RegistryVersion,
-    ) -> u32 {
-        let record = self.get_subnet_record(subnet_id, registry_version);
-        record.ecdsa_config.map(|c| c.max_queue_size).unwrap_or(0)
-    }
-}
-
-fn get_subnet_public_key(
-    registry: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-) -> Result<Vec<u8>, RegistryClientError> {
-    use ic_crypto_utils_threshold_sig_der::public_key_to_der;
-    Ok(registry
-        .get_initial_dkg_transcripts(subnet_id, registry_version)?
-        .value
-        .map(|transcripts| {
-            let transcript = transcripts.high_threshold;
-            let pk = transcript.public_key();
-            public_key_to_der(&pk.into_bytes()).unwrap_or_else(|err| {
-                panic!("Invalid public key for subnet {}: {:?}", subnet_id, err)
-            })
-        })
-        .expect("Initial DKG transcripts not found."))
 }
 
 impl BatchProcessor for BatchProcessorImpl {
@@ -709,38 +708,15 @@ impl BatchProcessor for BatchProcessorImpl {
         // TODO (MR-29) Cache network topology and subnet_features; and populate only
         // if version referenced in batch changes.
         let registry_version = batch.registry_version;
-        let network_topology = self.populate_network_topology(registry_version);
-        let provisional_whitelist = self.get_provisional_whitelist(registry_version);
-        let subnet_features =
-            self.get_subnet_features(state.metadata.own_subnet_id, registry_version);
-        let max_number_of_canisters =
-            self.get_max_number_of_canisters(state.metadata.own_subnet_id, registry_version);
-        let max_ecdsa_queue_size =
-            self.get_max_ecdsa_queue_size(state.metadata.own_subnet_id, registry_version);
-
-        let subnet_size = network_topology
-            .get_subnet_size(&state.metadata.own_subnet_id)
-            .unwrap_or_else(|| {
-                self.metrics.critical_error_missing_subnet_size.inc();
-                warn!(
-                    self.log,
-                    "{}: [EXC-1168] Unable to get subnet size from network topology. Cycles accounting may no longer be accurate.",
-                    CRITICAL_ERROR_MISSING_SUBNET_SIZE
-                );
-                SMALL_APP_SUBNET_MAX_SIZE
-            });
+        let (network_topology, subnet_features, registry_execution_settings) =
+            self.read_registry(registry_version, state.metadata.own_subnet_id);
 
         let mut state_after_round = self.state_machine.execute_round(
             state,
             network_topology,
             batch,
             subnet_features,
-            &RegistryExecutionSettings {
-                max_number_of_canisters,
-                provisional_whitelist,
-                max_ecdsa_queue_size,
-                subnet_size,
-            },
+            &registry_execution_settings,
         );
         // Garbage collect empty canister queue pairs before checkpointing.
         if certification_scope == CertificationScope::Full {
