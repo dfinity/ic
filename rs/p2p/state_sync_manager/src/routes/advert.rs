@@ -26,10 +26,9 @@ pub(crate) async fn state_sync_advert_handler(
         .with_label_values(&["advert"])
         .start_timer();
 
-    let payload = pb::GossipAdvert::decode(payload).map_err(|_| StatusCode::BAD_REQUEST)?;
-
-    let id: StateSyncArtifactId =
-        bincode::deserialize(&payload.artifact_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let id: StateSyncArtifactId = pb::StateSyncId::decode(payload)
+        .map_err(|_| StatusCode::BAD_REQUEST)?
+        .into();
 
     state
         .advert_sender
@@ -60,14 +59,8 @@ impl StateSyncAdvertHandler {
     }
 }
 
-pub(crate) fn build_advert_handler_request(artifact_id: &StateSyncArtifactId) -> Request<Bytes> {
-    // TODO: (NET-1448) This will be changed to use state sync specific protos.
-    let pb = pb::GossipAdvert {
-        attribute: vec![],
-        size: 0,
-        artifact_id: bincode::serialize(artifact_id).unwrap(),
-        integrity_hash: vec![],
-    };
+pub(crate) fn build_advert_handler_request(artifact_id: StateSyncArtifactId) -> Request<Bytes> {
+    let pb: pb::StateSyncId = artifact_id.into();
 
     let mut raw = BytesMut::with_capacity(pb.encoded_len());
     pb.encode(&mut raw).expect("Allocated enough memory");

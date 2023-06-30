@@ -630,3 +630,21 @@ impl TryFrom<pb::StateSyncFilter> for StateSyncFilter {
         })
     }
 }
+
+impl From<StateSyncArtifactId> for pb::StateSyncId {
+    fn from(id: StateSyncArtifactId) -> Self {
+        Self {
+            height: id.height.get(),
+            hash: id.hash.get().0,
+        }
+    }
+}
+
+impl From<pb::StateSyncId> for StateSyncArtifactId {
+    fn from(id: pb::StateSyncId) -> Self {
+        Self {
+            height: Height::from(id.height),
+            hash: CryptoHashOfState::new(CryptoHash(id.hash)),
+        }
+    }
+}
