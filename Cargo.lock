@@ -11129,9 +11129,9 @@ dependencies = [
 
 [[package]]
 name = "ic0"
-version = "0.18.10"
+version = "0.18.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "187fa0cecf46628330b7a390a1a65fb0637ea00d3a1121aa847ecbebc0f3ff79"
+checksum = "978b91fc78de9d2eb0144db717839cde3b35470199ea51aca362cb6310e93dfd"
 
 [[package]]
 name = "ic_bls12_381"

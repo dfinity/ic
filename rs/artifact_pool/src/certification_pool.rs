@@ -2,9 +2,7 @@ use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
-    artifact_pool::{
-        ChangeResult, MutablePool, ProcessingResult, UnvalidatedArtifact, ValidatedPoolReader,
-    },
+    artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
     time_source::TimeSource,
@@ -142,11 +140,7 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
         _time_source: &dyn TimeSource,
         change_set: ChangeSet,
     ) -> ChangeResult<CertificationArtifact> {
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
+        let changed = !change_set.is_empty();
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         change_set.into_iter().for_each(|action| match action {
@@ -483,7 +477,7 @@ mod tests {
             );
             assert_eq!(result.adverts.len(), 2);
             assert!(result.purged.is_empty());
-            assert_eq!(result.changed, ProcessingResult::StateChanged);
+            assert!(result.changed);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
                 Some(msg_to_cert(cert_msg))
@@ -513,7 +507,7 @@ mod tests {
             );
             assert_eq!(result.adverts.len(), 2);
             assert!(result.purged.is_empty());
-            assert_eq!(result.changed, ProcessingResult::StateChanged);
+            assert!(result.changed);
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
                     .collect::<Vec<CertificationShare>>(),
@@ -588,7 +582,7 @@ mod tests {
             }
             assert!(result.adverts.is_empty());
             assert_eq!(result.purged.len(), 2);
-            assert_eq!(result.changed, ProcessingResult::StateChanged);
+            assert!(result.changed);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
             assert!(pool.certification_at_height(Height::from(10)).is_none());
@@ -625,14 +619,14 @@ mod tests {
             );
             assert!(result.adverts.is_empty());
             assert!(result.purged.is_empty());
-            assert_eq!(result.changed, ProcessingResult::StateChanged);
+            assert!(result.changed);
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 0
             );
 
             let result = pool.apply_changes(&SysTimeSource::new(), vec![]);
-            assert_eq!(result.changed, ProcessingResult::StateUnchanged);
+            assert!(!result.changed);
         });
     }
 }

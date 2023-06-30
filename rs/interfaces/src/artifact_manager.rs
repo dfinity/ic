@@ -1,8 +1,5 @@
 //! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
-use crate::{
-    artifact_pool::{ProcessingResult, UnvalidatedArtifact},
-    time_source::TimeSource,
-};
+use crate::{artifact_pool::UnvalidatedArtifact, time_source::TimeSource};
 use derive_more::From;
 use ic_types::artifact::{ArtifactPriorityFn, PriorityFn};
 use ic_types::{artifact, chunkable, p2p, NodeId};
@@ -137,7 +134,7 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
         &self,
         time_source: &dyn TimeSource,
         new_artifacts: Vec<UnvalidatedArtifact<Artifact::Message>>,
-    ) -> (Vec<artifact::Advert<Artifact>>, ProcessingResult);
+    ) -> (Vec<artifact::Advert<Artifact>>, bool);
 }
 
 /// The Artifact Manager stores artifacts to be used by this and other nodes in
