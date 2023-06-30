@@ -10,10 +10,13 @@ use crate::{
     validator_executor::ValidatorExecutor,
     EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService,
 };
+use crossbeam::channel::Sender;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
-use ic_interfaces_p2p::{IngressError, IngressIngestionService};
+use ic_interfaces::{
+    artifact_pool::UnvalidatedArtifact, ingress_pool::IngressPoolThrottler, time_source::TimeSource,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
 use ic_registry_client_helpers::{
@@ -24,12 +27,12 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
-    CanisterId, CountBytes, RegistryVersion, SubnetId,
+    CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
 use std::convert::{Infallible, TryInto};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
 use tower::{
     limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder, ServiceExt,
@@ -39,11 +42,14 @@ use tower::{
 pub(crate) struct CallService {
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
+    node_id: NodeId,
     subnet_id: SubnetId,
+    time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
     validator_executor: ValidatorExecutor,
-    ingress_sender: IngressIngestionService,
     ingress_filter: IngressFilterService,
+    ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+    ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
     malicious_flags: MaliciousFlags,
 }
 
@@ -53,11 +59,14 @@ impl CallService {
         config: Config,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
+        node_id: NodeId,
         subnet_id: SubnetId,
+        time_source: Arc<dyn TimeSource>,
         registry_client: Arc<dyn RegistryClient>,
         validator_executor: ValidatorExecutor,
-        ingress_sender: IngressIngestionService,
         ingress_filter: IngressFilterService,
+        ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+        ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
         malicious_flags: MaliciousFlags,
     ) -> EndpointService {
         let base_service = BoxCloneService::new(
@@ -71,9 +80,12 @@ impl CallService {
                     subnet_id,
                     registry_client,
                     validator_executor,
-                    ingress_sender,
+                    ingress_throttler,
+                    ingress_tx,
+                    time_source,
                     ingress_filter,
                     malicious_flags,
+                    node_id,
                 }),
         );
 
@@ -140,8 +152,8 @@ impl Service<Request<Vec<u8>>> for CallService {
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.ingress_sender.poll_ready(cx)
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
@@ -217,31 +229,14 @@ impl Service<Request<Vec<u8>>> for CallService {
             return Box::pin(async move { Ok(res) });
         }
 
-        let ingress_sender = self.ingress_sender.clone();
-
-        // In case the inner service has state that's driven to readiness and
-        // not tracked by clones (such as `Buffer`), pass the version we have
-        // already called `poll_ready` on into the future, and leave its clone
-        // behind.
-        //
-        // The types implementing the Service trait are not necessary thread-safe.
-        // So the unless the caller is sure that the service implementation is
-        // thread-safe we must make sure 'poll_ready' is always called before 'call'
-        // on the same object. Hence if 'poll_ready' is called and not tracked by
-        // the 'Clone' implementation the following sequence of events may panic.
-        //
-        //  s1.call_ready()
-        //  s2 = s1.clone()
-        //  s2.call()
-        //
-        // NOTE: Buffer::Clone does not track readiness across clones.
-
-        let mut ingress_sender = std::mem::replace(&mut self.ingress_sender, ingress_sender);
-
+        let ingress_tx = self.ingress_tx.clone();
         let mut ingress_filter = self.ingress_filter.clone();
         let log = self.log.clone();
         let validator_executor = self.validator_executor.clone();
         let malicious_flags = self.malicious_flags.clone();
+        let time_source = self.time_source.clone();
+        let node_id = self.node_id;
+        let ingress_throttler = self.ingress_throttler.clone();
         Box::pin(async move {
             let validate_signed_ingress_fut = validator_executor.validate_signed_ingress(
                 msg.clone(),
@@ -268,23 +263,31 @@ impl Service<Request<Vec<u8>>> for CallService {
             }
 
             let ingress_log_entry = msg.log_entry();
-            let response = match ingress_sender.call(msg).await {
-                Err(_) => panic!("Can't panic on Infallible"),
-                Ok(Err(IngressError::Overloaded)) => make_plaintext_response(
+
+            let is_overloaded = ingress_throttler.read().unwrap().exceeds_threshold()
+                || ingress_tx
+                    .try_send(UnvalidatedArtifact {
+                        message: msg,
+                        peer_id: node_id,
+                        timestamp: time_source.get_relative_time(),
+                    })
+                    .is_err();
+
+            let response = if is_overloaded {
+                make_plaintext_response(
                     StatusCode::TOO_MANY_REQUESTS,
                     "Service is overloaded, try again later.".to_string(),
-                ),
-                Ok(Ok(())) => {
-                    // We're pretty much done, just need to send the message to ingress and
-                    // make_response to the client
-                    info_sample!(
-                        "message_id" => &message_id,
-                        log,
-                        "ingress_message_submit";
-                        ingress_message => ingress_log_entry
-                    );
-                    make_accepted_response()
-                }
+                )
+            } else {
+                // We're pretty much done, just need to send the message to ingress and
+                // make_response to the client
+                info_sample!(
+                    "message_id" => &message_id,
+                    log,
+                    "ingress_message_submit";
+                    ingress_message => ingress_log_entry
+                );
+                make_accepted_response()
             };
             Ok(response)
         })

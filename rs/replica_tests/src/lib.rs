@@ -1,4 +1,5 @@
 use core::future::Future;
+use crossbeam_channel::Sender as CrossbeamSender;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
@@ -10,8 +11,11 @@ use ic_ic00_types::{
     CanisterIdRecord, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     IC_00,
 };
-use ic_interfaces::execution_environment::{IngressHistoryReader, QueryHandler};
-use ic_interfaces_p2p::IngressIngestionService;
+use ic_interfaces::{
+    artifact_pool::UnvalidatedArtifact,
+    execution_environment::{IngressHistoryReader, QueryHandler},
+    time_source::{SysTimeSource, TimeSource},
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
@@ -27,7 +31,7 @@ use ic_replica::setup::setup_crypto_provider;
 use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::{
-    types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
+    types::ids::node_test_id, types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
     universal_canister::UNIVERSAL_CANISTER_WASM,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -49,7 +53,6 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tower::{util::ServiceExt, Service};
 
 const CYCLES_BALANCE: u128 = 1 << 120;
 
@@ -60,29 +63,19 @@ const CYCLES_BALANCE: u128 = 1 << 120;
 /// time.
 #[allow(clippy::await_holding_lock)]
 fn process_ingress(
-    ingress_sender_mu: &Mutex<Option<IngressIngestionService>>,
+    ingress_tx: &CrossbeamSender<UnvalidatedArtifact<SignedIngress>>,
     ingress_hist_reader: &dyn IngressHistoryReader,
     msg: SignedIngress,
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
-    #[allow(clippy::disallowed_methods)]
-    tokio::task::block_in_place(move || {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        rt.block_on(async move {
-            let mut ingress_sender_guard = ingress_sender_mu.lock().unwrap();
-            ingress_sender_guard
-                .as_mut()
-                .unwrap()
-                .ready()
-                .await
-                .expect("The service must always be able to process requests.")
-                .call(msg)
-                .await
-                .unwrap()
-                .unwrap();
-        });
-    });
+    ingress_tx
+        .send(UnvalidatedArtifact {
+            message: msg,
+            peer_id: node_test_id(1),
+            timestamp: SysTimeSource::new().get_relative_time(),
+        })
+        .unwrap();
 
     let start = Instant::now();
     loop {
@@ -161,7 +154,7 @@ where
 /// function calls instead of http calls.
 pub struct LocalTestRuntime {
     pub query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    pub ingress_sender: Arc<Mutex<Option<IngressIngestionService>>>,
+    pub ingress_sender: CrossbeamSender<UnvalidatedArtifact<SignedIngress>>,
     pub ingress_history_reader: Arc<dyn IngressHistoryReader>,
     pub state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     pub node_id: NodeId,
@@ -343,7 +336,7 @@ where
             ..Default::default()
         };
         let temp_node = node_id;
-        let (state_manager, query_handler, _p2p_thread_joiner, ingress_ingestion_service, _) =
+        let (state_manager, query_handler, _p2p_thread_joiner, ingress_tx, _) =
             ic_replica::setup_ic_stack::construct_ic_stack(
                 &logger,
                 &metrics_registry,
@@ -361,8 +354,6 @@ where
 
         let ingress_history_reader =
             IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as Arc<_>);
-
-        let ingress_sender = Mutex::new(Some(ingress_ingestion_service));
 
         std::thread::sleep(std::time::Duration::from_millis(1000));
         // Before height 1 the replica hasn't figured out what
@@ -383,7 +374,7 @@ where
 
         let runtime = LocalTestRuntime {
             query_handler,
-            ingress_sender: Arc::new(ingress_sender),
+            ingress_sender: ingress_tx,
             ingress_history_reader: Arc::new(ingress_history_reader),
             state_reader: state_manager,
             node_id,
@@ -404,14 +395,6 @@ impl LocalTestRuntime {
         let mut nonce = self.nonce.lock().unwrap();
         *nonce += 1;
         *nonce
-    }
-
-    pub fn stop(&self) {
-        // Drop the reference to the ingress sender,
-        // as some of the tests intentionally leak the runtime object.
-        // This prevents the runtime to be destroyed and drop references
-        // to the objects it holds. This causes test failures
-        self.ingress_sender.lock().unwrap().take().unwrap();
     }
 
     pub fn upgrade_canister(
@@ -576,7 +559,7 @@ impl LocalTestRuntime {
         install_code_args: InstallCodeArgs,
     ) -> Result<WasmResult, UserError> {
         // Clone data to send to thread
-        let ingress_sender = Arc::clone(&self.ingress_sender);
+        let ingress_sender = self.ingress_sender.clone();
         let ingress_history_reader = Arc::clone(&self.ingress_history_reader);
         let nonce = self.get_nonce();
         let ingress_time_limit = self.ingress_time_limit;

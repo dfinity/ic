@@ -40,7 +40,7 @@ use crate::{
     validator_executor::ValidatorExecutor,
 };
 use byte_unit::Byte;
-use crossbeam::atomic::AtomicCell;
+use crossbeam::{atomic::AtomicCell, channel::Sender};
 use http::method::Method;
 use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_async_utils::{receive_body, start_tcp_listener};
@@ -50,11 +50,13 @@ use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
+    artifact_pool::UnvalidatedArtifact,
     consensus_pool::ConsensusPoolCache,
     crypto::IngressSigVerifier,
     execution_environment::{IngressFilterService, QueryExecutionService},
+    ingress_pool::IngressPoolThrottler,
+    time_source::TimeSource,
 };
-use ic_interfaces_p2p::IngressIngestionService;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
@@ -70,7 +72,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
-        HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus,
+        HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus, SignedIngress,
     },
     time::expiry_time_from_now,
     CanisterId, NodeId, SubnetId,
@@ -234,12 +236,15 @@ pub fn start_server(
     metrics_registry: &MetricsRegistry,
     config: Config,
     ingress_filter: IngressFilterService,
-    ingress_sender: IngressIngestionService,
     query_execution_service: QueryExecutionService,
+    ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
+    ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
+    time_source: Arc<dyn TimeSource>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     registry_client: Arc<dyn RegistryClient>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     log: ReplicaLogger,
@@ -272,11 +277,14 @@ pub fn start_server(
         config.clone(),
         log.clone(),
         metrics.clone(),
+        node_id,
         subnet_id,
+        time_source,
         Arc::clone(&registry_client),
         validator_executor.clone(),
-        ingress_sender,
         ingress_filter,
+        ingress_throttler,
+        ingress_tx,
         malicious_flags.clone(),
     );
     let query_service = QueryService::new_service(

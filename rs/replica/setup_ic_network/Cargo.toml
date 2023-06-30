@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
+crossbeam-channel = "0.5.5"
 ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
@@ -16,7 +17,6 @@ ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
-ic-interfaces-p2p = { path = "../../interfaces/p2p" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../../interfaces/state_manager" }
 ic-interfaces-transport = { path = "../../interfaces/transport" }

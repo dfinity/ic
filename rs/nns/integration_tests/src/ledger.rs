@@ -215,8 +215,6 @@ fn test_rosetta1_92() {
             .await
             .expect("Couldn't get archive canisters");
         assert!(archive_canisters.len() >= 2);
-
-        runtime.stop();
         Ok(())
     });
 }

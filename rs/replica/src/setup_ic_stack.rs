@@ -1,4 +1,5 @@
 use crate::setup::get_subnet_type;
+use crossbeam_channel::Sender;
 use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, ensure_persistent_pool_replica_version_compatibility,
 };
@@ -11,10 +12,11 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_icos_sev::Sev;
-use ic_interfaces::artifact_manager::JoinGuard;
-use ic_interfaces::execution_environment::QueryHandler;
+use ic_interfaces::{
+    artifact_manager::JoinGuard, artifact_pool::UnvalidatedArtifact,
+    execution_environment::QueryHandler, time_source::SysTimeSource,
+};
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
-use ic_interfaces_p2p::IngressIngestionService;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
@@ -26,7 +28,7 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::{setup_consensus_and_p2p, P2PStateSyncClient};
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
-use ic_types::{consensus::CatchUpPackage, NodeId, SubnetId};
+use ic_types::{consensus::CatchUpPackage, messages::SignedIngress, NodeId, SubnetId};
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
@@ -62,7 +64,7 @@ pub fn construct_ic_stack(
     Arc<dyn QueryHandler<State = ReplicatedState>>,
     Vec<Box<dyn JoinGuard>>,
     // TODO: remove this return value since it is used only in tests
-    IngressIngestionService,
+    Sender<UnvalidatedArtifact<SignedIngress>>,
     XNetEndpoint,
 )> {
     // Determine the correct catch-up package.
@@ -112,6 +114,7 @@ pub fn construct_ic_stack(
         registry.get_latest_version(),
         registry.as_ref(),
     );
+    let time_source = Arc::new(SysTimeSource::new());
     // ---------- THE PERSISTED CONSENSUS ARTIFACT POOL DEPS FOLLOW ----------
     // This is the first object that is required for the creation of the IC stack. Initializing the persistent
     // consensus pool is the only way for retrieving the height of the last CUP and/or certification.
@@ -251,7 +254,7 @@ pub fn construct_ic_stack(
     let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
         LocalStoreImpl::new(config.registry_client.local_store.clone()),
     );
-    let (ingress_ingestion_service, p2p_runner) = setup_consensus_and_p2p(
+    let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
         metrics_registry,
         log.clone(),
         rt_handle,
@@ -281,6 +284,7 @@ pub fn construct_ic_stack(
         local_store_cert_time_reader,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
+        time_source.clone(),
     );
     // ---------- PUBLIC ENDPOINT DEPS FOLLOW ----------
     ic_http_endpoints_public::start_server(
@@ -288,12 +292,15 @@ pub fn construct_ic_stack(
         metrics_registry,
         config.http_handler.clone(),
         execution_services.ingress_filter,
-        ingress_ingestion_service.clone(),
         execution_services.async_query_handler,
+        ingress_throttler,
+        ingress_tx.clone(),
+        time_source,
         Arc::clone(&state_manager) as Arc<_>,
         registry,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&crypto) as Arc<_>,
+        node_id,
         subnet_id,
         root_subnet_id,
         log.clone(),
@@ -307,7 +314,7 @@ pub fn construct_ic_stack(
         state_manager,
         execution_services.sync_query_handler,
         p2p_runner,
-        ingress_ingestion_service,
+        ingress_tx,
         xnet_endpoint,
     ))
 }

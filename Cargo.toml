@@ -128,7 +128,6 @@ members = [
   "rs/interfaces/adapter_client",
   "rs/interfaces/state_manager",
   "rs/interfaces/state_manager/mocks",
-  "rs/interfaces/p2p",
   "rs/interfaces/registry",
   "rs/interfaces/registry/mocks",
   "rs/interfaces/transport",

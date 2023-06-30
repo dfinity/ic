@@ -1,8 +1,0 @@
-[package]
-name = "ic-interfaces-p2p"
-version = "0.8.0"
-edition = "2021"
-
-[dependencies]
-ic-types = { path = "../../types/types" }
-tower = { version = "0.4.11", features = ["util", "buffer"] }

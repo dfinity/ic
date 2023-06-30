@@ -7,6 +7,7 @@ edition = "2021"
 [dependencies]
 base64 = "0.11.0"
 clap = { version = "3.1.6", features = ["derive"] }
+crossbeam-channel = "0.5.5"
 hex = "0.4.2"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-async-utils = { path = "../async_utils" }
@@ -27,7 +28,6 @@ ic-icos-sev = { path = "../ic_os/sev" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-adapter-client = { path = "../interfaces/adapter_client" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
-ic-interfaces-p2p = { path = "../interfaces/p2p" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }
 ic-messaging = { path = "../messaging" }

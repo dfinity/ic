@@ -401,13 +401,6 @@ impl<'a> Runtime {
             .await
             .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
     }
-
-    /// Clean up the run times (if any clean up is needed)
-    pub fn stop(&self) {
-        if let Runtime::Local(r) = self {
-            r.stop();
-        }
-    }
 }
 
 /// An Internet Computer test runtime that talks to the IC using http

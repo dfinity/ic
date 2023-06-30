@@ -28,7 +28,6 @@ rust_library(
         "//rs/execution_environment",
         "//rs/interfaces",
         "//rs/interfaces/certified_stream_store",
-        "//rs/interfaces/p2p",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",
         "//rs/interfaces/state_manager/mocks",
