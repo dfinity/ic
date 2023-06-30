@@ -41,6 +41,7 @@ use async_trait::async_trait;
 use axum::Router;
 use bytes::Bytes;
 use connection_handle::ConnectionHandle;
+use either::Either;
 use http::{Request, Response};
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
 use ic_icos_sev_interfaces::ValidateAttestedStream;
@@ -49,6 +50,7 @@ use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_types::NodeId;
+use quinn::AsyncUdpSocket;
 
 use crate::connection_manager::start_connection_manager;
 
@@ -70,7 +72,7 @@ impl QuicTransport {
         sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         node_id: NodeId,
         topology_watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-        addr: SocketAddr,
+        udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
         metrics_registry: &MetricsRegistry,
         state_sync_router: Router,
     ) -> QuicTransport {
@@ -92,7 +94,7 @@ impl QuicTransport {
             node_id,
             peer_map.clone(),
             topology_watcher,
-            addr,
+            udp_socket,
             router,
         );
 
