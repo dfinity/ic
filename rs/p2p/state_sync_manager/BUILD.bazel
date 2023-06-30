@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = [
     "//rs/replica:__subpackages__",
@@ -25,6 +26,11 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/p2p/memory_transport",
+    "//rs/test_utilities/logger",
+]
+
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
@@ -39,4 +45,13 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
+)
+
+rust_test_suite_with_extra_srcs(
+    name = "state_sync_manager_integration_tests",
+    srcs = ["tests/test.rs"],
+    aliases = ALIASES,
+    extra_srcs = ["tests/common.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":state_sync_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
