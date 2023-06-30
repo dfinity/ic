@@ -37,6 +37,7 @@ use std::{
 };
 
 use axum::Router;
+use either::Either;
 use futures::StreamExt;
 use ic_async_utils::JoinMap;
 use ic_crypto_tls_interfaces::{
@@ -53,8 +54,8 @@ use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_types::{NodeId, RegistryVersion};
 use quinn::{
-    ConnectError, Connecting, Connection, ConnectionError, Endpoint, EndpointConfig, RecvStream,
-    SendStream, VarInt,
+    AsyncUdpSocket, ConnectError, Connecting, Connection, ConnectionError, Endpoint,
+    EndpointConfig, RecvStream, SendStream, VarInt,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -183,7 +184,7 @@ pub fn start_connection_manager(
     node_id: NodeId,
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    addr: SocketAddr,
+    socket: Either<SocketAddr, impl AsyncUdpSocket>,
     router: Router,
 ) {
     let topology = watcher.borrow().clone();
@@ -223,16 +224,29 @@ pub fn start_connection_manager(
     server_config.transport_config(transport_config.clone());
 
     // Start endpoint
-    let socket = std::net::UdpSocket::bind(addr).expect("Failed to bind to UDP socket");
-    let endpoint = rt.block_on(async {
-        Endpoint::new(
-            endpoint_config,
-            Some(server_config),
-            socket,
-            Arc::new(quinn::TokioRuntime),
-        )
-        .expect("Failed to create endpoint")
-    });
+    let endpoint = match socket {
+        Either::Left(addr) => {
+            let socket = std::net::UdpSocket::bind(addr).expect("Failed to bind to UDP socket");
+            rt.block_on(async {
+                Endpoint::new(
+                    endpoint_config,
+                    Some(server_config),
+                    socket,
+                    Arc::new(quinn::TokioRuntime),
+                )
+                .expect("Failed to create endpoint")
+            })
+        }
+        Either::Right(async_udp_socket) => rt.block_on(async {
+            Endpoint::new_with_abstract_socket(
+                endpoint_config,
+                Some(server_config),
+                async_udp_socket,
+                Arc::new(quinn::TokioRuntime),
+            )
+            .expect("Failed to create endpoint")
+        }),
+    };
 
     let manager = ConnectionManager {
         log,
