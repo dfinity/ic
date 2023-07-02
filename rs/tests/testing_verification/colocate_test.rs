@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io::{Read, Write};
-use std::net::Ipv6Addr;
 use std::path::Path;
 use std::process::Command;
 use std::str;
@@ -14,29 +13,26 @@ use anyhow::Result;
 use ic_tests::driver::constants::SSH_USERNAME;
 use ic_tests::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use ic_tests::driver::farm::HostFeature;
-use ic_tests::driver::group::SystemTestGroup;
+use ic_tests::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
 use ic_tests::driver::ic::VmResources;
 use ic_tests::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_tests::driver::test_env_api::{retry, FarmBaseUrl, HasDependencies, SshSession};
 use ic_tests::driver::test_setup::GroupSetup;
 use ic_tests::driver::universal_vm::{UniversalVm, UniversalVms};
-use serde::Deserialize;
-use slog::{debug, error, info, warn};
+use slog::{debug, error, info};
 use ssh2::Session;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpSocket;
-use tokio::runtime::Runtime;
 
 const UVM_NAME: &str = "test-driver";
 const COLOCATED_TEST: &str = "COLOCATED_TEST";
 const COLOCATED_TEST_BIN: &str = "COLOCATED_TEST_BIN";
 const EXTRA_TIME_LOG_COLLECTION: Duration = Duration::from_secs(10);
-const RETRY_LOG_READ_DELAY: Duration = Duration::from_secs(5);
 
 pub const ENV_TAR_ZST: &str = "env.tar.zst";
 
 pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+pub const TEST_STATUS_CHECK_RETRY: Duration = Duration::from_secs(5);
+type ExitCode = i32;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -165,7 +161,7 @@ docker build --tag final .
 
 cat <<EOF > /home/admin/run
 #!/bin/sh
-docker run --name system_test --network host \
+docker run --name {COLOCATE_CONTAINER_NAME} --network host \
   {docker_env_vars}
   final \
   /home/root/root_env/dependencies/{colocated_test_bin} \
@@ -182,38 +178,6 @@ chmod +x /home/admin/run
         info!(log, "Waiting for test results asynchronously ...");
         receive_test_exit_code_async(session, log.clone())
     };
-    let ipv6 = uvm.get_vm().unwrap().ipv6;
-    // We need a runtime to execute an async read_test_log_async in a sync context.
-    // As there is only one lightweight task, we allocate min resources to the runtime.
-    let rt: Runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(1)
-        .max_blocking_threads(1)
-        .enable_all()
-        .build()
-        .unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
-    info!(log, "Reading test logs from journald asynchronously ...");
-    let log_cloned = log.clone();
-    let test_log_handle = rt.spawn(async move {
-        // We start reading logs from the very beginning, which corresponds to the cursor="".
-        let mut cursor = String::from("");
-        loop {
-            // In normal scenarios, i.e. without errors/interrupts, the function below should never return.
-            // In case it returns unexpectedly, we restart reading logs from the checkpoint cursor.
-            let result = read_test_log_async(ipv6, &mut cursor).await;
-            if let Err(err) = result {
-                error!(
-                    log_cloned,
-                    "Reading test logs failed unexpectedly with {err}"
-                );
-            }
-            warn!(
-                log_cloned,
-                "Restart reading test logs from cursor after {} sec ...",
-                RETRY_LOG_READ_DELAY.as_secs()
-            );
-            tokio::time::sleep(RETRY_LOG_READ_DELAY).await;
-        }
-    });
     let test_exit_code = test_result_handle
         .join()
         .expect("test execution thread failed");
@@ -223,8 +187,6 @@ chmod +x /home/admin/run
         EXTRA_TIME_LOG_COLLECTION.as_secs()
     );
     std::thread::sleep(EXTRA_TIME_LOG_COLLECTION);
-    info!(log, "Stop reading logs from uvm");
-    test_log_handle.abort();
     assert_eq!(0, test_exit_code, "test finished with failure");
     info!(log, "test execution has finished successfully");
 }
@@ -248,62 +210,51 @@ fn receive_test_exit_code_async(
     session: Session,
     log: slog::Logger,
 ) -> std::thread::JoinHandle<i32> {
-    std::thread::spawn(move || {
-        let test_exit_code_script = r#"
-            set -e
-            value=$(<test_exit_code)
-            echo $value
-        "#
-        .to_string();
-        loop {
-            let mut output = String::new();
-            let mut channel = session.channel_session().unwrap();
-            channel.exec("bash").unwrap();
-            channel.write_all(test_exit_code_script.as_bytes()).unwrap();
-            channel.flush().unwrap();
-            channel.send_eof().unwrap();
-            channel.read_to_string(&mut output).unwrap();
-            channel.wait_close().unwrap();
-            let exit_code = channel.exit_status().unwrap();
-            if exit_code == 0 {
-                info!(log, "Test exited with code {output}.");
-                return output
-                    .trim()
-                    .parse::<i32>()
-                    .expect("Couldn't parse test exit code.");
+    std::thread::spawn(move || loop {
+        match check_test_exit_code(&session) {
+            Ok(result) => {
+                if let Some(exit_code) = result {
+                    info!(log, "Test execution finished with exit code {exit_code}.");
+                    return exit_code;
+                } else {
+                    // Test execution hasn't finished yet, wait a bit and retry.
+                    std::thread::sleep(TEST_STATUS_CHECK_RETRY);
+                }
             }
-            std::thread::sleep(Duration::from_secs(10));
+            Err(err) => {
+                error!(log, "Reading test exit code failed unexpectedly with err={err:?}. Retrying in {} sec",
+                TEST_STATUS_CHECK_RETRY.as_secs());
+                std::thread::sleep(TEST_STATUS_CHECK_RETRY);
+            }
         }
     })
 }
 
-#[derive(Debug, Deserialize)]
-struct JournalRecord {
-    #[serde(rename = "__CURSOR")]
-    cursor: String,
-    #[serde(rename = "MESSAGE")]
-    message: String,
-}
-
-async fn read_test_log_async(ipv6: Ipv6Addr, cursor: &mut String) -> anyhow::Result<()> {
-    let socket_addr = std::net::SocketAddr::new(ipv6.into(), 19531);
-    let mut stream = TcpSocket::new_v6()?.connect(socket_addr).await?;
-    stream
-        .write_all(b"GET /entries?CONTAINER_NAME=system_test&follow HTTP/1.1\n")
-        .await?;
-    stream.write_all(b"Accept: application/json\n").await?;
-    let entries = format!("Range: entries={}:-1:\n\r\n\r", cursor);
-    stream.write_all(entries.as_bytes()).await?;
-    let buf_reader = BufReader::new(stream);
-    let mut lines = buf_reader.lines();
-    while let Some(line) = lines.next_line().await? {
-        let record_result: Result<JournalRecord, serde_json::Error> = serde_json::from_str(&line);
-        if let Ok(record) = record_result {
-            println!("{}", record.message);
-            // We update the cursor value with the current one.
-            // In case function errors, we can start reading logs from this checkpointed cursor.
-            *cursor = record.cursor;
-        }
+fn check_test_exit_code(session: &Session) -> Result<Option<ExitCode>> {
+    // Try to read exit code of the test execution from the file `test_exit_code`.
+    // If file doesn't yet exist, it means that the test is still running.
+    let test_exit_code_script = r#"
+            set -e
+            value=$(<test_exit_code)
+            echo $value
+        "#
+    .to_string();
+    let mut output = String::new();
+    let mut channel = session.channel_session()?;
+    channel.exec("bash")?;
+    channel.write_all(test_exit_code_script.as_bytes())?;
+    channel.flush()?;
+    channel.send_eof()?;
+    channel.read_to_string(&mut output)?;
+    channel.wait_close()?;
+    let cmd_exit_code = channel.exit_status()?;
+    if cmd_exit_code == 0 {
+        let test_exit_code = output
+            .trim()
+            .parse::<i32>()
+            .expect("Couldn't parse test exit code.");
+        return Ok(Some(test_exit_code));
     }
-    Ok(())
+    // Test is still running.
+    Ok(None)
 }

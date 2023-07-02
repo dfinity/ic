@@ -50,7 +50,7 @@ pub enum UniversalVmConfig {
     Img(PathBuf),
 }
 
-const UNIVERSAL_VMS_DIR: &str = "universal_vms";
+pub const UNIVERSAL_VMS_DIR: &str = "universal_vms";
 const CONF_IMG_FNAME: &str = "config_disk.img.zst";
 const CONF_SSH_IMG_FNAME: &str = "config_ssh_disk.img.zst";
 
@@ -304,6 +304,7 @@ fn setup_ssh(env: &TestEnv, config_dir: PathBuf) -> Result<()> {
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct DeployedUniversalVm {
     env: TestEnv,
     name: String,
