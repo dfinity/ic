@@ -32,9 +32,7 @@ use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
 
 use ic_sns_governance::pb::v1::governance::Mode;
-use ic_sns_swap::pb::v1::{
-    new_sale_ticket_response, DerivedState, FinalizeSwapResponse, GetStateResponse, Lifecycle,
-};
+use ic_sns_swap::pb::v1::{new_sale_ticket_response, DerivedState, GetStateResponse, Lifecycle};
 use ic_sns_swap::swap::principal_to_subaccount;
 use ic_types::Height;
 use icp_ledger::{AccountIdentifier, Subaccount};
@@ -44,6 +42,7 @@ use icrc_ledger_types::icrc1::transfer::TransferArg;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use tokio::runtime::Builder;
+use tokio::time::sleep;
 
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
@@ -1339,7 +1338,7 @@ async fn create_one_sale_participant(
     Ok(())
 }
 
-/// Finalizes the swap, and verifies that the swap was finalized as expected.
+/// Waits for the swap to finalize (for up to 2 minutes), and verifies that the swap was finalized as expected.
 pub async fn finalize_swap_and_check_success(
     env: TestEnv,
     expected_derived_swap_state: DerivedState,
@@ -1353,24 +1352,30 @@ pub async fn finalize_swap_and_check_success(
     let app_node = env.get_first_healthy_application_node_snapshot();
     let canister_agent = app_node.build_canister_agent().await;
 
-    let finalize_swap_request = sns_request_provider.finalize_swap();
-    let finalize_swap_response = canister_agent
-        .call_and_parse(&finalize_swap_request)
-        .await
-        .result()
-        .unwrap();
+    info!(log, "Waiting for the swap to be finalized");
 
-    let FinalizeSwapResponse {
-            sweep_icp_result: Some(_),
-            sweep_sns_result: Some(_),
-            claim_neuron_result: Some(_),
-            set_mode_call_result: Some(_),
-            set_dapp_controllers_call_result: _, // currently None because there's currently no dapps to control
-            settle_community_fund_participation_result: Some(_),
-            error_message: None,
-        } = finalize_swap_response else {
-            panic!("Unexpected finalize_swap_response: {finalize_swap_response:#?}");
-        };
+    for _ in 0..120 {
+        let request = sns_request_provider.get_sns_governance_mode();
+        let get_mode_response = canister_agent
+            .call_and_parse(&request)
+            .await
+            .result()
+            .unwrap();
+        if get_mode_response.mode.and_then(Mode::from_i32).unwrap() == Mode::Normal {
+            info!(
+                log,
+                "Governance mode is `Normal`, indicating that the swap is finalized."
+            );
+            break;
+        }
+        sleep(Duration::from_secs(1)).await;
+    }
+
+    // TODO(NNS1-2359): Verify the FinalizeSwapResponse from automatic finalization is correct.
+
+    sns_client
+        .assert_state(&env, Lifecycle::Committed, Mode::Normal)
+        .await;
 
     info!(log, "Checking that the swap finalized successfully");
 
@@ -1391,10 +1396,6 @@ pub async fn finalize_swap_and_check_success(
         Lifecycle::Committed
     );
     assert_eq!(derived_swap_state, expected_derived_swap_state);
-
-    sns_client
-        .assert_state(&env, Lifecycle::Committed, Mode::Normal)
-        .await;
 
     info!(
         log,

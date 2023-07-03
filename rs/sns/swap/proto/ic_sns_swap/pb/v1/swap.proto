@@ -254,6 +254,10 @@ message Swap {
   // The next principal bytes that should be checked by the next
   // running purge_old_tickets routine.
   optional bytes purge_old_tickets_next_principal = 14;
+
+  // Set to true when auto-finalization is attempted. Prevents auto-finalization
+  // from being attempted more than once.
+  optional bool already_tried_to_auto_finalize = 17;
 }
 
 // The initialisation data of the canister. Always specified on

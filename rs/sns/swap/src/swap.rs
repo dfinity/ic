@@ -246,6 +246,7 @@ impl Swap {
             next_ticket_id: Some(0),
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
+            already_tried_to_auto_finalize: Some(false),
         }
     }
 
@@ -334,34 +335,34 @@ impl Swap {
         false
     }
 
-    /// If the swap is OPEN, tries to commit or abort the swap. Returns
-    /// true if a transition was made and false otherwise.
-    pub fn try_commit_or_abort(&mut self, now_seconds: u64) -> bool {
-        // If the swap lifecycle is not open, we can't commit or abort it
-        let lifecycle = self.lifecycle();
-        if lifecycle != Lifecycle::Open {
-            return false;
-        }
+    /// Attempts to finalize the swap. If this function calls [`Self::finalize`],
+    /// it will set `self.already_tried_to_auto_finalize` to `Some(true)`, and
+    /// won't try to finalize the swap again, even if called again.
+    ///
+    /// The argument 'now_fn' is a function that returns the current time
+    /// for bookkeeping of transfers. For easier testing, it is given
+    /// an argument that is 'false' to get the timestamp when a
+    /// transfer is initiated and 'true' to get the timestamp when a
+    /// transfer is successful.
+    pub async fn try_auto_finalize(
+        &mut self,
+        now_fn: fn(bool) -> u64,
+        environment: &mut impl CanisterEnvironment,
+    ) -> Result<FinalizeSwapResponse, String> {
+        self.can_auto_finalize()?;
 
-        // Commit if possible
-        if self.can_commit(now_seconds) {
-            self.commit(now_seconds);
-            return true;
-        }
+        // We don't want to try to finalize the swap more than once. So we'll
+        // set `self.already_tried_to_auto_finalize` to true, so we don't try
+        // again.
+        log!(
+            INFO,
+            "Attempting to automatically finalize the swap at timestamp {}. (Will not automatically attempt again even if this fails.)",
+            now_fn(false)
+        );
+        self.already_tried_to_auto_finalize = Some(true);
 
-        // Abort if time is up without reaching sufficient_participation.
-        if self.swap_due(now_seconds) && !self.sufficient_participation() {
-            self.abort(now_seconds);
-            return true;
-        }
-
-        // Abort if max icp is reached without reaching sufficient_participation.
-        if self.icp_target_reached() && !self.sufficient_participation() {
-            self.abort(now_seconds);
-            return true;
-        }
-
-        false
+        let finalize_response = self.finalize(now_fn, environment).await;
+        Ok(finalize_response)
     }
 
     /// Precondition: lifecycle == PENDING
@@ -439,13 +440,14 @@ impl Swap {
         r as u64
     }
 
-    /// Precondition: lifecycle == OPEN && sufficient_participation && (swap_due || icp_target_reached)
+    /// If: lifecycle == OPEN && sufficient_participation && (swap_due || icp_target_reached)
     ///
-    /// Postcondition: lifecycle == COMMITTED
-    fn commit(&mut self, now_seconds: u64) {
-        assert_eq!(self.lifecycle(), Lifecycle::Open);
-        assert!(self.sufficient_participation());
-        assert!(self.swap_due(now_seconds) || self.icp_target_reached());
+    /// Then: lifecycle == COMMITTED
+    pub fn try_commit(&mut self, now_seconds: u64) -> bool {
+        if !self.can_commit(now_seconds) {
+            return false;
+        }
+
         // Safe as `params` must be specified in call to `open`.
         let params = self.params.as_ref().expect("Expected params to be set");
 
@@ -548,19 +550,24 @@ impl Swap {
         );
         self.neuron_recipes = neurons;
         self.set_lifecycle(Lifecycle::Committed);
+
+        true
     }
 
-    /// Precondition:
+    /// If:
     ///     lifecycle = OPEN
     ///     && (swap_due || target_reached)
     ///     && not sufficient_participation
     ///
-    /// Postcondition: lifecycle == ABORTED
-    fn abort(&mut self, now_seconds: u64) {
-        assert_eq!(self.lifecycle(), Lifecycle::Open);
-        assert!(self.swap_due(now_seconds) || self.icp_target_reached());
-        assert!(!self.sufficient_participation());
+    /// Then: lifecycle == ABORTED
+    pub fn try_abort(&mut self, now_seconds: u64) -> bool {
+        if !self.can_abort(now_seconds) {
+            return false;
+        }
+
         self.set_lifecycle(Lifecycle::Aborted);
+
+        true
     }
 
     /// Retrieves the balance of 'this' canister on the SNS token
@@ -591,7 +598,17 @@ impl Swap {
     // --- state modifying methods ---------------------------------------------
     //
 
-    pub fn heartbeat(&mut self, now_seconds: u64) {
+    /// Runs those tasks that should be run on canister heartbeat.
+    ///
+    /// The argument 'now_fn' is a function that returns the current time
+    /// for bookkeeping of transfers. For easier testing, it is given
+    /// an argument that is 'false' to get the timestamp when a
+    /// transfer is initiated and 'true' to get the timestamp when a
+    /// transfer is successful.
+    pub async fn heartbeat(&mut self, now_fn: fn(bool) -> u64) {
+        let heartbeat_start_seconds = now_fn(false);
+
+        // Purge old tickets
         const NUMBER_OF_TICKETS_THRESHOLD: u64 = 100_000_000; // 100M * ~size(ticket) = ~25GB
         const TWO_DAYS_IN_NANOSECONDS: u64 = 60 * 60 * 24 * 2 * 1_000_000_000;
         const MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT: u64 = 100_000;
@@ -602,11 +619,78 @@ impl Swap {
             TWO_DAYS_IN_NANOSECONDS,
             MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT,
         );
-        if self.try_open_after_delay(now_seconds) {
-            log!(INFO, "Swap opened at timestamp {}", now_seconds);
+
+        // Automatically transition the state
+
+        // Auto-open the swap
+        if self.can_open(heartbeat_start_seconds) {
+            if self.try_open_after_delay(heartbeat_start_seconds) {
+                log!(INFO, "Swap opened at timestamp {}", heartbeat_start_seconds);
+            }
         }
-        if self.try_commit_or_abort(now_seconds) {
-            log!(INFO, "Swap committed/aborted at timestamp {}", now_seconds);
+        // Auto-commit the swap
+        else if self.can_commit(heartbeat_start_seconds) {
+            if self.try_commit(heartbeat_start_seconds) {
+                log!(
+                    INFO,
+                    "Swap committed at timestamp {}",
+                    heartbeat_start_seconds
+                );
+            }
+        }
+        // Auto-abort the swap
+        else if self.can_abort(heartbeat_start_seconds) {
+            if self.try_abort(heartbeat_start_seconds) {
+                log!(
+                    INFO,
+                    "Swap aborted at timestamp {}",
+                    heartbeat_start_seconds
+                );
+            }
+        }
+        // Auto-finalize the swap
+        // We discard the error, if there is one, because to log it would mean
+        // it would be logged every heartbeat where we fall through to this
+        // point (and we don't want to spam the logs).
+        else if self.can_auto_finalize().is_ok() {
+            // First, record when the finalization started, in case this function is
+            // refactored to `await` before this point.
+            let auto_finalization_start_seconds = now_fn(false);
+
+            // Then, get the environment
+            let environment = self
+                .init
+                .as_ref()
+                .ok_or_else(|| "couldn't get `init`".to_string())
+                .and_then(|init| init.environment());
+
+            match environment {
+                Err(error) => {
+                    log!(
+                        ERROR,
+                        "Failed to get environment when attempting auto-finalization. Error: {error}"
+                    );
+                }
+                Ok(mut environment) => {
+                    // Then, attempt the auto-finalization
+                    // `try_auto_finalize` will never return `Error` here
+                    // because we already checked `self.can_auto_finalize()`
+                    // above, and `try_auto_finalize` will only return an error
+                    // if `can_auto_finalize` does.
+                    // The FinalizeSwapResponse from finalization will be logged
+                    // by `Self::finalize`.
+                    if self
+                        .try_auto_finalize(now_fn, &mut environment)
+                        .await
+                        .is_ok()
+                    {
+                        // The current time is now probably different than the time when
+                        // auto-finalization began, due to the `await`.
+                        let auto_finalization_finish_seconds = now_fn(true);
+                        log!(INFO, "Swap auto-finalization finished at timestamp {auto_finalization_finish_seconds} (started at timestamp {auto_finalization_start_seconds})");
+                    }
+                }
+            }
         }
     }
 
@@ -783,7 +867,7 @@ impl Swap {
                         ,
                 );
             }
-            // The requested balance in the ticket matches the balance to be topped up in the sale
+            // The requested balance in the ticket matches the balance to be topped up in the swap
             // --> Delete fully executed ticket, if it exists and proceed with the top up
             memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow_mut().remove(&principal));
             // If there exists no ticket for the buyer, the payment flow will simply ignore the ticket
@@ -1002,7 +1086,7 @@ impl Swap {
     /// If the swap ended unsuccessfully (i.e. it is in the Lifecycle::Aborted
     /// phase), then ICP is send back to the buyers.
     ///
-    /// The argument 'now_fn' a function that returns the current time
+    /// The argument 'now_fn' is a function that returns the current time
     /// for bookkeeping of transfers. For easier testing, it is given
     /// an argument that is 'false' to get the timestamp when a
     /// transfer is initiated and 'true' to get the timestamp when a
@@ -1063,11 +1147,8 @@ impl Swap {
     ) -> FinalizeSwapResponse {
         let mut finalize_swap_response = FinalizeSwapResponse::default();
 
-        if !self.lifecycle_is_terminal() {
-            finalize_swap_response.set_error_message(format!(
-                "The Swap can only be finalized in the COMMITTED or ABORTED states. Current state is {:?}",
-                self.lifecycle()
-            ));
+        if let Err(e) = self.can_finalize() {
+            finalize_swap_response.set_error_message(e);
             return finalize_swap_response;
         }
 
@@ -2268,6 +2349,61 @@ impl Swap {
         self.swap_due(now_seconds) || self.icp_target_reached()
     }
 
+    /// Returns true if the swap can be aborted at the specified
+    /// timestamp, and false otherwise.
+    pub fn can_abort(&self, now_seconds: u64) -> bool {
+        // We can only abort if the lifecycle is currently open
+        if self.lifecycle() != Lifecycle::Open {
+            return false;
+        }
+
+        // if the swap is due or the ICP target is reached without sufficient participation, we can abort
+        (self.swap_due(now_seconds) || self.icp_target_reached())
+            && !self.sufficient_participation()
+    }
+
+    /// Returns Ok(()) if the swap can auto-finalize, and Err(reason) otherwise
+    pub fn can_auto_finalize(&self) -> Result<(), String> {
+        // Being allowed to finalize is a precondition for being allowed
+        // to auto-finalize.
+        self.can_finalize()?;
+
+        let Some(init) = self.init.as_ref() else {
+            return Err("unable to access swap's init".to_string());
+        };
+
+        // Fail early if `self.init.should_auto_finalize` doesn't indicate that
+        // auto-finalization is enabled.
+        if !init.should_auto_finalize.unwrap_or_default() {
+            return Err(format!(
+                "init.should_auto_finalize is {:?}, not attempting auto-finalization.",
+                init.should_auto_finalize
+            ));
+        }
+
+        // Fail early if we've already tried to auto-finalize the swap.
+        if self.already_tried_to_auto_finalize.unwrap_or(true) {
+            return Err(format!(
+                "self.already_tried_to_auto_finalize is {:?}, indicating that an attempt has already been made to auto-finalize. No further attempts will be made automatically. Manually calling finalize is still allowed.",
+                self.already_tried_to_auto_finalize
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Returns Ok(()) if the swap can finalize, and Err(reason) otherwise
+    pub fn can_finalize(&self) -> Result<(), String> {
+        if !self.lifecycle_is_terminal() {
+            Err(format!(
+                "The Swap can only be finalized in the COMMITTED or ABORTED states. Current state is {:?}",
+                self.lifecycle()
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     //
     // --- query methods on the state  -----------------------------------------
     //
@@ -2891,7 +3027,7 @@ mod tests {
             neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
             nns_proposal_id: None,                       // TODO[NNS1-2339]
             neurons_fund_participants: None,             // TODO[NNS1-2339]
-            should_auto_finalize: None,                  // TODO[NNS1-2339]
+            should_auto_finalize: Some(true),
         });
     }
 
@@ -3489,7 +3625,7 @@ mod tests {
                     neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
                     nns_proposal_id: None, // TODO[NNS1-2339]
                     neurons_fund_participants: None, // TODO[NNS1-2339]
-                    should_auto_finalize: None, // TODO[NNS1-2339]
+                    should_auto_finalize: Some(true),
                 }),
                 params: Some(Params {
                     min_participants: 1,
@@ -3513,7 +3649,8 @@ mod tests {
                 decentralization_sale_open_timestamp_seconds: Some(1),
                 next_ticket_id: Some(0),
                 purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
-                purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec())
+                purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
+                already_tried_to_auto_finalize: Some(false),
             };
             let mut ticket_ids = HashSet::new();
             for pid in pids {
@@ -3531,6 +3668,7 @@ mod tests {
     fn test_try_commit_or_abort_no_buyers_with_time_remaining() {
         let sale_duration = 100;
         let time_remaining = 50;
+        let now = sale_duration - time_remaining;
         let buyers = BTreeMap::new();
         let mut swap = Swap {
             lifecycle: Lifecycle::Open as i32,
@@ -3546,7 +3684,8 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
-        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+
+        let result = swap.try_commit(now) || swap.try_abort(now);
         assert!(!result);
         assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
     }
@@ -3555,6 +3694,7 @@ mod tests {
     fn test_try_commit_or_abort_not_enough_e8s_with_time_remaining() {
         let sale_duration = 100;
         let time_remaining = 50;
+        let now = sale_duration - time_remaining;
         let buyers = btreemap! {
             PrincipalId::new_user_test_id(0).to_string() => BuyerState {
                 icp: Some(TransferableAmount {
@@ -3577,7 +3717,8 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
-        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+
+        let result = swap.try_commit(now) || swap.try_abort(now);
         assert!(!result);
         assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
     }
@@ -3586,6 +3727,7 @@ mod tests {
     fn test_try_commit_or_abort_enough_e8s_with_time_remaining() {
         let sale_duration = 100;
         let time_remaining = 50;
+        let now = sale_duration - time_remaining;
         let buyers = btreemap! {
             PrincipalId::new_user_test_id(0).to_string() => BuyerState {
                 icp: Some(TransferableAmount {
@@ -3608,7 +3750,8 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
-        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+
+        let result = swap.try_commit(now) || swap.try_abort(now);
         // swap should be open because there is time remaining and we have not
         // reached the maximum amount of ICP raised
         assert!(!result);
@@ -3619,6 +3762,7 @@ mod tests {
     fn test_try_commit_or_abort_max_e8s_with_time_remaining() {
         let sale_duration = 100;
         let time_remaining = 50;
+        let now = sale_duration - time_remaining;
         let buyers = btreemap! {
             PrincipalId::new_user_test_id(0).to_string() => BuyerState {
                 icp: Some(TransferableAmount {
@@ -3641,17 +3785,31 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
-        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
-        // swap should be closed because there is time remaining and we have not
-        // reached the maximum amount of time remaining
-        assert!(result);
-        assert_eq!(swap.lifecycle, Lifecycle::Committed as i32);
+
+        // test try_commit
+        {
+            let mut swap = swap.clone();
+            let result = swap.try_commit(now);
+            // swap should commit because there is time remaining and we have not
+            // reached the maximum amount of participation
+            assert!(result);
+            assert_eq!(swap.lifecycle, Lifecycle::Committed as i32);
+        }
+        // test try_abort
+        {
+            let result = swap.try_abort(now);
+            // swap should not have aborted, because there is time remaining
+            // and we have not reached the maximum amount of participation
+            assert!(!result);
+            assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
+        }
     }
 
     #[test]
-    fn test_try_commit_or_abort_insufficient_participation_with_time_remaining() {
+    fn test_try_commit_or_abort_insufficient_participation_with_no_time_remaining() {
         let sale_duration = 100;
         let time_remaining = 0;
+        let now = sale_duration - time_remaining;
         let buyers = BTreeMap::new();
         let mut swap = Swap {
             lifecycle: Lifecycle::Open as i32,
@@ -3667,17 +3825,33 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
-        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
-        // swap should be closed because there is time remaining and we have not
-        // reached the maximum amount of time remaining
-        assert!(result);
-        assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
+
+        // test try_commit
+        {
+            let mut swap = swap.clone();
+            let result = swap.try_commit(now);
+            // swap should not commit because there is no time remaining and we
+            // have not reached the minimum number of participants
+
+            assert!(!result);
+            assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
+        }
+        // test try_abort
+        {
+            let result = swap.try_abort(now);
+            // swap should abort because there is no time remaining and we
+            // have not reached the minimum number of participants
+
+            assert!(result);
+            assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
+        }
     }
 
     #[test]
     fn test_try_commit_or_abort_insufficient_participation_with_max_icp() {
         let sale_duration = 100;
         let time_remaining = 50;
+        let now = sale_duration - time_remaining;
         let buyers = btreemap! {
             PrincipalId::new_user_test_id(0).to_string() => BuyerState {
                 icp: Some(TransferableAmount {
@@ -3700,11 +3874,26 @@ mod tests {
             buyers,
             ..(SWAP.clone())
         };
-        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
-        // swap should be closed because there is time remaining and we have not
-        // reached the maximum amount of time remaining
-        assert!(result);
-        assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
+
+        // test try_commit
+        {
+            let mut swap = swap.clone();
+            let result = swap.try_commit(now);
+            // swap should not commit because we have reached the max icp but
+            // have not reached the minimum number of participants
+
+            assert!(!result);
+            assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
+        }
+        // test try_abort
+        {
+            let result = swap.try_abort(now);
+            // swap should abort because we have reached the max icp but
+            // have not reached the minimum number of participants
+
+            assert!(result);
+            assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
+        }
     }
 
     #[test]
@@ -3740,7 +3929,7 @@ mod tests {
                 neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
                 nns_proposal_id: None,                       // TODO[NNS1-2339]
                 neurons_fund_participants: None,             // TODO[NNS1-2339]
-                should_auto_finalize: None,                  // TODO[NNS1-2339]
+                should_auto_finalize: Some(true),
             }),
             params: Some(Params {
                 min_participants: 0,
@@ -3765,6 +3954,7 @@ mod tests {
             next_ticket_id: Some(0),
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
+            already_tried_to_auto_finalize: Some(false),
         };
 
         let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {

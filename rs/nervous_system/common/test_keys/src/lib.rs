@@ -69,7 +69,7 @@ lazy_static! {
     pub static ref TEST_USER2_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_USER2_PUBKEY.key.clone()));
 
-   pub static ref TEST_USER3_KEYPAIR: Ed25519KeyPair = {
+    pub static ref TEST_USER3_KEYPAIR: Ed25519KeyPair = {
         let mut rng = ChaChaRng::seed_from_u64(7000_u64);
         Ed25519KeyPair::generate(&mut rng)
     };
@@ -80,7 +80,7 @@ lazy_static! {
     pub static ref TEST_USER3_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_USER3_PUBKEY.key.clone()));
 
-   pub static ref TEST_USER4_KEYPAIR: Ed25519KeyPair = {
+    pub static ref TEST_USER4_KEYPAIR: Ed25519KeyPair = {
         let mut rng = ChaChaRng::seed_from_u64(8000_u64);
         Ed25519KeyPair::generate(&mut rng)
     };
@@ -91,7 +91,7 @@ lazy_static! {
     pub static ref TEST_USER4_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_USER4_PUBKEY.key.clone()));
 
-   pub static ref TEST_USER5_KEYPAIR: Ed25519KeyPair = {
+    pub static ref TEST_USER5_KEYPAIR: Ed25519KeyPair = {
         let mut rng = ChaChaRng::seed_from_u64(9000_u64);
         Ed25519KeyPair::generate(&mut rng)
     };
@@ -102,7 +102,7 @@ lazy_static! {
     pub static ref TEST_USER5_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_USER5_PUBKEY.key.clone()));
 
-   pub static ref TEST_USER6_KEYPAIR: Ed25519KeyPair = {
+    pub static ref TEST_USER6_KEYPAIR: Ed25519KeyPair = {
         let mut rng = ChaChaRng::seed_from_u64(10000_u64);
         Ed25519KeyPair::generate(&mut rng)
     };
@@ -113,7 +113,7 @@ lazy_static! {
     pub static ref TEST_USER6_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_USER6_PUBKEY.key.clone()));
 
-   pub static ref TEST_USER7_KEYPAIR: Ed25519KeyPair = {
+    pub static ref TEST_USER7_KEYPAIR: Ed25519KeyPair = {
         let mut rng = ChaChaRng::seed_from_u64(11000_u64);
         Ed25519KeyPair::generate(&mut rng)
     };

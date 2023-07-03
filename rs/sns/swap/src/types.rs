@@ -225,6 +225,10 @@ impl Init {
         // that it is supplied. Needs to match the value in SNS governance
         // though.
 
+        if self.should_auto_finalize.is_none() {
+            return Err("should_auto_finalize is required.".to_string());
+        }
+
         Ok(())
     }
 }
