@@ -74,6 +74,7 @@ type UpgradeArgs = record {
     token_name : opt text;
     transfer_fee : opt nat64;
     change_fee_collector : opt ChangeFeeCollector;
+    max_memo_length : opt nat16;
 };
 
 type LedgerArg = variant {
