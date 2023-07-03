@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 ic-config = { path = "../../config" }
 ic-consensus-utils = { path = "../../consensus/utils" }
+ic-error-types = { path = "../../types/error_types" }
 ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }

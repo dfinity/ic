@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/replicated_state",
+    "//rs/types/error_types",
     "//rs/types/types",
     "@crate_index//:prometheus",
     "@crate_index//:prost",
@@ -26,7 +27,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/registry",
-    "//rs/types/error_types",
     "@crate_index//:mockall_0_7_2",
     "@crate_index//:proptest",
 ]

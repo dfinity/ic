@@ -9,8 +9,9 @@ use crate::{
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
+use ic_error_types::RejectCode;
 use ic_interfaces::{
-    batch_payload::{BatchPayloadBuilder, PastPayload},
+    batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload},
     canister_http::{
         CanisterHttpPayloadBuilder, CanisterHttpPayloadValidationError,
         CanisterHttpPermanentValidationError, CanisterHttpPool,
@@ -29,16 +30,16 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{CanisterHttpPayload, ValidationContext, MAX_CANISTER_HTTP_PAYLOAD_SIZE},
     canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
-        CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
+        CanisterHttpResponse, CanisterHttpResponseContent, CanisterHttpResponseDivergence,
+        CanisterHttpResponseMetadata, CanisterHttpResponseProof, CanisterHttpResponseWithConsensus,
         CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
     },
     consensus::Committee,
     crypto::Signed,
-    messages::CallbackId,
+    messages::{CallbackId, Payload, RejectContext, Response},
     registry::RegistryClientError,
     signature::BasicSignature,
-    CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
+    CanisterId, CountBytes, Cycles, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeSet, HashSet},
@@ -46,12 +47,22 @@ use std::{
     sync::{Arc, RwLock},
 };
 
+use self::parse::bytes_to_payload;
+
 mod parse;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 #[cfg(test)]
 mod tests;
 mod utils;
+
+/// Statistics about the number of canister http message types in a canister http payload
+#[derive(Debug, Default)]
+pub struct CanisterHttpBatchStats {
+    pub responses: usize,
+    pub timeouts: usize,
+    pub divergence_responses: usize,
+}
 
 enum CandidateOrDivergence {
     Candidate(
@@ -675,6 +686,76 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                     PayloadTransientError::CanisterHttpPayloadValidationError(err),
                 ),
             })
+    }
+}
+
+impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPayloadBuilderImpl {
+    fn into_messages(payload: &[u8]) -> (Vec<Response>, CanisterHttpBatchStats) {
+        let mut stats = CanisterHttpBatchStats::default();
+
+        let messages = bytes_to_payload(payload)
+            .expect("Failed to parse a payload that was already validated");
+
+        let responses = messages.responses.into_iter().map(|response| {
+            stats.responses += 1;
+            (
+                response.content.id,
+                match response.content.content {
+                    CanisterHttpResponseContent::Success(data) => Payload::Data(data),
+                    CanisterHttpResponseContent::Reject(canister_http_reject) => {
+                        Payload::Reject(RejectContext::from(&canister_http_reject))
+                    }
+                },
+            )
+        });
+
+        let timeouts = messages.timeouts.iter().map(|timeout| {
+            // Map timeouts to a rejected response
+            stats.timeouts += 1;
+            (
+                *timeout,
+                Payload::Reject(RejectContext {
+                    code: RejectCode::SysTransient,
+                    message: "Canister http request timed out".to_string(),
+                }),
+            )
+        });
+
+        let divergece_responses = messages.divergence_responses.iter().filter_map(|response| {
+            // NOTE: We skip delivering the divergence response, if it has no shares
+            // Such a divergence response should never validate, therefore this should never happen
+            // However, if it where ever to happen, we can ignore it here/
+            // This is sound, since eventually a timeout will end the outstanding callback anyway.
+            response.shares.get(0).map(|share| {
+                // Map divergence responses to reject response
+                stats.divergence_responses += 1;
+                (
+                    share.content.id,
+                    Payload::Reject(RejectContext {
+                        code: RejectCode::SysTransient,
+                        message: "Canister http responses were different across replicas, \
+                          and no consensus was reached"
+                            .to_string(),
+                    }),
+                )
+            })
+        });
+
+        let responses = responses
+            .chain(timeouts)
+            .chain(divergece_responses)
+            .map(|(id, response)| Response {
+                // Wrap the id and response payload into a response
+                // NOTE originator and respondent are not needed for these types of calls
+                originator: CanisterId::ic_00(),
+                respondent: CanisterId::ic_00(),
+                originator_reply_callback: id,
+                refund: Cycles::zero(),
+                response_payload: response,
+            })
+            .collect();
+
+        (responses, stats)
     }
 }
 
