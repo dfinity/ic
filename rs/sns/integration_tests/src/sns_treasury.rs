@@ -1,5 +1,6 @@
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_ledger_core::tokens::CheckedSub;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount;
 use ic_nns_constants::LEDGER_CANISTER_ID;
@@ -28,7 +29,6 @@ use icp_ledger::{
     DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
-use std::ops::Sub;
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
     AccountIdentifier::new(
@@ -127,7 +127,7 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
         user,
         Tokens::new(10001, 0)
             .unwrap()
-            .sub(DEFAULT_TRANSFER_FEE)
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
             .unwrap(),
         neuron_nonce,
     );

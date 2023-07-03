@@ -6,6 +6,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::{
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
@@ -1173,8 +1174,8 @@ fn sub_account_test() {
         // Transaction fees are a pain so we're easy going with equality
         fn is_roughly(a: Tokens, b: Tokens) {
             let one_tenth = Tokens::from_e8s(10_000_000);
-            assert!((a + one_tenth).unwrap() > b);
-            assert!((a - one_tenth).unwrap() < b);
+            assert!(a.checked_add(&one_tenth).unwrap() > b);
+            assert!(a.checked_sub(&one_tenth).unwrap() < b);
         }
 
         is_roughly(balance_1, Tokens::from_tokens(9).unwrap());

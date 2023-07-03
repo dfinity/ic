@@ -8,6 +8,7 @@ use crate::rosetta_tests::lib::{
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::{setup, TRANSFER_FEE};
 use crate::util::block_on;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
 use ic_rosetta_api::models::{EdKeypair, RosettaSupportedKeyPair};
 use ic_rosetta_api::request::Request;
@@ -187,7 +188,11 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
         client,
         ledger_client,
         &acc,
-        ((src_balance_before - amount).unwrap() - fee).unwrap(),
+        src_balance_before
+            .checked_sub(&amount)
+            .unwrap()
+            .checked_sub(&fee)
+            .unwrap(),
     )
     .await;
 
@@ -195,7 +200,7 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
         client,
         ledger_client,
         &dst_acc,
-        (dst_balance_before + amount).unwrap(),
+        dst_balance_before.checked_add(&amount).unwrap(),
     )
     .await;
 }
@@ -210,7 +215,7 @@ async fn test_no_funds(ros: &RosettaApiClient, funding_key_pair: Arc<EdKeypair>)
         ros,
         funding_key_pair,
         acc1,
-        (Tokens::from_e8s(10_000) + *FEE).unwrap(),
+        Tokens::from_e8s(10_000).checked_add(&FEE).unwrap(),
     )
     .await
     .unwrap();
@@ -346,14 +351,22 @@ async fn test_multiple_transfers(
         ros,
         ledger,
         &dst_acc1,
-        ((amount1 - amount2).unwrap() - *FEE).unwrap(),
+        amount1
+            .checked_sub(&amount2)
+            .unwrap()
+            .checked_sub(&FEE)
+            .unwrap(),
     )
     .await;
     check_balance(
         ros,
         ledger,
         &dst_acc2,
-        ((amount2 - amount3).unwrap() - *FEE).unwrap(),
+        amount2
+            .checked_sub(&amount3)
+            .unwrap()
+            .checked_sub(&FEE)
+            .unwrap(),
     )
     .await;
     check_balance(ros, ledger, &dst_acc3, amount3).await;

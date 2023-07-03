@@ -8,7 +8,7 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::{
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction};
 use ic_ledger_core::{
     approvals::AllowanceTable, balances::BalancesStore, block::BlockType, timestamp::TimeStamp,
-    Tokens,
+    tokens::CheckedAdd, Tokens,
 };
 use icp_ledger::{apply_operation, AccountIdentifier, ApprovalKey, Block, Operation};
 use rusqlite::params;
@@ -18,7 +18,7 @@ pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
     Blocks::new_persistent(path).unwrap()
 }
 
-type Approvals = AllowanceTable<ApprovalKey, AccountIdentifier>;
+type Approvals = AllowanceTable<ApprovalKey, AccountIdentifier, Tokens>;
 
 #[derive(Default)]
 struct TestContext {
@@ -30,6 +30,7 @@ impl LedgerContext for TestContext {
     type AccountId = AccountIdentifier;
     type Approvals = Approvals;
     type BalancesStore = ClientBalancesStore;
+    type Tokens = Tokens;
 
     fn balances(&self) -> &BalanceBook {
         &self.balance_book
@@ -358,7 +359,7 @@ fn verify_balance_snapshot(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
     }
     let mut sum_icpt = Tokens::ZERO;
     for amount in scribe.balance_history.get(oldest_idx).unwrap().values() {
-        sum_icpt += *amount;
+        sum_icpt = sum_icpt.checked_add(amount).unwrap();
     }
     let accounts = store.get_all_accounts().unwrap();
     let mut total = Tokens::ZERO;
@@ -366,7 +367,7 @@ fn verify_balance_snapshot(scribe: &Scribe, store: &mut Blocks, prune_at: u64) {
         let amount = store
             .get_account_balance(&account, &(oldest_idx as u64))
             .unwrap();
-        total += amount;
+        total = total.checked_add(&amount).unwrap();
     }
     assert_eq!(sum_icpt, total);
 }

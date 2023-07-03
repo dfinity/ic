@@ -37,6 +37,7 @@ use dfn_protobuf::protobuf;
 use ic_agent::Agent;
 use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair, Sender};
 use ic_ledger_core::block::BlockType;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID,
 };
@@ -328,7 +329,9 @@ fn funds(ptr: &Result<PrincipalId, u32>, plan: &Plan) -> Tokens {
                 Err((_, public)) => ed25519_public_to_principal(&public),
             });
 
-            let minimal_balance = (Tokens::from_e8s(*amount) + DEFAULT_TRANSFER_FEE).unwrap();
+            let minimal_balance = Tokens::from_e8s(*amount)
+                .checked_add(&DEFAULT_TRANSFER_FEE)
+                .unwrap();
             if from != *to {
                 // checking for account exhaustion
                 let source = funds(&from, tail);
@@ -345,11 +348,14 @@ fn funds(ptr: &Result<PrincipalId, u32>, plan: &Plan) -> Tokens {
             // at this point we know that addition won't overflow,
             // as the total sum invariant holds
             if ptr == to {
-                balance = (balance + Tokens::from_e8s(*amount)).unwrap()
+                balance = balance.checked_add(&Tokens::from_e8s(*amount)).unwrap()
             }
             if *ptr == from {
-                balance =
-                    ((balance - Tokens::from_e8s(*amount)).unwrap() - DEFAULT_TRANSFER_FEE).unwrap()
+                balance = balance
+                    .checked_sub(&Tokens::from_e8s(*amount))
+                    .unwrap()
+                    .checked_sub(&DEFAULT_TRANSFER_FEE)
+                    .unwrap()
             }
             balance
         }
@@ -488,7 +494,7 @@ async fn run_actions(nns_rt: &Runtime, app_rt: &Runtime, actions: &[Action]) {
             }
             Message::Send((from_funds, to_funds), to, amount) => {
                 let to_account = AccountIdentifier::new(*to, None);
-                let debit = (*amount + DEFAULT_TRANSFER_FEE).unwrap();
+                let debit = amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap();
                 let block: Option<(BlockIndex, AccountIdentifier, Memo)> = match owner {
                     Ok(princ) => {
                         let rt = if *princ == LIFELINE_CANISTER_ID.get() {

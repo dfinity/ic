@@ -5,12 +5,12 @@ pub mod hash;
 
 use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
-pub use ic_ledger_core::tokens::Tokens;
 use ic_ledger_core::{
     approvals::Approvals,
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
+    Tokens,
 };
 use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
@@ -95,6 +95,7 @@ pub struct Transaction {
 
 impl LedgerTransaction for Transaction {
     type AccountId = Account;
+    type Tokens = Tokens;
 
     fn burn(
         from: Account,
@@ -137,9 +138,9 @@ impl LedgerTransaction for Transaction {
         context: &mut C,
         now: TimeStamp,
         effective_fee: Tokens,
-    ) -> Result<(), TxApplyError>
+    ) -> Result<(), TxApplyError<Tokens>>
     where
-        C: LedgerContext<AccountId = Self::AccountId>,
+        C: LedgerContext<AccountId = Self::AccountId, Tokens = Tokens>,
     {
         let fee_collector = context.fee_collector().map(|fc| fc.fee_collector);
         let fee_collector = fee_collector.as_ref();
@@ -387,6 +388,7 @@ type TaggedBlock = Required<Block, 55799>;
 impl BlockType for Block {
     type Transaction = Transaction;
     type AccountId = Account;
+    type Tokens = Tokens;
 
     fn encode(self) -> EncodedBlock {
         let mut bytes = vec![];

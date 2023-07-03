@@ -3,6 +3,7 @@ use super::*;
 use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::Scribe;
 use ic_ledger_canister_blocks_synchronizer_test_utils::{create_tmp_dir, init_test_logger};
 use ic_ledger_core::block::BlockType;
+use ic_ledger_core::tokens::CheckedAdd;
 use ic_rosetta_api::convert::{block_id, from_hash, to_hash};
 use ic_rosetta_api::ledger_client::LedgerAccess;
 use ic_rosetta_api::models::amount::{tokens_to_amount, Amount};
@@ -450,13 +451,13 @@ fn verify_balances(scribe: &Scribe, blocks: &Blocks, start_idx: usize) {
     let mut sum_icpt = Tokens::ZERO;
     let latest = blocks.get_latest_verified_hashed_block().unwrap();
     for amount in scribe.balance_history.back().unwrap().values() {
-        sum_icpt += *amount;
+        sum_icpt = sum_icpt.checked_add(amount).unwrap();
     }
     let accounts = blocks.get_all_accounts().unwrap();
     let mut total = Tokens::ZERO;
     for account in accounts {
         let amount = blocks.get_account_balance(&account, &latest.index).unwrap();
-        total += amount;
+        total = total.checked_add(&amount).unwrap();
     }
     assert_eq!(sum_icpt, total);
 }

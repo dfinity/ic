@@ -9,7 +9,7 @@ use ic_ledger_core::{
     approvals::{Allowance, Approvals},
     block::{BlockIndex, BlockType},
     timestamp::TimeStamp,
-    tokens::Tokens,
+    tokens::{CheckedAdd, CheckedSub, Tokens},
 };
 use icp_ledger::{
     apply_operation, ArchiveOptions, Block, LedgerBalances, Memo, Operation, PaymentError,
@@ -64,7 +64,7 @@ fn balances_overflow() {
                 None,
             )
             .unwrap();
-        credited += amount
+        credited = credited.checked_add(&amount).unwrap();
     }
     println!("amount credited to accounts: {}", credited);
 
@@ -88,8 +88,11 @@ fn balances_overflow() {
     // We have credited 55 Tokens to various accounts but the three accounts
     // with lowest balances, 0, 1 and 2, should have been removed and their
     // balance returned to the minting canister
-    let expected_minting_canister_balance =
-        ((Tokens::MAX - credited).unwrap() + Tokens::new(1 + 2, 0).unwrap()).unwrap();
+    let expected_minting_canister_balance = Tokens::MAX
+        .checked_sub(&credited)
+        .unwrap()
+        .checked_add(&Tokens::new(1 + 2, 0).unwrap())
+        .unwrap();
     assert_eq!(state.balances.token_pool, expected_minting_canister_balance);
 }
 

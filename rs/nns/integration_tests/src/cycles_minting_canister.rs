@@ -6,6 +6,7 @@ use cycles_minting_canister::{
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
 };
@@ -147,10 +148,16 @@ fn test_cmc_mints_cycles_when_cmc_has_exchange_rate() {
             .unwrap();
 
         let mut expected_final_balance = icpts;
-        expected_final_balance = (expected_final_balance - Tokens::new(10, 0).unwrap()).unwrap();
-        expected_final_balance = (expected_final_balance
-            - (DEFAULT_TRANSFER_FEE + DEFAULT_TRANSFER_FEE).unwrap())
-        .unwrap();
+        expected_final_balance = expected_final_balance
+            .checked_sub(&Tokens::new(10, 0).unwrap())
+            .unwrap();
+        expected_final_balance = expected_final_balance
+            .checked_sub(
+                &DEFAULT_TRANSFER_FEE
+                    .checked_add(&DEFAULT_TRANSFER_FEE)
+                    .unwrap(),
+            )
+            .unwrap();
         assert_eq!(final_balance, expected_final_balance);
 
         let total_cycles_minted_final: u64 = nns_canisters
@@ -225,8 +232,10 @@ async fn send_cycles(
         .unwrap();
 
     let mut expected_balance = initial_icpts;
-    expected_balance = (expected_balance - Tokens::new(10, 0).unwrap()).unwrap();
-    expected_balance = (expected_balance - DEFAULT_TRANSFER_FEE).unwrap();
+    expected_balance = expected_balance
+        .checked_sub(&Tokens::new(10, 0).unwrap())
+        .unwrap();
+    expected_balance = expected_balance.checked_sub(&DEFAULT_TRANSFER_FEE).unwrap();
     assert_eq!(after_send_balance, expected_balance);
 
     let notify_args = NotifyCanisterArgs::new_from_send(

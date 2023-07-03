@@ -4,6 +4,7 @@ use ic_canister_log::{log, Sink};
 use ic_ledger_core::approvals::{
     Approvals, ApproveError, InsufficientAllowance, PrunableApprovals,
 };
+use ic_ledger_core::tokens::Zero;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
@@ -12,7 +13,7 @@ use std::time::Duration;
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore, InspectableBalancesStore};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::tokens::Tokens;
+use ic_ledger_core::tokens::TokensType;
 use ic_ledger_hash_of::HashOf;
 
 /// The memo to use for balances burned during trimming
@@ -25,7 +26,7 @@ pub struct TransactionInfo<TransactionType> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum TxApplyError {
+pub enum TxApplyError<Tokens> {
     InsufficientFunds { balance: Tokens },
     InsufficientAllowance { allowance: Tokens },
     ExpiredApproval { now: TimeStamp },
@@ -33,22 +34,22 @@ pub enum TxApplyError {
     SelfApproval,
 }
 
-impl From<BalanceError> for TxApplyError {
-    fn from(e: BalanceError) -> Self {
+impl<Tokens> From<BalanceError<Tokens>> for TxApplyError<Tokens> {
+    fn from(e: BalanceError<Tokens>) -> Self {
         match e {
             BalanceError::InsufficientFunds { balance } => Self::InsufficientFunds { balance },
         }
     }
 }
 
-impl From<InsufficientAllowance> for TxApplyError {
-    fn from(e: InsufficientAllowance) -> Self {
+impl<Tokens> From<InsufficientAllowance<Tokens>> for TxApplyError<Tokens> {
+    fn from(e: InsufficientAllowance<Tokens>) -> Self {
         Self::InsufficientAllowance { allowance: e.0 }
     }
 }
 
-impl From<ApproveError> for TxApplyError {
-    fn from(ae: ApproveError) -> Self {
+impl<Tokens> From<ApproveError<Tokens>> for TxApplyError<Tokens> {
+    fn from(ae: ApproveError<Tokens>) -> Self {
         match ae {
             ApproveError::ExpiredApproval { now } => Self::ExpiredApproval { now },
             ApproveError::AllowanceChanged { current_allowance } => {
@@ -61,8 +62,10 @@ impl From<ApproveError> for TxApplyError {
 
 pub trait LedgerContext {
     type AccountId: std::hash::Hash + Ord + Eq + Clone;
-    type Approvals: Approvals<AccountId = Self::AccountId> + PrunableApprovals;
-    type BalancesStore: BalancesStore<AccountId = Self::AccountId> + Default;
+    type Approvals: Approvals<AccountId = Self::AccountId, Tokens = Self::Tokens>
+        + PrunableApprovals;
+    type BalancesStore: BalancesStore<AccountId = Self::AccountId, Tokens = Self::Tokens> + Default;
+    type Tokens: TokensType;
 
     fn balances(&self) -> &Balances<Self::BalancesStore>;
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore>;
@@ -75,12 +78,13 @@ pub trait LedgerContext {
 
 pub trait LedgerTransaction: Sized {
     type AccountId: Clone;
+    type Tokens: TokensType;
 
     /// Constructs a new "burn" transaction that removes the specified `amount` of tokens from the
     /// `from` account.
     fn burn(
         from: Self::AccountId,
-        amount: Tokens,
+        amount: Self::Tokens,
         at: Option<TimeStamp>,
         memo: Option<u64>,
     ) -> Self;
@@ -96,10 +100,10 @@ pub trait LedgerTransaction: Sized {
         &self,
         context: &mut C,
         now: TimeStamp,
-        effective_fee: Tokens,
-    ) -> Result<(), TxApplyError>
+        effective_fee: Self::Tokens,
+    ) -> Result<(), TxApplyError<Self::Tokens>>
     where
-        C: LedgerContext<AccountId = Self::AccountId>;
+        C: LedgerContext<AccountId = Self::AccountId, Tokens = Self::Tokens>;
 }
 
 pub trait LedgerAccess {
@@ -123,8 +127,14 @@ pub trait LedgerAccess {
 pub trait LedgerData: LedgerContext {
     type ArchiveWasm: ArchiveCanisterWasm;
     type Runtime: Runtime;
-    type Block: BlockType<Transaction = Self::Transaction, AccountId = Self::AccountId>;
-    type Transaction: LedgerTransaction<AccountId = Self::AccountId> + Ord + Clone;
+    type Block: BlockType<
+        Transaction = Self::Transaction,
+        AccountId = Self::AccountId,
+        Tokens = Self::Tokens,
+    >;
+    type Transaction: LedgerTransaction<AccountId = Self::AccountId, Tokens = Self::Tokens>
+        + Ord
+        + Clone;
 
     // Purge configuration
 
@@ -171,7 +181,7 @@ pub trait LedgerData: LedgerContext {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub enum TransferError {
+pub enum TransferError<Tokens> {
     BadFee { expected_fee: Tokens },
     InsufficientFunds { balance: Tokens },
     InsufficientAllowance { allowance: Tokens },
@@ -191,8 +201,8 @@ pub fn apply_transaction<L>(
     ledger: &mut L,
     transaction: L::Transaction,
     now: TimeStamp,
-    effective_fee: Tokens,
-) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError>
+    effective_fee: L::Tokens,
+) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError<L::Tokens>>
 where
     L: LedgerData,
     L::BalancesStore: InspectableBalancesStore,
@@ -293,7 +303,7 @@ where
         let burn_tx = L::Transaction::burn(account, balance, Some(now), Some(TRIMMED_MEMO));
 
         burn_tx
-            .apply(ledger, now, Tokens::ZERO)
+            .apply(ledger, now, L::Tokens::zero())
             .expect("failed to burn funds that must have existed");
 
         let parent_hash = ledger.blockchain().last_hash;
@@ -305,7 +315,7 @@ where
                 parent_hash,
                 burn_tx,
                 now,
-                Tokens::from_e8s(0),
+                L::Tokens::zero(),
                 fee_collector,
             ))
             .unwrap();
@@ -410,12 +420,13 @@ pub fn purge_old_transactions<L: LedgerData>(ledger: &mut L, now: TimeStamp) -> 
 
 // Find the specified number of accounts with lowest balances so that their
 // balances can be reclaimed.
-fn select_accounts_to_trim<L>(ledger: &L) -> Vec<(Tokens, L::AccountId)>
+fn select_accounts_to_trim<L>(ledger: &L) -> Vec<(L::Tokens, L::AccountId)>
 where
     L: LedgerData,
-    L::BalancesStore: InspectableBalancesStore,
+    L::BalancesStore: InspectableBalancesStore<Tokens = L::Tokens>,
+    L::Tokens: TokensType,
 {
-    let mut to_trim: std::collections::BinaryHeap<(Tokens, L::AccountId)> =
+    let mut to_trim: std::collections::BinaryHeap<(L::Tokens, L::AccountId)> =
         std::collections::BinaryHeap::new();
 
     let num_accounts = ledger.accounts_overflow_trim_quantity();

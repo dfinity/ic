@@ -23,7 +23,7 @@ impl From<(&Account, &Account)> for Key {
     }
 }
 
-type TestAllowanceTable = AllowanceTable<Key, Account>;
+type TestAllowanceTable = AllowanceTable<Key, Account, Tokens>;
 
 #[test]
 fn allowance_table_default() {

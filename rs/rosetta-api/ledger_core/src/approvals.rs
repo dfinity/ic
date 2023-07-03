@@ -1,5 +1,5 @@
 use crate::timestamp::TimeStamp;
-use crate::tokens::Tokens;
+use crate::tokens::{TokensType, Zero};
 use serde::{Deserialize, Serialize};
 use std::cmp::Reverse;
 use std::collections::btree_map::Entry;
@@ -10,10 +10,10 @@ use std::marker::PhantomData;
 mod tests;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct InsufficientAllowance(pub Tokens);
+pub struct InsufficientAllowance<Tokens>(pub Tokens);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ApproveError {
+pub enum ApproveError<Tokens> {
     AllowanceChanged { current_allowance: Tokens },
     ExpiredApproval { now: TimeStamp },
     SelfApproval,
@@ -21,6 +21,7 @@ pub enum ApproveError {
 
 pub trait Approvals {
     type AccountId;
+    type Tokens;
 
     /// Returns the current spender's allowance for the account.
     fn allowance(
@@ -28,18 +29,18 @@ pub trait Approvals {
         account: &Self::AccountId,
         spender: &Self::AccountId,
         now: TimeStamp,
-    ) -> Allowance;
+    ) -> Allowance<Self::Tokens>;
 
     /// Increases the spender's allowance for the account by the specified amount.
     fn approve(
         &mut self,
         account: &Self::AccountId,
         spender: &Self::AccountId,
-        amount: Tokens,
+        amount: Self::Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
-        expected_allowance: Option<Tokens>,
-    ) -> Result<Tokens, ApproveError>;
+        expected_allowance: Option<Self::Tokens>,
+    ) -> Result<Self::Tokens, ApproveError<Self::Tokens>>;
 
     /// Consumes amount from the spender's allowance for the account.
     ///
@@ -49,9 +50,9 @@ pub trait Approvals {
         &mut self,
         account: &Self::AccountId,
         spender: &Self::AccountId,
-        amount: Tokens,
+        amount: Self::Tokens,
         now: TimeStamp,
-    ) -> Result<Tokens, InsufficientAllowance>;
+    ) -> Result<Self::Tokens, InsufficientAllowance<Self::Tokens>>;
 }
 
 #[allow(clippy::len_without_is_empty)]
@@ -61,31 +62,40 @@ pub trait PrunableApprovals {
     fn prune(&mut self, now: TimeStamp, limit: usize) -> usize;
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Allowance {
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Allowance<Tokens> {
     pub amount: Tokens,
     pub expires_at: Option<TimeStamp>,
 }
 
+impl<Tokens: Zero> Default for Allowance<Tokens> {
+    fn default() -> Self {
+        Self {
+            amount: Tokens::zero(),
+            expires_at: Default::default(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AllowanceTable<K, AccountId>
+pub struct AllowanceTable<K, AccountId, Tokens>
 where
     K: Ord,
 {
-    allowances: BTreeMap<K, Allowance>,
+    allowances: BTreeMap<K, Allowance<Tokens>>,
     expiration_queue: BinaryHeap<Reverse<(TimeStamp, K)>>,
     #[serde(skip)]
     #[serde(default)]
     _marker: PhantomData<fn(&AccountId, &AccountId) -> K>,
 }
 
-impl<K: Ord, AccountId> Default for AllowanceTable<K, AccountId> {
+impl<K: Ord, AccountId, Tokens> Default for AllowanceTable<K, AccountId, Tokens> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K, AccountId> AllowanceTable<K, AccountId>
+impl<K, AccountId, Tokens> AllowanceTable<K, AccountId, Tokens>
 where
     K: Ord,
 {
@@ -98,14 +108,21 @@ where
     }
 }
 
-impl<K, AccountId> Approvals for AllowanceTable<K, AccountId>
+impl<K, AccountId, Tokens> Approvals for AllowanceTable<K, AccountId, Tokens>
 where
     K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
     AccountId: std::cmp::PartialEq,
+    Tokens: TokensType,
 {
     type AccountId = AccountId;
+    type Tokens = Tokens;
 
-    fn allowance(&self, account: &AccountId, spender: &AccountId, now: TimeStamp) -> Allowance {
+    fn allowance(
+        &self,
+        account: &AccountId,
+        spender: &AccountId,
+        now: TimeStamp,
+    ) -> Allowance<Tokens> {
         let key = K::from((account, spender));
         match self.allowances.get(&key) {
             Some(allowance) if allowance.expires_at.unwrap_or_else(remote_future) > now => {
@@ -123,7 +140,7 @@ where
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
         expected_allowance: Option<Tokens>,
-    ) -> Result<Tokens, ApproveError> {
+    ) -> Result<Tokens, ApproveError<Tokens>> {
         if account == spender {
             return Err(ApproveError::SelfApproval);
         }
@@ -137,9 +154,9 @@ where
         match self.allowances.entry(key.clone()) {
             Entry::Vacant(e) => {
                 if let Some(expected_allowance) = expected_allowance {
-                    if expected_allowance != Tokens::ZERO {
+                    if !expected_allowance.is_zero() {
                         return Err(ApproveError::AllowanceChanged {
-                            current_allowance: Tokens::ZERO,
+                            current_allowance: Tokens::zero(),
                         });
                     }
                 }
@@ -177,22 +194,25 @@ where
         spender: &AccountId,
         amount: Tokens,
         now: TimeStamp,
-    ) -> Result<Tokens, InsufficientAllowance> {
+    ) -> Result<Tokens, InsufficientAllowance<Tokens>> {
         let key = K::from((account, spender));
 
         match self.allowances.entry(key) {
-            Entry::Vacant(_) => Err(InsufficientAllowance(Tokens::ZERO)),
+            Entry::Vacant(_) => Err(InsufficientAllowance(Tokens::zero())),
             Entry::Occupied(mut e) => {
                 if e.get().expires_at.unwrap_or_else(remote_future) <= now {
-                    Err(InsufficientAllowance(Tokens::ZERO))
+                    Err(InsufficientAllowance(Tokens::zero()))
                 } else {
                     let allowance = e.get_mut();
                     if allowance.amount < amount {
                         return Err(InsufficientAllowance(allowance.amount));
                     }
-                    allowance.amount -= amount;
+                    allowance.amount = allowance
+                        .amount
+                        .checked_sub(&amount)
+                        .expect("Underflow when using allowance");
                     let rest = allowance.amount;
-                    if rest == Tokens::ZERO {
+                    if rest.is_zero() {
                         e.remove();
                     }
                     Ok(rest)
@@ -202,7 +222,7 @@ where
     }
 }
 
-impl<K, AccountId> PrunableApprovals for AllowanceTable<K, AccountId>
+impl<K, AccountId, Tokens> PrunableApprovals for AllowanceTable<K, AccountId, Tokens>
 where
     K: Ord,
 {

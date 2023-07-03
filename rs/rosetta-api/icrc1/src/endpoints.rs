@@ -2,6 +2,7 @@ use crate::Block;
 use candid::types::number::Nat;
 use candid::CandidType;
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
+use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{
@@ -9,23 +10,25 @@ use icrc_ledger_types::icrc3::transactions::{
 };
 use serde::Deserialize;
 
-pub fn convert_transfer_error(err: CoreTransferError) -> EndpointsTransferError {
+pub fn convert_transfer_error<Tokens: TokensType>(
+    err: CoreTransferError<Tokens>,
+) -> EndpointsTransferError<Tokens> {
     EndpointsTransferError(err)
 }
 
-pub struct EndpointsTransferError(pub CoreTransferError);
+pub struct EndpointsTransferError<Tokens>(pub CoreTransferError<Tokens>);
 
-impl From<EndpointsTransferError> for TransferError {
-    fn from(err: EndpointsTransferError) -> Self {
+impl<Tokens: TokensType> From<EndpointsTransferError<Tokens>> for TransferError {
+    fn from(err: EndpointsTransferError<Tokens>) -> Self {
         use ic_ledger_canister_core::ledger::TransferError as LTE;
         use TransferError as TE;
 
         match err.0 {
             LTE::BadFee { expected_fee } => TE::BadFee {
-                expected_fee: Nat::from(expected_fee.get_e8s()),
+                expected_fee: expected_fee.into(),
             },
             LTE::InsufficientFunds { balance } => TE::InsufficientFunds {
-                balance: Nat::from(balance.get_e8s()),
+                balance: balance.into(),
             },
             LTE::TxTooOld { .. } => TE::TooOld,
             LTE::TxCreatedInFuture { ledger_time } => TE::CreatedInFuture {
@@ -51,17 +54,17 @@ impl From<EndpointsTransferError> for TransferError {
     }
 }
 
-impl From<EndpointsTransferError> for ApproveError {
-    fn from(err: EndpointsTransferError) -> Self {
+impl<Tokens: TokensType> From<EndpointsTransferError<Tokens>> for ApproveError {
+    fn from(err: EndpointsTransferError<Tokens>) -> Self {
         use ic_ledger_canister_core::ledger::TransferError as LTE;
         use ApproveError as AE;
 
         match err.0 {
             LTE::BadFee { expected_fee } => AE::BadFee {
-                expected_fee: Nat::from(expected_fee.get_e8s()),
+                expected_fee: expected_fee.into(),
             },
             LTE::InsufficientFunds { balance } => AE::InsufficientFunds {
-                balance: Nat::from(balance.get_e8s()),
+                balance: balance.into(),
             },
             LTE::TxTooOld { .. } => AE::TooOld,
             LTE::TxCreatedInFuture { ledger_time } => AE::CreatedInFuture {
@@ -78,7 +81,7 @@ impl From<EndpointsTransferError> for ApproveError {
                 ledger_time: ledger_time.as_nanos_since_unix_epoch(),
             },
             LTE::AllowanceChanged { current_allowance } => AE::AllowanceChanged {
-                current_allowance: Nat::from(current_allowance.get_e8s()),
+                current_allowance: current_allowance.into(),
             },
             LTE::SelfApproval { .. } => {
                 unimplemented!("self approval not implemented for ApproveError")

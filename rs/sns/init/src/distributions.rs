@@ -598,6 +598,7 @@ mod test {
         SnsCanisterIds, Tokens,
     };
     use ic_base_types::{CanisterId, PrincipalId};
+    use ic_ledger_core::tokens::CheckedAdd;
     use ic_nervous_system_common::ledger::{
         compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount_bytes,
     };
@@ -746,7 +747,9 @@ mod test {
             initial_ledger_accounts.get(&swap_canister_account).unwrap();
 
         assert_eq!(
-            (*locked_swap_account_balance + *swap_canister_account_balance).unwrap(),
+            locked_swap_account_balance
+                .checked_add(swap_canister_account_balance)
+                .unwrap(),
             Tokens::from_e8s(
                 initial_token_distribution
                     .swap_distribution

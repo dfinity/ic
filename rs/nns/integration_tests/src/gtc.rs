@@ -1,6 +1,7 @@
 use dfn_candid::{candid, candid_one};
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
+use ic_ledger_core::tokens::CheckedAdd;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_KEYPAIR,
     TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -317,8 +318,9 @@ async fn assert_unclaimed_neurons_can_be_forwarded(
 
     let custodian_account_balance = account_balance_response.unwrap();
 
-    let expected_custodian_account_balance_after_forward =
-        (custodian_account_balance + expected_custodian_account_balance_increase).unwrap();
+    let expected_custodian_account_balance_after_forward = custodian_account_balance
+        .checked_add(&expected_custodian_account_balance_increase)
+        .unwrap();
 
     // Have `TEST_IDENTITY_1` forward `TEST_IDENTITY_2`'s and `TEST_IDENTITY_4`'s
     // neurons
@@ -468,8 +470,9 @@ async fn assert_neurons_can_be_donated(
 
     let custodian_account_balance = account_balance_response.unwrap();
 
-    let expected_custodian_account_balance_after_donation =
-        (custodian_account_balance + expected_custodian_account_balance_increase).unwrap();
+    let expected_custodian_account_balance_after_donation = custodian_account_balance
+        .checked_add(&expected_custodian_account_balance_increase)
+        .unwrap();
 
     // Have `test_identity` donate their neurons
     let donate_account_response: Result<Result<(), String>, String> = gtc

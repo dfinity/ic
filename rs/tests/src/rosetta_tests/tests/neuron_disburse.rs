@@ -8,6 +8,7 @@ use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
 use crate::util::block_on;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
 use ic_nns_governance::pb::v1::neuron::DissolveState;
 use ic_nns_governance::pb::v1::Neuron;
@@ -176,7 +177,11 @@ async fn test_disburse(
         ros,
         ledger_client,
         &recipient.unwrap_or(acc),
-        ((pre_disburse + amount).unwrap() - DEFAULT_TRANSFER_FEE).unwrap(),
+        pre_disburse
+            .checked_add(&amount)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
+            .unwrap(),
     )
     .await;
     Ok(())
@@ -275,7 +280,11 @@ async fn test_disburse_raw(
         ros,
         ledger_client,
         &recipient.unwrap_or(acc),
-        ((pre_disburse + amount).unwrap() - DEFAULT_TRANSFER_FEE).unwrap(),
+        pre_disburse
+            .checked_add(&amount)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
+            .unwrap(),
     )
     .await;
     Ok(())

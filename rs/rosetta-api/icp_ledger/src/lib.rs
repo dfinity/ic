@@ -8,6 +8,7 @@ use ic_ledger_core::{
     approvals::Approvals,
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector},
+    tokens::CheckedAdd,
 };
 use ic_ledger_hash_of::HashOf;
 use ic_ledger_hash_of::HASH_LENGTH;
@@ -114,9 +115,9 @@ pub fn apply_operation<C>(
     context: &mut C,
     operation: &Operation,
     now: TimeStamp,
-) -> Result<(), TxApplyError>
+) -> Result<(), TxApplyError<C::Tokens>>
 where
-    C: LedgerContext<AccountId = AccountIdentifier>,
+    C: LedgerContext<AccountId = AccountIdentifier, Tokens = Tokens>,
 {
     match operation {
         Operation::Transfer {
@@ -209,6 +210,7 @@ pub struct Transaction {
 
 impl LedgerTransaction for Transaction {
     type AccountId = AccountIdentifier;
+    type Tokens = Tokens;
 
     fn burn(
         from: Self::AccountId,
@@ -238,10 +240,10 @@ impl LedgerTransaction for Transaction {
         &self,
         context: &mut C,
         now: TimeStamp,
-        _effective_fee: Tokens,
-    ) -> Result<(), TxApplyError>
+        _effective_fee: C::Tokens,
+    ) -> Result<(), TxApplyError<C::Tokens>>
     where
-        C: LedgerContext<AccountId = Self::AccountId>,
+        C: LedgerContext<AccountId = Self::AccountId, Tokens = Tokens>,
     {
         apply_operation(context, &self.operation, now)
     }
@@ -331,6 +333,7 @@ impl Block {
 impl BlockType for Block {
     type Transaction = Transaction;
     type AccountId = AccountIdentifier;
+    type Tokens = Tokens;
 
     fn encode(self) -> EncodedBlock {
         EncodedBlock::from_vec(
@@ -525,7 +528,9 @@ impl LedgerCanisterInitPayloadBuilder {
         // verify ledger's invariant about the maximum amount
         let mut sum = Tokens::ZERO;
         for initial_value in self.initial_values.values() {
-            sum = (sum + *initial_value).map_err(|_| "initial_values sum overflows".to_string())?
+            sum = sum
+                .checked_add(initial_value)
+                .ok_or_else(|| "initial_values sum overflows".to_string())?
         }
 
         // Don't allow self-transfers of the minting canister

@@ -18,6 +18,7 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, CreateCanisterArgs, Method, IC_00,
 };
 use ic_ledger_core::block::BlockType;
+use ic_ledger_core::tokens::CheckedSub;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
@@ -1493,7 +1494,14 @@ async fn refund(
 
     let mut burned = amount;
     let mut refunded = Tokens::ZERO;
-    if let Ok(to_refund) = (amount - DEFAULT_TRANSFER_FEE).and_then(|x| x - extra_fee) {
+    if let Ok(to_refund) = amount
+        .checked_sub(&DEFAULT_TRANSFER_FEE)
+        .ok_or("Underflow in subtracting the fee from amount")
+        .and_then(|x| {
+            x.checked_sub(&extra_fee)
+                .ok_or("Underflow in subtracting the extra fee from the amount")
+        })
+    {
         if to_refund > Tokens::ZERO {
             burned = extra_fee;
             refunded = to_refund;
