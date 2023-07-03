@@ -380,8 +380,10 @@ fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPayme
 /// Tries to commit or abort the swap if the parameters have been satisfied.
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
-    let now_seconds = now_seconds();
-    swap_mut().heartbeat(now_seconds);
+    let future = swap_mut().heartbeat(now_fn);
+
+    // The canister_heartbeat must be synchronous, so we cannot .await the future.
+    dfn_core::api::futures::spawn(future);
 }
 
 fn now_seconds() -> u64 {

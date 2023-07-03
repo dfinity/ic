@@ -51,10 +51,9 @@ use ic_sns_init::pb::v1::{
 };
 use ic_sns_swap::{
     pb::v1::{
-        self as swap_pb, error_refund_icp_response, set_dapp_controllers_call_result,
-        set_mode_call_result, ErrorRefundIcpRequest, ErrorRefundIcpResponse, GetOpenTicketResponse,
-        GetStateRequest, GetStateResponse, Init, NeuronBasketConstructionParameters, OpenRequest,
-        RefreshBuyerTokensResponse, SetDappControllersCallResult, SetDappControllersResponse,
+        self as swap_pb, error_refund_icp_response, set_mode_call_result, ErrorRefundIcpRequest,
+        ErrorRefundIcpResponse, GetOpenTicketResponse, GetStateRequest, GetStateResponse, Init,
+        NeuronBasketConstructionParameters, OpenRequest, RefreshBuyerTokensResponse,
     },
     swap::principal_to_subaccount,
 };
@@ -1697,6 +1696,8 @@ fn assert_successful_swap_finalizes_correctly(
     }
 
     // Execute the swap.
+    // TODO(NNS1-2359): We should also verify the FinalizeSwapResponse from
+    // automatic finalization is correct.
     let finalize_swap_response = {
         let result = state_machine
             .execute_ingress(
@@ -2416,61 +2417,20 @@ fn swap_lifecycle_sad() {
         );
     }
 
-    // Execute the swap.
-    let finalize_swap_response = {
-        let result = state_machine
-            .execute_ingress(
-                sns_canister_ids.swap.unwrap().try_into().unwrap(),
-                "finalize_swap",
-                Encode!(&swap_pb::FinalizeSwapRequest {}).unwrap(),
-            )
-            .unwrap();
-        let result: Vec<u8> = match result {
-            WasmResult::Reply(reply) => reply,
-            WasmResult::Reject(reject) => panic!(
-                "finalize_swap call was rejected by swap canister: {:#?}",
-                reject
-            ),
-        };
-        Decode!(&result, swap_pb::FinalizeSwapResponse).unwrap()
-    };
-
-    // Step 3: Inspect results.
-
-    // Step 3.1: Inspect finalize_swap_response.
+    // Ticking will cause the swap to auto-finalize
+    state_machine.tick();
+    // Make sure that governance is still in PreInitializationSwap mode
     {
-        use swap_pb::settle_community_fund_participation_result::{Possibility, Response};
-        assert_eq!(
-            finalize_swap_response,
-            swap_pb::FinalizeSwapResponse {
-                sweep_icp_result: Some(swap_pb::SweepResult {
-                    success: 1,
-                    failure: 0,
-                    skipped: 0,
-                    invalid: 0,
-                    global_failures: 0,
-                }),
-                sweep_sns_result: None,
-                claim_neuron_result: None,
-                set_mode_call_result: None,
-                set_dapp_controllers_call_result: Some(SetDappControllersCallResult {
-                    possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
-                        SetDappControllersResponse {
-                            failed_updates: vec![],
-                        }
-                    )),
-                }),
-                settle_community_fund_participation_result: Some(
-                    swap_pb::SettleCommunityFundParticipationResult {
-                        possibility: Some(Possibility::Ok(Response {
-                            governance_error: None,
-                        })),
-                    }
-                ),
-                error_message: None,
-            }
-        );
+        use sns_governance_pb::governance::Mode;
+        let sns_governance_canister_id =
+            CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
+        let mode = sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
+            .map(|mode| Mode::from_i32(mode).unwrap())
+            .unwrap();
+        assert_eq!(mode, Mode::PreInitializationSwap);
     }
+
+    // Step 3.1: TODO(NNS1-2359): Verify the FinalizeSwapResponse from automatic finalization is correct.
 
     // Step 3.2.1: Inspect ICP balance(s).
     // TEST_USER2 (the participant) should get their ICP back (less two transfer fees).
@@ -2719,7 +2679,7 @@ fn test_upgrade() {
         neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
         nns_proposal_id: None,                       // TODO[NNS1-2339]
         neurons_fund_participants: None,             // TODO[NNS1-2339]
-        should_auto_finalize: None,                  // TODO[NNS1-2339]
+        should_auto_finalize: Some(true),
     })
     .unwrap();
     let canister_id = state_machine
@@ -3123,7 +3083,7 @@ fn test_last_man_less_than_min() {
         neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
         nns_proposal_id: None,                       // TODO[NNS1-2339]
         neurons_fund_participants: None,             // TODO[NNS1-2339]
-        should_auto_finalize: None,                  // TODO[NNS1-2339]
+        should_auto_finalize: Some(true),
     })
     .unwrap();
     state_machine

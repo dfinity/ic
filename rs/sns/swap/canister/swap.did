@@ -195,6 +195,7 @@ type Swap = record {
   finalize_swap_in_progress : opt bool;
   cf_participants : vec CfParticipant;
   init : opt Init;
+  already_tried_to_auto_finalize : opt bool;
   purge_old_tickets_last_completion_timestamp_nanoseconds : opt nat64;
   lifecycle : int32;
   purge_old_tickets_next_principal : opt vec nat8;

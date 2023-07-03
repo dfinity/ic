@@ -213,6 +213,10 @@ pub struct Swap {
     /// running purge_old_tickets routine.
     #[prost(bytes = "vec", optional, tag = "14")]
     pub purge_old_tickets_next_principal: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Set to true when auto-finalization is attempted. Prevents auto-finalization
+    /// from being attempted more than once.
+    #[prost(bool, optional, tag = "17")]
+    pub already_tried_to_auto_finalize: ::core::option::Option<bool>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.

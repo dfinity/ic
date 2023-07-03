@@ -112,7 +112,7 @@ fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
         neuron_basket_construction_parameters: None, // TODO[NNS1-2339]
         nns_proposal_id: None,                       // TODO[NNS1-2339]
         neurons_fund_participants: None,             // TODO[NNS1-2339]
-        should_auto_finalize: None,                  // TODO[NNS1-2339]
+        should_auto_finalize: Some(true),
     };
     assert_is_ok!(result.validate());
     result
@@ -171,6 +171,7 @@ fn create_generic_committed_swap() -> Swap {
         next_ticket_id: Some(0),
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
+        already_tried_to_auto_finalize: Some(false),
     }
 }
 
@@ -393,7 +394,8 @@ fn test_min_icp() {
     }
     assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
-    assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 2 ICP from one buyer.
     assert!(swap
         .refresh_buyer_token_e8s(
@@ -454,8 +456,10 @@ fn test_min_icp() {
     //
     // Cannot commit
     assert!(!swap.can_commit(END_TIMESTAMP_SECONDS));
-    // This should now abort as the minimum hasn't been reached.
-    assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
+    // This should now abort as the minimum hasn't been reached. This should not
+    // commit.
+    assert!(!swap.try_commit(END_TIMESTAMP_SECONDS));
+    assert!(swap.try_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Aborted);
     {
         // "Sweep" all ICP, which should go back to the buyers.
@@ -541,7 +545,8 @@ fn test_min_max_icp_per_buyer() {
     }
     assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
-    assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
     // Try to deposit 0.99999999 ICP, slightly less than the minimum.
     {
         let e = swap
@@ -658,7 +663,8 @@ fn test_max_icp() {
     }
     assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
-    assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 6 ICP from one buyer.
     assert!(swap
         .refresh_buyer_token_e8s(
@@ -710,8 +716,9 @@ fn test_max_icp() {
     );
     // Can commit even if time isn't up as the max has been reached.
     assert!(swap.can_commit(END_TIMESTAMP_SECONDS - 1));
-    // This should commit...
-    assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
+    // This should commit, and should not abort
+    assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
+    assert!(swap.try_commit(END_TIMESTAMP_SECONDS - 1));
     assert_eq!(swap.lifecycle(), Committed);
     // Check that buyer balances are correct. Total SNS balance is 1M
     // and total ICP is 10, so 100k SNS tokens per ICP.
@@ -783,7 +790,8 @@ fn test_scenario_happy() {
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
     assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS));
     // Cannot commit or abort, as the swap is not due yet.
-    assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 900 ICP from one buyer.
     assert!(swap
         .refresh_buyer_token_e8s(
@@ -809,7 +817,8 @@ fn test_scenario_happy() {
         900 * E8
     );
     // Cannot commit or abort, as the swap is not due yet.
-    assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_commit(END_TIMESTAMP_SECONDS - 1));
+    assert!(!swap.try_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 600 ICP from another buyer.
     assert!(swap
         .refresh_buyer_token_e8s(
@@ -835,10 +844,11 @@ fn test_scenario_happy() {
         600 * E8
     );
     // Now there are two participants. If the time was up, the swap
-    // could be aborted...
+    // could be aborted, but not committed...
     {
         let mut abort_swap = swap.clone();
-        assert!(abort_swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
+        assert!(!abort_swap.try_commit(END_TIMESTAMP_SECONDS));
+        assert!(abort_swap.try_abort(END_TIMESTAMP_SECONDS));
         assert_eq!(abort_swap.lifecycle(), Aborted);
     }
     // Deposit 400 ICP from a third buyer.
@@ -874,8 +884,9 @@ fn test_scenario_happy() {
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
     // Can commit if the swap is due.
     assert!(swap.can_commit(END_TIMESTAMP_SECONDS));
-    // This should commit...
-    assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
+    // This should commit, but not abort...
+    assert!(!swap.try_abort(END_TIMESTAMP_SECONDS));
+    assert!(swap.try_commit(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
     // Should not be able to re-open after commit.
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
@@ -1129,43 +1140,114 @@ async fn test_finalize_swap_ok() {
         params: Some(params.clone()),
         buyers: buyers.clone(),
         cf_participants: vec![],
-        neuron_recipes: vec![],
+        neuron_recipes: vec![], // will be overwritten by `try_commit`
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
         next_ticket_id: Some(0),
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
+        already_tried_to_auto_finalize: Some(false),
     };
-    assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
+
+    // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
+    // the swap is open. Not only should it not work, it should do nothing.
+    assert_eq!(swap.lifecycle(), Open);
+    assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+    let auto_finalization_error = swap
+        .try_auto_finalize(now_fn, &mut spy_clients_exploding_root())
+        .await
+        .unwrap_err();
+    let allowed_to_finalize_error = swap.can_finalize().unwrap_err();
+    assert_eq!(auto_finalization_error, allowed_to_finalize_error);
+    assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+
+    // Step 2: Commit the swap
+    assert!(swap.try_commit(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
 
-    let mut clients = CanisterClients {
-        sns_governance: SpySnsGovernanceClient::new(vec![
-            SnsGovernanceClientReply::ClaimSwapNeurons(
-                compute_single_successful_claim_swap_neurons_response(&swap.neuron_recipes),
-            ),
-            SnsGovernanceClientReply::SetMode(SetModeResponse {}),
-        ]),
-        // Mock 3 successful ICP Ledger::transfer_funds calls
-        icp_ledger: SpyLedger::new(vec![
-            LedgerReply::TransferFunds(Ok(1000)),
-            LedgerReply::TransferFunds(Ok(1001)),
-            LedgerReply::TransferFunds(Ok(1002)),
-        ]),
-        sns_ledger: {
-            // Mock 9 successful SNS Ledger::transfer_funds calls
-            let sns_ledger_reply_calls =
-                (0..9).map(|i| LedgerReply::TransferFunds(Ok(i))).collect();
-            SpyLedger::new(sns_ledger_reply_calls)
-        },
-        ..spy_clients_exploding_root()
+    // We need to create a function to generate the clients, so we can get them
+    // †wice: once for when we call `finalize` and once for when we call
+    // `try_auto_finalize`
+    pub fn get_clients(
+        neuron_recipes: &[SnsNeuronRecipe],
+    ) -> CanisterClients<
+        ExplodingSnsRootClient,
+        SpySnsGovernanceClient,
+        SpyLedger,
+        SpyLedger,
+        SpyNnsGovernanceClient,
+    > {
+        CanisterClients {
+            sns_governance: SpySnsGovernanceClient::new(vec![
+                SnsGovernanceClientReply::ClaimSwapNeurons(
+                    compute_single_successful_claim_swap_neurons_response(neuron_recipes),
+                ),
+                SnsGovernanceClientReply::SetMode(SetModeResponse {}),
+            ]),
+            // Mock 3 successful ICP Ledger::transfer_funds calls
+            icp_ledger: SpyLedger::new(vec![
+                LedgerReply::TransferFunds(Ok(1000)),
+                LedgerReply::TransferFunds(Ok(1001)),
+                LedgerReply::TransferFunds(Ok(1002)),
+            ]),
+            sns_ledger: {
+                // Mock 9 successful SNS Ledger::transfer_funds calls
+                let sns_ledger_reply_calls =
+                    (0..9).map(|i| LedgerReply::TransferFunds(Ok(i))).collect();
+                SpyLedger::new(sns_ledger_reply_calls)
+            },
+            ..spy_clients_exploding_root()
+        }
+    }
+
+    let mut clients = get_clients(&swap.neuron_recipes[..]);
+
+    // Step 3: Run the code under test.
+    // We'll test finalize and try_auto_finalize and make sure they have the
+    // same result.
+    let result = {
+        // Clone swap & clients so we can run `finalize` and `try_auto_finalize` separately
+        let mut try_auto_finalize_swap = swap.clone();
+        let mut try_auto_finalize_clients = get_clients(&try_auto_finalize_swap.neuron_recipes);
+
+        // Call finalize on swap
+        let finalize_result = swap.finalize(now_fn, &mut clients).await;
+
+        // Call try_auto_finalize on the cloned version of swap
+        assert_eq!(
+            try_auto_finalize_swap.already_tried_to_auto_finalize,
+            Some(false)
+        );
+        let try_auto_finalize_result = try_auto_finalize_swap
+            .try_auto_finalize(now_fn, &mut try_auto_finalize_clients)
+            .await
+            .unwrap();
+        assert_eq!(
+            try_auto_finalize_swap.already_tried_to_auto_finalize,
+            Some(true)
+        );
+
+        // Try auto-finalizing again. It won't work since an attempt has already
+        // been made to auto-finalize the swap
+        let auto_finalization_error = try_auto_finalize_swap
+            .try_auto_finalize(now_fn, &mut try_auto_finalize_clients)
+            .await
+            .unwrap_err();
+        assert!(
+            auto_finalization_error.contains("an attempt has already been made to auto-finalize")
+        );
+
+        // Assert that finalization and auto-finalization had the same result
+        assert_eq!(
+            finalize_result, try_auto_finalize_result,
+            "the result from finalization and auto-finalization should be the same"
+        );
+
+        finalize_result
     };
 
-    // Step 2: Run the code under test. To wit, finalize_swap.
-    let result = swap.finalize(now_fn, &mut clients).await;
-
-    // Step 3: Inspect the results.
+    // Step 4: Inspect the results.
     {
         assert_eq!(
             result,
@@ -1212,12 +1294,14 @@ async fn test_finalize_swap_ok() {
         .sns_governance
         .calls
         .iter()
-        .filter_map(|c| {
+        .filter_map(|sns_governance_client_call| {
             use common::doubles::SnsGovernanceClientCall as Call;
-            match c {
+            match sns_governance_client_call {
                 Call::ManageNeuron(_) => None,
                 Call::SetMode(_) => None,
-                Call::ClaimSwapNeurons(b) => Some(b),
+                Call::ClaimSwapNeurons(claim_swap_neurons_request) => {
+                    Some(claim_swap_neurons_request)
+                }
             }
         })
         .flat_map(|b| &b.neuron_parameters)
@@ -1418,32 +1502,102 @@ async fn test_finalize_swap_abort() {
         next_ticket_id: Some(0),
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
+        already_tried_to_auto_finalize: Some(false),
     };
 
-    assert!(swap.try_commit_or_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
+    // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
+    // the swap is open. Not only should it not work, it should do nothing.
+    assert_eq!(swap.lifecycle(), Open);
+    assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+    let auto_finalization_error = swap
+        .try_auto_finalize(now_fn, &mut spy_clients_exploding_root())
+        .await
+        .unwrap_err();
+    let allowed_to_finalize_error = swap.can_finalize().unwrap_err();
+    assert_eq!(auto_finalization_error, allowed_to_finalize_error);
+
+    // already_tried_to_auto_finalize should still be set to false, since it
+    // couldn't try to auto-finalize due to the swap not being committed.
+    assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+
+    // Step 2: Abort the swap
+    assert!(swap.try_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
     assert_eq!(swap.lifecycle(), Aborted);
     // Cannot open when aborted.
     assert!(!swap.can_open(END_TIMESTAMP_SECONDS + 1));
     assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS + 1));
 
-    let mut clients = CanisterClients {
-        icp_ledger: SpyLedger::new(
-            // ICP Ledger should be called once and should return success
-            vec![LedgerReply::TransferFunds(Ok(1000))],
-        ),
-        sns_root: SpySnsRootClient::new(vec![
-            // SNS Root will respond with zero errors
-            SnsRootClientReply::SetDappControllers(SetDappControllersResponse {
-                failed_updates: vec![],
-            }),
-        ]),
-        ..spy_clients()
+    // We need to create a function to generate the clients, so we can get them
+    // †wice: once for when we call `finalize` and once for when we call
+    // `try_auto_finalize`
+    fn get_clients() -> CanisterClients<
+        SpySnsRootClient,
+        SpySnsGovernanceClient,
+        SpyLedger,
+        SpyLedger,
+        SpyNnsGovernanceClient,
+    > {
+        CanisterClients {
+            icp_ledger: SpyLedger::new(
+                // ICP Ledger should be called once and should return success
+                vec![LedgerReply::TransferFunds(Ok(1000))],
+            ),
+            sns_root: SpySnsRootClient::new(vec![
+                // SNS Root will respond with zero errors
+                SnsRootClientReply::SetDappControllers(SetDappControllersResponse {
+                    failed_updates: vec![],
+                }),
+            ]),
+            ..spy_clients()
+        }
+    }
+    let mut clients = get_clients();
+
+    // Step 3: Run the code under test.
+    // We'll test finalize and try_auto_finalize and make sure they have the
+    // same result.
+    let result = {
+        // Clone swap & clients so we can run `finalize` and `try_auto_finalize` separately
+        let mut try_auto_finalize_swap = swap.clone();
+        let mut try_auto_finalize_clients = get_clients();
+
+        // Call finalize on swap
+        let finalize_result = swap.finalize(now_fn, &mut clients).await;
+
+        // Call try_auto_finalize on the cloned version of swap.
+        assert_eq!(
+            try_auto_finalize_swap.already_tried_to_auto_finalize,
+            Some(false)
+        );
+        let try_auto_finalize_result = try_auto_finalize_swap
+            .try_auto_finalize(now_fn, &mut try_auto_finalize_clients)
+            .await
+            .unwrap();
+        assert_eq!(
+            try_auto_finalize_swap.already_tried_to_auto_finalize,
+            Some(true)
+        );
+
+        // Try auto-finalizing again. It won't work since an attempt has already
+        // been made to auto-finalize the swap
+        let auto_finalization_error = try_auto_finalize_swap
+            .try_auto_finalize(now_fn, &mut try_auto_finalize_clients)
+            .await
+            .unwrap_err();
+        assert!(
+            auto_finalization_error.contains("an attempt has already been made to auto-finalize")
+        );
+
+        // Assert that finalization and auto-finalization had the same result
+        assert_eq!(
+            finalize_result, try_auto_finalize_result,
+            "the result from finalization and auto-finalization should be the same"
+        );
+
+        finalize_result
     };
 
-    // Step 2: Run the code under test. To wit, finalize_swap.
-    let result = swap.finalize(now_fn, &mut clients).await;
-
-    // Step 3: Inspect the results.
+    // Step 4: Inspect the results.
     {
         assert_eq!(
             result,
@@ -1495,10 +1649,7 @@ async fn test_finalize_swap_abort() {
         ],
         "{icp_ledger_calls:#?}"
     );
-    assert_eq!(
-        clients.sns_ledger.get_calls_snapshot(),
-        vec![/* Test started in Open state */]
-    );
+    assert_eq!(clients.sns_ledger.get_calls_snapshot(), vec![]);
 
     // Step 3.3: SNS root was told to set dapp canister controllers.
     let controller_principal_ids = init
@@ -1598,9 +1749,11 @@ fn test_error_refund_single_user() {
         assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
 
         // The minimum number of participants is 1, so when calling commit with the appropriate end
-        // time a commit should be possible
+        // time a commit should be possible, but an abort should not be possible
+        assert!(!swap.can_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+        assert!(!swap.try_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
         assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-        assert!(swap.try_commit_or_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+        assert!(swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
 
         // The life cycle should have changed to COMMITTED
         assert_eq!(swap.lifecycle(), Committed);
@@ -1742,8 +1895,10 @@ fn test_error_refund_multiple_users() {
         .now_or_never()
         .unwrap();
 
-        //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
-        assert!(swap.try_commit_or_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+        // The minimum number of participants is 1, so when calling abort with the appropriate end time an abort should be possible
+        // (but a commit should not be possible)
+        assert!(!swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+        assert!(swap.try_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
 
         //The life cycle should have changed to ABORTED
         assert_eq!(swap.lifecycle(), Aborted);
@@ -1863,7 +2018,7 @@ fn test_error_refund_after_close() {
 
         //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
         assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
-        assert!(swap.try_commit_or_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+        assert!(swap.try_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
 
         //The life cycle should have changed to COMMITTED
         assert_eq!(swap.lifecycle(), Committed);
