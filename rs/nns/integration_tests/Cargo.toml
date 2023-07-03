@@ -34,6 +34,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }
 ic-sns-swap = { path = "../../sns/swap" }
+ic-stable-structures = "0.5.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 lifeline = { path = "../handlers/lifeline/impl" }
 prost = "0.11.0"

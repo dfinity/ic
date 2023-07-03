@@ -8585,6 +8585,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-swap",
  "ic-sns-wasm",
+ "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-types",
