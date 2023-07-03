@@ -30,14 +30,14 @@ use work::{Peek, PeekError};
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
     certificate::{
-        Export, ExportError, Exporter, Upload, UploadError, Uploader, WithIcCertification,
+        Export, ExportError, Exporter, Upload, UploadError, UploadWithIcCertification, Uploader,
     },
     ic_certification::{add_cert, init_cert_tree, set_root_hash},
     id::{Generate, Generator},
     rate_limiter::WithRateLimit,
     registration::{
         Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Remove, RemoveError,
-        Remover, Update, UpdateError, Updater,
+        Remover, Update, UpdateError, UpdateWithIcCertification, Updater,
     },
     work::{Dispense, DispenseError, Dispenser, Peeker, Queue, QueueError, Queuer, Retrier, Retry},
 };
@@ -326,6 +326,7 @@ thread_local! {
 
     static UPDATER: RefCell<Box<dyn Update>> = RefCell::new({
         let u = Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES);
+        let u = UpdateWithIcCertification::new(u, &ENCRYPTED_CERTIFICATES, &REGISTRATIONS);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
         let u = WithMetrics(u, &COUNTER_UPDATE_REGISTRATION_TOTAL);
         Box::new(u)
@@ -343,7 +344,7 @@ thread_local! {
 thread_local! {
     static UPLOADER: RefCell<Box<dyn Upload>> = RefCell::new({
         let u = Uploader::new(&ENCRYPTED_CERTIFICATES, &REGISTRATIONS);
-        let u = WithIcCertification::new(u, &REGISTRATIONS);
+        let u = UploadWithIcCertification::new(u, &REGISTRATIONS);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
         let u = WithMetrics(u, &COUNTER_UPLOAD_CERTIFICATE_TOTAL);
         Box::new(u)
