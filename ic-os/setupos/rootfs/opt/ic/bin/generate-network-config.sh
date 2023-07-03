@@ -92,8 +92,8 @@ function detect_network_interfaces() {
     INTERFACES_1GBE=()
 
     # Detect interface speed
-    for interface in ${INTERFACES[@]}; do
-        if [ "$(ethtool ${interface} | grep '10000base')" ]; then
+    for interface in "${INTERFACES[@]}"; do
+        if [ "$(ethtool ${interface} | grep -E '10000base|10000Mb')" ]; then
             INTERFACES_10GBE+=("${interface}")
         else
             INTERFACES_1GBE+=("${interface}")
