@@ -22,6 +22,7 @@ BASE_DEPENDENCIES = [
     "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
     "@crate_index//:strum",
@@ -228,6 +229,5 @@ rust_test(
     data = DEV_DATA,
     env = DEV_ENV,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    tags = ["post_master"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

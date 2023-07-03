@@ -1,50 +1,62 @@
 //! Make sure the governance canister scales
 
-use canister_test::{CanisterInstallMode, Project, Runtime};
-use ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet;
-use std::time::Duration;
+use candid::{Decode, Encode};
+use canister_test::Project;
+use ic_nns_governance::pb::v1::{ListProposalInfo, ListProposalInfoResponse};
+use ic_nns_test_utils::state_test_helpers::{create_canister, query};
+use ic_state_machine_tests::StateMachine;
 
 #[test]
 fn governance_mem_test() {
-    local_test_on_nns_subnet(|mut runtime| async move {
-        println!("Initializing governance mem test canister...");
+    let state_machine = StateMachine::new();
 
-        if let Runtime::Local(local_runtime) = &mut runtime {
-            local_runtime.ingress_time_limit = Duration::from_secs(20 * 60);
-        }
+    let state_setup_wasm = Project::cargo_bin_maybe_from_env("governance-mem-test-canister", &[]);
+    let governance_canister_id =
+        create_canister(&state_machine, state_setup_wasm, Some(vec![]), None);
 
-        let mut governance = runtime
-            .create_canister_max_cycles_with_retries()
-            .await
-            .unwrap();
+    let real_gov_wasm = Project::cargo_bin_maybe_from_env("governance-canister", &[]);
+    state_machine
+        .upgrade_canister(
+            governance_canister_id,
+            real_gov_wasm.clone().bytes(),
+            vec![],
+        )
+        .unwrap();
 
-        let state_initializer_wasm =
-            Project::cargo_bin_maybe_from_env("governance-mem-test-canister", &[]);
+    let list_proposal_info = ListProposalInfo {
+        limit: 1,
+        before_proposal: None,
+        exclude_topic: vec![],
+        include_reward_status: vec![],
+        include_status: vec![],
+        include_all_manage_neuron_proposals: None,
+    };
 
-        // It's on purpose that we don't want retries here! This test is only about
-        // initializing a canister with a very large state. A failure is most
-        // likely repeatable, so the test will fail much faster without retries.
-        let install = state_initializer_wasm
-            .install(&runtime)
-            .with_mode(CanisterInstallMode::Install);
-        install.install(&mut governance, Vec::new()).await.unwrap();
+    let proposals = query(
+        &state_machine,
+        governance_canister_id,
+        "list_proposals",
+        Encode!(&list_proposal_info).unwrap(),
+    )
+    .unwrap();
 
-        // Now let's upgrade to the real governance canister
-        let real_wasm = Project::cargo_bin_maybe_from_env("governance-canister", &[]);
-        governance.set_wasm(real_wasm.bytes());
+    let decoded = Decode!(&proposals, ListProposalInfoResponse).unwrap();
 
-        // Exercise canister_post_upgrade of the real canister
-        governance
-            .upgrade_to_self_binary(/* arg passed to post-upgrade: */ Vec::new())
-            .await
-            .unwrap();
+    assert_eq!(decoded.proposal_info.len(), 1);
 
-        // Exercise canister_pre_upgrade (and post upgrade again) of the real canister
-        governance
-            .upgrade_to_self_binary(/* arg passed to post-upgrade: */ Vec::new())
-            .await
-            .unwrap();
+    state_machine
+        .upgrade_canister(governance_canister_id, real_gov_wasm.bytes(), vec![])
+        .unwrap();
 
-        Ok(())
-    })
+    // We now want to assert that the data is the same as before the second upgrade.
+    let proposals = query(
+        &state_machine,
+        governance_canister_id,
+        "list_proposals",
+        Encode!(&list_proposal_info).unwrap(),
+    )
+    .unwrap();
+    let decoded2 = Decode!(&proposals, ListProposalInfoResponse).unwrap();
+
+    assert_eq!(decoded, decoded2);
 }

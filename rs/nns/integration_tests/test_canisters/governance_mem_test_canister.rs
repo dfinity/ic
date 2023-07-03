@@ -7,7 +7,7 @@
 //! can finish within the execution limit.
 use dfn_core::println;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter;
+use ic_nervous_system_common::memory_manager_upgrade_storage::store_protobuf;
 use ic_nns_common::pb::v1::{NeuronId as NeuronIdProto, ProposalId as ProposalIdProto};
 use ic_nns_governance::{
     governance::{
@@ -19,10 +19,13 @@ use ic_nns_governance::{
         NetworkEconomics as NetworkEconomicsProto, Neuron, Proposal, ProposalData, Topic, *,
     },
 };
+use ic_stable_structures::{
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+    DefaultMemoryImpl,
+};
 use icp_ledger::Subaccount;
 use lazy_static::lazy_static;
-use prost::Message;
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
 use strum::IntoEnumIterator;
 
 const LOG_PREFIX: &str = "[Governance mem test] ";
@@ -63,6 +66,20 @@ const DEFAULT_CONTROLLER: PrincipalId = PrincipalId::new(
     [0; PrincipalId::MAX_LENGTH_IN_BYTES],
 );
 
+/// Constants to define memory segments.  Must not change.
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+thread_local! {
+
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+        MemoryManager::init(DefaultMemoryImpl::default())
+    );
+
+    // The memory where the governance reads and writes its state during an upgrade.
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+}
+
 /// Returns the number of wasm32 pages consumed.
 #[cfg(target_arch = "wasm32")]
 fn heap_size_num_pages() -> usize {
@@ -82,13 +99,9 @@ fn canister_init() {
 
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
-    let mut writer = BufferedStableMemWriter::new(1000);
     unsafe {
-        GOVERNANCE
-            .as_ref()
-            .unwrap()
-            .encode(&mut writer)
-            .expect("Could not serialize to stable memory");
+        UPGRADES_MEMORY
+            .with(|um| store_protobuf(&*um.borrow(), GOVERNANCE.as_ref().unwrap()).unwrap());
     }
 }
 
