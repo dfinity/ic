@@ -5,8 +5,11 @@
 //! component to provide blocks and collect outgoing transactions.
 
 use bitcoin::{network::message::NetworkMessage, BlockHash, BlockHeader};
+use ic_logger::ReplicaLogger;
+use ic_metrics::MetricsRegistry;
 use parking_lot::RwLock;
 use std::{net::SocketAddr, sync::Arc, time::Instant};
+use tokio::sync::{mpsc::channel, Mutex};
 /// This module contains the AddressManager struct. The struct stores addresses
 /// that will be used to create new connections. It also tracks addresses that
 /// are in current use to encourage use from non-utilized addresses.
@@ -184,4 +187,41 @@ impl AdapterState {
         // Instant::now() is monotonically nondecreasing clock.
         *self.last_received_at.write() = Some(Instant::now());
     }
+}
+
+/// Starts the gRPC server and the router for handling incoming requests.
+pub fn start_grpc_server_and_router(
+    config: &config::Config,
+    metrics_registry: &MetricsRegistry,
+    logger: ReplicaLogger,
+    adapter_state: AdapterState,
+) {
+    // TODO: establish what the buffer size should be
+    let (blockchain_manager_tx, blockchain_manager_rx) = channel(10);
+
+    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(config, metrics_registry)));
+    let get_successors_handler =
+        GetSuccessorsHandler::new(config, blockchain_state.clone(), blockchain_manager_tx);
+
+    // TODO: we should NOT have an unbounded channel for buffering TransactionManagerRequests.
+    let (transaction_manager_tx, transaction_manager_rx) = channel(10);
+
+    spawn_grpc_server(
+        config.clone(),
+        logger.clone(),
+        adapter_state.clone(),
+        get_successors_handler,
+        transaction_manager_tx,
+        metrics_registry,
+    );
+
+    start_router(
+        config,
+        logger,
+        blockchain_state,
+        transaction_manager_rx,
+        adapter_state,
+        blockchain_manager_rx,
+        metrics_registry,
+    );
 }
