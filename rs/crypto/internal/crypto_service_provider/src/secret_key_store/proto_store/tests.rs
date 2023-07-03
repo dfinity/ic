@@ -230,69 +230,6 @@ proptest! {
     }
 }
 
-/// Verifies that `retain(..)` removes precisely the expected keys, no more, no
-/// less.
-#[test]
-fn should_retain_expected_keys() {
-    let mut key_store = proto_key_store();
-    let mut seeds = 0..;
-    let mut next_key = || {
-        (
-            make_key_id(seeds.next().unwrap()),
-            make_secret_key(seeds.next().unwrap()),
-        )
-    };
-    let key_with_id_to_retain = next_key();
-    let key_with_value_to_retain = next_key();
-    let key_to_remove = next_key();
-    let key_with_different_scope = next_key();
-    let key_with_no_scope = next_key();
-
-    let selected_scope = Scope::Const(ConstScope::Test0);
-    let different_scope = Scope::Const(ConstScope::Test1);
-
-    let mut insert_key_with_scope = |pair: &(KeyId, CspSecretKey), scope: Option<Scope>| {
-        key_store.insert(pair.0, pair.1.clone(), scope).unwrap();
-        assert!(key_store.contains(&pair.0));
-    };
-
-    insert_key_with_scope(&key_with_id_to_retain, Some(selected_scope));
-    insert_key_with_scope(&key_with_value_to_retain, Some(selected_scope));
-    insert_key_with_scope(&key_to_remove, Some(selected_scope));
-    insert_key_with_scope(&key_with_different_scope, Some(different_scope));
-    insert_key_with_scope(&key_with_no_scope, None);
-
-    let id_to_retain = key_with_id_to_retain.0;
-    let value_to_retain = key_with_value_to_retain.1;
-    assert!(key_store
-        .retain(
-            move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
-            selected_scope,
-        )
-        .is_ok());
-
-    assert!(
-        key_store.contains(&key_with_id_to_retain.0),
-        "Expected to retain key by ID"
-    );
-    assert!(
-        key_store.contains(&key_with_value_to_retain.0),
-        "Expected to retain key by value"
-    );
-    assert!(
-        !key_store.contains(&key_to_remove.0),
-        "Expected to remove unselected key"
-    );
-    assert!(
-        key_store.contains(&key_with_different_scope.0),
-        "Expected to keep key in different scope"
-    );
-    assert!(
-        key_store.contains(&key_with_no_scope.0),
-        "Expected to keep key with no scope"
-    );
-}
-
 #[test]
 fn should_deserialize_all_existing_secret_key_stores() {
     for version in SecretKeyStoreVersion::all_versions() {
@@ -491,6 +428,213 @@ fn should_successfully_write_to_secret_key_store_directory_with_write_and_execut
         SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
     ));
     assert_matches!(secret_key_store.insert(key_id, key, None), Ok(()));
+}
+
+mod retain {
+    use super::*;
+    use std::fs;
+    use std::time::UNIX_EPOCH;
+
+    #[test]
+    fn should_retain_expected_keys_with_specified_scope_and_not_remove_keys_with_non_matching_scope(
+    ) {
+        let mut key_store = proto_key_store();
+        let mut seeds = 0..;
+        let mut next_key = || {
+            (
+                make_key_id(seeds.next().unwrap()),
+                make_secret_key(seeds.next().unwrap()),
+            )
+        };
+        let key_with_id_to_retain = next_key();
+        let key_with_value_to_retain = next_key();
+        let key_to_remove = next_key();
+        let key_with_different_scope = next_key();
+        let key_with_no_scope = next_key();
+
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let different_scope = Scope::Const(ConstScope::Test1);
+
+        let mut insert_key_with_scope = |pair: &(KeyId, CspSecretKey), scope: Option<Scope>| {
+            key_store.insert(pair.0, pair.1.clone(), scope).unwrap();
+            assert!(key_store.contains(&pair.0));
+        };
+
+        insert_key_with_scope(&key_with_id_to_retain, Some(selected_scope));
+        insert_key_with_scope(&key_with_value_to_retain, Some(selected_scope));
+        insert_key_with_scope(&key_to_remove, Some(selected_scope));
+        insert_key_with_scope(&key_with_different_scope, Some(different_scope));
+        insert_key_with_scope(&key_with_no_scope, None);
+
+        let id_to_retain = key_with_id_to_retain.0;
+        let value_to_retain = key_with_value_to_retain.1;
+        assert!(key_store
+            .retain(
+                move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
+                selected_scope,
+            )
+            .is_ok());
+
+        assert!(
+            key_store.contains(&key_with_id_to_retain.0),
+            "Expected to retain key by ID"
+        );
+        assert!(
+            key_store.contains(&key_with_value_to_retain.0),
+            "Expected to retain key by value"
+        );
+        assert!(
+            !key_store.contains(&key_to_remove.0),
+            "Expected to remove unselected key"
+        );
+        assert!(
+            key_store.contains(&key_with_different_scope.0),
+            "Expected to keep key in different scope"
+        );
+        assert!(
+            key_store.contains(&key_with_no_scope.0),
+            "Expected to keep key with no scope"
+        );
+    }
+
+    #[test]
+    fn should_succeed_on_empty_secret_key_store() {
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let id_to_retain = make_key_id(42);
+        let value_to_retain = make_secret_key(37);
+
+        assert_eq!(key_store.retain(|_, _| true, selected_scope), Ok(()));
+        assert_eq!(key_store.retain(|_, _| false, selected_scope), Ok(()));
+        assert_eq!(
+            key_store.retain(move |id, _| (id == &id_to_retain), selected_scope),
+            Ok(())
+        );
+        assert_eq!(
+            key_store.retain(move |_, value| (value == &value_to_retain), selected_scope),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_not_modify_secret_key_store_on_disk_when_retain_is_a_nop() {
+        let (_temp_dir, mut key_store, file) = temp_proto_secret_key_store_and_file_path();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let key_id = make_key_id(42);
+        let key_value = make_secret_key(37);
+
+        key_store
+            .insert(key_id, key_value, Some(selected_scope))
+            .expect("insert should succeed");
+        let initial_modified_time = file_modified_time_in_nanoseconds(&file);
+
+        assert_eq!(
+            key_store.retain(move |id, _| (id == &key_id), selected_scope),
+            Ok(())
+        );
+        assert!(key_store.contains(&key_id));
+        assert_eq!(
+            file_modified_time_in_nanoseconds(&file),
+            initial_modified_time
+        );
+    }
+
+    #[test]
+    fn should_succeed_when_retaining_non_existing_key_by_key_id() {
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let key_id = make_key_id(42);
+        let key_value = make_secret_key(37);
+        let key_id_to_retain = make_key_id(77);
+
+        key_store
+            .insert(key_id, key_value, Some(selected_scope))
+            .expect("insert should succeed");
+
+        assert_eq!(
+            key_store.retain(move |id, _| (id == &key_id_to_retain), selected_scope),
+            Ok(())
+        );
+        assert!(!key_store.contains(&key_id));
+    }
+
+    #[test]
+    fn should_succeed_when_retaining_non_existing_key_by_key_value() {
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let key_id = make_key_id(42);
+        let key_value = make_secret_key(37);
+        let key_value_to_retain = make_secret_key(97);
+
+        key_store
+            .insert(key_id, key_value, Some(selected_scope))
+            .expect("insert should succeed");
+
+        assert_eq!(
+            key_store.retain(
+                move |_, value| (value == &key_value_to_retain),
+                selected_scope
+            ),
+            Ok(())
+        );
+        assert!(!key_store.contains(&key_id));
+    }
+
+    #[test]
+    fn should_not_remove_if_filter_matches_but_scope_does_not_match() {
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let different_scope = Scope::Const(ConstScope::Test1);
+        let key_id = make_key_id(42);
+        let key_value = make_secret_key(37);
+
+        key_store
+            .insert(key_id, key_value, Some(selected_scope))
+            .expect("insert should succeed");
+
+        assert_eq!(
+            key_store.retain(move |id, _| (id == &key_id), different_scope),
+            Ok(())
+        );
+        assert!(key_store.contains(&key_id));
+    }
+
+    #[test]
+    #[should_panic(expected = "retain filter panicked!")]
+    fn should_panic_if_retain_filter_panics() {
+        let mut key_store = proto_key_store();
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let key_id = make_key_id(42);
+        key_store
+            .insert(key_id, make_secret_key(37), Some(selected_scope))
+            .expect("insert should succeed");
+
+        assert_eq!(
+            key_store.retain(
+                move |_, _| panic!("retain filter panicked!"),
+                selected_scope
+            ),
+            Ok(())
+        );
+    }
+
+    fn file_modified_time_in_nanoseconds(path: &PathBuf) -> u128 {
+        fs::metadata(path)
+            .expect("getting file metadata should succeed")
+            .modified()
+            .expect("getting modification time should succeed")
+            .duration_since(UNIX_EPOCH)
+            .expect("getting duration since unix epoch should succeed")
+            .as_nanos()
+    }
+
+    fn temp_proto_secret_key_store_and_file_path() -> (TempDir, ProtoSecretKeyStore, PathBuf) {
+        let temp_dir: TempDir = mk_temp_dir_with_permissions(0o700);
+        let sks_filename = "sks_data.pb";
+        let key_store = ProtoSecretKeyStore::open(temp_dir.path(), sks_filename, None);
+        let file = temp_dir.path().join(sks_filename);
+        (temp_dir, key_store, file)
+    }
 }
 
 mod zeroize_old_secret_key_store {
