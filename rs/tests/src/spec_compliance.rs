@@ -129,6 +129,8 @@ pub fn test_subnet(
     env: TestEnv,
     test_subnet_type: Option<SubnetType>,
     peer_subnet_type: Option<SubnetType>,
+    excluded_tests: Vec<&str>,
+    included_tests: Vec<&str>,
 ) {
     let log = env.logger();
     let topology_snapshot = &env.topology_snapshot();
@@ -145,6 +147,8 @@ pub fn test_subnet(
         .into_os_string()
         .into_string()
         .unwrap();
+    let mut all_excluded_tests = excluded_tests;
+    all_excluded_tests.append(&mut EXCLUDED.to_vec());
     with_endpoint(
         env,
         test_subnet,
@@ -152,7 +156,8 @@ pub fn test_subnet(
         httpbin,
         ic_ref_test_path,
         log,
-        EXCLUDED.to_vec(),
+        all_excluded_tests,
+        included_tests,
     );
 }
 
@@ -187,6 +192,7 @@ pub fn with_endpoint(
     ic_ref_test_path: String,
     log: Logger,
     excluded_tests: Vec<&str>,
+    included_tests: Vec<&str>,
 ) {
     let node = test_subnet.nodes().next().unwrap();
     let test_subnet_config = subnet_config(&test_subnet);
@@ -200,7 +206,7 @@ pub fn with_endpoint(
         )
         .arg("-j20")
         .arg("--pattern")
-        .arg(tests_to_pattern(excluded_tests))
+        .arg(tests_to_pattern(excluded_tests, included_tests))
         .arg("--endpoint")
         .arg(node.get_public_url().to_string())
         .arg("--httpbin")
@@ -217,6 +223,9 @@ pub fn with_endpoint(
     assert!(status.success());
 }
 
-fn tests_to_pattern(tests: Vec<&str>) -> String {
-    format!("!({})", tests.join(" || "))
+fn tests_to_pattern(excluded_tests: Vec<&str>, included_tests: Vec<&str>) -> String {
+    let inner = format!("!({})", excluded_tests.join(" || "));
+    let mut patterns = vec![inner.as_str()];
+    patterns.append(&mut included_tests.clone());
+    patterns.join(" && ")
 }

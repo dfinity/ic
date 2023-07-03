@@ -190,12 +190,20 @@ name = "ic-systest-canister-http-correctness"
 path = "networking/canister_http_correctness_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-application"
-path = "testing_verification/spec_compliance_application_test.rs"
+name = "ic-systest-spec-compliance-application-subnet"
+path = "testing_verification/spec_compliance_application_subnet_test.rs"
 
 [[bin]]
-name = "ic-systest-spec-compliance-system"
-path = "testing_verification/spec_compliance_system_test.rs"
+name = "ic-systest-spec-compliance-system-subnet"
+path = "testing_verification/spec_compliance_system_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-system-api-application-subnet"
+path = "testing_verification/spec_compliance_system_api_application_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-spec-compliance-system-api-system-subnet"
+path = "testing_verification/spec_compliance_system_api_system_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
