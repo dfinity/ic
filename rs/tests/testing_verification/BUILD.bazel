@@ -22,7 +22,7 @@ rust_binary(
 )
 
 system_test(
-    name = "spec_compliance_application_test",
+    name = "spec_compliance_application_subnet_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
@@ -32,7 +32,27 @@ system_test(
 )
 
 system_test(
-    name = "spec_compliance_system_test",
+    name = "spec_compliance_system_subnet_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "spec_compliance_system_api_application_subnet_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+    ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "spec_compliance_system_api_system_subnet_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [

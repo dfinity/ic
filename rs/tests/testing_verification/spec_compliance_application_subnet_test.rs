@@ -4,8 +4,8 @@ Title:: Specification compliance test
 Goal:: Ensure that the replica implementation is compliant with the formal specification.
 
 Runbook::
-. Set up application subnet containing one node
-. Run ic-ref-test
+. Set up system and application subnet containing two nodes each
+. Run ic-ref-test against system subnet
 
 Success:: The ic-ref-test binary does not return an error.
 
@@ -24,7 +24,13 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    test_subnet(env, Some(SubnetType::Application), None);
+    test_subnet(
+        env,
+        Some(SubnetType::Application),
+        None,
+        vec!["($0 ~ /API availability/)"],
+        vec![],
+    );
 }
 
 fn main() -> Result<()> {
