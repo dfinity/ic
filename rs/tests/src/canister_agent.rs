@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use ic_agent::{Agent, Identity};
 
 use crate::{
-    canister_api::{Request, Response},
+    canister_api::{CallMode, Request, Response},
     driver::test_env_api::{retry_async, HasPublicApiUrl, IcNodeSnapshot},
     generic_workload_engine::metrics::RequestOutcome,
     util::{assert_create_agent, assert_create_agent_with_identity},
@@ -79,14 +79,19 @@ impl CanisterAgent {
                 .call()
                 .await
         } else {
-            self.agent
-                .update(&request.canister_id(), request.method_name())
-                .with_arg(request.payload())
+            let mut update = self
+                .agent
+                .update(&request.canister_id(), request.method_name());
+            let update_with_arg = update.with_arg(request.payload());
+            if matches!(request.mode(), CallMode::UpdateNoPolling) {
+                update_with_arg.call().await.map(|_| vec![])
+            } else {
                 // TODO: polling interval or (throttling duration) can be important in case of high rps.
                 // If chosen badly it could result in 429 Too Many Requests from the node.
                 // Ideally, node should have a high rate limit to mitigate the impact/sensitivity of this value.
-                .call_and_wait()
-                .await
+                //.call()
+                update_with_arg.call_and_wait().await
+            }
         })
         .map_err(|e| anyhow::anyhow!(e));
         RequestOutcome::new(result, request.signature(), start_time.elapsed(), 1)
