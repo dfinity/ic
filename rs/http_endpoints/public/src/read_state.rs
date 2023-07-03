@@ -269,11 +269,7 @@ async fn verify_paths(
                 verify_canister_ids(&canister_id, &effective_canister_id)?;
                 metrics.read_state_canister_controller_total.inc();
             }
-            [b"canister", canister_id, b"controllers"] => {
-                let canister_id = parse_canister_id(canister_id)?;
-                verify_canister_ids(&canister_id, &effective_canister_id)?;
-            }
-            [b"canister", canister_id, b"module_hash"] => {
+            [b"canister", canister_id, b"controllers" | b"module_hash"] => {
                 let canister_id = parse_canister_id(canister_id)?;
                 verify_canister_ids(&canister_id, &effective_canister_id)?;
             }
@@ -290,14 +286,10 @@ async fn verify_paths(
                 can_read_canister_metadata(user, &canister_id, &name, &state)?
             }
             [b"subnet"] => {}
-            [b"subnet", _subnet_id, b"public_key"] => {}
-            [b"subnet", _subnet_id, b"canister_ranges"] => {}
+            [b"subnet", _subnet_id, b"public_key" | b"canister_ranges"] => {}
             [b"request_status", request_id]
-            | [b"request_status", request_id, b"status"]
-            | [b"request_status", request_id, b"reply"]
-            | [b"request_status", request_id, b"reject_code"]
-            | [b"request_status", request_id, b"reject_message"]
-            | [b"request_status", request_id, b"error_code"] => {
+            | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
+            {
                 // Verify that the request was signed by the same user.
                 if let Ok(message_id) = MessageId::try_from(*request_id) {
                     if let Some(request_status_id) = request_status_id {

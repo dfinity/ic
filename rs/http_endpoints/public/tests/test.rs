@@ -701,3 +701,50 @@ fn test_graceful_shutdown_of_the_endpoint() {
         "Connected to endpoint after shutting down the runtime."
     );
 }
+
+/// If a requested path is too long, the endpoint should return early with 404 (NOT FOUND) status code.
+#[test]
+fn test_too_long_paths_are_rejected() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        ..Default::default()
+    };
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let _ = start_http_endpoint(
+        rt.handle().clone(),
+        config,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
+    );
+
+    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+
+    let agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
+
+    let long_path: Vec<Label<Vec<u8>>> = (0..100).map(|i| format!("hallo{}", i).into()).collect();
+    let paths = vec![long_path];
+
+    let expected_error_response = AgentError::HttpError(HttpErrorPayload {
+        status: 404,
+        content_type: Some("text/plain".to_string()),
+        content: b"Invalid path requested.".to_vec(),
+    });
+
+    let actual_response = rt.block_on(async {
+        wait_for_status_healthy(&agent).await.unwrap();
+        agent.read_state_raw(paths.clone(), canister).await
+    });
+
+    assert_eq!(Err(expected_error_response), actual_response);
+}
