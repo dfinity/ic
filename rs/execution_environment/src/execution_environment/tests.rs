@@ -904,9 +904,9 @@ fn subnet_ingress_message_on_create_canister_fails() {
     let err = test
         .subnet_message(Method::CreateCanister, EmptyBlob.encode())
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterMethodNotFound, err.code());
+    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert_eq!(
-        "create_canister can only be called by other canisters, not via ingress messages.",
+        "create_canister cannot be called by a user.",
         err.description()
     );
 }
@@ -1109,7 +1109,7 @@ fn metrics_are_observed_for_subnet_messages() {
                 &[
                     ("method_name", "ic00_create_canister"),
                     ("outcome", "error"),
-                    ("status", "CanisterMethodNotFound"),
+                    ("status", "CanisterContractViolation"),
                 ],
                 1
             ),
