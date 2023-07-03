@@ -328,3 +328,76 @@ macos-openssl-static-binaries:
         otool -L "$BIN"
         exit 1
       fi
+
+.build-ic:
+  extends:
+    - .ic-build-image
+  needs: []
+  artifacts:
+    reports:
+      dotenv: nns.release.env
+    paths:
+      - bazel-build-log*.json*
+  script:
+    - |
+      set -euo pipefail
+      VERSION=$(git rev-parse HEAD)
+
+      if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
+          # read NNS release version from git tree
+          NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
+          # we pass nss version info to build-determinism-*-release jobs
+          # we put it under /tmp due to git clean -ffdx within build-ic script
+          echo "NNS_RELEASE_VERSION=$NNS_RELEASE_VERSION" > /tmp/nns.release.env
+
+          # fetch and checkout this version
+          git fetch origin "$NNS_RELEASE_VERSION"
+          git checkout "$NNS_RELEASE_VERSION"
+          # NOTE: ic/$VERSION in S3 will have artifacts
+          #       for revision $NNS_RELEASE_VERSION !!!
+      fi
+
+      if [ "$CI_COMMIT_REF_PROTECTED" == "true" ]; then
+          gitlab-ci/container/build-ic.sh -i -c -b
+      else
+          gitlab-ci/container/build-ic.sh -i -c -b --no-release
+      fi
+
+      # release binaries
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/release" "${CI_JOB_NAME}/release"
+      # canister binaries
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/canisters" "${CI_JOB_NAME}/canisters"
+
+      # guestos images
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
+      # hostos images
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
+      # setupos images
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
+
+      # collect dotenv
+      if [ -f /tmp/nns.release.env ]; then
+          mv /tmp/nns.release.env .
+      fi
+
+# MR Pipeline
+build-ic:
+  extends:
+    - .build-ic
+    - .bazel-rules-pipeline
+
+# Scheduled Pipeline
+build-ic-release:
+  extends:
+    - .build-ic
+    - .rules-scheduled-reproducibility
