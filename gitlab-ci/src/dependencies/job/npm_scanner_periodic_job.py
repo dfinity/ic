@@ -1,6 +1,7 @@
 from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
 from data_source.jira_finding_data_source import JiraFindingDataSource
-from model.repository import Project, Repository
+from model.project import Project
+from model.repository import Repository
 from model.team import Team
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator

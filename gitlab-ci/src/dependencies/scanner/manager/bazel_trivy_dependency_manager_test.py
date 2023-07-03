@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 from bazel_trivy_dependency_manager import BazelTrivyContainer
 from model.dependency import Dependency
-from model.repository import Project
+from model.project import Project
 from model.vulnerability import Vulnerability
 
 

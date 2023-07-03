@@ -6,7 +6,7 @@ import typing
 
 from model.dependency import Dependency
 from model.finding import Finding
-from model.repository import Project
+from model.project import Project
 from model.vulnerability import Vulnerability
 from nested_lookup import nested_lookup
 from nodesemver import satisfies

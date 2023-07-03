@@ -5,7 +5,8 @@ from unittest.mock import Mock, patch
 import pytest
 from model.dependency import Dependency
 from model.finding import Finding
-from model.repository import Project, Repository
+from model.project import Project
+from model.repository import Repository
 from model.security_risk import SecurityRisk
 from model.team import Team
 from model.user import User

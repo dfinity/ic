@@ -5,7 +5,7 @@ from unittest.mock import call, patch
 import pytest
 from model.dependency import Dependency
 from model.finding import Finding
-from model.repository import Project
+from model.project import Project
 from model.vulnerability import Vulnerability
 from scanner.manager.npm_dependency_manager import NPMDependencyManager
 

@@ -5,7 +5,7 @@ import typing
 
 import pytest
 from model.dependency import Dependency
-from model.repository import Project
+from model.project import Project
 from model.vulnerability import Vulnerability
 from scanner.manager.bazel_rust_dependency_manager import BazelCargoExecutor, BazelRustDependencyManager
 
