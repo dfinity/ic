@@ -33,7 +33,14 @@ tonic = "0.8.2"
 tower = { version = "0.4.11", features = ["util"], optional = true }
 
 [dev-dependencies]
-tempfile = "3.3.0"
+bitcoind = "0.32.0"
+bitcoincore-rpc = "0.15.0"
+ic-btc-adapter-client = { path = "../client" }
+ic-btc-interface = { workspace = true }
+ic-btc-types-internal = { path = "../types/internal" }
+ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
+tempfile = "^3.1.0"
 
 [[bin]]
 name = "adapter-stress-test"

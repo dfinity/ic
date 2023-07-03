@@ -2,14 +2,11 @@ use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
 use ic_async_utils::{abort_on_panic, incoming_from_nth_systemd_socket, shutdown_signal};
 use ic_btc_adapter::{
-    cli::Cli, config::IncomingSource, spawn_grpc_server, start_router, AdapterState,
-    BlockchainState, GetSuccessorsHandler,
+    cli::Cli, config::IncomingSource, start_grpc_server_and_router, AdapterState,
 };
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
-use std::sync::Arc;
-use tokio::sync::{mpsc::channel, Mutex};
 
 #[tokio::main]
 pub async fn main() {
@@ -46,34 +43,9 @@ pub async fn main() {
         start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);
     }
 
-    // TODO: establish what the buffer size should be
-    let (blockchain_manager_tx, blockchain_manager_rx) = channel(10);
-
     let adapter_state = AdapterState::new(config.idle_seconds);
-    let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(&config, &metrics_registry)));
-    let get_successors_handler =
-        GetSuccessorsHandler::new(&config, blockchain_state.clone(), blockchain_manager_tx);
 
-    // TODO: we should NOT have an unbounded channel for buffering TransactionManagerRequests.
-    let (transaction_manager_tx, transaction_manager_rx) = channel(10);
+    start_grpc_server_and_router(&config, &metrics_registry, logger.clone(), adapter_state);
 
-    spawn_grpc_server(
-        config.clone(),
-        logger.clone(),
-        adapter_state.clone(),
-        get_successors_handler,
-        transaction_manager_tx,
-        &metrics_registry,
-    );
-
-    start_router(
-        &config,
-        logger.clone(),
-        blockchain_state,
-        transaction_manager_rx,
-        adapter_state,
-        blockchain_manager_rx,
-        &metrics_registry,
-    );
     shutdown_signal(logger.inner_logger.root.clone()).await;
 }

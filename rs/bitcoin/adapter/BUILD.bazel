@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -35,7 +35,16 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
+    "@crate_index//:bitcoincore-rpc",
+    "@crate_index//:bitcoind",
+    "@crate_index//:ic-btc-interface",
+    "//rs/bitcoin/client",
+    "//rs/bitcoin/types/internal",
+    "//rs/interfaces/adapter_client",
+    "//rs/test_utilities/logger",
 ]
+
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
@@ -71,4 +80,20 @@ rust_test(
     crate = ":adapter",
     tags = ["requires-network"],
     deps = DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "adapter_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    data = [
+        "@bitcoin-core//:bitcoin-core",
+        "@bitcoin-core//:bitcoind",
+    ],
+    env = {
+        "BITCOIN_CORE_PATH": "$(rootpath @bitcoin-core//:bitcoind)",
+    },
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    tags = ["requires-network"],
+    deps = [":adapter"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

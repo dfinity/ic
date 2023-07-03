@@ -18,5 +18,15 @@ configure_make(
     lib_source = ":all_srcs",
     out_binaries = ["bitcoind"],
     out_headers_only = True,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "bitcoind",
+    srcs = [":bitcoin-core"],
+    output_group = "bitcoind",
     visibility = ["//visibility:public"],
 )

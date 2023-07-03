@@ -192,6 +192,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "bitcoincore-rpc": crate.spec(
                 version = "^0.15.0",
             ),
+            "bitcoind": crate.spec(
+                version = "^0.32.0",
+            ),
             "bitflags": crate.spec(
                 version = "^1.2.1",
             ),
