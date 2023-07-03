@@ -134,7 +134,13 @@ pub fn deliver_batches(
                 } else {
                     let batch_payload = BlockPayload::from(block.payload).into_data().batch;
                     let batch_stats = BatchStats::from_payload(h, &batch_payload);
-                    let batch_messages = batch_payload.into_messages().unwrap();
+                    let batch_messages = batch_payload
+                        .into_messages()
+                        .map_err(|err| {
+                            error!(log, "batch payload deserialization failed: {:?}", err);
+                            err
+                        })
+                        .unwrap_or_default();
                     (batch_messages, batch_stats)
                 };
 
