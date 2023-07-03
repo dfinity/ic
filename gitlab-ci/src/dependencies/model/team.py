@@ -10,3 +10,4 @@ class Team(IntEnum):
     FINANCIAL_INTEGRATIONS_TEAM = 6
     EXECUTION_TEAM = 7
     NNS_TEAM = 8
+    CRYPTO_TEAM = 9

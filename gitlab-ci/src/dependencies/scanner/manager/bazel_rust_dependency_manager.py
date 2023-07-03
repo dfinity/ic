@@ -14,7 +14,7 @@ import parse
 from cvss import CVSS3
 from model.dependency import Dependency
 from model.finding import Finding
-from model.repository import Project
+from model.project import Project
 from model.vulnerability import Vulnerability
 from packaging import version
 from scanner.manager.dependency_manager import DependencyManager

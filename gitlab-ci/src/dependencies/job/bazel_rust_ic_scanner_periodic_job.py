@@ -1,6 +1,7 @@
 from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
 from data_source.jira_finding_data_source import JiraFindingDataSource
-from model.repository import Project, Repository
+from model.project import Project
+from model.repository import Repository
 from model.team import Team
 from notification.notification_config import NotificationConfig
 from notification.notification_creator import NotificationCreator
@@ -10,7 +11,7 @@ from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyMan
 from scanner.scanner_job_type import ScannerJobType
 
 REPOS_TO_SCAN = [
-    Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project(name="ic", path="ic")]),
+    Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project(name="ic", path="ic", owner_by_path={"rs/crypto": [Team.CRYPTO_TEAM],"rs/validator": [Team.CRYPTO_TEAM],"rs/canonical_state": [Team.CRYPTO_TEAM]})]),
     Repository("nns-dapp", "https://github.com/dfinity/nns-dapp", [Project(name="nns-dapp", path="nns-dapp", owner=Team.NNS_TEAM)]),
     Repository("internet-identity", "https://github.com/dfinity/internet-identity", [Project(name="internet-identity", path="internet-identity", owner=Team.GIX_TEAM)]),
     Repository("response-verification", "https://github.com/dfinity/response-verification", [Project(name="response-verification", path="response-verification", owner=Team.TRUST_TEAM)]),

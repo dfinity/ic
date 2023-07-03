@@ -70,9 +70,10 @@ class DependencyScanner:
                         repository.name, project, repository.engine_version
                     )
                     for finding in findings_for_project:
-                        if project.owner and project.owner not in finding.owning_teams:
-                            finding.owning_teams.append(project.owner)
-                            finding.owning_teams.sort()
+                        for project_owner in project.get_owners_for(finding):
+                            if project_owner not in finding.owning_teams:
+                                finding.owning_teams.append(project.owner)
+                        finding.owning_teams.sort()
                         if finding.id() in finding_by_id:
                             finding_by_id[finding.id()].merge_with(finding)
                         else:

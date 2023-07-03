@@ -5,7 +5,7 @@ import typing
 
 from model.dependency import Dependency
 from model.finding import Finding
-from model.repository import Project
+from model.project import Project
 
 PROJECT_ROOT = pathlib.Path(
     os.environ.get("CI_PROJECT_DIR", pathlib.Path(__file__).absolute().parent.parent.parent.parent.parent.parent)

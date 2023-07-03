@@ -65,6 +65,7 @@ JIRA_OWNER_GROUP_BY_TEAM = {
     Team.FINANCIAL_INTEGRATIONS_TEAM : {"name": "dept-Financial Integrations"},
     Team.EXECUTION_TEAM : {"name": "dept-Execution"},
     Team.NNS_TEAM : {"name": "dept-NNS"},
+    Team.CRYPTO_TEAM : {"name": "dept-Crypto Library"},
 }
 JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"
