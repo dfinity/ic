@@ -6,6 +6,7 @@ use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
+use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
 use ic_nervous_system_common::{cmc::FakeCmc, i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
@@ -2746,8 +2747,9 @@ fn test_disburse_neuron_to_self_succeeds() {
         // Calculate how much balance should have been disbursed
         let expected_disbursal_amount =
             Tokens::from_e8s(neuron_stake_before_disbursal - params.transaction_fee_e8s.unwrap());
-        let expected_account_balance_after_disbursal =
-            (account_balance_before_disbursal + expected_disbursal_amount).unwrap();
+        let expected_account_balance_after_disbursal = account_balance_before_disbursal
+            .checked_add(&expected_disbursal_amount)
+            .unwrap();
 
         // Assert that the Neuron owner's account balance has increased the expected amount
         let account_balance_after_disbursal =
@@ -2845,7 +2847,8 @@ fn test_disburse_neuron_to_different_account_succeeds() {
         let expected_disbursal_amount =
             Tokens::from_e8s(amount_to_disburse - params.transaction_fee_e8s.unwrap());
         let expected_account_balance_after_disbursal_of_funds_receiver =
-            (account_balance_before_disbursal_of_funds_receiver + expected_disbursal_amount)
+            account_balance_before_disbursal_of_funds_receiver
+                .checked_add(&expected_disbursal_amount)
                 .unwrap();
 
         // Assert that the funds receiver account balance has increased the expected amount
@@ -2971,8 +2974,9 @@ fn test_disburse_neuron_burns_neuron_fees() {
                 - neuron_fees_before_disbursal
                 - params.transaction_fee_e8s.unwrap(),
         );
-        let expected_account_balance_after_disbursal =
-            (account_balance_before_disbursal + expected_disbursal_amount).unwrap();
+        let expected_account_balance_after_disbursal = account_balance_before_disbursal
+            .checked_add(&expected_disbursal_amount)
+            .unwrap();
 
         // Assert that the Neuron owner's account balance has increased the expected amount
         let account_balance_after_disbursal =

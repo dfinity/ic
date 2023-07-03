@@ -1,5 +1,6 @@
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_types::PrincipalId;
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, Memo, Operation, Tokens, Transaction,
@@ -124,7 +125,8 @@ impl Scribe {
     pub fn buy(&mut self, uid: AccountIdentifier, amount: u64) {
         let amount = Tokens::from_e8s(amount);
         self.transactions.push_back(Trans::Buy(uid, amount));
-        *self.balance_book.get_mut(&uid).unwrap() += amount;
+        let balance = self.balance_book.get_mut(&uid).unwrap();
+        *balance = (*balance).checked_add(&amount).unwrap();
         let memo = self.next_message();
         let transaction = Transaction {
             operation: Operation::Mint { to: uid, amount },
@@ -139,7 +141,8 @@ impl Scribe {
     pub fn sell(&mut self, uid: AccountIdentifier, amount: u64) {
         let amount = Tokens::from_e8s(amount);
         self.transactions.push_back(Trans::Sell(uid, amount));
-        *self.balance_book.get_mut(&uid).unwrap() -= amount;
+        let balance = self.balance_book.get_mut(&uid).unwrap();
+        *balance = (*balance).checked_sub(&amount).unwrap();
         let memo = self.next_message();
         let transaction = Transaction {
             operation: Operation::Burn { from: uid, amount },
@@ -155,8 +158,12 @@ impl Scribe {
         let amount = Tokens::from_e8s(amount);
         self.transactions
             .push_back(Trans::Transfer(src, dst, amount));
-        *self.balance_book.get_mut(&src).unwrap() -= (amount + DEFAULT_TRANSFER_FEE).unwrap();
-        *self.balance_book.get_mut(&dst).unwrap() += amount;
+        let balance = self.balance_book.get_mut(&src).unwrap();
+        *balance = balance
+            .checked_sub(&amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap())
+            .unwrap();
+        let balance = self.balance_book.get_mut(&dst).unwrap();
+        *balance = (*balance).checked_add(&amount).unwrap();
         let memo = self.next_message();
         let transaction = Transaction {
             operation: Operation::Transfer {
@@ -188,7 +195,7 @@ impl Scribe {
         let amount = self.rand_val(x, 0.1);
         let icpt_amount = Tokens::from_e8s(amount);
 
-        let acc1 = self.get_rand_account((icpt_amount + DEFAULT_TRANSFER_FEE).unwrap());
+        let acc1 = self.get_rand_account(icpt_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap());
         let mut acc2 = self.get_rand_account(Tokens::ZERO);
 
         let mut safety_belt = 1000;

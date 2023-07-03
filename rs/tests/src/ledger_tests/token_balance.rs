@@ -41,6 +41,7 @@ use canister_test::Canister;
 use dfn_candid::candid_one;
 use futures::future::join_all;
 use ic_canister_client::Sender;
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
 };
@@ -183,10 +184,12 @@ pub fn test(env: TestEnv) {
             .collect::<Vec<_>>();
         let funds: Vec<_> = join_all(obtainers).await;
         assert_eq!(
-            (minting_balance - Tokens::from_e8s(11 * fee)).unwrap(),
-            funds
-                .iter()
-                .fold(Tokens::ZERO, |s, f| (s + f.clone().unwrap()).unwrap())
+            minting_balance
+                .checked_sub(&Tokens::from_e8s(11 * fee))
+                .unwrap(),
+            funds.iter().fold(Tokens::ZERO, |s, f| s
+                .checked_add(&f.clone().unwrap())
+                .unwrap())
         );
 
         // as a preparation, get the subaccounts of neurons

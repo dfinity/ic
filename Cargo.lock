@@ -7838,6 +7838,7 @@ dependencies = [
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "ic-utils 0.8.0",
+ "num-traits",
  "serde",
 ]
 
@@ -8235,6 +8236,7 @@ dependencies = [
  "ic-config",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha",
+ "ic-ledger-core",
  "ic-metrics-encoder",
  "ic-nervous-system-clients",
  "ic-nervous-system-common",
@@ -11229,6 +11231,7 @@ dependencies = [
  "icrc-ledger-types",
  "lazy_static",
  "ledger-canister-protobuf-generator",
+ "num-traits",
  "on_wire",
  "proptest",
  "prost",

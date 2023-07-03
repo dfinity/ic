@@ -158,7 +158,7 @@ pub enum LedgerArgument {
 pub struct Ledger {
     balances: LedgerBalances,
     #[serde(default)]
-    approvals: AllowanceTable<ApprovalKey, Account>,
+    approvals: AllowanceTable<ApprovalKey, Account, Tokens>,
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
 
     minting_account: Account,
@@ -239,8 +239,9 @@ impl From<(&Account, &Account)> for ApprovalKey {
 
 impl LedgerContext for Ledger {
     type AccountId = Account;
-    type Approvals = AllowanceTable<ApprovalKey, Account>;
+    type Approvals = AllowanceTable<ApprovalKey, Account, Tokens>;
     type BalancesStore = HashMap<Self::AccountId, Tokens>;
+    type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
         &self.balances

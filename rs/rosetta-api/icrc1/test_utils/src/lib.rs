@@ -1,6 +1,7 @@
 use candid::Principal;
-use ic_icrc1::{Block, Operation, Tokens, Transaction};
+use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
+use ic_ledger_core::Tokens;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use num_traits::cast::ToPrimitive;

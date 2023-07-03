@@ -1,5 +1,4 @@
 use crate::timestamp::TimeStamp;
-use crate::Tokens;
 
 use candid::CandidType;
 use ic_ledger_hash_of::HashOf;
@@ -59,6 +58,7 @@ impl<Account> From<Account> for FeeCollector<Account> {
 pub trait BlockType: Sized + Clone {
     type Transaction;
     type AccountId;
+    type Tokens;
 
     /// Constructs a new block containing the given transaction.
     ///
@@ -73,7 +73,7 @@ pub trait BlockType: Sized + Clone {
         parent_hash: Option<HashOf<EncodedBlock>>,
         tx: Self::Transaction,
         block_timestamp: TimeStamp,
-        effective_fee: Tokens,
+        effective_fee: Self::Tokens,
         fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self;
 

@@ -9,6 +9,7 @@ use dfn_core::api::{time_nanos, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
 use maplit::hashmap;
 use priority_queue::priority_queue::PriorityQueue;
@@ -183,13 +184,17 @@ impl ExplosiveTokens {
     // Self, not Result.
 
     pub fn add_or_die(self, other: Self) -> Self {
-        let result = Tokens::from(self) + Tokens::from(other);
-        result.unwrap().into()
+        Tokens::from(self)
+            .checked_add(&Tokens::from(other))
+            .unwrap()
+            .into()
     }
 
     pub fn sub_or_die(self, other: Self) -> Self {
-        let result = Tokens::from(self) - Tokens::from(other);
-        result.unwrap().into()
+        Tokens::from(self)
+            .checked_sub(&Tokens::from(other))
+            .unwrap()
+            .into()
     }
 
     pub fn mul_or_die(self, other: u64) -> Self {
@@ -260,7 +265,7 @@ impl Div<u64> for ExplosiveTokens {
 
 impl AddAssign for ExplosiveTokens {
     fn add_assign(&mut self, right: Self) {
-        self.0 += right.0;
+        self.0 = self.0.checked_add(&right.0).unwrap();
     }
 }
 

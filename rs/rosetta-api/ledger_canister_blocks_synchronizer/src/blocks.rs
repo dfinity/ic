@@ -1,4 +1,5 @@
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
+use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, Tokens};
 use rusqlite::params;
@@ -817,7 +818,9 @@ impl Blocks {
                 &latest_hb.index.clone(),
                 &account,
             )?;
-            total += Tokens::from_e8s(amount.unwrap());
+            total = total
+                .checked_add(&Tokens::from_e8s(amount.unwrap()))
+                .unwrap();
         }
         assert!(total <= Tokens::MAX);
         Ok(())

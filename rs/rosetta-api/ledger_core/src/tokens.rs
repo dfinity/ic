@@ -1,7 +1,99 @@
-use candid::CandidType;
-use core::ops::{Add, AddAssign, Sub, SubAssign};
+use candid::{CandidType, Nat};
+use num_traits::{Bounded, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::fmt::Debug;
+
+/// Performs addition that returns `None` instead of wrapping around on
+/// overflow.
+///
+/// The difference with `num_traits::CheckedAdd` is that this one dropped
+/// the requirements that `Self` implements `Add`.
+pub trait CheckedAdd: Sized {
+    /// Adds two numbers, checking for overflow. If overflow happens, `None` is
+    /// returned.
+    fn checked_add(&self, v: &Self) -> Option<Self>;
+}
+
+impl<T> CheckedAdd for T
+where
+    T: num_traits::CheckedAdd,
+{
+    fn checked_add(&self, v: &Self) -> Option<Self> {
+        self.checked_add(v)
+    }
+}
+
+/// Performs subtraction that returns `None` instead of wrapping around on underflow.
+///
+/// The difference with `num_traits::CheckedSub` is that this one dropped
+/// the requirements that `Self` implements `Sub`.
+pub trait CheckedSub: Sized {
+    /// Subtracts two numbers, checking for underflow. If underflow happens,
+    /// `None` is returned.
+    fn checked_sub(&self, v: &Self) -> Option<Self>;
+}
+
+impl<T> CheckedSub for T
+where
+    T: num_traits::CheckedSub,
+{
+    fn checked_sub(&self, v: &Self) -> Option<Self> {
+        self.checked_sub(v)
+    }
+}
+
+/// Defines the identity of `Self` for [`CheckedAdd::checked_add()`].
+pub trait Zero: Sized + CheckedAdd {
+    /// The identity of `Self` for [`CheckedAdd::checked_add()`]
+    fn zero() -> Self;
+
+    /// Returns `true` if `self` is equal to [`Zero::zero()`].
+    fn is_zero(&self) -> bool;
+}
+
+impl<T> Zero for T
+where
+    T: CheckedAdd + num_traits::Zero,
+{
+    fn zero() -> Self {
+        num_traits::Zero::zero()
+    }
+
+    fn is_zero(&self) -> bool {
+        <Self as num_traits::Zero>::is_zero(self)
+    }
+}
+
+pub trait TokensType:
+    Bounded
+    + CheckedAdd
+    + CheckedSub
+    + Clone
+    + Copy
+    + Debug
+    + Into<Nat>
+    + Ord
+    + PartialOrd
+    + TryFrom<Nat>
+    + Zero
+{
+}
+
+impl<T> TokensType for T where
+    T: Bounded
+        + CheckedAdd
+        + CheckedSub
+        + Clone
+        + Copy
+        + Debug
+        + Into<Nat>
+        + Ord
+        + PartialOrd
+        + TryFrom<Nat>
+        + Zero
+{
+}
 
 #[derive(
     Serialize,
@@ -124,46 +216,35 @@ impl Tokens {
     }
 }
 
-impl Add for Tokens {
-    type Output = Result<Self, String>;
-
-    /// This returns a result, in normal operation this should always return Ok
-    /// because of the cap in the total number of Tokens, but when dealing with
-    /// money it's better to be safe than sorry
-    fn add(self, other: Self) -> Self::Output {
-        let e8s = self.e8s.checked_add(other.e8s).ok_or_else(|| {
-            format!(
-                "Add Token {} + {} failed because the underlying u64 overflowed",
-                self.e8s, other.e8s
-            )
-        })?;
-        Ok(Self { e8s })
+impl CheckedAdd for Tokens {
+    fn checked_add(&self, other: &Self) -> Option<Self> {
+        self.e8s.checked_add(other.e8s).map(|e8s| Self { e8s })
     }
 }
 
-impl AddAssign for Tokens {
-    fn add_assign(&mut self, other: Self) {
-        *self = (*self + other).expect("+= panicked");
+impl CheckedSub for Tokens {
+    fn checked_sub(&self, other: &Self) -> Option<Self> {
+        self.e8s.checked_sub(other.e8s).map(|e8s| Self { e8s })
     }
 }
 
-impl Sub for Tokens {
-    type Output = Result<Self, String>;
+impl Bounded for Tokens {
+    fn min_value() -> Self {
+        Tokens::ZERO
+    }
 
-    fn sub(self, other: Self) -> Self::Output {
-        let e8s = self.e8s.checked_sub(other.e8s).ok_or_else(|| {
-            format!(
-                "Subtracting Token {} - {} failed because the underlying u64 underflowed",
-                self.e8s, other.e8s
-            )
-        })?;
-        Ok(Self { e8s })
+    fn max_value() -> Self {
+        Tokens::MAX
     }
 }
 
-impl SubAssign for Tokens {
-    fn sub_assign(&mut self, other: Self) {
-        *self = (*self - other).expect("-= panicked");
+impl Zero for Tokens {
+    fn zero() -> Self {
+        Tokens::ZERO
+    }
+
+    fn is_zero(&self) -> bool {
+        self == &Tokens::ZERO
     }
 }
 
@@ -181,5 +262,25 @@ impl fmt::Display for Tokens {
             self.get_tokens(),
             self.get_remainder_e8s()
         )
+    }
+}
+
+impl TryFrom<Nat> for Tokens {
+    type Error = String;
+
+    fn try_from(value: Nat) -> Result<Self, Self::Error> {
+        match value.0.to_u64() {
+            Some(e8s) => Ok(Self { e8s }),
+            None => Err(format!(
+                "value {} is bigger than Tokens::max_value()",
+                value
+            )),
+        }
+    }
+}
+
+impl From<Tokens> for Nat {
+    fn from(value: Tokens) -> Self {
+        Nat::from(value.e8s)
     }
 }

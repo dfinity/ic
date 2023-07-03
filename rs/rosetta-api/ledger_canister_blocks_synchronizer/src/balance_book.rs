@@ -177,6 +177,7 @@ impl ClientBalancesStore {
 
 impl BalancesStore for ClientBalancesStore {
     type AccountId = AccountIdentifier;
+    type Tokens = Tokens;
 
     fn get_balance(&self, k: &AccountIdentifier) -> Option<&Tokens> {
         self.acc_to_hist.get(k).and_then(|hist| hist.get_last_ref())

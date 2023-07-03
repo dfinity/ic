@@ -9,6 +9,7 @@ use crate::rosetta_tests::setup::setup;
 use crate::rosetta_tests::test_neurons::TestNeurons;
 use crate::util::block_on;
 use assert_json_diff::{assert_json_eq, assert_json_include};
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_rosetta_api::convert::{from_model_account_identifier, neuron_account_from_public_key};
@@ -83,7 +84,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc,
-                    amount: (staked_amount + DEFAULT_TRANSFER_FEE).unwrap(),
+                    amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
                 sender_keypair: Arc::clone(&key_pair),
@@ -167,7 +168,10 @@ async fn test_staking_failure(client: &RosettaApiClient) {
     let neuron_index = 2;
 
     // This is just below the minimum (NetworkEconomics.neuron_minimum_stake_e8s).
-    let staked_amount = (Tokens::new(1, 0).unwrap() - Tokens::from_e8s(1)).unwrap();
+    let staked_amount = Tokens::new(1, 0)
+        .unwrap()
+        .checked_sub(&Tokens::from_e8s(1))
+        .unwrap();
 
     // Could use /construction/derive for this.
     let neuron_account =
@@ -181,7 +185,7 @@ async fn test_staking_failure(client: &RosettaApiClient) {
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc,
-                    amount: (staked_amount + DEFAULT_TRANSFER_FEE).unwrap(),
+                    amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
                 sender_keypair: Arc::clone(&key_pair),
@@ -578,7 +582,7 @@ async fn test_staking_flow(
                 request: Request::Transfer(Operation::Transfer {
                     from: test_account,
                     to: dst_acc,
-                    amount: (staked_amount + DEFAULT_TRANSFER_FEE).unwrap(),
+                    amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
                 sender_keypair: Arc::clone(&test_key_pair),
@@ -640,8 +644,12 @@ async fn test_staking_flow(
         client,
         ledger_client,
         &test_account,
-        (((balance_before - staked_amount).unwrap() - DEFAULT_TRANSFER_FEE).unwrap()
-            - DEFAULT_TRANSFER_FEE)
+        balance_before
+            .checked_sub(&staked_amount)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
             .unwrap(),
     )
     .await;
@@ -676,7 +684,7 @@ async fn test_staking_flow_two_txns(
                 request: Request::Transfer(Operation::Transfer {
                     from: test_account,
                     to: dst_acc,
-                    amount: (staked_amount + DEFAULT_TRANSFER_FEE).unwrap(),
+                    amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
                 sender_keypair: Arc::clone(&test_key_pair),
@@ -749,8 +757,12 @@ async fn test_staking_flow_two_txns(
         client,
         ledger_client,
         &test_account,
-        (((balance_before - staked_amount).unwrap() - DEFAULT_TRANSFER_FEE).unwrap()
-            - DEFAULT_TRANSFER_FEE)
+        balance_before
+            .checked_sub(&staked_amount)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
+            .unwrap()
+            .checked_sub(&DEFAULT_TRANSFER_FEE)
             .unwrap(),
     )
     .await;
