@@ -134,3 +134,197 @@ bazel-build-fuzzers-archives:
       set -euo pipefail
       cd "${CI_PROJECT_DIR}"/bin
       ./build-all-fuzzers.sh --zip
+
+.bazel-rules-pipeline:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+
+.bazel-rules-pipeline-no-merge-train:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+
+.bazel-rules-pipeline-no-merge-train-allow-to-fail:
+  rules:
+    # Set to manual due to capacity crunch 2022-12-13.
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+      allow_failure: true
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
+      allow_failure: true
+
+.bazel-rules-post-master:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      when: manual
+      allow_failure: true
+    - if: '$SCHEDULE_NAME == "run-all-master"'
+
+.bazel-test-all:
+  extends:
+    - .bazel-rules-pipeline
+    - .bazel-build-k8s
+  needs: []
+  artifacts:
+    when: always
+    paths:
+      - bazel-build-log*.json*
+      - bazel-bep.pb
+    reports:
+      junit: bazel-testlogs-gitlab/**/test.xml
+  variables:
+    BAZEL_COMMAND: "test"
+    BAZEL_TARGETS: "//..."
+  script:
+    - ./gitlab-ci/src/bazel-ci/main.sh
+  after_script:
+    - |
+      set +e # Do not fail in the after_script, try to do as much as possible instead.
+      echo -e "\033[0;31m"
+      echo -e "************************************************************************"
+      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
+      echo -e "************************************************************************"
+      echo -e "\033[0m"
+    - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
+    - gzip bazel-build-log*.json
+    - |
+      echo -e "\e[0Ksection_start:$(date +%s):bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
+      bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
+      echo -e "\e[0Ksection_end:$(date +%s):bazel_exporter_logs\r\e[0K"
+    - !reference [after_script]
+
+bazel-test-all:
+  extends:
+    - .bazel-test-all
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going $BAZEL_EXTRA_ARGS_RULES"
+    BAZEL_TARGETS: "//..."
+  timeout: 80 minutes
+
+linux-openssl-static-binaries:
+  extends:
+    - .bazel-test-all
+    - .bazel-rules-pipeline-no-merge-train
+  variables:
+    DFINITY_OPENSSL_STATIC: 1
+    BAZEL_COMMAND: "build"
+    BAZEL_TARGETS: "//publish/binaries:upload"
+
+# VER-1818: bazelified system tests should not block pre-master pipelines, as they run on a new (WIP) test driver implementation.
+bazel-test-all-allow-to-fail:
+  extends:
+    - .bazel-test-all
+    - .bazel-rules-pipeline-no-merge-train-allow-to-fail
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
+    BAZEL_TARGETS: "//..."
+
+bazel-system-test-hourly:
+  extends:
+    - .bazel-test-all
+    - .bazel-rules-post-master
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly"
+    BAZEL_TARGETS: "//..."
+  timeout: 120 minutes
+
+bazel-system-test-hotfix:
+  extends:
+    - .bazel-test-all
+    - .rules-prod-hotfix-pipeline
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hotfix"
+    BAZEL_TARGETS: "//..."
+
+bazel-system-test-staging:
+  extends:
+    - .bazel-test-all
+    - .rules-rollout-pipeline-auto
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_staging"
+    BAZEL_TARGETS: "//..."
+  allow_failure: true
+
+bazel-system-test-nightly:
+  extends:
+    - .bazel-test-all
+    - .rules-rollout-pipeline-auto
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_nightly"
+    BAZEL_TARGETS: "//..."
+  timeout: 7h 30m
+
+bazel-config-check-all-rebuild:
+  extends:
+    - .bazel-test-all
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=check"
+    BAZEL_COMMAND: "build"
+    BAZEL_TARGETS: "//rs/..."
+
+bazel-test-all-rebuild:
+  extends:
+    - .bazel-test-all
+    - .bazel-rules-post-master
+  variables:
+    BAZEL_COMMAND: "build"
+    BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
+  timeout: 2h
+
+bazel-build-macos:
+  extends:
+    - .build-env-base
+    - .bazel-test-all
+    - .bazel-rules-pipeline-no-merge-train
+  tags:
+    - macos
+  variables:
+    BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
+    BAZEL_COMMAND: "build"
+    BAZEL_EXTRA_ARGS: "--config macos_ci"
+    BAZEL_TARGETS: "//rs/... //publish/binaries/..."
+  timeout: 90 minutes
+
+macos-openssl-static-binaries:
+  extends:
+    - .build-env-base
+    - .bazel-test-all
+    - .bazel-rules-pipeline-no-merge-train
+  tags:
+    - macos
+  variables:
+    DFINITY_OPENSSL_STATIC: 1
+    BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
+    BAZEL_COMMAND: "build"
+    BAZEL_EXTRA_ARGS: "--config macos_ci"
+    BAZEL_TARGETS: "//publish/binaries:upload"
+  script:
+    - !reference [.bazel-test-all, script]
+    - |
+      # check replica
+      if ! bazel run --config macos_ci //publish/binaries:replica -- --print-sample-config --replica-version 1 >/dev/null; then
+        BIN=$(bazel cquery --output=files //publish/binaries:replica)
+        otool -L "$BIN"
+        exit 1
+      fi
+      # check ic-starter
+      if ! bazel run --config macos_ci //publish/binaries:ic-starter -- --version; then
+        BIN=$(bazel cquery --output=files //publish/binaries:ic-starter)
+        otool -L "$BIN"
+        exit 1
+      fi
