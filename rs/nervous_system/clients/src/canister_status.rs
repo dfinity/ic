@@ -63,6 +63,7 @@ pub struct CanisterStatusResult {
     pub module_hash: Option<Vec<u8>>,
     pub memory_size: candid::Nat,
     pub settings: DefiniteCanisterSettings,
+    pub cycles: candid::Nat,
 }
 
 /// Copy-paste of ic-types::ic_00::CanisterStatusResult.
@@ -92,13 +93,25 @@ pub struct DefiniteCanisterSettingsFromManagementCanister {
 
 impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
     fn from(value: CanisterStatusResultFromManagementCanister) -> Self {
+        let CanisterStatusResultFromManagementCanister {
+            status,
+            module_hash,
+            memory_size,
+            settings,
+            cycles,
+
+            // Ignored.
+            idle_cycles_burned_per_day: _,
+        } = value;
+
         CanisterStatusResult {
-            status: value.status,
-            module_hash: value.module_hash,
-            memory_size: value.memory_size,
+            status,
+            module_hash,
+            memory_size,
             settings: DefiniteCanisterSettings {
-                controllers: value.settings.controllers,
+                controllers: settings.controllers,
             },
+            cycles,
         }
     }
 }
@@ -329,6 +342,7 @@ mod tests {
             settings: DefiniteCanisterSettings {
                 controllers: vec![test_principal],
             },
+            cycles: candid::Nat::from(100),
         };
 
         let actual_canister_status_result = CanisterStatusResult::from(m);

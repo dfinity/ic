@@ -8,6 +8,7 @@ type CanisterInstallMode = variant { reinstall; upgrade; install };
 type CanisterStatusResult = record {
   status : CanisterStatusType;
   memory_size : nat;
+  cycles : nat;
   settings : DefiniteCanisterSettings;
   module_hash : opt vec nat8;
 };

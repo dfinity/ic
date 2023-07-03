@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("@rules_rust//cargo:cargo_build_script.bzl", "cargo_build_script")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:prost.bzl", "generated_files_check")
@@ -122,6 +122,17 @@ rust_library(
     deps = DEPENDENCIES_WITH_TEST_FEATURES + [":build_script"],
 )
 
+rust_binary(
+    name = "generate_did",
+    srcs = ["canister/canister.rs"],
+    compile_data = ["canister/root.did"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        ":build_script",
+        ":root",
+    ],
+)
+
 rust_test(
     name = "root_test",
     srcs = glob(["src/**"]),
@@ -149,6 +160,14 @@ rust_canister(
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_canisters/upgrade_test_canister.did",
     deps = DEPENDENCIES + [":root"] + [":build_script"],
+)
+
+rust_test(
+    name = "canister_unit_test",
+    crate = ":_wasm_root-canister",
+    data = ["canister/root.did"],
+    env = {"CARGO_MANIFEST_DIR": "rs/nns/handlers/root/impl"},
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":root"] + [":build_script"],
 )
 
 generated_files_check(
