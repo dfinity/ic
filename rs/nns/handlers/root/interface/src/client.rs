@@ -192,6 +192,7 @@ impl SpyNnsRootCanisterClientReply {
             module_hash: None,
             memory_size: Default::default(),
             settings: DefiniteCanisterSettings { controllers },
+            cycles: candid::Nat::from(42),
         }))
     }
 
