@@ -719,7 +719,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         visibility = visibility,
     )
 
-def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None):
+def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None, ic_version = "//bazel:version.txt"):
     """
     A boundary API GuestOS build parameterized by mode.
 
@@ -728,6 +728,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
       image_deps: Function to be used to generate image manifest
       mode: dev, or prod. If not specified, will use the value of `name`
       visibility: See Bazel documentation
+      ic_version: the label pointing to the target that returns IC version
     """
     if mode == None:
         mode = name
@@ -772,9 +773,6 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
         file_build_args = {
             "//ic-os/boundary-api-guestos:rootfs/docker-base.prod": "BASE_IMAGE",
         },
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -788,16 +786,9 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
         ],
     )
 
-    # TODO(IDX-2538): re-enable this (or any other similar) solution when everything will be ready to have ic version that is not git revision.
-    #summary_sha256sum(
-    #    name = "version.txt",
-    #    inputs = image_deps,
-    #    suffix = "-dev" if mode == "dev" else "",
-    #)
-
     copy_file(
         name = "copy_version_txt",
-        src = "//bazel:version.txt",
+        src = ic_version,
         out = "version.txt",
         allow_symlink = True,
     )
@@ -842,9 +833,6 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
             "/run",
             "/boot",
         ],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -880,9 +868,6 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
             "partition-root.tar",
         ],
         expanded_size = "50G",
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -908,9 +893,6 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
     gzip_compress(
         name = "disk-img.tar.gz",
         srcs = ["disk-img.tar"],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
     )
 
     upload_suffix = ""
