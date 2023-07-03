@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use candid::Principal;
 use certificate_orchestrator_interface::{
-    EncryptedPair, Id, Name, NameError, Registration, State, UpdateType,
+    EncryptedPair, ExportPackage, Id, Name, NameError, Registration, State, UpdateType,
 };
 use ic_cdk::caller;
 use mockall::automock;
@@ -21,7 +21,7 @@ cfg_if::cfg_if! {
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    ic_certification::remove_cert,
+    ic_certification::{add_cert, remove_cert},
     id::Generate,
     LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
@@ -244,8 +244,8 @@ impl Update for Updater {
                     },
                 );
 
-                Ok::<(), UpdateError>(())
-            })?,
+                Ok(())
+            }),
 
             // Update state
             UpdateType::State(state) => {
@@ -286,10 +286,54 @@ impl Update for Updater {
                         );
                     });
                 }
+
+                Ok(())
             }
         }
+    }
+}
 
-        Ok(())
+pub struct UpdateWithIcCertification<T> {
+    updater: T,
+    pairs: LocalRef<StableMap<StorableId, EncryptedPair>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
+}
+
+impl<T: Update> UpdateWithIcCertification<T> {
+    pub fn new(
+        updater: T,
+        pairs: LocalRef<StableMap<StorableId, EncryptedPair>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
+    ) -> Self {
+        Self {
+            updater,
+            pairs,
+            registrations,
+        }
+    }
+}
+
+impl<T: Update> Update for UpdateWithIcCertification<T> {
+    fn update(&self, id: &Id, typ: UpdateType) -> Result<(), UpdateError> {
+        if let UpdateType::Canister(canister) = typ {
+            // If the encrypted pair has been uploaded, update the entry in certification tree
+            if let Some(pair) = self.pairs.with(|pairs| pairs.borrow().get(&id.into())) {
+                let Registration { name, .. } = self
+                    .registrations
+                    .with(|regs| regs.borrow().get(&id.into()))
+                    .ok_or(UpdateError::NotFound)?;
+
+                let package_to_certify = ExportPackage {
+                    id: id.into(),
+                    name,
+                    canister,
+                    pair,
+                };
+                add_cert(id.into(), &package_to_certify);
+                set_root_hash();
+            }
+        }
+        self.updater.update(id, typ)
     }
 }
 

@@ -56,12 +56,12 @@ impl Upload for Uploader {
     }
 }
 
-pub struct WithIcCertification<T> {
+pub struct UploadWithIcCertification<T> {
     uploader: T,
     registrations: LocalRef<StableMap<StorableId, Registration>>,
 }
 
-impl<T: Upload> WithIcCertification<T> {
+impl<T: Upload> UploadWithIcCertification<T> {
     pub fn new(uploader: T, registrations: LocalRef<StableMap<StorableId, Registration>>) -> Self {
         Self {
             uploader,
@@ -70,7 +70,7 @@ impl<T: Upload> WithIcCertification<T> {
     }
 }
 
-impl<T: Upload> Upload for WithIcCertification<T> {
+impl<T: Upload> Upload for UploadWithIcCertification<T> {
     fn upload(&self, id: &Id, pair: EncryptedPair) -> Result<(), UploadError> {
         self.uploader.upload(id, pair.clone())?;
         let package_to_certify = self.registrations.with(|regs| {
