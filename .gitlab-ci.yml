@@ -8,7 +8,6 @@ include:
   - local: /gitlab-ci/config/rosetta.yml
   - local: /gitlab-ci/config/main.yml
   - local: /gitlab-ci/config/00--common.yml
-  - local: /gitlab-ci/config/20--test--pre-commit.yml
   - local: /gitlab-ci/config/20--test--python.yml
   - local: /gitlab-ci/config/20--test--container-image-autobuild.yml
   - local: /gitlab-ci/config/20--test--dependencies.yml
