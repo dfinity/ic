@@ -2,7 +2,7 @@
 // In order to run it use following commands:
 //   gitlab-ci/container/container-run.sh
 // then in the container run:
-//   ict testnet //rs/tests/consensus:throughput_with_small_messages_colocate
+//   ict test //rs/tests/consensus:throughput_with_small_messages_colocate --keepalive
 // then in the log search for a line like this:
 //   2023-06-01 16:46:15.994 INFO[setup:rs/tests/src/driver/prometheus_vm.rs:169:0]
 //     IC Progress Clock at http://grafana.throughput_with_small_messages_colocate--1685637895775.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now

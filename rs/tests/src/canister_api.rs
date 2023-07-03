@@ -45,6 +45,8 @@ use crate::{
 pub enum CallMode {
     Query,
     Update,
+    // update call without subsequent polling of the request state
+    UpdateNoPolling,
 }
 
 pub trait Response: candid::CandidType + DeserializeOwned {}
@@ -56,7 +58,7 @@ impl<T: candid::CandidType + DeserializeOwned> Response for T {}
 pub trait Request<T: Response> {
     fn mode(&self) -> CallMode;
     fn is_update(&self) -> bool {
-        matches!(self.mode(), CallMode::Update)
+        matches!(self.mode(), CallMode::Update | CallMode::UpdateNoPolling)
     }
     fn is_query(&self) -> bool {
         matches!(self.mode(), CallMode::Query)

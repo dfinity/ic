@@ -6,12 +6,12 @@
 // 26-node System subnet, single boundary node and a p8s (with grafana) VM.
 // All nodes use the following resources: 64 vCPUs, 488GiB of RAM and 500 GiB disk.
 //
-// This testnet additionally installs the NNS.
+// This test additionally installs the NNS.
 //
-// You can setup this testnet by executing the following commands:
+// You can setup this test by executing the following commands:
 //
 //   $ gitlab-ci/container/container-run.sh
-//   $ ict testnet consensus_performance_colocate -- --test_tmpdir=./performance
+//   $ ict test consensus_performance_colocate --keepalive -- --test_tmpdir=./performance
 //
 // The --test_tmpdir=./performance will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
