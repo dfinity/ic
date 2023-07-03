@@ -7,6 +7,7 @@ mod execution_environment;
 mod execution_environment_metrics;
 mod history;
 mod hypervisor;
+mod ic00_permissions;
 mod ingress_filter;
 mod metrics;
 mod query_handler;
