@@ -12,7 +12,7 @@ use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_regedit;
-use ic_registry_subnet_features::SubnetFeatures;
+use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::p2p::build_default_gossip_config;
@@ -334,6 +334,7 @@ pub struct Subnet {
     pub max_number_of_canisters: Option<u64>,
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
+    pub ecdsa_config: Option<EcdsaConfig>,
 }
 
 impl Subnet {
@@ -360,6 +361,7 @@ impl Subnet {
             subnet_type,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
+            ecdsa_config: None,
         }
     }
 
@@ -503,6 +505,11 @@ impl Subnet {
         self
     }
 
+    pub fn with_ecdsa_config(mut self, ecdsa_config: EcdsaConfig) -> Self {
+        self.ecdsa_config = Some(ecdsa_config);
+        self
+    }
+
     pub fn add_malicious_nodes(
         mut self,
         no_of_nodes: usize,
@@ -550,6 +557,7 @@ impl Default for Subnet {
             max_number_of_canisters: None,
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
+            ecdsa_config: None,
         }
     }
 }
