@@ -200,6 +200,7 @@ impl Hypervisor {
         embedder_config.stable_memory_dirty_page_limit = config.stable_memory_dirty_page_limit;
         embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
+        embedder_config.trace_execution = config.trace_execution;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
