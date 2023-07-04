@@ -38,7 +38,7 @@ const WASM_HASH_LENGTH: usize = 32;
 const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
 
 /// Methods exported by ic:00.
-#[derive(Debug, EnumString, EnumIter, Display, Copy, Clone)]
+#[derive(Debug, EnumString, EnumIter, Display, Copy, Clone, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum Method {
     CanisterStatus,

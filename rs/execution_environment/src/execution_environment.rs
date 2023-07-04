@@ -495,7 +495,7 @@ impl ExecutionEnvironment {
                         self.reject_unexpected_ingress(Ic00Method::CreateCanister)
                     }
                     CanisterCall::Request(req) => {
-                        match permissions.verify_sender_id(req, &state) {
+                        match permissions.verify(req, &state) {
                             Err(err) => Some((Err(err), msg.take_cycles())),
                             Ok(_) => {
                                 let cycles = Arc::make_mut(req).take_cycles();
@@ -709,7 +709,7 @@ impl ExecutionEnvironment {
 
             Ok((Ic00Method::RawRand, permissions)) => match &msg {
                 CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::RawRand),
-                CanisterCall::Request(req) => match permissions.verify_sender_id(req, &state) {
+                CanisterCall::Request(req) => match permissions.verify(req, &state) {
                     Err(err) => Some((Err(err), msg.take_cycles())),
                     Ok(_) => {
                         let res = match EmptyBlob::decode(payload) {
@@ -729,14 +729,11 @@ impl ExecutionEnvironment {
                 Err(err) => Some((Err(err), msg.take_cycles())),
                 Ok(args) => Some(self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state)),
             },
-            Ok((Ic00Method::HttpRequest, permissions)) => match state
-                .metadata
-                .own_subnet_features
-                .http_requests
-            {
-                true => match &msg {
-                    CanisterCall::Request(request) => {
-                        match permissions.verify_sender_id(request, &state) {
+            Ok((Ic00Method::HttpRequest, permissions)) => {
+                match state.metadata.own_subnet_features.http_requests {
+                    true => match &msg {
+                        CanisterCall::Request(request) => match permissions.verify(request, &state)
+                        {
                             Err(err) => Some((Err(err), msg.take_cycles())),
                             Ok(_) => match CanisterHttpRequestArgs::decode(payload) {
                                 Err(err) => Some((Err(err), msg.take_cycles())),
@@ -792,25 +789,25 @@ impl ExecutionEnvironment {
                                     }
                                 },
                             },
+                        },
+                        CanisterCall::Ingress(_) => {
+                            self.reject_unexpected_ingress(Ic00Method::HttpRequest)
                         }
+                    },
+                    false => {
+                        let err = Err(UserError::new(
+                            ErrorCode::CanisterContractViolation,
+                            "This API is not enabled on this subnet".to_string(),
+                        ));
+                        Some((err, msg.take_cycles()))
                     }
-                    CanisterCall::Ingress(_) => {
-                        self.reject_unexpected_ingress(Ic00Method::HttpRequest)
-                    }
-                },
-                false => {
-                    let err = Err(UserError::new(
-                        ErrorCode::CanisterContractViolation,
-                        "This API is not enabled on this subnet".to_string(),
-                    ));
-                    Some((err, msg.take_cycles()))
                 }
-            },
-            Ok((Ic00Method::SetupInitialDKG, _)) => match &msg {
-                CanisterCall::Request(request) => match SetupInitialDKGArgs::decode(payload) {
+            }
+            Ok((Ic00Method::SetupInitialDKG, permissions)) => match &msg {
+                CanisterCall::Request(request) => match permissions.verify(request, &state) {
                     Err(err) => Some((Err(err), msg.take_cycles())),
-                    Ok(args) => self
-                        .setup_initial_dkg(*msg.sender(), &args, request, &mut state, rng)
+                    Ok(_) => self
+                        .setup_initial_dkg(payload, request, &mut state, rng)
                         .map_or_else(|err| Some((Err(err), msg.take_cycles())), |()| None),
                 },
                 CanisterCall::Ingress(_) => {
@@ -855,46 +852,31 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok((Ic00Method::ComputeInitialEcdsaDealings, _)) => {
+            Ok((Ic00Method::ComputeInitialEcdsaDealings, permissions)) => {
                 let cycles = msg.take_cycles();
                 match &msg {
                     CanisterCall::Request(request) => {
-                        let res = match state.find_subnet_id(*msg.sender()) {
+                        let result = match permissions.verify(request, &state) {
+                            Ok(_) => match ComputeInitialEcdsaDealingsArgs::decode(
+                                request.method_payload(),
+                            ) {
+                                Ok(args) => match get_master_ecdsa_public_key(
+                                    ecdsa_subnet_public_keys,
+                                    self.own_subnet_id,
+                                    &args.key_id,
+                                ) {
+                                    Ok(_) => self
+                                        .compute_initial_ecdsa_dealings(&mut state, args, request)
+                                        .map_or_else(|err: UserError| Some(err), |()| None),
+                                    Err(err) => Some(err),
+                                },
+                                Err(err) => Some(err),
+                            },
                             Err(err) => Some(err),
-                            Ok(sender_subnet_id) => {
-                                if sender_subnet_id != state.metadata.network_topology.nns_subnet_id
-                                {
-                                    Some(UserError::new(
-                                        ErrorCode::CanisterContractViolation,
-                                        format!(
-                                            "{} is called by {}. It can only be called by NNS.",
-                                            Ic00Method::ComputeInitialEcdsaDealings,
-                                            msg.sender(),
-                                        ),
-                                    ))
-                                } else {
-                                    match ComputeInitialEcdsaDealingsArgs::decode(
-                                        request.method_payload(),
-                                    ) {
-                                        Err(err) => Some(err),
-                                        Ok(args) => match get_master_ecdsa_public_key(
-                                            ecdsa_subnet_public_keys,
-                                            self.own_subnet_id,
-                                            &args.key_id,
-                                        ) {
-                                            Err(err) => Some(err),
-                                            Ok(_) => self
-                                                .compute_initial_ecdsa_dealings(
-                                                    &mut state, args, request,
-                                                )
-                                                .map_or_else(Some, |()| None),
-                                        },
-                                    }
-                                }
-                            }
                         };
-                        res.map(|err| (Err(err), cycles))
+                        result.map(|err| (Err(err), cycles))
                     }
+
                     CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::ComputeInitialEcdsaDealings)
                     }
@@ -1727,48 +1709,38 @@ impl ExecutionEnvironment {
 
     fn setup_initial_dkg(
         &self,
-        sender: PrincipalId,
-        settings: &SetupInitialDKGArgs,
+        payload: &[u8],
         request: &Request,
         state: &mut ReplicatedState,
         rng: &mut dyn RngCore,
     ) -> Result<(), UserError> {
-        let sender_subnet_id = state.find_subnet_id(sender)?;
-
-        if sender_subnet_id != state.metadata.network_topology.nns_subnet_id {
-            return Err(UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "{} is called by {}. It can only be called by NNS.",
-                    Ic00Method::SetupInitialDKG,
-                    sender,
-                ),
-            ));
-        }
-        match settings.get_set_of_node_ids() {
+        match SetupInitialDKGArgs::decode(payload) {
             Err(err) => Err(err),
-            Ok(nodes_in_target_subnet) => {
-                let mut target_id = [0u8; 32];
-                rng.fill_bytes(&mut target_id);
+            Ok(settings) => match settings.get_set_of_node_ids() {
+                Err(err) => Err(err),
+                Ok(nodes_in_target_subnet) => {
+                    let mut target_id = [0u8; 32];
+                    rng.fill_bytes(&mut target_id);
 
-                info!(
-                    self.log,
-                    "Assigned the target_id {:?} to the new DKG setup request for nodes {:?}",
-                    target_id,
-                    &nodes_in_target_subnet
-                );
-                state
-                    .metadata
-                    .subnet_call_context_manager
-                    .push_setup_initial_dkg_request(SetupInitialDkgContext {
-                        request: request.clone(),
-                        nodes_in_target_subnet,
-                        target_id: NiDkgTargetId::new(target_id),
-                        registry_version: settings.get_registry_version(),
-                        time: state.time(),
-                    });
-                Ok(())
-            }
+                    info!(
+                        self.log,
+                        "Assigned the target_id {:?} to the new DKG setup request for nodes {:?}",
+                        target_id,
+                        &nodes_in_target_subnet
+                    );
+                    state
+                        .metadata
+                        .subnet_call_context_manager
+                        .push_setup_initial_dkg_request(SetupInitialDkgContext {
+                            request: request.clone(),
+                            nodes_in_target_subnet,
+                            target_id: NiDkgTargetId::new(target_id),
+                            registry_version: settings.get_registry_version(),
+                            time: state.time(),
+                        });
+                    Ok(())
+                }
+            },
         }
     }
 
