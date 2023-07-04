@@ -98,7 +98,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "replica_tests_integration_tests",
+    name = "replica_tests_integration",
     timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,

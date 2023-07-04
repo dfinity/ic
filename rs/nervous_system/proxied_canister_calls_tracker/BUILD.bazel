@@ -38,7 +38,7 @@ rust_doc_test(
 )
 
 rust_test_suite(
-    name = "proxied_canister_calls_tracker_integration_tests",
+    name = "proxied_canister_calls_tracker_integration",
     srcs = glob(["tests/**/*.rs"]),
     deps = [":proxied_canister_calls_tracker"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

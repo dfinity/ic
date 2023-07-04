@@ -140,7 +140,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "root_integration_tests",
+    name = "root_integration",
     srcs = glob(
         ["tests/**/*.rs"],
         exclude = ["tests/check_generated_files.rs"],

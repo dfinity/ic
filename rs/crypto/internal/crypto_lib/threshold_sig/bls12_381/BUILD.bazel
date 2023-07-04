@@ -63,7 +63,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "integration_tests",
+    name = "internal_threshold_sig_bls12_381_integration",
     srcs = glob(["tests/**/*.rs"]),
     compile_data = glob(["tests/data/*"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

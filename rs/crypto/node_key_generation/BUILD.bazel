@@ -63,7 +63,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "node_key_generation_integration_tests",
+    name = "node_key_generation_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     edition = "2021",

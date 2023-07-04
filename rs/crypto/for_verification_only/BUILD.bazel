@@ -42,7 +42,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "for_verification_only_integration_tests",
+    name = "for_verification_only_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     edition = "2021",

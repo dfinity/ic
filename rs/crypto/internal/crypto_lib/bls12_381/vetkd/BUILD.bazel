@@ -32,7 +32,7 @@ rust_library(
 )
 
 rust_test_suite(
-    name = "integration_tests",
+    name = "integration",
     srcs = glob(["tests/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":vetkd"] + DEPENDENCIES + DEV_DEPENDENCIES,

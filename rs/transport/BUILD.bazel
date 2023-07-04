@@ -57,9 +57,8 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-# Test is flaky.
 rust_test_suite_with_extra_srcs(
-    name = "integration_tests",
+    name = "integration",
     size = "small",
     timeout = "moderate",
     srcs = glob(

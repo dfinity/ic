@@ -43,7 +43,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "ecdsa_secp256r1_integration_tests",
+    name = "ecdsa_secp256r1_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

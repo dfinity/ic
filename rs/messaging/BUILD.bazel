@@ -65,7 +65,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "messaging_integration_tests",
+    name = "messaging_integration",
     srcs = glob(["tests/**/*.rs"]),
     data = ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
     env = {

@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -52,11 +53,11 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-rust_test(
-    name = "artifact_manager_integration_tests",
-    srcs = glob(["tests/**/*.rs"]),
+rust_test_suite_with_extra_srcs(
+    name = "artifact_manager_integration",
+    srcs = ["tests/clients.rs"],
     aliases = ALIASES,
-    crate_root = "tests/clients.rs",
+    extra_srcs = ["tests/setup.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":artifact_manager"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

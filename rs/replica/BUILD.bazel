@@ -140,7 +140,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "replica_integration_tests",
+    name = "replica_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     data = [":replica"],

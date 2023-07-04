@@ -49,7 +49,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "determinism_test_integration_tests",
+    name = "determinism_test_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = {},
     data = [

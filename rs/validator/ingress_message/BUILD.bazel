@@ -54,7 +54,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "ingress_message_integration_tests",
+    name = "ingress_message_integration",
     srcs = glob(
         ["tests/*.rs"],
     ),

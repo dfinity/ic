@@ -34,7 +34,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "sha2_integration_tests",
+    name = "sha2_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

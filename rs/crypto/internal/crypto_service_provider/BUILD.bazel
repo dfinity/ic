@@ -117,9 +117,9 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "crypto_service_provider_integration_tests",
+    name = "crypto_service_provider_integration",
     srcs = glob(
-        ["tests/*.rs"],
+        ["tests/**/*.rs"],
         exclude = [
             "tests/check_generated_files.rs",
         ],

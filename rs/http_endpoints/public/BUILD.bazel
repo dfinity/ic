@@ -112,7 +112,7 @@ rust_test(
 )
 
 rust_test_suite_with_extra_srcs(
-    name = "public_integration_tests",
+    name = "public_integration",
     size = "small",
     srcs = glob(
         ["tests/**"],
