@@ -99,6 +99,12 @@ pub struct IDkgReceivers {
     count: NumberOfNodes,
 }
 
+impl AsRef<IDkgReceivers> for IDkgReceivers {
+    fn as_ref(&self) -> &IDkgReceivers {
+        self
+    }
+}
+
 impl IDkgReceivers {
     /// `IDkgReceivers` can only be created if the following invariants hold:
     /// * Receivers are not empty (error: `ReceiversEmpty`)
@@ -298,6 +304,18 @@ pub struct IDkgTranscriptParams {
     algorithm_id: AlgorithmId,
     /// Mode of operation for this current execution of the protocol.
     operation_type: IDkgTranscriptOperation,
+}
+
+impl AsRef<IDkgReceivers> for IDkgTranscriptParams {
+    fn as_ref(&self) -> &IDkgReceivers {
+        self.receivers()
+    }
+}
+
+impl AsRef<IDkgDealers> for IDkgTranscriptParams {
+    fn as_ref(&self) -> &IDkgDealers {
+        self.dealers()
+    }
 }
 
 impl IDkgTranscriptParams {
@@ -685,6 +703,12 @@ pub struct IDkgTranscript {
     pub algorithm_id: AlgorithmId,
     #[serde(with = "serde_bytes")]
     pub internal_transcript_raw: Vec<u8>,
+}
+
+impl AsRef<IDkgReceivers> for IDkgTranscript {
+    fn as_ref(&self) -> &IDkgReceivers {
+        &self.receivers
+    }
 }
 
 /// Identifier for the way an IDKG transcript is created.

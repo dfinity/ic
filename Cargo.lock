@@ -6606,6 +6606,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-interfaces",
  "ic-logger",
+ "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",

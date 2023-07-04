@@ -1431,6 +1431,7 @@ impl TranscriptState {
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
+    use std::ops::Deref;
 
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
@@ -1651,13 +1652,10 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                let subnet_nodes = env.receivers().into_iter().collect::<BTreeSet<_>>();
-                let crypto = env.crypto_components.into_values().next().unwrap();
-                let (_, pre_signer) = create_pre_signer_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(Arc::new(crypto)),
-                );
+                let subnet_nodes: BTreeSet<_> = env.nodes.ids();
+                let crypto = first_crypto(&env);
+                let (_, pre_signer) =
+                    create_pre_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
                 let id = create_transcript_id_with_height(4, Height::from(5));
                 let params = IDkgTranscriptParams::new(
                     id,
@@ -2113,13 +2111,10 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                let subnet_nodes = env.receivers().into_iter().collect::<BTreeSet<_>>();
-                let crypto = env.crypto_components.into_values().next().unwrap();
-                let (_, pre_signer) = create_pre_signer_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(Arc::new(crypto)),
-                );
+                let subnet_nodes: BTreeSet<_> = env.nodes.ids();
+                let crypto = first_crypto(&env);
+                let (_, pre_signer) =
+                    create_pre_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
                 let id = create_transcript_id_with_height(4, Height::from(5));
                 let params = IDkgTranscriptParams::new(
                     id,
@@ -2681,7 +2676,7 @@ mod tests {
         let block_reader =
             TestEcdsaBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
         let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
-        let crypto = env.crypto_components.values().next().unwrap();
+        let crypto = first_crypto(&env);
 
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
@@ -2691,7 +2686,7 @@ mod tests {
                 {
                     let b = EcdsaTranscriptBuilderImpl::new(
                         &block_reader,
-                        crypto,
+                        crypto.deref(),
                         &ecdsa_pool,
                         &metrics,
                         logger.clone(),
@@ -2717,7 +2712,7 @@ mod tests {
                 {
                     let b = EcdsaTranscriptBuilderImpl::new(
                         &block_reader,
-                        crypto,
+                        crypto.deref(),
                         &ecdsa_pool,
                         &metrics,
                         logger.clone(),
@@ -2745,7 +2740,7 @@ mod tests {
 
                 let b = EcdsaTranscriptBuilderImpl::new(
                     &block_reader,
-                    crypto,
+                    crypto.deref(),
                     &ecdsa_pool,
                     &metrics,
                     logger.clone(),
@@ -2767,7 +2762,7 @@ mod tests {
                         TestEcdsaBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
                     let b = EcdsaTranscriptBuilderImpl::new(
                         &block_reader,
-                        crypto,
+                        crypto.deref(),
                         &ecdsa_pool,
                         &metrics,
                         logger.clone(),
@@ -2790,5 +2785,9 @@ mod tests {
                 assert_matches!(result, None);
             })
         });
+    }
+
+    fn first_crypto(env: &CanisterThresholdSigTestEnvironment) -> Arc<dyn ConsensusCrypto> {
+        env.nodes.iter().next().unwrap().crypto()
     }
 }

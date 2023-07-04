@@ -344,6 +344,12 @@ impl fmt::Debug for ThresholdEcdsaSigInputs {
     }
 }
 
+impl AsRef<IDkgReceivers> for ThresholdEcdsaSigInputs {
+    fn as_ref(&self) -> &IDkgReceivers {
+        self.receivers()
+    }
+}
+
 impl ThresholdEcdsaSigInputs {
     /// Creates the inputs to the threshold ECDSA signing protocol.
     ///

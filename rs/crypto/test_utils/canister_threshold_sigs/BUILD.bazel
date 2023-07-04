@@ -14,6 +14,7 @@ rust_library(
         "//rs/crypto/test_utils/reproducible_rng",
         "//rs/interfaces",
         "//rs/monitoring/logger",
+        "//rs/protobuf",
         "//rs/registry/fake",
         "//rs/registry/keys",
         "//rs/registry/proto_data_provider",

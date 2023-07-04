@@ -615,8 +615,8 @@ mod tests {
     use crate::ecdsa::utils::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, generate_tecdsa_protocol_inputs, load_input_transcripts,
-        run_tecdsa_protocol, CanisterThresholdSigTestEnvironment,
+        generate_key_transcript, generate_tecdsa_protocol_inputs, run_tecdsa_protocol,
+        CanisterThresholdSigTestEnvironment,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
@@ -627,6 +627,7 @@ mod tests {
     use ic_types::consensus::ecdsa::*;
     use ic_types::crypto::{canister_threshold_sig::ExtendedDerivationPath, AlgorithmId};
     use ic_types::{Height, Randomness};
+    use std::ops::Deref;
 
     fn create_request_id(generator: &mut EcdsaUIDGenerator, height: Height) -> RequestId {
         let quadruple_id = generator.next_quadruple_id();
@@ -852,12 +853,15 @@ mod tests {
                     AlgorithmId::ThresholdEcdsaSecp256k1,
                     &mut rng,
                 );
-                let crypto = env.crypto_components.into_values().next().unwrap();
-                let (_, signer) = create_signer_dependencies_with_crypto(
-                    pool_config,
-                    logger,
-                    Some(Arc::new(crypto)),
-                );
+                let crypto = env
+                    .nodes
+                    .receivers(&sig_inputs)
+                    .into_iter()
+                    .next()
+                    .unwrap()
+                    .crypto();
+                let (_, signer) =
+                    create_signer_dependencies_with_crypto(pool_config, logger, Some(crypto));
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 // let time_source = FastForwardTimeSource::new();
                 let id = create_request_id(&mut uid_generator, Height::from(5));
@@ -1227,12 +1231,18 @@ mod tests {
                 );
 
                 let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
-                let crypto = env.crypto_components.iter().next().unwrap().1;
+                let crypto: Arc<dyn ConsensusCrypto> = env
+                    .nodes
+                    .receivers(&sig_inputs)
+                    .into_iter()
+                    .next()
+                    .unwrap()
+                    .crypto();
 
                 {
                     let sig_builder = EcdsaSignatureBuilderImpl::new(
                         &block_reader,
-                        crypto,
+                        crypto.deref(),
                         &ecdsa_pool,
                         &metrics,
                         logger.clone(),
@@ -1245,15 +1255,15 @@ mod tests {
 
                 // Generate signature shares and add to validated
                 let change_set = env
-                    .crypto_components
-                    .iter()
-                    .map(|(id, c)| {
-                        load_input_transcripts(&env.crypto_components, *id, &sig_inputs);
-                        let share = c
+                    .nodes
+                    .receivers(&sig_inputs)
+                    .map(|receiver| {
+                        receiver.load_input_transcripts(&sig_inputs);
+                        let share = receiver
                             .sign_share(&sig_inputs)
                             .expect("failed to create sig share");
                         EcdsaSigShare {
-                            signer_id: *id,
+                            signer_id: receiver.id(),
                             request_id: req_id,
                             share,
                         }
@@ -1266,7 +1276,7 @@ mod tests {
 
                 let sig_builder = EcdsaSignatureBuilderImpl::new(
                     &block_reader,
-                    crypto,
+                    crypto.deref(),
                     &ecdsa_pool,
                     &metrics,
                     logger.clone(),
@@ -1282,7 +1292,7 @@ mod tests {
                 let block_reader = block_reader.clone().with_fail_to_resolve();
                 let sig_builder = EcdsaSignatureBuilderImpl::new(
                     &block_reader,
-                    crypto,
+                    crypto.deref(),
                     &ecdsa_pool,
                     &metrics,
                     logger,
