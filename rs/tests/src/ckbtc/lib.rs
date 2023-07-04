@@ -283,6 +283,7 @@ pub(crate) async fn install_ledger(
         },
         fee_collector_account: None,
         max_memo_length: Some(CKBTC_LEDGER_MEMO_SIZE),
+        feature_flags: None,
     });
     install_icrc1_ledger(env, canister, &init_args).await;
     canister.canister_id()

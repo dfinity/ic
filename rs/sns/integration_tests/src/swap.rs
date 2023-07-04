@@ -3093,6 +3093,7 @@ fn test_last_man_less_than_min() {
             max_transactions_per_response: None
         },
         max_memo_length: None,
+        feature_flags: None,
     }))
     .unwrap();
     state_machine

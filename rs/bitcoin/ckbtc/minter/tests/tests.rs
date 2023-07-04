@@ -99,6 +99,7 @@ fn install_ledger(env: &StateMachine) -> CanisterId {
         },
         fee_collector_account: None,
         max_memo_length: None,
+        feature_flags: None,
     });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
@@ -481,6 +482,7 @@ impl CkBtcSetup {
                 },
                 fee_collector_account: None,
                 max_memo_length: Some(CKBTC_LEDGER_MEMO_SIZE),
+                feature_flags: None,
             }))
             .unwrap(),
         )

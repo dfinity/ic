@@ -428,6 +428,9 @@ fn get_data_certificate() -> DataCertificate {
 #[candid_method(update)]
 async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
     let block_idx = Access::with_ledger_mut(|ledger| {
+        if !ledger.feature_flags().icrc2 {
+            ic_cdk::trap("ICRC-2 features are not enabled on the ledger.");
+        }
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
 
         let from_account = Account {
@@ -505,6 +508,9 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
 #[candid_method(query)]
 fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
     Access::with_ledger(|ledger| {
+        if !ledger.feature_flags().icrc2 {
+            ic_cdk::trap("ICRC-2 features are not enabled on the ledger.");
+        }
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
         let allowance = ledger
             .approvals()

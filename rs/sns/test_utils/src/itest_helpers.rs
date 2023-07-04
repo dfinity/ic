@@ -148,6 +148,7 @@ impl SnsTestsInitPayloadBuilder {
             metadata: vec![],
             fee_collector_account: None,
             max_memo_length: None,
+            feature_flags: None,
         };
 
         let swap = SwapInit {
