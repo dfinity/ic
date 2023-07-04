@@ -11,7 +11,7 @@ use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
 };
 use ic_config::adapters::AdaptersConfig;
-use ic_interfaces_adapter_client::{Options, RpcAdapterClient};
+use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::net::{SocketAddr, SocketAddrV4};
@@ -141,21 +141,32 @@ fn sync_until_end_block(
     let end_hash = client.get_best_block_hash().unwrap()[..].to_vec();
     while anchor != end_hash {
         let res = adapter_client.get_successors(anchor.clone(), headers.clone());
-        if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(res) = res.unwrap() {
-            let new_blocks = res.blocks;
-            if !new_blocks.is_empty() {
-                let new_headers: Vec<Vec<u8>> = new_blocks
-                    .iter()
-                    .map(|block| deserialize::<Block>(block).unwrap().block_hash()[..].to_vec())
-                    .collect();
+        match res {
+            Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(res)) => {
+                let new_blocks = res.blocks;
+                if !new_blocks.is_empty() {
+                    let new_headers: Vec<Vec<u8>> = new_blocks
+                        .iter()
+                        .map(|block| deserialize::<Block>(block).unwrap().block_hash()[..].to_vec())
+                        .collect();
 
-                check_received_blocks(client, &new_headers, start_index as usize + blocks.len());
+                    check_received_blocks(
+                        client,
+                        &new_headers,
+                        start_index as usize + blocks.len(),
+                    );
 
-                headers.extend(new_headers);
+                    headers.extend(new_headers);
 
-                blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
-                anchor = headers.last().unwrap().clone();
+                    blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
+                    anchor = headers.last().unwrap().clone();
+                }
             }
+            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_)) => {
+                panic!("Wrong type of response")
+            }
+            Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
+            Err(err) => panic!("{:?}", err),
         }
 
         std::thread::sleep(std::time::Duration::from_secs(1));
