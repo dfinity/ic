@@ -9,6 +9,9 @@ rust_library(
     ],
     crate_name = "ic_canister_log",
     version = "0.8.0",
+    deps = [
+        "@crate_index//:serde",
+    ],
 )
 
 rust_doc_test(

@@ -10,3 +10,6 @@ documentation = "https://docs.rs/ic-canister-log"
 keywords = ["internet-computer", "dfinity", "canister", "logging"]
 repository = "https://github.com/dfinity/ic"
 include = ["src", "Cargo.toml", "LICENSE", "README.md", "CHANGELOG.md"]
+
+[dependencies]
+serde = "1.0.136"

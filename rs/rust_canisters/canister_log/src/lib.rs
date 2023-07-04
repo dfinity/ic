@@ -14,6 +14,24 @@ macro_rules! declare_log_buffer {
     };
 }
 
+pub mod entry_counter {
+    thread_local! {
+        static ENTRY_COUNTER: std::cell::Cell<u64> = Default::default();
+    }
+    pub fn increment() -> u64 {
+        ENTRY_COUNTER.with(|cell| {
+            cell.set(cell.get() + 1);
+            cell.get()
+        })
+    }
+    pub fn set(value: u64) {
+        ENTRY_COUNTER.with(|cell| cell.set(value));
+    }
+    pub fn get() -> u64 {
+        ENTRY_COUNTER.with(|cell| cell.get())
+    }
+}
+
 /// Adds a new record to a canister log buffer.
 ///
 /// ```
@@ -35,12 +53,12 @@ macro_rules! log {
         let message = std::format!($message $(,$args)*);
         // Print the message for convenience for local development (e.g. integration tests)
         println!("{}", &message);
-
         (&$sink).append($crate::LogEntry {
             timestamp: $crate::now(),
             message,
             file: std::file!(),
             line: std::line!(),
+            counter: $crate::entry_counter::increment()
         });
     }}
 }
@@ -50,9 +68,11 @@ pub trait Sink {
 }
 
 /// An entry in the canister log.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, serde::Serialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LogEntry {
     pub timestamp: u64,
+    // The index of this entry starting from the last canister upgrade.
+    pub counter: u64,
     pub message: String,
     pub file: &'static str,
     pub line: u32,

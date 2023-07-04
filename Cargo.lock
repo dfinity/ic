@@ -5191,6 +5191,9 @@ dependencies = [
 [[package]]
 name = "ic-canister-log"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "ic-canister-profiler"

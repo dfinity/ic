@@ -455,6 +455,7 @@ impl<'a> EnhancedLogEntry<'a> {
             file,
             line,
             message,
+            ..
         } = log_entry;
 
         let timestamp = *timestamp;
