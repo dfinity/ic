@@ -58,6 +58,7 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
             max_transactions_per_response: None,
         },
         max_memo_length: None,
+        feature_flags: args.feature_flags,
     })
 }
 
@@ -195,6 +196,11 @@ fn test_approve_max_expiration() {
 }
 
 #[test]
+fn test_feature_flags() {
+    ic_icrc1_ledger_sm_tests::test_feature_flags(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_block_transformation() {
     ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
         std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())
@@ -279,6 +285,7 @@ fn test_upgrade_from_first_version() {
             max_transactions_per_response: None,
         },
         max_memo_length: None,
+        feature_flags: None,
     })
     .unwrap();
     let ledger_id = env

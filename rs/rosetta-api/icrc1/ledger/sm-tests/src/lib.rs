@@ -2,6 +2,7 @@ use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
+use ic_icrc1_ledger::FeatureFlags;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::HashOf;
@@ -63,6 +64,7 @@ pub struct InitArgs {
     pub token_symbol: String,
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
+    pub feature_flags: Option<FeatureFlags>,
 }
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
@@ -78,6 +80,7 @@ pub struct UpgradeArgs {
     pub token_symbol: Option<String>,
     pub transfer_fee: Option<u64>,
     pub change_fee_collector: Option<ChangeFeeCollector>,
+    pub feature_flags: Option<FeatureFlags>,
 }
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
@@ -523,6 +526,7 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
+        feature_flags: Some(FeatureFlags { icrc2: true }),
     }
 }
 
@@ -2223,4 +2227,98 @@ where
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_feature_flags<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let args = encode_init_args(InitArgs {
+        feature_flags: None,
+        ..init_args(vec![(Account::from(from.0), 100_000)])
+    });
+    let args = Encode!(&args).unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm.clone(), args, None)
+        .unwrap();
+
+    let approve_args = default_approve_args(spender.0, 150_000);
+    let allowance_args = AllowanceArgs {
+        account: from.0.into(),
+        spender: spender.0.into(),
+    };
+
+    fn expect_icrc2_disabled(
+        env: &StateMachine,
+        from: PrincipalId,
+        canister_id: CanisterId,
+        approve_args: &ApproveArgs,
+        allowance_args: &AllowanceArgs,
+    ) {
+        let err = env
+            .execute_ingress_as(
+                from,
+                canister_id,
+                "icrc2_approve",
+                Encode!(&approve_args).unwrap(),
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+        assert!(
+            err.description()
+                .ends_with("ICRC-2 features are not enabled on the ledger."),
+            "Expected ICRC-2 disabled error, got: {}",
+            err.description()
+        );
+        let err = env
+            .execute_ingress_as(
+                from,
+                canister_id,
+                "icrc2_allowance",
+                Encode!(&allowance_args).unwrap(),
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+        assert!(
+            err.description()
+                .ends_with("ICRC-2 features are not enabled on the ledger."),
+            "Expected ICRC-2 disabled error, got: {}",
+            err.description()
+        );
+    }
+
+    expect_icrc2_disabled(&env, from, canister_id, &approve_args, &allowance_args);
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        feature_flags: None,
+        ..UpgradeArgs::default()
+    }));
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&upgrade_args).unwrap(),
+    )
+    .expect("failed to upgrade the archive canister");
+
+    expect_icrc2_disabled(&env, from, canister_id, &approve_args, &allowance_args);
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        feature_flags: Some(FeatureFlags { icrc2: true }),
+        ..UpgradeArgs::default()
+    }));
+
+    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+        .expect("failed to upgrade the archive canister");
+
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 1);
+    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
 }

@@ -82,6 +82,7 @@ proptest! {
                     max_transactions_per_response: None,
                 },
                 max_memo_length: None,
+                feature_flags: None,
             }).await;
 
     // Create a testing agent
@@ -161,6 +162,7 @@ proptest! {
                 max_transactions_per_response: None,
             },
             max_memo_length: None,
+            feature_flags: None,
         }).await;
 
     // Create a testing agent

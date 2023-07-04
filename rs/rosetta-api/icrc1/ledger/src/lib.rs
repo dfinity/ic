@@ -115,6 +115,7 @@ pub struct InitArgs {
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
+    pub feature_flags: Option<FeatureFlags>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -146,6 +147,8 @@ pub struct UpgradeArgs {
     pub change_fee_collector: Option<ChangeFeeCollector>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_memo_length: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feature_flags: Option<FeatureFlags>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -173,6 +176,26 @@ pub struct Ledger {
     metadata: Vec<(String, StoredValue)>,
     #[serde(default = "default_max_memo_length")]
     max_memo_length: u16,
+
+    #[serde(default)]
+    feature_flags: FeatureFlags,
+}
+
+#[derive(CandidType, Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct FeatureFlags {
+    pub icrc2: bool,
+}
+
+impl FeatureFlags {
+    const fn const_default() -> Self {
+        Self { icrc2: false }
+    }
+}
+
+impl Default for FeatureFlags {
+    fn default() -> Self {
+        Self::const_default()
+    }
 }
 
 fn default_max_memo_length() -> u16 {
@@ -191,6 +214,7 @@ impl Ledger {
             archive_options,
             fee_collector_account,
             max_memo_length,
+            feature_flags,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -210,6 +234,7 @@ impl Ledger {
                 .map(|(k, v)| (k, StoredValue::from(v)))
                 .collect(),
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
+            feature_flags: feature_flags.unwrap_or_default(),
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -361,6 +386,10 @@ impl Ledger {
         records
     }
 
+    pub fn feature_flags(&self) -> &FeatureFlags {
+        &self.feature_flags
+    }
+
     pub fn upgrade(&mut self, args: UpgradeArgs) {
         if let Some(upgrade_metadata_args) = args.metadata {
             self.metadata = upgrade_metadata_args
@@ -391,6 +420,9 @@ impl Ledger {
                     "The fee collector account cannot be the same account as the minting account",
                 );
             }
+        }
+        if let Some(feature_flags) = args.feature_flags {
+            self.feature_flags = feature_flags;
         }
     }
 

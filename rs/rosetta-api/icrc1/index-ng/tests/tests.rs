@@ -106,6 +106,7 @@ fn install_ledger(
         archive_options,
         fee_collector_account,
         max_memo_length: None,
+        feature_flags: None,
     });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
@@ -125,6 +126,7 @@ fn upgrade_ledger(
         transfer_fee: None,
         change_fee_collector,
         max_memo_length: None,
+        feature_flags: None,
     }));
     env.upgrade_canister(ledger_id, ledger_wasm(), Encode!(&args).unwrap())
         .unwrap()

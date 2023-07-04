@@ -84,6 +84,7 @@ pub fn test(env: TestEnv) {
             },
             fee_collector_account: None,
             max_memo_length: None,
+            feature_flags: None,
         };
         install_icrc1_ledger(&env, &mut ledger, &LedgerArgument::Init(init_args.clone())).await;
 

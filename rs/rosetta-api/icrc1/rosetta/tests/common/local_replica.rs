@@ -114,6 +114,7 @@ pub async fn deploy_icrc_ledger_with_default_args(context: &ReplicaContext) -> C
             max_transactions_per_response: None,
         },
         max_memo_length: None,
+        feature_flags: None,
     };
     deploy_icrc_ledger_with_custom_args(context, default_init_args).await
 }

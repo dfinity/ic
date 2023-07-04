@@ -57,6 +57,7 @@ fn default_init_args() -> InitArgs {
             max_transactions_per_response: None,
         },
         max_memo_length: None,
+        feature_flags: None,
     }
 }
 
