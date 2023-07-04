@@ -14,10 +14,11 @@ use ic_ledger_core::{
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs,
     Block, BlockArg, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
-    GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Memo, NotifyCanisterArgs, Operation,
-    QueryBlocksResponse, SendArgs, Subaccount, Tokens, TotalSupplyArgs, Transaction, TransferArgs,
-    TransferError, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
+    GetBlocksRes, GetBlocksResult, GetEncodedBlocksResult, IterBlocksArgs, IterBlocksRes,
+    LedgerCanisterInitPayload, LedgerCanisterPayload, LedgerCanisterUpgradePayload, Memo,
+    NotifyCanisterArgs, Operation, QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs,
+    Subaccount, Tokens, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
+    TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::IntoWire;
@@ -161,9 +162,41 @@ async fn get_blocks_candid(archive: &Canister<'_>, range: std::ops::Range<u64>) 
         .expect("get_blocks call trapped")
 }
 
+async fn get_encoded_blocks_candid(
+    archive: &Canister<'_>,
+    range: std::ops::Range<u64>,
+) -> GetEncodedBlocksResult {
+    archive
+        .query_(
+            "get_encoded_blocks",
+            candid_one,
+            GetBlocksArgs {
+                start: range.start,
+                length: range.end.saturating_sub(range.start) as usize,
+            },
+        )
+        .await
+        .expect("get_encoded_blocks call trapped")
+}
+
 async fn query_blocks(ledger: &Canister<'_>, start: u64, length: usize) -> QueryBlocksResponse {
     ledger
         .query_("query_blocks", candid_one, GetBlocksArgs { start, length })
+        .await
+        .expect("failed to query blocks")
+}
+
+async fn query_encoded_blocks(
+    ledger: &Canister<'_>,
+    start: u64,
+    length: usize,
+) -> QueryEncodedBlocksResponse {
+    ledger
+        .query_(
+            "query_encoded_blocks",
+            candid_one,
+            GetBlocksArgs { start, length },
+        )
         .await
         .expect("failed to query blocks")
 }
@@ -623,9 +656,17 @@ fn query_blocks_certificate() {
 
         let result = query_blocks(&ledger, 0, 1).await;
         assert!(result.certificate.is_some());
+        assert_eq!(
+            result.certificate,
+            query_encoded_blocks(&ledger, 0, 1).await.certificate
+        );
 
         let result = query_blocks(&ledger, 0, 100).await;
         assert!(result.certificate.is_some());
+        assert_eq!(
+            result.certificate,
+            query_encoded_blocks(&ledger, 0, 1).await.certificate
+        );
         Ok(())
     })
 }
@@ -681,6 +722,20 @@ fn archived_blocks_ranges() {
                 assert_eq!(response.archived_blocks.len(), 1);
                 assert_eq!(response.archived_blocks[0].start, start);
                 assert_eq!(response.archived_blocks[0].length, length);
+                let response_encoded_blocks =
+                    query_encoded_blocks(&ledger, start, length as usize).await;
+                assert_eq!(
+                    response.archived_blocks.len(),
+                    response_encoded_blocks.archived_blocks.len()
+                );
+                assert_eq!(
+                    response.archived_blocks[0].start,
+                    response_encoded_blocks.archived_blocks[0].start
+                );
+                assert_eq!(
+                    response.archived_blocks[0].length,
+                    response_encoded_blocks.archived_blocks[0].length
+                );
             }
         }
         Ok(())
@@ -1689,8 +1744,11 @@ fn get_multiple_blocks_test() {
             println!("[test] querying blocks 10 and 11");
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 10..12).await?;
             let BlockRange { blocks } = get_blocks_candid(&node, 10..12).await.unwrap();
+            let encoded_blocks_from_archive =
+                get_encoded_blocks_candid(&node, 10..12).await.unwrap();
             let blocks_from_node: Vec<EncodedBlock> = blocks_from_node.unwrap();
             assert_same_blocks(&blocks_from_node, &blocks);
+            assert_eq!(blocks_from_node, encoded_blocks_from_archive);
             assert!(blocks_from_node.len() == 2);
         }
 
@@ -1700,7 +1758,10 @@ fn get_multiple_blocks_test() {
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 11..13).await?;
             let BlockRange { blocks } = get_blocks_candid(&node, 11..13).await.unwrap();
             let blocks_from_node: Vec<EncodedBlock> = blocks_from_node.unwrap();
+            let encoded_blocks_from_archive =
+                get_encoded_blocks_candid(&node, 11..13).await.unwrap();
             assert_same_blocks(&blocks_from_node, &blocks);
+            assert_eq!(blocks_from_node, encoded_blocks_from_archive);
             assert!(blocks_from_node.len() == 2);
         }
 
@@ -1710,7 +1771,10 @@ fn get_multiple_blocks_test() {
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 12..14).await?;
             let BlockRange { blocks } = get_blocks_candid(&node, 12..14).await.unwrap();
             let blocks_from_node: Vec<EncodedBlock> = blocks_from_node.unwrap();
+            let encoded_blocks_from_archive =
+                get_encoded_blocks_candid(&node, 12..14).await.unwrap();
             assert_same_blocks(&blocks_from_node, &blocks);
+            assert_eq!(blocks_from_node, encoded_blocks_from_archive);
             assert!(blocks_from_node.len() == 2);
         }
 
@@ -1720,7 +1784,10 @@ fn get_multiple_blocks_test() {
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 9..14).await?;
             let BlockRange { blocks } = get_blocks_candid(&node, 9..14).await.unwrap();
             let blocks_from_node: Vec<EncodedBlock> = blocks_from_node.unwrap();
+            let encoded_blocks_from_archive =
+                get_encoded_blocks_candid(&node, 9..14).await.unwrap();
             assert_same_blocks(&blocks_from_node, &blocks);
+            assert_eq!(blocks_from_node, encoded_blocks_from_archive);
             assert!(blocks_from_node.len() == 5);
         }
 
@@ -1739,6 +1806,14 @@ fn get_multiple_blocks_test() {
                 }
             );
 
+            assert_eq!(
+                get_encoded_blocks_candid(&node, 8..10).await.unwrap_err(),
+                GetBlocksError::BadFirstBlockIndex {
+                    requested_index: 8,
+                    first_valid_index: 9
+                }
+            );
+
             // outside range right
             let GetBlocksRes(blocks_from_node) = get_blocks_pb(&node, 10..16).await?;
             blocks_from_node.unwrap_err();
@@ -1746,6 +1821,13 @@ fn get_multiple_blocks_test() {
             // The candid endpoint succeeds and returns the valid prefix of the request.
             assert_eq!(
                 get_blocks_candid(&node, 10..18).await.unwrap().blocks.len(),
+                4
+            );
+            assert_eq!(
+                get_encoded_blocks_candid(&node, 10..18)
+                    .await
+                    .unwrap()
+                    .len(),
                 4
             );
 

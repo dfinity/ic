@@ -6,8 +6,9 @@ use ic_icrc1_ledger_sm_tests::{transfer, MINTER};
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
-    AccountIdentifier, Block, GetBlocksArgs, GetBlocksRes, InitArgs, LedgerCanisterInitPayload,
-    LedgerCanisterPayload, QueryBlocksResponse,
+    AccountIdentifier, ArchiveOptions, Block, CandidBlock, GetBlocksArgs, GetBlocksRes, InitArgs,
+    LedgerCanisterInitPayload, LedgerCanisterPayload, Operation, QueryBlocksResponse,
+    QueryEncodedBlocksResponse,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
@@ -63,6 +64,31 @@ fn query_blocks(
         .expect("failed to query blocks")
         .bytes(),
         QueryBlocksResponse
+    )
+    .expect("failed to decode transfer response")
+}
+
+fn query_encoded_blocks(
+    env: &StateMachine,
+    caller: Principal,
+    ledger: CanisterId,
+    start: u64,
+    length: u64,
+) -> QueryEncodedBlocksResponse {
+    Decode!(
+        &env.execute_ingress_as(
+            PrincipalId(caller),
+            ledger,
+            "query_encoded_blocks",
+            Encode!(&GetBlocksArgs {
+                start,
+                length: length as usize
+            })
+            .unwrap()
+        )
+        .expect("failed to query blocks")
+        .bytes(),
+        QueryEncodedBlocksResponse
     )
     .expect("failed to decode transfer response")
 }
@@ -252,6 +278,123 @@ fn check_memo() {
     }
 }
 
+fn assert_candid_block_equals_icp_ledger_block(
+    candid_blocks: Vec<CandidBlock>,
+    icp_ledger_blocks: Vec<Block>,
+) {
+    assert_eq!(candid_blocks.len(), icp_ledger_blocks.len());
+    for (cb, lb) in candid_blocks.into_iter().zip(icp_ledger_blocks.into_iter()) {
+        assert_eq!(
+            cb.parent_hash.map(|x| x.to_vec()),
+            lb.parent_hash.map(|x| x.as_slice().to_vec())
+        );
+        assert_eq!(cb.timestamp, lb.timestamp);
+        assert_eq!(cb.transaction.icrc1_memo, lb.transaction.icrc1_memo);
+        assert_eq!(cb.transaction.memo, lb.transaction.memo);
+        assert_eq!(
+            Operation::try_from(cb.transaction.operation.unwrap()).unwrap(),
+            lb.transaction.operation
+        );
+    }
+}
+
+#[test]
+fn check_query_blocks_coherence() {
+    let ledger_wasm_current = ledger_wasm();
+
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let p3 = PrincipalId::new_user_test_id(3);
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
+    initial_balances.insert(Account::from(p2.0).into(), Tokens::from_e8s(10_000_000));
+    initial_balances.insert(Account::from(p3.0).into(), Tokens::from_e8s(10_000_000));
+    let init_args = Encode!(&LedgerCanisterPayload::Init(InitArgs {
+        archive_options: Some(ArchiveOptions {
+            trigger_threshold: 5,
+            num_blocks_to_archive: 2,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_anonymous(),
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None
+        }),
+        minting_account: MINTER.into(),
+        icrc1_minting_account: Some(MINTER),
+        initial_values: initial_balances,
+        max_message_size_bytes: None,
+        transaction_window: None,
+        send_whitelist: HashSet::new(),
+        transfer_fee: Some(Tokens::from_e8s(10_000)),
+        token_symbol: Some("ICP".into()),
+        token_name: Some("Internet Computer".into()),
+    }))
+    .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm_current, init_args, None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p1.0, p3.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p3.0, p2.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p2.0, p1.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p2.0, p3.0, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p3.0, p1.0, 1_000_000).expect("transfer failed");
+
+    let query_blocks_res = query_blocks(&env, p1.0, canister_id, 0, u32::MAX.into());
+    let query_encoded_blocks_res =
+        query_encoded_blocks(&env, p1.0, canister_id, 0, u32::MAX.into());
+
+    assert_eq!(
+        query_blocks_res.certificate,
+        query_encoded_blocks_res.certificate
+    );
+    assert_eq!(
+        query_blocks_res.chain_length,
+        query_encoded_blocks_res.chain_length
+    );
+    assert_eq!(
+        query_blocks_res.first_block_index,
+        query_encoded_blocks_res.first_block_index
+    );
+    assert_eq!(
+        query_blocks_res
+            .archived_blocks
+            .clone()
+            .into_iter()
+            .map(|x| x.start)
+            .collect::<Vec<u64>>(),
+        query_encoded_blocks_res
+            .archived_blocks
+            .clone()
+            .into_iter()
+            .map(|x| x.start)
+            .collect::<Vec<u64>>()
+    );
+    assert_eq!(
+        query_blocks_res
+            .archived_blocks
+            .into_iter()
+            .map(|x| x.length)
+            .collect::<Vec<u64>>(),
+        query_encoded_blocks_res
+            .archived_blocks
+            .into_iter()
+            .map(|x| x.length)
+            .collect::<Vec<u64>>()
+    );
+    assert_candid_block_equals_icp_ledger_block(
+        query_blocks_res.blocks,
+        query_encoded_blocks_res
+            .blocks
+            .into_iter()
+            .map(|x| Block::decode(x).unwrap())
+            .collect::<Vec<Block>>(),
+    );
+}
+
 #[test]
 fn test_block_transformation() {
     let ledger_wasm_mainnet =
@@ -293,8 +436,9 @@ fn test_block_transformation() {
 
     // Fetch all blocks before the upgrade
     let resp_pre_upgrade = get_blocks_pb(&env, p1.0, canister_id, 0, 8).0.unwrap();
-    let certificate_pre_upgrade =
-        query_blocks(&env, p1.0, canister_id, 0, u32::MAX.into()).certificate;
+    let pre_upgrade_query_blocks = query_blocks(&env, p1.0, canister_id, 0, u32::MAX.into());
+    let certificate_pre_upgrade = pre_upgrade_query_blocks.certificate;
+
     // Now upgrade the ledger to the new canister wasm
     env.upgrade_canister(
         canister_id,
@@ -305,8 +449,13 @@ fn test_block_transformation() {
 
     // Fetch all blocks after the upgrade
     let resp_post_upgrade = get_blocks_pb(&env, p1.0, canister_id, 0, 8).0.unwrap();
-    let certificate_post_upgrade =
-        query_blocks(&env, p1.0, canister_id, 0, u32::MAX.into()).certificate;
+    let post_upgrade_query_blocks = query_blocks(&env, p1.0, canister_id, 0, u32::MAX.into());
+    let certificate_post_upgrade = post_upgrade_query_blocks.certificate;
+
+    assert_eq!(
+        query_encoded_blocks(&env, p1.0, canister_id, 0, u32::MAX.into()).certificate,
+        certificate_post_upgrade
+    );
 
     // Make sure the same number of blocks were fetched before and after the upgrade
     assert_eq!(resp_pre_upgrade.len(), resp_post_upgrade.len());

@@ -1004,20 +1004,20 @@ pub struct TipOfChainRes {
     pub tip_index: BlockIndex,
 }
 
-#[derive(Serialize, Deserialize, CandidType)]
+#[derive(Serialize, Deserialize, CandidType, Debug, Clone)]
 pub struct GetBlocksArgs {
     pub start: BlockIndex,
     pub length: usize,
 }
 
-#[derive(Serialize, Deserialize, CandidType, Debug)]
+#[derive(Serialize, Deserialize, CandidType, Debug, Clone)]
 pub struct BlockRange {
     pub blocks: Vec<CandidBlock>,
 }
 
 pub type GetBlocksResult = Result<BlockRange, GetBlocksError>;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, CandidType)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, CandidType, Clone)]
 pub enum GetBlocksError {
     BadFirstBlockIndex {
         requested_index: BlockIndex,
@@ -1081,7 +1081,7 @@ pub fn iter_blocks(blocks: &[EncodedBlock], offset: usize, length: usize) -> Ite
     IterBlocksRes(blocks)
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Clone)]
 pub enum CyclesResponse {
     CanisterCreated(CanisterId),
     // Silly requirement by the candid derivation
@@ -1089,60 +1089,14 @@ pub enum CyclesResponse {
     Refunded(String, Option<BlockIndex>),
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(try_from = "candid::types::reference::Func")]
-pub struct QueryArchiveFn {
-    pub canister_id: CanisterId,
-    pub method: String,
-}
-
-impl From<QueryArchiveFn> for candid::types::reference::Func {
-    fn from(archive_fn: QueryArchiveFn) -> Self {
-        let p: &PrincipalId = archive_fn.canister_id.as_ref();
-        Self {
-            principal: p.0,
-            method: archive_fn.method,
-        }
-    }
-}
-
-impl TryFrom<candid::types::reference::Func> for QueryArchiveFn {
-    type Error = String;
-    fn try_from(func: candid::types::reference::Func) -> Result<Self, Self::Error> {
-        let canister_id = CanisterId::try_from(func.principal.as_slice())
-            .map_err(|e| format!("principal is not a canister id: {}", e))?;
-        Ok(QueryArchiveFn {
-            canister_id,
-            method: func.method,
-        })
-    }
-}
-
-impl CandidType for QueryArchiveFn {
-    fn _ty() -> candid::types::Type {
-        candid::types::Type::Func(candid::types::Function {
-            modes: vec![candid::parser::types::FuncMode::Query],
-            args: vec![GetBlocksArgs::_ty()],
-            rets: vec![GetBlocksResult::_ty()],
-        })
-    }
-
-    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
-    where
-        S: candid::types::Serializer,
-    {
-        candid::types::reference::Func::from(self.clone()).idl_serialize(serializer)
-    }
-}
-
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Deserialize, Clone)]
 pub struct ArchivedBlocksRange {
     pub start: BlockIndex,
     pub length: u64,
-    pub callback: QueryArchiveFn,
+    pub callback: QueryArchiveBlocksFn,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Deserialize, Clone)]
 pub struct QueryBlocksResponse {
     pub chain_length: u64,
     pub certificate: Option<serde_bytes::ByteBuf>,
@@ -1150,3 +1104,26 @@ pub struct QueryBlocksResponse {
     pub first_block_index: BlockIndex,
     pub archived_blocks: Vec<ArchivedBlocksRange>,
 }
+
+#[derive(Debug, CandidType, Deserialize, Clone)]
+pub struct QueryEncodedBlocksResponse {
+    pub chain_length: u64,
+    pub certificate: Option<serde_bytes::ByteBuf>,
+    pub blocks: Vec<EncodedBlock>,
+    pub first_block_index: BlockIndex,
+    pub archived_blocks: Vec<ArchivedEncodedBlocksRange>,
+}
+
+pub type GetEncodedBlocksResult = Result<Vec<EncodedBlock>, GetBlocksError>;
+
+#[derive(Debug, CandidType, Deserialize, Clone)]
+pub struct ArchivedEncodedBlocksRange {
+    pub start: BlockIndex,
+    pub length: u64,
+    pub callback: QueryArchiveEncodedBlocksFn,
+}
+
+pub type QueryArchiveBlocksFn =
+    icrc_ledger_types::icrc3::archive::QueryArchiveFn<GetBlocksArgs, GetBlocksResult>;
+pub type QueryArchiveEncodedBlocksFn =
+    icrc_ledger_types::icrc3::archive::QueryArchiveFn<GetBlocksArgs, GetEncodedBlocksResult>;

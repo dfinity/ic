@@ -152,7 +152,11 @@ fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::
         let req = Encode!(&req).expect("Failed to encode GetBlocksArgs for archive node");
         let canister_id = archived.callback.canister_id;
         let res = env
-            .execute_ingress(canister_id, archived.callback.method, req)
+            .execute_ingress(
+                CanisterId::new(PrincipalId(canister_id)).unwrap(),
+                archived.callback.method,
+                req,
+            )
             .expect("Failed to send get_blocks request to archive")
             .bytes();
         let res = Decode!(&res, icp_ledger::GetBlocksResult).unwrap().unwrap();
