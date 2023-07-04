@@ -589,8 +589,7 @@ mod test {
     };
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, run_idkg_and_create_and_verify_transcript,
-        CanisterThresholdSigTestEnvironment,
+        generate_key_transcript, CanisterThresholdSigTestEnvironment,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_ic00_types::EcdsaKeyId;
@@ -656,8 +655,8 @@ mod test {
             ecdsa::KeyTranscriptCreation::RandomTranscriptParams(
                 ecdsa::RandomTranscriptParams::new(
                     transcript_id_0,
-                    env.receivers().into_iter().collect(),
-                    env.receivers().into_iter().collect(),
+                    env.nodes.ids(),
+                    env.nodes.ids(),
                     registry_version,
                     algorithm_id,
                 ),
@@ -881,13 +880,13 @@ mod test {
         // Fill in the ongoing signatures
         let sig_inputs_1 = create_sig_inputs_with_args(
             13,
-            &env.receivers(),
+            &env.nodes.ids(),
             key_transcript.clone(),
             Height::from(44),
         );
         let sig_inputs_2 = create_sig_inputs_with_args(
             14,
-            &env.receivers(),
+            &env.nodes.ids(),
             key_transcript.clone(),
             Height::from(44),
         );
@@ -1001,7 +1000,7 @@ mod test {
         // Add a masked transcript
         let transcript_1 = {
             let transcript_id = transcript_id_0.increment();
-            let dealers = env.receivers().into_iter().collect::<BTreeSet<_>>();
+            let dealers: BTreeSet<_> = env.nodes.ids();
             let receivers = dealers.clone();
             let param = ecdsa::RandomTranscriptParams::new(
                 transcript_id,
@@ -1010,9 +1009,8 @@ mod test {
                 registry_version,
                 AlgorithmId::ThresholdEcdsaSecp256k1,
             );
-            run_idkg_and_create_and_verify_transcript(
+            env.nodes.run_idkg_and_create_and_verify_transcript(
                 &param.as_ref().translate(&block_reader).unwrap(),
-                &env.crypto_components,
                 &mut rng,
             )
         };
@@ -1030,8 +1028,8 @@ mod test {
         // Add the reference
         let random_params = ecdsa::RandomTranscriptParams::new(
             transcript_id_0,
-            env.receivers().into_iter().collect(),
-            env.receivers().into_iter().collect(),
+            env.nodes.ids(),
+            env.nodes.ids(),
             registry_version,
             algorithm_id,
         );
