@@ -60,7 +60,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "type_integration_tests",
+    name = "type_integration",
     srcs = glob(["tests/**/*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":type"] + DEPENDENCIES + DEV_DEPENDENCIES,

@@ -98,7 +98,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "replicated_state_integration_tests",
+    name = "replicated_state_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

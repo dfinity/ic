@@ -81,7 +81,7 @@ rust_test(
 )
 
 rust_test_suite_with_extra_srcs(
-    name = "payload_builder_integration_tests",
+    name = "payload_builder_integration",
     srcs = [
         "tests/certified_slice_pool.rs",
         "tests/xnet_payload_builder.rs",

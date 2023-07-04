@@ -60,7 +60,7 @@ rust_test(
 )
 
 rust_test_suite_with_extra_srcs(
-    name = "integration_tests",
+    name = "integration",
     srcs = glob(
         ["tests/**/*.rs"],
         exclude = ["tests/**/test_*.rs"],

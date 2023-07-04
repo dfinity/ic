@@ -32,7 +32,7 @@ rust_library(
 )
 
 rust_test_suite(
-    name = "rosetta-integration-tests",
+    name = "rosetta-integration",
     srcs = ["tests/tests.rs"],
     data = [
         "//rs/canister_sandbox",

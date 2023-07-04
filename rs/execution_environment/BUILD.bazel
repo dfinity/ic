@@ -119,7 +119,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "execution_environment_misc_integration_tests",
+    name = "execution_environment_misc_integration",
     size = "large",
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,

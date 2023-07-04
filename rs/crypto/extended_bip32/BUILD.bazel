@@ -35,7 +35,7 @@ rust_test(
 )
 
 rust_test_suite(
-    name = "extended_bip32_integration_tests",
+    name = "extended_bip32_integration",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
