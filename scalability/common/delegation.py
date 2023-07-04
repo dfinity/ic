@@ -114,7 +114,7 @@ def get_delegation(host_url, ii_canister_id):
         )
 
     logging.info("II: Registering .. ")
-    registration = identityCanister.register(
+    registration = retry_call(identityCanister.register, fargs=[
         {
             "pubkey": identity.der_pubkey,
             "alias": "foobar",
@@ -124,22 +124,22 @@ def get_delegation(host_url, ii_canister_id):
             "protection": {"unprotected": None},
         },
         {"key": challenge[0]["challenge_key"], "chars": "a"},
-    )
+    ])
     logging.debug(registration)
 
     logging.info("II: Preparing delegation .. ")
-    prepare_delegation = identityCanister.prepare_delegation(
+    prepare_delegation = retry_call(identityCanister.prepare_delegation, fargs=[
         registration[0]["registered"]["user_number"],
         host_url,
         identity.der_pubkey,
-        [604800000000000],
-    )
+        [604800000000000]
+    ])
     logging.debug(prepare_delegation)
 
     logging.info("II: Getting delegation .. ")
-    get_delegation = identityCanister.get_delegation(
+    get_delegation = retry_call(identityCanister.get_delegation, fargs=[
         registration[0]["registered"]["user_number"], host_url, identity.der_pubkey, prepare_delegation[1]
-    )
+    ])
     logging.debug(get_delegation)
 
     ic_delegation = {}

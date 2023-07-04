@@ -665,6 +665,8 @@ tecdsa:
       # $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
       cd -
 
 # BENCHMARK SUITE delegated identity
@@ -688,6 +690,8 @@ delegated-identity-bench:
       $SHELL_WRAPPER python3 experiments/run_delegation_experiment.py --testnet $TESTNET --num_procs 64 --iter_duration 30 --num_identities 200 --rps 30,100,200,500,1000
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+
       cd -
 
 # BENCHMARK SUITE maximum_capacity_boundary_nodes with queries
@@ -713,6 +717,6 @@ maximum-capacity-boundary-nodes-queries:
       $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
-      cd -
 
       $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      cd -

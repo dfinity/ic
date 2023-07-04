@@ -65,7 +65,7 @@
     <p>
       For query workloads we currently target 4000 queries/second per node in each subnetwork (red line in the plot).
     </p>
-    
+
     <h4>Query capacity</h4>
 
     <div id="plot-exp1-query" class="plot"></div>
@@ -74,7 +74,7 @@
       {{#each plot_exp1_query.data}}
         plot_exp1_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
       {{/each}}
-      
+
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot-exp1-query');
           Plotly.newPlot(plot, {{{plot_exp1_query.plot}}},  {{{plot_exp1_query.layout}}});
@@ -86,12 +86,12 @@
               window.open(link, "_self");
           });
       }, false);
-    </script>    
+    </script>
 
     <p>
-      For query workloads the follwing plots show latency and failure rates. Each plot tracks the latency or failure rate over time. 
-      As we have changed the requests rates that we are running in weekly benchmarks, some plots end and other ones start. 
-      The goal is for all of them to never increase over time.     
+      For query workloads the follwing plots show latency and failure rates. Each plot tracks the latency or failure rate over time.
+      As we have changed the requests rates that we are running in weekly benchmarks, some plots end and other ones start.
+      The goal is for all of them to never increase over time.
     </p>
 
     <h4>Failure rate</h4>
@@ -101,7 +101,7 @@
       {{#each plot_exp1_query_failure_rate.data}}
         plot_exp1_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
       {{/each}}
-      
+
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot_exp1_query_failure_rate');
           Plotly.newPlot(plot, {{{plot_exp1_query_failure_rate.plot}}},  {{{plot_exp1_query_failure_rate.layout}}});
@@ -122,7 +122,7 @@
       {{#each plot_exp1_query_latency.data}}
         plot_exp1_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
       {{/each}}
-      
+
       window.addEventListener("load", function(event) {
           plot = document.getElementById('plot_exp1_query_latency');
           Plotly.newPlot(plot, {{{plot_exp1_query_latency.plot}}},  {{{plot_exp1_query_latency.layout}}});
@@ -134,7 +134,7 @@
               window.open(link, "_self");
           });
       }, false);
-    </script>    
+    </script>
 
     <h3>Update calls</h3>
     <a name="sys-baseline-updates" />
@@ -142,7 +142,7 @@
     <p>
       We currently expect to see around 800 updates/second per subnetwork (red line in the plot)
     </p>
-    
+
     <div id="plot-exp1-update" class="plot"></div>
     <script>
       const plot_exp1_update_links = new Map();
@@ -173,7 +173,7 @@
 
     <div id="canister_code">
       <span>Canister code:</span> <a href="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/rs/rust_canisters/memory_test">memory_test canister</a>
-    </div>    
+    </div>
 
     <h3>Update</h3>
 
@@ -200,7 +200,7 @@
 
       }, false);
     </script>
-    
+
     <h2>State Sync duration</h2>
     <a name="state-sync" />
 
@@ -238,7 +238,7 @@
 
     <p>
       Purpose: Motoko's QR benchmark<br />
-      The benchmark code is rather naively written: Because of the awaits in a loop, there will be quite a few context switches and those might be flooding the canisiter with overlapping requests 
+      The benchmark code is rather naively written: Because of the awaits in a loop, there will be quite a few context switches and those might be flooding the canisiter with overlapping requests
     </p>
 
    <div id="canister_code">
@@ -247,7 +247,7 @@
 
     <div style="background-color: orange;">
       Note that the canister wasm needs to be manually updated in the ic repo to reflect changes in Motoko.
-    </div>    
+    </div>
 
     <h3>Failure rate</h1>
     <div id="plot_qr" class="plot"></div>
@@ -290,7 +290,7 @@
           });
 
       }, false);
-    </script>    
+    </script>
 
     <h2>Motoko sha256 performance</h2>
     <a name="motoko-sha256" />
@@ -305,7 +305,7 @@
 
     <div style="background-color: orange;">
       Note that the canister wasm needs to be manually updated in the ic repo to reflect changes in Motoko.
-    </div>        
+    </div>
 
     <h3>Failure rate</h1>
     <div id="plot_sha256" class="plot"></div>
@@ -347,7 +347,7 @@
           });
 
       }, false);
-    </script>    
+    </script>
 
     <h2>HTTP outcall feature benchmark</h2>
     <a name="http-outcall" />
@@ -422,8 +422,8 @@
           });
 
       }, false);
-    </script>    
-    
+    </script>
+
     <h2>Mixed update query workload</h2>
 
     <p>
@@ -474,8 +474,34 @@
           });
 
       }, false);
-    </script>    
+    </script>
 
+    <h2>Runtime of other benchmarks</h2>
+
+    <p>
+      For various other benchmarks, we plot the sum of all iteration runtimes as a sanity check.</ br>
+      This generic way of plotting results of course is not great, but it is better than nothing.
+    </p>
+
+    <div id="plot_experiment_time" class="plot"></div>
+    <script>
+      const plot_experiment_time_links = new Map();
+      {{#each plot_experiment_time.data}}
+        plot_experiment_time_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_experiment_time');
+          Plotly.newPlot( plot, {{{ plot_experiment_time.plot }}},  {{{plot_experiment_time.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_experiment_time_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>
 
   </div> <!-- Container //-->
 </body>
