@@ -329,10 +329,12 @@ func GetTestLog(file *build_event_stream.File) ([]byte, error) {
 }
 
 func ExtractFailuresFromTestLog(testLog string) (string, error) {
-	// First we need to find the "JSON Report" event, which contains all inner errors.
-	reportIdx := strings.Index(testLog, "JSON Report")
+	// First we need to find "json_report_created_event" event in the logs, which contains all inner errors.
+	// Example of report event in the logs:
+	// TIMESTAMP INFO[...] {"event_name":"json_report_created_event","body":{"success":[],"failure":[],"skipped":[]}}
+	reportIdx := strings.Index(testLog, "{\"event_name\":\"json_report_created_event\"")
 	if reportIdx == -1 {
-		err := errors.New("JSON Report was not found in the test log.")
+		err := errors.New("json_report_created_event was not found in the test log.")
 		log.Println(err)
 		return "", err
 	}
@@ -340,16 +342,27 @@ func ExtractFailuresFromTestLog(testLog string) (string, error) {
 	reportEnd := reportStart + strings.Index(testLog[reportStart:], "\n")
 	report := testLog[reportStart:reportEnd]
 	jsonMap := make(map[string]interface{})
+	errMsg := "json_report_created_event from log couldn't be processed correctly"
 	if err := json.Unmarshal([]byte(report), &jsonMap); err != nil {
-		log.Printf("Failed to unmarshal json bytes to map in JSON Report: %v\n", err)
-		return "", fmt.Errorf("JSON Report from log couldn't be processed correctly: %v", err)
+		log.Printf("Failed to unmarshal json bytes to map in json_report_created_event: %v\n", err)
+		return "", fmt.Errorf("%s: %v", errMsg, err)
 	}
-	jsonBytes, err := json.Marshal(jsonMap["failure"])
+	jsonBytesBody, err := json.Marshal(jsonMap["body"])
 	if err != nil {
 		log.Printf("Failed to marshal map: %v\n", err)
-		return "", fmt.Errorf("JSON Report from log couldn't be processed correctly: %v", err)
+		return "", fmt.Errorf("%s: %v", errMsg, err)
 	}
-	return string(jsonBytes), nil
+	jsonMap = make(map[string]interface{})
+	if err := json.Unmarshal([]byte(jsonBytesBody), &jsonMap); err != nil {
+		log.Printf("Failed to unmarshal json bytes in the \"body\" of json_report_created_event: %v\n", err)
+		return "", fmt.Errorf("%s: %v", errMsg, err)
+	}
+	jsonBytesFailure, err := json.Marshal(jsonMap["failure"])
+	if err != nil {
+		log.Printf("Failed to marshal map: %v\n", err)
+		return "", fmt.Errorf("%s: %v", errMsg, err)
+	}
+	return string(jsonBytesFailure), nil
 }
 
 func ExtractKibanaUrlFromTestLog(testLog string) (string, error) {

@@ -15,6 +15,7 @@ use crate::driver::{
     constants::SSH_USERNAME,
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+    log_events,
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
@@ -59,6 +60,10 @@ const GRAFANA_DOMAIN_NAME: &str = "grafana";
 
 pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+// Be mindful when modifying this constant, as the event can be consumed by other parties.
+const PROMETHEUS_VM_CREATED_EVENT_NAME: &str = "prometheus_vm_created_event";
+const GRAFANA_INSTANCE_CREATED_EVENT_NAME: &str = "grafana_instance_created_event";
+const IC_PROGRESS_CLOCK_CREATED_EVENT_NAME: &str = "ic_progress_clock_created_event";
 
 pub struct PrometheusVm {
     universal_vm: UniversalVm,
@@ -164,12 +169,18 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
         ]);
         let prometheus_fqdn = format!("{PROMETHEUS_DOMAIN_NAME}.{suffix}");
         let grafana_fqdn = format!("{GRAFANA_DOMAIN_NAME}.{suffix}");
-        info!(log, "Prometheus Web UI at http://{prometheus_fqdn}",);
-        info!(
-            log,
+        let prometheus_message = format!("Prometheus Web UI at http://{prometheus_fqdn}");
+        let grafana_message = format!("Grafana at http://{grafana_fqdn}");
+        let ic_progress_clock_message = format!(
             "IC Progress Clock at http://{grafana_fqdn}/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now"
         );
-        info!(log, "Grafana at http://{grafana_fqdn}",);
+        emit_event(&log, &prometheus_message, PROMETHEUS_VM_CREATED_EVENT_NAME);
+        emit_event(&log, &grafana_message, GRAFANA_INSTANCE_CREATED_EVENT_NAME);
+        emit_event(
+            &log,
+            &ic_progress_clock_message,
+            IC_PROGRESS_CLOCK_CREATED_EVENT_NAME,
+        );
         Ok(())
     }
 }
@@ -387,4 +398,9 @@ fn sync_prometheus_config_dir(
 
 fn scraping_target_url(node: &IcNodeSnapshot, port: u16) -> String {
     format!("[{:?}]:{:?}", node.get_ip_addr(), port)
+}
+
+fn emit_event(log: &slog::Logger, message: &str, event_name: &str) {
+    let event = log_events::LogEvent::new(event_name.to_string(), message.to_string());
+    event.emit_log(log);
 }

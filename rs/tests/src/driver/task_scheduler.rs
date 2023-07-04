@@ -6,12 +6,15 @@ use slog::{debug, info, Logger};
 
 use crate::driver::action_graph::ActionGraph;
 use crate::driver::event::TaskId;
+use crate::driver::log_events;
 use crate::driver::task::Task;
 
 use super::action_graph::Node;
 use super::group::is_task_visible_to_user;
 use super::report::{SystemGroupSummary, TaskReport};
 use super::task::TaskHandle;
+// Be mindful when modifying this constant, as the event can be consumed by other parties.
+const JSON_REPORT_CREATED_EVENT_NAME: &str = "json_report_created_event";
 
 // trait for report and failure
 #[derive(Debug)]
@@ -73,7 +76,8 @@ impl TaskScheduler {
 
                             if dbg_keepalive && task_id.to_string() == "report" {
                                 let report = self.create_report();
-                                info!(log, "JSON Report:\n{}", report);
+                                let event: log_events::LogEvent<_> = report.clone().into();
+                                event.emit_log(log);
                                 info!(log, "Report:\n{}", report.pretty_print());
                             }
                         }
@@ -201,5 +205,11 @@ impl TaskScheduler {
             failure,
             skipped,
         }
+    }
+}
+
+impl From<SystemGroupSummary> for log_events::LogEvent<SystemGroupSummary> {
+    fn from(item: SystemGroupSummary) -> Self {
+        log_events::LogEvent::new(JSON_REPORT_CREATED_EVENT_NAME.to_string(), item)
     }
 }

@@ -18,6 +18,7 @@ use crate::driver::{
     },
 };
 use crate::driver::{
+    log_events,
     pot_dsl::{PotSetupFn, SysTestFn},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::HasIcDependencies,
@@ -35,8 +36,8 @@ use tokio::{
 };
 
 use crate::driver::{
-    constants::{kibana_link, GROUP_TTL, KEEPALIVE_INTERVAL},
-    report::{SystemGroupSummary, SystemTestGroupError},
+    constants::{GROUP_TTL, KEEPALIVE_INTERVAL},
+    report::SystemTestGroupError,
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},
     timeout::TimeoutTask,
@@ -885,7 +886,9 @@ impl SystemTestGroup {
 
                 let report = task_scheduler.create_report();
                 if !args.no_summary_report {
-                    info!(group_ctx.log(), "JSON Report:\n{}", report);
+                    let event: log_events::LogEvent<_> = report.clone().into();
+                    // Emit a json log event, to be consumed by log post-processing tools.
+                    event.emit_log(group_ctx.log());
                     info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
                 }
 
@@ -934,18 +937,6 @@ impl SystemTestGroup {
         let group_name = group_setup.farm_group_name;
         farm.delete_group(&group_name);
     }
-}
-
-fn print_report(ctx: &GroupContext, report: &SystemGroupSummary) {
-    info!(ctx.log(), "JSON Report:\n{}", report);
-    info!(ctx.log(), "\n{}", report.pretty_print());
-    if let Ok(group_setup) = GroupSetup::try_read_attribute(&ctx.get_setup_env().unwrap()) {
-        info!(
-            ctx.log(),
-            "See replica logs in Kibana: {}\n",
-            kibana_link(&group_setup.farm_group_name)
-        );
-    };
 }
 
 #[derive(Debug, Deserialize)]

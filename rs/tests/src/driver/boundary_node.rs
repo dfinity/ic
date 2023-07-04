@@ -15,6 +15,7 @@ use crate::{
             VMCreateResponse, VmType,
         },
         ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+        log_events,
         resource::{DiskImage, ImageType},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
@@ -51,6 +52,8 @@ const BOUNDARY_NODE_PLAYNET_PATH: &str = "playnet.json";
 const CONF_IMG_FNAME: &str = "config_disk.img";
 const CERT_DIR: &str = "certificate";
 const PLAYNET_PATH: &str = "playnet.json";
+// Be mindful when modifying this constant, as the event can be consumed by other parties.
+const BN_AAAA_RECORDS_CREATED_EVENT_NAME: &str = "bn_aaaa_records_created_event";
 
 fn mk_compressed_img_path() -> std::string::String {
     format!("{}.gz", CONF_IMG_FNAME)
@@ -191,11 +194,8 @@ impl BoundaryNodeWithVm {
                     records: vec![bn_fqdn.clone()],
                 },
             ]);
-
-            info!(
-                &logger,
-                "Created AAAA records {} to {:?}", bn_fqdn, existing_playnet.aaaa_records
-            );
+            // Emit a json log event, to be consumed by log post-processing tools.
+            emit_bn_aaaa_records_event(&logger, &bn_fqdn, existing_playnet.aaaa_records.clone());
             Some(existing_playnet)
         } else {
             None
@@ -692,4 +692,20 @@ struct Playnet {
     playnet_cert: PlaynetCertificate,
     aaaa_records: Vec<String>,
     a_records: Vec<String>,
+}
+
+pub fn emit_bn_aaaa_records_event(log: &slog::Logger, bn_fqdn: &str, aaaa_records: Vec<String>) {
+    #[derive(Serialize, Deserialize)]
+    pub struct BoundaryNodeAAAARecords {
+        url: String,
+        aaaa_records: Vec<String>,
+    }
+    let event = log_events::LogEvent::new(
+        BN_AAAA_RECORDS_CREATED_EVENT_NAME.to_string(),
+        BoundaryNodeAAAARecords {
+            url: bn_fqdn.to_string(),
+            aaaa_records,
+        },
+    );
+    event.emit_log(log);
 }

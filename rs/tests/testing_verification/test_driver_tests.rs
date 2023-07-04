@@ -1,4 +1,5 @@
 use ic_tests::driver::{
+    log_events,
     report::{SystemGroupSummary, TaskReport},
     test_env_api::FarmBaseUrl,
 };
@@ -75,13 +76,13 @@ fn execute_test_scenario_with_default_cmd(scenario_name: &str) -> Output {
 // Use by calling cmd.output() instead of cmd.result()
 fn extract_report(out: Vec<u8>) -> Option<SystemGroupSummary> {
     let log = String::from_utf8(out).unwrap();
-    let group_report = log
+    let substring = "\"event_name\":\"json_report_created_event\"";
+    let report: &str = log
         .split('\n')
-        .skip_while(|line| !line.contains("JSON Report:"))
-        .nth(1)
-        .map(|r| serde_json::from_str(r).ok())
-        .expect("Failed to find json summary in test logs.");
-    group_report
+        .find_map(|line| line.find(substring).map(|idx| &line[idx - 1..]))?;
+    let group_summary: log_events::LogEvent<SystemGroupSummary> =
+        serde_json::from_str(report).expect("Failed to deserialize report");
+    Some(group_summary.body)
 }
 
 #[test]

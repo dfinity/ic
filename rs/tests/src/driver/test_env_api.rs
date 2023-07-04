@@ -138,6 +138,7 @@ use super::test_setup::GroupSetup;
 use crate::driver::boundary_node::BoundaryNodeVm;
 use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
+use crate::driver::log_events;
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
 use crate::util::{block_on, create_agent};
 use anyhow::{anyhow, bail, Context, Result};
@@ -195,7 +196,8 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 // It usually takes below 60 secs to install nns canisters.
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
-
+// Be mindful when modifying this constant, as the event can be consumed by other parties.
+const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
@@ -318,6 +320,64 @@ impl std::fmt::Display for TopologySnapshot {
 }
 
 impl TopologySnapshot {
+    pub fn emit_log_event(&self, log: &slog::Logger) {
+        #[derive(Serialize, Deserialize)]
+        pub struct NodeView {
+            pub id: NodeId,
+            pub ipv6: IpAddr,
+        }
+
+        #[derive(Serialize, Deserialize)]
+        pub struct SubnetView {
+            pub subnet_type: SubnetType,
+            pub subnet_id: SubnetId,
+            pub nodes: Vec<NodeView>,
+        }
+
+        #[derive(Serialize, Deserialize)]
+        pub struct TopologyView {
+            pub registry_version: String,
+            pub subnets: Vec<SubnetView>,
+            pub unassigned_nodes: Vec<NodeView>,
+        }
+        let subnets: Vec<_> = self
+            .subnets()
+            .enumerate()
+            .map(|(_, s)| {
+                let nodes: Vec<_> = s
+                    .nodes()
+                    .enumerate()
+                    .map(|(_, n)| NodeView {
+                        id: n.node_id,
+                        ipv6: n.get_ip_addr(),
+                    })
+                    .collect();
+                SubnetView {
+                    subnet_type: s.subnet_type(),
+                    subnet_id: s.subnet_id,
+                    nodes,
+                }
+            })
+            .collect();
+        let unassigned_nodes: Vec<_> = self
+            .unassigned_nodes()
+            .enumerate()
+            .map(|(_, n)| NodeView {
+                id: n.node_id,
+                ipv6: n.get_ip_addr(),
+            })
+            .collect();
+        let event = log_events::LogEvent::new(
+            IC_TOPOLOGY_EVENT_NAME.to_string(),
+            TopologyView {
+                registry_version: self.registry_version.to_string(),
+                subnets,
+                unassigned_nodes,
+            },
+        );
+        event.emit_log(log);
+    }
+
     pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
         let registry_version = self.local_registry.get_latest_version();
         Box::new(

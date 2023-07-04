@@ -226,11 +226,11 @@ impl InternetComputer {
             reg_snapshot_serialized,
         )
         .unwrap();
-        info!(
-            env.logger(),
-            "{}",
-            env.topology_snapshot_by_name(&self.name)
-        );
+        let topology_snapshot = env.topology_snapshot_by_name(&self.name);
+        // Pretty print IC Topology using the Display implementation
+        info!(env.logger(), "{topology_snapshot}");
+        // Emit a json log event, to be consumed by log post-processing tools.
+        topology_snapshot.emit_log_event(&env.logger());
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
         Ok(())
     }
