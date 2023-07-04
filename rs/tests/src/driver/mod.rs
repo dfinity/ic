@@ -11,6 +11,7 @@ pub mod event;
 pub mod farm;
 pub mod group;
 pub mod ic;
+pub mod log_events;
 pub mod logger;
 pub mod node_software_version;
 pub mod plan;

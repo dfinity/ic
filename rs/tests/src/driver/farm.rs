@@ -6,6 +6,7 @@ use std::{
 };
 
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
+use crate::driver::log_events;
 use crate::driver::test_env::{RequiredHostFeaturesFromCmdLine, TestEnvAttribute};
 use crate::driver::test_env_api::HasIcDependencies;
 use anyhow::Result;
@@ -14,7 +15,7 @@ use ic_crypto_sha::Sha256;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use slog::{error, info, warn, Logger};
+use slog::{error, warn, Logger};
 use std::fmt;
 use std::io::Write;
 use thiserror::Error;
@@ -38,6 +39,9 @@ const TIMEOUT_SETTINGS: TimeoutSettings = TimeoutSettings {
     max_http_timeout: Duration::from_secs(60),
     linear_backoff: Duration::from_secs(5),
 };
+// Be mindful when modifying these constants, as the events can be consumed by other parties.
+const FARM_VM_CREATED_EVENT_NAME: &str = "farm_vm_created_event";
+const VM_CONSOLE_LINK_CREATED_EVENT_NAME: &str = "vm_console_link_created_event";
 
 /// Farm managed resources that make up the Internet Computer under test. The
 /// `Farm`-structure translates abstract requests (for resources) to concrete
@@ -120,13 +124,13 @@ impl Farm {
         let rb = Self::json(self.post(&path), &vm);
         let resp = self.retry_until_success_long(rb)?;
         let created_vm = resp.json::<VMCreateResponse>()?;
+        // Emit a json log event, to be consumed by log post-processing tools.
         let ipv6 = created_vm.ipv6;
-        info!(
-            self.logger,
-            "VM({}) Host: {} IPv6: {} vCPUs: {:?} Memory: {:?} KiB",
+        emit_vm_created_event(
+            &self.logger,
             &vm.name,
-            created_vm.hostname,
-            &ipv6,
+            &created_vm.hostname,
+            ipv6,
             created_vm.spec.v_cpus,
             created_vm.spec.memory_ki_b,
         );
@@ -193,11 +197,8 @@ impl Farm {
         let path = format!("group/{}/vm/{}/start", group_name, vm_name);
         let rb = self.put(&path);
         let _resp = self.retry_until_success(rb)?;
-        info!(
-            self.logger,
-            "Console: {}",
-            self.url_from_path(&format!("group/{}/vm/{}/console/", group_name, vm_name)[..])
-        );
+        let url = self.url_from_path(&format!("group/{}/vm/{}/console/", group_name, vm_name)[..]);
+        emit_vm_console_link_event(&self.logger, url, vm_name);
         Ok(())
     }
 
@@ -727,4 +728,49 @@ pub enum DnsRecordType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct CreateDnsRecordsResult {
     suffix: String,
+}
+
+fn emit_vm_console_link_event(log: &Logger, url: Url, vm_name: &str) {
+    #[derive(Serialize, Deserialize)]
+    struct ConsoleLink {
+        url: Url,
+        vm_name: String,
+    }
+    let event = log_events::LogEvent::new(
+        VM_CONSOLE_LINK_CREATED_EVENT_NAME.to_string(),
+        ConsoleLink {
+            url,
+            vm_name: vm_name.to_string(),
+        },
+    );
+    event.emit_log(log);
+}
+
+pub fn emit_vm_created_event(
+    log: &Logger,
+    vm_name: &str,
+    hostname: &str,
+    ipv6: Ipv6Addr,
+    v_cpus: u64,
+    memory_ki_b: u64,
+) {
+    #[derive(Serialize, Deserialize)]
+    pub struct FarmVMCreated {
+        vm_name: String,
+        hostname: String,
+        ipv6: Ipv6Addr,
+        v_cpus: u64,
+        memory_ki_b: u64,
+    }
+    let event = log_events::LogEvent::new(
+        FARM_VM_CREATED_EVENT_NAME.to_string(),
+        FarmVMCreated {
+            vm_name: vm_name.to_string(),
+            hostname: hostname.to_string(),
+            v_cpus,
+            memory_ki_b,
+            ipv6,
+        },
+    );
+    event.emit_log(log);
 }
