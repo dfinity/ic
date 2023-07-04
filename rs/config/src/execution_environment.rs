@@ -239,6 +239,10 @@ pub struct Config {
 
     /// The capacity of the Wasm compilation cache.
     pub max_compilation_cache_size: NumBytes,
+
+    /// If this flag is enabled, then execution of a slice will produce a log
+    /// entry with the number of executed instructions and the duration.
+    pub trace_execution: FlagStatus,
 }
 
 impl Default for Config {
@@ -310,6 +314,7 @@ impl Default for Config {
                 embedders::STABLE_MEMORY_DIRTY_PAGE_LIMIT,
             ),
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
+            trace_execution: FlagStatus::Disabled,
         }
     }
 }

@@ -150,6 +150,10 @@ pub struct Config {
     /// replaced with the correct value at runtime when the hypervisor is
     /// created.
     pub dirty_page_overhead: NumInstructions,
+
+    /// If this flag is enabled, then execution of a slice will produce a log
+    /// entry with the number of executed instructions and the duration.
+    pub trace_execution: FlagStatus,
 }
 
 impl Config {
@@ -173,6 +177,7 @@ impl Config {
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
             subnet_type: SubnetType::Application,
             dirty_page_overhead: NumInstructions::new(0),
+            trace_execution: FlagStatus::Disabled,
         }
     }
 }

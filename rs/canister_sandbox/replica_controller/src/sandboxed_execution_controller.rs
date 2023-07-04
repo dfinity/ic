@@ -6,9 +6,10 @@ use ic_canister_sandbox_common::protocol::structs::{SandboxExecInput, SandboxExe
 use ic_canister_sandbox_common::sandbox_service::SandboxService;
 use ic_canister_sandbox_common::{protocol, rpc};
 use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
     get_wasm_reserved_pages, wasm_execution_error, CanisterStateChanges, PausedWasmExecution,
-    WasmExecutionResult, WasmExecutor,
+    SliceExecutionOutput, WasmExecutionResult, WasmExecutor,
 };
 use ic_embedders::{
     wasm_utils::WasmImportsDetails, CompilationCache, CompilationResult, WasmExecutionInput,
@@ -24,6 +25,7 @@ use ic_replicated_state::canister_state::execution_state::{
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
 use ic_types::ingress::WasmResult;
+use ic_types::methods::{FuncRef, WasmMethod};
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::CanisterModule;
 #[cfg(target_os = "linux")]
@@ -455,6 +457,69 @@ enum SandboxProcessStatus {
     Evicted,
 }
 
+// This is a helper struct that is used for tracing execution of method when the
+// `ic_config::execution_environment::Config::trace_execution` flag is enabled.
+// The struct keeps track of the number of executed slices, instructions and
+// the total duration of all executed slices.
+struct ExecutionTracingState {
+    canister_id: CanisterId,
+    function: FuncRef,
+    slices: usize,
+    instructions: NumInstructions,
+    duration: Duration,
+}
+
+impl ExecutionTracingState {
+    fn observe_slice(&mut self, slice: &SliceExecutionOutput, duration: Duration) {
+        self.slices += 1;
+        self.instructions += slice.executed_instructions;
+        self.duration += duration;
+    }
+
+    fn trace(&mut self, log: &ReplicaLogger, result: &SandboxExecOutput, duration: Duration) {
+        self.observe_slice(&result.slice, duration);
+        let canister_id = self.canister_id;
+        let function_name = self.format_function_name();
+        let instructions = self.instructions;
+        let duration_ms = duration.as_millis();
+        info!(log, "Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms.");
+        eprintln!("Executed {canister_id}::{function_name}: instructions = {instructions}, duration = {duration_ms}ms.");
+    }
+
+    fn format_function_name(&self) -> String {
+        match &self.function {
+            FuncRef::Method(method) => match method {
+                WasmMethod::Update(name)
+                | WasmMethod::Query(name)
+                | WasmMethod::CompositeQuery(name) => name.to_string(),
+                WasmMethod::System(system) => system.to_string(),
+            },
+            FuncRef::UpdateClosure(closure) | FuncRef::QueryClosure(closure) => {
+                format!("[response@{}::{}]", closure.func_idx, closure.env)
+            }
+        }
+    }
+}
+
+enum ExecutionTracing {
+    Enabled(ExecutionTracingState),
+    Disabled,
+}
+
+impl ExecutionTracing {
+    fn observe_slice(&mut self, slice: &SliceExecutionOutput, duration: Duration) {
+        if let ExecutionTracing::Enabled(state) = self {
+            state.observe_slice(slice, duration);
+        }
+    }
+
+    fn trace(&mut self, log: &ReplicaLogger, result: &SandboxExecOutput, duration: Duration) {
+        if let ExecutionTracing::Enabled(state) = self {
+            state.trace(log, result, duration);
+        }
+    }
+}
+
 // Represent a paused sandbox execution.
 struct PausedSandboxExecution {
     canister_id: CanisterId,
@@ -465,6 +530,7 @@ struct PausedSandboxExecution {
     message_instruction_limit: NumInstructions,
     api_type_label: &'static str,
     controller: Arc<SandboxedExecutionController>,
+    execution_tracing: ExecutionTracing,
 }
 
 impl std::fmt::Debug for PausedSandboxExecution {
@@ -482,6 +548,7 @@ impl PausedWasmExecution for PausedSandboxExecution {
         // Create channel through which we will receive the execution
         // output from closure (running by IPC thread at end of
         // execution).
+        let timer = std::time::Instant::now();
         let (tx, rx) = std::sync::mpsc::sync_channel(1);
         let sandbox_process = Arc::clone(&self.sandbox_process);
         self.sandbox_process
@@ -515,6 +582,8 @@ impl PausedWasmExecution for PausedSandboxExecution {
             self.message_instruction_limit,
             self.api_type_label,
             self.sandbox_process,
+            self.execution_tracing,
+            timer,
         )
     }
 
@@ -561,6 +630,7 @@ pub struct SandboxedExecutionController {
     min_sandbox_count: usize,
     max_sandbox_count: usize,
     max_sandbox_idle_time: Duration,
+    trace_execution: FlagStatus,
     logger: ReplicaLogger,
     /// Executable and arguments to be passed to `canister_sandbox` which are
     /// the same for all canisters.
@@ -599,6 +669,7 @@ impl WasmExecutor for SandboxedExecutionController {
     ) -> (Option<CompilationResult>, WasmExecutionResult) {
         let message_instruction_limit = execution_parameters.instruction_limits.message();
         let api_type_label = api_type.as_str();
+        let execution_start = std::time::Instant::now();
         let _execute_timer = self
             .metrics
             .sandboxed_execution_replica_execute_duration
@@ -609,6 +680,17 @@ impl WasmExecutor for SandboxedExecutionController {
             .sandboxed_execution_replica_execute_prepare_duration
             .with_label_values(&[api_type_label])
             .start_timer();
+
+        let execution_tracing = match self.trace_execution {
+            FlagStatus::Enabled => ExecutionTracing::Enabled(ExecutionTracingState {
+                canister_id: sandbox_safe_system_state.canister_id(),
+                function: func_ref.clone(),
+                slices: 0,
+                instructions: NumInstructions::new(0),
+                duration: Duration::from_secs(0),
+            }),
+            FlagStatus::Disabled => ExecutionTracing::Disabled,
+        };
 
         // Determine which process we want to run this on.
         let sandbox_process = self.get_sandbox_process(sandbox_safe_system_state.canister_id());
@@ -711,6 +793,8 @@ impl WasmExecutor for SandboxedExecutionController {
             message_instruction_limit,
             api_type_label,
             sandbox_process,
+            execution_tracing,
+            execution_start,
         );
         (compilation_result, execution_result)
     }
@@ -932,6 +1016,7 @@ impl SandboxedExecutionController {
         let min_sandbox_count = embedder_config.min_sandbox_count;
         let max_sandbox_count = embedder_config.max_sandbox_count;
         let max_sandbox_idle_time = embedder_config.max_sandbox_idle_time;
+        let trace_execution = embedder_config.trace_execution;
         let sandbox_exec_argv =
             create_sandbox_argv(embedder_config).expect("No canister_sandbox binary found");
         let backends = Arc::new(Mutex::new(HashMap::new()));
@@ -977,6 +1062,7 @@ impl SandboxedExecutionController {
             min_sandbox_count,
             max_sandbox_count,
             max_sandbox_idle_time,
+            trace_execution,
             logger,
             sandbox_exec_argv,
             metrics,
@@ -1190,9 +1276,12 @@ impl SandboxedExecutionController {
         message_instruction_limit: NumInstructions,
         api_type_label: &'static str,
         sandbox_process: Arc<SandboxProcess>,
+        mut execution_tracing: ExecutionTracing,
+        execution_start: std::time::Instant,
     ) -> WasmExecutionResult {
         let mut exec_output = match result {
             CompletionResult::Paused(slice) => {
+                execution_tracing.observe_slice(&slice, execution_start.elapsed());
                 self.metrics
                     .observe_executed_message_slice(api_type_label, "Paused");
                 let paused = Box::new(PausedSandboxExecution {
@@ -1204,6 +1293,7 @@ impl SandboxedExecutionController {
                     message_instruction_limit,
                     api_type_label,
                     controller: self,
+                    execution_tracing,
                 });
                 return WasmExecutionResult::Paused(slice, paused);
             }
@@ -1243,6 +1333,8 @@ impl SandboxedExecutionController {
             .sandboxed_execution_sandbox_execute_run_duration
             .with_label_values(&[api_type_label])
             .observe(exec_output.execute_run_duration.as_secs_f64());
+
+        execution_tracing.trace(&self.logger, &exec_output, execution_start.elapsed());
 
         WasmExecutionResult::Finished(exec_output.slice, exec_output.wasm, canister_state_changes)
     }
