@@ -394,6 +394,43 @@ def parse_statesync_experiment(data, githash, timestamp, meta_data, raw_data):
         return False
 
 
+def parse_experiment_time(data, githash, timestamp, meta_data, raw_data):
+    """Parse an experiment and return just the sum of all iteration durations."""
+    xvalue = data["t_experiment_start"]
+    yvalues = []
+
+    base_dir = os.path.join(FLAGS.experiment_data, githash, timestamp)
+    assert os.path.exists(base_dir)
+    for iteration, _ in report.find_experiment_summaries(base_dir).items():
+        iteration_file = os.path.join(base_dir, str(iteration), "iteration.json")
+        with open(iteration_file) as f:
+            iteration_json = json.loads(f.read())
+            yvalues.append(float(iteration_json["t_end"] - float(iteration_json["t_start"])))
+
+    if len(yvalues) > 0:
+        yvalue = sum(yvalues)
+        meta_data.append(
+            {
+                "timestamp": timestamp,
+                "date": convert_date(int(timestamp)),
+                "githash": githash,
+                "yvalue": yvalue,
+                "xvalue": xvalue,
+            }
+        )
+        print(
+            "  {:40} {:30} {:10.3f}".format(
+                data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
+        )
+        label = data["experiment_name"]
+        raw_data[label] = raw_data.get(
+            label, []) + [(xvalue, yvalue, f"{len(yvalues)} iterations")]
+        return True
+    else:
+        print(colored(f"Failed to find experiment runtime in experiment {githash}/{timestamp}"))
+        return False
+
+
 def parse_mixed_workload_experiment(
     data, githash, experiment_timestamp, meta_data, raw_data, workload_file, eval_function=None
 ):
@@ -557,7 +594,7 @@ def render_results(
 
     layout = {
         "yaxis": {"title": yaxis_title, "range": [0, 1.2 * max(all_ydata)]},
-        "xaxis": {"title": "benchmark execution date [s]"},
+        "xaxis": {"title": "benchmark execution date"},
     }
     if threshold is not None:
         layout.update(
@@ -646,6 +683,16 @@ if __name__ == "__main__":
 
         data["plot_xnet"] = render_results(["run_xnet_experiment"], [
                                            "query"], parse_xnet_experiment, 5500)
+
+        # For all remaining experiments, simply plot the runtime of those.
+        # That also has the added benefits that we see if an experiment even passed recently.
+        data["plot_experiment_time"] = render_results(
+            ["run_boundary_node_baseline_experiment", "run_delegation_experiment", "run_tecdsa"],
+            ["query"],
+            parse_experiment_time,
+            None,
+            yaxis_title="Total benchmark time [s]"
+        )
 
         render_mixed_workload_experiment(data, "qr", "qr.toml")
         render_mixed_workload_experiment(data, "sha256", "sha256.toml")
