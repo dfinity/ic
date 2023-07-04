@@ -1,6 +1,5 @@
 workspace(
     name = "ic",
-    managed_directories = {"@sw_npm": ["node_modules"]},
 )
 
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
