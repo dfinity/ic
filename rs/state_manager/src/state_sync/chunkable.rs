@@ -103,13 +103,6 @@ pub struct IncompleteState {
 
 impl Drop for IncompleteState {
     fn drop(&mut self) {
-        if self.state_sync_refs.remove(&self.height).is_none() {
-            warn!(
-                self.log,
-                "State sync refs does not contain incomplete state @{}.", self.height,
-            );
-        }
-
         // If state sync is aborted before completion we need to
         // measure the total duration here
         let elapsed = self.started_at.elapsed();
@@ -177,6 +170,13 @@ impl Drop for IncompleteState {
         // Pass self to the cache, taking ownership of chunks on disk
         let cache = Arc::clone(&self.state_sync_refs.cache);
         cache.write().push(self);
+
+        if self.state_sync_refs.remove(&self.height).is_none() {
+            warn!(
+                self.log,
+                "State sync refs does not contain incomplete state @{}.", self.height,
+            );
+        }
     }
 }
 
