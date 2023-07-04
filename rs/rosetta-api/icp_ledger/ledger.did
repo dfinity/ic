@@ -215,18 +215,36 @@ type QueryBlocksResponse = record {
     //
     // For each entry `e` in [archived_blocks], `[e.from, e.from + len)` is a sub-range
     // of the originally requested block range.
-    archived_blocks : vec record {
-        // The index of the first archived block that can be fetched using the callback.
-        start : BlockIndex;
+    archived_blocks : vec ArchivedBlocksRange;
+};
 
-        // The number of blocks that can be fetch using the callback.
-        length : nat64;
+type ArchivedBlocksRange = record {
+    // The index of the first archived block that can be fetched using the callback.
+    start : BlockIndex;
 
-        // The function that should be called to fetch the archived blocks.
-        // The range of the blocks accessible using this function is given by [from]
-        // and [len] fields above.
-        callback : QueryArchiveFn;
-    };
+    // The number of blocks that can be fetch using the callback.
+    length : nat64;
+
+    // The function that should be called to fetch the archived blocks.
+    // The range of the blocks accessible using this function is given by [from]
+    // and [len] fields above.
+    callback : QueryArchiveFn;
+};
+
+type ArchivedEncodedBlocksRange = record {
+    callback : func (GetBlocksArgs) -> (
+        variant { Ok : vec blob; Err : QueryArchiveError },
+        ) query;
+    start : nat64;
+    length : nat64;
+};
+
+type QueryEncodedBlocksResponse = record {
+    certificate : opt blob;
+    blocks : vec blob;
+    chain_length : nat64;
+    first_block_index : nat64;
+    archived_blocks : vec ArchivedEncodedBlocksRange;
 };
 
 type Archive = record {
@@ -349,6 +367,9 @@ service: (LedgerCanisterPayload) -> {
     // Queries blocks in the specified range.
     query_blocks : (GetBlocksArgs) -> (QueryBlocksResponse) query;
 
+    // Queries encoded blocks in the specified range
+    query_encoded_blocks : (GetBlocksArgs) -> (QueryEncodedBlocksResponse) query;
+    
     // Returns token symbol.
     symbol : () -> (record { symbol: text }) query;
 

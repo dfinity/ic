@@ -8,7 +8,7 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_metrics_encoder::MetricsEncoder;
 use icp_ledger::{
     Block, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError, GetBlocksResult,
-    IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
+    GetEncodedBlocksResult, IterBlocksArgs, MAX_BLOCKS_PER_REQUEST,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::RwLock;
@@ -184,43 +184,13 @@ fn get_blocks_() {
 
 #[candid_method(query, rename = "get_blocks")]
 fn get_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetBlocksResult {
-    let archive_state = ARCHIVE_STATE.read().unwrap();
-    let blocks = &archive_state.blocks;
-
-    let block_range = range_utils::make_range(archive_state.block_height_offset, blocks.len());
-
-    if start < block_range.start {
-        return Err(GetBlocksError::BadFirstBlockIndex {
-            requested_index: start,
-            first_valid_index: block_range.start,
-        });
-    }
-
-    let requested_range = range_utils::make_range(start, length);
-    let effective_range = match range_utils::intersect(
-        &block_range,
-        &range_utils::take(&requested_range, MAX_BLOCKS_PER_REQUEST),
-    ) {
-        Ok(range) => range,
-        Err(range_utils::NoIntersection) => return Ok(BlockRange { blocks: vec![] }),
-    };
-
-    let mut candid_blocks: Vec<CandidBlock> =
-        Vec::with_capacity(range_utils::range_len(&effective_range) as usize);
-
-    for i in effective_range {
-        let encoded_block = &blocks[(i - block_range.start) as usize];
-        let candid_block = CandidBlock::from(
-            Block::decode(encoded_block.clone()).expect("failed to decode a block"),
-        );
-        candid_blocks.push(candid_block);
-    }
-
     Ok(BlockRange {
-        blocks: candid_blocks,
+        blocks: read_encoded_blocks(start, length)?
+            .into_iter()
+            .map(|b| Block::decode(b).expect("failed to decode a block").into())
+            .collect::<Vec<CandidBlock>>(),
     })
 }
-
 /// Get multiple Blocks by BlockIndex and length. If the query is outside the
 /// range stored in the Node the result is an error.
 #[export_name = "canister_query get_blocks"]
@@ -296,6 +266,47 @@ fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
 #[export_name = "canister_query http_request"]
 fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
+}
+
+#[candid_method(query, rename = "get_encoded_blocks")]
+fn get_encoded_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> GetEncodedBlocksResult {
+    read_encoded_blocks(start, length)
+}
+
+fn read_encoded_blocks(start: u64, length: usize) -> Result<Vec<EncodedBlock>, GetBlocksError> {
+    let archive_state = ARCHIVE_STATE.read().unwrap();
+    let blocks = &archive_state.blocks;
+
+    let block_range = range_utils::make_range(archive_state.block_height_offset, blocks.len());
+
+    if start < block_range.start {
+        return Err(GetBlocksError::BadFirstBlockIndex {
+            requested_index: start,
+            first_valid_index: block_range.start,
+        });
+    }
+
+    let requested_range = range_utils::make_range(start, length);
+    let effective_range = match range_utils::intersect(
+        &block_range,
+        &range_utils::take(&requested_range, MAX_BLOCKS_PER_REQUEST),
+    ) {
+        Ok(range) => range,
+        Err(range_utils::NoIntersection) => return Ok(vec![]),
+    };
+
+    let mut encoded_blocks = Vec::with_capacity(range_utils::range_len(&effective_range) as usize);
+    for i in effective_range {
+        encoded_blocks.push(blocks[(i - block_range.start) as usize].clone());
+    }
+    Ok(encoded_blocks)
+}
+
+/// Get multiple Blocks by BlockIndex and length. If the query is outside the
+/// range stored in the Node the result is an error.
+#[export_name = "canister_query get_encoded_blocks"]
+fn get_encoded_blocks_blocks_() {
+    dfn_core::over(candid_one, get_encoded_blocks);
 }
 
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]

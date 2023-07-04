@@ -24,11 +24,12 @@ use ic_ledger_core::{
 };
 use icp_ledger::{
     protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
-    ArchivedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo,
-    Name, Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount,
-    Symbol, TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
-    TransferFeeArgs, MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
+    ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
+    BlockArg, BlockRes, CandidBlock, Decimals, GetBlocksArgs, InitArgs, IterBlocksArgs,
+    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
+    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
+    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
+    MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
@@ -1069,10 +1070,10 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         .map(|(canister_id, slice)| ArchivedBlocksRange {
             start: slice.start,
             length: range_utils::range_len(&slice),
-            callback: QueryArchiveFn {
-                canister_id,
-                method: "get_blocks".to_string(),
-            },
+            callback: icrc_ledger_types::icrc3::archive::QueryArchiveFn::new(
+                canister_id.into(),
+                "get_blocks".to_string(),
+            ),
         })
         .collect();
 
@@ -1211,6 +1212,46 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
 #[export_name = "canister_query http_request"]
 fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
+}
+
+#[candid_method(query, rename = "query_encoded_blocks")]
+fn query_encoded_blocks(
+    GetBlocksArgs { start, length }: GetBlocksArgs,
+) -> QueryEncodedBlocksResponse {
+    let ledger = LEDGER.read().unwrap();
+    let locations = block_locations(&*ledger, start, length);
+
+    let local_blocks = range_utils::take(&locations.local_blocks, MAX_BLOCKS_PER_REQUEST);
+
+    let blocks = ledger.blockchain.block_slice(local_blocks.clone()).to_vec();
+
+    let archived_blocks = locations
+        .archived_blocks
+        .into_iter()
+        .map(|(canister_id, slice)| ArchivedEncodedBlocksRange {
+            start: slice.start,
+            length: range_utils::range_len(&slice),
+            callback: icrc_ledger_types::icrc3::archive::QueryArchiveFn::new(
+                canister_id.into(),
+                "get_encoded_blocks".to_string(),
+            ),
+        })
+        .collect();
+
+    let chain_length = ledger.blockchain.chain_length();
+
+    QueryEncodedBlocksResponse {
+        chain_length,
+        certificate: dfn_core::api::data_certificate().map(serde_bytes::ByteBuf::from),
+        blocks,
+        first_block_index: local_blocks.start as BlockIndex,
+        archived_blocks,
+    }
+}
+
+#[export_name = "canister_query query_encoded_blocks"]
+fn query_encoded_blocks_() {
+    over(candid_one, query_encoded_blocks)
 }
 
 candid::export_service!();

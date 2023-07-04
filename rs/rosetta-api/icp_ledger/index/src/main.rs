@@ -248,7 +248,7 @@ async fn get_blocks_from_archive(
         length: block_range.length as usize,
     };
     let (blocks_res,): (icp_ledger::GetBlocksResult,) = ic_cdk::call(
-        block_range.callback.canister_id.into(),
+        block_range.callback.canister_id,
         &block_range.callback.method,
         (req,),
     )

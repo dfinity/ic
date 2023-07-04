@@ -79,6 +79,9 @@ type GetBlocksResult = variant {
     Err : GetBlocksError;
 };
 
+type GetEncodedBlocksResult = variant { Ok : vec blob; Err : GetBlocksError };
+
 service : {
     get_blocks : (GetBlocksArgs) -> (GetBlocksResult) query;
+    get_encoded_blocks : (GetBlocksArgs) -> (GetEncodedBlocksResult) query;
 }
