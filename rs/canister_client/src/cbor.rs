@@ -297,17 +297,18 @@ mod tests {
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities::types::ids::node_test_id;
-    use ic_types::malicious_flags::MaliciousFlags;
     use ic_types::messages::{
         HttpCanisterUpdate, HttpReadStateResponse, HttpRequest, HttpUserQuery, UserQuery,
     };
     use ic_types::time::current_time;
     use ic_types::{PrincipalId, RegistryVersion, UserId};
-    use ic_validator::get_authorized_canisters;
+    use ic_validator::HttpRequestVerifier;
+    use ic_validator::HttpRequestVerifierImpl;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
     use serde::Serialize;
     use std::convert::TryFrom;
+    use std::sync::Arc;
     use std::time::Duration;
     use tokio_test::assert_ok;
 
@@ -356,16 +357,10 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert!(get_authorized_canisters(
-            &request,
-            &validator,
-            test_start_time,
-            mock_registry_version(),
-            &MaliciousFlags::default(),
-        )
-        .unwrap()
-        .contains(&request.content().canister_id()));
+        assert!(request_validator()
+            .validate_request(&request, test_start_time, mock_registry_version(),)
+            .unwrap()
+            .contains(&request.content().canister_id()));
     }
 
     /// Create an HttpRequest with a non-anonymous user and then verify
@@ -405,16 +400,10 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert!(get_authorized_canisters(
-            &request,
-            &validator,
-            test_start_time,
-            mock_registry_version(),
-            &MaliciousFlags::default(),
-        )
-        .unwrap()
-        .contains(&request.content().canister_id()));
+        assert!(request_validator()
+            .validate_request(&request, test_start_time, mock_registry_version(),)
+            .unwrap()
+            .contains(&request.content().canister_id()));
     }
 
     /// Create an HttpRequest with an explicit anonymous user and then
@@ -446,16 +435,10 @@ mod tests {
         assert_eq!(id, request.id());
 
         // The envelope can be successfully authenticated
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert!(get_authorized_canisters(
-            &request,
-            &validator,
-            test_start_time,
-            mock_registry_version(),
-            &MaliciousFlags::default(),
-        )
-        .unwrap()
-        .contains(&request.content().canister_id()));
+        assert!(request_validator()
+            .validate_request(&request, test_start_time, mock_registry_version(),)
+            .unwrap()
+            .contains(&request.content().canister_id()));
     }
 
     #[test]
@@ -494,13 +477,10 @@ mod tests {
 
         // The signature matches
         let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert_ok!(get_authorized_canisters(
+        assert_ok!(request_validator().validate_request(
             &read_request,
-            &validator,
             test_start_time,
             mock_registry_version(),
-            &MaliciousFlags::default(),
         ));
     }
 
@@ -543,13 +523,10 @@ mod tests {
 
         // The signature matches
         let read_request = HttpRequest::<UserQuery>::try_from(read).unwrap();
-        let validator = temp_crypto_component_with_fake_registry(node_test_id(VALIDATOR_NODE_ID));
-        assert_ok!(get_authorized_canisters(
+        assert_ok!(request_validator().validate_request(
             &read_request,
-            &validator,
             test_start_time,
             mock_registry_version(),
-            &MaliciousFlags::default(),
         ));
     }
 
@@ -715,5 +692,11 @@ mod tests {
             parse_read_state_response(&request_id, &CanisterId::from(1), Some(&root_pk), response),
             Ok(RequestStatus::unknown())
         );
+    }
+
+    fn request_validator() -> HttpRequestVerifierImpl {
+        HttpRequestVerifierImpl::new(Arc::new(temp_crypto_component_with_fake_registry(
+            node_test_id(VALIDATOR_NODE_ID),
+        )))
     }
 }

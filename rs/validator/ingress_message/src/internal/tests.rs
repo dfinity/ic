@@ -10,17 +10,20 @@ mod validate_request {
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_registry_client_helpers::node_operator::PrincipalId;
     use ic_types::messages::Blob;
+    use ic_types::messages::HttpRequestContent;
     use ic_types::time::GENESIS;
     use ic_types::CanisterId;
     use ic_types::{Time, UserId};
     use ic_validator_http_request_test_utils::DirectAuthenticationScheme::{
         CanisterSignature, UserKeyPair,
     };
+    use ic_validator_http_request_test_utils::HttpRequestEnvelopeContent;
     use ic_validator_http_request_test_utils::{
         hard_coded_root_of_trust, AuthenticationScheme, CanisterSigner, DirectAuthenticationScheme,
         HttpRequestBuilder, RootOfTrust,
     };
     use rand::{CryptoRng, Rng};
+    use std::fmt::Debug;
     use std::str::FromStr;
 
     const CURRENT_TIME: Time = GENESIS;
@@ -28,52 +31,100 @@ mod validate_request {
     const CANISTER_ID_SIGNER: CanisterId = CanisterId::from_u64(1185);
     const CANISTER_ID_WRONG_SIGNER: CanisterId = CanisterId::from_u64(1186);
 
+    trait EnvelopeContent<C>: HttpRequestEnvelopeContent<HttpRequestContentType = C> + Debug {}
+
+    impl<R, T: HttpRequestEnvelopeContent<HttpRequestContentType = R> + Debug> EnvelopeContent<R>
+        for T
+    {
+    }
+
     mod ingress_expiry {
         use super::*;
         use crate::RequestValidationError::InvalidIngressExpiry;
-        use ic_validator_http_request_test_utils::{AuthenticationScheme, DelegationChain};
+        use ic_validator_http_request_test_utils::{
+            AuthenticationScheme, DelegationChain, HttpRequestBuilder,
+        };
         use std::time::Duration;
 
         #[test]
         fn should_error_when_request_expired() {
             let mut rng = ReproducibleRng::new();
+            let verifier = verifier_at_time(CURRENT_TIME);
+
             for scheme in all_authentication_schemes(&mut rng) {
-                let request = HttpRequestBuilder::default()
-                    .with_authentication(scheme.clone())
+                test(
+                    &verifier,
+                    HttpRequestBuilder::new_update_call(),
+                    scheme.clone(),
+                );
+                test(&verifier, HttpRequestBuilder::new_query(), scheme.clone());
+                test(&verifier, HttpRequestBuilder::new_read_state(), scheme);
+            }
+
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                scheme: AuthenticationScheme,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_authentication(scheme)
                     .with_ingress_expiry_at(
                         CURRENT_TIME.saturating_sub_duration(Duration::from_nanos(1)),
                     )
                     .build();
 
-                let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+                let result = verifier.validate_request(&request);
 
                 assert_matches!(
                     result,
                     Err(InvalidIngressExpiry(_)),
-                    "Test with authentication {:?} failed",
-                    scheme
+                    "Test with {builder_info} failed",
                 );
             }
         }
 
         #[test]
         fn should_error_when_request_expiry_too_far_in_future() {
+            let verifier = verifier_at_time(CURRENT_TIME);
             let mut rng = ReproducibleRng::new();
             for scheme in all_authentication_schemes(&mut rng) {
-                let request = HttpRequestBuilder::default()
-                    .with_authentication(scheme.clone())
+                test(
+                    &verifier,
+                    HttpRequestBuilder::new_update_call(),
+                    scheme.clone(),
+                );
+                test(&verifier, HttpRequestBuilder::new_query(), scheme.clone());
+                test(&verifier, HttpRequestBuilder::new_read_state(), scheme);
+            }
+
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                scheme: AuthenticationScheme,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_authentication(scheme)
                     .with_ingress_expiry_at(
                         max_ingress_expiry_at(CURRENT_TIME) + Duration::from_nanos(1),
                     )
                     .build();
 
-                let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+                let result = verifier.validate_request(&request);
 
                 assert_matches!(
                     result,
                     Err(InvalidIngressExpiry(_)),
-                    "Test with authentication {:?} failed",
-                    scheme
+                    "Test with {builder_info} failed",
                 );
             }
         }
@@ -81,27 +132,54 @@ mod validate_request {
         #[test]
         fn should_accept_request_when_expiry_within_acceptable_bounds() {
             let mut rng = ReproducibleRng::new();
+            let verifier = default_verifier()
+                .with_root_of_trust(hard_coded_root_of_trust().public_key)
+                .build();
             let acceptable_expiry = Time::from_nanos_since_unix_epoch(rng.gen_range(
                 CURRENT_TIME.as_nanos_since_unix_epoch()
                     ..=max_ingress_expiry_at(CURRENT_TIME).as_nanos_since_unix_epoch(),
             ));
+
             for scheme in all_authentication_schemes(&mut rng) {
-                let request = HttpRequestBuilder::default()
-                    .with_authentication(scheme.clone())
+                test(
+                    &verifier,
+                    HttpRequestBuilder::new_update_call(),
+                    scheme.clone(),
+                    acceptable_expiry,
+                );
+                test(
+                    &verifier,
+                    HttpRequestBuilder::new_query(),
+                    scheme.clone(),
+                    acceptable_expiry,
+                );
+                test(
+                    &verifier,
+                    HttpRequestBuilder::new_read_state(),
+                    scheme,
+                    acceptable_expiry,
+                );
+            }
+
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                scheme: AuthenticationScheme,
+                acceptable_expiry: Time,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_authentication(scheme)
                     .with_ingress_expiry_at(acceptable_expiry)
                     .build();
 
-                let result = default_verifier()
-                    .with_root_of_trust(hard_coded_root_of_trust().public_key)
-                    .build()
-                    .validate_request(&request);
+                let result = verifier.validate_request(&request);
 
-                assert_matches!(
-                    result,
-                    Ok(()),
-                    "Test with authentication {:?} failed",
-                    scheme
-                );
+                assert_matches!(result, Ok(()), "Test with {builder_info} failed");
             }
         }
 
@@ -134,44 +212,103 @@ mod validate_request {
 
         #[test]
         fn should_validate_anonymous_request() {
-            let request = HttpRequestBuilder::default()
-                .with_authentication(Anonymous)
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .build();
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(&verifier, HttpRequestBuilder::new_update_call());
+            test(&verifier, HttpRequestBuilder::new_query());
+            test(&verifier, HttpRequestBuilder::new_read_state());
 
-            assert_eq!(result, Ok(()));
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_authentication(Anonymous)
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            }
         }
 
         #[test]
         fn should_error_if_sender_not_anonymous_principal_in_unsigned_request() {
-            let non_anonymous_user_id =
-                UserId::from(PrincipalId::from_str("bfozs-kwa73-7nadi").expect("invalid user id"));
-            let request = HttpRequestBuilder::default()
-                .with_authentication(Anonymous)
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication_sender(Blob(non_anonymous_user_id.get().as_slice().to_vec()))
-                .build();
-            assert_eq!(request.sender(), non_anonymous_user_id);
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(&verifier, HttpRequestBuilder::new_update_call());
+            test(&verifier, HttpRequestBuilder::new_query());
+            test(&verifier, HttpRequestBuilder::new_read_state());
 
-            assert_matches!(result, Err(MissingSignature(user_id)) if user_id == non_anonymous_user_id);
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let non_anonymous_user_id = UserId::from(
+                    PrincipalId::from_str("bfozs-kwa73-7nadi").expect("invalid user id"),
+                );
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_authentication(Anonymous)
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication_sender(Blob(
+                        non_anonymous_user_id.get().as_slice().to_vec(),
+                    ))
+                    .build();
+                assert_eq!(request.sender(), non_anonymous_user_id);
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                        result,
+                        Err(MissingSignature(user_id)) if user_id == non_anonymous_user_id,
+                        "Test with {builder_info} failed");
+            }
         }
 
         #[test]
         fn should_error_when_anonymous_request_signed() {
             let mut rng = ReproducibleRng::new();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(UserKeyPair(Ed25519KeyPair::generate(&mut rng))))
-                .with_authentication_sender_being_anonymous()
-                .build();
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
 
-            assert_matches!(result, Err(AnonymousSignatureNotAllowed));
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                rng: &mut ReproducibleRng,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(Direct(UserKeyPair(Ed25519KeyPair::generate(rng))))
+                    .with_authentication_sender_being_anonymous()
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(AnonymousSignatureNotAllowed),
+                    "Test with {builder_info} failed"
+                );
+            }
         }
     }
 
@@ -187,65 +324,140 @@ mod validate_request {
         #[test]
         fn should_validate_signed_request() {
             let mut rng = reproducible_rng();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(random_user_key_pair(&mut rng)))
-                .build();
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
 
-            assert_eq!(result, Ok(()));
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                rng: &mut ReproducibleRng,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(Direct(random_user_key_pair(rng)))
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            }
         }
 
         #[test]
         fn should_error_when_signature_corrupted() {
             let mut rng = reproducible_rng();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(random_user_key_pair(&mut rng)))
-                .corrupt_authentication_sender_signature()
-                .build();
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
 
-            assert_matches!(result, Err(InvalidSignature(AuthenticationError::InvalidBasicSignature(e)))
-                if e.contains("Ed25519 signature could not be verified"))
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                rng: &mut ReproducibleRng,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(Direct(random_user_key_pair(rng)))
+                    .corrupt_authentication_sender_signature()
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(result,
+                        Err(InvalidSignature(AuthenticationError::InvalidBasicSignature(e))) if e.contains("Ed25519 signature could not be verified"),
+                        "Test with {builder_info} failed")
+            }
         }
 
         #[test]
         fn should_error_when_public_key_does_not_match_sender() {
             let mut rng = reproducible_rng();
-            let correct_key_pair = auth_with_random_user_key_pair(&mut rng);
-            let other_key_pair = auth_with_random_user_key_pair(&mut rng);
-            assert_ne!(correct_key_pair, other_key_pair);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(correct_key_pair)
-                .with_authentication_sender_public_key(other_key_pair.sender_public_key())
-                .build();
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
 
-            assert_matches!(result, Err(UserIdDoesNotMatchPublicKey(_, _)))
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                rng: &mut ReproducibleRng,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let correct_key_pair = auth_with_random_user_key_pair(rng);
+                let other_key_pair = auth_with_random_user_key_pair(rng);
+                assert_ne!(correct_key_pair, other_key_pair);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(correct_key_pair)
+                    .with_authentication_sender_public_key(other_key_pair.sender_public_key())
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(UserIdDoesNotMatchPublicKey(_, _)),
+                    "Test with {builder_info} failed"
+                )
+            }
         }
 
         #[test]
         fn should_error_when_request_signed_by_other_key_pair() {
             let mut rng = reproducible_rng();
-            let correct_key_pair = auth_with_random_user_key_pair(&mut rng);
-            let other_key_pair = auth_with_random_user_key_pair(&mut rng);
-            assert_ne!(correct_key_pair, other_key_pair);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(correct_key_pair)
-                .with_authentication_sender(other_key_pair.sender())
-                .with_authentication_sender_public_key(other_key_pair.sender_public_key())
-                .build();
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
 
-            assert_matches!(result, Err(InvalidSignature(AuthenticationError::InvalidBasicSignature(e)))
-                if e.contains("Ed25519 signature could not be verified"))
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                rng: &mut ReproducibleRng,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let correct_key_pair = auth_with_random_user_key_pair(rng);
+                let other_key_pair = auth_with_random_user_key_pair(rng);
+                assert_ne!(correct_key_pair, other_key_pair);
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(correct_key_pair)
+                    .with_authentication_sender(other_key_pair.sender())
+                    .with_authentication_sender_public_key(other_key_pair.sender_public_key())
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(result, Err(InvalidSignature(AuthenticationError::InvalidBasicSignature(e)))
+                    if e.contains("Ed25519 signature could not be verified"),
+                    "Test with {builder_info} failed"
+                )
+            }
         }
     }
 
@@ -261,119 +473,278 @@ mod validate_request {
         fn should_validate_request_signed_by_canister() {
             let mut rng = reproducible_rng();
             let root_of_trust = RootOfTrust::new_random(&mut rng);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(canister_signature(root_of_trust.clone())))
+            let verifier = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
                 .build();
 
-            let result = default_verifier()
-                .with_root_of_trust(root_of_trust.public_key)
-                .build()
-                .validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_read_state(),
+                root_of_trust,
+            );
 
-            assert_eq!(result, Ok(()));
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                root_of_trust: RootOfTrust,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(Direct(canister_signature(root_of_trust)))
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            }
         }
 
         #[test]
         fn should_error_when_root_of_trust_wrong() {
             let mut rng = reproducible_rng();
-            let root_of_trust = RootOfTrust::new_random(&mut rng);
-            let another_root_of_trust = RootOfTrust::new_random(&mut rng);
-            assert_ne!(root_of_trust.public_key, another_root_of_trust.public_key);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(canister_signature(root_of_trust)))
+            let verifier_root_of_trust = RootOfTrust::new_random(&mut rng);
+            let request_root_of_trust = RootOfTrust::new_random(&mut rng);
+            assert_ne!(
+                verifier_root_of_trust.public_key,
+                request_root_of_trust.public_key
+            );
+            let verifier = default_verifier()
+                .with_root_of_trust(verifier_root_of_trust.public_key)
                 .build();
 
-            let result = default_verifier()
-                .with_root_of_trust(another_root_of_trust.public_key)
-                .build()
-                .validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                request_root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                request_root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_read_state(),
+                request_root_of_trust,
+            );
 
-            assert_matches!(result, Err(InvalidSignature(InvalidCanisterSignature(_))));
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                root_of_trust: RootOfTrust,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(Direct(canister_signature(root_of_trust)))
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(InvalidSignature(InvalidCanisterSignature(_))),
+                    "Test with {builder_info} failed"
+                );
+            }
         }
 
         #[test]
         fn should_error_when_signature_corrupted() {
             let mut rng = reproducible_rng();
             let root_of_trust = RootOfTrust::new_random(&mut rng);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(canister_signature(root_of_trust.clone())))
-                .corrupt_authentication_sender_signature()
+            let verifier = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
                 .build();
 
-            let result = default_verifier()
-                .with_root_of_trust(root_of_trust.public_key)
-                .build()
-                .validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_read_state(),
+                root_of_trust,
+            );
 
-            assert_matches!(result, Err(InvalidSignature(InvalidCanisterSignature(_))));
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                root_of_trust: RootOfTrust,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(Direct(canister_signature(root_of_trust)))
+                    .corrupt_authentication_sender_signature()
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(InvalidSignature(InvalidCanisterSignature(_))),
+                    "Test with {builder_info} failed"
+                );
+            }
         }
 
         #[test]
         fn should_error_when_public_key_does_not_match_sender_because_seed_corrupted() {
             let mut rng = reproducible_rng();
             let root_of_trust = RootOfTrust::new_random(&mut rng);
-            let signer = CanisterSigner {
-                seed: CANISTER_SIGNATURE_SEED.to_vec(),
-                canister_id: CANISTER_ID_SIGNER,
-                root_public_key: root_of_trust.public_key,
-                root_secret_key: root_of_trust.secret_key,
-            };
-            let signer_with_different_seed = {
-                let mut other = signer.clone();
-                flip_a_bit_mut(&mut other.seed);
-                other
-            };
-            assert_ne!(signer, signer_with_different_seed);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(CanisterSignature(signer)))
-                .with_authentication_sender_public_key(
-                    Direct(CanisterSignature(signer_with_different_seed)).sender_public_key(),
-                )
+            let verifier = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
                 .build();
 
-            let result = default_verifier()
-                .with_root_of_trust(root_of_trust.public_key)
-                .build()
-                .validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_read_state(),
+                root_of_trust,
+            );
 
-            assert_matches!(result, Err(UserIdDoesNotMatchPublicKey(_, _)));
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                root_of_trust: RootOfTrust,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let signer = CanisterSigner {
+                    seed: CANISTER_SIGNATURE_SEED.to_vec(),
+                    canister_id: CANISTER_ID_SIGNER,
+                    root_public_key: root_of_trust.public_key,
+                    root_secret_key: root_of_trust.secret_key,
+                };
+                let signer_with_different_seed = {
+                    let mut other = signer.clone();
+                    flip_a_bit_mut(&mut other.seed);
+                    other
+                };
+                assert_ne!(signer, signer_with_different_seed);
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(Direct(CanisterSignature(signer)))
+                    .with_authentication_sender_public_key(
+                        Direct(CanisterSignature(signer_with_different_seed)).sender_public_key(),
+                    )
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(UserIdDoesNotMatchPublicKey(_, _)),
+                    "Test with {builder_info} failed"
+                );
+            }
         }
 
         #[test]
         fn should_error_when_public_key_does_not_match_sender_because_canister_id_corrupted() {
             let mut rng = reproducible_rng();
             let root_of_trust = RootOfTrust::new_random(&mut rng);
-            let signer = CanisterSigner {
-                seed: CANISTER_SIGNATURE_SEED.to_vec(),
-                canister_id: CANISTER_ID_SIGNER,
-                root_public_key: root_of_trust.public_key,
-                root_secret_key: root_of_trust.secret_key,
-            };
-            let signer_with_different_canister_id = {
-                let mut other = signer.clone();
-                other.canister_id = CANISTER_ID_WRONG_SIGNER;
-                other
-            };
-            assert_ne!(signer, signer_with_different_canister_id);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(CanisterSignature(signer)))
-                .with_authentication_sender_public_key(
-                    Direct(CanisterSignature(signer_with_different_canister_id))
-                        .sender_public_key(),
-                )
+            let verifier = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
                 .build();
 
-            let result = default_verifier()
-                .with_root_of_trust(root_of_trust.public_key)
-                .build()
-                .validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                root_of_trust.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_read_state(),
+                root_of_trust,
+            );
 
-            assert_matches!(result, Err(UserIdDoesNotMatchPublicKey(_, _)));
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                root_of_trust: RootOfTrust,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let signer = CanisterSigner {
+                    seed: CANISTER_SIGNATURE_SEED.to_vec(),
+                    canister_id: CANISTER_ID_SIGNER,
+                    root_public_key: root_of_trust.public_key,
+                    root_secret_key: root_of_trust.secret_key,
+                };
+                let signer_with_different_canister_id = {
+                    let mut other = signer.clone();
+                    other.canister_id = CANISTER_ID_WRONG_SIGNER;
+                    other
+                };
+                assert_ne!(signer, signer_with_different_canister_id);
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(Direct(CanisterSignature(signer)))
+                    .with_authentication_sender_public_key(
+                        Direct(CanisterSignature(signer_with_different_canister_id))
+                            .sender_public_key(),
+                    )
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(UserIdDoesNotMatchPublicKey(_, _)),
+                    "Test with {builder_info} failed"
+                );
+            }
         }
     }
 
@@ -383,16 +754,17 @@ mod validate_request {
         use crate::AuthenticationError::DelegationTargetError;
         use crate::AuthenticationError::InvalidBasicSignature;
         use crate::AuthenticationError::InvalidCanisterSignature;
-        use crate::HttpRequestVerifier;
         use crate::RequestValidationError::InvalidDelegation;
         use crate::RequestValidationError::InvalidDelegationExpiry;
         use crate::RequestValidationError::{CanisterNotInDelegationTargets, InvalidSignature};
+        use crate::{HttpRequestVerifier, RequestValidationError};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-        use ic_types::messages::{HttpRequest, SignedIngressContent};
+        use ic_types::messages::{HttpRequest, ReadState, SignedIngressContent, UserQuery};
         use ic_types::time::GENESIS;
         use ic_types::{CanisterId, Time};
         use ic_validator_http_request_test_utils::{
-            AuthenticationScheme, DelegationChain, DelegationChainBuilder, HttpRequestBuilder,
+            AuthenticationScheme, DelegationChain, DelegationChainBuilder,
+            HttpRequestEnvelopeContentWithCanisterId,
         };
         use rand::{CryptoRng, Rng};
         use std::time::Duration;
@@ -404,20 +776,38 @@ mod validate_request {
         #[test]
         fn should_validate_empty_delegations() {
             let mut rng = reproducible_rng();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(auth_with_random_user_key_pair(&mut rng))
-                .with_authentication_sender_delegations(Some(Vec::new()))
-                .build();
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
+            test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
 
-            assert_eq!(result, Ok(()))
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                rng: &mut ReproducibleRng,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent>,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(auth_with_random_user_key_pair(rng))
+                    .with_authentication_sender_delegations(Some(Vec::new()))
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            }
         }
 
         #[test]
         fn should_validate_delegation_chains_of_length_up_to_20() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(&mut rng));
             for number_of_delegations in 1..=20 {
                 chain_builder =
@@ -425,87 +815,107 @@ mod validate_request {
                 let chain = chain_builder.clone().build();
                 assert_eq!(chain.len(), number_of_delegations);
 
-                let request = HttpRequestBuilder::default()
-                    .with_ingress_expiry_at(CURRENT_TIME)
-                    .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
-                    .build();
-
-                let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-                assert_eq!(
-                    result,
-                    Ok(()),
-                    "verification of delegation chain {:?} of length {} failed",
-                    chain,
-                    number_of_delegations
+                test_all_request_types_with_delegation_chain(
+                    &verifier,
+                    chain.clone(),
+                    |result, builder_info| {
+                        assert_eq!(
+                            result,
+                            Ok(()),
+                            "verification of delegation chain {:?} for request builder {} failed",
+                            chain,
+                            builder_info
+                        );
+                    },
                 );
             }
         }
+
         #[test]
         fn should_validate_delegation_chains_of_length_up_to_20_containing_a_canister_signature() {
             let mut rng = reproducible_rng();
             let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let verifier = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
+                .build();
             let delegation_chain = delegation_chain_with_a_canister_signature(
                 MAXIMUM_NUMBER_OF_DELEGATIONS,
                 CURRENT_TIME,
-                root_of_trust.clone(),
+                root_of_trust,
                 &mut rng,
+            )
+            .build();
+
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_eq!(
+                        result,
+                        Ok(()),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        delegation_chain,
+                        builder_info
+                    );
+                },
             );
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
-                .build();
-
-            let result = default_verifier()
-                .with_root_of_trust(root_of_trust.public_key)
-                .build()
-                .validate_request(&request);
-
-            assert_eq!(result, Ok(()));
         }
 
         #[test]
         fn should_fail_when_delegation_chain_length_just_above_boundary() {
             let mut rng = reproducible_rng();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(
-                    delegation_chain_of_length(
-                        MAXIMUM_NUMBER_OF_DELEGATIONS + 1,
-                        CURRENT_TIME,
-                        &mut rng,
-                    )
-                    .build(),
-                ))
-                .build();
+            let verifier = verifier_at_time(CURRENT_TIME);
+            let delegation_chain = delegation_chain_of_length(
+                MAXIMUM_NUMBER_OF_DELEGATIONS + 1,
+                CURRENT_TIME,
+                &mut rng,
+            )
+            .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(_)))
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegation(_)),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        delegation_chain,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
         fn should_fail_when_delegation_chain_too_long() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let number_of_delegations = rng
                 .gen_range(MAXIMUM_NUMBER_OF_DELEGATIONS + 2..=2 * MAXIMUM_NUMBER_OF_DELEGATIONS);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(
-                    delegation_chain_of_length(number_of_delegations, CURRENT_TIME, &mut rng)
-                        .build(),
-                ))
-                .build();
+            let delegation_chain =
+                delegation_chain_of_length(number_of_delegations, CURRENT_TIME, &mut rng).build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(_)))
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegation(_)),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        delegation_chain,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
         fn should_fail_when_a_single_delegation_expired() {
             let mut rng1 = reproducible_rng();
             let mut rng2 = rng1.fork();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let expired_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
             let one_ns = Duration::from_nanos(1);
             let expired = CURRENT_TIME.saturating_sub_duration(one_ns);
@@ -516,39 +926,53 @@ mod validate_request {
                 |index| index == expired_delegation_index,
                 |builder| builder.delegate_to(random_user_key_pair(&mut rng1), expired),
                 |builder| builder.delegate_to(random_user_key_pair(&mut rng2), not_expired),
+            )
+            .build();
+
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegationExpiry(msg)) if msg.contains(&format!("{expired}")),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        delegation_chain,
+                        builder_info
+                    );
+                },
             );
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
-                .build();
-
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegationExpiry(msg)) if msg.contains(&format!("{expired}")))
         }
 
         #[test]
         fn should_validate_non_expiring_delegation() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let never_expire = Time::from_nanos_since_unix_epoch(u64::MAX);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(
-                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
-                        .delegate_to(random_user_key_pair(&mut rng), never_expire)
-                        .build(),
-                ))
+            let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                .delegate_to(random_user_key_pair(&mut rng), never_expire)
                 .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_eq!(result, Ok(()));
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Ok(()),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        delegation_chain,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
         fn should_fail_when_single_delegation_signature_corrupted() {
             let mut rng1 = reproducible_rng();
             let mut rng2 = rng1.fork();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let corrupted_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
             let mut key_pair_whose_signature_is_corrupted = None;
             let delegation_chain = grow_delegation_chain(
@@ -563,25 +987,35 @@ mod validate_request {
                     // corrupt signature produced by secret key of `key_pair_whose_signature_is_corrupted`
                 },
                 |builder| builder.delegate_to(random_user_key_pair(&mut rng2), CURRENT_TIME),
+            )
+            .build();
+            let corrupted_public_key_hex = hex::encode(
+                key_pair_whose_signature_is_corrupted
+                    .expect("one delegation was corrupted")
+                    .public_key_raw(),
             );
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
-                .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(InvalidBasicSignature(msg)))
-                    if msg.contains(&format!("Ed25519 signature could not be verified: public key {}",
-                        hex::encode(key_pair_whose_signature_is_corrupted
-                        .expect("no delegation was corrupted")
-                        .public_key_raw()))))
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                            result,
+                            Err(InvalidDelegation(InvalidBasicSignature(msg)))
+                            if msg.contains(&format!("Ed25519 signature could not be verified: public key {corrupted_public_key_hex}")),
+                            "verification of delegation chain {:?} for request builder {} failed",
+                            delegation_chain,
+                            builder_info
+                    );
+                },
+            );
         }
 
         #[test]
         fn should_fail_when_delegations_do_not_form_a_chain() {
             let mut rng1 = reproducible_rng();
             let mut rng2 = rng1.fork();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let wrong_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
             let other_key_pair = random_user_key_pair(&mut rng1);
             let delegation_chain = grow_delegation_chain(
@@ -596,15 +1030,22 @@ mod validate_request {
                         })
                 },
                 |builder| builder.delegate_to(random_user_key_pair(&mut rng2), CURRENT_TIME),
+            )
+            .build();
+
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegation(InvalidBasicSignature(_))),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        delegation_chain,
+                        builder_info
+                    );
+                },
             );
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
-                .build();
-
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(InvalidBasicSignature(_))));
         }
 
         #[test]
@@ -614,24 +1055,31 @@ mod validate_request {
             let root_of_trust = RootOfTrust::new_random(&mut rng);
             let other_root_of_trust = RootOfTrust::new_random(&mut rng);
             assert_ne!(root_of_trust.public_key, other_root_of_trust.public_key);
+            let verifier = default_verifier()
+                .with_root_of_trust(other_root_of_trust.public_key)
+                .build();
             let delegation_chain = delegation_chain_with_a_canister_signature(
                 MAXIMUM_NUMBER_OF_DELEGATIONS - 1,
                 CURRENT_TIME,
                 root_of_trust,
                 &mut rng,
             )
-            .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
-                .build();
+            .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
+            .build();
 
-            let result = default_verifier()
-                .with_root_of_trust(other_root_of_trust.public_key)
-                .build()
-                .validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(InvalidCanisterSignature(_))));
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegation(InvalidCanisterSignature(_))),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        delegation_chain,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
@@ -641,6 +1089,9 @@ mod validate_request {
             let root_of_trust = RootOfTrust::new_random(&mut rng);
             let other_root_of_trust = RootOfTrust::new_random(&mut rng);
             assert_ne!(root_of_trust.public_key, other_root_of_trust.public_key);
+            let verifier = default_verifier()
+                .with_root_of_trust(other_root_of_trust.public_key)
+                .build();
             let delegation_chain = delegation_chain_of_length(
                 MAXIMUM_NUMBER_OF_DELEGATIONS - 1,
                 CURRENT_TIME,
@@ -648,214 +1099,349 @@ mod validate_request {
             )
             .delegate_to(canister_signature(root_of_trust), CURRENT_TIME)
             .build();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(delegation_chain))
-                .build();
 
-            let result = default_verifier()
-                .with_root_of_trust(other_root_of_trust.public_key)
-                .build()
-                .validate_request(&request);
-
-            assert_matches!(result, Err(InvalidSignature(InvalidCanisterSignature(_))));
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidSignature(InvalidCanisterSignature(_))),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        delegation_chain,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
         fn should_validate_request_when_canister_id_among_all_targets() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let requested_canister_id = CanisterId::from(42);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_canister_id(Blob(requested_canister_id.get().to_vec()))
-                .with_authentication(AuthenticationScheme::Delegation(
-                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
-                        .delegate_to_with_targets(
-                            random_user_key_pair(&mut rng),
-                            CURRENT_TIME,
-                            vec![
-                                CanisterId::from(41),
-                                requested_canister_id,
-                                CanisterId::from(43),
-                            ],
-                        )
-                        .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
-                        .delegate_to_with_targets(
-                            random_user_key_pair(&mut rng),
-                            CURRENT_TIME,
-                            vec![requested_canister_id, CanisterId::from(43)],
-                        )
-                        .build(),
-                ))
+            let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                .delegate_to_with_targets(
+                    random_user_key_pair(&mut rng),
+                    CURRENT_TIME,
+                    vec![
+                        CanisterId::from(41),
+                        requested_canister_id,
+                        CanisterId::from(43),
+                    ],
+                )
+                .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
+                .delegate_to_with_targets(
+                    random_user_key_pair(&mut rng),
+                    CURRENT_TIME,
+                    vec![requested_canister_id, CanisterId::from(43)],
+                )
                 .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                requested_canister_id,
+                delegation_chain.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                requested_canister_id,
+                delegation_chain,
+            );
 
-            assert_eq!(result, Ok(()))
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                requested_canister_id: CanisterId,
+                delegation_chain: DelegationChain,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+                    .with_authentication(AuthenticationScheme::Delegation(delegation_chain))
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            }
         }
 
         #[test]
         fn should_fail_when_requested_canister_id_not_among_all_targets() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let requested_canister_id = CanisterId::from(42);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_canister_id(Blob(requested_canister_id.get().to_vec()))
-                .with_authentication(AuthenticationScheme::Delegation(
-                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
-                        .delegate_to_with_targets(
-                            random_user_key_pair(&mut rng),
-                            CURRENT_TIME,
-                            vec![CanisterId::from(41), CanisterId::from(43)],
-                        )
-                        .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
-                        .delegate_to_with_targets(
-                            random_user_key_pair(&mut rng),
-                            CURRENT_TIME,
-                            vec![
-                                CanisterId::from(41),
-                                requested_canister_id,
-                                CanisterId::from(43),
-                            ],
-                        )
-                        .build(),
-                ))
+            let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                .delegate_to_with_targets(
+                    random_user_key_pair(&mut rng),
+                    CURRENT_TIME,
+                    vec![CanisterId::from(41), CanisterId::from(43)],
+                )
+                .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
+                .delegate_to_with_targets(
+                    random_user_key_pair(&mut rng),
+                    CURRENT_TIME,
+                    vec![
+                        CanisterId::from(41),
+                        requested_canister_id,
+                        CanisterId::from(43),
+                    ],
+                )
                 .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                requested_canister_id,
+                delegation_chain.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                requested_canister_id,
+                delegation_chain,
+            );
 
-            assert_matches!(result, Err(CanisterNotInDelegationTargets(id)) if id == requested_canister_id);
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                requested_canister_id: CanisterId,
+                delegation_chain: DelegationChain,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+                    .with_authentication(AuthenticationScheme::Delegation(delegation_chain))
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(CanisterNotInDelegationTargets(id)) if id == requested_canister_id,
+                    "Test with {builder_info} failed"
+                );
+            }
         }
 
         #[test]
         fn should_fail_when_targets_empty() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let requested_canister_id = CanisterId::from(42);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_canister_id(Blob(requested_canister_id.get().to_vec()))
-                .with_authentication(AuthenticationScheme::Delegation(
-                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
-                        .delegate_to_with_targets(
-                            random_user_key_pair(&mut rng),
-                            CURRENT_TIME,
-                            vec![],
-                        )
-                        .build(),
-                ))
+            let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                .delegate_to_with_targets(random_user_key_pair(&mut rng), CURRENT_TIME, vec![])
                 .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                requested_canister_id,
+                delegation_chain.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                requested_canister_id,
+                delegation_chain,
+            );
 
-            assert_matches!(result, Err(CanisterNotInDelegationTargets(id)) if id == requested_canister_id);
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                requested_canister_id: CanisterId,
+                delegation_chain: DelegationChain,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+                    .with_authentication(AuthenticationScheme::Delegation(delegation_chain))
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(CanisterNotInDelegationTargets(id)) if id == requested_canister_id,
+                    "Test with {builder_info} failed"
+                );
+            }
         }
 
         #[test]
         fn should_accept_repeating_target() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let requested_canister_id = CanisterId::from(42);
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_canister_id(Blob(requested_canister_id.get().to_vec()))
-                .with_authentication(AuthenticationScheme::Delegation(
-                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
-                        .delegate_to_with_targets(
-                            random_user_key_pair(&mut rng),
-                            CURRENT_TIME,
-                            vec![
-                                CanisterId::from(41),
-                                requested_canister_id,
-                                requested_canister_id,
-                                requested_canister_id,
-                                CanisterId::from(43),
-                                requested_canister_id,
-                            ],
-                        )
-                        .build(),
-                ))
+            let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                .delegate_to_with_targets(
+                    random_user_key_pair(&mut rng),
+                    CURRENT_TIME,
+                    vec![
+                        CanisterId::from(41),
+                        requested_canister_id,
+                        requested_canister_id,
+                        requested_canister_id,
+                        CanisterId::from(43),
+                        requested_canister_id,
+                    ],
+                )
                 .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            test(
+                &verifier,
+                HttpRequestBuilder::new_update_call(),
+                requested_canister_id,
+                delegation_chain.clone(),
+            );
+            test(
+                &verifier,
+                HttpRequestBuilder::new_query(),
+                requested_canister_id,
+                delegation_chain,
+            );
 
-            assert_eq!(result, Ok(()))
+            fn test<ReqContent, EnvContent, Verifier>(
+                verifier: &Verifier,
+                builder: HttpRequestBuilder<EnvContent>,
+                requested_canister_id: CanisterId,
+                delegation_chain: DelegationChain,
+            ) where
+                ReqContent: HttpRequestContent,
+                EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
+                Verifier: HttpRequestVerifier<ReqContent>,
+            {
+                let builder_info = format!("{:?}", builder);
+                let request = builder
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+                    .with_authentication(AuthenticationScheme::Delegation(delegation_chain))
+                    .build();
+
+                let result = verifier.validate_request(&request);
+
+                assert_eq!(result, Ok(()), "Test with {} failed", builder_info);
+            }
         }
 
         #[test]
         fn should_fail_when_delegations_self_signed() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let mut key_pairs = random_user_key_pairs(3, &mut rng);
             let duplicated_key_pair = key_pairs[1].clone();
             key_pairs.insert(1, duplicated_key_pair.clone());
             let chain_with_self_signed_delegations =
                 DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(
-                    chain_with_self_signed_delegations,
-                ))
-                .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError{public_key}))
-            if public_key == duplicated_key_pair.public_key_der())
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                chain_with_self_signed_delegations.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegation(DelegationContainsCyclesError{public_key}))
+                        if public_key == duplicated_key_pair.public_key_der(),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        chain_with_self_signed_delegations,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
         fn should_fail_when_start_of_delegations_self_signed() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let mut key_pairs = random_user_key_pairs(2, &mut rng);
             let duplicated_key_pair = key_pairs[0].clone();
             key_pairs.insert(0, duplicated_key_pair.clone());
             let chain_with_self_signed_delegations =
                 DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(
-                    chain_with_self_signed_delegations,
-                ))
-                .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError{public_key}))
-                if public_key == duplicated_key_pair.public_key_der())
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                chain_with_self_signed_delegations.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegation(DelegationContainsCyclesError{public_key}))
+                        if public_key == duplicated_key_pair.public_key_der(),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        chain_with_self_signed_delegations,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
         fn should_fail_when_delegation_chain_contains_a_cycle_with_start_of_chain() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let mut key_pairs = random_user_key_pairs(2, &mut rng);
             let duplicated_key_pair = key_pairs[0].clone();
             key_pairs.push(duplicated_key_pair.clone());
             let chain_with_cycle = DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(chain_with_cycle))
-                .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError {public_key}))
-                if public_key == duplicated_key_pair.public_key_der())
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                chain_with_cycle.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegation(DelegationContainsCyclesError{public_key}))
+                        if public_key == duplicated_key_pair.public_key_der(),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        chain_with_cycle,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
         fn should_fail_when_delegation_chain_contains_a_cycle() {
             let mut rng = reproducible_rng();
+            let verifier = verifier_at_time(CURRENT_TIME);
             let mut key_pairs = random_user_key_pairs(3, &mut rng);
             let duplicated_key_pair = key_pairs[1].clone();
             key_pairs.push(duplicated_key_pair.clone());
             let chain_with_cycle = DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(chain_with_cycle))
-                .build();
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError {public_key}))
-                if public_key == duplicated_key_pair.public_key_der())
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                chain_with_cycle.clone(),
+                |result, builder_info| {
+                    assert_matches!(
+                        result,
+                        Err(InvalidDelegation(DelegationContainsCyclesError{public_key}))
+                        if public_key == duplicated_key_pair.public_key_der(),
+                        "verification of delegation chain {:?} for request builder {} failed",
+                        chain_with_cycle,
+                        builder_info
+                    );
+                },
+            );
         }
 
         #[test]
@@ -865,10 +1451,22 @@ mod validate_request {
                 targets.push(CanisterId::from_u64(i as u64))
             }
             let mut rng = reproducible_rng();
-            let request = request_authenticated_by_delegation_with_targets(targets, &mut rng);
+            let verifier = verifier_at_time(CURRENT_TIME);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            let update_request = request_authenticated_by_delegation_with_targets(
+                HttpRequestBuilder::new_update_call(),
+                targets.clone(),
+                &mut rng,
+            );
+            let result = verifier.validate_request(&update_request);
+            assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"));
 
+            let query_request = request_authenticated_by_delegation_with_targets(
+                HttpRequestBuilder::new_query(),
+                targets,
+                &mut rng,
+            );
+            let result = verifier.validate_request(&query_request);
             assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"))
         }
 
@@ -879,19 +1477,36 @@ mod validate_request {
                 targets.push(CanisterId::from_u64(0_u64))
             }
             let mut rng = reproducible_rng();
-            let request = request_authenticated_by_delegation_with_targets(targets, &mut rng);
 
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+            let update_request = request_authenticated_by_delegation_with_targets(
+                HttpRequestBuilder::new_update_call(),
+                targets.clone(),
+                &mut rng,
+            );
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&update_request);
+            assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"));
 
+            let query_request = request_authenticated_by_delegation_with_targets(
+                HttpRequestBuilder::new_query(),
+                targets,
+                &mut rng,
+            );
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&query_request);
             assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"))
         }
 
-        fn request_authenticated_by_delegation_with_targets<R: Rng + CryptoRng>(
+        fn request_authenticated_by_delegation_with_targets<ReqContent, EnvContent, R>(
+            builder: HttpRequestBuilder<EnvContent>,
             targets: Vec<CanisterId>,
             rng: &mut R,
-        ) -> HttpRequest<SignedIngressContent> {
+        ) -> HttpRequest<ReqContent>
+        where
+            ReqContent: HttpRequestContent,
+            EnvContent: EnvelopeContent<ReqContent> + HttpRequestEnvelopeContentWithCanisterId,
+            R: Rng + CryptoRng,
+        {
             assert!(!targets.is_empty());
-            HttpRequestBuilder::default()
+            builder
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_canister_id(Blob(targets[0].get().to_vec()))
                 .with_authentication(AuthenticationScheme::Delegation(
@@ -970,6 +1585,44 @@ mod validate_request {
             );
             chain_builder
         }
+
+        fn test_all_request_types_with_delegation_chain<
+            Verifier: HttpRequestVerifier<SignedIngressContent>
+                + HttpRequestVerifier<ReadState>
+                + HttpRequestVerifier<UserQuery>,
+            F: FnMut(Result<(), RequestValidationError>, String),
+        >(
+            verifier: &Verifier,
+            delegation_chain: DelegationChain,
+            mut expect: F,
+        ) {
+            let builder = HttpRequestBuilder::new_update_call();
+            let builder_info = format!("{:?}", builder);
+            let request = builder
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.clone()))
+                .build();
+            let result = verifier.validate_request(&request);
+            expect(result, builder_info);
+
+            let builder = HttpRequestBuilder::new_query();
+            let builder_info = format!("{:?}", builder);
+            let request = builder
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.clone()))
+                .build();
+            let result = verifier.validate_request(&request);
+            expect(result, builder_info);
+
+            let builder = HttpRequestBuilder::new_read_state();
+            let builder_info = format!("{:?}", builder);
+            let request = builder
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain))
+                .build();
+            let result = verifier.validate_request(&request);
+            expect(result, builder_info);
+        }
     }
 
     fn auth_with_random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> AuthenticationScheme {
@@ -1041,7 +1694,7 @@ mod registry {
             crypto_logic_to_retrieve_root_subnet_pubkey(&registry_client, DUMMY_REGISTRY_VERSION);
 
         assert_matches!(retrieved_nns_root_public_key, Some(actual_key)
-            if actual_key == nns_root_public_key());
+                if actual_key == nns_root_public_key());
     }
 
     #[test]
@@ -1053,7 +1706,7 @@ mod registry {
             crypto_logic_to_retrieve_root_subnet_pubkey(&registry_client, DUMMY_REGISTRY_VERSION);
 
         assert_matches!(retrieved_root_of_trust, Some(actual_key)
-            if actual_key == other_root_of_trust);
+                if actual_key == other_root_of_trust);
     }
 
     fn crypto_logic_to_retrieve_root_subnet_pubkey(

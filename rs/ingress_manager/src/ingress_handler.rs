@@ -16,7 +16,6 @@ use ic_types::{
     time::current_time,
     CountBytes,
 };
-use ic_validator::validate_request;
 
 impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
     type ChangeSet = ChangeSet;
@@ -91,12 +90,10 @@ impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
 
             // Check signatures, remove from unvalidated if they can't be
             // verified, add to validated otherwise.
-            if let Err(err) = validate_request(
+            if let Err(err) = self.request_validator.validate_request(
                 ingress_message.as_ref(),
-                self.ingress_signature_crypto.as_ref(),
                 current_time,
                 registry_version,
-                &self.malicious_flags,
             ) {
                 debug!(
                     self.log,

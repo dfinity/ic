@@ -66,7 +66,7 @@ mod delegation_chain {
         let expected_sender = UserId::from(PrincipalId::new_self_authenticating(
             &ed25519_public_key_to_der(first_key_pair.public_key.to_vec()),
         ));
-        let request = HttpRequestBuilder::default()
+        let request = HttpRequestBuilder::new_update_call()
             .with_authentication(Delegation(
                 DelegationChain::rooted_at(UserKeyPair(first_key_pair))
                     .delegate_to(
@@ -89,7 +89,7 @@ mod delegation_chain {
         let first_key_pair = Ed25519KeyPair::generate(&mut rng);
         let second_key_pair = Ed25519KeyPair::generate(&mut rng);
 
-        let request = HttpRequestBuilder::default()
+        let request = HttpRequestBuilder::new_update_call()
             .with_authentication(Delegation(
                 DelegationChain::rooted_at(UserKeyPair(first_key_pair))
                     .delegate_to(
@@ -140,7 +140,7 @@ mod change_authentication {
         let key_pair = Ed25519KeyPair::generate(&mut rng);
         let new_sender = vec![42];
 
-        let request = HttpRequestBuilder::default()
+        let request = HttpRequestBuilder::new_update_call()
             .with_authentication(AuthenticationScheme::Direct(UserKeyPair(key_pair)))
             .with_authentication_sender(Blob(new_sender.clone()))
             .build();
@@ -159,7 +159,7 @@ mod change_authentication {
         let other_public_key = UserKeyPair(other_key_pair).public_key_der();
         assert_ne!(key_pair, other_key_pair);
 
-        let request = HttpRequestBuilder::default()
+        let request = HttpRequestBuilder::new_update_call()
             .with_authentication(AuthenticationScheme::Direct(UserKeyPair(key_pair)))
             .with_authentication_sender_public_key(Some(Blob(other_public_key.clone())))
             .build();
@@ -175,10 +175,10 @@ mod change_authentication {
         let mut rng = reproducible_rng();
         let key_pair = Ed25519KeyPair::generate(&mut rng);
 
-        let valid_request = HttpRequestBuilder::default()
+        let valid_request = HttpRequestBuilder::new_update_call()
             .with_authentication(AuthenticationScheme::Direct(UserKeyPair(key_pair)))
             .build();
-        let corrupted_request = HttpRequestBuilder::default()
+        let corrupted_request = HttpRequestBuilder::new_update_call()
             .with_authentication(AuthenticationScheme::Direct(UserKeyPair(key_pair)))
             .corrupt_authentication_sender_signature()
             .build();

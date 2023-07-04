@@ -272,7 +272,6 @@ pub fn start_server(
     let delegation_from_nns = Arc::new(RwLock::new(None));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));
     let state_reader_executor = StateReaderExecutor::new(state_reader);
-    let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
     let call_service = CallService::new_service(
         config.clone(),
         log.clone(),
@@ -281,11 +280,10 @@ pub fn start_server(
         subnet_id,
         time_source,
         Arc::clone(&registry_client),
-        validator_executor.clone(),
+        ValidatorExecutor::new(ingress_verifier.clone(), &malicious_flags, log.clone()),
         ingress_filter,
         ingress_throttler,
         ingress_tx,
-        malicious_flags.clone(),
     );
     let query_service = QueryService::new_service(
         config.clone(),
@@ -293,10 +291,9 @@ pub fn start_server(
         metrics.clone(),
         Arc::clone(&health_status),
         Arc::clone(&delegation_from_nns),
-        validator_executor.clone(),
+        ValidatorExecutor::new(ingress_verifier.clone(), &malicious_flags, log.clone()),
         Arc::clone(&registry_client),
         query_execution_service,
-        malicious_flags.clone(),
     );
     let read_state_service = ReadStateService::new_service(
         config.clone(),
@@ -305,9 +302,8 @@ pub fn start_server(
         Arc::clone(&health_status),
         Arc::clone(&delegation_from_nns),
         state_reader_executor.clone(),
-        validator_executor,
+        ValidatorExecutor::new(ingress_verifier.clone(), &malicious_flags, log.clone()),
         Arc::clone(&registry_client),
-        malicious_flags,
     );
     let status_service = StatusService::new_service(
         config.clone(),

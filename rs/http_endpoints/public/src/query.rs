@@ -16,12 +16,9 @@ use ic_config::http_handler::Config;
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
-use ic_types::{
-    malicious_flags::MaliciousFlags,
-    messages::{
-        CertificateDelegation, HasCanisterId, HttpQueryContent, HttpRequest, HttpRequestEnvelope,
-        SignedRequestBytes, UserQuery,
-    },
+use ic_types::messages::{
+    CertificateDelegation, HasCanisterId, HttpQueryContent, HttpRequest, HttpRequestEnvelope,
+    SignedRequestBytes, UserQuery,
 };
 use std::convert::{Infallible, TryFrom};
 use std::future::Future;
@@ -36,10 +33,9 @@ pub(crate) struct QueryService {
     metrics: HttpHandlerMetrics,
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-    validator_executor: ValidatorExecutor,
+    validator_executor: ValidatorExecutor<UserQuery>,
     registry_client: Arc<dyn RegistryClient>,
     query_execution_service: QueryExecutionService,
-    malicious_flags: MaliciousFlags,
 }
 
 impl QueryService {
@@ -50,10 +46,9 @@ impl QueryService {
         metrics: HttpHandlerMetrics,
         health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
-        validator_executor: ValidatorExecutor,
+        validator_executor: ValidatorExecutor<UserQuery>,
         registry_client: Arc<dyn RegistryClient>,
         query_execution_service: QueryExecutionService,
-        malicious_flags: MaliciousFlags,
     ) -> EndpointService {
         let base_service = BoxCloneService::new(
             ServiceBuilder::new()
@@ -68,7 +63,6 @@ impl QueryService {
                     validator_executor,
                     registry_client,
                     query_execution_service,
-                    malicious_flags,
                 }),
         );
         BoxCloneService::new(
@@ -188,15 +182,11 @@ impl Service<Request<Vec<u8>>> for QueryService {
         );
 
         let registry_client = self.registry_client.get_latest_version();
-        let malicious_flags = self.malicious_flags.clone();
         let validator_executor = self.validator_executor.clone();
         let response_body_size_bytes_metric = self.metrics.response_body_size_bytes.clone();
         async move {
-            let get_authorized_canisters_fut = validator_executor.get_authorized_canisters(
-                request.clone(),
-                registry_client,
-                malicious_flags,
-            );
+            let get_authorized_canisters_fut =
+                validator_executor.validate_request(request.clone(), registry_client);
 
             match get_authorized_canisters_fut.await {
                 Ok(targets) => {

@@ -46,7 +46,6 @@ pub use internal::TimeProvider;
 pub trait HttpRequestVerifier<C> {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError>;
 }
-
 /// Top-level error that occur when verifying an HTTP request
 /// with [`HttpRequestVerifier::validate_request`].
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
