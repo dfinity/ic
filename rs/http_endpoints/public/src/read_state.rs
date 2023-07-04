@@ -18,7 +18,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
 use ic_types::{
-    malicious_flags::MaliciousFlags,
     messages::{
         Blob, Certificate, CertificateDelegation, HttpReadStateContent, HttpReadStateResponse,
         HttpRequest, HttpRequestEnvelope, MessageId, ReadState, SignedRequestBytes,
@@ -43,9 +42,8 @@ pub(crate) struct ReadStateService {
     health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
     delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
     state_reader_executor: StateReaderExecutor,
-    validator_executor: ValidatorExecutor,
+    validator_executor: ValidatorExecutor<ReadState>,
     registry_client: Arc<dyn RegistryClient>,
-    malicious_flags: MaliciousFlags,
 }
 
 impl ReadStateService {
@@ -57,9 +55,8 @@ impl ReadStateService {
         health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
         delegation_from_nns: Arc<RwLock<Option<CertificateDelegation>>>,
         state_reader_executor: StateReaderExecutor,
-        validator_executor: ValidatorExecutor,
+        validator_executor: ValidatorExecutor<ReadState>,
         registry_client: Arc<dyn RegistryClient>,
-        malicious_flags: MaliciousFlags,
     ) -> EndpointService {
         let base_service = Self {
             log,
@@ -69,7 +66,6 @@ impl ReadStateService {
             state_reader_executor,
             validator_executor,
             registry_client,
-            malicious_flags,
         };
         let base_service = BoxCloneService::new(
             ServiceBuilder::new()
@@ -158,16 +154,11 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
 
         let read_state = request.content().clone();
         let registry_client = self.registry_client.get_latest_version();
-        let malicious_flags = self.malicious_flags.clone();
         let state_reader_executor = self.state_reader_executor.clone();
         let validator_executor = self.validator_executor.clone();
         let metrics = self.metrics.clone();
         Box::pin(async move {
-            let targets_fut = validator_executor.get_authorized_canisters(
-                request.clone(),
-                registry_client,
-                malicious_flags,
-            );
+            let targets_fut = validator_executor.validate_request(request.clone(), registry_client);
 
             let targets = match targets_fut.await {
                 Ok(targets) => targets,

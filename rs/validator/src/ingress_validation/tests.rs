@@ -542,7 +542,7 @@ mod validate_ingress_expiry {
                 update: HttpCanisterUpdate {
                     canister_id: Blob(vec![42; 8]),
                     method_name: "some_method".to_string(),
-                    arg: Blob(b"".to_vec()),
+                    arg: Default::default(),
                     sender: Blob(vec![0x04]),
                     nonce: None,
                     ingress_expiry,

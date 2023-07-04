@@ -21,6 +21,7 @@ use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
+use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
 use ic_types::{
     artifact::{IngressMessageId, SignedIngress},
     consensus::BlockPayload,
@@ -28,6 +29,9 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     time::{Time, UNIX_EPOCH},
     Height, RegistryVersion, SubnetId,
+};
+use ic_validator::{
+    CanisterIdSet, HttpRequestVerifier, HttpRequestVerifierImpl, RequestValidationError,
 };
 use prometheus::{Histogram, IntGauge};
 use std::{
@@ -111,7 +115,7 @@ pub struct IngressManager {
     ingress_payload_cache: Arc<RwLock<IngressPayloadCache>>,
     ingress_pool: IngressPoolSelectWrapper,
     registry_client: Arc<dyn RegistryClient>,
-    ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+    request_validator: Arc<dyn HttpRequestVerifier<SignedIngressContent>>,
     metrics: IngressManagerMetrics,
     subnet_id: SubnetId,
     log: ReplicaLogger,
@@ -121,7 +125,6 @@ pub struct IngressManager {
     pub(crate) last_purge_time: RwLock<Time>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    malicious_flags: MaliciousFlags,
 }
 
 impl IngressManager {
@@ -140,13 +143,31 @@ impl IngressManager {
         cycles_account_manager: Arc<CyclesAccountManager>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
+        let request_validator = if malicious_flags.maliciously_disable_ingress_validation {
+            pub struct DisabledHttpRequestVerifier;
+
+            impl<C: HttpRequestContent> HttpRequestVerifier<C> for DisabledHttpRequestVerifier {
+                fn validate_request(
+                    &self,
+                    _request: &HttpRequest<C>,
+                    _current_time: Time,
+                    _registry_version: RegistryVersion,
+                ) -> Result<CanisterIdSet, RequestValidationError> {
+                    Ok(CanisterIdSet::all())
+                }
+            }
+
+            Arc::new(DisabledHttpRequestVerifier) as Arc<_>
+        } else {
+            Arc::new(HttpRequestVerifierImpl::new(ingress_signature_crypto)) as Arc<_>
+        };
         Self {
             consensus_pool_cache,
             ingress_hist_reader,
             ingress_payload_cache: Arc::new(RwLock::new(BTreeMap::new())),
             ingress_pool: IngressPoolSelectWrapper::new(&ingress_pool),
             registry_client,
-            ingress_signature_crypto,
+            request_validator,
             metrics: IngressManagerMetrics::new(metrics_registry),
             subnet_id,
             log,
@@ -154,7 +175,6 @@ impl IngressManager {
             messages_to_purge: RwLock::new(Vec::new()),
             state_reader,
             cycles_account_manager,
-            malicious_flags,
         }
     }
 

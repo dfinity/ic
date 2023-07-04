@@ -24,8 +24,8 @@ use ic_registry_client_helpers::{
     subnet::{IngressMessageSettings, SubnetRegistry},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
+use ic_types::messages::SignedIngressContent;
 use ic_types::{
-    malicious_flags::MaliciousFlags,
     messages::{SignedIngress, SignedRequestBytes},
     CanisterId, CountBytes, NodeId, RegistryVersion, SubnetId,
 };
@@ -46,11 +46,10 @@ pub(crate) struct CallService {
     subnet_id: SubnetId,
     time_source: Arc<dyn TimeSource>,
     registry_client: Arc<dyn RegistryClient>,
-    validator_executor: ValidatorExecutor,
+    validator_executor: ValidatorExecutor<SignedIngressContent>,
     ingress_filter: IngressFilterService,
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
-    malicious_flags: MaliciousFlags,
 }
 
 impl CallService {
@@ -63,11 +62,10 @@ impl CallService {
         subnet_id: SubnetId,
         time_source: Arc<dyn TimeSource>,
         registry_client: Arc<dyn RegistryClient>,
-        validator_executor: ValidatorExecutor,
+        validator_executor: ValidatorExecutor<SignedIngressContent>,
         ingress_filter: IngressFilterService,
         ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
         ingress_tx: Sender<UnvalidatedArtifact<SignedIngress>>,
-        malicious_flags: MaliciousFlags,
     ) -> EndpointService {
         let base_service = BoxCloneService::new(
             ServiceBuilder::new()
@@ -84,7 +82,6 @@ impl CallService {
                     ingress_tx,
                     time_source,
                     ingress_filter,
-                    malicious_flags,
                     node_id,
                 }),
         );
@@ -233,16 +230,12 @@ impl Service<Request<Vec<u8>>> for CallService {
         let mut ingress_filter = self.ingress_filter.clone();
         let log = self.log.clone();
         let validator_executor = self.validator_executor.clone();
-        let malicious_flags = self.malicious_flags.clone();
         let time_source = self.time_source.clone();
         let node_id = self.node_id;
         let ingress_throttler = self.ingress_throttler.clone();
         Box::pin(async move {
-            let validate_signed_ingress_fut = validator_executor.validate_signed_ingress(
-                msg.clone(),
-                registry_version,
-                malicious_flags,
-            );
+            let validate_signed_ingress_fut =
+                validator_executor.validate_request(msg.as_ref().clone(), registry_version);
             if let Err(http_err) = validate_signed_ingress_fut.await {
                 let res = make_plaintext_response(http_err.status, http_err.message);
                 return Ok(res);

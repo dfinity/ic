@@ -20,7 +20,7 @@ const CANISTER_ID_SIGNER: CanisterId = CanisterId::from_u64(1185);
 #[test]
 fn should_reject_request_when_expired_with_default_verifier() {
     let verifier = IngressMessageVerifier::default();
-    let request = HttpRequestBuilder::default()
+    let request = HttpRequestBuilder::new_update_call()
         .with_ingress_expiry_at(GENESIS)
         .with_authentication(AuthenticationScheme::Anonymous)
         .build();
@@ -36,7 +36,7 @@ fn should_validate_anonymous_request() {
     let verifier = IngressMessageVerifier::builder()
         .with_time_provider(TimeProvider::Constant(current_time))
         .build();
-    let request = HttpRequestBuilder::default()
+    let request = HttpRequestBuilder::new_update_call()
         .with_ingress_expiry_at(current_time)
         .with_authentication(AuthenticationScheme::Anonymous)
         .build();
@@ -54,7 +54,7 @@ fn should_validate_signed_request_without_delegation() {
         .with_time_provider(TimeProvider::Constant(current_time))
         .build();
     let keypair = Ed25519KeyPair::generate(&mut rng);
-    let request = HttpRequestBuilder::default()
+    let request = HttpRequestBuilder::new_update_call()
         .with_ingress_expiry_at(current_time)
         .with_authentication(AuthenticationScheme::Direct(UserKeyPair(keypair)))
         .build();
@@ -71,7 +71,7 @@ fn should_validate_signed_request_with_delegation() {
     let verifier = IngressMessageVerifier::builder()
         .with_time_provider(TimeProvider::Constant(current_time))
         .build();
-    let request = HttpRequestBuilder::default()
+    let request = HttpRequestBuilder::new_update_call()
         .with_ingress_expiry_at(current_time)
         .with_authentication(AuthenticationScheme::Delegation(
             DelegationChain::rooted_at(UserKeyPair(Ed25519KeyPair::generate(&mut rng)))
@@ -101,7 +101,7 @@ fn should_validate_signed_request_from_canister() {
         .with_time_provider(TimeProvider::Constant(current_time))
         .with_root_of_trust(root_public_key)
         .build();
-    let request = HttpRequestBuilder::default()
+    let request = HttpRequestBuilder::new_update_call()
         .with_ingress_expiry_at(current_time)
         .with_authentication(AuthenticationScheme::Direct(CanisterSignature(
             CanisterSigner {
@@ -127,7 +127,7 @@ fn should_validate_signed_request_with_delegation_from_canister() {
         .with_time_provider(TimeProvider::Constant(current_time))
         .with_root_of_trust(root_public_key)
         .build();
-    let request = HttpRequestBuilder::default()
+    let request = HttpRequestBuilder::new_update_call()
         .with_ingress_expiry_at(current_time)
         .with_authentication(AuthenticationScheme::Delegation(
             DelegationChain::rooted_at(CanisterSignature(CanisterSigner {

@@ -5,13 +5,15 @@ use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope,
-    MessageId, SignedDelegation, SignedIngressContent,
+    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+    HttpReadStateContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, MessageId, ReadState,
+    SignedDelegation, SignedIngressContent, UserQuery,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use rand::{CryptoRng, Rng};
 use simple_asn1::OID;
 use std::convert::identity;
+use std::fmt::{Debug, Formatter};
 use strum_macros::EnumCount;
 
 #[cfg(test)]
@@ -19,8 +21,9 @@ mod tests;
 
 const ANONYMOUS_SENDER: u8 = 0x04;
 
-pub struct HttpRequestBuilder<T> {
-    content: HttpCanisterUpdate,
+pub type HttpRequestBuilder<C> = HttpRequestBuilderGeneric<C, AuthenticationScheme>;
+pub struct HttpRequestBuilderGeneric<C, T> {
+    content: C,
     authentication: T,
     overwrite_sender: Box<dyn FnOnce(Blob) -> Blob>,
     overwrite_sender_public_key: Box<dyn FnOnce(Option<Blob>) -> Option<Blob>>,
@@ -30,10 +33,10 @@ pub struct HttpRequestBuilder<T> {
         Box<dyn FnOnce(Option<Vec<SignedDelegation>>) -> Option<Vec<SignedDelegation>>>,
 }
 
-impl Default for HttpRequestBuilder<AuthenticationScheme> {
-    fn default() -> Self {
-        HttpRequestBuilder {
-            content: dummy_request_content(),
+impl HttpRequestBuilderGeneric<HttpCanisterUpdate, AuthenticationScheme> {
+    pub fn new_update_call() -> Self {
+        HttpRequestBuilderGeneric {
+            content: dummy_call_request_content(),
             authentication: AuthenticationScheme::Anonymous,
             overwrite_sender: Box::new(identity),
             overwrite_sender_public_key: Box::new(identity),
@@ -43,33 +46,79 @@ impl Default for HttpRequestBuilder<AuthenticationScheme> {
     }
 }
 
-fn dummy_request_content() -> HttpCanisterUpdate {
+impl HttpRequestBuilderGeneric<HttpUserQuery, AuthenticationScheme> {
+    pub fn new_query() -> Self {
+        HttpRequestBuilderGeneric {
+            content: dummy_query_call_request_content(),
+            authentication: AuthenticationScheme::Anonymous,
+            overwrite_sender: Box::new(identity),
+            overwrite_sender_public_key: Box::new(identity),
+            overwrite_sender_signature: Box::new(identity),
+            overwrite_sender_delegations: Box::new(identity),
+        }
+    }
+}
+
+impl HttpRequestBuilderGeneric<HttpReadState, AuthenticationScheme> {
+    pub fn new_read_state() -> Self {
+        HttpRequestBuilderGeneric {
+            content: dummy_read_state_request_content(),
+            authentication: AuthenticationScheme::Anonymous,
+            overwrite_sender: Box::new(identity),
+            overwrite_sender_public_key: Box::new(identity),
+            overwrite_sender_signature: Box::new(identity),
+            overwrite_sender_delegations: Box::new(identity),
+        }
+    }
+}
+
+impl<C: Debug, T: Debug> Debug for HttpRequestBuilderGeneric<C, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "HttpRequestBuilder {{ content: {:?}, authentication: {:?} }}",
+            self.content, self.authentication
+        )
+    }
+}
+
+fn dummy_call_request_content() -> HttpCanisterUpdate {
     HttpCanisterUpdate {
         canister_id: Blob(vec![42; 8]),
         method_name: "some_method".to_string(),
-        arg: Blob(b"".to_vec()),
+        arg: Default::default(),
         sender: Default::default(),
         ingress_expiry: 0,
         nonce: None,
     }
 }
 
-impl<T: HttpRequestEnvelopeFactory> HttpRequestBuilder<T> {
-    pub fn with_ingress_expiry_at(mut self, ingress_expiry_time: Time) -> Self {
-        self.content.ingress_expiry = ingress_expiry_time.as_nanos_since_unix_epoch();
-        self
+fn dummy_query_call_request_content() -> HttpUserQuery {
+    HttpUserQuery {
+        canister_id: Blob(vec![42; 8]),
+        method_name: "some_method".to_string(),
+        arg: Default::default(),
+        sender: Default::default(),
+        ingress_expiry: 0,
+        nonce: None,
     }
+}
 
-    pub fn with_canister_id(mut self, new_canister_id: Blob) -> Self {
-        self.content.canister_id = new_canister_id;
-        self
+fn dummy_read_state_request_content() -> HttpReadState {
+    HttpReadState {
+        sender: Default::default(),
+        paths: vec![],
+        ingress_expiry: 0,
+        nonce: None,
     }
+}
 
+impl<C, T: HttpRequestEnvelopeFactory> HttpRequestBuilderGeneric<C, T> {
     pub fn with_authentication<U: HttpRequestEnvelopeFactory>(
         self,
         authentication: U,
-    ) -> HttpRequestBuilder<U> {
-        HttpRequestBuilder {
+    ) -> HttpRequestBuilderGeneric<C, U> {
+        HttpRequestBuilderGeneric {
             content: self.content,
             authentication,
             overwrite_sender: self.overwrite_sender,
@@ -103,15 +152,29 @@ impl<T: HttpRequestEnvelopeFactory> HttpRequestBuilder<T> {
 
     pub fn corrupt_authentication_sender_signature(mut self) -> Self {
         self.overwrite_sender_signature = Box::new(|signature| {
-            let mut corrupted_signature = signature.expect("cannot corrupt emnpty signature");
+            let mut corrupted_signature = signature.expect("cannot corrupt empty signature");
             flip_a_bit_mut(&mut corrupted_signature.0);
             Some(corrupted_signature)
         });
         self
     }
+}
 
-    pub fn build(mut self) -> HttpRequest<SignedIngressContent> {
-        self.content.sender = (self.overwrite_sender)(self.authentication.sender());
+impl<C: HttpRequestEnvelopeContent, T> HttpRequestBuilderGeneric<C, T> {
+    pub fn with_ingress_expiry_at(mut self, ingress_expiry_time: Time) -> Self {
+        self.content.set_ingress_expiry(ingress_expiry_time);
+        self
+    }
+}
+
+impl<ReqContent, EnvelopeContent, Auth> HttpRequestBuilderGeneric<EnvelopeContent, Auth>
+where
+    EnvelopeContent: HttpRequestEnvelopeContent<HttpRequestContentType = ReqContent>,
+    Auth: HttpRequestEnvelopeFactory,
+{
+    pub fn build(mut self) -> HttpRequest<ReqContent> {
+        self.content
+            .set_sender((self.overwrite_sender)(self.authentication.sender()));
         let message_id = self.content.id();
         let sender_pubkey =
             (self.overwrite_sender_public_key)(self.authentication.sender_public_key());
@@ -120,15 +183,141 @@ impl<T: HttpRequestEnvelopeFactory> HttpRequestBuilder<T> {
         let sender_delegation =
             (self.overwrite_sender_delegations)(self.authentication.sender_delegations());
 
+        self.content
+            .into_request(sender_pubkey, sender_sig, sender_delegation)
+    }
+}
+
+impl<C: HttpRequestEnvelopeContentWithCanisterId, T: HttpRequestEnvelopeFactory>
+    HttpRequestBuilderGeneric<C, T>
+{
+    pub fn with_canister_id(mut self, new_canister_id: Blob) -> Self {
+        self.content.set_canister_id(new_canister_id);
+        self
+    }
+}
+
+/// A trait to unify HttpCanisterUpdate, HttpUserQuery and HttpReadState
+pub trait HttpRequestEnvelopeContent {
+    type HttpRequestContentType;
+
+    fn set_sender(&mut self, sender: Blob);
+    fn set_ingress_expiry(&mut self, ingress_expiry: Time);
+    fn id(&self) -> MessageId;
+    fn into_request(
+        self,
+        sender_pubkey: Option<Blob>,
+        sender_sig: Option<Blob>,
+        sender_delegation: Option<Vec<SignedDelegation>>,
+    ) -> HttpRequest<Self::HttpRequestContentType>;
+}
+
+pub trait HttpRequestEnvelopeContentWithCanisterId {
+    fn set_canister_id(&mut self, canister_id: Blob);
+}
+
+impl HttpRequestEnvelopeContent for HttpCanisterUpdate {
+    type HttpRequestContentType = SignedIngressContent;
+
+    fn set_sender(&mut self, sender: Blob) {
+        self.sender = sender;
+    }
+
+    fn set_ingress_expiry(&mut self, ingress_expiry: Time) {
+        self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
+    }
+
+    fn id(&self) -> MessageId {
+        MessageId::from(self.representation_independent_hash())
+    }
+
+    fn into_request(
+        self,
+        sender_pubkey: Option<Blob>,
+        sender_sig: Option<Blob>,
+        sender_delegation: Option<Vec<SignedDelegation>>,
+    ) -> HttpRequest<Self::HttpRequestContentType> {
         HttpRequest::try_from(HttpRequestEnvelope::<HttpCallContent> {
-            content: HttpCallContent::Call {
-                update: self.content,
-            },
+            content: HttpCallContent::Call { update: self },
             sender_pubkey,
             sender_sig,
             sender_delegation,
         })
-        .expect("invalid HTTP request")
+        .expect("valid HTTP request")
+    }
+}
+
+impl HttpRequestEnvelopeContentWithCanisterId for HttpCanisterUpdate {
+    fn set_canister_id(&mut self, canister_id: Blob) {
+        self.canister_id = canister_id;
+    }
+}
+
+impl HttpRequestEnvelopeContent for HttpUserQuery {
+    type HttpRequestContentType = UserQuery;
+
+    fn set_sender(&mut self, sender: Blob) {
+        self.sender = sender;
+    }
+
+    fn set_ingress_expiry(&mut self, ingress_expiry: Time) {
+        self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
+    }
+
+    fn id(&self) -> MessageId {
+        MessageId::from(self.representation_independent_hash())
+    }
+
+    fn into_request(
+        self,
+        sender_pubkey: Option<Blob>,
+        sender_sig: Option<Blob>,
+        sender_delegation: Option<Vec<SignedDelegation>>,
+    ) -> HttpRequest<Self::HttpRequestContentType> {
+        HttpRequest::try_from(HttpRequestEnvelope::<HttpQueryContent> {
+            content: HttpQueryContent::Query { query: self },
+            sender_pubkey,
+            sender_sig,
+            sender_delegation,
+        })
+        .expect("valid HTTP request")
+    }
+}
+
+impl HttpRequestEnvelopeContentWithCanisterId for HttpUserQuery {
+    fn set_canister_id(&mut self, canister_id: Blob) {
+        self.canister_id = canister_id;
+    }
+}
+
+impl HttpRequestEnvelopeContent for HttpReadState {
+    type HttpRequestContentType = ReadState;
+
+    fn set_sender(&mut self, sender: Blob) {
+        self.sender = sender;
+    }
+
+    fn set_ingress_expiry(&mut self, ingress_expiry: Time) {
+        self.ingress_expiry = ingress_expiry.as_nanos_since_unix_epoch();
+    }
+
+    fn id(&self) -> MessageId {
+        MessageId::from(self.representation_independent_hash())
+    }
+
+    fn into_request(
+        self,
+        sender_pubkey: Option<Blob>,
+        sender_sig: Option<Blob>,
+        sender_delegation: Option<Vec<SignedDelegation>>,
+    ) -> HttpRequest<Self::HttpRequestContentType> {
+        HttpRequest::try_from(HttpRequestEnvelope::<HttpReadStateContent> {
+            content: HttpReadStateContent::ReadState { read_state: self },
+            sender_pubkey,
+            sender_sig,
+            sender_delegation,
+        })
+        .expect("valid HTTP request")
     }
 }
 

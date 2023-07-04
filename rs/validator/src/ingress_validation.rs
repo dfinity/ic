@@ -3,9 +3,9 @@ use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_crypto::{user_public_key_from_bytes, KeyBytesContentType};
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_types::crypto::{CanisterSig, CanisterSigOf};
+use ic_types::messages::{ReadState, SignedIngressContent, UserQuery};
 use ic_types::{
     crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey},
-    malicious_flags::MaliciousFlags,
     messages::{
         Authentication, Delegation, HasCanisterId, HttpRequest, HttpRequestContent, MessageId,
         SignedDelegation, UserSignature, WebAuthnSignature,
@@ -13,6 +13,7 @@ use ic_types::{
     CanisterId, PrincipalId, RegistryVersion, Time, UserId,
 };
 use std::collections::HashSet;
+use std::sync::Arc;
 use std::{collections::BTreeSet, convert::TryFrom, fmt};
 use thiserror::Error;
 use AuthenticationError::*;
@@ -38,31 +39,90 @@ const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20;
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION: usize = 1_000;
 
-/// Validates the `request` and that the sender is authorized to send
-/// a message to the receiving canister.
-///
-/// See notes on request validity in the crate docs.
-pub fn validate_request<C: HttpRequestContent + HasCanisterId>(
-    request: &HttpRequest<C>,
-    ingress_signature_verifier: &dyn IngressSigVerifier,
-    current_time: Time,
-    registry_version: RegistryVersion,
-    #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
-) -> Result<(), RequestValidationError> {
-    #[cfg(feature = "malicious_code")]
-    {
-        if malicious_flags.maliciously_disable_ingress_validation {
-            return Ok(());
-        }
-    }
+/// A trait for validating an `HttpRequest` with content `C`.
+pub trait HttpRequestVerifier<C>: Send + Sync {
+    /// Validates the given request.
+    /// If valid, returns the set of canister IDs that are *common* to all delegations.
+    /// Otherwise, returns an error.
+    ///
+    /// The given `request` is valid iff
+    /// * The request hasn't expired relative to `current_time`.
+    /// * The delegations (if any) are valid:
+    ///     * There are at most `MAXIMUM_NUMBER_OF_DELEGATIONS` delegations.
+    ///     * There are at most `MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION` targets for each delegation.
+    ///     * The delegations haven't expired relative to `current_time`.
+    ///     * The delegations form a chain of certificates that are correctly signed and do not contain any cycle.
+    /// * The request's signature is correct.
+    /// * If the request specifies a `CanisterId` (see `HasCanisterId`),
+    ///   then it must be among the set of canister IDs that are common to all delegations.
+    fn validate_request(
+        &self,
+        request: &HttpRequest<C>,
+        current_time: Time,
+        registry_version: RegistryVersion,
+    ) -> Result<CanisterIdSet, RequestValidationError>;
+}
 
-    validate_request_content(
-        request,
-        ingress_signature_verifier,
-        current_time,
-        registry_version,
-    )
-    .and_then(|targets| validate_request_target(request, targets))
+pub struct HttpRequestVerifierImpl {
+    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+}
+
+impl HttpRequestVerifierImpl {
+    pub fn new(validator: Arc<dyn IngressSigVerifier + Send + Sync>) -> Self {
+        Self { validator }
+    }
+}
+
+impl HttpRequestVerifier<SignedIngressContent> for HttpRequestVerifierImpl {
+    fn validate_request(
+        &self,
+        request: &HttpRequest<SignedIngressContent>,
+        current_time: Time,
+        registry_version: RegistryVersion,
+    ) -> Result<CanisterIdSet, RequestValidationError> {
+        let delegation_targets = validate_request_content(
+            request,
+            self.validator.as_ref(),
+            current_time,
+            registry_version,
+        )?;
+        validate_request_target(request, &delegation_targets)?;
+        Ok(delegation_targets)
+    }
+}
+
+impl HttpRequestVerifier<UserQuery> for HttpRequestVerifierImpl {
+    fn validate_request(
+        &self,
+        request: &HttpRequest<UserQuery>,
+        current_time: Time,
+        registry_version: RegistryVersion,
+    ) -> Result<CanisterIdSet, RequestValidationError> {
+        let delegation_targets = validate_request_content(
+            request,
+            self.validator.as_ref(),
+            current_time,
+            registry_version,
+        )?;
+        validate_request_target(request, &delegation_targets)?;
+        Ok(delegation_targets)
+    }
+}
+
+impl HttpRequestVerifier<ReadState> for HttpRequestVerifierImpl {
+    fn validate_request(
+        &self,
+        request: &HttpRequest<ReadState>,
+        current_time: Time,
+        registry_version: RegistryVersion,
+    ) -> Result<CanisterIdSet, RequestValidationError> {
+        validate_request_content(
+            request,
+            self.validator.as_ref(),
+            current_time,
+            registry_version,
+        )
+    }
 }
 
 pub fn validate_request_content<C: HttpRequestContent>(
@@ -85,9 +145,9 @@ pub fn validate_request_content<C: HttpRequestContent>(
     )
 }
 
-pub fn validate_request_target<C: HasCanisterId>(
+fn validate_request_target<C: HasCanisterId>(
     request: &HttpRequest<C>,
-    targets: CanisterIdSet,
+    targets: &CanisterIdSet,
 ) -> Result<(), RequestValidationError> {
     if targets.contains(&request.content().canister_id()) {
         Ok(())
@@ -96,31 +156,6 @@ pub fn validate_request_target<C: HasCanisterId>(
             request.content().canister_id(),
         ))
     }
-}
-
-/// Returns the set of canisters that the request is authorized to act on.
-///
-/// The request must be valid for this call to be successful. See notes on
-/// request validity in the crate docs.
-pub fn get_authorized_canisters<C: HttpRequestContent>(
-    request: &HttpRequest<C>,
-    ingress_signature_verifier: &dyn IngressSigVerifier,
-    current_time: Time,
-    registry_version: RegistryVersion,
-    #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
-) -> Result<CanisterIdSet, RequestValidationError> {
-    #[cfg(feature = "malicious_code")]
-    {
-        if malicious_flags.maliciously_disable_ingress_validation {
-            return Ok(CanisterIdSet::all());
-        }
-    }
-    validate_request_content(
-        request,
-        ingress_signature_verifier,
-        current_time,
-        registry_version,
-    )
 }
 
 /// Error in validating an [HttpRequest].

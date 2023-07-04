@@ -26,7 +26,7 @@ use ic_types::{
     messages::{extract_effective_canister_id, MessageId, SignedIngress},
     CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
 };
-use ic_validator::{validate_request, RequestValidationError};
+use ic_validator::RequestValidationError;
 use std::{collections::BTreeMap, sync::Arc};
 
 impl IngressSelector for IngressManager {
@@ -377,12 +377,10 @@ impl IngressManager {
 
         // Do not include the message if it is considered invalid with
         // respect to the given context (expiry & registry_version).
-        if let Err(err) = validate_request(
+        if let Err(err) = self.request_validator.validate_request(
             signed_ingress.as_ref(),
-            self.ingress_signature_crypto.as_ref(),
             context.time,
             context.registry_version,
-            &self.malicious_flags,
         ) {
             let message_id = MessageId::from(&ingress_id);
             return Err(ValidationError::Permanent(match err {
