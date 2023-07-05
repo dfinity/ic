@@ -75,6 +75,7 @@ fn main() -> Result<()> {
         cli_args.poll_interval,
         metrics.clone(),
         Some(update_signal_sender),
+        1,
     );
 
     info!(
@@ -110,11 +111,13 @@ fn main() -> Result<()> {
 
     rt.block_on(shutdown_signal);
 
-    for handle in handles {
+    for _ in &handles {
         stop_signal_sender.send(())?;
-        handle.join().expect("Join failed");
     }
 
+    for handle in handles {
+        handle.join().expect("Join failed");
+    }
     Ok(())
 }
 
