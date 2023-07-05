@@ -13,13 +13,16 @@ use ic_recovery::{
     file_sync_helper::rsync,
     replay_helper,
     steps::Step,
-    util::block_on,
+    util::{block_on, parse_hex_str},
     Recovery, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::split::resolve_ranges_and_split;
+use ic_types::Height;
 use slog::{info, Logger};
 use url::Url;
+
+use std::net::IpAddr;
 
 pub(crate) struct CopyWorkDirStep {
     pub(crate) layout: Layout,
@@ -248,5 +251,30 @@ impl Step for ValidateCUPStep {
         ))
         .map(|_| ())
         .map_err(|err| RecoveryError::validation_failed("Failed to validate CUP", err))
+    }
+}
+
+pub(crate) struct WaitForCUPStep {
+    pub(crate) logger: Logger,
+    pub(crate) node_ip: IpAddr,
+    pub(crate) layout: Layout,
+    pub(crate) target_subnet: TargetSubnet,
+}
+
+impl Step for WaitForCUPStep {
+    fn descr(&self) -> String {
+        format!(
+            "Waiting until recovery CUP is found on node {}.",
+            self.node_ip
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let latest_checkpoint = self.layout.latest_checkpoint_dir(self.target_subnet)?;
+        let state_hash = get_state_hash(&latest_checkpoint)?;
+        let state_height = parse_hex_str(latest_checkpoint.file_name().unwrap().to_str().unwrap())?;
+        let new_cup_height = Recovery::get_recovery_height(Height::from(state_height));
+
+        Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, new_cup_height, state_hash)
     }
 }

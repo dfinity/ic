@@ -1,6 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
-
-package(default_visibility = ["//visibility:public"])
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 DEPENDENCIES = [
     "//rs/crypto/utils/threshold_sig_der",
@@ -33,11 +31,23 @@ MACRO_DEPENDENCIES = [
 
 ALIASES = {}
 
+rust_library(
+    name = "subnet_splitting",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_subnet_splitting",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    visibility = ["//rs/tests:__subpackages__"],
+    deps = DEPENDENCIES,
+)
+
 rust_binary(
     name = "subnet-splitting-tool",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = ["//visibility:public"],
     deps = DEPENDENCIES + [
         "//rs/canister_sandbox/backend_lib",
         "//rs/canister_sandbox/sandbox_launcher:sandbox_launcher_lib",
