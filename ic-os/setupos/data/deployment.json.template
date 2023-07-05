@@ -6,7 +6,7 @@
     "hosts": "elasticsearch-node-0.mercury.dfinity.systems:443 elasticsearch-node-1.mercury.dfinity.systems:443 elasticsearch-node-2.mercury.dfinity.systems:443 elasticsearch-node-3.mercury.dfinity.systems:443"
   },
   "nns": {
-    "url": "https://icp-api.io,https://icp0.io,https://ic0.app"
+    "url": "NNS_URL"
   },
   "dns": {
     "name_servers": "2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844"

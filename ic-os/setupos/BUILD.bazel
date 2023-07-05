@@ -19,14 +19,6 @@ filegroup(
     srcs = glob(["rootfs/**"]),
 )
 
-# TODO: This can be extended for build time configuration, as needed
-genrule(
-    name = "deployment_json",
-    srcs = [":data/deployment.json.template"],
-    outs = ["deployment.json"],
-    cmd = "sed -e 's/.*/&/' < $< > $@",
-)
-
 # All setup-os targets are named the same, just stay in different submodules.
 # To build or run specific target:
 #
