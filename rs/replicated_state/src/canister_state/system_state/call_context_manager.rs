@@ -20,27 +20,29 @@ use std::collections::BTreeMap;
 use std::convert::{From, TryFrom, TryInto};
 use std::time::Duration;
 
-/// Call context contains all context information related to an incoming call.
+/// Contains all context information related to an incoming call.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CallContext {
     /// Tracks relevant information about who sent the request that created the
-    /// CallContext needed to form the eventual reply.
+    /// `CallContext` needed to form the eventual reply.
     call_origin: CallOrigin,
 
-    /// A CallContext may still be alive after the canister has replied on it
-    /// already (e.g. it replies without executing all callbacks).  Tracks the
-    /// current status.
+    /// A `CallContext` may still be alive after the canister has replied on it
+    /// already (e.g. it replies without executing all callbacks).
+    ///
+    /// Tracks the current status.
     responded: bool,
 
-    /// True if the call context associated with the callback has been deleted
-    /// (e.g. during uninstall), false otherwise.
+    /// True if the `CallContext` associated with the callback has been deleted
+    /// (e.g. during uninstall); false otherwise.
     deleted: bool,
 
-    /// Cycles that were sent in the request that created the CallContext.
+    /// Cycles that were sent in the request that created the `CallContext`.
     available_cycles: Cycles,
 
-    /// Time that the call context was created. This field is only optional to
-    /// accomodate contexts that were created before this field was created.
+    /// Point in time at which the `CallContext` was created. This field is only
+    /// optional to accomodate contexts that were created before this field was
+    /// added.
     time: Option<Time>,
 }
 
@@ -66,7 +68,7 @@ impl CallContext {
         self.available_cycles
     }
 
-    /// Updates the available cycles in the call context based on how much
+    /// Updates the available cycles in the `CallContext` based on how much
     /// cycles the canister requested to keep.
     ///
     /// Returns a `CallContextError::InsufficientCyclesInCall` if `cycles` is
@@ -105,7 +107,7 @@ impl CallContext {
         self.responded = true;
     }
 
-    /// The time at which the call context was created.
+    /// The point in time at which the call context was created.
     pub fn time(&self) -> Option<Time> {
         self.time
     }
@@ -165,42 +167,42 @@ impl From<CallContextError> for HypervisorError {
 /// The action the caller of `CallContext.on_canister_result` should take.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CallContextAction {
-    /// The canister produced a reply for the request which is returned along
+    /// The canister produced a `Reply` for the request which is returned along
     /// with the remaining cycles that the canister did not accept.
     Reply { payload: Vec<u8>, refund: Cycles },
-    /// The canister produced a reject for the request which is returned along
+    /// The canister produced a `Reject` for the request which is returned along
     /// with all the cycles that the request initially contained.
     Reject { payload: String, refund: Cycles },
-    /// The canister did not produce a response or a reject and will not produce
-    /// one.  The cycles that the sender supplied is returned.
+    /// The canister did not produce a `Response` or a `Reject` and will not produce
+    /// one. The cycles that the sender supplied is returned.
     NoResponse { refund: Cycles },
-    /// Message execution failed; the canister has not produced a response or a
-    /// reject yet; and will not produce one.  The produced error and the cycles
+    /// Message execution failed; the canister has not produced a `Response` or a
+    /// `Reject` yet; and will not produce one.  The produced error and the cycles
     /// that the sender supplied is returned.
     Fail {
         error: HypervisorError,
         refund: Cycles,
     },
-    /// The canister did not produce a response or a reject yet but may still
+    /// The canister did not produce a `Response` or a `Reject` yet but may still
     /// produce one later.
     NotYetResponded,
-    /// The canister did not produce a response or a reject during this
+    /// The canister did not produce a `Response` or a `Reject` during this
     /// execution but it produced one earlier.
     AlreadyResponded,
 }
 
-/// Call context manager is an entity responsible for management of contexts of
-/// incoming calls of a canister. The call context manager must be used for
-/// opening new call contexts, registering and unregistering of callback for
-/// subsequent outgoing calls and for closing call contexts.
+/// `CallContextManager` is the entity responsible for managing call contexts of
+/// incoming calls of a canister. It must be used for opening new call contexts,
+/// registering and unregistering of a callback for subsequent outgoing calls and
+/// for closing call contexts.
 ///
-/// In every method, if the provided callback or call context id was
-/// not found inside the call context manager, we panic. Since this logic is
-/// executed inside the "trusted" part of the execution (after the consensus),
-/// any such error would indicate an unexpected and inconsistent system state.
+/// In every method, if the provided callback or call context id was not found
+/// inside the call context manager, we panic. Since this logic is executed inside
+/// the "trusted" part of the execution (after the consensus), any such error would
+/// indicate an unexpected and inconsistent system state.
 ///
 /// Conceptually, this data structure reimplements a reference counter and could
-/// be replaced by an Arc/Rc smart pointer. However, serde does not play well
+/// be replaced by an `Arc`/`Rc` smart pointer. However, serde does not play well
 /// with the serialization of these pointers. In the future we might consider
 /// introducing an intermediate layer between the serialization and the actual
 /// working data structure, to separate these concerns.
@@ -208,7 +210,7 @@ pub enum CallContextAction {
 pub struct CallContextManager {
     next_call_context_id: u64,
     next_callback_id: u64,
-    // maps call context to its responded status
+    /// Maps call context to its responded status.
     call_contexts: BTreeMap<CallContextId, CallContext>,
     callbacks: BTreeMap<CallbackId, Callback>,
 }
@@ -219,7 +221,7 @@ pub enum CallOrigin {
     CanisterUpdate(CanisterId, CallbackId),
     Query(UserId),
     CanisterQuery(CanisterId, CallbackId),
-    /// System task is either a Heartbeat or a GlobalTimer.
+    /// System task is either a `Heartbeat` or a `GlobalTimer`.
     SystemTask,
 }
 
@@ -347,8 +349,8 @@ impl CallContextManager {
     /// Verifies that the stored respondent and originator associated with the
     /// `callback_id` match with details provided by the response.
     ///
-    /// Returns a `StateError::NonMatchingResponse` if could not find the `callback_id` or
-    /// if the response is not valid.
+    /// Returns a `StateError::NonMatchingResponse` if the `callback_id` was not found
+    /// or if the response is not valid.
     pub(crate) fn validate_response(&self, response: &Response) -> Result<(), StateError> {
         match self.callback(&response.originator_reply_callback) {
             Some(callback) => {
@@ -493,7 +495,7 @@ impl CallContextManager {
         callback_id
     }
 
-    /// Returns a copy of the callback for the given callback_id
+    /// Returns a copy of the callback for the given `callback_id`.
     pub fn peek_callback(&self, callback_id: CallbackId) -> Option<&Callback> {
         self.callbacks.get(&callback_id)
     }
@@ -513,7 +515,7 @@ impl CallContextManager {
             .map(|cc| cc.call_origin.clone())
     }
 
-    /// Tells if a call context was already responded or not.
+    /// Returns if a call context was already responded or not.
     pub fn call_responded(&self, call_context_id: CallContextId) -> Option<bool> {
         self.call_contexts
             .get(&call_context_id)
