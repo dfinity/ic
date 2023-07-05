@@ -18,6 +18,9 @@ ic-utils = { path = "../../utils/" }
 ic-registry-local-registry = { path = "../../registry/local_registry" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
+ic-registry-client = { path = "../../registry/client" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+base64 = "0.11.0"
 regex = "1.7.0"
 serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.54"

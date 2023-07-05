@@ -26,12 +26,13 @@ use url::Url;
 pub async fn sync_local_registry(
     log: Logger,
     local_path: PathBuf,
-    nns_url: Url,
+    nns_urls: Vec<Url>,
     use_current_version: bool,
+    public_key: Option<ThresholdSigPublicKey>,
 ) {
     let start = Instant::now();
     let local_store = Arc::new(LocalStoreImpl::new(local_path.clone()));
-    let registry_canister = RegistryCanister::new(vec![nns_url]);
+    let registry_canister = RegistryCanister::new(nns_urls);
 
     let mut latest_version = if !Path::new(&local_path).exists() {
         ZERO_REGISTRY_VERSION
@@ -57,9 +58,12 @@ pub async fn sync_local_registry(
 
     let mut latest_certified_time = 0;
     let mut updates = vec![];
-    let nns_public_key = nns_public_key(&registry_canister)
-        .await
-        .map_err(|e| anyhow::format_err!("Failed to get nns_public_key: {}", e));
+    let nns_public_key = match public_key {
+        Some(pk) => Ok(pk),
+        _ => nns_public_key(&registry_canister)
+            .await
+            .map_err(|e| anyhow::format_err!("Failed to get nns_public_key: {}", e)),
+    };
 
     loop {
         if match registry_canister.get_latest_version().await {

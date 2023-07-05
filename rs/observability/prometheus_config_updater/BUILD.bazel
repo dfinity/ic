@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/http_endpoints/metrics",
     "//rs/monitoring/metrics",
     "//rs/observability/service_discovery",
@@ -12,6 +13,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:anyhow",
+    "@crate_index//:base64",
     "@crate_index//:clap",
     "@crate_index//:crossbeam",
     "@crate_index//:crossbeam-channel",

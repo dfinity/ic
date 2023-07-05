@@ -9,6 +9,7 @@ use futures_util::FutureExt;
 use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
@@ -33,6 +34,18 @@ pub struct JobParameters {
 
 fn main() -> Result<()> {
     let cli_args = CliArgs::parse().validate()?;
+    let public_key = cli_args.public_key.map(|pk: String| {
+        let decoded = base64::decode(&pk).unwrap();
+
+        parse_threshold_sig_key_from_der(&decoded)
+            .map_err(|e| anyhow::format_err!("Failed to get nns_public_key: {}", e))
+            .unwrap()
+    });
+    let nns_urls = cli_args
+        .nns_urls
+        .split(',')
+        .map(Url::parse)
+        .collect::<Result<Vec<Url>, _>>()?;
     let rt = tokio::runtime::Runtime::new()?;
     let log = make_logger();
     let metrics_registry = MetricsRegistry::new();
@@ -40,12 +53,14 @@ fn main() -> Result<()> {
     let mut handles = vec![];
 
     info!(log, "Starting prometheus-config-updater");
-    let mercury_dir = cli_args.targets_dir.join("mercury");
+    let mercury_dir = cli_args.targets_dir.join(cli_args.ic_name);
+
     rt.block_on(sync_local_registry(
         log.clone(),
         mercury_dir,
-        cli_args.nns_url,
+        nns_urls,
         cli_args.skip_sync,
+        public_key,
     ));
 
     let jobs = jobs::get_jobs();
@@ -229,13 +244,22 @@ Regex used to filter the node IDs
     filter_node_id_regex: Option<Regex>,
 
     #[clap(
-        long = "nns-url",
-        default_value = "https://ic0.app",
+        long = "ic-name",
+        default_value = "mercury",
         help = r#"
-NNS-url to use for syncing the registry version.
+IC-name for labelling target nodes.
 "#
     )]
-    nns_url: Url,
+    ic_name: String,
+
+    #[clap(
+        long = "nns-urls",
+        default_value = "https://ic0.app",
+        help = r#"
+NNS-urls to use for syncing the registry version.
+"#
+    )]
+    nns_urls: String,
 
     #[clap(
         long = "skip-sync",
@@ -245,6 +269,14 @@ Possible only if the version is not a ZERO_REGISTRY_VERSION
 "#
     )]
     skip_sync: bool,
+
+    #[clap(
+        long = "public_key",
+        help = r#"
+If specified the public key for validating nns registry base64 encoded one line
+"#
+    )]
+    public_key: Option<String>,
 
     #[clap(
         long = "metrics-listen-addr",
