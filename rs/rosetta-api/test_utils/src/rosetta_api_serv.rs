@@ -3,6 +3,7 @@ use ic_rosetta_api::models::*;
 use ic_types::CanisterId;
 
 use icp_ledger::{AccountIdentifier, BlockIndex};
+use slog::info;
 
 use crate::store_threshold_sig_pk;
 use ic_rosetta_api::models::operation::Operation;
@@ -40,6 +41,7 @@ fn to_rosetta_response<T: serde::de::DeserializeOwned>(
 }
 
 pub struct RosettaApiHandle {
+    logger: slog::Logger,
     process: std::process::Child,
     can_panic: bool,
     http_client: HttpClient,
@@ -51,6 +53,7 @@ pub struct RosettaApiHandle {
 
 impl RosettaApiHandle {
     pub async fn start<P: AsRef<Path>>(
+        logger: slog::Logger,
         rosetta_api_bin_path: P,
         node_url: Url,
         port: u16,
@@ -113,6 +116,7 @@ impl RosettaApiHandle {
 
         let http_client = HttpClient::new();
         let api_serv = Self {
+            logger,
             process,
             can_panic: true,
             http_client,
@@ -162,16 +166,17 @@ impl RosettaApiHandle {
     }
 
     async fn wait_for_startup(&self) {
-        let now = std::time::SystemTime::now();
-        let timeout = std::time::Duration::from_secs(10);
+        const TIMEOUT: Duration = Duration::from_secs(10 * 60); // 10 minutes
+        const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_secs(1);
 
-        while now.elapsed().unwrap() < timeout {
+        let now = std::time::SystemTime::now();
+        while now.elapsed().unwrap() < TIMEOUT {
             if self.network_list().await.is_ok() {
                 return;
             }
-            sleep(Duration::from_millis(100)).await;
+            sleep(WAIT_BETWEEN_ATTEMPTS).await;
         }
-        panic!("Rosetta_api failed to start in {} secs", timeout.as_secs());
+        panic!("Rosetta failed to start in {} secs", TIMEOUT.as_secs());
     }
 
     async fn post_json_request(
@@ -455,75 +460,95 @@ impl RosettaApiHandle {
     }
 
     pub async fn wait_for_block_at(&self, idx: u64) -> Result<Block, String> {
-        let timeout = std::time::Duration::from_secs(5);
-        let now = std::time::SystemTime::now();
+        const TIMEOUT: Duration = Duration::from_secs(30);
+        const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 
-        while now.elapsed().unwrap() < timeout {
+        let now = std::time::SystemTime::now();
+        while now.elapsed().unwrap() < TIMEOUT {
             if let Ok(Ok(resp)) = self.block_at(idx).await {
                 if let Some(b) = resp.block {
                     return Ok(b);
                 }
             }
-            sleep(Duration::from_millis(100)).await;
+            sleep(WAIT_BETWEEN_ATTEMPTS).await;
         }
-        Err(format!("Timeout on waiting for block at {}", idx))
+        Err(format!(
+            "Timeout on waiting for block at {} after {} secs",
+            idx,
+            now.elapsed().unwrap().as_secs()
+        ))
     }
 
     pub async fn wait_for_tip_sync(&self, tip_idx: BlockIndex) -> Result<(), String> {
-        let timeout = std::time::Duration::from_secs(5);
-        let now = std::time::SystemTime::now();
+        const TIMEOUT: Duration = Duration::from_secs(30);
+        const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 
-        while now.elapsed().unwrap() < timeout {
+        let now = std::time::SystemTime::now();
+        while now.elapsed().unwrap() < TIMEOUT {
             if let Ok(Ok(resp)) = self.network_status().await {
                 if resp.current_block_identifier.index as u64 >= tip_idx {
                     return Ok(());
                 }
             }
-            sleep(Duration::from_millis(100)).await;
+            sleep(WAIT_BETWEEN_ATTEMPTS).await;
         }
 
-        Err(format!("Timeout on waiting for tip at {}", tip_idx))
+        Err(format!(
+            "Timeout on waiting for tip at {} after {} secs",
+            tip_idx,
+            now.elapsed().unwrap().as_secs()
+        ))
     }
 
     // safe to call this multiple times
     pub fn stop(&mut self) {
+        const TIMEOUT: Duration = Duration::from_secs(10 * 60); // 10 minutes
+        const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_secs(1);
+
         use nix::sys::signal::{kill, Signal::SIGTERM};
         use nix::unistd::Pid;
         kill(Pid::from_raw(self.process.id() as i32), SIGTERM).ok();
 
-        let mut tries_left = 300i32;
-        let backoff = std::time::Duration::from_millis(100);
-        while tries_left > 0 {
-            tries_left -= 1;
+        let now = std::time::SystemTime::now();
+
+        while now.elapsed().unwrap() < TIMEOUT {
             match self.process.try_wait() {
                 Ok(Some(status)) => {
                     if self.can_panic {
                         assert!(
                             status.success(),
-                            "ic-rosetta-api did not finish successfully. Exit status: {}",
+                            "Rosetta did not stop successfully. Elapsed: {} secs, exit status: {}",
+                            now.elapsed().unwrap().as_secs(),
                             status,
                         );
+                    } else {
+                        info!(
+                            self.logger,
+                            "Rosetta stopped successfully after {} secs",
+                            now.elapsed().unwrap().as_secs()
+                        )
                     }
-                    break;
+                    return;
                 }
-                Ok(None) => std::thread::sleep(backoff),
+                Ok(None) => std::thread::sleep(WAIT_BETWEEN_ATTEMPTS),
                 Err(_) => {
                     if self.can_panic {
-                        panic!("wait for rosetta-api finish: rosetta-api did not start(?)")
+                        panic!(
+                            "Cannot wait for Rosetta to stop because Rosetta process doesn't exist. Did it start? (elapsed: {} secs)",
+                            now.elapsed().unwrap().as_secs(),
+                        )
                     } else {
-                        break;
+                        return;
                     }
                 }
             }
         }
-        if tries_left == 0 {
-            self.process.kill().ok();
-            if self.can_panic {
-                panic!(
-                    "rosetta-api did not finish in {} sec",
-                    (backoff * 300).as_secs_f32()
-                );
-            }
+        self.process.kill().ok();
+        if self.can_panic {
+            panic!(
+                "Rosetta did not stop after {} sec",
+                now.elapsed().unwrap().as_secs()
+            );
         }
     }
 

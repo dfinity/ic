@@ -191,9 +191,10 @@ pub fn test_everything(env: TestEnv) {
 
         let (_cert, tip_idx) = get_tip(&ledger).await;
 
-        info!(log, "Starting rosetta-api");
+        info!(log, "Starting Rosetta");
         let rosetta_api_bin_path = rosetta_api_bin_path(&env);
         let mut rosetta_api_serv = RosettaApiHandle::start(
+            env.logger(),
             rosetta_api_bin_path.clone(),
             nns_node.get_public_url(),
             8099,
@@ -254,8 +255,9 @@ pub fn test_everything(env: TestEnv) {
         rosetta_api_serv.stop();
 
         let (_cert, tip_idx) = get_tip(&ledger).await;
-        info!(log, "Starting rosetta-api again to see if it properly fetches blocks in batches from all the archives");
+        info!(log, "Starting Rosetta again to see if it properly fetches blocks in batches from all the archives");
         let mut rosetta_api_serv = RosettaApiHandle::start(
+            env.logger(),
             rosetta_api_bin_path.clone(),
             nns_node.get_public_url(),
             8101,
@@ -271,7 +273,7 @@ pub fn test_everything(env: TestEnv) {
         let net_status = rosetta_api_serv.network_status().await.unwrap().unwrap();
         assert_eq!(
             net_status.current_block_identifier.index as u64, tip_idx,
-            "Newly started rosetta-api did not fetch all the blocks from the ledger properly"
+            "Newly started Rosetta did not fetch all the blocks from the ledger properly"
         );
         rosetta_api_serv.stop();
 
@@ -281,15 +283,16 @@ pub fn test_everything(env: TestEnv) {
         // avoid potential problems unrelated to this test
         info!(
             log,
-            "Test wrong canister id (expected rosetta-api sync errors in logs)"
+            "Test wrong canister id (expected Rosetta sync errors in logs)"
         );
         test_wrong_canister_id(&env, nns_node.get_public_url(), None).await;
         info!(log, "Test wrong canister id finished");
 
         let (_cert, tip_idx) = get_tip(&ledger_for_governance).await;
 
-        info!(log, "Starting rosetta-api with default fee");
+        info!(log, "Starting Rosetta with default fee");
         let mut rosetta_api_serv = RosettaApiHandle::start(
+            env.logger(),
             rosetta_api_bin_path,
             nns_node.get_public_url(),
             8100,
@@ -332,6 +335,7 @@ async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Opt
     let some_can_id = CanisterId::new(pid).unwrap();
     let rosetta_api_bin_path = rosetta_api_bin_path(env);
     let ros = RosettaApiHandle::start(
+        env.logger(),
         rosetta_api_bin_path,
         node_url,
         8101,

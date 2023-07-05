@@ -9739,6 +9739,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+ "slog",
  "tempfile",
  "tokio",
  "url",

@@ -346,21 +346,24 @@ impl RosettaApiClient {
     }
 
     pub async fn wait_for_startup(&self) {
+        const TIMEOUT: Duration = Duration::from_secs(10 * 60); // 10 minutes
+        const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_secs(1);
         info!(&self.logger, "Waiting for Rosetta availability...");
         let now = std::time::SystemTime::now();
-        let timeout = std::time::Duration::from_secs(180);
-        while now.elapsed().unwrap() < timeout {
+        while now.elapsed().unwrap() < TIMEOUT {
             let res = self.network_list().await;
             if res.is_ok() {
+                info!(
+                    &self.logger,
+                    "Rosetta found after {} seconds",
+                    now.elapsed().unwrap().as_secs()
+                );
                 return;
             }
             debug!(&self.logger, "Rosetta not ready: {}", res.unwrap_err());
-            sleep(Duration::from_millis(1000)).await;
+            sleep(WAIT_BETWEEN_ATTEMPTS).await;
         }
-        panic!(
-            "Rosetta API failed to start in {} seconds.",
-            timeout.as_secs()
-        );
+        panic!("Rosetta failed to start in {} seconds.", TIMEOUT.as_secs());
     }
 
     pub async fn account_balance(
