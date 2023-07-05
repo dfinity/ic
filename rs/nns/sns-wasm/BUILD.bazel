@@ -205,6 +205,7 @@ generated_files_check(
         "//rs/nervous_system/proto:protos",
         "//rs/sns/init:protos",
         "//rs/types/base_types:protos",
+        "//rs/sns/swap:protos",
     ],
     manifest_dir = "rs/nns/sns-wasm",
     deps = [

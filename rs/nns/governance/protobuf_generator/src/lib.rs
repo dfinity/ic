@@ -9,7 +9,7 @@ pub struct ProtoPaths<'a> {
     pub ledger: &'a Path,
     pub sns_swap: &'a Path,
 
-    // Indirectly requiredby sns_swap
+    // Indirectly required by sns_swap
     pub sns_root: &'a Path,
 }
 

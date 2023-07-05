@@ -1129,7 +1129,13 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 
         assert_eq!(
             SnsInitPayload {
-                initial_token_distribution: None, // We'll look at this separately.
+                // We'll look at this separately.
+                initial_token_distribution: None,
+                swap_start_timestamp_seconds: None,
+                swap_due_timestamp_seconds: None,
+                neurons_fund_participants: None,
+                nns_proposal_id: None,
+                neuron_basket_construction_parameters: None,
                 ..converted
             },
             SnsInitPayload {
@@ -1199,10 +1205,26 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                         id: Some(CanisterId::from_u64(1000).get()),
                     }],
                 }),
+                min_participants: original_swap_parameters.minimum_participants,
+                min_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.minimum_icp),
+                max_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.maximum_icp),
+                min_participant_icp_e8s: unwrap_tokens_e8s(
+                    &original_swap_parameters.minimum_participant_icp
+                ),
+                max_participant_icp_e8s: unwrap_tokens_e8s(
+                    &original_swap_parameters.maximum_participant_icp
+                ),
+
                 confirmation_text: original_swap_parameters.confirmation_text.clone(),
                 restricted_countries: original_swap_parameters.restricted_countries.clone(),
 
+                // We'll examine these later
                 initial_token_distribution: None,
+                neuron_basket_construction_parameters: None,
+                neurons_fund_participants: None,
+                swap_start_timestamp_seconds: None,
+                swap_due_timestamp_seconds: None,
+                nns_proposal_id: None,
             },
         );
 
@@ -1276,6 +1298,32 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 },
             ),
         );
+
+        let original_neuron_basket_construction_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
+            .swap_parameters
+            .as_ref()
+            .unwrap()
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .unwrap();
+
+        assert_eq!(
+            converted.neuron_basket_construction_parameters.unwrap(),
+            NeuronBasketConstructionParameters {
+                count: original_neuron_basket_construction_parameters
+                    .count
+                    .unwrap(),
+                dissolve_delay_interval_seconds: unwrap_duration_seconds(
+                    &original_neuron_basket_construction_parameters.dissolve_delay_interval
+                )
+                .unwrap(),
+            }
+        );
+
+        assert_eq!(converted.nns_proposal_id, None);
+        assert_eq!(converted.neurons_fund_participants, None);
+        assert_eq!(converted.swap_start_timestamp_seconds, None);
+        assert_eq!(converted.swap_due_timestamp_seconds, None);
     }
 
     #[test]
@@ -1302,6 +1350,307 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             Ok(ok) => panic!("Invalid data was not rejected. Result: {:#?}", ok),
             Err(err) => assert!(err.contains("wait_for_quiet"), "{}", err),
         }
+    }
+}
+
+mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_payload_tests {
+    use ic_nervous_system_proto::pb::v1 as pb;
+    use ic_sns_init::pb::v1::{sns_init_payload, NeuronsFundParticipants};
+    use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
+    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1};
+
+    use super::*;
+
+    // Alias types from crate::pb::v1::...
+    //
+    // This is done within another mod to differentiate against types that have
+    // similar names as types found in ic_sns_init.
+    mod src {
+        pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
+    }
+
+    fn unwrap_duration_seconds(original: &Option<pb::Duration>) -> Option<u64> {
+        Some(original.as_ref().unwrap().seconds.unwrap())
+    }
+
+    fn unwrap_tokens_e8s(original: &Option<pb::Tokens>) -> Option<u64> {
+        Some(original.as_ref().unwrap().e8s.unwrap())
+    }
+
+    fn unwrap_percentage_basis_points(original: &Option<pb::Percentage>) -> Option<u64> {
+        Some(original.as_ref().unwrap().basis_points.unwrap())
+    }
+
+    #[test]
+    fn test_convert_from_valid() {
+        // Step 1: Prepare the world. (In this case, trivial.)
+        let current_timestamp_seconds = 13_245;
+        let proposal_id = 1000;
+        let neurons_fund_participants = vec![
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(1).to_string(),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 1,
+                    amount_icp_e8s: 10 * E8,
+                }],
+            },
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(2).to_string(),
+                cf_neurons: vec![
+                    CfNeuron {
+                        nns_neuron_id: 2,
+                        amount_icp_e8s: 11 * E8,
+                    },
+                    CfNeuron {
+                        nns_neuron_id: 3,
+                        amount_icp_e8s: 12 * E8,
+                    },
+                ],
+            },
+        ];
+
+        let executed_create_service_nervous_system_proposal =
+            ExecutedCreateServiceNervousSystemProposal {
+                current_timestamp_seconds,
+                create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+                proposal_id,
+                neurons_fund_participants: neurons_fund_participants.clone(),
+            };
+
+        // Step 2: Call the code under test.
+        let converted =
+            SnsInitPayload::try_from(executed_create_service_nervous_system_proposal).unwrap();
+
+        // Step 3: Inspect the result.
+
+        let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+            .ledger_parameters
+            .as_ref()
+            .unwrap();
+        let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+            .governance_parameters
+            .as_ref()
+            .unwrap();
+
+        let original_voting_reward_parameters: &_ = original_governance_parameters
+            .voting_reward_parameters
+            .as_ref()
+            .unwrap();
+
+        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+            .swap_parameters
+            .as_ref()
+            .unwrap();
+
+        assert_eq!(
+            SnsInitPayload {
+                // We'll look at this separately.
+                initial_token_distribution: None,
+                neuron_basket_construction_parameters: None,
+                swap_start_timestamp_seconds: None,
+                swap_due_timestamp_seconds: None,
+                ..converted
+            },
+            SnsInitPayload {
+                transaction_fee_e8s: unwrap_tokens_e8s(&original_ledger_parameters.transaction_fee),
+                token_name: Some(original_ledger_parameters.clone().token_name.unwrap()),
+                token_symbol: Some(original_ledger_parameters.clone().token_symbol.unwrap()),
+
+                proposal_reject_cost_e8s: unwrap_tokens_e8s(
+                    &original_governance_parameters.proposal_rejection_fee
+                ),
+
+                neuron_minimum_stake_e8s: unwrap_tokens_e8s(
+                    &original_governance_parameters.neuron_minimum_stake
+                ),
+
+                fallback_controller_principal_ids: CREATE_SERVICE_NERVOUS_SYSTEM
+                    .fallback_controller_principal_ids
+                    .iter()
+                    .map(|id| id.to_string())
+                    .collect(),
+
+                logo: Some(IMAGE_1.to_string(),),
+                url: Some("https://best.app".to_string(),),
+                name: Some("Hello, world!".to_string(),),
+                description: Some("Best app that you ever did saw.".to_string(),),
+
+                neuron_minimum_dissolve_delay_to_vote_seconds: unwrap_duration_seconds(
+                    &original_governance_parameters.neuron_minimum_dissolve_delay_to_vote
+                ),
+
+                initial_reward_rate_basis_points: unwrap_percentage_basis_points(
+                    &original_voting_reward_parameters.initial_reward_rate
+                ),
+                final_reward_rate_basis_points: unwrap_percentage_basis_points(
+                    &original_voting_reward_parameters.final_reward_rate
+                ),
+                reward_rate_transition_duration_seconds: unwrap_duration_seconds(
+                    &original_voting_reward_parameters.reward_rate_transition_duration
+                ),
+
+                max_dissolve_delay_seconds: unwrap_duration_seconds(
+                    &original_governance_parameters.neuron_maximum_dissolve_delay
+                ),
+
+                max_neuron_age_seconds_for_age_bonus: unwrap_duration_seconds(
+                    &original_governance_parameters.neuron_maximum_age_for_age_bonus
+                ),
+
+                max_dissolve_delay_bonus_percentage: unwrap_percentage_basis_points(
+                    &original_governance_parameters.neuron_maximum_dissolve_delay_bonus
+                )
+                .map(|basis_points| basis_points / 100),
+
+                max_age_bonus_percentage: unwrap_percentage_basis_points(
+                    &original_governance_parameters.neuron_maximum_age_bonus
+                )
+                .map(|basis_points| basis_points / 100),
+
+                initial_voting_period_seconds: unwrap_duration_seconds(
+                    &original_governance_parameters.proposal_initial_voting_period
+                ),
+                wait_for_quiet_deadline_increase_seconds: unwrap_duration_seconds(
+                    &original_governance_parameters.proposal_wait_for_quiet_deadline_increase
+                ),
+                dapp_canisters: Some(sns_init_pb::DappCanisters {
+                    canisters: vec![pb::Canister {
+                        id: Some(CanisterId::from_u64(1000).get()),
+                    }],
+                }),
+                min_participants: original_swap_parameters.minimum_participants,
+                min_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.minimum_icp),
+                max_icp_e8s: unwrap_tokens_e8s(&original_swap_parameters.maximum_icp),
+                min_participant_icp_e8s: unwrap_tokens_e8s(
+                    &original_swap_parameters.minimum_participant_icp
+                ),
+                max_participant_icp_e8s: unwrap_tokens_e8s(
+                    &original_swap_parameters.maximum_participant_icp
+                ),
+
+                confirmation_text: original_swap_parameters.confirmation_text.clone(),
+                restricted_countries: original_swap_parameters.restricted_countries.clone(),
+                nns_proposal_id: Some(proposal_id),
+                neurons_fund_participants: Some(NeuronsFundParticipants {
+                    participants: neurons_fund_participants,
+                }),
+
+                // We'll examine these later
+                initial_token_distribution: None,
+                neuron_basket_construction_parameters: None,
+                swap_start_timestamp_seconds: None,
+                swap_due_timestamp_seconds: None,
+            },
+        );
+
+        let original_initial_token_distribution: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+            .initial_token_distribution
+            .as_ref()
+            .unwrap();
+        let original_developer_distribution: &_ = original_initial_token_distribution
+            .developer_distribution
+            .as_ref()
+            .unwrap();
+        assert_eq!(
+            original_developer_distribution.developer_neurons.len(),
+            1,
+            "{:#?}",
+            original_developer_distribution.developer_neurons,
+        );
+        let original_neuron_distribution: &_ = original_developer_distribution
+            .developer_neurons
+            .get(0)
+            .unwrap();
+
+        let src::SwapDistribution { total: swap_total } = original_initial_token_distribution
+            .swap_distribution
+            .as_ref()
+            .unwrap();
+        let swap_total_e8s = unwrap_tokens_e8s(swap_total).unwrap();
+        assert_eq!(swap_total_e8s, 184_088_000);
+
+        assert_eq!(
+            converted.initial_token_distribution.unwrap(),
+            sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower(
+                sns_init_pb::FractionalDeveloperVotingPower {
+                    developer_distribution: Some(sns_init_pb::DeveloperDistribution {
+                        developer_neurons: vec![sns_init_pb::NeuronDistribution {
+                            controller: Some(original_neuron_distribution.controller.unwrap()),
+
+                            stake_e8s: unwrap_tokens_e8s(&original_neuron_distribution.stake)
+                                .unwrap(),
+
+                            memo: original_neuron_distribution.memo.unwrap(),
+
+                            dissolve_delay_seconds: unwrap_duration_seconds(
+                                &original_neuron_distribution.dissolve_delay
+                            )
+                            .unwrap(),
+
+                            vesting_period_seconds: unwrap_duration_seconds(
+                                &original_neuron_distribution.vesting_period
+                            ),
+                        },],
+                    },),
+                    treasury_distribution: Some(sns_init_pb::TreasuryDistribution {
+                        total_e8s: unwrap_tokens_e8s(
+                            &original_initial_token_distribution
+                                .treasury_distribution
+                                .as_ref()
+                                .unwrap()
+                                .total
+                        )
+                        .unwrap(),
+                    },),
+                    swap_distribution: Some(sns_init_pb::SwapDistribution {
+                        // These are intentionally the same.
+                        total_e8s: swap_total_e8s,
+                        initial_swap_amount_e8s: swap_total_e8s,
+                    },),
+                    airdrop_distribution: Some(sns_init_pb::AirdropDistribution {
+                        airdrop_neurons: vec![],
+                    },),
+                },
+            ),
+        );
+
+        let original_neuron_basket_construction_parameters = CREATE_SERVICE_NERVOUS_SYSTEM
+            .swap_parameters
+            .as_ref()
+            .unwrap()
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .unwrap();
+
+        assert_eq!(
+            converted.neuron_basket_construction_parameters.unwrap(),
+            NeuronBasketConstructionParameters {
+                count: original_neuron_basket_construction_parameters
+                    .count
+                    .unwrap(),
+                dissolve_delay_interval_seconds: unwrap_duration_seconds(
+                    &original_neuron_basket_construction_parameters.dissolve_delay_interval
+                )
+                .unwrap(),
+            }
+        );
+
+        let (expected_swap_start_timestamp_seconds, expected_swap_due_timestamp_seconds) =
+            CreateServiceNervousSystem::swap_start_and_due_timestamps(
+                original_swap_parameters.start_time,
+                original_swap_parameters.duration.unwrap(),
+                current_timestamp_seconds,
+            )
+            .unwrap();
+
+        assert_eq!(
+            converted.swap_start_timestamp_seconds,
+            Some(expected_swap_start_timestamp_seconds)
+        );
+        assert_eq!(
+            converted.swap_due_timestamp_seconds,
+            Some(expected_swap_due_timestamp_seconds)
+        );
     }
 }
 
@@ -1381,6 +1730,8 @@ mod metrics_tests {
     }
 }
 
+// TODO: NNS1-2296 - Re-enable when swap_start_and_due_timestamps uses environment randomness
+#[ignore]
 #[test]
 fn randomly_pick_swap_start() {
     // Generate "zillions" of outputs, and count their occurrences.

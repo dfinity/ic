@@ -99,6 +99,7 @@ generated_files_check(
         ":protos",
         "//rs/types/base_types:protos",
         "//rs/nervous_system/proto:protos",
+        "//rs/sns/swap:protos",
     ],
     manifest_dir = "rs/sns/init",
     deps = DEV_DEPENDENCIES,

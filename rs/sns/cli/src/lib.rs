@@ -255,7 +255,7 @@ pub fn generate_sns_init_payload(init_config_file: &PathBuf) -> anyhow::Result<S
     })?;
 
     sns_init_payload
-        .validate()
+        .validate_legacy_init()
         .map_err(|err| anyhow!("Initial parameters file failed validation: {}", err))?;
 
     Ok(sns_init_payload)

@@ -372,7 +372,7 @@ impl SnsCliInitConfig {
     /// struct pass its validation.
     fn validate(&self) -> anyhow::Result<()> {
         let sns_init_payload = SnsInitPayload::try_from(self.clone())?;
-        sns_init_payload.validate()?;
+        sns_init_payload.validate_legacy_init()?;
         Ok(())
     }
 }
@@ -499,12 +499,22 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
                 .sns_governance
                 .wait_for_quiet_deadline_increase_seconds,
             dapp_canisters: None, // TODO[NNS1-1969]
+            min_participants: None,
+            min_icp_e8s: None,
+            max_icp_e8s: None,
+            min_participant_icp_e8s: None,
+            max_participant_icp_e8s: None,
+            swap_start_timestamp_seconds: None,
+            swap_due_timestamp_seconds: None,
+            neuron_basket_construction_parameters: None,
+            nns_proposal_id: None,
             confirmation_text: sns_cli_init_config.sns_swap.confirmation_text,
             restricted_countries: sns_cli_init_config.sns_swap.restricted_countries.map(
                 |country_codes| Countries {
                     iso_codes: country_codes,
                 },
             ),
+            neurons_fund_participants: None,
         })
     }
 }
@@ -1219,6 +1229,16 @@ wait_for_quiet_deadline_increase_seconds: 1000
             dapp_canisters: _, // TODO[NNS1-1969]
             confirmation_text,
             restricted_countries,
+            min_participants: _,
+            min_icp_e8s: _,
+            max_icp_e8s: _,
+            min_participant_icp_e8s: _,
+            max_participant_icp_e8s: _,
+            swap_start_timestamp_seconds: _,
+            swap_due_timestamp_seconds: _,
+            neuron_basket_construction_parameters: _,
+            nns_proposal_id: _,
+            neurons_fund_participants: _,
         } = sns_init_payload;
 
         assert_eq!(

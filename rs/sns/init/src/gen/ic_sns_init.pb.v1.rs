@@ -125,6 +125,66 @@ pub struct SnsInitPayload {
     /// / Canisters that will be transferred to an SNS.
     #[prost(message, optional, tag = "25")]
     pub dapp_canisters: ::core::option::Option<DappCanisters>,
+    /// The minimum number of buyers that must participate for the swap
+    /// to take place. Must be greater than zero.
+    #[prost(uint64, optional, tag = "26")]
+    pub min_participants: ::core::option::Option<u64>,
+    /// The total number of ICP that is required for this token swap to
+    /// take place. This number divided by the number of SNS tokens being
+    /// offered gives the seller's reserve price for the swap, i.e., the
+    /// minimum number of ICP per SNS tokens that the seller of SNS
+    /// tokens is willing to accept. If this amount is not achieved, the
+    /// swap will be aborted (instead of committed) when the due date/time
+    /// occurs. Must be smaller than or equal to `max_icp_e8s`.
+    #[prost(uint64, optional, tag = "27")]
+    pub min_icp_e8s: ::core::option::Option<u64>,
+    /// The number of ICP that is "targeted" by this token swap. If this
+    /// amount is achieved with sufficient participation, the swap will be
+    /// triggered immediately, without waiting for the due date
+    /// (`end_timestamp_seconds`). This means that an investor knows the minimum
+    /// number of SNS tokens received per invested ICP. If this amount is achieved
+    /// without reaching sufficient_participation, the swap will abort without
+    /// waiting for the due date. Must be at least
+    /// `min_participants * min_participant_icp_e8s`.
+    #[prost(uint64, optional, tag = "28")]
+    pub max_icp_e8s: ::core::option::Option<u64>,
+    /// The minimum amount of ICP that each buyer must contribute to
+    /// participate. Must be greater than zero.
+    #[prost(uint64, optional, tag = "29")]
+    pub min_participant_icp_e8s: ::core::option::Option<u64>,
+    /// The maximum amount of ICP that each buyer can contribute. Must be
+    /// greater than or equal to `min_participant_icp_e8s` and less than
+    /// or equal to `max_icp_e8s`. Can effectively be disabled by
+    /// setting it to `max_icp_e8s`.
+    #[prost(uint64, optional, tag = "30")]
+    pub max_participant_icp_e8s: ::core::option::Option<u64>,
+    /// The date/time when the swap should start.
+    #[prost(uint64, optional, tag = "31")]
+    pub swap_start_timestamp_seconds: ::core::option::Option<u64>,
+    /// The date/time when the swap is due, i.e., it will automatically
+    /// end and commit or abort depending on whether the parameters have
+    /// been fulfilled.
+    #[prost(uint64, optional, tag = "32")]
+    pub swap_due_timestamp_seconds: ::core::option::Option<u64>,
+    /// The construction parameters for the basket of neurons created for all
+    /// investors in the decentralization swap. Each investor, whether via
+    /// the Neurons' Fund or direct, will receive `count` Neurons with
+    /// increasing dissolve delays. The total number of Tokens swapped for
+    /// by the investor will be evenly distributed across the basket. This is
+    /// effectively a vesting schedule to ensure there is a gradual release of
+    /// SNS Tokens available to all investors instead of being liquid immediately.
+    /// See `NeuronBasketConstructionParameters` for more details on how
+    /// the basket is configured.
+    #[prost(message, optional, tag = "33")]
+    pub neuron_basket_construction_parameters:
+        ::core::option::Option<::ic_sns_swap::pb::v1::NeuronBasketConstructionParameters>,
+    /// The ID of the NNS proposal submitted to launch this SNS decentralization
+    /// swap.
+    #[prost(uint64, optional, tag = "34")]
+    pub nns_proposal_id: ::core::option::Option<u64>,
+    /// The Neurons' Fund participants of this SNS decentralization swap.
+    #[prost(message, optional, tag = "35")]
+    pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.
@@ -320,4 +380,17 @@ pub struct NeuronDistribution {
 pub struct DappCanisters {
     #[prost(message, repeated, tag = "1")]
     pub canisters: ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    Eq,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronsFundParticipants {
+    #[prost(message, repeated, tag = "1")]
+    pub participants: ::prost::alloc::vec::Vec<::ic_sns_swap::pb::v1::CfParticipant>,
 }

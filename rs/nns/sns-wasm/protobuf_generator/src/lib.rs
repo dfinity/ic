@@ -7,6 +7,9 @@ pub struct ProtoPaths<'a> {
     pub sns_init: &'a Path,
     pub base_types: &'a Path,
     pub nervous_system: &'a Path,
+
+    // Indirectly required by sns_init
+    pub sns_swap: &'a Path,
 }
 
 /// Build protos using prost_build.
@@ -23,6 +26,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "::ic-nervous-system-proto::pb::v1",
     );
     config.extern_path(".ic_sns_init.pb.v1", "::ic-sns-init::pb::v1");
+    config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
 
     // Add universally needed types to all definitions in this namespace
     config.type_attribute(
@@ -41,6 +45,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
                 proto.sns_init,
                 proto.sns_wasm,
                 proto.nervous_system,
+                proto.sns_swap,
             ],
         )
         .unwrap();
