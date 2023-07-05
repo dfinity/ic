@@ -1,4 +1,5 @@
 use candid::{candid_method, Nat, Principal};
+use ic_canister_profiler::{measure_span, SpanStats};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::trap;
 use ic_cdk_macros::{init, post_upgrade, query};
@@ -87,6 +88,9 @@ thread_local! {
     static ACCOUNT_DATA: RefCell<AccountDataMap> = with_memory_manager(|memory_manager| {
         RefCell::new(AccountDataMap::init(memory_manager.get(ACCOUNT_DATA_MEMORY_ID)))
     });
+
+    /// Profiling data to understand cycles usage
+    static PROFILING_DATA: RefCell<SpanStats> = RefCell::new(SpanStats::default());
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -363,11 +367,8 @@ pub fn compute_wait_time(indexed_tx_count: usize) -> Duration {
     DEFAULT_MAX_WAIT_TIME * (100f64 * numerator) as u32 / 100
 }
 
-fn append_blocks(new_blocks: Vec<GenericBlock>) {
-    // the index of the next block that we
-    // are going to append
-    let mut block_index = with_blocks(|blocks| blocks.len());
-    for block in new_blocks {
+fn append_block(block_index: BlockIndex64, block: GenericBlock) {
+    measure_span(&PROFILING_DATA, "append_blocks", move || {
         let block = generic_block_to_encoded_block_or_trap(block_index, block);
 
         // append the encoded block to the block log
@@ -391,7 +392,15 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) {
 
         // change the balance of the involved accounts
         process_balance_changes(block_index, &decoded_block);
+    });
+}
 
+fn append_blocks(new_blocks: Vec<GenericBlock>) {
+    // the index of the next block that we
+    // are going to append
+    let mut block_index = with_blocks(|blocks| blocks.len());
+    for block in new_blocks {
+        append_block(block_index, block);
         block_index += 1;
     }
 }
@@ -424,56 +433,60 @@ fn push_block(block_ranges: &mut Vec<Range<BlockIndex64>>, block_index: BlockInd
 }
 
 fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
-    match block.transaction.operation {
-        Operation::Burn { from, amount } => debit(block_index, from, amount),
-        Operation::Mint { to, amount } => credit(block_index, to, amount),
-        Operation::Transfer {
-            from,
-            to,
-            amount,
-            fee,
-        } => {
-            let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                ic_cdk::trap(&format!(
-                    "Block {} is of type Transfer but has no fee or effective fee!",
-                    block_index
-                ))
-            });
-            debit(block_index, from, amount + fee);
-            credit(block_index, to, amount);
-            if let Some(fee_collector) = get_fee_collector(block_index, block) {
-                credit(block_index, fee_collector, fee);
+    measure_span(
+        &PROFILING_DATA,
+        "append_blocks.process_balance_changes",
+        move || match block.transaction.operation {
+            Operation::Burn { from, amount } => debit(block_index, from, amount),
+            Operation::Mint { to, amount } => credit(block_index, to, amount),
+            Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => {
+                let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
+                    ic_cdk::trap(&format!(
+                        "Block {} is of type Transfer but has no fee or effective fee!",
+                        block_index
+                    ))
+                });
+                debit(block_index, from, amount + fee);
+                credit(block_index, to, amount);
+                if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                    credit(block_index, fee_collector, fee);
+                }
             }
-        }
-        Operation::Approve { from, fee, .. } => {
-            let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                ic_cdk::trap(&format!(
-                    "Block {} is of type Approve but has no fee or effective fee!",
-                    block_index
-                ))
-            });
-            debit(block_index, from, fee);
-        }
-        Operation::TransferFrom {
-            from,
-            to,
-            amount,
-            fee,
-            ..
-        } => {
-            let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                ic_cdk::trap(&format!(
-                    "Block {} is of type TransferFrom but has no fee or effective fee!",
-                    block_index
-                ))
-            });
-            debit(block_index, from, amount + fee);
-            credit(block_index, to, amount);
-            if let Some(fee_collector) = get_fee_collector(block_index, block) {
-                credit(block_index, fee_collector, fee);
+            Operation::Approve { from, fee, .. } => {
+                let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
+                    ic_cdk::trap(&format!(
+                        "Block {} is of type Approve but has no fee or effective fee!",
+                        block_index
+                    ))
+                });
+                debit(block_index, from, fee);
             }
-        }
-    }
+            Operation::TransferFrom {
+                from,
+                to,
+                amount,
+                fee,
+                ..
+            } => {
+                let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
+                    ic_cdk::trap(&format!(
+                        "Block {} is of type TransferFrom but has no fee or effective fee!",
+                        block_index
+                    ))
+                });
+                debit(block_index, from, amount + fee);
+                credit(block_index, to, amount);
+                if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                    credit(block_index, fee_collector, fee);
+                }
+            }
+        },
+    );
 }
 
 fn debit(block_index: BlockIndex64, account: Account, amount: u64) {
@@ -841,6 +854,13 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
             .min(f64::MAX as u128) as f64,
         "Last amount of time waited between two transactions fetch.",
     )?;
+    PROFILING_DATA.with(|cell| -> std::io::Result<()> {
+        cell.borrow().record_metrics(w.histogram_vec(
+            "index_ng_profile_instructions",
+            "Statistics for how many instructions index-ng operations require.",
+        )?)?;
+        Ok(())
+    })?;
     Ok(())
 }
 

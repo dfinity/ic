@@ -7609,6 +7609,7 @@ dependencies = [
  "candid",
  "ciborium",
  "ic-base-types",
+ "ic-canister-profiler",
  "ic-canisters-http-types",
  "ic-cdk 0.6.10",
  "ic-cdk-macros",
