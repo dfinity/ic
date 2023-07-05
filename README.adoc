@@ -36,7 +36,7 @@ Protocol Documentation:
 Engineering
 
 - https://sdk.dfinity.org/docs/developers-guide/concepts/what-is-ic[What is the Internet Computer?]
-- https://sdk.dfinity.org/docs/quickstart/quickstart-intro.html[Tutorials, SDKs, and sample apps to get started]
+- https://internetcomputer.org/docs/current/tutorials/[Tutorials, SDKs, and sample apps to get started]
 - https://docs.dfinity.org/[Rust Cargo docs for the replica]
 
 
