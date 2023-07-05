@@ -5727,6 +5727,69 @@
       "yaxis": {
         "align": true
       }
+    },
+    {
+      "cards": {
+        "cardPadding": 0
+      },
+      "color": {
+        "cardColor": "#73BF69",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateGreens",
+        "exponent": 0.5,
+        "min": 0,
+        "mode": "spectrum"
+      },
+      "dashes": false,
+      "dataFormat": "tsbuckets",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "The total number of changes in canister history per canister on a subnet.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 216
+      },
+      "heatmap": {},
+      "hideZeroBuckets": true,
+      "highlightCards": true,
+      "id": 140,
+      "interval": "10s",
+      "legend": {
+        "show": true
+      },
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "round(\n  sum by (le) (\n    quantile by(le, ic_subnet) (\n    0.5,\n    rate(mr_canister_history_total_num_changes_bucket{ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$heatmap_period])\n    )\n  )\n)\n",
+          "format": "heatmap",
+          "interval": "$heatmap_period",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Total number of changes in canister history per canister",
+      "tooltip": {
+        "show": true,
+        "showHistogram": true
+      },
+      "transparent": true,
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "yAxis": {
+        "decimals": 0,
+        "format": "none",
+        "logBase": 1,
+        "show": true
+      },
+      "yBucketBound": "auto"
     }
   ],
   "refresh": false,
