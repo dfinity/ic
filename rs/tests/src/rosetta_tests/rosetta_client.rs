@@ -99,22 +99,46 @@ impl RosettaApiClient {
         url: &str,
         body: Vec<u8>,
     ) -> Result<(Vec<u8>, HttpStatusCode), String> {
-        let resp = self
-            .http_client
-            .post(url)
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .timeout(Duration::from_secs(100))
-            .body(body)
-            .send()
-            .await
-            .map_err(|err| format!("sending post request failed with {}: ", err))?;
-        let resp_status = resp.status();
-        let resp_body = resp
-            .bytes()
-            .await
-            .map_err(|err| format!("receive post response failed with {}: ", err))?
-            .to_vec();
-        Ok((resp_body, resp_status))
+        const TIMEOUT: Duration = Duration::from_secs(30);
+        const WAIT_BETWEEN_ATTEMPTS: Duration = Duration::from_secs(5);
+        const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+
+        let now = std::time::SystemTime::now();
+        loop {
+            debug!(self.logger, "Sending post request to {}", url);
+            let response = self
+                .http_client
+                .post(url)
+                .header(reqwest::header::CONTENT_TYPE, "application/json")
+                .timeout(REQUEST_TIMEOUT)
+                .body(body.clone())
+                .send()
+                .await
+                .map_err(|err| format!("sending post request failed with {}: ", err))?;
+            let response_status = response.status();
+            let response_body = response
+                .bytes()
+                .await
+                .map_err(|err| format!("receive post response failed with {}: ", err))?
+                .to_vec();
+            if response_status.is_success() || now.elapsed().unwrap() >= TIMEOUT {
+                debug!(
+                    self.logger,
+                    "Request {} succeeded after {} seconds",
+                    url,
+                    now.elapsed().unwrap().as_secs(),
+                );
+                return Ok((response_body, response_status));
+            }
+            debug!(
+                self.logger,
+                "Request {} failed with status {}, retrying in {} seconds",
+                url,
+                response_status,
+                WAIT_BETWEEN_ATTEMPTS.as_secs()
+            );
+            sleep(WAIT_BETWEEN_ATTEMPTS).await;
+        }
     }
 
     pub async fn construction_derive(
