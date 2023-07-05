@@ -5,9 +5,11 @@
 //! bad state) and optionally replacing any (potentially) broken nodes in the
 //! subnet with a set of known-good nodes
 
-use crate::mutations::do_create_subnet::EcdsaInitialConfig;
-use crate::registry::Version;
-use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
+use crate::{
+    common::LOG_PREFIX,
+    mutations::{common::encode_or_panic, do_create_subnet::EcdsaInitialConfig},
+    registry::{Registry, Version},
+};
 use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::{call, CanisterId};
 #[cfg(target_arch = "wasm32")]
@@ -19,8 +21,10 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_subnet_record_key,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
-use ic_registry_transport::upsert;
+use ic_registry_transport::{
+    pb::v1::{registry_mutation, RegistryMutation},
+    upsert,
+};
 use on_wire::bytes;
 use serde::Serialize;
 use std::convert::TryFrom;
@@ -56,6 +60,17 @@ impl Registry {
             cup_contents.registry_store_uri = None;
 
             let mut subnet_record = self.get_subnet_or_panic(subnet_id);
+
+            // If [SubnetRecord::halt_at_cup_height] is set to `true`, then the Subnet was
+            // instructed to halt after reaching the next CUP height. Since the Consensus is
+            // looking at the registry version from the highest CUP when considering this flag,
+            // we reset it to `false` but flip the `is_halted` flag to `true`, so the subnet
+            // remains halted but can be later unhalted by sending an appropriate proposal which
+            // resets `is_halted` to `false`.
+            if subnet_record.halt_at_cup_height {
+                subnet_record.halt_at_cup_height = false;
+                subnet_record.is_halted = true;
+            }
 
             let dkg_nodes = if let Some(replacement_nodes) = payload.replacement_nodes.clone() {
                 self.replace_subnet_record_membership(
@@ -95,7 +110,6 @@ impl Registry {
             // and make sure the subnet is not listed as signing_subnet for keys it no longer holds
             if let Some(ref new_ecdsa_config) = payload.ecdsa_config {
                 // get current set of keys
-
                 let new_key_list: Vec<EcdsaKeyId> = new_ecdsa_config
                     .keys
                     .iter()
@@ -106,9 +120,11 @@ impl Registry {
                     subnet_id,
                     &self.get_keys_that_will_be_removed_from_subnet(subnet_id, new_key_list),
                 ));
+
                 // Update ECDSA configuration on subnet record to reflect new holdings
                 subnet_record.ecdsa_config = Some(new_ecdsa_config.clone().into());
             }
+
             // Push all of our subnet_record mutations
             mutations.push(upsert(
                 make_subnet_record_key(subnet_id),
@@ -260,16 +276,17 @@ fn get_record_version_as_of_registry_version(
 
 #[cfg(test)]
 mod test {
-    use crate::common::test_helpers::{
-        add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
-        prepare_registry_with_nodes,
+    use crate::{
+        common::test_helpers::{
+            add_fake_subnet, get_invariant_compliant_subnet_record, invariant_compliant_registry,
+            prepare_registry_with_nodes,
+        },
+        mutations::{
+            do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest},
+            do_recover_subnet::{panic_if_record_changed_across_versions, RecoverSubnetPayload},
+        },
+        registry::Registry,
     };
-    use crate::mutations::do_create_subnet::EcdsaInitialConfig;
-    use crate::mutations::do_create_subnet::EcdsaKeyRequest;
-    use crate::mutations::do_recover_subnet::{
-        panic_if_record_changed_across_versions, RecoverSubnetPayload,
-    };
-    use crate::registry::Registry;
     use ic_base_types::SubnetId;
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::subnet::v1::SubnetRecord;

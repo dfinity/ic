@@ -5,34 +5,33 @@ use ic_config::Config;
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryClient;
 use ic_nns_common::registry::encode_or_panic;
-use ic_nns_test_utils::itest_helpers::try_call_via_universal_canister;
 use ic_nns_test_utils::{
     itest_helpers::{
         forward_call_via_universal_canister, local_test_on_nns_subnet_with_mutations,
-        set_up_registry_canister, set_up_universal_canister,
+        set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
     },
     registry::{get_value_or_panic, prepare_registry},
 };
-use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
-use ic_protobuf::registry::crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId};
-use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, EcdsaConfig};
-use ic_protobuf::registry::subnet::v1::{SubnetListRecord, SubnetRecord};
+use ic_protobuf::registry::{
+    crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId, EcdsaSigningSubnetList},
+    subnet::v1::{CatchUpPackageContents, EcdsaConfig, SubnetListRecord, SubnetRecord},
+};
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
     make_ecdsa_signing_subnet_list_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_registry_transport::{insert, upsert};
+use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_test_utilities::types::ids::subnet_test_id;
 use ic_types::ReplicaVersion;
-use registry_canister::mutations::common::decode_registry_value;
-use registry_canister::mutations::do_create_subnet::{
-    CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest,
-};
 use registry_canister::{
-    init::RegistryCanisterInitPayloadBuilder, mutations::do_recover_subnet::RecoverSubnetPayload,
+    init::RegistryCanisterInitPayloadBuilder,
+    mutations::{
+        common::decode_registry_value,
+        do_create_subnet::{CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest},
+        do_recover_subnet::RecoverSubnetPayload,
+    },
 };
 use std::convert::TryFrom;
 
@@ -584,6 +583,116 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
             ecdsa_signing_subnet_list,
             EcdsaSigningSubnetList { subnets: vec![] }
         )
+    });
+}
+
+#[test]
+fn test_recover_subnet_resets_the_halt_at_cup_height_flag() {
+    let ic_config = get_ic_config();
+    let (config, _tmpdir) = Config::temp_config();
+    canister_test_with_config_async(config, ic_config, |local_runtime| async move {
+        let data_provider = local_runtime.registry_data_provider.clone();
+        let fake_client = local_runtime.registry_client.clone();
+
+        let runtime = Runtime::Local(local_runtime);
+        // get some nodes for our tests
+        let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5, 0);
+
+        let subnet_to_recover_nodes = vec![node_ids.pop().unwrap()];
+        let mut subnet_to_recover: SubnetRecord = CreateSubnetPayload {
+            unit_delay_millis: 10,
+            gossip_retransmission_request_ms: 10_000,
+            gossip_registry_poll_period_ms: 2000,
+            gossip_pfn_evaluation_period_ms: 50,
+            gossip_receive_check_cache_size: 1,
+            gossip_max_duplicity: 1,
+            gossip_max_chunk_wait_ms: 200,
+            gossip_max_artifact_streams_per_peer: 1,
+            replica_version_id: ReplicaVersion::default().into(),
+            node_ids: subnet_to_recover_nodes.clone(),
+            ..Default::default()
+        }
+        .into();
+
+        // Set the `halt_at_cup_height` to `true`, to verify that it will be later set to `false`.
+        subnet_to_recover.halt_at_cup_height = true;
+        subnet_to_recover.is_halted = false;
+
+        let mut subnet_list_record = decode_registry_value::<SubnetListRecord>(
+            fake_client
+                .get_value(
+                    &make_subnet_list_record_key(),
+                    fake_client.get_latest_version(),
+                )
+                .unwrap()
+                .unwrap(),
+        );
+
+        let subnet_to_recover_subnet_id = subnet_test_id(1003);
+
+        subnet_list_record
+            .subnets
+            .push(subnet_to_recover_subnet_id.get().into_vec());
+
+        let mutations = vec![
+            upsert(
+                make_subnet_record_key(subnet_to_recover_subnet_id).into_bytes(),
+                encode_or_panic(&subnet_to_recover),
+            ),
+            upsert(
+                make_subnet_list_record_key().into_bytes(),
+                encode_or_panic(&subnet_list_record),
+            ),
+            insert(
+                make_crypto_threshold_signing_pubkey_key(subnet_to_recover_subnet_id).as_bytes(),
+                encode_or_panic(&vec![]),
+            ),
+            insert(
+                make_catch_up_package_contents_key(subnet_to_recover_subnet_id).as_bytes(),
+                encode_or_panic(&dummy_cup_for_subnet(subnet_to_recover_nodes)),
+            ),
+        ];
+
+        let add_subnets_mutate = RegistryAtomicMutateRequest {
+            preconditions: vec![],
+            mutations,
+        };
+
+        let registry = setup_registry_synced_with_fake_client(
+            &runtime,
+            fake_client,
+            data_provider,
+            vec![init_mutate, add_subnets_mutate],
+        )
+        .await;
+
+        // Install the universal canister in place of the governance canister
+        let fake_governance_canister = set_up_universal_canister_as_governance(&runtime).await;
+
+        let payload = RecoverSubnetPayload {
+            subnet_id: subnet_to_recover_subnet_id.get(),
+            height: 10,
+            time_ns: 1200,
+            state_hash: vec![10, 20, 30],
+            replacement_nodes: None,
+            registry_store_uri: None,
+            ecdsa_config: None,
+        };
+
+        try_call_via_universal_canister(
+            &fake_governance_canister,
+            &registry,
+            "recover_subnet",
+            Encode!(&payload).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        // Verify that the `halt_at_cup_height` and `is_halted` flags are correctly set.
+        let subnet_record = get_subnet_record(&registry, subnet_to_recover_subnet_id).await;
+
+        assert!(!subnet_record.halt_at_cup_height);
+        assert!(subnet_record.is_halted);
     });
 }
 
