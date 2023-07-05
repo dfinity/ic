@@ -348,8 +348,15 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
             )
         };
 
-        let (block_idx, _) =
-            apply_transaction(ledger, tx, now, effective_fee).map_err(convert_transfer_error)?;
+        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)
+            .map_err(convert_transfer_error)
+            .map_err(|err| {
+                let err: TransferError = match err.try_into() {
+                    Ok(err) => err,
+                    Err(err) => ic_cdk::trap(&err),
+                };
+                err
+            })?;
         Ok(block_idx)
     })?;
 
@@ -492,7 +499,14 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
         };
 
         let (block_idx, _) = apply_transaction(ledger, tx, now, expected_fee_tokens)
-            .map_err(convert_transfer_error)?;
+            .map_err(convert_transfer_error)
+            .map_err(|err| {
+                let err: ApproveError = match err.try_into() {
+                    Ok(err) => err,
+                    Err(err) => ic_cdk::trap(&err),
+                };
+                err
+            })?;
         Ok(block_idx)
     })?;
 

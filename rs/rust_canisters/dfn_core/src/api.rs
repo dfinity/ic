@@ -708,9 +708,10 @@ pub fn print<S: std::convert::AsRef<str>>(s: S) {
 }
 
 /// Traps with the given message.
-pub fn trap_with(message: &str) {
+pub fn trap_with(message: &str) -> ! {
     unsafe {
         ic0::trap(message.as_ptr() as u32, message.len() as u32);
+        unreachable!()
     }
 }
 
