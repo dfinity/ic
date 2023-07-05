@@ -14,7 +14,7 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
-use ic_metrics::buckets::{add_bucket, decimal_buckets};
+use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
@@ -78,6 +78,7 @@ const METRIC_TIMED_OUT_REQUESTS_TOTAL: &str = "mr_timed_out_requests_total";
 const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
     "mr_wasm_custom_sections_memory_usage_bytes";
 const METRIC_CANISTER_HISTORY_MEMORY_USAGE_BYTES: &str = "mr_canister_history_memory_usage_bytes";
+const METRIC_CANISTER_HISTORY_TOTAL_NUM_CHANGES: &str = "mr_canister_history_total_num_changes";
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
@@ -262,6 +263,8 @@ pub(crate) struct MessageRoutingMetrics {
     /// and does not account for the extra copies of the state that the protocol
     /// has to store for correct operations.
     canister_history_memory_usage_bytes: IntGauge,
+    /// The total number of changes in canister history per canister on this subnet.
+    canister_history_total_num_changes: Histogram,
     /// Critical error for not being able to calculate a subnet size.
     critical_error_missing_subnet_size: IntCounter,
     /// Critical error: subnet has no canister allocation range to generate new
@@ -317,6 +320,12 @@ impl MessageRoutingMetrics {
             canister_history_memory_usage_bytes: metrics_registry.int_gauge(
                 METRIC_CANISTER_HISTORY_MEMORY_USAGE_BYTES,
                 "Total memory footprint of canister history of all canisters on this subnet.",
+            ),
+            canister_history_total_num_changes: metrics_registry.histogram(
+                METRIC_CANISTER_HISTORY_TOTAL_NUM_CHANGES,
+                "Total number of changes in canister history per canister on this subnet.",
+                // 0, 1, 2, 5, …, 1000, 2000, 5000
+                decimal_buckets_with_zero(0, 3),
             ),
             critical_error_missing_subnet_size: metrics_registry
                 .error_counter(CRITICAL_ERROR_MISSING_SUBNET_SIZE),
@@ -442,6 +451,12 @@ impl BatchProcessorImpl {
                 .map(|es| es.metadata.memory_usage())
                 .unwrap_or_default();
             canister_history_memory_usage += canister.canister_history_memory_usage();
+            self.metrics.canister_history_total_num_changes.observe(
+                canister
+                    .system_state
+                    .get_canister_history()
+                    .get_total_num_changes() as f64,
+            );
         }
         self.metrics
             .canisters_memory_usage_bytes
