@@ -78,6 +78,10 @@ pub struct SubnetRecord {
     pub ecdsa_config: ::core::option::Option<EcdsaConfig>,
     /// If `true`, the subnet will be halted after reaching the next cup height: it will no longer
     /// create or execute blocks.
+    ///
+    /// Note: this flag is reset automatically when a new CUP proposal is approved. When that
+    /// happens, the `is_halted` flag is set to `true`, so the Subnet remains halted until an
+    /// appropriate proposal which sets `is_halted` to `false` is approved.
     #[prost(bool, tag = "28")]
     pub halt_at_cup_height: bool,
 }
