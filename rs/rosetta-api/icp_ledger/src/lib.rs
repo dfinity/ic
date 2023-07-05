@@ -768,7 +768,9 @@ pub enum CandidOperation {
     Approve {
         from: AccountIdBlob,
         spender: AccountIdBlob,
-        allowance_e8s: u64,
+        // This field is deprecated and should not be used.
+        allowance_e8s: i128,
+        allowance: Tokens,
         fee: Tokens,
         expires_at: Option<TimeStamp>,
     },
@@ -812,9 +814,10 @@ impl From<Operation> for CandidOperation {
             } => Self::Approve {
                 from: from.to_address(),
                 spender: spender.to_address(),
-                allowance_e8s: allowance.get_e8s(),
+                allowance_e8s: allowance.get_e8s() as i128,
                 fee,
                 expires_at,
+                allowance,
             },
             Operation::TransferFrom {
                 from,
@@ -863,13 +866,14 @@ impl TryFrom<CandidOperation> for Operation {
             CandidOperation::Approve {
                 from,
                 spender,
-                allowance_e8s,
                 fee,
                 expires_at,
+                allowance,
+                ..
             } => Operation::Approve {
                 spender: address_to_accountidentifier(spender)?,
                 from: address_to_accountidentifier(from)?,
-                allowance: Tokens::from_e8s(allowance_e8s),
+                allowance,
                 fee,
                 expires_at,
             },
