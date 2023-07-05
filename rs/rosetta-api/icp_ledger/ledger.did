@@ -115,7 +115,9 @@ type Operation = variant {
     Approve : record {
         from : AccountIdentifier;
         spender : AccountIdentifier;
+        // This field is deprecated and should not be used.
         allowance_e8s : int;
+        allowance: Tokens;
         fee : Tokens;
         expires_at : opt TimeStamp;
     };
