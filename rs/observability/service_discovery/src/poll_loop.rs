@@ -16,6 +16,7 @@ pub fn make_poll_loop(
     poll_interval: Duration,
     metrics: Metrics,
     update_notifier: Option<Sender<()>>,
+    amount_of_updaters: usize,
 ) -> impl FnMut() {
     let interval = crossbeam::channel::tick(poll_interval);
     move || {
@@ -48,8 +49,10 @@ pub fn make_poll_loop(
                 err = true;
             }
             if let Some(sender) = &update_notifier {
-                if let Err(e) = sender.send(()) {
-                    warn!(log, "Failed to send update signal : {:?}", e);
+                for _ in 0..amount_of_updaters {
+                    if let Err(e) = sender.send(()) {
+                        warn!(log, "Failed to send update signal : {:?}", e);
+                    }
                 }
             }
             std::mem::drop(timer);
