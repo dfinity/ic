@@ -68,6 +68,7 @@ fn subnet_splitting(
         recovery_args,
         neuron_args,
         subnet_splitting_args,
+        /*interactive=*/ true,
     );
 
     cli::execute_steps(&logger, subnet_splitting);

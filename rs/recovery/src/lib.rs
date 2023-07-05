@@ -93,7 +93,7 @@ pub struct NeuronArgs {
 pub struct NodeMetrics {
     _ip: IpAddr,
     pub finalization_height: Height,
-    certification_height: Height,
+    pub certification_height: Height,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

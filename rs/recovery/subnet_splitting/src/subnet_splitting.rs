@@ -8,7 +8,7 @@ use crate::{
     state_tool_helper::StateToolHelper,
     steps::{
         ComputeExpectedManifestsStep, CopyWorkDirStep, SplitStateStep, StateSplitStrategy,
-        ValidateCUPStep,
+        ValidateCUPStep, WaitForCUPStep,
     },
     target_subnet::TargetSubnet,
     utils::get_state_hash,
@@ -22,7 +22,7 @@ use ic_recovery::{
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::{RegistryPollingStrategy, VersionedRecoveryResult},
-    steps::{AdminStep, Step, UploadAndRestartStep, WaitForCUPStep},
+    steps::{AdminStep, Step, UploadAndRestartStep},
     NeuronArgs, Recovery, RecoveryArgs, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -46,7 +46,7 @@ use std::{collections::HashMap, iter::Peekable, net::IpAddr};
     EnumMessage,
     clap::ValueEnum,
 )]
-pub(crate) enum StepType {
+pub enum StepType {
     PrepareCanisterMigration,
     HaltSourceSubnetAtCupHeight,
     RerouteCanisterRanges,
@@ -70,46 +70,46 @@ pub(crate) enum StepType {
 
 #[derive(Debug, Clone, PartialEq, Parser, Serialize, Deserialize)]
 #[clap(version = "1.0")]
-pub(crate) struct SubnetSplittingArgs {
+pub struct SubnetSplittingArgs {
     /// Id of the subnet whose state will be split.
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
-    source_subnet_id: SubnetId,
+    #[clap(long, parse(try_from_str=ic_recovery::util::subnet_id_from_str))]
+    pub source_subnet_id: SubnetId,
 
     /// Id of the destination subnet.
-    #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
-    destination_subnet_id: SubnetId,
+    #[clap(long, parse(try_from_str=ic_recovery::util::subnet_id_from_str))]
+    pub destination_subnet_id: SubnetId,
 
     /// Public ssh key to be deployed to the subnet for read only access.
     #[clap(long)]
-    pub_key: Option<String>,
+    pub pub_key: Option<String>,
 
     /// If the downloaded state should be backed up locally.
     #[clap(long)]
-    keep_downloaded_state: Option<bool>,
+    pub keep_downloaded_state: Option<bool>,
 
     /// IP address of the node from the source subnet to download the state from.
     #[clap(long)]
-    download_node_source: Option<IpAddr>,
+    pub download_node_source: Option<IpAddr>,
 
     /// IP address of the node to upload the new subnet state to.
     #[clap(long)]
-    upload_node_source: Option<IpAddr>,
+    pub upload_node_source: Option<IpAddr>,
 
     /// IP address of the node to upload the new subnet state to.
     #[clap(long)]
-    upload_node_destination: Option<IpAddr>,
+    pub upload_node_destination: Option<IpAddr>,
 
     /// If present the tool will start execution for the provided step, skipping the initial ones.
     #[clap(long = "resume")]
     #[clap(value_enum)]
-    next_step: Option<StepType>,
+    pub next_step: Option<StepType>,
 
     /// The canister ID ranges to be moved to the destination subnet.
     #[clap(long, multiple_values(true), required = true)]
-    canister_id_ranges_to_move: Vec<CanisterIdRange>,
+    pub canister_id_ranges_to_move: Vec<CanisterIdRange>,
 }
 
-pub(crate) struct SubnetSplitting {
+pub struct SubnetSplitting {
     step_iterator: Peekable<StepTypeIter>,
     params: SubnetSplittingArgs,
     recovery_args: RecoveryArgs,
@@ -118,14 +118,16 @@ pub(crate) struct SubnetSplitting {
     state_tool_helper: StateToolHelper,
     layout: Layout,
     logger: Logger,
+    interactive: bool,
 }
 
 impl SubnetSplitting {
-    pub(crate) fn new(
+    pub fn new(
         logger: Logger,
         recovery_args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
         subnet_args: SubnetSplittingArgs,
+        interactive: bool,
     ) -> Self {
         let recovery = Recovery::new(
             logger.clone(),
@@ -152,6 +154,7 @@ impl SubnetSplitting {
             recovery,
             state_tool_helper,
             logger,
+            interactive,
         }
     }
 
@@ -209,7 +212,7 @@ impl SubnetSplitting {
                 node_ip,
                 work_dir: self.layout.work_dir(target_subnet),
                 data_src: self.layout.ic_state_dir(target_subnet),
-                require_confirmation: true,
+                require_confirmation: self.interactive,
                 key_file: self.recovery.key_file.clone(),
                 check_ic_replay_height: false,
             }),
@@ -221,8 +224,9 @@ impl SubnetSplitting {
         match self.upload_node(target_subnet) {
             Some(node_ip) => Ok(WaitForCUPStep {
                 logger: self.recovery.logger.clone(),
+                layout: self.layout.clone(),
                 node_ip,
-                work_dir: self.layout.work_dir(target_subnet),
+                target_subnet,
             }),
             None => Err(RecoveryError::StepSkipped),
         }
@@ -257,7 +261,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
     }
 
     fn interactive(&self) -> bool {
-        true
+        self.interactive
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
