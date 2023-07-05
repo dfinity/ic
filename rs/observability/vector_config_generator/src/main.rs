@@ -65,8 +65,9 @@ fn main() -> Result<()> {
     rt.block_on(sync_local_registry(
         log.clone(),
         mercury_dir,
-        cli_args.nns_url,
+        vec![cli_args.nns_url],
         cli_args.skip_sync,
+        None,
     ));
 
     let jobs = map_jobs(&cli_args.jobs_and_ports);
