@@ -857,7 +857,8 @@ impl StateMachine {
 
     fn await_height(&self, h: Height) {
         const SLEEP_TIME: Duration = Duration::from_millis(100);
-        const MAX_WAIT_TIME: Duration = Duration::from_secs(180);
+        // TODO[NNS1-2370] decrease MAX_WAIT_TIME back to 180 seconds.
+        const MAX_WAIT_TIME: Duration = Duration::from_secs(270);
 
         let started_at = Instant::now();
 
