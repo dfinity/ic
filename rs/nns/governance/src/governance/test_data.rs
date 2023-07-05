@@ -18,6 +18,7 @@ mod src {
             developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
             TreasuryDistribution,
         },
+        swap_parameters::NeuronBasketConstructionParameters,
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     };
 } // end mod src
@@ -120,15 +121,31 @@ lazy_static! {
                 iso_codes: vec!["CH".to_string()]
             }),
 
-            // Not used.
-            minimum_participants: None,
-            minimum_icp: None,
-            maximum_icp: None,
-            minimum_participant_icp: None,
-            maximum_participant_icp: None,
-            neuron_basket_construction_parameters: None,
-            start_time: None,
-            duration: None,
+            minimum_participants: Some(500),
+            minimum_icp: Some(pb::Tokens {
+                e8s: Some(12_300_000_000),
+            }),
+            maximum_icp: Some(pb::Tokens {
+                e8s: Some(321_000_000_000),
+            }),
+            minimum_participant_icp: Some(pb::Tokens {
+                e8s:  Some(150_000_000)
+            }),
+            maximum_participant_icp: Some(pb::Tokens {
+                e8s:  Some(500_000_000)
+            }),
+            neuron_basket_construction_parameters: Some(src::NeuronBasketConstructionParameters {
+                count: Some(5),
+                dissolve_delay_interval: Some(pb::Duration {
+                    seconds: Some(10_001),
+                })
+            }),
+            start_time: Some(pb::GlobalTimeOfDay {
+               seconds_after_utc_midnight: Some(0),
+            }),
+            duration: Some(pb::Duration {
+                seconds: Some(604_800),
+            }),
         })
     };
 }

@@ -2,6 +2,11 @@ type AddWasmRequest = record { hash : vec nat8; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
 type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
 type Canister = record { id : opt principal };
+type CfNeuron = record { nns_neuron_id : nat64; amount_icp_e8s : nat64 };
+type CfParticipant = record {
+  hotkey_principal : text;
+  cf_neurons : vec CfNeuron;
+};
 type Countries = record { iso_codes : vec text };
 type DappCanisters = record { canisters : vec Canister };
 type DappCanistersTransferResult = record {
@@ -62,6 +67,10 @@ type ListUpgradeStepsRequest = record {
   sns_governance_canister_id : opt principal;
 };
 type ListUpgradeStepsResponse = record { steps : vec ListUpgradeStep };
+type NeuronBasketConstructionParameters = record {
+  dissolve_delay_interval_seconds : nat64;
+  count : nat64;
+};
 type NeuronDistribution = record {
   controller : opt principal;
   dissolve_delay_seconds : nat64;
@@ -69,6 +78,7 @@ type NeuronDistribution = record {
   stake_e8s : nat64;
   vesting_period_seconds : opt nat64;
 };
+type NeuronsFundParticipants = record { participants : vec CfParticipant };
 type PrettySnsVersion = record {
   archive_wasm_hash : text;
   root_wasm_hash : text;
@@ -89,27 +99,37 @@ type SnsInitPayload = record {
   url : opt text;
   max_dissolve_delay_seconds : opt nat64;
   max_dissolve_delay_bonus_percentage : opt nat64;
+  nns_proposal_id : opt nat64;
+  min_participant_icp_e8s : opt nat64;
+  neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   fallback_controller_principal_ids : vec text;
   token_symbol : opt text;
   final_reward_rate_basis_points : opt nat64;
+  max_icp_e8s : opt nat64;
   neuron_minimum_stake_e8s : opt nat64;
   confirmation_text : opt text;
   logo : opt text;
   name : opt text;
+  swap_start_timestamp_seconds : opt nat64;
+  swap_due_timestamp_seconds : opt nat64;
   initial_voting_period_seconds : opt nat64;
   neuron_minimum_dissolve_delay_to_vote_seconds : opt nat64;
   description : opt text;
   max_neuron_age_seconds_for_age_bonus : opt nat64;
+  min_participants : opt nat64;
   initial_reward_rate_basis_points : opt nat64;
   wait_for_quiet_deadline_increase_seconds : opt nat64;
   transaction_fee_e8s : opt nat64;
   dapp_canisters : opt DappCanisters;
+  neurons_fund_participants : opt NeuronsFundParticipants;
   max_age_bonus_percentage : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
   reward_rate_transition_duration_seconds : opt nat64;
   token_name : opt text;
+  max_participant_icp_e8s : opt nat64;
   proposal_reject_cost_e8s : opt nat64;
   restricted_countries : opt Countries;
+  min_icp_e8s : opt nat64;
 };
 type SnsUpgrade = record {
   next_version : opt SnsVersion;

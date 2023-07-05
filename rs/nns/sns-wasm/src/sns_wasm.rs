@@ -1777,7 +1777,12 @@ impl DeployNewSnsRequest {
             // Validate presence
             .ok_or_else(|| "sns_init_payload is a required field".to_string())
             // Validate contents
-            .and_then(|init_payload| init_payload.validate().map_err(|e| e.to_string()))
+            // TODO 2296: Validate based on caller()
+            .and_then(|init_payload| {
+                init_payload
+                    .validate_legacy_init()
+                    .map_err(|e| e.to_string())
+            })
     }
 }
 
@@ -4209,7 +4214,7 @@ mod test {
         );
 
         let wasms_payloads = init_payload
-            .validate()
+            .validate_legacy_init()
             .unwrap()
             .build_canister_payloads(
                 &SnsCanisterIds {

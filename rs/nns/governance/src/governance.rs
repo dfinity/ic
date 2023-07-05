@@ -31,7 +31,10 @@ use crate::{
         RewardNodeProviders, SetSnsTokenSwapOpenTimeWindow, SettleCommunityFundParticipation,
         SwapBackgroundInformation, Tally, Topic, UpdateNodeProvider, Vote, WaitForQuietState,
     },
-    proposals::create_service_nervous_system::create_service_nervous_system_proposals_is_enabled,
+    proposals::create_service_nervous_system::{
+        create_service_nervous_system_proposals_is_enabled,
+        ExecutedCreateServiceNervousSystemProposal,
+    },
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -4399,8 +4402,24 @@ impl Governance {
         proposal_id: u64,
         create_service_nervous_system: &CreateServiceNervousSystem,
     ) {
+        // Get the current time of proposal execution.
+        let current_timestamp_seconds = self.env.now();
+
+        // TODO NNS1-2296: Draw from the Neurons' Fund
+        let neurons_fund_participants = vec![];
+
+        let executed_create_service_nervous_system_proposal =
+            ExecutedCreateServiceNervousSystemProposal {
+                current_timestamp_seconds,
+                create_service_nervous_system: create_service_nervous_system.clone(),
+                proposal_id,
+                neurons_fund_participants,
+            };
+
         let execute_create_service_nervous_system_result = self
-            .execute_create_service_nervous_system_proposal(create_service_nervous_system)
+            .execute_create_service_nervous_system_proposal(
+                executed_create_service_nervous_system_proposal,
+            )
             .await;
         self.set_proposal_execution_status(
             proposal_id,
@@ -4410,19 +4429,19 @@ impl Governance {
 
     async fn execute_create_service_nervous_system_proposal(
         &mut self,
-        create_service_nervous_system: &CreateServiceNervousSystem,
+        executed_create_service_nervous_system_proposal: ExecutedCreateServiceNervousSystemProposal,
     ) -> Result<(), GovernanceError> {
         // Step 1: Convert proposal into main request object.
-        let sns_init_payload = match SnsInitPayload::try_from(create_service_nervous_system.clone())
-        {
-            Ok(ok) => ok,
-            Err(err) => {
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    format!("Failed to convert proposal to SnsInitPayload: {}", err,),
-                ))
-            }
-        };
+        let sns_init_payload =
+            match SnsInitPayload::try_from(executed_create_service_nervous_system_proposal) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!("Failed to convert proposal to SnsInitPayload: {}", err,),
+                    ))
+                }
+            };
 
         // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
         let request = DeployNewSnsRequest {
