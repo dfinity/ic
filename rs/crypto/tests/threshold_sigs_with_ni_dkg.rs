@@ -6,6 +6,7 @@ use ic_crypto_test_utils_ni_dkg::{
     create_dealings, run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment,
     RandomNiDkgConfig,
 };
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::{
     LoadTranscriptResult, NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner,
 };
@@ -47,7 +48,7 @@ fn should_threshold_sign_if_sufficient_shares() {
     let verify_combined_result = crypto_for(random_verifier, &crypto_components)
         .verify_threshold_sig_combined(&combined_sig, &msg, dkg_id);
 
-    assert!(verify_combined_result.is_ok());
+    assert_eq!(verify_combined_result, Ok(()));
 }
 
 #[test]
@@ -68,15 +69,85 @@ fn should_produce_valid_signature_shares() {
 
     let verifier = random_node_in(config.receivers().get());
     sig_shares.iter().for_each(|(signer, sig_share)| {
-        assert!(
+        assert_eq!(
             crypto_for(verifier, &crypto_components)
-                .verify_threshold_sig_share(sig_share, &msg, dkg_id, *signer)
-                .is_ok(),
+                .verify_threshold_sig_share(sig_share, &msg, dkg_id, *signer),
+            Ok(()),
             "node {:?} failed to verify threshold sig share of signer {:?}",
             verifier,
             *signer
         );
     });
+}
+
+#[test]
+fn should_load_transcript_and_validate_signature_shares_as_non_receiver_without_secret_key() {
+    let mut rng = reproducible_rng();
+    let subnet_size = rng.gen_range(1..7);
+    let (config, dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size);
+
+    let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
+    load_transcript_for_receivers_expecting_status(
+        &config,
+        &transcript,
+        &crypto_components,
+        Some(LoadTranscriptResult::SigningKeyAvailable),
+    );
+
+    let msg = message();
+    let sig_shares = sign_threshold_for_each(
+        &config.receivers().get().iter().copied().collect::<Vec<_>>(),
+        &msg,
+        dkg_id,
+        &crypto_components,
+    );
+
+    // Create another config with a single node that is not a receiver of the original transcript.
+    let (_another_config, _another_dkg_id, another_crypto_components) =
+        setup_with_random_ni_dkg_config(1);
+    // Load the original transcript with the node that is not a receiver and therefore does not
+    // have the secret key.
+    let (other_node_id, other_crypto_component) = another_crypto_components
+        .first_key_value()
+        .expect("should contain a crypto component");
+    assert_matches!(
+        other_crypto_component.load_transcript(&transcript),
+        Ok(LoadTranscriptResult::NodeNotInCommittee)
+    );
+
+    // Verify the signature shares with the node that is not a receiver.
+    sig_shares.iter().for_each(|(signer, sig_share)| {
+        assert_eq!(
+            other_crypto_component.verify_threshold_sig_share(sig_share, &msg, dkg_id, *signer),
+            Ok(()),
+            "node {:?} failed to verify threshold sig share of signer {:?}",
+            other_node_id,
+            *signer
+        );
+    });
+}
+
+#[test]
+fn should_successfully_reload_the_same_transcript() {
+    let mut rng = reproducible_rng();
+    let subnet_size = rng.gen_range(1..7);
+    let (config, _dkg_id, crypto_components) = setup_with_random_ni_dkg_config(subnet_size);
+
+    let transcript = run_ni_dkg_and_create_single_transcript(&config, &crypto_components);
+    load_transcript_for_receivers_expecting_status(
+        &config,
+        &transcript,
+        &crypto_components,
+        Some(LoadTranscriptResult::SigningKeyAvailable),
+    );
+
+    // Try to reload the same transcript
+    load_transcript_for_receivers_expecting_status(
+        &config,
+        &transcript,
+        &crypto_components,
+        Some(LoadTranscriptResult::SigningKeyAvailable),
+    );
 }
 
 #[test]
@@ -230,6 +301,7 @@ mod non_interactive_distributed_key_generation {
     use super::*;
     use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
     use ic_crypto_internal_types::NodeIndex;
+    use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgDealing;
 
     #[test]
@@ -243,8 +315,9 @@ mod non_interactive_distributed_key_generation {
 
         for (dealer, dealing) in dealings {
             let verification_result = verifier_crypto.verify_dealing(&config, dealer, &dealing);
-            assert!(
-                verification_result.is_ok(),
+            assert_eq!(
+                verification_result,
+                Ok(()),
                 "verification of dealing from dealer {:?} failed for {:?}",
                 dealer,
                 verifier
@@ -543,6 +616,57 @@ mod non_interactive_distributed_key_generation {
             assert_matches!(
                 result,
                 Err(DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore(_))
+            );
+        }
+    }
+
+    #[test]
+    fn should_not_load_old_transcript_after_pruning_old_keys() {
+        let mut rng = reproducible_rng();
+        let registry_version = RegistryVersion::from(rng.gen_range(1..u32::MAX - 10_000) as u64);
+        let mut env = NiDkgTestEnvironment::new();
+        let subnet_size = rng.gen_range(4..7);
+
+        // Epoch 0
+        let config0 = RandomNiDkgConfig::builder()
+            .subnet_size(subnet_size)
+            .dkg_tag(NiDkgTag::HighThreshold)
+            .registry_version(registry_version)
+            .build();
+        let (transcript0, _dkg_id0, _epoch0_nodes) =
+            run_dkg_and_load_transcripts(&config0, &mut env);
+
+        // Epoch 1
+        // Create a new config based on the initial transcript (same dealers and receivers), but
+        // no resharing.
+        let config1 = RandomNiDkgConfig::new_for_same_subnet_with_incremented_registry_version(
+            transcript0.clone(),
+        );
+
+        // Add a dummy value into the registry to increment its version.
+        env.registry_data
+            .add::<PublicKey>("dummy_key", config1.get().registry_version(), None)
+            .expect("updating registry should succeed");
+        env.registry.reload();
+        let (transcript1, _dkg_id1, _epoch1_nodes) =
+            run_dkg_and_load_transcripts(&config1, &mut env);
+
+        // low threshold
+        let config_low = config1.new_with_inverted_threshold();
+        let (transcript_low, _dkg_id_low, _epochlow_nodes) =
+            run_dkg_and_load_transcripts(&config_low, &mut env);
+
+        // Retain only keys from the most recent transcripts. Since the registry was updated after
+        // the creation of the initial transcript, and the version was incremented, the old keys
+        // will be pruned.
+        retain_only_active_keys_for_transcripts(&[transcript1, transcript_low], &mut env);
+
+        // Now attempt to load transcript0, which fails since the secret keys were pruned.
+        for node_id in config1.receiver_ids() {
+            let result = crypto_for(node_id, &env.crypto_components).load_transcript(&transcript0);
+            assert_eq!(
+                result,
+                Ok(LoadTranscriptResult::SigningKeyUnavailableDueToDiscard)
             );
         }
     }

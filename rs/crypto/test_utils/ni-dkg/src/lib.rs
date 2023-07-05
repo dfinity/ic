@@ -442,6 +442,45 @@ impl RandomNiDkgConfig {
         Self(NiDkgConfig::new(config_data).expect("invariant violated"))
     }
 
+    /// Creates a new NI-DKG config based on an existing `transcript` and subnet.
+    /// Also increments the registry version.
+    pub fn new_for_same_subnet_with_incremented_registry_version(
+        transcript: NiDkgTranscript,
+    ) -> Self {
+        let subnet_size = transcript.committee.get().len();
+        let max_corrupt_dealers = Self::number_of_nodes_from_usize(get_faults_tolerated(
+            transcript.committee.get().len(),
+        ));
+        let registry_version = transcript.registry_version + Self::ONE_REGISTRY_VERSION;
+        let dealers = transcript.committee.get().clone();
+        let receivers = transcript.committee.get().clone();
+        let dkg_tag = transcript.dkg_id.dkg_tag;
+        let config_data = NiDkgConfigData {
+            dkg_id: NiDkgId {
+                start_block_height: Height::new(transcript.dkg_id.start_block_height.get() + 1),
+                // Theoretically the subnet ID should change on the _first_ DKG in the new
+                // subnet, but this is not important: relevant is only that
+                // the NiDkgId is different, which is already achieved by
+                // increasing the start_block_height.
+                dealer_subnet: transcript.dkg_id.dealer_subnet,
+                dkg_tag,
+                target_subnet: NiDkgTargetSubnet::Local,
+            },
+            max_corrupt_dealers,
+            dealers,
+            max_corrupt_receivers: {
+                Self::number_of_nodes_from_usize(get_faults_tolerated(subnet_size))
+            },
+            receivers,
+            threshold: Self::number_of_nodes_from_usize(
+                dkg_tag.threshold_for_subnet_of_size(subnet_size),
+            ),
+            registry_version,
+            resharing_transcript: None,
+        };
+        Self(NiDkgConfig::new(config_data).expect("invariant violated"))
+    }
+
     pub fn receiver_ids(&self) -> HashSet<NodeId> {
         self.get().receivers().get().iter().cloned().collect()
     }
