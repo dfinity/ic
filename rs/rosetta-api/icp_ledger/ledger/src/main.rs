@@ -294,7 +294,14 @@ async fn icrc1_send(
             created_at_time,
         };
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)
-            .map_err(convert_transfer_error)?;
+            .map_err(convert_transfer_error)
+            .map_err(|err| {
+                let err: icrc_ledger_types::icrc1::transfer::TransferError = match err.try_into() {
+                    Ok(err) => err,
+                    Err(err) => trap_with(&err),
+                };
+                err
+            })?;
 
         set_certified_data(&hash.into_bytes());
 
@@ -746,7 +753,6 @@ fn send_() {
                 .await
                 .unwrap_or_else(|e| {
                     trap_with(&e.to_string());
-                    unreachable!()
                 })
         },
     );
@@ -800,7 +806,6 @@ fn notify_() {
 async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError> {
     let to_account = AccountIdentifier::from_address(arg.to).unwrap_or_else(|e| {
         trap_with(&format!("Invalid account identifier: {}", e));
-        unreachable!()
     });
     send(
         arg.memo,
@@ -939,7 +944,6 @@ fn account_balance_() {
 fn account_balance_candid_(arg: BinaryAccountBalanceArgs) -> Tokens {
     let account = AccountIdentifier::from_address(arg.account).unwrap_or_else(|e| {
         trap_with(&format!("Invalid account identifier: {}", e));
-        unreachable!()
     });
     account_balance(account)
 }

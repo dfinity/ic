@@ -80,7 +80,6 @@ fn operation_from_args() -> Operation {
                 String::from_utf8_lossy(&data),
                 err,
             ));
-            unreachable!("cannot reach here after the trap");
         }
     }
 }

@@ -18,12 +18,13 @@ pub fn convert_transfer_error<Tokens: TokensType>(
 
 pub struct EndpointsTransferError<Tokens>(pub CoreTransferError<Tokens>);
 
-impl<Tokens: TokensType> From<EndpointsTransferError<Tokens>> for TransferError {
-    fn from(err: EndpointsTransferError<Tokens>) -> Self {
+impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferError {
+    type Error = String;
+    fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
         use ic_ledger_canister_core::ledger::TransferError as LTE;
         use TransferError as TE;
 
-        match err.0 {
+        Ok(match err.0 {
             LTE::BadFee { expected_fee } => TE::BadFee {
                 expected_fee: expected_fee.into(),
             },
@@ -39,27 +40,30 @@ impl<Tokens: TokensType> From<EndpointsTransferError<Tokens>> for TransferError 
                 duplicate_of: Nat::from(duplicate_of),
             },
             LTE::InsufficientAllowance { .. } => {
-                unimplemented!("InsufficientAllowance error should not happen for transfer")
+                return Err(
+                    "InsufficientAllowance error should not happen for transfer".to_string()
+                );
             }
             LTE::ExpiredApproval { .. } => {
-                unimplemented!("ExpiredApproval error should not happen for transfer")
+                return Err("ExpiredApproval error should not happen for transfer".to_string());
             }
             LTE::AllowanceChanged { .. } => {
-                unimplemented!("AllowanceChanged error should not happen for transfer")
+                return Err("AllowanceChanged error should not happen for transfer".to_string());
             }
             LTE::SelfApproval { .. } => {
-                unimplemented!("SelfApproval error should not happen for transfer")
+                return Err("SelfApproval error should not happen for transfer".to_string());
             }
-        }
+        })
     }
 }
 
-impl<Tokens: TokensType> From<EndpointsTransferError<Tokens>> for ApproveError {
-    fn from(err: EndpointsTransferError<Tokens>) -> Self {
+impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for ApproveError {
+    type Error = String;
+    fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
         use ic_ledger_canister_core::ledger::TransferError as LTE;
         use ApproveError as AE;
 
-        match err.0 {
+        Ok(match err.0 {
             LTE::BadFee { expected_fee } => AE::BadFee {
                 expected_fee: expected_fee.into(),
             },
@@ -75,7 +79,9 @@ impl<Tokens: TokensType> From<EndpointsTransferError<Tokens>> for ApproveError {
                 duplicate_of: Nat::from(duplicate_of),
             },
             LTE::InsufficientAllowance { .. } => {
-                unimplemented!("InsufficientAllowance error should not happen for approval")
+                return Err(
+                    "InsufficientAllowance error should not happen for approval".to_string()
+                );
             }
             LTE::ExpiredApproval { ledger_time } => AE::Expired {
                 ledger_time: ledger_time.as_nanos_since_unix_epoch(),
@@ -84,9 +90,9 @@ impl<Tokens: TokensType> From<EndpointsTransferError<Tokens>> for ApproveError {
                 current_allowance: current_allowance.into(),
             },
             LTE::SelfApproval { .. } => {
-                unimplemented!("self approval not implemented for ApproveError")
+                return Err("self-approvals are not allowed".to_string());
             }
-        }
+        })
     }
 }
 
