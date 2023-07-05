@@ -1120,6 +1120,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "tokio-io-timeout": crate.spec(
                 version = "^1.2.0",
             ),
+            "tokio-metrics": crate.spec(
+                version = "^0.2.2",
+            ),
             "tokio-openssl": crate.spec(
                 version = "^0.6.1",
             ),

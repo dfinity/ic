@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-metrics",
 ] + select({
     "@rules_rust//rust/platform:linux": [
         "@crate_index//:procfs",
