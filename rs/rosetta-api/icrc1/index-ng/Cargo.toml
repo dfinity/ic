@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 candid = "0.8.1"
-ciborium = "0.2"
+ciborium = { workspace = true }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { version = "0.6.0" }
 ic-cdk-macros = { version = "0.6.0" }

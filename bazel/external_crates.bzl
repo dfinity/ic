@@ -252,8 +252,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "=0.4.19",
             ),
             "ciborium": crate.spec(
-                git = "https://github.com/enarx/ciborium",
-                rev = "7d8f6e499db51fe52f5d3c2ce1d0e0be61c7eaa2",
+                version = "^0.2.1",
             ),
             "clap": crate.spec(
                 version = "^3.1.6",

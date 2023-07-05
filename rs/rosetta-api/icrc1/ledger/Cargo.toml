@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1.53"
 candid = "0.8.1"
-ciborium = "0.2"
+ciborium = { workspace = true }
 hex = "0.4.2"
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }

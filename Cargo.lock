@@ -1836,7 +1836,8 @@ checksum = "cca491388666e04d7248af3f60f0c40cfb0991c72205595d7c396e3510207d1a"
 [[package]]
 name = "ciborium"
 version = "0.2.1"
-source = "git+https://github.com/enarx/ciborium?rev=7d8f6e499db51fe52f5d3c2ce1d0e0be61c7eaa2#7d8f6e499db51fe52f5d3c2ce1d0e0be61c7eaa2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "effd91f6c78e5a4ace8a5d3c0b6bfaec9e2baaef55f3efc00e45fb2e477ee926"
 dependencies = [
  "ciborium-io",
  "ciborium-ll",
@@ -1846,12 +1847,14 @@ dependencies = [
 [[package]]
 name = "ciborium-io"
 version = "0.2.1"
-source = "git+https://github.com/enarx/ciborium?rev=7d8f6e499db51fe52f5d3c2ce1d0e0be61c7eaa2#7d8f6e499db51fe52f5d3c2ce1d0e0be61c7eaa2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdf919175532b369853f5d5e20b26b43112613fd6fe7aee757e35f7a44642656"
 
 [[package]]
 name = "ciborium-ll"
 version = "0.2.1"
-source = "git+https://github.com/enarx/ciborium?rev=7d8f6e499db51fe52f5d3c2ce1d0e0be61c7eaa2#7d8f6e499db51fe52f5d3c2ce1d0e0be61c7eaa2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defaa24ecc093c77630e6c15e17c51f5e187bf35ee514f4e2d67baaa96dae22b"
 dependencies = [
  "ciborium-io",
  "half",

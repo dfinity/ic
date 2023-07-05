@@ -11,7 +11,7 @@ path = "src/main.rs"
 async-trait = "0.1.59"
 candid = "0.8.4"
 walkdir = "2.3.2"
-ciborium = "0.2"
+ciborium = { workspace = true }
 futures = "0.3.25"
 ic0 = "0.18.9"
 ic-base-types = { path = "../../types/base_types" }
