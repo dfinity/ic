@@ -54,12 +54,15 @@ def _custom_partitions(mode):
     if mode == "dev":
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.gz")
+        nns_url = "https://dfinity.org"
     elif mode == "dev-sev":
         guest_image = Label("//ic-os/guestos/envs/dev-sev:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/dev-sev:disk-img.tar.gz")
+        nns_url = "https://dfinity.org"
     else:
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.gz")
+        nns_url = "https://icp-api.io,https://icp0.io,https://ic0.app"
 
     copy_file(
         name = "copy_guestos_img",
@@ -96,11 +99,18 @@ def _custom_partitions(mode):
         ],
     )
 
+    native.genrule(
+        name = "deployment_json",
+        srcs = [Label("//ic-os/setupos:data/deployment.json.template")],
+        outs = ["deployment.json"],
+        cmd = "sed -e 's#NNS_URL#{nns_url}#' < $< > $@".format(nns_url = nns_url),
+    )
+
     pkg_tar(
         name = "data_tar",
         srcs = [
             Label("//ic-os/setupos:data/nns_public_key.pem"),
-            Label("//ic-os/setupos:deployment.json"),
+            ":deployment.json",
             ":guest-os.img.tar.gz",
             ":host-os.img.tar.gz",
         ],
