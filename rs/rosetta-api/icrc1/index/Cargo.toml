@@ -8,7 +8,7 @@ edition = "2018"
 [dependencies]
 async-trait = "0.1.53"
 candid = "0.8.1"
-ciborium = "0.2"
+ciborium = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }

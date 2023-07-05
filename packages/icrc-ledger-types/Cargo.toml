@@ -17,7 +17,7 @@ serde_bytes = "0.11"
 serde = "1"
 sha2 = "0.10"
 num-traits = "0.2.12"
-ciborium = "0.2"
+ciborium = "0.2.1"
 
 [dev-dependencies]
 hex = "0.4"

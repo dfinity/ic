@@ -11,7 +11,7 @@ path = "src/main.rs"
 [dependencies]
 async-trait = "0.1.57"
 candid = "0.8.1"
-ciborium = "0.2"
+ciborium = { workspace = true }
 dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }

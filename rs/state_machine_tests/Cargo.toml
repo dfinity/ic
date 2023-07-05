@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 candid = "0.8.1"
-ciborium = "0.2"
+ciborium = { workspace = true }
 clap = { version = "3.1.6", features = ["derive"] }
 hex = "0.4.2"
 ic-config = { path = "../config" }

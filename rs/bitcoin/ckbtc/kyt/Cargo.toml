@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 askama = "0.11"
 candid = "0.8.1"
-ciborium = { git = "https://github.com/enarx/ciborium", rev = "7d8f6e499db51fe52f5d3c2ce1d0e0be61c7eaa2" }
+ciborium = { workspace = true }
 hex = "0.4.3"
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = "0.7.0"
