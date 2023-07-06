@@ -394,7 +394,7 @@ macos-openssl-static-binaries:
 build-ic:
   extends:
     - .build-ic
-    - .bazel-rules-pipeline
+    - .bazel-rules-pipeline-no-merge-train
 
 # Scheduled Pipeline
 build-ic-release:
