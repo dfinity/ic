@@ -134,3 +134,10 @@ user.bazelrc
 
 # OS X
 .DS_Store
+
+# Potential files produced in devcontainer
+.cache
+.rustup
+.bash_history
+.zcompdump*
+.zsh*
