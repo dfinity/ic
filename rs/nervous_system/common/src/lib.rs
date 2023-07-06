@@ -43,6 +43,9 @@ pub const ONE_TRILLION: u64 = 1_000_000_000_000;
 /// The number of cycles required to create an SNS, charged by the SNS-W canister.
 pub const SNS_CREATION_FEE: u64 = 180 * ONE_TRILLION;
 
+// The number of nanoseconds per second.
+pub const NANO_SECONDS_PER_SECOND: u64 = 1_000_000_000;
+
 // The size of a WASM page in bytes, as defined by the WASM specification
 #[cfg(any(target_arch = "wasm32"))]
 const WASM_PAGE_SIZE_BYTES: usize = 65536;

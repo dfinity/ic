@@ -16,7 +16,6 @@ build-info = { version = "0.0.26", default-features = false, features = [] }
 candid = "0.8.1"
 comparable = { version = "0.5.1", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../rust_canisters/dfn_core" }
 futures = "0.3.21"
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }

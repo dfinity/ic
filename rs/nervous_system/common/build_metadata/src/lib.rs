@@ -54,6 +54,23 @@ pub fn define_get_build_metadata_candid_method(_: TokenStream) -> TokenStream {
     .unwrap()
 }
 
+// The ic_cdk's version of the above.
+#[proc_macro]
+pub fn define_get_build_metadata_candid_method_cdk(_: TokenStream) -> TokenStream {
+    format!(
+        r#"
+            #[candid::candid_method(query)]
+            #[ic_cdk_macros::query]
+            fn get_build_metadata() -> &'static str {{
+                {}
+            }}
+        "#,
+        BUILD_INFO_FORMAT,
+    )
+    .parse()
+    .unwrap()
+}
+
 /// The caller does not need to pass anything.
 #[proc_macro]
 pub fn get_description(_: TokenStream) -> TokenStream {
