@@ -128,8 +128,4 @@ build:fuzzing --//bazel:enable_fuzzing_code=True
 query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
 
-# Turn off internal pkg_* rules as external rules_pkg should be used:
-# https://github.com/bazelbuild/bazel/pull/8858
-build --@bazel_tools//tools/build_defs/pkg:incompatible_no_build_defs_pkg
-
 try-import %workspace%/user.bazelrc
