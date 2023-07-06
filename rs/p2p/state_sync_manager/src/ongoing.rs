@@ -188,6 +188,7 @@ impl OngoingStateSync {
                 }
             }
             Err(DownloadChunkError::Overloaded) => {}
+            Err(DownloadChunkError::Timeout) => {}
         }
     }
 
@@ -258,11 +259,7 @@ impl OngoingStateSync {
                 chunk_id,
                 err: e.to_string(),
             }),
-            Err(e) => Err(DownloadChunkError::RequestError {
-                peer_id,
-                chunk_id,
-                err: e.to_string(),
-            }),
+            Err(_) => Err(DownloadChunkError::Overloaded),
         }?;
 
         let chunk = parse_chunk_handler_response(response, chunk_id)?;
@@ -311,10 +308,11 @@ pub(crate) enum DownloadChunkError {
     /// Request was processed but requested content was not available.
     /// This error is permanent.
     NoContent { peer_id: NodeId },
-    /// Request was not processed because endpoint is overloaded.
+    /// Request was not processed because peer endpoint is overloaded.
     /// This error is transient.
-    // TODO: Add peer id for collecting metrics
     Overloaded,
+    /// Request was not processed beacuse of a timeout either on the client side or on the server side.
+    Timeout,
     /// An unexpected error occurred during the request. Requests to well-behaving peers
     /// do not return a RequestError.
     RequestError {
