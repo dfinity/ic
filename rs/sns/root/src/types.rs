@@ -19,7 +19,4 @@ pub trait Environment: Send + Sync {
         method_name: &str,
         arg: Vec<u8>,
     ) -> Result</* reply: */ Vec<u8>, (/* error_code: */ i32, /* message: */ String)>;
-
-    /// Returns the PrincipalId of the canister implementing the Environment trait.
-    fn canister_id(&self) -> CanisterId;
 }

@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use candid::candid_method;
-use dfn_core::api::now;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -10,7 +9,7 @@ use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_nervous_system_clients::management_canister_client::ManagementCanisterClientImpl;
 use ic_nervous_system_common::{
     dfn_core_stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
-    serve_logs, serve_logs_v2, serve_metrics,
+    serve_logs, serve_logs_v2, serve_metrics, NANO_SECONDS_PER_SECOND,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
@@ -27,7 +26,7 @@ use ic_sns_root::{
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
-use std::{cell::RefCell, time::SystemTime};
+use std::cell::RefCell;
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
@@ -38,10 +37,7 @@ struct CanisterEnvironment {}
 #[async_trait]
 impl Environment for CanisterEnvironment {
     fn now(&self) -> u64 {
-        now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("Could not get the duration")
-            .as_secs()
+        ic_cdk::api::time() / NANO_SECONDS_PER_SECOND
     }
 
     async fn call_canister(
@@ -51,10 +47,6 @@ impl Environment for CanisterEnvironment {
         arg: Vec<u8>,
     ) -> Result<Vec<u8>, (i32, String)> {
         CanisterRuntime::call_bytes_with_cleanup(canister_id, method_name, &arg).await
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        dfn_core::api::id()
     }
 }
 
@@ -101,7 +93,6 @@ fn init(args: SnsRootCanister) {
 }
 
 fn canister_init_(init_payload: SnsRootCanister) {
-    dfn_core::printer::hook();
     log!(INFO, "canister_init: Begin...");
 
     assert_state_is_valid(&init_payload);
@@ -145,7 +136,7 @@ fn canister_post_upgrade() {
     log!(INFO, "canister_post_upgrade: Done!");
 }
 
-ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
+ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method_cdk! {}
 
 #[candid_method(update)]
 #[update]
@@ -169,7 +160,7 @@ async fn get_sns_canisters_summary(
     let update_canister_list = request.update_canister_list.unwrap_or(false);
     // Only governance can set this parameter to true
     if update_canister_list {
-        assert_eq_governance_canister_id(dfn_core::api::caller());
+        assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
     }
 
     let canister_env = CanisterEnvironment {};
@@ -179,7 +170,7 @@ async fn get_sns_canisters_summary(
         &create_ledger_client(),
         &canister_env,
         update_canister_list,
-        dfn_core::api::id().into(),
+        PrincipalId(ic_cdk::api::id()),
     )
     .await
 }
@@ -194,7 +185,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
     STATE.with(|sns_root_canister| {
         sns_root_canister
             .borrow()
-            .list_sns_canisters(dfn_core::api::id())
+            .list_sns_canisters(ic_cdk::api::id())
     })
 }
 
@@ -202,7 +193,7 @@ fn list_sns_canisters(_request: ListSnsCanistersRequest) -> ListSnsCanistersResp
 #[update]
 fn change_canister(proposal: ChangeCanisterProposal) {
     log!(INFO, "change_canister");
-    assert_eq_governance_canister_id(dfn_core::api::caller());
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
 
     // We do not want the reply to the Candid change_canister method call to be
     // blocked on performing the canister change, because that could cause a
@@ -246,14 +237,14 @@ async fn register_dapp_canister(
     request: RegisterDappCanisterRequest,
 ) -> RegisterDappCanisterResponse {
     log!(INFO, "register_dapp_canister");
-    assert_eq_governance_canister_id(dfn_core::api::caller());
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
     let request = RegisterDappCanistersRequest {
         canister_ids: request.canister_id.into_iter().collect(),
     };
     let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        dfn_core::api::id(),
+        ic_cdk::api::id(),
         request,
     )
     .await;
@@ -276,11 +267,11 @@ async fn register_dapp_canisters(
     request: RegisterDappCanistersRequest,
 ) -> RegisterDappCanistersResponse {
     log!(INFO, "register_dapp_canisters");
-    assert_eq_governance_canister_id(dfn_core::api::caller());
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
     SnsRootCanister::register_dapp_canisters(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        dfn_core::api::id(),
+        ic_cdk::api::id(),
         request,
     )
     .await
@@ -309,8 +300,8 @@ async fn set_dapp_controllers(request: SetDappControllersRequest) -> SetDappCont
     SnsRootCanister::set_dapp_controllers(
         &STATE,
         &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
-        dfn_core::api::id(),
-        dfn_core::api::caller(),
+        ic_cdk::api::id(),
+        PrincipalId(ic_cdk::api::caller()),
         &request,
     )
     .await
@@ -435,7 +426,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn no_authz() {
-        let canister_id = dfn_core::api::CanisterId::from(1);
+        let canister_id = CanisterId::from(1);
 
         let mut proposal = ChangeCanisterProposal::new(
             false, // stop before_installing

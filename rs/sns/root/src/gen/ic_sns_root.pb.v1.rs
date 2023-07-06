@@ -2,7 +2,7 @@
 ///
 /// When canister_init is called in the SNS root canister, it is expected that a
 /// serialized version of this was passed via ic_ic00_types::InstallCodeArgs::args,
-/// which can be retrieved by the canister via dfn_core::api::arg_data().
+/// which can be retrieved by the canister via ic_cdk::api::call::arg_data().
 #[derive(
     candid::CandidType,
     candid::Deserialize,
