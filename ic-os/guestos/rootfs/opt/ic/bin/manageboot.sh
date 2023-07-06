@@ -231,6 +231,9 @@ case "${ACTION}" in
         boot_cycle=first_boot
         write_grubenv "${GRUBENV_FILE}"
         sync
+        # Ignore termination signals from the following reboot, so that
+        # the script exits without error.
+        trap -- '' SIGTERM
         reboot
         ;;
     confirm)
