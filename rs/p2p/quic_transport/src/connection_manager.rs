@@ -696,14 +696,6 @@ impl ConnectionManager {
     }
 }
 
-impl Drop for ConnectionManager {
-    fn drop(&mut self) {
-        // This makes the socket available again.
-        let socket = std::net::UdpSocket::bind((std::net::Ipv6Addr::LOCALHOST, 0)).unwrap();
-        self.endpoint.rebind(socket).unwrap();
-    }
-}
-
 struct HandshakeReadWrite {
     recv: RecvStream,
     send: SendStream,
