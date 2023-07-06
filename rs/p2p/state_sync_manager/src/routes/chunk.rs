@@ -121,7 +121,7 @@ pub(crate) fn parse_chunk_handler_response(
         }
         StatusCode::NO_CONTENT => Err(DownloadChunkError::NoContent { peer_id }),
         StatusCode::TOO_MANY_REQUESTS => Err(DownloadChunkError::Overloaded),
-        StatusCode::REQUEST_TIMEOUT => Err(DownloadChunkError::Overloaded),
+        StatusCode::REQUEST_TIMEOUT => Err(DownloadChunkError::Timeout),
         _ => Err(DownloadChunkError::RequestError {
             peer_id,
             chunk_id,
