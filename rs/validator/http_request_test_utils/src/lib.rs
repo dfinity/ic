@@ -2,6 +2,7 @@ use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
 use ic_certification_test_utils::{generate_root_of_trust, serialize_to_cbor};
 use ic_crypto_internal_basic_sig_iccsa_test_utils::CanisterState;
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
+use ic_crypto_tree_hash::Path;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
@@ -163,6 +164,13 @@ impl<C, T: HttpRequestEnvelopeFactory> HttpRequestBuilderGeneric<C, T> {
 impl<C: HttpRequestEnvelopeContent, T> HttpRequestBuilderGeneric<C, T> {
     pub fn with_ingress_expiry_at(mut self, ingress_expiry_time: Time) -> Self {
         self.content.set_ingress_expiry(ingress_expiry_time);
+        self
+    }
+}
+
+impl<T> HttpRequestBuilderGeneric<HttpReadState, T> {
+    pub fn with_paths(mut self, paths: Vec<Path>) -> Self {
+        self.content.paths = paths;
         self
     }
 }

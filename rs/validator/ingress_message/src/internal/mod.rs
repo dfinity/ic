@@ -236,6 +236,12 @@ fn to_validation_error(error: ic_validator::RequestValidationError) -> RequestVa
         ic_validator::RequestValidationError::CanisterNotInDelegationTargets(canister_id) => {
             RequestValidationError::CanisterNotInDelegationTargets(canister_id)
         }
+        ic_validator::RequestValidationError::TooManyPathsError { length, maximum } => {
+            RequestValidationError::TooManyPathsError { length, maximum }
+        }
+        ic_validator::RequestValidationError::PathTooLongError { length, maximum } => {
+            RequestValidationError::PathTooLongError { length, maximum }
+        }
     }
 }
 fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> AuthenticationError {

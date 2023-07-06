@@ -58,6 +58,8 @@ pub enum RequestValidationError {
     MissingSignature(UserId),
     AnonymousSignatureNotAllowed,
     CanisterNotInDelegationTargets(CanisterId),
+    TooManyPathsError { length: usize, maximum: usize },
+    PathTooLongError { length: usize, maximum: usize },
 }
 
 impl Display for RequestValidationError {
@@ -88,6 +90,16 @@ impl Display for RequestValidationError {
                 "Canister {} is not one of the delegation targets",
                 canister_id
             ),
+            RequestValidationError::TooManyPathsError { length, maximum } => write!(
+                f,
+                "Too many paths in read state request: got {} paths, but at most {} are allowed",
+                length, maximum
+            ),
+            RequestValidationError::PathTooLongError { length, maximum } => write!(
+                f,
+                "At least one path in read state request is too deep: got {} labels, but at most {} are allowed",
+                length, maximum
+            )
         }
     }
 }
