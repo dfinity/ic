@@ -1,6 +1,7 @@
 use crate::webauthn::validate_webauthn_sig;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use ic_crypto::{user_public_key_from_bytes, KeyBytesContentType};
+use ic_crypto_tree_hash::Path;
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_types::crypto::{CanisterSig, CanisterSigOf};
 use ic_types::messages::{ReadState, SignedIngressContent, UserQuery};
@@ -38,6 +39,18 @@ const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20;
 /// **Note**: this limit part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication)
 /// and so changing this value might be breaking or result in a deviation from the specification.
 const MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION: usize = 1_000;
+
+/// Maximum number of paths that can be specified in a read state request. Requests having more paths
+/// will be declared invalid without any further verification.
+/// **Note**: this limit part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state)
+/// and so changing this value might be breaking or result in a deviation from the specification.
+const MAXIMUM_NUMBER_OF_PATHS: usize = 1_000;
+
+/// Maximum number of labels than can be specified in a single path inside a read state request.
+/// Requests having a single path with more labels will be declared invalid without any further verification.
+/// **Note**: this limit part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#http-read-state)
+/// and so changing this value might be breaking or result in a deviation from the specification.
+const MAXIMUM_NUMBER_OF_LABELS_PER_PATH: usize = 127;
 
 /// A trait for validating an `HttpRequest` with content `C`.
 pub trait HttpRequestVerifier<C>: Send + Sync {
@@ -116,6 +129,7 @@ impl HttpRequestVerifier<ReadState> for HttpRequestVerifierImpl {
         current_time: Time,
         registry_version: RegistryVersion,
     ) -> Result<CanisterIdSet, RequestValidationError> {
+        validate_paths_width_and_depth(&request.content().paths)?;
         validate_request_content(
             request,
             self.validator.as_ref(),
@@ -123,6 +137,24 @@ impl HttpRequestVerifier<ReadState> for HttpRequestVerifierImpl {
             registry_version,
         )
     }
+}
+
+fn validate_paths_width_and_depth(paths: &[Path]) -> Result<(), RequestValidationError> {
+    if paths.len() > MAXIMUM_NUMBER_OF_PATHS {
+        return Err(TooManyPathsError {
+            maximum: MAXIMUM_NUMBER_OF_PATHS,
+            length: paths.len(),
+        });
+    }
+    for path in paths {
+        if path.len() > MAXIMUM_NUMBER_OF_LABELS_PER_PATH {
+            return Err(PathTooLongError {
+                maximum: MAXIMUM_NUMBER_OF_LABELS_PER_PATH,
+                length: path.len(),
+            });
+        }
+    }
+    Ok(())
 }
 
 pub fn validate_request_content<C: HttpRequestContent>(
@@ -169,6 +201,8 @@ pub enum RequestValidationError {
     MissingSignature(UserId),
     AnonymousSignatureNotAllowed,
     CanisterNotInDelegationTargets(CanisterId),
+    TooManyPathsError { length: usize, maximum: usize },
+    PathTooLongError { length: usize, maximum: usize },
 }
 
 impl fmt::Display for RequestValidationError {
@@ -193,6 +227,16 @@ impl fmt::Display for RequestValidationError {
                 "Canister {} is not one of the delegation targets",
                 canister_id
             ),
+            TooManyPathsError { length, maximum } => write!(
+                f,
+                "Too many paths in read state request: got {} paths, but at most {} are allowed",
+                length, maximum
+            ),
+            PathTooLongError { length, maximum } => write!(
+                f,
+                "At least one path in read state request is too deep: got {} labels, but at most {} are allowed",
+                length, maximum
+            )
         }
     }
 }

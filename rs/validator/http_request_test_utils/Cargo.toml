@@ -15,6 +15,7 @@ ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../crypto/secrets_containers" }
 ic-crypto-test-utils = { path = "../../crypto/test_utils" }
 ic-crypto-test-utils-canister-sigs = { path = "../../crypto/test_utils/canister_sigs" }
+ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-types = { path = "../../types/types" }
 rand = "0.8"
 simple_asn1 = "0.6.1"
