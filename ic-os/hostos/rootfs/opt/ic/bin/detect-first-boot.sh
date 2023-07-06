@@ -7,6 +7,7 @@ set -e
 SCRIPT="$(basename $0)[$$]"
 METRICS_DIR="/run/node_exporter/collector_textfile"
 FIRST_BOOT_FILE="/boot/config/first_boot"
+HOSTOS_VERSION_FILE="/opt/ic/share/version.txt"
 
 # Get keyword arguments
 for argument in "${@}"; do
@@ -35,6 +36,16 @@ write_log() {
     fi
 
     logger -t ${SCRIPT} "${message}"
+}
+
+write_metric_attr() {
+    local name=$1
+    local attr=$2
+    local value=$3
+    local help=$4
+    local type=$5
+
+    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name}${attr} ${value}" >"${METRICS_DIR}/${name}.prom"
 }
 
 write_metric() {
@@ -83,8 +94,25 @@ function detect_first_boot() {
     fi
 }
 
+function get_hostos_version() {
+    if [ -r ${HOSTOS_VERSION_FILE} ]; then
+        HOSTOS_VERSION=$(cat ${HOSTOS_VERSION_FILE})
+        HOSTOS_VERSION_OK=1
+    else
+        HOSTOS_VERSION="unknown"
+        HOSTOS_VERSION_OK=0
+    fi
+    write_log "HostOS version ${HOSTOS_VERSION}"
+    write_metric_attr "hostos_version" \
+        "{version=\"${HOSTOS_VERSION}\"}" \
+        "${HOSTOS_VERSION_OK}" \
+        "HostOS version string" \
+        "gauge"
+}
+
 function main() {
     # Establish run order
+    get_hostos_version
     detect_first_boot
 }
 
