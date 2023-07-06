@@ -47,6 +47,7 @@ BINARIES = {
     "ic-test-state-machine": "//rs/state_machine_tests:ic-test-state-machine",
     "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
+    "icx-proxy-dev": "//rs/boundary_node/icx_proxy:icx-proxy-dev",
     "log-vector-config-generator": "//rs/observability/log_vector_config_generator:log_vector_config_generator",
     "orchestrator": "//rs/orchestrator",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",

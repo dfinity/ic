@@ -53,8 +53,17 @@ ALIASES = {}
 
 rust_binary(
     name = "icx-proxy",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "icx-proxy-dev",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_features = ["allow_http"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
