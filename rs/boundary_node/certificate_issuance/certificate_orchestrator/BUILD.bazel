@@ -40,6 +40,7 @@ rust_canister(
 
 rust_test(
     name = "certificate_orchestrator_test",
+    compile_data = ["interface.did"],
     crate = ":_wasm_certificate_orchestrator",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,

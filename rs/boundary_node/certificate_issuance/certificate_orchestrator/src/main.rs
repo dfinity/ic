@@ -1,5 +1,6 @@
 use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, time::Duration};
 
+use candid::candid_method;
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
     DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
@@ -553,6 +554,7 @@ fn post_upgrade_fn() {
 // Registration
 
 #[update(name = "createRegistration")]
+#[candid_method(update, rename = "createRegistration")]
 fn create_registration(name: String, canister: Principal) -> CreateRegistrationResponse {
     match CREATOR.with(|c| c.borrow().create(&name, &canister)) {
         Ok(id) => CreateRegistrationResponse::Ok(id),
@@ -569,6 +571,7 @@ fn create_registration(name: String, canister: Principal) -> CreateRegistrationR
 }
 
 #[query(name = "getRegistration")]
+#[candid_method(query, rename = "getRegistration")]
 fn get_registration(id: Id) -> GetRegistrationResponse {
     match GETTER.with(|g| g.borrow().get(&id)) {
         Ok(reg) => GetRegistrationResponse::Ok(reg),
@@ -583,6 +586,7 @@ fn get_registration(id: Id) -> GetRegistrationResponse {
 }
 
 #[update(name = "updateRegistration")]
+#[candid_method(update, rename = "updateRegistration")]
 fn update_registration(id: Id, typ: UpdateType) -> UpdateRegistrationResponse {
     match UPDATER.with(|u| u.borrow().update(&id, typ)) {
         Ok(()) => UpdateRegistrationResponse::Ok(()),
@@ -597,6 +601,7 @@ fn update_registration(id: Id, typ: UpdateType) -> UpdateRegistrationResponse {
 }
 
 #[update(name = "removeRegistration")]
+#[candid_method(update, rename = "removeRegistration")]
 fn remove_registration(id: Id) -> RemoveRegistrationResponse {
     match REMOVER.with(|r| r.borrow().remove(&id)) {
         Ok(()) => {
@@ -616,6 +621,7 @@ fn remove_registration(id: Id) -> RemoveRegistrationResponse {
 // Certificates
 
 #[update(name = "uploadCertificate")]
+#[candid_method(update, rename = "uploadCertificate")]
 fn upload_certificate(id: Id, pair: EncryptedPair) -> UploadCertificateResponse {
     match UPLOADER.with(|u| u.borrow().upload(&id, pair)) {
         Ok(()) => UploadCertificateResponse::Ok(()),
@@ -630,6 +636,7 @@ fn upload_certificate(id: Id, pair: EncryptedPair) -> UploadCertificateResponse 
 }
 
 #[query(name = "exportCertificatesPaginated")]
+#[candid_method(query, rename = "exportCertificatesPaginated")]
 fn export_certificates_paginated(key: Option<String>, limit: u64) -> ExportCertificatesResponse {
     match EXPORTER.with(|e| e.borrow().export(key, limit)) {
         Ok(pkgs) => ExportCertificatesResponse::Ok(pkgs),
@@ -643,6 +650,7 @@ fn export_certificates_paginated(key: Option<String>, limit: u64) -> ExportCerti
 }
 
 #[query(name = "exportCertificatesCertified")]
+#[candid_method(query, rename = "exportCertificatesCertified")]
 fn export_certificates_certified(
     key: Option<String>,
     limit: u64,
@@ -659,6 +667,7 @@ fn export_certificates_certified(
 }
 
 #[query(name = "exportCertificates")]
+#[candid_method(query, rename = "exportCertificates")]
 fn export_certificates() -> ExportCertificatesResponse {
     match EXPORTER.with(|e| e.borrow().export(None, u64::MAX)) {
         Ok(pkgs) => ExportCertificatesResponse::Ok(pkgs),
@@ -674,6 +683,7 @@ fn export_certificates() -> ExportCertificatesResponse {
 // Tasks
 
 #[update(name = "queueTask")]
+#[candid_method(update, rename = "queueTask")]
 fn queue_task(id: Id, timestamp: u64) -> QueueTaskResponse {
     match QUEUER.with(|q| q.borrow().queue(id, timestamp)) {
         Ok(()) => QueueTaskResponse::Ok(()),
@@ -686,6 +696,7 @@ fn queue_task(id: Id, timestamp: u64) -> QueueTaskResponse {
 }
 
 #[query(name = "peekTask")]
+#[candid_method(query, rename = "peekTask")]
 fn peek_task() -> PeekTaskResponse {
     match PEEKER.with(|p| p.borrow().peek()) {
         Ok(id) => PeekTaskResponse::Ok(id),
@@ -698,6 +709,7 @@ fn peek_task() -> PeekTaskResponse {
 }
 
 #[update(name = "dispenseTask")]
+#[candid_method(update, rename = "dispenseTask")]
 fn dispense_task() -> DispenseTaskResponse {
     match DISPENSER.with(|d| d.borrow().dispense()) {
         Ok(id) => DispenseTaskResponse::Ok(id),
@@ -714,6 +726,7 @@ fn dispense_task() -> DispenseTaskResponse {
 // Metrics
 
 #[query(name = "http_request")]
+#[candid_method(query, rename = "http_request")]
 fn http_request(request: HttpRequest) -> HttpResponse {
     if request.url != "/metrics" {
         return HttpResponse {
@@ -783,6 +796,7 @@ fn http_request(request: HttpRequest) -> HttpResponse {
 // ACLs
 
 #[query(name = "listAllowedPrincipals")]
+#[candid_method(query, rename = "listAllowedPrincipals")]
 fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
     if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
         return ListAllowedPrincipalsResponse::Err(match err {
@@ -804,6 +818,7 @@ fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
 }
 
 #[update(name = "addAllowedPrincipal")]
+#[candid_method(update, rename = "addAllowedPrincipal")]
 fn add_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse {
     if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
         return ModifyAllowedPrincipalResponse::Err(match err {
@@ -820,6 +835,7 @@ fn add_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse
 }
 
 #[update(name = "rmAllowedPrincipal")]
+#[candid_method(update, rename = "rmAllowedPrincipal")]
 fn rm_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse {
     if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
         return ModifyAllowedPrincipalResponse::Err(match err {
@@ -840,4 +856,23 @@ fn rm_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse 
     };
 
     ModifyAllowedPrincipalResponse::Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_candid_interface() {
+        use candid::utils::{service_compatible, CandidSource};
+
+        candid::export_service!();
+        let new_interface = __export_service();
+
+        service_compatible(
+            CandidSource::Text(&new_interface),
+            CandidSource::Text(include_str!("../interface.did")),
+        )
+        .unwrap();
+    }
 }
