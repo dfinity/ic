@@ -256,3 +256,62 @@ where
 {
     over(from, f)
 }
+
+/// Functions in this module reject the request if they fail to deserialize the argument.
+pub mod reject_on_decode_error {
+    use std::future::Future;
+
+    use on_wire::{FromWire, IntoWire, NewType};
+
+    use super::{over_async_bytes_may_reject, over_bytes_may_reject};
+
+    pub fn over<In, Out, F, Witness>(_: Witness, f: F)
+    where
+        In: FromWire + NewType,
+        Out: IntoWire + NewType,
+        F: FnOnce(In::Inner) -> Out::Inner,
+        Witness: FnOnce(Out, In::Inner) -> (Out::Inner, In),
+    {
+        over_bytes_may_reject(|inp| {
+            // Failure to deserialize the input should not be logged
+            let outer = In::from_bytes(inp)?;
+            let input = outer.into_inner();
+            let output = f(input);
+            // If Serializing the output fails we want that to be logged
+            Ok(Out::into_bytes(Out::from_inner(output)).expect("Serialization failed"))
+        })
+    }
+
+    pub fn over_async_may_reject<In, Out, F, Witness, Fut>(_: Witness, f: F)
+    where
+        In: FromWire + NewType,
+        Out: IntoWire + NewType,
+        F: FnOnce(In::Inner) -> Fut + 'static,
+        Fut: Future<Output = Result<Out::Inner, String>> + 'static,
+        Witness: FnOnce(Out, In::Inner) -> (Out::Inner, In),
+    {
+        over_async_bytes_may_reject(|inp| async move {
+            let outer = In::from_bytes(inp)?;
+            let input = outer.into_inner();
+            f(input).await.map(|output| {
+                Out::into_bytes(Out::from_inner(output)).expect("Serialization Failed")
+            })
+        })
+    }
+
+    pub fn over_async<In, Out, F, Witness, Fut>(_: Witness, f: F)
+    where
+        In: FromWire + NewType,
+        Out: IntoWire + NewType,
+        F: FnOnce(In::Inner) -> Fut + 'static,
+        Fut: Future<Output = Out::Inner> + 'static,
+        Witness: FnOnce(Out, In::Inner) -> (Out::Inner, In),
+    {
+        over_async_bytes_may_reject(|inp| async move {
+            let outer = In::from_bytes(inp)?;
+            let input = outer.into_inner();
+            let output = f(input).await;
+            Ok(Out::into_bytes(Out::from_inner(output)).expect("Serialization Failed"))
+        })
+    }
+}

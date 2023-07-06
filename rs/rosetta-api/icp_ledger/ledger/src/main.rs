@@ -4,7 +4,8 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::BytesS;
 use dfn_core::{
     api::{caller, data_certificate, print, set_certified_data, time_nanos, trap_with},
-    over, over_async, over_async_may_reject, over_init, printer, setup, stable,
+    endpoint::reject_on_decode_error::{over, over_async, over_async_may_reject},
+    over_init, printer, setup, stable,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
@@ -760,7 +761,9 @@ fn send_() {
 
 #[candid_method(update, rename = "send_dfx")]
 async fn send_dfx(arg: SendArgs) -> BlockIndex {
-    transfer_candid(arg.into()).await.unwrap()
+    transfer_candid(arg.into()).await.unwrap_or_else(|e| {
+        trap_with(&e.to_string());
+    })
 }
 
 /// Do not use call this from code, this is only here so dfx has something to
