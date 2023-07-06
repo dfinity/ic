@@ -8,7 +8,7 @@ exports_files([
     "rootfs/docker-base.prod",
     "rootfs/docker-base.sev",
     "config/config.ini",
-    "config/ssh_authorized_keys",
+    "config/ssh_authorized_keys/admin",
     "config/node_operator_private_key.pem",
     "data/deployment.json.template",
     "data/nns_public_key.pem",
