@@ -207,10 +207,8 @@ impl Upgrade {
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
-            return self
-                .execute_upgrade(&new_replica_version)
-                .await
-                .map_err(OrchestratorError::from);
+            self.execute_upgrade(&new_replica_version).await?;
+            return Ok(Some(subnet_id));
         }
 
         // If we arrive here, we are on the newest replica version.

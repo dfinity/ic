@@ -213,7 +213,7 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
 
     /// Executes the node upgrade by unpacking the downloaded image (if it didn't happen yet)
     /// and rebooting the node.
-    async fn execute_upgrade<T>(&mut self, version: &V) -> UpgradeResult<T> {
+    async fn execute_upgrade(&mut self, version: &V) -> UpgradeResult<()> {
         match self.get_prepared_version() {
             Some(v) if v == version => {
                 info!(
@@ -238,17 +238,16 @@ pub trait ImageUpgrader<V: Clone + Debug + PartialEq + Eq + Send + Sync, R: Send
             .map_err(|e| UpgradeError::IoError("Couldn't delete the image".to_string(), e))?;
 
         info!(self.log(), "Attempting to reboot");
-        let mut script = self.binary_dir().clone();
-        script.push("manageboot.sh");
-        let mut c = Command::new(script.into_os_string());
-        let out = c
+        let script = self.binary_dir().join("manageboot.sh");
+        let mut cmd = Command::new(script.into_os_string());
+        let out = cmd
             .arg("upgrade-commit")
             .output()
             .await
-            .map_err(|e| UpgradeError::file_command_error(e, &c))?;
+            .map_err(|e| UpgradeError::file_command_error(e, &cmd))?;
 
         if !out.status.success() {
-            warn!(self.log(), "upgrade-commit has failed");
+            warn!(self.log(), "upgrade-commit has failed: {:?}", out.status);
             Err(UpgradeError::GenericError(
                 "upgrade-commit failed".to_string(),
             ))
