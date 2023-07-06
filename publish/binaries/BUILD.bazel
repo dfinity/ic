@@ -49,6 +49,7 @@ BINARIES = {
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
     "log-vector-config-generator": "//rs/observability/log_vector_config_generator:log_vector_config_generator",
     "orchestrator": "//rs/orchestrator",
+    "prometheus-config-updater": "//rs/observability/prometheus_config_updater:prometheus_config_updater",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
     "sevctl": "//rs/ic_os/sevctl:sevctl",
     "sns": "//rs/sns/cli:sns",
