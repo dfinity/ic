@@ -204,7 +204,7 @@ pub fn with_endpoint(
             "IC_TEST_DATA",
             env.get_dependency_path("rs/tests/ic-hs/test-data"),
         )
-        .arg("-j20")
+        .arg("-j12")
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests, included_tests))
         .arg("--endpoint")
