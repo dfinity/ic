@@ -1,6 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_ledger_core::block::EncodedBlock;
 use icp_ledger::{AccountIdentifier, BlockIndex, Transaction};
+pub mod logs;
 
 #[derive(CandidType, Debug, Deserialize)]
 pub struct InitArg {
@@ -52,4 +53,24 @@ pub type GetAccountIdentifierTransactionsResult =
 #[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct Status {
     pub num_blocks_synced: BlockIndex,
+}
+
+#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+pub enum Priority {
+    P0,
+    P1,
+}
+
+#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+pub struct LogEntry {
+    pub timestamp: u64,
+    pub priority: Priority,
+    pub file: String,
+    pub line: u32,
+    pub message: String,
+}
+
+#[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]
+pub struct Log {
+    pub entries: Vec<LogEntry>,
 }

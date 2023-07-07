@@ -7358,6 +7358,7 @@ dependencies = [
  "candid",
  "ciborium",
  "ic-base-types",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-cdk 0.6.10",
  "ic-cdk-macros",
@@ -7375,6 +7376,7 @@ dependencies = [
  "num-traits",
  "scopeguard",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

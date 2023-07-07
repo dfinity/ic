@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/http_types",
+    "//rs/rust_canisters/canister_log",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
@@ -18,6 +19,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:serde_json",
 ]
 
 DEV_DEPENDENCIES = [
