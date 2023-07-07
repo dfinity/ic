@@ -2886,6 +2886,7 @@ dependencies = [
  "thread_profiler",
  "threadpool",
  "time 0.3.22",
+ "tiny-keccak",
  "tiny_http",
  "tokio",
  "tokio-io-timeout",

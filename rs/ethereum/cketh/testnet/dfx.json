@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "dfx": "0.14.0",
+  "canisters": {
+    "minter": {
+      "type": "custom",
+      "build": [
+        "bazel build //rs/cketh/minter:cketh_minter"
+      ],
+      "wasm": "../../../bazel-bin/rs/cketh/minter/cketh_minter.wasm",
+      "candid": "../minter/cketh_minter.did",
+      "shrink": false
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "",
+      "args": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  }
+}

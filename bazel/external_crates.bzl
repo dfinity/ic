@@ -1104,6 +1104,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "tiny_http": crate.spec(
                 version = "^0.10.0",
             ),
+            "tiny-keccak": crate.spec(
+                version = "^2.0.0",
+                features = ["keccak"],
+            ),
             "time": crate.spec(
                 version = "^0.3.20",
             ),
