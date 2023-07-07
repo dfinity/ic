@@ -30,6 +30,7 @@ use ic_types::{
     NodeId,
 };
 use rand::{rngs::SmallRng, Rng, SeedableRng};
+use strum_macros::Display;
 use tokio::{
     runtime::Handle,
     select,
@@ -112,11 +113,12 @@ impl OngoingStateSync {
         loop {
             select! {
                 _ = &mut state_sync_timeout => {
-                    info!(self.log, "State sync timed out.");
+                    info!(self.log, "State sync for height {} timed out.", self.artifact_id.height);
                     break;
                 }
                 Some(new_peer) = self.new_peers_rx.recv() => {
                     if self.peers.insert(new_peer) {
+                        info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
                         self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
                         self.spawn_chunk_downloads();
                     }
@@ -141,11 +143,23 @@ impl OngoingStateSync {
                     }
                 }
             }
+            // Collect metrics
+            self.metrics
+                .allowed_parallel_downloads
+                .set(self.allowed_downloads as i64);
+            self.metrics
+                .peers_serving_state
+                .set(self.peers.len() as i64);
             // Conditions on when to exit (in addition to timeout)
             if self.state_sync_finished
                 || self.peers.is_empty()
                 || self.state_sync.should_cancel(&self.artifact_id)
             {
+                info!(self.log, "Stopping ongoing state sync because: finished: {}; no peers: {}; should cancel: {};",
+                    self.state_sync_finished,
+                    self.peers.is_empty(),
+                    self.state_sync.should_cancel(&self.artifact_id)
+                );
                 break;
             }
         }
@@ -157,7 +171,7 @@ impl OngoingStateSync {
         &mut self,
         res: Result<Option<CompletedStateSync>, DownloadChunkError>,
     ) {
-        self.metrics.active_downloads.dec();
+        self.metrics.record_chunk_download_result(&res);
         match res {
             // Received chunk
             Ok(Some(CompletedStateSync { msg, peer_id })) => {
@@ -201,7 +215,6 @@ impl OngoingStateSync {
         for _ in 0..available_download_capacity {
             match self.chunks_to_download.next() {
                 Some(chunk) if !self.downloading_chunks.contains(&chunk) => {
-                    self.metrics.active_downloads.inc();
                     // Select random peer.
                     let peers: Vec<_> = self.peers.iter().copied().collect();
                     if peers.is_empty() {
@@ -211,13 +224,16 @@ impl OngoingStateSync {
                     let peer = peers.get(small_rng.gen_range(0..peers.len())).unwrap();
                     self.downloading_chunks.spawn_on(
                         chunk,
-                        Self::download_chunk_task(
-                            *peer,
-                            self.transport.clone(),
-                            self.tracker.clone(),
-                            self.artifact_id.clone(),
-                            chunk,
-                        ),
+                        self.metrics
+                            .download_task_monitor
+                            .instrument(Self::download_chunk_task(
+                                *peer,
+                                self.transport.clone(),
+                                self.tracker.clone(),
+                                self.artifact_id.clone(),
+                                chunk,
+                                self.metrics.clone(),
+                            )),
                         &self.rt,
                     );
                 }
@@ -233,6 +249,8 @@ impl OngoingStateSync {
                             v.push(c);
                         }
                     }
+                    self.metrics.chunks_to_download_calls_total.inc();
+                    self.metrics.chunks_to_download_total.inc_by(v.len() as u64);
                     self.chunks_to_download = Box::new(v.into_iter());
                 }
             }
@@ -245,7 +263,10 @@ impl OngoingStateSync {
         tracker: Arc<Mutex<Box<dyn Chunkable + Send + Sync>>>,
         artifact_id: StateSyncArtifactId,
         chunk_id: ChunkId,
+        metrics: OngoingStateSyncMetrics,
     ) -> Result<Option<CompletedStateSync>, DownloadChunkError> {
+        let _timer = metrics.chunk_download_duration.start_timer();
+
         let response_result = tokio::time::timeout(
             CHUNK_DOWNLOAD_TIMEOUT,
             client.rpc(&peer_id, build_chunk_handler_request(artifact_id, chunk_id)),
@@ -259,7 +280,7 @@ impl OngoingStateSync {
                 chunk_id,
                 err: e.to_string(),
             }),
-            Err(_) => Err(DownloadChunkError::Overloaded),
+            Err(_) => Err(DownloadChunkError::Timeout),
         }?;
 
         let chunk = parse_chunk_handler_response(response, chunk_id)?;
@@ -298,12 +319,13 @@ impl OngoingStateSync {
     }
 }
 
-struct CompletedStateSync {
+pub(crate) struct CompletedStateSync {
     msg: StateSyncMessage,
     peer_id: NodeId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Display)]
+#[strum(serialize_all = "snake_case")]
 pub(crate) enum DownloadChunkError {
     /// Request was processed but requested content was not available.
     /// This error is permanent.

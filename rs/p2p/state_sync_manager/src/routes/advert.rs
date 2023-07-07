@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::metrics::StateSyncManagerHandlerMetrics;
+use crate::metrics::{StateSyncManagerHandlerMetrics, ADVERT_HANDLER_LABEL};
 use axum::{
     body::Bytes,
     extract::State,
@@ -23,7 +23,7 @@ pub(crate) async fn state_sync_advert_handler(
     let _timer = state
         .metrics
         .request_duration
-        .with_label_values(&["advert"])
+        .with_label_values(&[ADVERT_HANDLER_LABEL])
         .start_timer();
 
     let id: StateSyncArtifactId = pb::StateSyncId::decode(payload)

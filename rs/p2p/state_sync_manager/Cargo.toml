@@ -23,7 +23,10 @@ prost = "0.11.0"
 rand = "0.8.5"
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+strum = "0.23.0"
+strum_macros = "0.23.0"
 tokio = { version = "1.28.0", features = ["full"] }
+tokio-metrics = "0.2.2"
 
 [dev-dependencies]
 ic-memory-transport = { path = "../memory_transport" }
