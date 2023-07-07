@@ -350,6 +350,7 @@ impl Hypervisor {
             *self.cycles_account_manager,
             network_topology,
             self.dirty_page_overhead,
+            execution_parameters.compute_allocation,
         );
         let (compilation_result, execution_result) = Arc::clone(&self.wasm_executor).execute(
             WasmExecutionInput {

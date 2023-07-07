@@ -134,6 +134,7 @@ impl WasmtimeInstanceBuilder {
             cycles_account_manager,
             &self.network_topology,
             dirty_page_overhead,
+            ComputeAllocation::default(),
         );
         let api = ic_system_api::SystemApiImpl::new(
             self.api_type,

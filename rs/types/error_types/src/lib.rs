@@ -106,6 +106,7 @@ impl From<ErrorCode> for RejectCode {
             QueryCallGraphInternal => CanisterError,
             InsufficientCyclesInComputeAllocation => CanisterError,
             InsufficientCyclesInMemoryAllocation => CanisterError,
+            InsufficientCyclesInMemoryGrow => CanisterError,
         }
     }
 }
@@ -163,6 +164,7 @@ pub enum ErrorCode {
     QueryCallGraphInternal = 529,
     InsufficientCyclesInComputeAllocation = 530,
     InsufficientCyclesInMemoryAllocation = 531,
+    InsufficientCyclesInMemoryGrow = 532,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -214,6 +216,7 @@ impl TryFrom<u64> for ErrorCode {
             529 => Ok(ErrorCode::QueryCallGraphInternal),
             530 => Ok(ErrorCode::InsufficientCyclesInComputeAllocation),
             531 => Ok(ErrorCode::InsufficientCyclesInMemoryAllocation),
+            532 => Ok(ErrorCode::InsufficientCyclesInMemoryGrow),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -307,7 +310,8 @@ impl UserError {
             | ErrorCode::CompositeQueryCalledInReplicatedMode
             | ErrorCode::QueryTimeLimitExceeded
             | ErrorCode::InsufficientCyclesInComputeAllocation
-            | ErrorCode::InsufficientCyclesInMemoryAllocation => false,
+            | ErrorCode::InsufficientCyclesInMemoryAllocation
+            | ErrorCode::InsufficientCyclesInMemoryGrow => false,
         }
     }
 

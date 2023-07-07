@@ -83,6 +83,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         cycles_account_manager,
         &network_topology,
         dirty_page_overhead,
+        ComputeAllocation::default(),
     );
 
     let canister_current_memory_usage = NumBytes::new(0);

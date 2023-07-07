@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::routing::ResolveDestinationError;
+use crate::{routing::ResolveDestinationError, ApiType};
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
@@ -501,6 +501,7 @@ pub struct SandboxSafeSystemState {
     dirty_page_overhead: NumInstructions,
     freeze_threshold: NumSeconds,
     memory_allocation: MemoryAllocation,
+    compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
     call_context_balances: BTreeMap<CallContextId, Cycles>,
     cycles_account_manager: CyclesAccountManager,
@@ -525,6 +526,7 @@ impl SandboxSafeSystemState {
         status: CanisterStatusView,
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
+        compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
         call_context_balances: BTreeMap<CallContextId, Cycles>,
         cycles_account_manager: CyclesAccountManager,
@@ -546,6 +548,7 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             freeze_threshold,
             memory_allocation,
+            compute_allocation,
             system_state_changes: SystemStateChanges::default(),
             initial_cycles_balance,
             call_context_balances,
@@ -565,6 +568,7 @@ impl SandboxSafeSystemState {
         cycles_account_manager: CyclesAccountManager,
         network_topology: &NetworkTopology,
         dirty_page_overhead: NumInstructions,
+        compute_allocation: ComputeAllocation,
     ) -> Self {
         let call_context_balances = match system_state.call_context_manager() {
             Some(call_context_manager) => call_context_manager
@@ -603,6 +607,7 @@ impl SandboxSafeSystemState {
             CanisterStatusView::from_full_status(&system_state.status),
             system_state.freeze_threshold,
             system_state.memory_allocation,
+            compute_allocation,
             system_state.balance(),
             call_context_balances,
             cycles_account_manager,
@@ -785,7 +790,6 @@ impl SandboxSafeSystemState {
     pub(super) fn withdraw_cycles_for_transfer(
         &mut self,
         canister_current_memory_usage: NumBytes,
-        compute_allocation: ComputeAllocation,
         amount: Cycles,
     ) -> HypervisorResult<()> {
         let mut new_balance = self.cycles_balance();
@@ -796,7 +800,7 @@ impl SandboxSafeSystemState {
                 self.freeze_threshold,
                 self.memory_allocation,
                 canister_current_memory_usage,
-                compute_allocation,
+                self.compute_allocation,
                 &mut new_balance,
                 amount,
                 self.subnet_size,
@@ -810,7 +814,6 @@ impl SandboxSafeSystemState {
     pub fn push_output_request(
         &mut self,
         canister_current_memory_usage: NumBytes,
-        compute_allocation: ComputeAllocation,
         msg: Request,
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
@@ -822,7 +825,7 @@ impl SandboxSafeSystemState {
             self.freeze_threshold,
             self.memory_allocation,
             canister_current_memory_usage,
-            compute_allocation,
+            self.compute_allocation,
             &msg,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
@@ -873,6 +876,83 @@ impl SandboxSafeSystemState {
 
     pub fn is_controller(&self, principal_id: &PrincipalId) -> bool {
         self.controllers.contains(principal_id)
+    }
+
+    /// Checks the cycles balance against the freezing threshold with the new
+    /// memory usage if that's needed for the given API type.
+    ///
+    /// If the old memory usage is higher than the new memory usage, then
+    /// no check is performed.
+    ///
+    /// Returns `Err(HypervisorError::InsufficientCyclesInMemoryGrow)` if the
+    /// canister would become frozen with the new memory usage.
+    /// Otherwise, returns `Ok(())`.
+    pub(super) fn check_freezing_threshold_for_memory_grow(
+        &self,
+        api_type: &ApiType,
+        old_memory_usage: NumBytes,
+        new_memory_usage: NumBytes,
+    ) -> HypervisorResult<()> {
+        let should_check = self.should_check_freezing_threshold_for_memory_grow(api_type);
+        if !should_check || old_memory_usage >= new_memory_usage {
+            return Ok(());
+        }
+        match self.memory_allocation {
+            MemoryAllocation::Reserved(limit) if new_memory_usage <= limit => Ok(()),
+            MemoryAllocation::Reserved(_) | MemoryAllocation::BestEffort => {
+                // Note that currently the memory usage of a canister cannot
+                // exceed its reserved limit. The `Reserved(_)` case is
+                // actually unreachable here, but we still handle it to keep
+                // this code robust.
+                let threshold = self.cycles_account_manager.freeze_threshold_cycles(
+                    self.freeze_threshold,
+                    self.memory_allocation,
+                    new_memory_usage,
+                    self.compute_allocation,
+                    self.subnet_size,
+                );
+                if self.cycles_balance() >= threshold {
+                    Ok(())
+                } else {
+                    Err(HypervisorError::InsufficientCyclesInMemoryGrow {
+                        bytes: new_memory_usage - old_memory_usage,
+                        available: self.cycles_balance(),
+                        threshold,
+                    })
+                }
+            }
+        }
+    }
+
+    // Returns `true` if the freezing threshold needs to be checked for the given
+    // API type when growing memory.
+    fn should_check_freezing_threshold_for_memory_grow(&self, api_type: &ApiType) -> bool {
+        match api_type {
+            ApiType::Update { .. } | ApiType::SystemTask { .. } => true,
+
+            ApiType::Start { .. } | ApiType::Init { .. } | ApiType::PreUpgrade { .. } => {
+                // Individual endpoints of install_code do not check the
+                // freezing threshold. Instead, it is checked at the end of
+                // install_code.
+                false
+            }
+
+            ApiType::InspectMessage { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. } => {
+                // Queries do not check the freezing threshold because the state
+                // changes are disarded anyways.
+                false
+            }
+
+            ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::Cleanup { .. } => {
+                // Response callbacks are specified to not check the freezing
+                // threshold.
+                false
+            }
+        }
     }
 }
 

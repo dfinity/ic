@@ -300,5 +300,6 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         QueryCallGraphInternal => "System error while executing a composite query",
         InsufficientCyclesInComputeAllocation => "Canister does not have enough cycles to increase its compute allocation",
         InsufficientCyclesInMemoryAllocation => "Canister does not have enough cycles to increase its memory allocation",
+        InsufficientCyclesInMemoryGrow => "Canister does not have enough cycles to grow memory",
     }
 }

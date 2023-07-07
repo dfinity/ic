@@ -1,4 +1,4 @@
-use ic_base_types::{CanisterIdError, PrincipalIdBlobParseError};
+use ic_base_types::{CanisterIdError, NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
 use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
 use ic_wasm_types::{WasmEngineError, WasmInstrumentationError, WasmValidationError};
@@ -135,6 +135,11 @@ pub enum HypervisorError {
     },
     /// A canister has written too much new data in a single message.
     MemoryAccessLimitExceeded(String),
+    InsufficientCyclesInMemoryGrow {
+        bytes: NumBytes,
+        available: Cycles,
+        threshold: Cycles,
+    },
 }
 
 impl From<WasmInstrumentationError> for HypervisorError {
@@ -320,6 +325,14 @@ impl HypervisorError {
                 format!("Canister exceeded memory access limits: {}", s)
 
             ),
+            Self::InsufficientCyclesInMemoryGrow { bytes, available, threshold } => UserError::new(
+                E::InsufficientCyclesInMemoryGrow,
+                format!(
+                    "Canister cannot grow memory by {} bytes due to insufficient cycles. \
+                     At least {} additional cycles are required.",
+                     bytes,
+                     threshold - available)
+            ),
         }
     }
 
@@ -350,6 +363,9 @@ impl HypervisorError {
             HypervisorError::Aborted => "Aborted",
             HypervisorError::SliceOverrun { .. } => "SliceOverrun",
             HypervisorError::MemoryAccessLimitExceeded(_) => "MemoryAccessLimitExceeded",
+            HypervisorError::InsufficientCyclesInMemoryGrow { .. } => {
+                "InsufficientCyclesInMemoryGrow"
+            }
         }
     }
 }
