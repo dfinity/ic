@@ -1,17 +1,34 @@
 //! Tests of the whole NiDKG protocol
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
+use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
+use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::vault::api::NiDkgCspVault;
+use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionKeySetWithPop;
+use crate::vault::local_csp_vault::ni_dkg::ni_dkg_clib::types::FsEncryptionSecretKey;
+use crate::vault::local_csp_vault::ni_dkg::CspFsEncryptionKeySet;
+use crate::vault::local_csp_vault::ni_dkg::CspNiDkgTranscript;
+use crate::vault::local_csp_vault::ni_dkg::CspSecretKey;
+use crate::vault::local_csp_vault::ni_dkg::Epoch;
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::test_utils;
 use crate::vault::test_utils::ni_dkg::fixtures::MockNetwork;
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
-use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateFsKeyError;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
+    CspDkgCreateFsKeyError, CspDkgLoadPrivateKeyError,
+};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPop;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::FsEncryptionPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::Transcript;
+use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
+use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_types::crypto::AlgorithmId;
 use ic_types_test_utils::ids::NODE_42;
 
+use crate::key_id::KeyId;
 use mockall::Sequence;
 use proptest::prelude::*;
 use std::io;
@@ -154,4 +171,112 @@ fn should_fail_with_internal_error_if_nidkg_secret_key_persistence_fails_due_to_
         Err(CspDkgCreateFsKeyError::InternalError(InternalError{ internal_error }))
         if internal_error.contains(&expected_serialization_error)
     );
+}
+
+#[test]
+fn should_return_internal_error_from_load_threshold_signing_key_internal_if_nidkg_secret_key_persistence_fails_due_to_serialization_error(
+) {
+    const INTERNAL_ERROR: &str = "cannot serialize keys";
+    let fs_key_id = KeyId::from([0u8; 32]);
+    let vault = csp_vault_with_fs_key_id_and_mock_secret_key_store_insert_error(
+        fs_key_id,
+        SecretKeyStoreInsertionError::SerializationError(INTERNAL_ERROR.to_string()),
+    );
+
+    let result = load_threshold_signing_key_for_empty_transcript_with_key_id(fs_key_id, vault);
+
+    assert_matches!(
+        result,
+        Err(CspDkgLoadPrivateKeyError::InternalError(InternalError{internal_error}))
+        if internal_error.contains(INTERNAL_ERROR)
+    );
+}
+
+#[test]
+fn should_return_transient_internal_error_from_load_threshold_signing_key_if_nidkg_secret_key_persistence_fails_due_to_transient_internal_error(
+) {
+    const INTERNAL_ERROR: &str = "transient internal error";
+    let fs_key_id = KeyId::from([0u8; 32]);
+    let vault = csp_vault_with_fs_key_id_and_mock_secret_key_store_insert_error(
+        fs_key_id,
+        SecretKeyStoreInsertionError::TransientError(INTERNAL_ERROR.to_string()),
+    );
+
+    let result = load_threshold_signing_key_for_empty_transcript_with_key_id(fs_key_id, vault);
+
+    assert_matches!(
+        result,
+        Err(CspDkgLoadPrivateKeyError::TransientInternalError(InternalError{internal_error}))
+        if internal_error.contains(INTERNAL_ERROR)
+    );
+}
+
+fn csp_vault_with_fs_key_id_and_mock_secret_key_store_insert_error(
+    fs_key_id: KeyId,
+    insert_error: SecretKeyStoreInsertionError,
+) -> LocalCspVault<ReproducibleRng, MockSecretKeyStore, TempSecretKeyStore, TempPublicKeyStore> {
+    let mut sks_returning_transient_internal_error = MockSecretKeyStore::new();
+    sks_returning_transient_internal_error
+        .expect_insert()
+        .times(1)
+        .return_const(Err(insert_error));
+    sks_returning_transient_internal_error
+        .expect_get()
+        .withf(move |key_id| key_id == &fs_key_id)
+        .return_const(arbitrary_fs_encryption_key_set());
+    sks_returning_transient_internal_error
+        .expect_get()
+        .return_const(None);
+    LocalCspVault::builder_for_test()
+        .with_node_secret_key_store(sks_returning_transient_internal_error)
+        .build()
+}
+
+fn load_threshold_signing_key_for_empty_transcript_with_key_id(
+    fs_key_id: KeyId,
+    vault: LocalCspVault<
+        ReproducibleRng,
+        MockSecretKeyStore,
+        TempSecretKeyStore,
+        TempPublicKeyStore,
+    >,
+) -> Result<(), CspDkgLoadPrivateKeyError> {
+    let algorithm_id = AlgorithmId::NiDkg_Groth20_Bls12_381;
+    let epoch = Epoch::new(135);
+    let csp_transcript = empty_ni_csp_dkg_transcript();
+    let receiver_index = 37_u32;
+
+    vault.load_threshold_signing_key(
+        algorithm_id,
+        epoch,
+        csp_transcript,
+        fs_key_id,
+        receiver_index,
+    )
+}
+
+fn arbitrary_fs_encryption_key_set() -> CspSecretKey {
+    // TODO(CRP-862): produce random values rather than default.
+    //  Copied from ic_crypto_internal_csp::types::test_utils::arbitrary_fs_encryption_key_set
+    let fs_enc_key_set = FsEncryptionKeySetWithPop {
+        public_key: FsEncryptionPublicKey(Default::default()),
+        pop: FsEncryptionPop {
+            pop_key: Default::default(),
+            challenge: Default::default(),
+            response: Default::default(),
+        },
+        secret_key: FsEncryptionSecretKey { bte_nodes: vec![] },
+    };
+    CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(
+        fs_enc_key_set,
+    ))
+}
+
+fn empty_ni_csp_dkg_transcript() -> CspNiDkgTranscript {
+    CspNiDkgTranscript::Groth20_Bls12_381(Transcript {
+        public_coefficients: PublicCoefficientsBytes {
+            coefficients: vec![],
+        },
+        receiver_data: Default::default(),
+    })
 }

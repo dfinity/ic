@@ -73,6 +73,11 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
                     },
                 )
             }
+            CspDkgLoadPrivateKeyError::InternalError(e) => {
+                DkgLoadTranscriptError::InternalError(ic_types::crypto::error::InternalError {
+                    internal_error: e.internal_error,
+                })
+            }
         }
     }
 }

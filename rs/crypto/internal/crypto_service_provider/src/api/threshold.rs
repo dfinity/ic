@@ -492,6 +492,10 @@ pub trait NiDkgCspClient {
     /// * the transcript is malformed. (`MalformedTranscriptError`)
     /// * it is unable to compute the secret key. (`InvalidTranscriptError`)
     /// * the public key is malformed. (`MalformedPublicKeyError`)
+    /// * there is an internal error, e.g., a serialization error while inserting the threshold
+    ///   secret key into the key store. (`InternalError`)
+    /// * there is a transient internal error, e.g., an RPC error communicating with the remote CSP
+    ///   vault. (`TransientInternalError`)
     fn load_threshold_signing_key(
         &self,
         algorithm_id: AlgorithmId,
