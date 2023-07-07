@@ -1456,6 +1456,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
+        execution_parameters().compute_allocation,
     );
     let mut api = SystemApiImpl::new(
         ApiTypeBuilder::build_update_api(),
@@ -1502,6 +1503,7 @@ fn take_execution_result_properly_frees_memory() {
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
+        execution_parameters().compute_allocation,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1580,6 +1582,7 @@ fn push_output_request_respects_memory_limits() {
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
+        execution_parameters().compute_allocation,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state
@@ -1682,6 +1685,7 @@ fn push_output_request_oversized_request_memory_limits() {
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
+        execution_parameters().compute_allocation,
     );
     let own_canister_id = system_state.canister_id;
     let callback_id = sandbox_safe_system_state

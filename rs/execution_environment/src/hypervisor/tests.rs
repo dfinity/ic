@@ -285,7 +285,9 @@ fn ic0_grow_handles_overflow() {
 
 #[test]
 fn ic0_grow_can_reach_max_number_of_pages() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(3_000_000_000_000)
+        .build();
     let wat = r#"
         (module
             (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
@@ -366,7 +368,9 @@ fn ic0_stable64_grow_beyond_max_pages_returns_neg_one() {
 
 #[test]
 fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(3_000_000_000_000)
+        .build();
     let wat = r#"
         (module
             (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
@@ -399,7 +403,9 @@ fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
 
 #[test]
 fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(3_000_000_000_000)
+        .build();
     let wat = r#"
         (module
             (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
@@ -425,7 +431,9 @@ fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
 
 #[test]
 fn ic0_stable_grow_traps_if_stable_memory_exceeds_4gb() {
-    let mut test = ExecutionTestBuilder::new().build();
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(3_000_000_000_000)
+        .build();
     let wat = r#"
         (module
             (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
@@ -653,7 +661,7 @@ fn ic0_stable_write_traps_if_heap_is_out_of_bounds() {
 #[test]
 fn ic0_stable_write_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_000_000_000_000)
+        .with_initial_canister_cycles(3_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -699,7 +707,7 @@ fn ic0_stable_read_does_not_trap_if_in_bounds() {
 #[test]
 fn ic0_stable_read_works_at_max_size() {
     let mut test = ExecutionTestBuilder::new()
-        .with_initial_canister_cycles(2_000_000_000_000)
+        .with_initial_canister_cycles(3_000_000_000_000)
         .build();
     let wat = r#"
         (module
@@ -5190,5 +5198,165 @@ fn division_by_zero() {
     assert_eq!(
         err.description(),
         format!("Canister {} trapped: integer division by 0", canister_id)
+    );
+}
+
+#[test]
+fn stable_grow_checks_freezing_threshold_in_update() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let body = wasm().stable_grow(10_000).build();
+    let err = test.ingress(canister_id, "update", body).unwrap_err();
+    assert!(
+        err.description()
+            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn stable64_grow_checks_freezing_threshold_in_update() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let body = wasm().stable64_grow(10_000).build();
+    let err = test.ingress(canister_id, "update", body).unwrap_err();
+    assert!(
+        err.description()
+            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn memory_grow_checks_freezing_threshold_in_update() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let wat = r#"
+        (module
+            (func (export "canister_update test")
+                (drop (memory.grow (i32.const 10000)))
+            )
+            (memory 0)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    assert!(
+        err.description()
+            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn stable_grow_does_not_check_freezing_threshold_in_query() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let body = wasm().stable_grow(10_000).build();
+    let result = test.ingress(canister_id, "query", body);
+    assert_empty_reply(result);
+}
+
+#[test]
+fn stable64_grow_does_not_check_freezing_threshold_in_query() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let body = wasm().stable64_grow(10_000).build();
+    let result = test.ingress(canister_id, "query", body);
+    assert_empty_reply(result);
+}
+
+#[test]
+fn memory_grow_does_not_check_freezing_threshold_in_query() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let wat = r#"
+        (module
+            (func (export "canister_query test")
+                (drop (memory.grow (i32.const 10000)))
+            )
+            (memory 0)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+}
+
+#[test]
+fn stable_grow_does_not_check_freezing_threshold_in_reply() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let callee = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let body = wasm()
+        .call_simple(
+            callee,
+            "update",
+            call_args()
+                .other_side(wasm().message_payload().append_and_reply())
+                .on_reply(wasm().stable_grow(10_000).build()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", body);
+    assert_empty_reply(result);
+    assert_eq!(
+        test.execution_state(canister_id).stable_memory.size,
+        NumWasmPages::new(10_000)
+    );
+}
+
+#[test]
+fn stable_grow_does_not_check_freezing_threshold_in_reject() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let callee = test.universal_canister().unwrap();
+    let canister_id = test.universal_canister().unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let body = wasm()
+        .call_simple(
+            callee,
+            "update",
+            call_args()
+                .other_side(wasm().build())
+                .on_reject(wasm().stable_grow(10_000).build()),
+        )
+        .build();
+    let result = test.ingress(canister_id, "update", body);
+    assert_empty_reply(result);
+    assert_eq!(
+        test.execution_state(canister_id).stable_memory.size,
+        NumWasmPages::new(10_000)
     );
 }

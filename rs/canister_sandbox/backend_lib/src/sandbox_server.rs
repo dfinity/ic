@@ -197,6 +197,7 @@ mod tests {
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
+            ComputeAllocation::default(),
             Cycles::new(1_000_000),
             BTreeMap::new(),
             CyclesAccountManager::new(

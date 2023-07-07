@@ -123,6 +123,7 @@ pub fn get_system_api(
         cycles_account_manager,
         &NetworkTopology::default(),
         SchedulerConfig::application_subnet().dirty_page_overhead,
+        execution_parameters().compute_allocation,
     );
     SystemApiImpl::new(
         api_type,

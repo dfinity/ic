@@ -1087,7 +1087,6 @@ impl TestWasmExecutorCore {
             message.calls,
             paused.call_context_id,
             paused.canister_current_memory_usage,
-            paused.execution_parameters.compute_allocation,
         );
 
         let canister_state_changes = CanisterStateChanges {
@@ -1159,7 +1158,6 @@ impl TestWasmExecutorCore {
         calls: Vec<TestCall>,
         call_context_id: Option<CallContextId>,
         canister_current_memory_usage: NumBytes,
-        compute_allocation: ComputeAllocation,
     ) -> SystemStateChanges {
         for call in calls.into_iter() {
             if let Err(error) = self.perform_call(
@@ -1167,7 +1165,6 @@ impl TestWasmExecutorCore {
                 call,
                 call_context_id.unwrap(),
                 canister_current_memory_usage,
-                compute_allocation,
             ) {
                 eprintln!("Skipping a call due to an error: {}", error);
             }
@@ -1182,7 +1179,6 @@ impl TestWasmExecutorCore {
         call: TestCall,
         call_context_id: CallContextId,
         canister_current_memory_usage: NumBytes,
-        compute_allocation: ComputeAllocation,
     ) -> Result<(), String> {
         let sender = system_state.canister_id();
         let receiver = call.other_side.canister.unwrap();
@@ -1221,7 +1217,6 @@ impl TestWasmExecutorCore {
         };
         if let Err(req) = system_state.push_output_request(
             canister_current_memory_usage,
-            compute_allocation,
             request,
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
