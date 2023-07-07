@@ -265,7 +265,7 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
 ///
 /// The NNS will be initialized with only the "test" neurons.
 /// (See [`ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder::with_test_neurons`].)
-pub fn setup_with_oc_parameters(
+pub fn setup_with_oc_parameters_legacy(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
@@ -363,8 +363,8 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
 }
 
 /// Sets up an SNS using "openchat-ish" parameters.
-pub fn sns_setup(env: TestEnv) {
-    setup_with_oc_parameters(
+pub fn sns_setup_legacy(env: TestEnv) {
+    setup_with_oc_parameters_legacy(
         env,
         vec![],
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -373,8 +373,8 @@ pub fn sns_setup(env: TestEnv) {
 }
 
 /// Sets up an SNS using "openchat-ish" parameters, with the "fast" configuration.
-pub fn sns_setup_fast(env: TestEnv) {
-    setup_with_oc_parameters(
+pub fn sns_setup_fast_legacy(env: TestEnv) {
+    setup_with_oc_parameters_legacy(
         env,
         vec![],
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -413,7 +413,7 @@ fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: boo
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup_with_oc_parameters(
+    setup_with_oc_parameters_legacy(
         env,
         participants,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -446,7 +446,7 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup_with_oc_parameters(
+    setup_with_oc_parameters_legacy(
         env,
         participants,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,

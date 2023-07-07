@@ -75,7 +75,7 @@ fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStra
 }
 
 pub fn benchmark_config(env: TestEnv) {
-    sns_deployment::sns_setup(env);
+    sns_deployment::sns_setup_legacy(env);
 }
 
 pub fn benchmark_config_with_auth(env: TestEnv) {
@@ -83,7 +83,7 @@ pub fn benchmark_config_with_auth(env: TestEnv) {
 }
 
 pub fn benchmark_config_with_aggregator(env: TestEnv) {
-    sns_deployment::sns_setup(env.clone());
+    sns_deployment::sns_setup_legacy(env.clone());
     install_aggregator(&env);
 }
 
