@@ -1744,6 +1744,53 @@ impl Governance {
         }
     }
 
+    #[allow(dead_code)] // TODO NNS1-2351 remove allow(dead_code)
+    /// A neuron is considered inactive if it has no stake, no maturity, and is not currently
+    /// involved in an open proposal or in the middle of a neuron operation.
+    fn neuron_can_be_archived(&self, neuron: &Neuron) -> bool {
+        fn involved_with_open_proposal(
+            proposals: &BTreeMap<u64, ProposalData>,
+            neuron: &Neuron,
+        ) -> bool {
+            let id = neuron.id.as_ref().unwrap();
+            let subaccount = &neuron.account;
+
+            proposals.values().any(|p| {
+                if p.status() != ProposalStatus::Open {
+                    return false;
+                }
+
+                if p.proposer.as_ref() == Some(id) {
+                    return true;
+                }
+
+                let manage_neuron_proposal_involves_neuron = p.is_manage_neuron()
+                    && p.proposal.as_ref().map_or(false, |pr| {
+                        pr.managed_neuron() == Some(NeuronIdOrSubaccount::NeuronId(id.clone()))
+                            || pr.managed_neuron()
+                                == Some(NeuronIdOrSubaccount::Subaccount(subaccount.clone()))
+                    });
+
+                manage_neuron_proposal_involves_neuron
+            })
+        }
+
+        let is_locked = neuron
+            .id
+            .as_ref()
+            .map(|id| self.proto.in_flight_commands.contains_key(&id.id))
+            .unwrap_or_default();
+
+        let has_stake = neuron.stake_e8s() != 0;
+
+        let has_maturity = neuron.maturity_e8s_equivalent != 0;
+
+        !has_maturity
+            && !has_stake
+            && !is_locked
+            && !involved_with_open_proposal(&self.proto.proposals, neuron)
+    }
+
     /// Locks a given neuron for a specific, signaling there is an ongoing
     /// ledger update.
     ///
