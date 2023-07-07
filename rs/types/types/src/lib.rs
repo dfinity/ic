@@ -349,6 +349,12 @@ impl Default for ComputeAllocation {
     }
 }
 
+impl PartialOrd for ComputeAllocation {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.as_percent().partial_cmp(&other.as_percent())
+    }
+}
+
 /// The error that occurs when an end-user specifies an invalid
 /// [`ComputeAllocation`].
 #[derive(Clone, Debug)]
@@ -540,6 +546,27 @@ impl fmt::Display for MemoryAllocation {
 impl Default for MemoryAllocation {
     fn default() -> Self {
         MemoryAllocation::BestEffort
+    }
+}
+
+impl PartialOrd for MemoryAllocation {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        // The ordering corresponds to how much memory the canister is
+        // reserving:
+        // - `BestEffort < Reserved(n)` for all `n`.
+        // - `Reserved(n) < Reserved(n + 1)` for all `n`.
+        match (&self, other) {
+            (MemoryAllocation::Reserved(a), MemoryAllocation::Reserved(b)) => a.partial_cmp(b),
+            (MemoryAllocation::Reserved(_), MemoryAllocation::BestEffort) => {
+                Some(std::cmp::Ordering::Greater)
+            }
+            (MemoryAllocation::BestEffort, MemoryAllocation::Reserved(_)) => {
+                Some(std::cmp::Ordering::Less)
+            }
+            (MemoryAllocation::BestEffort, MemoryAllocation::BestEffort) => {
+                Some(std::cmp::Ordering::Equal)
+            }
+        }
     }
 }
 

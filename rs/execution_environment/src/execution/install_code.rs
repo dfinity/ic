@@ -322,6 +322,7 @@ impl InstallCodeHelper {
     pub fn validate_input(
         &mut self,
         original: &OriginalContext,
+        round: &RoundContext,
         round_limits: &RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         self.steps.push(InstallCodeStep::ValidateInput);
@@ -346,6 +347,10 @@ impl InstallCodeHelper {
             round_limits.compute_allocation_used,
             original.config.compute_capacity,
             original.config.max_controllers,
+            self.canister.system_state.freeze_threshold,
+            self.canister.system_state.balance(),
+            round.cycles_account_manager,
+            original.subnet_size,
         )?;
 
         match original.mode {
@@ -589,7 +594,7 @@ impl InstallCodeHelper {
         round_limits: &RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         match step {
-            InstallCodeStep::ValidateInput => self.validate_input(original, round_limits),
+            InstallCodeStep::ValidateInput => self.validate_input(original, round, round_limits),
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state,

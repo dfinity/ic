@@ -387,6 +387,8 @@ impl CanisterManager {
         settings: CanisterSettings,
         subnet_compute_allocation_usage: u64,
         subnet_available_memory: &SubnetAvailableMemory,
+        canister_cycles_balance: Cycles,
+        subnet_size: usize,
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         validate_canister_settings(
             settings,
@@ -397,6 +399,10 @@ impl CanisterManager {
             subnet_compute_allocation_usage,
             self.config.compute_capacity,
             self.config.max_controllers,
+            self.config.default_freeze_threshold,
+            canister_cycles_balance,
+            &self.cycles_account_manager,
+            subnet_size,
         )
     }
 
@@ -456,6 +462,7 @@ impl CanisterManager {
         settings: CanisterSettings,
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> Result<(), CanisterManagerError> {
         let sender = origin.origin();
 
@@ -470,6 +477,10 @@ impl CanisterManager {
             round_limits.compute_allocation_used,
             self.config.compute_capacity,
             self.config.max_controllers,
+            canister.system_state.freeze_threshold,
+            canister.system_state.balance(),
+            &self.cycles_account_manager,
+            subnet_size,
         )?;
 
         let is_controllers_change =
@@ -566,6 +577,8 @@ impl CanisterManager {
             settings,
             round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
+            cycles - fee,
+            subnet_size,
         ) {
             Err(err) => (Err(err), cycles),
             Ok(validate_settings) => {
@@ -970,6 +983,7 @@ impl CanisterManager {
         new_controller: PrincipalId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> Result<(), CanisterManagerError> {
         let canister = state
             .canister_state_mut(&canister_id)
@@ -978,7 +992,14 @@ impl CanisterManager {
         let settings = CanisterSettingsBuilder::new()
             .with_controller(new_controller)
             .build();
-        self.update_settings(timestamp_nanos, origin, settings, canister, round_limits)
+        self.update_settings(
+            timestamp_nanos,
+            origin,
+            settings,
+            canister,
+            round_limits,
+            subnet_size,
+        )
     }
 
     /// Permanently deletes a canister from `ReplicatedState`.
@@ -1079,6 +1100,7 @@ impl CanisterManager {
         provisional_whitelist: &ProvisionalWhitelist,
         max_number_of_canisters: u64,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> Result<CanisterId, CanisterManagerError> {
         let sender = origin.origin();
 
@@ -1097,6 +1119,8 @@ impl CanisterManager {
             settings,
             round_limits.compute_allocation_used,
             &round_limits.subnet_available_memory,
+            cycles,
+            subnet_size,
         ) {
             Err(err) => Err(err),
             Ok(validated_settings) => self.create_canister_helper(
@@ -1354,6 +1378,16 @@ pub(crate) enum CanisterManagerError {
     CanisterNotHostedBySubnet {
         message: String,
     },
+    InsufficientCyclesInComputeAllocation {
+        compute_allocation: ComputeAllocation,
+        available: Cycles,
+        threshold: Cycles,
+    },
+    InsufficientCyclesInMemoryAllocation {
+        memory_allocation: MemoryAllocation,
+        available: Cycles,
+        threshold: Cycles,
+    },
 }
 
 impl From<CanisterManagerError> for UserError {
@@ -1519,6 +1553,28 @@ impl From<CanisterManagerError> for UserError {
                     ErrorCode::CanisterNotHostedBySubnet,
                     format!("Unsuccessful validation of specified ID: {}", message),
                 )
+            }
+            InsufficientCyclesInComputeAllocation { compute_allocation, available, threshold} =>
+            {
+                Self::new(
+                    ErrorCode::InsufficientCyclesInComputeAllocation,
+                    format!(
+                        "Cannot increase compute allocation to {} due to insufficient cycles. The new freezing threshold: {} cycles, available: {} cycles.",
+                        compute_allocation, threshold, available
+                    ),
+                )
+
+            }
+            InsufficientCyclesInMemoryAllocation { memory_allocation, available, threshold} =>
+            {
+                Self::new(
+                    ErrorCode::InsufficientCyclesInMemoryAllocation,
+                    format!(
+                        "Cannot increase memory allocation to {} due to insufficient cycles. The new freezing threshold: {} cycles, available: {} cycles.",
+                        memory_allocation, threshold, available
+                    ),
+                )
+
             }
         }
     }

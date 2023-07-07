@@ -574,6 +574,7 @@ impl ExecutionEnvironment {
                                 canister_id,
                                 &mut state,
                                 round_limits,
+                                registry_settings.subnet_size,
                             ),
                         };
                         // The induction cost of `UpdateSettings` is charged
@@ -629,6 +630,7 @@ impl ExecutionEnvironment {
                             args.get_new_controller(),
                             &mut state,
                             round_limits,
+                            registry_settings.subnet_size,
                         )
                         .map(|()| EmptyBlob.encode())
                         .map_err(|err| err.into()),
@@ -919,6 +921,7 @@ impl ExecutionEnvironment {
                                     &registry_settings.provisional_whitelist,
                                     registry_settings.max_number_of_canisters,
                                     round_limits,
+                                    registry_settings.subnet_size,
                                 )
                                 .map(|canister_id| CanisterIdRecord::from(canister_id).encode())
                                 .map_err(|err| err.into()),
@@ -1285,10 +1288,18 @@ impl ExecutionEnvironment {
         canister_id: CanisterId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
-            .update_settings(timestamp_nanos, origin, settings, canister, round_limits)
+            .update_settings(
+                timestamp_nanos,
+                origin,
+                settings,
+                canister,
+                round_limits,
+                subnet_size,
+            )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }

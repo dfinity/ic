@@ -95,9 +95,9 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         )
         .build();
 
-    test.canister_update_allocations_settings(a_id, Some(1), None)
-        .unwrap();
     test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
 
     test.ingress_raw(a_id, "update", a);
@@ -200,9 +200,9 @@ fn dts_update_concurrent_cycles_change_fails() {
         )
         .build();
 
-    test.canister_update_allocations_settings(a_id, Some(1), None)
-        .unwrap();
     test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
 
     let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
