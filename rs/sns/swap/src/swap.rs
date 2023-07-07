@@ -233,9 +233,9 @@ impl Swap {
         if let Err(e) = init.validate() {
             panic!("Invalid init arg: {:#?}\nReason: {}", init, e);
         }
-        Self {
+        let mut res = Self {
             lifecycle: Lifecycle::Pending as i32,
-            init: Some(init),
+            init: None, // Postpone setting this field to avoid cloning.
             params: None,
             cf_participants: vec![],
             buyers: Default::default(), // Btree map
@@ -247,7 +247,22 @@ impl Swap {
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
+        };
+        if init.is_swap_init_for_single_proposal() {
+            // Automatically fill out the fields that the (legacy) open request
+            // used to provide, supporting clients who read legacy Swap fields.
+            {
+                let data = init.mk_open_sns_request();
+                res.params = data.params;
+                res.cf_participants = data.cf_participants;
+            }
+            res.open_sns_token_swap_proposal_id = init.nns_proposal_id;
+            res.decentralization_sale_open_timestamp_seconds = init.swap_start_timestamp_seconds;
+            // Transit to the next SNS lifecycle state.
+            res.lifecycle = Lifecycle::Adopted as i32;
         }
+        res.init = Some(init);
+        res
     }
 
     /// Retrieve a reference to the `init` field. The `init` field
@@ -365,14 +380,21 @@ impl Swap {
         Ok(finalize_response)
     }
 
-    /// Precondition: lifecycle == PENDING
+    /// Opens the SNS decentralization swap (only for the legacy flow).
+    ///
+    /// This function should not be called in the new, single-proposal flow.
+    ///
+    /// The swap parameters are specified via `req` (for the legacy flow) and
+    /// in `SnsInitPayload` (in the new single-proposal flow). This includes,
+    /// e.g., the limits on the total and per-participant ICP, the number of SNS
+    /// tokens for this swap, and the community fund participation of the swap.
+    ///
+    /// Preconditions:
+    /// 1. lifecycle == PENDING
+    /// 2. `req` validates.
+    /// 3. SNS token amount is sufficient.
     ///
     /// Postcondition (on Ok): lifecycle == OPEN
-    ///
-    /// The parameters of the swap, specified in the request, specify
-    /// the limits on total and per-participant ICP, the number of SNS
-    /// tokens for swap, and the community fund participation of the
-    /// swap.
     pub async fn open(
         &mut self,
         this_canister: CanisterId,
@@ -380,20 +402,19 @@ impl Swap {
         now_seconds: u64,
         req: OpenRequest,
     ) -> Result<OpenResponse, String> {
+        // Precondition 1
         if self.lifecycle() != Lifecycle::Pending {
             return Err("Invalid lifecycle state to OPEN the swap: must be PENDING".to_string());
         }
-
+        // Precondition 2
         req.validate(now_seconds, self.init_or_panic())?;
+
+        // Precondition 3. Check that the SNS token amount is sufficient. We
+        // don't refuse to open the swap just because there are more SNS tokens
+        // sent to the swap canister than advertised, as this would lead to
+        // a dead end, because there is no way to take the tokens back.
         let params = req.params.as_ref().expect("The params field has no value.");
-
         let sns_token_amount = Self::get_sns_tokens(this_canister, sns_ledger).await?;
-
-        // Check that the SNS amount is at least the required
-        // amount. We don't refuse to open the swap just because there
-        // are more SNS tokens sent to the swap canister than
-        // advertised, as this would lead to a dead end, because there
-        // is no way to take the tokens back.
         if sns_token_amount.get_e8s() < params.sns_token_e8s {
             return Err(format!(
                 "Cannot OPEN, because the expected number of SNS tokens is not \
@@ -402,7 +423,6 @@ impl Swap {
                 sns_token_amount.get_e8s(),
             ));
         }
-
         assert!(self.params.is_none());
         self.params = req.params;
         self.cf_participants = req.cf_participants;
@@ -417,8 +437,8 @@ impl Swap {
         if open_delay_seconds > 0 {
             self.set_lifecycle(Lifecycle::Adopted);
         } else {
-            // set the purge_old_ticket last principal so that the routine can start
-            // in the next heartbeat
+            // set the purge_old_ticket last principal so that the routine can
+            // start in the next heartbeat
             self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
             self.set_lifecycle(Lifecycle::Open);
         }

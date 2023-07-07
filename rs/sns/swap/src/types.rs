@@ -20,7 +20,8 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, SECONDS_PER_DAY};
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
-use std::str::FromStr;
+use maplit::btreemap;
+use std::{collections::BTreeMap, str::FromStr};
 
 pub fn validate_principal(p: &str) -> Result<(), String> {
     let _ = PrincipalId::from_str(p).map_err(|x| {
@@ -97,6 +98,47 @@ fn principal_string_to_canister_id(s: &str) -> Result<CanisterId, String> {
     let principal_id = PrincipalId::from_str(s).map_err(|err| err.to_string())?;
     let canister_id = CanisterId::new(principal_id).map_err(|err| err.to_string())?;
     Ok(canister_id)
+}
+
+/// Represents outcomes of consistency checking two data sources.
+/// One can think of "source" as some structure filled out by a third-party,
+/// e.g., a canister request payload.
+///
+/// This type may be useful for implementing validation logic in canister APIs
+/// that require the same data to be provided via different endpoints,
+/// e.g., due to legacy reasons.
+///
+/// This type assumes an asymmetric data consistency analysis, i.e.:
+/// 1. Check that `this` source is a superset of the `other` source.
+/// 2. Check if `this.f` is set also in `other.f`.
+/// 2.1. If not, then the analysis outcome will be `Incomplete`.
+/// 2.2. Otherwise, if `this.f` matches `other.f`, the outcome is `Consistent`.
+/// 2.3. Otherwise, the outcome is `Contradiction`.
+///
+/// Here, `this` and `other` may be structures of different types, both of
+/// which have the field `f: Option<X>` for some `X`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum DataConsistencyAnalysisOutcome {
+    // Indicates that the analysis has not been performed. This value
+    // facilitates code reuse.
+    Unknown,
+    // Indicates that both sources agree.
+    Consistent,
+    /// Indicates that the data is present only in `this` but not in `other`.
+    Incomplete,
+    /// Indicates that there is an explicit contradiction between `this` and
+    /// `other`.
+    Contradiction,
+}
+
+impl DataConsistencyAnalysisOutcome {
+    pub fn is_contradiction(&self) -> bool {
+        self.eq(&Self::Contradiction)
+    }
+
+    pub fn is_consistent(&self) -> bool {
+        self.eq(&Self::Consistent)
+    }
 }
 
 impl Init {
@@ -198,6 +240,230 @@ impl Init {
         self.transaction_fee_e8s.unwrap()
     }
 
+    /// This function projects the set of fields needed in the single-proposal
+    /// swap opening scenario to the set of
+    /// `Option<DataConsistencyAnalysisOutcome>`, preserving the `is_none()` and
+    /// `is_some()` properties of all the elements. The set is represented via
+    /// a table from `SnsInitPayload` field names to set elements (the keys
+    /// facilitate testing and improve error reporting and debuggablility).
+    ///
+    /// If `open_request` is `Some(r)`, analyzes the consistency of the provided
+    /// `OpenRequest` instance `r` w.r.t. the swap opening fields of `self`.
+    ///
+    /// This creates one source of truth for defining (1) the original set
+    /// and (2) its mapping to the set of (legacy) fields in `OpenRequest`.
+    fn swap_opening_field_states(
+        &self,
+        open_request: Option<&OpenRequest>,
+    ) -> BTreeMap<String, Option<DataConsistencyAnalysisOutcome>> {
+        fn m(has_matched: bool) -> DataConsistencyAnalysisOutcome {
+            if has_matched {
+                DataConsistencyAnalysisOutcome::Consistent
+            } else {
+                DataConsistencyAnalysisOutcome::Contradiction
+            }
+        }
+        btreemap![
+            "min_participants".to_string() => self.min_participants.as_ref().map(|x| {
+                open_request
+                    .map(|r| {
+                        r.params
+                            .as_ref()
+                            .map(|p| m(*x == p.min_participants))
+                            .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                    })
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 17
+            "min_icp_e8s".to_string() => self.min_icp_e8s.as_ref().map(|x| {
+                open_request
+                    .map(|r| {
+                        r.params
+                            .as_ref()
+                            .map(|p| m(*x == p.min_icp_e8s))
+                            .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                    })
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 18
+            "max_icp_e8s".to_string() => self.max_icp_e8s.as_ref().map(|x| {
+                open_request
+                    .map(|r| {
+                        r.params
+                            .as_ref()
+                            .map(|p| m(*x == p.max_icp_e8s))
+                            .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                    })
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 19
+            "min_participant_icp_e8s".to_string() => self.min_participant_icp_e8s.as_ref().map(|x| {
+                open_request
+                    .map(|r| {
+                        r.params
+                            .as_ref()
+                            .map(|p| m(*x == p.min_participant_icp_e8s))
+                            .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                    })
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 20
+            "max_participant_icp_e8s".to_string() => self.max_participant_icp_e8s.as_ref().map(|x| {
+                open_request
+                    .map(|r| {
+                        r.params
+                            .as_ref()
+                            .map(|p| m(*x == p.max_participant_icp_e8s))
+                            .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                    })
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 21
+            "swap_start_timestamp_seconds".to_string() => self.swap_start_timestamp_seconds.as_ref().map(|_|
+                // This field is not available from `open_request`
+                DataConsistencyAnalysisOutcome::Consistent), // 22
+            "swap_due_timestamp_seconds".to_string() => self.swap_due_timestamp_seconds.as_ref().map(|x| {
+                open_request
+                    .map(|r| {
+                        r.params
+                            .as_ref()
+                            .map(|p| m(*x == p.swap_due_timestamp_seconds))
+                            .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                    })
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 23
+            "sns_token_e8s".to_string() => self.sns_token_e8s.as_ref().map(|x| {
+                open_request
+                    .map(|r| {
+                        r.params
+                            .as_ref()
+                            .map(|p| m(*x == p.sns_token_e8s))
+                            .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                    })
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 24
+            "neuron_basket_construction_parameters".to_string() => self.neuron_basket_construction_parameters
+                .as_ref()
+                .map(|x| {
+                    open_request
+                        .map(|r| {
+                            r.params
+                                .as_ref()
+                                .map(|p| {
+                                    p.neuron_basket_construction_parameters
+                                        .as_ref()
+                                        .map(|q| m(*x == *q))
+                                        .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                                })
+                                .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                        })
+                        .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+                }), // 25
+            "nns_proposal_id".to_string() => self.nns_proposal_id.as_ref().map(|x| {
+                open_request
+                    .map(|r| {
+                        r.open_sns_token_swap_proposal_id
+                            .as_ref()
+                            .map(|proposal_id| m(*x == *proposal_id))
+                            .unwrap_or(DataConsistencyAnalysisOutcome::Incomplete)
+                    })
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 26
+            "neurons_fund_participants".to_string() => self.neurons_fund_participants.as_ref().map(|x| {
+                open_request
+                    .map(|r|
+                    // Ignore the possibility of permutted yet equivalent vector
+                    // fields. This allows not worrying about the efficiency of
+                    // this function, e.g., even if the number of participants
+                    // is very large.
+                    m({
+                        let (xs, rs) = (&x.cf_participants, &r.cf_participants);
+                        xs.len() == rs.len() && xs.iter().zip(rs).all(|(x, r)| *x == *r)
+                    }))
+                    .unwrap_or(DataConsistencyAnalysisOutcome::Unknown)
+            }), // 27
+        ]
+    }
+
+    /// Checks that an `OpenRequest` instance does not have legacy fields set.
+    /// This function is implemented here (as opposed to `impl OpenRequest`)
+    /// to make it easier to compare it against the fields in
+    /// `swap_opening_field_states`.
+    pub fn check_no_legacy_fields_set_in_open_sns_request(req: &OpenRequest) -> Result<(), String> {
+        // Only `OpenRequest.params.sale_delay_seconds` is legacy.
+        req.params
+            .as_ref()
+            .map(|p| {
+                if p.sale_delay_seconds.is_some() {
+                    Err("`OpenRequest.params.sale_delay_seconds` is deprecated".to_string())
+                } else {
+                    Ok(())
+                }
+            })
+            .unwrap_or(Ok(()))
+    }
+
+    /// Creates a new `OpenRequest` instance based on the swap opening fields of
+    /// `self`. Needed to form responses to clients that read legacy endpoints,
+    /// e.g., `swap.get_sale_parameters`.
+    ///
+    /// Requires:
+    /// - `self.is_swap_init_for_single_proposal()`
+    pub fn mk_open_sns_request(&self) -> OpenRequest {
+        assert!(
+            self.is_swap_init_for_single_proposal(),
+            "cannot make an `OpenRequest` instance from a legacy `SnsInitPayload`"
+        );
+        let params = Params {
+            min_participants: self.min_participants.unwrap(),
+            min_icp_e8s: self.min_icp_e8s.unwrap(),
+            max_icp_e8s: self.max_icp_e8s.unwrap(),
+            min_participant_icp_e8s: self.min_participant_icp_e8s.unwrap(),
+            max_participant_icp_e8s: self.max_participant_icp_e8s.unwrap(),
+            swap_due_timestamp_seconds: self.swap_due_timestamp_seconds.unwrap(),
+            sns_token_e8s: self.sns_token_e8s.unwrap(),
+            neuron_basket_construction_parameters: self
+                .neuron_basket_construction_parameters
+                .clone(),
+            sale_delay_seconds: None,
+        };
+        OpenRequest {
+            params: Some(params),
+            cf_participants: self
+                .neurons_fund_participants
+                .as_ref()
+                .unwrap()
+                .cf_participants
+                .to_vec(),
+            open_sns_token_swap_proposal_id: self.nns_proposal_id,
+        }
+    }
+
+    /// Indicates whether this swap `Init` payload matches the legacy structure,
+    /// i.e., all of its swap-opening fields (see `swap_opening_field_states`)
+    /// are **unset**, as they will be passed explicitly via the `Swap.open` API.
+    pub fn is_swap_init_for_legacy(&self) -> bool {
+        self.swap_opening_field_states(None)
+            .values()
+            .all(|x| x.is_none())
+    }
+
+    /// Indicates whether this swap `Init` payload matches the new structure,
+    /// i.e., all of its swap-opening fields (see `swap_opening_field_states`)
+    /// are **set**.
+    pub fn is_swap_init_for_single_proposal(&self) -> bool {
+        self.swap_opening_field_states(None)
+            .values()
+            .all(|x| x.is_some())
+    }
+
+    /// Indicates whether an `OpenRequest` instance contradicts this swap `Init`
+    /// payload, as defined in `swap_opening_field_states`.
+    pub fn is_contradicting_open_sns_request(&self, req: &OpenRequest) -> bool {
+        self.swap_opening_field_states(Some(req))
+            .values()
+            .any(|outcome| {
+                outcome
+                    .map(|specific_outcome| specific_outcome.is_contradiction())
+                    .unwrap_or(true)
+            })
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         validate_canister_id(&self.nns_governance_canister_id)?;
         validate_canister_id(&self.sns_governance_canister_id)?;
@@ -224,6 +490,15 @@ impl Init {
         // As with transaction_fee_e8s, the value itself is not checked; only
         // that it is supplied. Needs to match the value in SNS governance
         // though.
+
+        // TODO[NNS1-2362] Re-validate also the fields that were filled out by
+        // TODO[NNS1-2362] trusted code.
+
+        if !self.is_swap_init_for_legacy() && !self.is_swap_init_for_single_proposal() {
+            return Err(
+                "fields listed in `swap_opening_field_states` must either all be set (for 1-proposal) or all be unset (legacy).".to_string()
+            );
+        }
 
         if self.should_auto_finalize.is_none() {
             return Err("should_auto_finalize is required.".to_string());
@@ -859,7 +1134,8 @@ mod tests {
     use crate::{
         pb::v1::{
             CfNeuron, CfParticipant, Init, ListDirectParticipantsResponse,
-            NeuronBasketConstructionParameters, OpenRequest, Params, Participant,
+            NeuronBasketConstructionParameters, NeuronsFundParticipants, OpenRequest, Params,
+            Participant,
         },
         swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
@@ -1204,5 +1480,134 @@ mod tests {
             ..PARAMS.clone()
         };
         assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+    }
+
+    #[test]
+    fn test_swap_opening_field_states_function() {
+        // `SnsInitPayload` defaults to the legacy flow (all single-proposal
+        // fields are `None`).
+        {
+            let default_init: Init = Default::default();
+            assert!(default_init.is_swap_init_for_legacy());
+        }
+        // There exists some `SnsInitPayload` that is not suitable for both
+        // single-proposal and legacy flows.
+        {
+            let incorrect_init = Init {
+                nns_proposal_id: Some(26_u64),
+                ..Default::default()
+            };
+            assert!(
+                !incorrect_init.is_swap_init_for_single_proposal()
+                    && !incorrect_init.is_swap_init_for_legacy()
+            );
+        }
+        let mut init = Init {
+            min_participants: Some(17_u32),
+            min_icp_e8s: Some(18_u64),
+            max_icp_e8s: Some(19_000_u64),
+            min_participant_icp_e8s: Some(20_u64),
+            max_participant_icp_e8s: Some(21_u64),
+            swap_start_timestamp_seconds: Some(22_u64),
+            swap_due_timestamp_seconds: Some(23_u64),
+            sns_token_e8s: Some(24_u64),
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 25_u64,
+                dissolve_delay_interval_seconds: 25_u64,
+            }),
+            nns_proposal_id: Some(26_u64),
+            neurons_fund_participants: Some(NeuronsFundParticipants {
+                cf_participants: vec![],
+            }),
+            ..Default::default()
+        };
+        // There exists some `SnsInitPayload` that is suitable for the new
+        // single-proposal flow.
+        assert!(init.is_swap_init_for_single_proposal());
+
+        let neurons_fund_participant_a = CfParticipant {
+            hotkey_principal: "HotKeyA".to_string(),
+            cf_neurons: vec![
+                CfNeuron {
+                    nns_neuron_id: 26_101_u64,
+                    amount_icp_e8s: 26_101_u64,
+                },
+                CfNeuron {
+                    nns_neuron_id: 26_102_u64,
+                    amount_icp_e8s: 26_102_u64,
+                },
+            ],
+        };
+        let neurons_fund_participant_b = CfParticipant {
+            hotkey_principal: "HotKeyB".to_string(),
+            cf_neurons: vec![
+                CfNeuron {
+                    nns_neuron_id: 26_201_u64,
+                    amount_icp_e8s: 26_201_u64,
+                },
+                CfNeuron {
+                    nns_neuron_id: 26_202_u64,
+                    amount_icp_e8s: 26_202_u64,
+                },
+            ],
+        };
+        init.neurons_fund_participants = Some(NeuronsFundParticipants {
+            cf_participants: vec![
+                neurons_fund_participant_a.clone(),
+                neurons_fund_participant_b.clone(),
+            ],
+        });
+        // Form a valid `SnsInitPayload` instance.
+        {
+            init.transaction_fee_e8s = Some(0_u64);
+            init.neuron_minimum_stake_e8s = Some(0_u64);
+        }
+        let open_request = init.mk_open_sns_request();
+        // Check that the parameters of the generated open request validate.
+        // Note that testing this `validate` function is not the main focus of
+        // this test, so we concentrate only on the happy scenario in this case.
+        assert_is_ok!(open_request.params.as_ref().unwrap().validate(&init));
+
+        // Check that the generated open request does not specify legacy fields.
+        assert_is_ok!(Init::check_no_legacy_fields_set_in_open_sns_request(
+            &open_request
+        ));
+
+        // ...but if we were to add the legacy field, the check would fail.
+        {
+            let mut bad_open_request = open_request.clone();
+            bad_open_request.params = Some({
+                let mut bad_params = bad_open_request.params.unwrap();
+                bad_params.sale_delay_seconds = Some(123345_u64);
+                bad_params
+            });
+            assert_is_err!(Init::check_no_legacy_fields_set_in_open_sns_request(
+                &bad_open_request
+            ));
+        }
+
+        // Check that the generated open request is expected, i.e.:
+        // 1. Each single-proposal enabling field is defined.
+        // 2. The single-proposal enabling fields do not contradict those of
+        //    `SnsInitPayload`.
+        for (fname, fstate) in init
+            .swap_opening_field_states(Some(&open_request))
+            .into_iter()
+        {
+            assert!(
+                fstate.unwrap().is_consistent(),
+                "field `{fname}` is not fully consistent: {fstate:?}"
+            );
+        }
+
+        // Check that even a permutation of `neurons_fund_participants` causes a
+        // contradiction.
+        init.neurons_fund_participants = Some(NeuronsFundParticipants {
+            cf_participants: vec![neurons_fund_participant_b, neurons_fund_participant_a],
+        });
+        assert!(init
+            .swap_opening_field_states(Some(&open_request))
+            .values()
+            .any(|x| x.map(|y| y.is_contradiction()).unwrap_or(false)));
     }
 }
