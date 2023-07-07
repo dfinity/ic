@@ -6,6 +6,7 @@ use crate::driver::{
     resource::AllocatedVm,
     task_scheduler::TaskScheduler,
     test_env_api::{FarmBaseUrl, HasGroupSetup},
+    universal_vm::UNIVERSAL_VMS_DIR,
     {
         action_graph::ActionGraph,
         context::{GroupContext, ProcessContext},
@@ -979,6 +980,12 @@ fn discover_uvms(root_path: PathBuf) -> Result<HashMap<String, Ipv6Addr>> {
     for entry in WalkDir::new(root_path)
         .into_iter()
         .filter_map(Result::ok)
+        .filter(|e| {
+            e.path()
+                .to_str()
+                .map(|p| p.contains(UNIVERSAL_VMS_DIR))
+                .unwrap_or(false)
+        })
         .filter(|e| {
             let file_name = String::from(e.file_name().to_string_lossy());
             e.file_type().is_file() && file_name == "vm.json"
