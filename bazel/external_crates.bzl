@@ -806,6 +806,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "protobuf": crate.spec(
                 version = "^2.27.1",
             ),
+            "publicsuffix": crate.spec(
+                version = "^2.2.3",
+            ),
             "quickcheck": crate.spec(
                 version = "^1.0.3",
             ),

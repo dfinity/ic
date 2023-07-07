@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:mockall",
     "@crate_index//:priority-queue",
     "@crate_index//:prometheus",
+    "@crate_index//:publicsuffix",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde",
@@ -32,6 +33,7 @@ MACRO_DEPENDENCIES = [
 rust_canister(
     name = "certificate_orchestrator",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = ["public_suffix_list.dat"],
     crate_name = "certificate_orchestrator",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",
