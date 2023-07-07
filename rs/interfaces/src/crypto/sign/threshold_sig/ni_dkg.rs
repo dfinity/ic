@@ -165,6 +165,10 @@ pub trait NiDkgAlgorithm {
     ///   error, e.g. because the registry version is not available.
     /// * `DkgLoadTranscriptError::InvalidTranscript` if the transcript could
     ///   not be parsed.
+    /// * `DkgLoadTranscriptError::TransientInternalError` if there was a transient internal error
+    ///   while loading the transcript, e.g., an RPC error when calling the remote CSP vault.
+    /// * `DkgLoadTranscriptError::InternalError` if there was an internal error, e.g., due to
+    ///   invalid input.
     fn load_transcript(
         &self,
         transcript: &NiDkgTranscript,

@@ -138,6 +138,8 @@ impl ErrorReproducibility for DkgLoadTranscriptError {
             DkgLoadTranscriptError::MalformedFsEncryptionPublicKey(_) => true,
             // false, as a transient error is not replicated by definition
             DkgLoadTranscriptError::TransientInternalError(_) => false,
+            // true, as internal errors are not expected to resolve through retrying
+            DkgLoadTranscriptError::InternalError(_) => true,
         }
     }
 }

@@ -480,7 +480,9 @@ pub enum CspDkgLoadPrivateKeyError {
         ciphertext_epoch: Epoch,
         secret_key_epoch: Epoch,
     },
-    // A transient internal error, e.g. an RPC error.
+    /// An internal error occurred.
+    InternalError(InternalError),
+    /// A transient internal error, e.g. an RPC error.
     TransientInternalError(InternalError),
     /// The public key could not be parsed.
     MalformedPublicKeyError(MalformedDataError),
