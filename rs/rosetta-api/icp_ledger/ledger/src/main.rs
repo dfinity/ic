@@ -32,11 +32,15 @@ use icp_ledger::{
     Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
     MEMO_SIZE_BYTES,
 };
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue as Value, icrc3::archive::QueryArchiveFn,
+};
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
+#[allow(unused_imports)]
+use on_wire::IntoWire;
 use std::cell::RefCell;
 use std::{
     collections::{HashMap, HashSet},
@@ -345,7 +349,6 @@ pub async fn notify(
 ) -> Result<BytesS, String> {
     use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
     use dfn_protobuf::ProtoBuf;
-    use on_wire::IntoWire;
 
     NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
 
@@ -752,9 +755,7 @@ fn send_() {
          }| async move {
             send(memo, amount, fee, from_subaccount, to, created_at_time)
                 .await
-                .unwrap_or_else(|e| {
-                    trap_with(&e.to_string());
-                })
+                .unwrap_or_else(|e| trap_with(&e.to_string()))
         },
     );
 }
@@ -856,7 +857,7 @@ async fn icrc1_transfer(
 
 #[export_name = "canister_update transfer"]
 fn transfer() {
-    over_async(candid_one, transfer_candid)
+    over_async_may_reject(candid_one, |arg| async { Ok(transfer_candid(arg).await) })
 }
 
 #[export_name = "canister_update icrc1_transfer"]
@@ -1077,10 +1078,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         .map(|(canister_id, slice)| ArchivedBlocksRange {
             start: slice.start,
             length: range_utils::range_len(&slice),
-            callback: icrc_ledger_types::icrc3::archive::QueryArchiveFn::new(
-                canister_id.into(),
-                "get_blocks".to_string(),
-            ),
+            callback: QueryArchiveFn::new(canister_id.into(), "get_blocks".to_string()),
         })
         .collect();
 

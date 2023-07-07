@@ -8,14 +8,15 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::Tokens;
 use ic_state_machine_tests::StateMachine;
-use icp_ledger::{AccountIdentifier, GetBlocksArgs, QueryBlocksResponse, MAX_BLOCKS_PER_REQUEST};
+use icp_ledger::{
+    AccountIdentifier, GetBlocksArgs, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+};
 use icp_ledger::{LedgerCanisterInitPayload, Memo, Operation, Transaction};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -139,10 +140,11 @@ fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
     let res = env
-        .execute_ingress(ledger_id, "query_blocks", req)
+        .execute_ingress(ledger_id, "query_encoded_blocks", req)
         .expect("Failed to send get_blocks request")
         .bytes();
-    let res = Decode!(&res, QueryBlocksResponse).expect("Failed to decode GetBlocksResponse");
+    let res =
+        Decode!(&res, QueryEncodedBlocksResponse).expect("Failed to decode GetBlocksResponse");
     let mut blocks = vec![];
     for archived in res.archived_blocks {
         let req = GetBlocksArgs {
@@ -159,13 +161,15 @@ fn icp_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<icp_ledger::
             )
             .expect("Failed to send get_blocks request to archive")
             .bytes();
-        let res = Decode!(&res, icp_ledger::GetBlocksResult).unwrap().unwrap();
-        blocks.extend(res.blocks);
+        let res = Decode!(&res, icp_ledger::GetEncodedBlocksResult)
+            .unwrap()
+            .unwrap();
+        blocks.extend(res);
     }
     blocks.extend(res.blocks);
     blocks
         .into_iter()
-        .map(icp_ledger::Block::try_from)
+        .map(icp_ledger::Block::decode)
         .collect::<Result<Vec<icp_ledger::Block>, String>>()
         .unwrap()
 }

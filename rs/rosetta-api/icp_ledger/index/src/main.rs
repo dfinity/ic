@@ -14,15 +14,14 @@ use ic_stable_structures::{
 };
 use ic_stable_structures::{BoundedStorable, StableBTreeMap};
 use icp_ledger::{
-    AccountIdentifier, ArchivedBlocksRange, Block, BlockIndex, CandidBlock, GetBlocksArgs,
-    Operation, QueryBlocksResponse, MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier, ArchivedEncodedBlocksRange, Block, BlockIndex, GetBlocksArgs,
+    GetEncodedBlocksResult, Operation, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
 };
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Reverse;
-use std::convert::TryFrom;
 use std::time::Duration;
 
 /// The maximum number of blocks to return in a single [get_blocks] request.
@@ -228,26 +227,27 @@ fn init(init_arg: InitArg) {
     set_build_index_timer(Duration::from_secs(1));
 }
 
-async fn get_blocks_from_ledger(start: u64) -> Result<QueryBlocksResponse, String> {
+async fn get_blocks_from_ledger(start: u64) -> Result<QueryEncodedBlocksResponse, String> {
     let ledger_id = with_state(|state| state.ledger_id);
     let req = GetBlocksArgs {
         start,
         length: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
     };
-    let (res,): (QueryBlocksResponse,) = ic_cdk::call(ledger_id, "query_blocks", (req,))
-        .await
-        .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+    let (res,): (QueryEncodedBlocksResponse,) =
+        ic_cdk::call(ledger_id, "query_encoded_blocks", (req,))
+            .await
+            .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
     Ok(res)
 }
 
 async fn get_blocks_from_archive(
-    block_range: &ArchivedBlocksRange,
-) -> Result<Vec<icp_ledger::CandidBlock>, String> {
+    block_range: &ArchivedEncodedBlocksRange,
+) -> Result<Vec<EncodedBlock>, String> {
     let req = GetBlocksArgs {
         start: block_range.start,
         length: block_range.length as usize,
     };
-    let (blocks_res,): (icp_ledger::GetBlocksResult,) = ic_cdk::call(
+    let (blocks_res,): (GetEncodedBlocksResult,) = ic_cdk::call(
         block_range.callback.canister_id,
         &block_range.callback.method,
         (req,),
@@ -267,7 +267,7 @@ async fn get_blocks_from_archive(
             error_message,
         } => format!("code: {:#?} message: {}", error_code, error_message),
     })?;
-    Ok(blocks.blocks)
+    Ok(blocks)
 }
 
 pub async fn build_index() -> Result<(), String> {
@@ -292,16 +292,16 @@ pub async fn build_index() -> Result<(), String> {
         let mut remaining = archived.length;
         let mut next_archived_txid = archived.start;
         while remaining > 0u64 {
-            let archived = ArchivedBlocksRange {
+            let archived = ArchivedEncodedBlocksRange {
                 start: next_archived_txid,
                 length: remaining,
                 callback: archived.callback.clone(),
             };
-            let candid_blocks = get_blocks_from_archive(&archived).await?;
-            next_archived_txid += candid_blocks.len() as u64;
-            tx_indexed_count += candid_blocks.len();
-            remaining -= candid_blocks.len() as u64;
-            append_blocks(candid_blocks);
+            let encoded_blocks = get_blocks_from_archive(&archived).await?;
+            next_archived_txid += encoded_blocks.len() as u64;
+            tx_indexed_count += encoded_blocks.len();
+            remaining -= encoded_blocks.len() as u64;
+            append_blocks(encoded_blocks);
         }
     }
     tx_indexed_count += res.blocks.len();
@@ -333,15 +333,11 @@ pub fn compute_wait_time(indexed_tx_count: usize) -> Duration {
     DEFAULT_MAX_WAIT_TIME * (100f64 * numerator) as u32 / 100
 }
 
-fn append_blocks(new_blocks: Vec<CandidBlock>) {
+fn append_blocks(new_blocks: Vec<EncodedBlock>) {
     // the index of the next block that we
     // are going to append
     let mut block_index = with_blocks(|blocks| blocks.len());
-    for candid_block in new_blocks {
-        let block = icp_ledger::Block::try_from(candid_block)
-            .unwrap_or_else(|msg| ic_cdk::api::trap(&msg))
-            .encode();
-
+    for block in new_blocks {
         // append the encoded block to the block log
         with_blocks(|blocks| {
             blocks
