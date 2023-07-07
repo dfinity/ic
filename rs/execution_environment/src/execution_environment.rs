@@ -411,10 +411,18 @@ impl ExecutionEnvironment {
         let timestamp_nanos = state.time();
         let method = Ic00Method::from_str(msg.method_name());
         let payload = msg.method_payload();
-        let method_and_permissions =
-            method.map(|method| (method, Ic00MethodPermissions::new(method)));
-        let result = match method_and_permissions {
-            Ok((Ic00Method::InstallCode, _)) => {
+
+        if let Ok(permissions) = method.map(|method| Ic00MethodPermissions::new(method)) {
+            if let Err(err) = permissions.verify(&msg, &state) {
+                let refund = msg.take_cycles();
+                let state =
+                    self.finish_subnet_message_execution(state, msg, Err(err), refund, timer);
+                return (state, Some(NumInstructions::from(0)));
+            }
+        }
+
+        let result = match method {
+            Ok(Ic00Method::InstallCode) => {
                 // Tail call is needed for deterministic time slicing here to
                 // properly handle the case of a paused execution.
                 return self.execute_install_code(
@@ -428,7 +436,7 @@ impl ExecutionEnvironment {
                 );
             }
 
-            Ok((Ic00Method::SignWithECDSA, _)) => match &msg {
+            Ok(Ic00Method::SignWithECDSA) => match &msg {
                 CanisterCall::Request(request) => {
                     let reject_message = if payload.is_empty() {
                         "An empty message cannot be signed".to_string()
@@ -489,58 +497,52 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok((Ic00Method::CreateCanister, permissions)) => {
+            Ok(Ic00Method::CreateCanister) => {
                 match &mut msg {
                     CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::CreateCanister)
                     }
                     CanisterCall::Request(req) => {
-                        match permissions.verify(req, &state) {
-                            Err(err) => Some((Err(err), msg.take_cycles())),
-                            Ok(_) => {
-                                let cycles = Arc::make_mut(req).take_cycles();
-                                match CreateCanisterArgs::decode(req.method_payload()) {
-                                    Err(err) => Some((Err(err), cycles)),
-                                    Ok(args) => {
-                                        // Start logging execution time for `create_canister`.
-                                        let timer = Timer::start();
+                        let cycles = Arc::make_mut(req).take_cycles();
+                        match CreateCanisterArgs::decode(req.method_payload()) {
+                            Err(err) => Some((Err(err), cycles)),
+                            Ok(args) => {
+                                // Start logging execution time for `create_canister`.
+                                let timer = Timer::start();
 
-                                        let sender_canister_version =
-                                            args.get_sender_canister_version();
+                                let sender_canister_version = args.get_sender_canister_version();
 
-                                        let settings = match args.settings {
-                                            None => CanisterSettingsArgs::default(),
-                                            Some(settings) => settings,
-                                        };
-                                        let result = match CanisterSettings::try_from(settings) {
-                                            Err(err) => Some((Err(err.into()), cycles)),
-                                            Ok(settings) => Some(self.create_canister(
-                                                msg.canister_change_origin(sender_canister_version),
-                                                cycles,
-                                                settings,
-                                                registry_settings.max_number_of_canisters,
-                                                &mut state,
-                                                registry_settings.subnet_size,
-                                                round_limits,
-                                            )),
-                                        };
-                                        info!(
+                                let settings = match args.settings {
+                                    None => CanisterSettingsArgs::default(),
+                                    Some(settings) => settings,
+                                };
+                                let result = match CanisterSettings::try_from(settings) {
+                                    Err(err) => Some((Err(err.into()), cycles)),
+                                    Ok(settings) => Some(self.create_canister(
+                                        msg.canister_change_origin(sender_canister_version),
+                                        cycles,
+                                        settings,
+                                        registry_settings.max_number_of_canisters,
+                                        &mut state,
+                                        registry_settings.subnet_size,
+                                        round_limits,
+                                    )),
+                                };
+                                info!(
                                             self.log,
                                             "Finished executing create_canister message after {:?} with result: {:?}",
                                             timer.elapsed(),
                                             result
                                         );
 
-                                        result
-                                    }
-                                }
+                                result
                             }
                         }
                     }
                 }
             }
 
-            Ok((Ic00Method::UninstallCode, _)) => {
+            Ok(Ic00Method::UninstallCode) => {
                 let res = match UninstallCodeArgs::decode(payload) {
                     Err(err) => Err(err),
                     Ok(args) => self
@@ -556,7 +558,7 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok((Ic00Method::UpdateSettings, _)) => {
+            Ok(Ic00Method::UpdateSettings) => {
                 let res = match UpdateSettingsArgs::decode(payload) {
                     Err(err) => Err(err),
                     Ok(args) => {
@@ -618,7 +620,7 @@ impl ExecutionEnvironment {
             }
 
             // This API is deprecated and should not be used in new code.
-            Ok((Ic00Method::SetController, _)) => {
+            Ok(Ic00Method::SetController) => {
                 let res = match SetControllerArgs::decode(payload) {
                     Err(err) => Err(err),
                     Ok(args) => self
@@ -638,7 +640,7 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok((Ic00Method::CanisterStatus, _)) => {
+            Ok(Ic00Method::CanisterStatus) => {
                 let res = match CanisterIdRecord::decode(payload) {
                     Err(err) => Err(err),
                     Ok(args) => self.get_canister_status(
@@ -651,7 +653,7 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok((Ic00Method::CanisterInfo, _)) => match &msg {
+            Ok(Ic00Method::CanisterInfo) => match &msg {
                 CanisterCall::Request(_) => {
                     let res = match CanisterInfoRequest::decode(payload) {
                         Err(err) => Err(err),
@@ -668,7 +670,7 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok((Ic00Method::StartCanister, _)) => {
+            Ok(Ic00Method::StartCanister) => {
                 let res = match CanisterIdRecord::decode(payload) {
                     Err(err) => Err(err),
                     Ok(args) => {
@@ -678,12 +680,12 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok((Ic00Method::StopCanister, _)) => match CanisterIdRecord::decode(payload) {
+            Ok(Ic00Method::StopCanister) => match CanisterIdRecord::decode(payload) {
                 Err(err) => Some((Err(err), msg.take_cycles())),
                 Ok(args) => self.stop_canister(args.get_canister_id(), &msg, &mut state),
             },
 
-            Ok((Ic00Method::DeleteCanister, _)) => {
+            Ok(Ic00Method::DeleteCanister) => {
                 let res = match CanisterIdRecord::decode(payload) {
                     Err(err) => Err(err),
                     Ok(args) => {
@@ -709,115 +711,106 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok((Ic00Method::RawRand, permissions)) => match &msg {
+            Ok(Ic00Method::RawRand) => match &msg {
                 CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::RawRand),
-                CanisterCall::Request(req) => match permissions.verify(req, &state) {
-                    Err(err) => Some((Err(err), msg.take_cycles())),
-                    Ok(_) => {
-                        let res = match EmptyBlob::decode(payload) {
-                            Err(err) => Err(err),
-                            Ok(EmptyBlob) => {
-                                let mut buffer = vec![0u8; 32];
-                                rng.fill_bytes(&mut buffer);
-                                Ok(Encode!(&buffer).unwrap())
-                            }
-                        };
-                        Some((res, msg.take_cycles()))
-                    }
-                },
+                CanisterCall::Request(_) => {
+                    let res = match EmptyBlob::decode(payload) {
+                        Err(err) => Err(err),
+                        Ok(EmptyBlob) => {
+                            let mut buffer = vec![0u8; 32];
+                            rng.fill_bytes(&mut buffer);
+                            Ok(Encode!(&buffer).unwrap())
+                        }
+                    };
+                    Some((res, msg.take_cycles()))
+                }
             },
 
-            Ok((Ic00Method::DepositCycles, _)) => match CanisterIdRecord::decode(payload) {
+            Ok(Ic00Method::DepositCycles) => match CanisterIdRecord::decode(payload) {
                 Err(err) => Some((Err(err), msg.take_cycles())),
                 Ok(args) => Some(self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state)),
             },
-            Ok((Ic00Method::HttpRequest, permissions)) => {
-                match state.metadata.own_subnet_features.http_requests {
-                    true => match &msg {
-                        CanisterCall::Request(request) => match permissions.verify(request, &state)
-                        {
+            Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
+                true => match &msg {
+                    CanisterCall::Request(request) => {
+                        match CanisterHttpRequestArgs::decode(payload) {
                             Err(err) => Some((Err(err), msg.take_cycles())),
-                            Ok(_) => match CanisterHttpRequestArgs::decode(payload) {
-                                Err(err) => Some((Err(err), msg.take_cycles())),
-                                Ok(args) => match CanisterHttpRequestContext::try_from((
-                                    state.time(),
-                                    request.as_ref(),
-                                    args,
-                                )) {
-                                    Err(err) => Some((Err(err.into()), msg.take_cycles())),
-                                    Ok(mut canister_http_request_context) => {
-                                        let http_request_fee =
-                                            self.cycles_account_manager.http_request_fee(
-                                                canister_http_request_context.variable_parts_size(),
-                                                canister_http_request_context.max_response_bytes,
-                                                registry_settings.subnet_size,
-                                            );
-                                        if request.payment < http_request_fee {
-                                            let err = Err(UserError::new(
+                            Ok(args) => match CanisterHttpRequestContext::try_from((
+                                state.time(),
+                                request.as_ref(),
+                                args,
+                            )) {
+                                Err(err) => Some((Err(err.into()), msg.take_cycles())),
+                                Ok(mut canister_http_request_context) => {
+                                    let http_request_fee =
+                                        self.cycles_account_manager.http_request_fee(
+                                            canister_http_request_context.variable_parts_size(),
+                                            canister_http_request_context.max_response_bytes,
+                                            registry_settings.subnet_size,
+                                        );
+                                    if request.payment < http_request_fee {
+                                        let err = Err(UserError::new(
                                                         ErrorCode::CanisterRejectedMessage,
                                                         format!(
                                                             "http_request request sent with {} cycles, but {} cycles are required.",
                                                             request.payment, http_request_fee
                                                         ),
                                                     ));
-                                            Some((err, msg.take_cycles()))
-                                        } else {
-                                            canister_http_request_context.request.payment -=
-                                                http_request_fee;
-                                            let http_fee = NominalCycles::from(http_request_fee);
-                                            state
-                                                .metadata
-                                                .subnet_metrics
-                                                .consumed_cycles_http_outcalls += http_fee;
-                                            state
-                                                .metadata
-                                                .subnet_metrics
-                                                .observe_consumed_cycles_with_use_case(
-                                                    CyclesUseCase::HTTPOutcalls,
-                                                    http_fee,
-                                                );
-                                            state
-                                                .metadata
-                                                .subnet_call_context_manager
-                                                .push_http_request(canister_http_request_context);
-                                            self.metrics.observe_message_with_label(
-                                                &request.method_name,
-                                                timer.elapsed(),
-                                                SUBMITTED_OUTCOME_LABEL.into(),
-                                                SUCCESS_STATUS_LABEL.into(),
+                                        Some((err, msg.take_cycles()))
+                                    } else {
+                                        canister_http_request_context.request.payment -=
+                                            http_request_fee;
+                                        let http_fee = NominalCycles::from(http_request_fee);
+                                        state
+                                            .metadata
+                                            .subnet_metrics
+                                            .consumed_cycles_http_outcalls += http_fee;
+                                        state
+                                            .metadata
+                                            .subnet_metrics
+                                            .observe_consumed_cycles_with_use_case(
+                                                CyclesUseCase::HTTPOutcalls,
+                                                http_fee,
                                             );
-                                            None
-                                        }
+                                        state
+                                            .metadata
+                                            .subnet_call_context_manager
+                                            .push_http_request(canister_http_request_context);
+                                        self.metrics.observe_message_with_label(
+                                            &request.method_name,
+                                            timer.elapsed(),
+                                            SUBMITTED_OUTCOME_LABEL.into(),
+                                            SUCCESS_STATUS_LABEL.into(),
+                                        );
+                                        None
                                     }
-                                },
+                                }
                             },
-                        },
-                        CanisterCall::Ingress(_) => {
-                            self.reject_unexpected_ingress(Ic00Method::HttpRequest)
                         }
-                    },
-                    false => {
-                        let err = Err(UserError::new(
-                            ErrorCode::CanisterContractViolation,
-                            "This API is not enabled on this subnet".to_string(),
-                        ));
-                        Some((err, msg.take_cycles()))
                     }
-                }
-            }
-            Ok((Ic00Method::SetupInitialDKG, permissions)) => match &msg {
-                CanisterCall::Request(request) => match permissions.verify(request, &state) {
-                    Err(err) => Some((Err(err), msg.take_cycles())),
-                    Ok(_) => self
-                        .setup_initial_dkg(payload, request, &mut state, rng)
-                        .map_or_else(|err| Some((Err(err), msg.take_cycles())), |()| None),
+
+                    CanisterCall::Ingress(_) => {
+                        self.reject_unexpected_ingress(Ic00Method::HttpRequest)
+                    }
                 },
+                false => {
+                    let err = Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "This API is not enabled on this subnet".to_string(),
+                    ));
+                    Some((err, msg.take_cycles()))
+                }
+            },
+            Ok(Ic00Method::SetupInitialDKG) => match &msg {
+                CanisterCall::Request(request) => self
+                    .setup_initial_dkg(payload, request, &mut state, rng)
+                    .map_or_else(|err| Some((Err(err), msg.take_cycles())), |()| None),
                 CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::SetupInitialDKG)
                 }
             },
 
-            Ok((Ic00Method::ECDSAPublicKey, _)) => {
+            Ok(Ic00Method::ECDSAPublicKey) => {
                 let cycles = msg.take_cycles();
                 match &msg {
                     CanisterCall::Request(request) => {
@@ -854,14 +847,13 @@ impl ExecutionEnvironment {
                 }
             }
 
-            Ok((Ic00Method::ComputeInitialEcdsaDealings, permissions)) => {
+            Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
                 let cycles = msg.take_cycles();
                 match &msg {
                     CanisterCall::Request(request) => {
-                        let result = match permissions.verify(request, &state) {
-                            Ok(_) => match ComputeInitialEcdsaDealingsArgs::decode(
-                                request.method_payload(),
-                            ) {
+                        let result =
+                            match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload())
+                            {
                                 Ok(args) => match get_master_ecdsa_public_key(
                                     ecdsa_subnet_public_keys,
                                     self.own_subnet_id,
@@ -873,19 +865,16 @@ impl ExecutionEnvironment {
                                     Err(err) => Some(err),
                                 },
                                 Err(err) => Some(err),
-                            },
-                            Err(err) => Some(err),
-                        };
+                            };
                         result.map(|err| (Err(err), cycles))
                     }
-
                     CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::ComputeInitialEcdsaDealings)
                     }
                 }
             }
 
-            Ok((Ic00Method::ProvisionalCreateCanisterWithCycles, _)) => {
+            Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res = match ProvisionalCreateCanisterWithCyclesArgs::decode(payload) {
                     Err(err) => Err(err),
                     Ok(args) => {
@@ -914,7 +903,7 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok((Ic00Method::ProvisionalTopUpCanister, _)) => {
+            Ok(Ic00Method::ProvisionalTopUpCanister) => {
                 let res = match ProvisionalTopUpCanisterArgs::decode(payload) {
                     Err(err) => Err(err),
                     Ok(args) => self.add_cycles(
@@ -928,7 +917,7 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok((Ic00Method::BitcoinSendTransactionInternal, _)) => match &msg {
+            Ok(Ic00Method::BitcoinSendTransactionInternal) => match &msg {
                 CanisterCall::Request(request) => {
                     match crate::bitcoin::send_transaction_internal(
                         &self.config.bitcoin.privileged_access,
@@ -946,7 +935,7 @@ impl ExecutionEnvironment {
             }
             .map(|payload| (payload, msg.take_cycles())),
 
-            Ok((Ic00Method::BitcoinGetSuccessors, _)) => match &msg {
+            Ok(Ic00Method::BitcoinGetSuccessors) => match &msg {
                 CanisterCall::Request(request) => {
                     match crate::bitcoin::get_successors(
                         &self.config.bitcoin.privileged_access,
@@ -964,10 +953,10 @@ impl ExecutionEnvironment {
             }
             .map(|payload| (payload, msg.take_cycles())),
 
-            Ok((Ic00Method::BitcoinGetBalance, _))
-            | Ok((Ic00Method::BitcoinGetUtxos, _))
-            | Ok((Ic00Method::BitcoinSendTransaction, _))
-            | Ok((Ic00Method::BitcoinGetCurrentFeePercentiles, _)) => {
+            Ok(Ic00Method::BitcoinGetBalance)
+            | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinSendTransaction)
+            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
                 // Code path can only be triggered if there are no bitcoin canisters to route
                 // the request to.
                 Some((

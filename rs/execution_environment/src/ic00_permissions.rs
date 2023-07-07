@@ -1,7 +1,8 @@
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::Method as Ic00Method;
+use ic_interfaces::messages::CanisterCall;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{messages::Request, CanisterId, SubnetId};
+use ic_types::{CanisterId, SubnetId};
 
 /// Keeps track of when an IC00 method is allowed to be executed.
 #[derive(PartialEq, Eq)]
@@ -146,14 +147,17 @@ impl Ic00MethodPermissions {
     }
 
     /// Verifies all the rules defined for a management method.
-    pub fn verify(&self, msg: &Request, state: &ReplicatedState) -> Result<(), UserError> {
-        match state.find_subnet_id(msg.sender().get()) {
-            Ok(sender_subnet_id) => {
-                self.verify_caller_is_remote_subnet(sender_subnet_id, state)?;
-                self.verify_caller_is_nns_subnet(msg.sender(), sender_subnet_id, state)?;
-                Ok(())
-            }
-            Err(err) => Err(err),
+    pub fn verify(&self, msg: &CanisterCall, state: &ReplicatedState) -> Result<(), UserError> {
+        match msg {
+            CanisterCall::Ingress(_) => Ok(()),
+            CanisterCall::Request(msg) => match state.find_subnet_id(msg.sender().into()) {
+                Ok(sender_subnet_id) => {
+                    self.verify_caller_is_remote_subnet(sender_subnet_id, state)?;
+                    self.verify_caller_is_nns_subnet(msg.sender(), sender_subnet_id, state)?;
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            },
         }
     }
 
