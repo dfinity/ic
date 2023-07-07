@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,8 +11,10 @@ DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/registry/subnet_features",
     "//rs/types/ic00_types",
+    "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:serde_cbor",
+    "@crate_index//:thiserror",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -20,6 +22,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
+    "@crate_index//:assert_matches",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
@@ -42,4 +45,12 @@ rust_test(
     crate = ":helpers",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "helpers_integration",
+    srcs = glob(["tests/**/*.rs"]),
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = [":helpers"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

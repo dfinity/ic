@@ -9134,6 +9134,8 @@ dependencies = [
 name = "ic-registry-client-helpers"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
+ "ic-base-types",
  "ic-ic00-types",
  "ic-interfaces-registry",
  "ic-protobuf",
@@ -9146,6 +9148,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-types",
  "serde_cbor",
+ "thiserror",
 ]
 
 [[package]]

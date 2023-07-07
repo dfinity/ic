@@ -116,6 +116,20 @@ impl From<ThresholdSigPublicKey> for IcRootOfTrust {
     }
 }
 
+impl From<[u8; 96]> for IcRootOfTrust {
+    fn from(value: [u8; 96]) -> Self {
+        IcRootOfTrust::from(ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes(
+            value,
+        )))
+    }
+}
+
+impl From<IcRootOfTrust> for PublicKeyProto {
+    fn from(value: IcRootOfTrust) -> Self {
+        PublicKeyProto::from(value.0)
+    }
+}
+
 /// Retrieves the Internet Computer's root of trust.
 ///
 /// # Security
