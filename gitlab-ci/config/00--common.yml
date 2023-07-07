@@ -14,6 +14,10 @@ default:
       - unknown_failure
       - api_failure
       - runner_system_failure
+  # Generally only the last push to a branch matters and older jobs can be cancelled.
+  # https://docs.gitlab.com/ee/ci/yaml/#interruptible
+  # Jobs can override this by setting `interruptible: false`.
+  interruptible: true
 
 variables:
   TEST_ES_HOSTNAMES: >-
@@ -84,10 +88,6 @@ after_script:
     echo -e "\e[0Ksection_end:$(date +%s):after_script\r\e[0K"
 
 .build-env-base:
-  # Generally only the last push to a branch matters and older jobs can be cancelled
-  # https://docs.gitlab.com/ee/ci/yaml/#interruptible
-  # Jobs can override this by setting `interruptible: false`
-  interruptible: true
   artifacts:
     paths:
       - "junit_data/*"
