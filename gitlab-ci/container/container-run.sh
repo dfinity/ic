@@ -7,12 +7,12 @@ if [ -n "${IN_NIX_SHELL:-}" ]; then
 fi
 
 if [ -e /run/.containerenv ]; then
-    echo "Nested $0 is not supported!" >&2
+    echo "Nested $0 is not supported." >&2
     exit 1
 fi
 
 if ! which podman >/dev/null 2>&1; then
-    echo "Podman missing...install it!" >&2
+    echo "Podman missing...install it." >&2
     exit 1
 fi
 
@@ -96,6 +96,12 @@ PODMAN_RUN_ARGS+=(
 )
 
 if [ "$(id -u)" = "1000" ]; then
+    if [ -e "${HOME}/.gitconfig" ]; then
+        PODMAN_RUN_ARGS+=(
+            --mount type=bind,source="${HOME}/.gitconfig",target="/home/ubuntu/.gitconfig"
+        )
+    fi
+
     if [ -e "${HOME}/.bash_history" ]; then
         PODMAN_RUN_ARGS+=(
             --mount type=bind,source="${HOME}/.bash_history",target="/home/ubuntu/.bash_history"
@@ -130,16 +136,25 @@ fi
 # make sure we have all bind-mounts
 mkdir -p ~/.{aws,ssh,cache,local/share/fish} && touch ~/.{zsh,bash}_history
 
+PODMAN_RUN_USR_ARGS=()
+if [ -f "$HOME/.container-run.conf" ]; then
+    # conf file with user's custom PODMAN_RUN_USR_ARGS
+    echo "Sourcing user's ~/.container-run.conf"
+    source "$HOME/.container-run.conf"
+fi
+
 # privileged rootful podman is required due to requirements of IC-OS guest build
 # additionally, we need to use hosts's cgroups and network
 if [ $# -eq 0 ]; then
     set -x
     sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
-        "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" ${USHELL:-/usr/bin/bash}
+        "${PODMAN_RUN_ARGS[@]}" ${PODMAN_RUN_USR_ARGS[@]} -w "$WORKDIR" \
+        "$IMAGE" ${USHELL:-/usr/bin/bash}
     set +x
 else
     set -x
     sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
-        "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "$@"
+        "${PODMAN_RUN_ARGS[@]}" "${PODMAN_RUN_USR_ARGS[@]}" -w "$WORKDIR" \
+        "$IMAGE" "$@"
     set +x
 fi
