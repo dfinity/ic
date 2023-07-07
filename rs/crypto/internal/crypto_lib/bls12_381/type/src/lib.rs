@@ -1618,10 +1618,17 @@ macro_rules! declare_muln_vartime_dispatch_for {
             }
 
             fn muln_vartime_naive(points: &[Self], scalars: &[Scalar]) -> Self {
+                let (accum, points, scalars) = if points.len() % 2 == 0 {
+                    (Self::identity(), points, scalars)
+                } else {
+                    (&points[0] * &scalars[0], &points[1..], &scalars[1..])
+                };
                 points
-                    .iter()
-                    .zip(scalars.iter())
-                    .fold(Self::identity(), |accum, (p, s)| accum + p * s)
+                    .chunks(2)
+                    .zip(scalars.chunks(2))
+                    .fold(accum, |accum, (c_p, c_s)| {
+                        accum + Self::mul2(&c_p[0], &c_s[0], &c_p[1], &c_s[1])
+                    })
             }
         }
     };
@@ -1844,10 +1851,10 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
 /// These values were derived from benchmarks on a single machine,
 /// but seem to match fairly closely with simulated estimates of
 /// the cost of Pippenger's
-const G1_PROJECTIVE_USE_W3_LARGER_THAN: usize = 12;
-const G1_PROJECTIVE_USE_W4_LARGER_THAN: usize = 64;
-const G2_PROJECTIVE_USE_W3_LARGER_THAN: usize = 8;
-const G2_PROJECTIVE_USE_W4_LARGER_THAN: usize = 64;
+const G1_PROJECTIVE_USE_W3_IF_EQ_OR_GT: usize = 13;
+const G1_PROJECTIVE_USE_W4_IF_EQ_OR_GT: usize = 64;
+const G2_PROJECTIVE_USE_W3_IF_EQ_OR_GT: usize = 15;
+const G2_PROJECTIVE_USE_W4_IF_EQ_OR_GT: usize = 64;
 
 define_affine_and_projective_types!(G1Affine, G1Projective, 48);
 declare_addsub_ops_for!(G1Projective);
@@ -1856,8 +1863,8 @@ declare_windowed_scalar_mul_ops_for!(G1Projective, 4);
 declare_mul2_impl_for!(G1Projective, G1Mul2Table, 2, 3);
 declare_muln_vartime_dispatch_for!(
     G1Projective,
-    G1_PROJECTIVE_USE_W3_LARGER_THAN,
-    G1_PROJECTIVE_USE_W4_LARGER_THAN
+    G1_PROJECTIVE_USE_W3_IF_EQ_OR_GT,
+    G1_PROJECTIVE_USE_W4_IF_EQ_OR_GT
 );
 declare_muln_vartime_impls_for!(G1Projective, 3, 4);
 declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
@@ -1871,8 +1878,8 @@ declare_windowed_scalar_mul_ops_for!(G2Projective, 4);
 declare_mul2_impl_for!(G2Projective, G2Mul2Table, 2, 3);
 declare_muln_vartime_dispatch_for!(
     G2Projective,
-    G2_PROJECTIVE_USE_W3_LARGER_THAN,
-    G2_PROJECTIVE_USE_W4_LARGER_THAN
+    G2_PROJECTIVE_USE_W3_IF_EQ_OR_GT,
+    G2_PROJECTIVE_USE_W4_IF_EQ_OR_GT
 );
 declare_muln_vartime_impls_for!(G2Projective, 3, 4);
 declare_muln_vartime_affine_impl_for!(G2Projective, G2Affine);
