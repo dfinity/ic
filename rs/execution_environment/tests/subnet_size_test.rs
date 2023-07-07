@@ -197,6 +197,7 @@ fn simulate_one_gib_per_second_cost(
         DEFAULT_CYCLES_PER_NODE * subnet_size,
         Some(
             CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1)
                 .with_compute_allocation(compute_allocation.as_percent())
                 .with_memory_allocation(one_gib)
                 .build(),

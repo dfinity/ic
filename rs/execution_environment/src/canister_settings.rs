@@ -1,9 +1,10 @@
 use ic_base_types::{NumBytes, NumSeconds};
+use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterSettingsArgs;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_types::{
-    ComputeAllocation, InvalidComputeAllocationError, InvalidMemoryAllocationError,
+    ComputeAllocation, Cycles, InvalidComputeAllocationError, InvalidMemoryAllocationError,
     MemoryAllocation, PrincipalId,
 };
 use num_traits::cast::ToPrimitive;
@@ -256,8 +257,10 @@ impl ValidatedCanisterSettings {
 /// - memory allocation:
 ///     - it cannot be lower than the current canister memory usage.
 ///     - there must be enough available subnet capacity for the change.
+///     - there must be enough cycles to avoid freezing the canister.
 /// - compute allocation:
 ///     - there must be enough available compute capacity for the change.
+///     - there must be enough cycles to avoid freezing the canister.
 /// - controllers:
 ///     - the number of controllers cannot exceed the given maximum.
 pub(crate) fn validate_canister_settings(
@@ -269,6 +272,10 @@ pub(crate) fn validate_canister_settings(
     subnet_compute_allocation_usage: u64,
     subnet_compute_allocation_capacity: u64,
     max_controllers: usize,
+    canister_freezing_threshold: NumSeconds,
+    canister_cycles_balance: Cycles,
+    cycles_account_manager: &CyclesAccountManager,
+    subnet_size: usize,
 ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
     if let Some(new_memory_allocation) = settings.memory_allocation {
         // The new memory allocation cannot be lower than the current canister
@@ -338,6 +345,51 @@ pub(crate) fn validate_canister_settings(
             }
         }
         None => {}
+    }
+
+    let new_memory_allocation = settings
+        .memory_allocation
+        .unwrap_or(canister_memory_allocation);
+
+    let new_compute_allocation = settings
+        .compute_allocation()
+        .unwrap_or(canister_compute_allocation);
+
+    let freezing_threshold = settings
+        .freezing_threshold
+        .unwrap_or(canister_freezing_threshold);
+
+    let threshold = cycles_account_manager.freeze_threshold_cycles(
+        freezing_threshold,
+        new_memory_allocation,
+        canister_memory_usage,
+        new_compute_allocation,
+        subnet_size,
+    );
+
+    if canister_cycles_balance < threshold {
+        if new_compute_allocation > canister_compute_allocation {
+            // Note that the error is produced only if allocation increases.
+            // This is to allow increasing of the freezing threshold to make the
+            // canister frozen.
+            return Err(
+                CanisterManagerError::InsufficientCyclesInComputeAllocation {
+                    compute_allocation: new_compute_allocation,
+                    available: canister_cycles_balance,
+                    threshold,
+                },
+            );
+        }
+        if new_memory_allocation > canister_memory_allocation {
+            // Note that the error is produced only if allocation increases.
+            // This is to allow increasing of the freezing threshold to make the
+            // canister frozen.
+            return Err(CanisterManagerError::InsufficientCyclesInMemoryAllocation {
+                memory_allocation: new_memory_allocation,
+                available: canister_cycles_balance,
+                threshold,
+            });
+        }
     }
 
     Ok(ValidatedCanisterSettings {

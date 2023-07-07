@@ -370,7 +370,10 @@ fn install_canister_makes_subnet_oversubscribed() {
                 canister_change_origin_from_principal(&sender),
                 sender_subnet_id,
                 *INITIAL_CYCLES,
-                CanisterSettings::default(),
+                CanisterSettings {
+                    freezing_threshold: Some(1.into()),
+                    ..CanisterSettings::default()
+                },
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -383,7 +386,10 @@ fn install_canister_makes_subnet_oversubscribed() {
                 canister_change_origin_from_principal(&sender),
                 sender_subnet_id,
                 *INITIAL_CYCLES,
-                CanisterSettings::default(),
+                CanisterSettings {
+                    freezing_threshold: Some(1.into()),
+                    ..CanisterSettings::default()
+                },
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -396,7 +402,10 @@ fn install_canister_makes_subnet_oversubscribed() {
                 canister_change_origin_from_principal(&sender),
                 sender_subnet_id,
                 *INITIAL_CYCLES,
-                CanisterSettings::default(),
+                CanisterSettings {
+                    freezing_threshold: Some(1.into()),
+                    ..CanisterSettings::default()
+                },
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -559,7 +568,10 @@ fn can_update_compute_allocation_during_upgrade() {
                 canister_change_origin_from_principal(&sender),
                 sender_subnet_id,
                 Cycles::new(2_000_000_000_000_000),
-                CanisterSettings::default(),
+                CanisterSettings {
+                    freezing_threshold: Some(1.into()),
+                    ..CanisterSettings::default()
+                },
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -630,7 +642,10 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 canister_change_origin_from_principal(&sender),
                 sender_subnet_id,
                 initial_cycles,
-                CanisterSettings::default(),
+                CanisterSettings {
+                    freezing_threshold: Some(1.into()),
+                    ..CanisterSettings::default()
+                },
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -643,7 +658,10 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 canister_change_origin_from_principal(&sender),
                 sender_subnet_id,
                 initial_cycles,
-                CanisterSettings::default(),
+                CanisterSettings {
+                    freezing_threshold: Some(1.into()),
+                    ..CanisterSettings::default()
+                },
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -656,7 +674,10 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
                 canister_change_origin_from_principal(&sender),
                 sender_subnet_id,
                 initial_cycles,
-                CanisterSettings::default(),
+                CanisterSettings {
+                    freezing_threshold: Some(1.into()),
+                    ..CanisterSettings::default()
+                },
                 MAX_NUMBER_OF_CANISTERS,
                 &mut state,
                 SMALL_APP_SUBNET_MAX_SIZE,
@@ -1223,6 +1244,7 @@ fn create_canister_sets_correct_allocations() {
         let settings = CanisterSettings {
             compute_allocation: Some(compute_alloc),
             memory_allocation: Some(mem_alloc),
+            freezing_threshold: Some(1.into()),
             ..Default::default()
         };
         let canister_id = canister_manager
@@ -1315,6 +1337,7 @@ fn provisional_create_canister_has_no_creation_fee() {
                 &ProvisionalWhitelist::All,
                 MAX_NUMBER_OF_CANISTERS,
                 &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
 
@@ -2118,6 +2141,7 @@ fn set_controller_with_incorrect_controller() {
                 new_controller,
                 &mut state,
                 &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             ),
             Err(CanisterManagerError::CanisterInvalidController {
                 canister_id,
@@ -2162,7 +2186,8 @@ fn set_controller_with_correct_controller() {
                 canister_id,
                 new_controller,
                 &mut state,
-                &mut round_limits
+                &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .is_ok());
 
@@ -2444,6 +2469,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
             &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
             MAX_NUMBER_OF_CANISTERS,
             &mut round_limits,
+            SMALL_APP_SUBNET_MAX_SIZE,
         )
         .unwrap();
 
@@ -2480,6 +2506,7 @@ fn create_canister_with_specified_id(
         &ProvisionalWhitelist::Set(btreeset! { canister_test_id(1).get() }),
         MAX_NUMBER_OF_CANISTERS,
         &mut round_limits,
+        SMALL_APP_SUBNET_MAX_SIZE,
     );
 
     (creation_result, state)
@@ -3583,6 +3610,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 settings,
                 canister,
                 &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             ),
             Err(CanisterManagerError::NotEnoughMemoryAllocationGiven { .. })
         );
@@ -3657,6 +3685,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 settings,
                 canister,
                 &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
 
@@ -3788,6 +3817,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 settings,
                 canister,
                 &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
 
@@ -3891,8 +3921,8 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 canister_change_origin_from_principal(&sender),
                 settings,
                 canister,
-                //memory_allocation_used,
                 &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
 
@@ -3979,6 +4009,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 settings,
                 canister,
                 &mut round_limits,
+                SMALL_APP_SUBNET_MAX_SIZE,
             )
             .unwrap();
 
@@ -4317,7 +4348,7 @@ fn unfreezing_of_frozen_canister() {
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgsBuilder::new()
-            .with_freezing_threshold(0)
+            .with_freezing_threshold(1)
             .build(),
         sender_canister_version: None,
     }
@@ -4348,9 +4379,10 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
 
     test.canister_state_mut(uc)
         .system_state
-        .set_balance(Cycles::new(1_000_000_000_000_000));
+        .set_balance(Cycles::new(1_000_000_000_000_000_000));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
     let args = CreateCanisterArgs {
@@ -4364,7 +4396,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -4374,6 +4406,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
     // There should be not enough memory for CAPACITY/2 because universal
     // canister already consumed some
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
         .build();
     let args = CreateCanisterArgs {
@@ -4387,7 +4420,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister).unwrap();
@@ -4403,9 +4436,10 @@ fn create_canister_makes_subnet_oversubscribed() {
 
     test.canister_state_mut(uc)
         .system_state
-        .set_balance(Cycles::new(1_000_000_000_000_000));
+        .set_balance(Cycles::new(1_000_000_000_000));
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_compute_allocation(50)
         .build();
     let args = CreateCanisterArgs {
@@ -4419,7 +4453,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -4427,6 +4461,7 @@ fn create_canister_makes_subnet_oversubscribed() {
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_compute_allocation(25)
         .build();
     let args = CreateCanisterArgs {
@@ -4440,7 +4475,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -4449,6 +4484,7 @@ fn create_canister_makes_subnet_oversubscribed() {
 
     // Create a canister with compute allocation.
     let settings = CanisterSettingsArgsBuilder::new()
+        .with_freezing_threshold(1)
         .with_compute_allocation(30)
         .build();
     let args = CreateCanisterArgs {
@@ -4462,7 +4498,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee(),
+            test.canister_creation_fee() + Cycles::new(1_000_000_000),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister).unwrap();
@@ -4490,6 +4526,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c1.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_compute_allocation(50)
             .build(),
         sender_canister_version: None,
@@ -4500,6 +4537,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c2.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_compute_allocation(25)
             .build(),
         sender_canister_version: None,
@@ -4511,6 +4549,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c3.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_compute_allocation(30)
             .build(),
         sender_canister_version: None,
@@ -4524,6 +4563,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c1.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_memory_allocation(10 * 1024 * 1024)
             .build(),
         sender_canister_version: None,
@@ -4534,6 +4574,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c2.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_memory_allocation(30 * 1024 * 1024)
             .build(),
         sender_canister_version: None,
@@ -4545,6 +4586,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let args = UpdateSettingsArgs {
         canister_id: c3.get(),
         settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1)
             .with_memory_allocation(65 * 1024 * 1024)
             .build(),
         sender_canister_version: None,
@@ -5332,4 +5374,185 @@ fn delete_canister_with_non_empty_output_queue_fails() {
             )),
         );
     });
+}
+
+#[test]
+fn install_code_checks_freezing_threshold_for_memory_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let err = test
+        .install_canister_with_allocation(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.into(),
+            None,
+            Some(10 * 1024 * 1024 * 1024),
+        )
+        .unwrap_err();
+
+    assert!(
+        err.description()
+            .contains("Cannot increase memory allocation to 10.00 GiB due to insufficient cycles."),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation);
+}
+
+#[test]
+fn install_code_checks_freezing_threshold_for_compute_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let err = test
+        .install_canister_with_allocation(
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.into(),
+            Some(50),
+            None,
+        )
+        .unwrap_err();
+
+    assert!(
+        err.description()
+            .contains("Cannot increase compute allocation to 50% due to insufficient cycles."),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInComputeAllocation);
+}
+
+#[test]
+fn update_settings_checks_freezing_threshold_for_memory_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let err = test
+        .canister_update_allocations_settings(canister_id, None, Some(10 * 1024 * 1024 * 1024))
+        .unwrap_err();
+
+    assert!(
+        err.description()
+            .contains("Cannot increase memory allocation to 10.00 GiB due to insufficient cycles."),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation);
+}
+
+#[test]
+fn update_settings_checks_freezing_threshold_for_compute_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+
+    let err = test
+        .canister_update_allocations_settings(canister_id, Some(50), None)
+        .unwrap_err();
+
+    assert!(
+        err.description()
+            .contains("Cannot increase compute allocation to 50% due to insufficient cycles."),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInComputeAllocation);
+}
+
+#[test]
+fn create_canister_checks_freezing_threshold_for_memory_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let err = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(10 * 1024 * 1024 * 1024),
+        )
+        .unwrap_err();
+
+    assert!(
+        err.description()
+            .contains("Cannot increase memory allocation to 10.00 GiB due to insufficient cycles."),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation);
+}
+
+#[test]
+fn create_canister_checks_freezing_threshold_for_compute_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let err = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), Some(50), None)
+        .unwrap_err();
+
+    assert!(
+        err.description()
+            .contains("Cannot increase compute allocation to 50% due to insufficient cycles."),
+        "{}",
+        err.description(),
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInComputeAllocation);
+}
+
+#[test]
+fn system_subnet_does_not_check_for_freezing_threshold_on_allocation_changes() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_type(SubnetType::System)
+        .build();
+
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000), Some(50), None)
+        .unwrap();
+    test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
+        .unwrap();
+
+    let canister_id = test
+        .create_canister_with_allocation(
+            Cycles::new(1_000_000_000_000),
+            None,
+            Some(10 * 1024 * 1024 * 1024),
+        )
+        .unwrap();
+    test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
+        .unwrap();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    test.canister_update_allocations_settings(canister_id, Some(50), None)
+        .unwrap();
+    test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
+        .unwrap();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    test.canister_update_allocations_settings(canister_id, None, Some(10 * 1024 * 1024 * 1024))
+        .unwrap();
+    test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
+        .unwrap();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    test.install_canister_with_allocation(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.into(),
+        Some(50),
+        None,
+    )
+    .unwrap();
+    test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
+        .unwrap();
+
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    test.install_canister_with_allocation(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.into(),
+        None,
+        Some(10 * 1024 * 1024 * 1024),
+    )
+    .unwrap();
+    test.canister_update_allocations_settings(canister_id, Some(0), Some(0))
+        .unwrap();
 }

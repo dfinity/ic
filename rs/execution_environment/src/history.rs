@@ -298,5 +298,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         CanisterNotHostedBySubnet => "Canister is not hosted by subnet",
         QueryTimeLimitExceeded => "Canister exceeded the time limit for composite query execution",
         QueryCallGraphInternal => "System error while executing a composite query",
+        InsufficientCyclesInComputeAllocation => "Canister does not have enough cycles to increase its compute allocation",
+        InsufficientCyclesInMemoryAllocation => "Canister does not have enough cycles to increase its memory allocation",
     }
 }

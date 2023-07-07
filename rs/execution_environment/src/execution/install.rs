@@ -77,7 +77,7 @@ pub(crate) fn execute_install(
 
     // Stage 0: validate input.
 
-    if let Err(err) = helper.validate_input(&original, round_limits) {
+    if let Err(err) = helper.validate_input(&original, &round, round_limits) {
         let instructions_left = helper.instructions_left();
         return finish_err(clean_canister, instructions_left, original, round, err);
     }

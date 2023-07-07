@@ -1291,9 +1291,9 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     test.execute_message(b_id);
     test.induct_messages();
 
-    test.canister_update_allocations_settings(a_id, Some(1), None)
-        .unwrap();
     test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
 
     // The test setup is done by this point.
@@ -1410,9 +1410,9 @@ fn dts_response_concurrent_cycles_change_fails() {
     test.execute_message(b_id);
     test.induct_messages();
 
-    test.canister_update_allocations_settings(a_id, Some(1), None)
-        .unwrap();
     test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
 
     // The test setup is done by this point.
@@ -1556,9 +1556,9 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     test.execute_message(b_id);
     test.induct_messages();
 
-    test.canister_update_allocations_settings(a_id, Some(1), None)
-        .unwrap();
     test.update_freezing_threshold(a_id, NumSeconds::from(1))
+        .unwrap();
+    test.canister_update_allocations_settings(a_id, Some(1), None)
         .unwrap();
 
     // The test setup is done by this point.
