@@ -16,6 +16,7 @@ pub struct OrchestratorMetrics {
     pub orchestrator_info: IntGaugeVec,
     pub key_rotation_status: IntGaugeVec,
     pub ecdsa_key_changed_errors: IntCounterVec,
+    pub failed_consecutive_upgrade_checks: IntCounter,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -82,6 +83,10 @@ impl OrchestratorMetrics {
                 "orchestrator_tecdsa_key_changed_errors_total",
                 "Critical error counter monitoring changed tECDSA public keys",
                 &["key_id"],
+            ),
+            failed_consecutive_upgrade_checks: metrics_registry.int_counter(
+                "orchestrator_failed_consecutive_upgrade_checks_total",
+                "Number of times the upgrade check failed consecutively",
             ),
         }
     }

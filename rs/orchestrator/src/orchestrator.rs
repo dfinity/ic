@@ -279,11 +279,18 @@ impl Orchestrator {
             // This timeout is a last resort trying to revive the upgrade monitoring
             // in case it gets stuck in an unexpected situation for longer than 15 minutes.
             let timeout = Duration::from_secs(60 * 15);
+            let metrics = upgrade.metrics.clone();
             upgrade
                 .upgrade_loop(exit_signal, CHECK_INTERVAL_SECS, timeout, |r| async {
                     match r {
-                        Ok(Ok(val)) => *maybe_subnet_id.write().await = val,
-                        e => warn!(log, "Check for upgrade failed: {:?}", e),
+                        Ok(Ok(val)) => {
+                            *maybe_subnet_id.write().await = val;
+                            metrics.failed_consecutive_upgrade_checks.reset();
+                        }
+                        e => {
+                            warn!(log, "Check for upgrade failed: {:?}", e);
+                            metrics.failed_consecutive_upgrade_checks.inc();
+                        }
                     };
                 })
                 .await;
