@@ -30,6 +30,7 @@ members = [
   "rs/boundary_node/prober",
   "rs/canister_client",
   "rs/canister_client/sender",
+  "rs/ethereum/cketh/minter",
   "rs/cycles_account_manager",
   "rs/https_outcalls/adapter",
   "rs/https_outcalls/client",
@@ -373,6 +374,7 @@ jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 pprof = { git = "https://github.com/tikv/pprof-rs", rev = "059d3c80395c74e9f82ca1f9cbb3c013acfffb75" }
 
 [workspace.dependencies]
+ethnum = { version = "1.3.2", features = ["serde"] }
 ciborium = "0.2.1"
 ic-agent = "0.24.1"
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }

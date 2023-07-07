@@ -1,0 +1,8 @@
+type MinterArg = variant {
+    InitArg : record { ecdsa_key_name : text };
+    UpgradeArg;
+};
+
+service : (MinterArg) -> {
+    minter_address : () -> (text);
+}

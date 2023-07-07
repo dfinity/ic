@@ -17,7 +17,7 @@ axum-server = { version = "0.5.1", features = ["tls-rustls"] }
 bytes = "1.4.0"
 candid = "0.8.4"
 clap = { version = "4", features = ["derive"] }
-ethnum = "1.3.2"
+ethnum = { workspace = true }
 futures = "0.3.21"
 futures-util = "0.3.28"
 hex = "0.4.3"

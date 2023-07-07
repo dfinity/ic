@@ -1,5 +1,5 @@
 {
-  "checksum": "f57162b9e1337a71b7cc94feb11a804ae20abcc58e420b0bf6a5051afe5a262c",
+  "checksum": "40b9f454855953b58766156566ae1f8910d30d2c37d0c29647646eb361845c4f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14934,6 +14934,10 @@
             {
               "id": "time 0.3.22",
               "target": "time"
+            },
+            {
+              "id": "tiny-keccak 2.0.2",
+              "target": "tiny_keccak"
             },
             {
               "id": "tiny_http 0.10.0",
@@ -50103,6 +50107,7 @@
         ],
         "crate_features": [
           "default",
+          "keccak",
           "sha3"
         ],
         "deps": {
@@ -54334,6 +54339,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -54348,18 +54365,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

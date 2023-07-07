@@ -1,0 +1,48 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "minter",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    crate_name = "ic_cketh_minter",
+    proc_macro_deps = [
+        "@crate_index//:ic-cdk-macros",
+    ],
+    version = "0.1.0",
+    deps = [
+        "//rs/crypto/ecdsa_secp256k1",
+        "@crate_index//:candid",
+        "@crate_index//:ethnum",
+        "@crate_index//:hex",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:tiny-keccak",
+    ],
+)
+
+rust_test(
+    name = "lib_test",
+    crate = ":minter",
+)
+
+rust_canister(
+    name = "cketh_minter",
+    srcs = ["src/main.rs"],
+    crate_name = "ic_cketh_minter_canister",
+    proc_macro_deps = [
+        "@crate_index//:ic-cdk-macros",
+    ],
+    service_file = "cketh_minter.did",
+    deps = [
+        ":minter",
+        "//rs/crypto/ecdsa_secp256k1",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+    ],
+)
