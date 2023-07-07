@@ -117,11 +117,13 @@ impl StateSyncManager {
     }
 
     async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer: NodeId) {
+        self.metrics.adverts_received_total.inc();
         // Remove ongoing state sync if finished or try to add peer if ongoing.
         if let Some(ongoing) = &mut self.ongoing_state_sync {
             // Try to add peer to state sync peer set.
             let _ = ongoing.sender.send(peer).await;
             if ongoing.jh.is_finished() {
+                info!(self.log, "Cleaning up state sync {}", artifact_id.height);
                 self.ongoing_state_sync = None;
             }
         }
@@ -136,7 +138,7 @@ impl StateSyncManager {
                 self.log,
                 "Starting state sync for height {}", artifact_id.height
             );
-            self.metrics.state_syncs.inc();
+            self.metrics.state_syncs_total.inc();
 
             // This will spawn a task that downloads the chunk according to the tracker.
             // If it is done/timeout it will finish and drop the tracker. Until the state is dropped
@@ -162,6 +164,9 @@ impl StateSyncManager {
 
     fn handle_advert_tick(&mut self) {
         if let Some(state_id) = self.state_sync.latest_state() {
+            self.metrics
+                .latest_state_height_broadcasted
+                .set(state_id.height.get() as i64);
             self.transport
                 .broadcast(build_advert_handler_request(state_id));
         }

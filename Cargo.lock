@@ -10472,7 +10472,10 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "slog",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
  "tokio",
+ "tokio-metrics",
 ]
 
 [[package]]
