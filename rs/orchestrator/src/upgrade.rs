@@ -30,7 +30,7 @@ const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
 /// within.
 pub(crate) struct Upgrade {
     pub registry: Arc<RegistryHelper>,
-    metrics: Arc<OrchestratorMetrics>,
+    pub metrics: Arc<OrchestratorMetrics>,
     replica_process: Arc<Mutex<ReplicaProcess>>,
     cup_provider: Arc<CatchUpPackageProvider>,
     replica_version: ReplicaVersion,
