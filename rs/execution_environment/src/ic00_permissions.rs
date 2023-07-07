@@ -11,7 +11,7 @@ pub(crate) struct Ic00MethodPermissions {
 
     /// Call initiated by a remote subnet.
     allow_remote_subnet_sender: bool,
-    /// Call initiated by only by NNS subnet.
+    /// Call initiated only by the NNS subnet.
     allow_only_nns_subnet_sender: bool,
 }
 
