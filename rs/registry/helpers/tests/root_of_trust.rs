@@ -1,21 +1,19 @@
-use crate::sign::canister_sig::root_of_trust::{
-    RegistryRootOfTrustProvider, RegistryRootOfTrustProviderError,
-};
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_base_types::RegistryVersion;
 use ic_base_types::SubnetId;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_client_helpers::crypto::root_of_trust::{
+    RegistryRootOfTrustProvider, RegistryRootOfTrustProviderError,
+};
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
 use std::sync::Arc;
 
@@ -80,11 +78,11 @@ fn should_retrieve_root_of_trust() {
 
     let result = provider.root_of_trust();
 
-    assert_eq!(result, Ok(IcRootOfTrust::from(root_subnet_public_key)));
+    assert_eq!(result, Ok(root_subnet_public_key));
 }
 
-fn root_subnet_public_key() -> ThresholdSigPublicKey {
-    ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes([0; 96]))
+fn root_subnet_public_key() -> IcRootOfTrust {
+    IcRootOfTrust::from([0; 96])
 }
 
 struct RegistryBuilder {

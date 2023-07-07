@@ -195,6 +195,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/registry/helpers/src/routing_table.rs             @dfinity-lab/teams/execution-owners @dfinity-lab/teams/message-routing-owners
 /rs/registry/helpers/src/subnet.rs                    @dfinity-lab/teams/consensus-owners
 /rs/registry/helpers/src/unassigned_nodes.rs          @dfinity-lab/teams/consensus-owners
+/rs/registry/helpers/tests/root_of_trust.rs           @dfinity-lab/teams/crypto-owners
 /rs/registry/nns_data_provider/         @dfinity-lab/teams/nns-team
 /rs/registry/regedit/                                 @dfinity-lab/teams/ic-testing-verification
 /rs/registry/transport/                 @dfinity-lab/teams/nns-team
