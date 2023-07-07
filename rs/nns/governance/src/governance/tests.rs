@@ -6,6 +6,8 @@ use crate::pb::v1::{
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
@@ -25,9 +27,6 @@ use std::{
     string::ToString,
     sync::{Arc, Mutex},
 };
-
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 
 #[test]
 fn test_time_warp() {
@@ -1655,6 +1654,10 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
 }
 
 mod metrics_tests {
+    use std::sync::{Arc, Mutex};
+
+    use maplit::btreemap;
+
     use crate::{
         encode_metrics,
         governance::{
@@ -1663,8 +1666,6 @@ mod metrics_tests {
         },
         pb::v1::{proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally},
     };
-    use maplit::btreemap;
-    use std::sync::{Arc, Mutex};
 
     #[test]
     fn test_metrics_total_voting_power() {
@@ -1778,4 +1779,181 @@ fn randomly_pick_swap_start() {
             max_occurrence_count
         );
     }
+}
+
+mod neuron_archiving_tests {
+    use crate::{
+        governance::{
+            tests::{MockEnvironment, StubCMC, StubIcpLedger},
+            Governance,
+        },
+        pb::v1::{
+            governance::NeuronInFlightCommand, manage_neuron::NeuronIdOrSubaccount, proposal,
+            Governance as GovernanceProto, ManageNeuron, Motion, Neuron, Proposal, ProposalData,
+        },
+    };
+    use ic_nns_common::pb::v1::NeuronId;
+    use maplit::{btreemap, hashmap};
+    use proptest::proptest;
+    use std::sync::{Arc, Mutex};
+
+    fn empty_neuron_id_1() -> Neuron {
+        Neuron {
+            id: Some(NeuronId { id: 1 }),
+            account: vec![],
+            cached_neuron_stake_e8s: 0,
+            neuron_fees_e8s: 0,
+            staked_maturity_e8s_equivalent: None,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_neuron_can_be_archived_involved_with_proposals() {
+        let inactive_neuron = empty_neuron_id_1();
+
+        let neuron_2_is_proposer = ProposalData {
+            proposer: Some(NeuronId { id: 2 }),
+            proposal: Some(Proposal {
+                title: Some("Foo Foo Bar".to_string()),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "Text for this motion".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            ..ProposalData::default()
+        };
+
+        let neuron_3_is_managed_neuron = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("Woo hoo".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    id: None,
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
+                        id: 3,
+                    })),
+                    command: None,
+                }))),
+                ..Proposal::default()
+            }),
+            ..ProposalData::default()
+        };
+
+        let subaccount_123_is_managed_neuron = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("Woo hoo".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
+                    id: None,
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::Subaccount(vec![1, 2, 3])),
+                    command: None,
+                }))),
+                ..Proposal::default()
+            }),
+            ..ProposalData::default()
+        };
+
+        let governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {
+                    1 => neuron_2_is_proposer,
+                    2 => neuron_3_is_managed_neuron,
+                    3 => subaccount_123_is_managed_neuron
+                },
+                ..GovernanceProto::default()
+            },
+            Box::new(MockEnvironment {
+                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
+                now: Arc::new(Mutex::new(0)),
+            }),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
+
+        assert!(governance.neuron_can_be_archived(&inactive_neuron));
+
+        let neuron_is_proposer = Neuron {
+            id: Some(NeuronId { id: 2 }),
+            ..inactive_neuron.clone()
+        };
+
+        assert!(!governance.neuron_can_be_archived(&neuron_is_proposer));
+
+        let id_is_managed_neuron_in_proposal = Neuron {
+            id: Some(NeuronId { id: 3 }),
+            ..inactive_neuron.clone()
+        };
+
+        assert!(!governance.neuron_can_be_archived(&id_is_managed_neuron_in_proposal));
+
+        let subaccount_is_managed_neuron_in_proposal = Neuron {
+            account: vec![1, 2, 3],
+            ..inactive_neuron
+        };
+
+        assert!(!governance.neuron_can_be_archived(&subaccount_is_managed_neuron_in_proposal));
+    }
+
+    #[test]
+    fn test_neuron_can_be_archived_neuron_locks() {
+        let inactive_neuron = empty_neuron_id_1();
+
+        let governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {},
+                in_flight_commands: hashmap! {
+                    4 => NeuronInFlightCommand { timestamp: 123, command: None}
+                },
+                ..GovernanceProto::default()
+            },
+            Box::new(MockEnvironment {
+                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
+                now: Arc::new(Mutex::new(0)),
+            }),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
+
+        assert!(governance.neuron_can_be_archived(&inactive_neuron));
+
+        let has_neuron_lock = Neuron {
+            id: Some(NeuronId { id: 4 }),
+            ..inactive_neuron
+        };
+
+        assert!(!governance.neuron_can_be_archived(&has_neuron_lock));
+    }
+
+    proptest! {
+    #[test]
+    fn test_neuron_can_be_archived_stake_and_maturity(stake in 0u64..10_000,
+                                              staked_maturity in 0u64..10_000,
+                                              fees in 0u64..10_000,
+                                              maturity in 0u64..10_000) {
+        let inactive_neuron = empty_neuron_id_1();
+
+        let governance = Governance::new(
+            GovernanceProto::default(),
+            Box::new(MockEnvironment {
+                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
+                now: Arc::new(Mutex::new(0)),
+            }),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
+
+
+        let neuron = Neuron {
+            cached_neuron_stake_e8s: stake,
+            staked_maturity_e8s_equivalent: Some(staked_maturity),
+            neuron_fees_e8s: fees,
+            maturity_e8s_equivalent: maturity,
+            ..inactive_neuron
+        };
+
+        assert_eq!(governance.neuron_can_be_archived(&neuron),
+            neuron.stake_e8s() == 0 && neuron.maturity_e8s_equivalent == 0,
+            "{:#?}",
+            neuron,
+        );
+    }} // end proptest
 }
