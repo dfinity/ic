@@ -105,13 +105,20 @@ after_script:
     - .build-env-base
     - .ic-build-legacy-image
 
-.bazel-build-k8s:
+.build-k8s:
   extends:
     - .ubuntu-k8s
     - .ic-build-image
   tags:
     - dfinity-ic
+
+.bazel-build-k8s:
+  extends:
+    - .build-k8s
+  tags:
+    - dfinity-ic
     # Run in ZH since BuildFarm is in ZH
+    # TODO(IDX-2570): Run in any cluster when bazel infrastructure will be ready.
     - zh
   variables:
     BAZEL_STARTUP_ARGS: "--output_base=/var/tmp/bazel-output/"

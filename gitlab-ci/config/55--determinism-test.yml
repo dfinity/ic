@@ -1,6 +1,6 @@
 build-determinism:
   extends:
-    - .bazel-build-k8s
+    - .build-k8s
     - .bazel-rules-pipeline-no-merge-train
   needs:
     - job: bazel-test-all
