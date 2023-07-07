@@ -24,6 +24,9 @@ scopeguard = "1.1.0"
 serde = "1.0"
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-metrics-encoder = "1.1"
+ic-canister-log = { path = "../../../rust_canisters/canister_log" }
+serde_json = "1.0.40"
+
 
 [dev-dependencies]
 ic-base-types = { path = "../../../types/base_types" }
