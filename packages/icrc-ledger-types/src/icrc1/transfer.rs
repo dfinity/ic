@@ -1,14 +1,11 @@
-use std::fmt;
-
+use super::account::{Account, Subaccount};
 use candid::{CandidType, Deserialize, Nat};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
-
-pub type BlockIndex = Nat;
-
-use super::account::{Account, Subaccount};
+use std::fmt;
 
 pub type NumTokens = Nat;
+pub type BlockIndex = Nat;
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransferArg {
