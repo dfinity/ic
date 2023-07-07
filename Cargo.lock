@@ -1747,6 +1747,7 @@ dependencies = [
  "mockall 0.11.4",
  "priority-queue",
  "prometheus 0.13.3",
+ "publicsuffix",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -14409,6 +14410,16 @@ dependencies = [
  "proc-macro2 1.0.52",
  "quote 1.0.26",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "publicsuffix"
+version = "2.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96a8c1bda5ae1af7f99a2962e49df150414a43d62404644d98dd5c3a93d07457"
+dependencies = [
+ "idna 0.3.0",
+ "psl-types",
 ]
 
 [[package]]

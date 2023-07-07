@@ -24,6 +24,7 @@ ic-certified-map = "0.3.2"
 ic-stable-structures = "0.5.3"
 priority-queue = { version = "1.3.0", features = ["serde"] }
 prometheus = "0.13.3"
+publicsuffix = "2.2.3"
 serde = "1.0.147"
 serde_bytes = "0.11.7"
 serde_cbor = "0.11.2"

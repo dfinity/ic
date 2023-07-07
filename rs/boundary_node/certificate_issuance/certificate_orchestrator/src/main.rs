@@ -89,6 +89,8 @@ const MEMORY_ID_TASKS: u8 = 7;
 const MEMORY_ID_EXPIRATIONS: u8 = 8;
 const MEMORY_ID_RETRIES: u8 = 9;
 
+const SUFFIX_LIST_STR: &str = include_str!("../public_suffix_list.dat");
+
 // Metrics
 
 const SERVICE_NAME: &str = "certificate_orchestrator";
@@ -313,7 +315,7 @@ thread_local! {
 
     static CREATOR: RefCell<Box<dyn Create>> = RefCell::new({
         let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
-        let c = WithRateLimit::new(c, REGISTRATION_RATE_LIMIT_RATE, &AVAILABLE_TOKENS);
+        let c = WithRateLimit::new(c, REGISTRATION_RATE_LIMIT_RATE, &AVAILABLE_TOKENS, SUFFIX_LIST_STR.parse().unwrap());
         let c = WithAuthorize(c, &MAIN_AUTHORIZER);
         let c = WithMetrics(c, &COUNTER_CREATE_REGISTRATION_TOTAL);
         Box::new(c)
