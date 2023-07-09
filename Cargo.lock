@@ -7896,6 +7896,7 @@ dependencies = [
  "actix-web",
  "async-trait",
  "candid",
+ "chrono",
  "clap 3.2.23",
  "dfn_protobuf",
  "ic-agent",

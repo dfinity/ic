@@ -8,6 +8,8 @@ use std::convert::TryInto;
 use std::path::Path;
 use std::sync::Mutex;
 
+use self::database_access::INSERT_INTO_TRANSACTIONS_STATEMENT;
+
 mod database_access {
     use super::vec_into_array;
     use crate::blocks::{BlockStoreError, HashedBlock};
@@ -17,8 +19,8 @@ mod database_access {
         Tokens,
     };
     use ic_ledger_hash_of::HashOf;
-    use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{params, types::Null, Connection, Error, Statement};
+    use icp_ledger::{AccountIdentifier, Block, Operation, TimeStamp};
+    use rusqlite::{named_params, params, types::Null, Connection, Error, Statement};
 
     pub fn push_hashed_block(
         con: &mut Connection,
@@ -46,15 +48,24 @@ mod database_access {
         Ok(())
     }
 
+    pub const INSERT_INTO_TRANSACTIONS_STATEMENT: &str = "INSERT INTO transactions (block_idx, tx_hash, operation_type, from_account, to_account, amount, fee, created_at_time, memo, icrc1_memo) VALUES (:index, :tx_hash, :op, :from, :to, :tokens, :fee, :created_at_time, :memo, :icrc1_memo)";
+
     pub fn push_transaction(
         connection: &mut Connection,
         tx: &icp_ledger::Transaction,
         index: &u64,
     ) -> Result<(), BlockStoreError> {
         let mut stmt = connection
-        .prepare("INSERT INTO transactions (block_idx,tx_hash,operation_type,from_account,to_account,amount,fee) VALUES (?1, ?2, ?3, ?4, ?5,?6,?7)")
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            .prepare(INSERT_INTO_TRANSACTIONS_STATEMENT)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         push_transaction_execution(tx, &mut stmt, index)
+    }
+
+    fn timestamp_to_iso8601(ts: TimeStamp) -> String {
+        let secs = (ts.as_nanos_since_unix_epoch() / 1_000_000_000) as i64;
+        let nsecs = (ts.as_nanos_since_unix_epoch() % 1_000_000_000) as u32;
+        let datetime = chrono::NaiveDateTime::from_timestamp_opt(secs, nsecs).unwrap();
+        chrono::DateTime::<chrono::Utc>::from_utc(datetime, chrono::Utc).to_rfc3339()
     }
 
     pub fn push_transaction_execution(
@@ -63,6 +74,9 @@ mod database_access {
         index: &u64,
     ) -> Result<(), BlockStoreError> {
         let tx_hash = tx.hash().into_bytes().to_vec();
+        let created_at_time = tx.created_at_time.map(timestamp_to_iso8601);
+        let memo = tx.memo.0.to_string();
+        let icrc1_memo = tx.icrc1_memo.as_ref().map(|memo| memo.to_vec());
         let operation_type = tx.operation.clone();
         match operation_type {
             Operation::Burn { from, amount } => {
@@ -71,15 +85,18 @@ mod database_access {
                 let tokens = amount.get_e8s();
                 let to_account = Null;
                 let fees = Null;
-                stmt.execute(params![
-                    index,
-                    tx_hash,
-                    op_string,
-                    from_account,
-                    to_account,
-                    tokens,
-                    fees
-                ])
+                stmt.execute(named_params! {
+                    ":index": index,
+                    ":tx_hash": tx_hash,
+                    ":op": op_string,
+                    ":from": from_account,
+                    ":to": to_account,
+                    ":tokens": tokens,
+                    ":fee": fees,
+                    ":created_at_time": created_at_time,
+                    ":memo": memo,
+                    ":icrc1_memo": icrc1_memo,
+                })
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
             Operation::Mint { to, amount } => {
@@ -88,15 +105,18 @@ mod database_access {
                 let tokens = amount.get_e8s();
                 let to_account = to.to_hex();
                 let fees = Null;
-                stmt.execute(params![
-                    index,
-                    tx_hash,
-                    op_string,
-                    from_account,
-                    to_account,
-                    tokens,
-                    fees
-                ])
+                stmt.execute(named_params! {
+                    ":index": index,
+                    ":tx_hash": tx_hash,
+                    ":op": op_string,
+                    ":from": from_account,
+                    ":to": to_account,
+                    ":tokens": tokens,
+                    ":fee": fees,
+                    ":created_at_time": created_at_time,
+                    ":memo": memo,
+                    ":icrc1_memo": icrc1_memo,
+                })
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
             Operation::Approve { .. } => todo!(),
@@ -112,15 +132,18 @@ mod database_access {
                 let tokens = amount.get_e8s();
                 let to_account = to.to_hex();
                 let fees = fee.get_e8s();
-                stmt.execute(params![
-                    index,
-                    tx_hash,
-                    op_string,
-                    from_account,
-                    to_account,
-                    tokens,
-                    fees
-                ])
+                stmt.execute(named_params! {
+                    ":index": index,
+                    ":tx_hash": tx_hash,
+                    ":op": op_string,
+                    ":from": from_account,
+                    ":to": to_account,
+                    ":tokens": tokens,
+                    ":fee": fees,
+                    ":created_at_time": created_at_time,
+                    ":memo": memo,
+                    ":icrc1_memo": icrc1_memo,
+                })
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
         }
@@ -731,10 +754,13 @@ impl Blocks {
                 block_idx INTEGER NOT NULL,
                 tx_hash BLOB NOT NULL,
                 operation_type VARCHAR NOT NULL,
-                from_account VARCHAR(64) ,
-                to_account VARCHAR(64) ,
+                from_account VARCHAR(64),
+                to_account VARCHAR(64),
                 amount INTEGER NOT NULL,
                 fee INTEGER,
+                created_at_time TEXT,
+                memo TEXT,
+                icrc1_memo BLOB,
                 PRIMARY KEY(block_idx),
                 FOREIGN KEY(block_idx) REFERENCES blocks(idx)
             )
@@ -1054,10 +1080,11 @@ impl Blocks {
         connection
             .execute_batch("BEGIN TRANSACTION;")
             .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
-        let mut stmt_hb =  connection .prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)")
+        let mut stmt_hb =  connection.prepare("INSERT INTO blocks (hash, block, parent_hash, idx, verified) VALUES (?1, ?2, ?3, ?4, FALSE)")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        let mut stmt_tx = connection .prepare("INSERT INTO transactions (block_idx,tx_hash,operation_type,from_account,to_account,amount,fee) VALUES (?1, ?2, ?3, ?4, ?5,?6,?7)")
-        .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        let mut stmt_tx = connection
+            .prepare(INSERT_INTO_TRANSACTIONS_STATEMENT)
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut stmt_select =  connection
         .prepare("SELECT block_idx,account,tokens FROM account_balances WHERE account=?1 AND block_idx<=?2 ORDER BY block_idx DESC LIMIT 1")
         .map_err(|e| BlockStoreError::Other(e.to_string()))?;

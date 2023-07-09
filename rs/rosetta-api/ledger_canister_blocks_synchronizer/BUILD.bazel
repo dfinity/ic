@@ -12,6 +12,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "@crate_index//:candid",
+    "@crate_index//:chrono",
     "@crate_index//:ic-agent",
     "@crate_index//:log",
     "@crate_index//:log4rs",
