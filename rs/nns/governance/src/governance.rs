@@ -2649,30 +2649,38 @@ impl Governance {
     ///   still be merged into the maturity of the target neuron.
     pub async fn merge_neurons(
         &mut self,
-        id: &NeuronId,
-        caller: &PrincipalId,
-        merge: &manage_neuron::Merge,
+        #[allow(unused_variables)] id: &NeuronId,
+        #[allow(unused_variables)] caller: &PrincipalId,
+        #[allow(unused_variables)] merge: &manage_neuron::Merge,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
-        let source_neuron_id = merge.source_neuron_id.as_ref().ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "There was no source neuron id",
-            )
-        })?;
+        return Err(GovernanceError::new_with_message(
+            ErrorType::NotAuthorized,
+            "Merging neurons has been temporarily disabled.",
+        ));
 
-        let now = self.env.now();
-        let in_flight_command = NeuronInFlightCommand {
-            timestamp: now,
-            command: Some(InFlightCommand::Merge(merge.clone())),
-        };
-        // Make sure the source and target neurons are not already
-        // undergoing a ledger update.
-        let _target_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
-        let _source_lock =
-            self.lock_neuron_for_command(source_neuron_id.id, in_flight_command.clone())?;
+        #[allow(unreachable_code)]
+        {
+            let source_neuron_id = merge.source_neuron_id.as_ref().ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "There was no source neuron id",
+                )
+            })?;
 
-        let action = ManageNeuronRequest::new(merge.clone(), id.clone(), *caller);
-        execute_manage_neuron(self, action).await
+            let now = self.env.now();
+            let in_flight_command = NeuronInFlightCommand {
+                timestamp: now,
+                command: Some(InFlightCommand::Merge(merge.clone())),
+            };
+            // Make sure the source and target neurons are not already
+            // undergoing a ledger update.
+            let _target_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
+            let _source_lock =
+                self.lock_neuron_for_command(source_neuron_id.id, in_flight_command.clone())?;
+
+            let action = ManageNeuronRequest::new(merge.clone(), id.clone(), *caller);
+            execute_manage_neuron(self, action).await
+        }
     }
 
     pub async fn simulate_manage_neuron(
