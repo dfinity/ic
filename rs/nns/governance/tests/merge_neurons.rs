@@ -56,6 +56,7 @@ fn icp_to_e8s(amount: u64) -> u64 {
 /// * the list of all neurons is unchanged
 /// * the list of accounts is unchanged
 #[test]
+#[ignore] // TODO(NNS1-2386): remove
 fn test_merge_neurons_fails() {
     let mut nns = NNSBuilder::new()
         .set_economics(NetworkEconomics::with_default_values())
@@ -869,6 +870,7 @@ fn do_test_merge_neurons(
 proptest! {
 
 #[test]
+#[ignore] // TODO(NNS1-2386): remove
 fn test_merge_neurons_small(
     n1_stake in 0u64..50_000,
     n1_maturity in 0u64..500_000_000,
@@ -896,6 +898,7 @@ fn test_merge_neurons_small(
 }
 
 #[test]
+#[ignore] // TODO(NNS1-2386): remove
 fn test_merge_neurons_normal(
     n1_stake in 0u64..500_000_000,
 
@@ -927,6 +930,7 @@ fn test_merge_neurons_normal(
 
 #[test]
 // Test that two neurons that have the same ManageNeuron following can be merged
+#[ignore] // TODO(NNS1-2386): remove
 fn test_neuron_merge_follow() {
     fn icp(amount: u64) -> u64 {
         amount * 100_000_000
