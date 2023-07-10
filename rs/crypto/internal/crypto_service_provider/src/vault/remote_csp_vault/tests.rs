@@ -17,7 +17,6 @@ use crate::RemoteCspVault;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::setup_listener;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
-use rand::Rng;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -580,31 +579,6 @@ mod tls_sign {
             key_id,
             remote_csp_vault,
         );
-    }
-}
-
-mod public_seed {
-    use super::*;
-    use ic_crypto_internal_seed::Seed;
-    use rand::thread_rng;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
-
-    #[test]
-    fn remote_csp_vault_should_generate_correct_public_seeds() {
-        let tokio_rt = new_tokio_runtime();
-        let mut csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
-        let vault = LocalCspVault::builder_for_test()
-            .with_rng(csprng.clone())
-            .build_into_arc();
-        let expected_seeds: Vec<_> = (0..10)
-            .map(|_| {
-                let intermediate_seed: [u8; 32] = csprng.gen();
-                Seed::from_bytes(&intermediate_seed)
-            })
-            .collect();
-        let csp_vault = new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), vault);
-        test_utils::public_seed::should_generate_particular_seeds(csp_vault, expected_seeds);
     }
 }
 

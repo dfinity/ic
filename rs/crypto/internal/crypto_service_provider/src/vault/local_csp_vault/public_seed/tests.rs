@@ -1,12 +1,13 @@
-use crate::vault::test_utils::public_seed::should_generate_particular_seeds;
+use crate::vault::api::PublicRandomSeedGenerator;
 use crate::LocalCspVault;
 use ic_crypto_internal_seed::Seed;
-use rand::{thread_rng, Rng, SeedableRng};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 #[test]
-fn local_csp_vault_should_generate_correct_public_seeds() {
-    let mut csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
+fn should_generate_correct_public_seeds() {
+    let mut csprng = ChaCha20Rng::from_seed(reproducible_rng().gen::<[u8; 32]>());
     let vault = LocalCspVault::builder_for_test()
         .with_rng(csprng.clone())
         .build_into_arc();
@@ -16,5 +17,19 @@ fn local_csp_vault_should_generate_correct_public_seeds() {
             Seed::from_bytes(&intermediate_seed)
         })
         .collect();
-    should_generate_particular_seeds(vault, expected_seeds);
+
+    let new_seeds_iter = (0..expected_seeds.len()).map(|_| {
+        vault
+            .new_public_seed()
+            .expect("Failed to generate a public seed from the CSP vault")
+    });
+
+    // Seed doesn't implement PartialEq, so let's avoid adding it just for a test
+    // and instead test the equality of the produced randomness.
+    for (new_seed, expected_seed) in new_seeds_iter.zip(expected_seeds) {
+        assert_eq!(
+            new_seed.into_rng().next_u64(),
+            expected_seed.into_rng().next_u64()
+        );
+    }
 }

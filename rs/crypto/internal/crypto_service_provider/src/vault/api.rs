@@ -831,7 +831,7 @@ pub trait ThresholdEcdsaSignerCspVault {
 }
 
 /// An error returned by failing to generate a public seed from [`CspVault`].
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub enum PublicRandomSeedGeneratorError {
     /// Internal error, e.g., an RPC error.
     TransientInternalError { internal_error: String },

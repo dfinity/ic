@@ -11,6 +11,7 @@ mod tests;
 
 pub use common::arb_algorithm_id;
 pub use common::arb_key_id;
+pub use common::arb_seed;
 pub use crypto_error::arb_crypto_error;
 pub use csp_basic_signature_error::arb_csp_basic_signature_error;
 pub use csp_basic_signature_keygen_error::arb_csp_basic_signature_keygen_error;
@@ -25,6 +26,7 @@ pub use csp_threshold_sign_error::arb_csp_threshold_sign_error;
 pub use node_public_keys::arb_current_node_public_keys;
 pub use node_public_keys::arb_external_public_keys;
 pub use pks_and_sks_contains_errors::arb_pks_and_sks_contains_errors;
+pub use public_random_seed_generator_error::arb_public_random_seed_generator_error;
 pub use validate_pks_and_sks_error::arb_validate_pks_and_sks_error;
 
 /// Creates a proptest strategy for a given enum variant.
@@ -104,6 +106,7 @@ macro_rules! proptest_strategy_for_enum {
 
 mod common {
     use super::*;
+    use ic_crypto_internal_seed::Seed;
     use ic_types::crypto::KeyPurpose;
     use ic_types::NodeId;
     use ic_types::PrincipalId;
@@ -128,6 +131,12 @@ mod common {
     prop_compose! {
         pub fn arb_node_id()(id in any::<u64>()) -> NodeId {
             NodeId::from(PrincipalId::new_node_test_id(id))
+        }
+    }
+
+    prop_compose! {
+        pub fn arb_seed()(bytes in uniform32(any::<u8>())) -> Seed {
+            Seed::from_bytes(&bytes)
         }
     }
 
@@ -596,5 +605,14 @@ mod validate_pks_and_sks_error {
         DkgDealingEncryptionKeyError => (error in arb_validate_pks_and_sks_key_pair_error()),
         IdkgDealingEncryptionKeyError => (error in arb_validate_pks_and_sks_key_pair_error()),
         TransientInternalError => (error in ".*")
+    );
+}
+
+mod public_random_seed_generator_error {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::PublicRandomSeedGeneratorError;
+
+    proptest_strategy_for_enum!(PublicRandomSeedGeneratorError;
+        TransientInternalError => {internal_error in ".*"}
     );
 }
