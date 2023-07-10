@@ -607,7 +607,7 @@ pub trait SystemApi {
     /// Can be called at most once between `ic0.call_new` and
     /// `ic0.call_perform`.
     ///
-    /// See https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call
+    /// See <https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call>
     fn ic0_call_on_cleanup(&mut self, fun: u32, env: u32) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_call_cycles_add128` instead, as this API
@@ -902,7 +902,7 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// Sets the certified data for the canister.
-    /// See: https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-certified-data
+    /// See: <https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-certified-data>
     fn ic0_certified_data_set(&mut self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
     /// If run in non-replicated execution (i.e. query),

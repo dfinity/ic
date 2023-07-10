@@ -84,7 +84,7 @@ pub unsafe fn incoming_from_second_systemd_socket(
 
 /// # Safety
 ///  To ensure safety caller needs to ensure that the FD for Socket(n) exists and only consumed once.
-/// See https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
+/// See <https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html>
 /// First socket would correspond to socket_num = 1, second = 2, so on.
 pub unsafe fn incoming_from_nth_systemd_socket(
     socket_num: i32,
