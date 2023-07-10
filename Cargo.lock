@@ -9011,24 +9011,33 @@ dependencies = [
  "http",
  "http-serde",
  "ic-async-utils",
+ "ic-crypto",
+ "ic-crypto-internal-csp",
+ "ic-crypto-test-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
+ "ic-icos-sev",
  "ic-icos-sev-interfaces",
  "ic-interfaces",
  "ic-interfaces-registry",
+ "ic-interfaces-registry-mocks",
  "ic-logger",
  "ic-metrics",
  "ic-peer-manager",
  "ic-registry-client-helpers",
+ "ic-test-utilities-logger",
  "ic-types",
+ "ic-types-test-utils",
  "prometheus 0.12.0",
  "quinn",
+ "rustls 0.21.2",
  "serde",
  "slog",
  "tokio",
  "tokio-rustls 0.24.0",
  "tokio-util",
  "tower",
+ "turmoil",
 ]
 
 [[package]]
@@ -12565,6 +12574,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ffbee8634e0d45d258acb448e7eaab3fce7a0a467395d4d9f228e3c1f01fb2e4"
 
 [[package]]
+name = "matchers"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
+dependencies = [
+ "regex-automata",
+]
+
+[[package]]
 name = "matches"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14878,6 +14896,9 @@ name = "regex-automata"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
+dependencies = [
+ "regex-syntax 0.6.28",
+]
 
 [[package]]
 name = "regex-syntax"
@@ -17591,12 +17612,16 @@ version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6176eae26dd70d0c919749377897b54a9276bd7061339665dd68777926b5a70"
 dependencies = [
+ "matchers",
  "nu-ansi-term",
+ "once_cell",
+ "regex",
  "serde",
  "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "tracing",
  "tracing-core",
  "tracing-log",
  "tracing-serde",
@@ -17691,6 +17716,26 @@ dependencies = [
  "thiserror",
  "url",
  "utf-8",
+]
+
+[[package]]
+name = "turmoil"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e72ab712288bd737d0abc60712e031fb48488bbce7810ac2135da067e916469"
+dependencies = [
+ "bytes",
+ "futures",
+ "indexmap",
+ "rand 0.8.5",
+ "rand_distr",
+ "scoped-tls",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

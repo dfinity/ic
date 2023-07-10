@@ -88,12 +88,12 @@ pub(crate) struct ConnectionManager {
     rt: Handle,
     metrics: QuicTransportMetrics,
 
-    // Current topology
+    /// Current topology
     topology: SubnetTopology,
-    // All outgoing connection requests should go through this queue.
-    // It is ok to add the same node multiple times here since we only dial
-    // if we don't have an outstanding dial.
-    // If we want to immediately connect add to this queue with Duration 0.
+    /// All outgoing connection requests should go through this queue.
+    /// It is ok to add the same node multiple times here since we only dial
+    /// if we don't have an outstanding dial.
+    /// If we want to immediately connect add to this queue with Duration 0.
     connect_queue: DelayQueue<NodeId>,
 
     // Authentication
@@ -105,15 +105,15 @@ pub(crate) struct ConnectionManager {
     peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
 
     // Local state.
-    // Task joinmap that holds stores a connecting tasks keys by peer id.
+    /// Task joinmap that holds stores a connecting tasks keys by peer id.
     outbound_connecting: JoinMap<NodeId, Result<ConnectionHandle, ConnectionEstablishError>>,
-    // Task joinset on which incoming connection requests are spawned. This is not a JoinMap
-    // because the peerId is not available until the TLS handshake succeeded.
+    /// Task joinset on which incoming connection requests are spawned. This is not a JoinMap
+    /// because the peerId is not available until the TLS handshake succeeded.
     inbound_connecting: JoinSet<Result<ConnectionHandle, ConnectionEstablishError>>,
-    // JoinMap that stores active connection handlers keyed by peer id.
+    /// JoinMap that stores active connection handlers keyed by peer id.
     active_connections: JoinMap<NodeId, ()>,
 
-    // Endpoint config
+    /// Endpoint config
     endpoint: Endpoint,
     transport_config: Arc<quinn::TransportConfig>,
     router: Router,
@@ -237,15 +237,13 @@ pub fn start_connection_manager(
                 .expect("Failed to create endpoint")
             })
         }
-        Either::Right(async_udp_socket) => rt.block_on(async {
-            Endpoint::new_with_abstract_socket(
-                endpoint_config,
-                Some(server_config),
-                async_udp_socket,
-                Arc::new(quinn::TokioRuntime),
-            )
-            .expect("Failed to create endpoint")
-        }),
+        Either::Right(async_udp_socket) => Endpoint::new_with_abstract_socket(
+            endpoint_config,
+            Some(server_config),
+            async_udp_socket,
+            Arc::new(quinn::TokioRuntime),
+        )
+        .expect("Failed to create endpoint"),
     };
 
     let manager = ConnectionManager {
@@ -305,7 +303,7 @@ impl ConnectionManager {
                     match conn_res {
                         Ok((conn_out, _)) => self.handle_connecting_result(conn_out),
                         Err(err) => {
-                            // Cancelling tasks is ok. Panicing tasks are not.
+                            // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
                                 std::panic::resume_unwind(err.into_panic());
                             }
@@ -316,7 +314,7 @@ impl ConnectionManager {
                     match conn_res {
                         Ok(conn_out) => self.handle_connecting_result(conn_out),
                         Err(err) => {
-                            // Cancelling tasks is ok. Panicing tasks are not.
+                            // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
                                 std::panic::resume_unwind(err.into_panic());
                             }
@@ -327,7 +325,7 @@ impl ConnectionManager {
                     match active_result {
                         Ok((_, peer_id)) => self.handled_closed_conn(peer_id),
                         Err(err) => {
-                            // Cancelling tasks is ok. Panicing tasks are not.
+                            // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
                                 std::panic::resume_unwind(err.into_panic());
                             }
