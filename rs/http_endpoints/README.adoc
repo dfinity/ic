@@ -3,8 +3,7 @@
  
 == Introduction ==
  
-The directory contains replica components that listen on network sockets, so NNS managed nodes can 
-communicate with each other.
+The directory contains replica components that listen on network sockets, manage connections and serve HTTP requests.
 
 The replica components in this directory are:
 
@@ -13,12 +12,10 @@ The replica components in this directory are:
 
 == Connection management ==
 
-Components in scope assume persistent connections are established.
-
 === Using Nftables ===
 
 The ReplicaOS uses https://en.wikipedia.org/wiki/Nftables[nftables] for setting firewall rules that are important
-for the overall reliability of the IC. Nftables are used for:
+for the overall reliability and security of the IC. Nftables are used for:
 
  *  restrict inbound traffic. Only IPs of nodes that are in the registry can establish connections to IC nodes on whitelisted ports. 
  *  limit the number of simultaneous TCP connections from a source IP. 
@@ -30,9 +27,9 @@ The above rules serve as protection against:
  *  shared resource exhaustion (e.g. file descriptor exhaustion due to many connections, 
  CPU exhaustion due to excessive number of TLS handshakes).
 
-=== Dead peer detection ===
+=== Detecing idle connections ===
 
-Given the existence of persistent connections, we must detect dead peers, disconnections due
+Each component implements detection for dead peers, disconnections due
 to network inactivity and/or peers holding on to connections without sending requests.
 For this purpose, if no bytes are read from a connection for the duration of 
 `+connection_read_timeout_seconds+` then the connection is dropped. There is no point in 
@@ -41,20 +38,13 @@ setting a timeout on the write bytes since they are conditioned on the received 
 Each component uses the ReplicaOS defaults for https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html#whyuse[TCP alivekeep].
 
 == Thread-per-request ==
+
+Components in scope use the https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failure_queue-management[thread-per-request]
+pattern. More specifically, requests come in, they sit in a bounded-size queue, and then threads pick requests off the queue and perform the actual work (whatever actions are required by the replica). If a request is cancelled before it is picked up from a thread, then the request is not executed.
  
-Components in scope listen on a socket, parse the corresponding request and execute the requested API
-call by calling an upstream component(s) that may block the running thread. Since async code needs to be
-https://docs.rs/tokio/latest/tokio/task/index.html[non-blocking], the components use 
-https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failure_queue-management[thread-per-request]
-pattern for executing the corresponding upstream API calls. More specifically, there is a
-queue in front of each thread pool that handles requests. Requests come in, they sit in a bounded-size queue, and then
-threads pick requests off the queue and perform the actual work (whatever actions are required by the replica).
-The caller is responsible for correctly handling the case when the queue is full.
-
-If a request is cancelled before it is picked up from a thread, then the request is not executed.
-
-This design pattern is implemented using a https://docs.rs/tower/latest/tower/limit/concurrency/index.html[limit on number of requests being concurrently processed],
-https://docs.rs/threadpool/latest/threadpool/[threadpool] per upstream service and https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html[Tokio oneshot channel].
+Some upstream component(s) provide only synchronous APIs that block the running thread for longer periods of time (>100ms). In order to make request processing https://docs.rs/tokio/latest/tokio/task/index.html[non-blocking], components in scope 
+https://docs.rs/tower/latest/tower/limit/concurrency/index.html[limit the number of requests being concurrently processed],
+use a https://docs.rs/threadpool/latest/threadpool/[threadpool] per upstream service and use https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html[Tokio oneshot channel] for communicating the result back to the async component.
 
 == Request timeout ==
 
@@ -76,8 +66,8 @@ https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failur
 In addition, serving errors early and cheaply can be beneficial for replicated servers that stay behind load balancers.
 For example, https://sre.google/sre-book/load-balancing-datacenter/[Least-Loaded Round Robin] takes into account recent errors.
  
-Given the listed best practices, when a particular queue in-front of a thread pool is full and request can't be added,
-the endpoint https://docs.rs/tower/latest/tower/load_shed/index.html#[sheds load] by responding with `+429 Too Many Requests+` for that particular request. 
+Given the listed best practices, when a particular queue in-front of a thread pool is full and new request can't be added,
+the endpoint https://docs.rs/tower/latest/tower/load_shed/index.html#[sheds load] by responding with `+429 Too Many Requests+` for the request. 
 
 == Too large and too slow requests ==
 
