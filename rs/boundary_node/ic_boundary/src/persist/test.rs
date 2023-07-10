@@ -50,23 +50,33 @@ fn test_principal_to_u256() -> Result<(), Error> {
     Ok(())
 }
 
-fn node(i: u64) -> Node {
+fn node(i: u64, subnet_id: Principal) -> Node {
     Node {
         id: node_test_id(1001 + i).get().0,
+        subnet_id,
         addr: IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
         port: 8080,
         tls_certificate: valid_tls_certificate().certificate_der,
     }
 }
 
-fn generate_test_routing_table(offset: u64) -> RoutingTable {
-    let node1 = node(1 + offset);
-    let node2 = node(2 + offset);
-    let node3 = node(3 + offset);
+pub fn generate_test_routing_table(offset: u64) -> RoutingTable {
+    let subnet_id_1 =
+        Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap();
+    let subnet_id_2 =
+        Principal::from_text("uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe")
+            .unwrap();
+    let subnet_id_3 =
+        Principal::from_text("snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae")
+            .unwrap();
+
+    let node1 = node(1 + offset, subnet_id_1);
+    let node2 = node(2 + offset, subnet_id_2);
+    let node3 = node(3 + offset, subnet_id_3);
 
     let subnet1 = Subnet {
-        id: Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
-            .unwrap(),
+        id: subnet_id_1,
         subnet_type: SubnetType::Application,
         ranges: vec![
             CanisterRange {
@@ -82,8 +92,7 @@ fn generate_test_routing_table(offset: u64) -> RoutingTable {
     };
 
     let subnet2 = Subnet {
-        id: Principal::from_text("uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe")
-            .unwrap(),
+        id: subnet_id_2,
         subnet_type: SubnetType::Application,
         ranges: vec![
             CanisterRange {
@@ -99,8 +108,7 @@ fn generate_test_routing_table(offset: u64) -> RoutingTable {
     };
 
     let subnet3 = Subnet {
-        id: Principal::from_text("snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae")
-            .unwrap(),
+        id: subnet_id_3,
         subnet_type: SubnetType::Application,
         ranges: vec![CanisterRange {
             start: Principal::from_text("zdpgc-saqaa-aacai").unwrap(),
@@ -122,42 +130,53 @@ fn generate_test_routing_table(offset: u64) -> RoutingTable {
 }
 
 fn generate_test_routes(offset: u64) -> Routes {
+    let subnet_id_1 =
+        Principal::from_text("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap();
+    let subnet_id_2 =
+        Principal::from_text("uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe")
+            .unwrap();
+    let subnet_id_3 =
+        Principal::from_text("snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae")
+            .unwrap();
+
     let subnet1 = RouteSubnet {
-        id: "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe".to_string(),
+        id: subnet_id_1.to_string(),
         range_start: principal_to_u256("f7crg-kabae").unwrap(),
         range_end: principal_to_u256("sxiki-5ygae-aq").unwrap(),
-        nodes: vec![node(1 + offset)],
+        nodes: vec![node(1 + offset, subnet_id_1)],
     };
 
     let subnet2 = RouteSubnet {
-        id: "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe".to_string(),
+        id: subnet_id_2.to_string(),
         range_start: principal_to_u256("sqjm4-qahae-aq").unwrap(),
         range_end: principal_to_u256("sqjm4-qahae-aq").unwrap(),
-        nodes: vec![node(2 + offset)],
+        nodes: vec![node(2 + offset, subnet_id_2)],
     };
 
     let subnet3 = RouteSubnet {
-        id: "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe".to_string(),
+        id: subnet_id_1.to_string(),
         range_start: principal_to_u256("t5his-7iiae-aq").unwrap(),
         range_end: principal_to_u256("jlzvg-byp77-7qcai").unwrap(),
-        nodes: vec![node(1 + offset)],
+        nodes: vec![node(1 + offset, subnet_id_1)],
     };
 
     let subnet4 = RouteSubnet {
-        id: "snjp4-xlbw4-mnbog-ddwy6-6ckfd-2w5a2-eipqo-7l436-pxqkh-l6fuv-vae".to_string(),
+        id: subnet_id_3.to_string(),
         range_start: principal_to_u256("zdpgc-saqaa-aacai").unwrap(),
         range_end: principal_to_u256("fij4j-bi777-7qcai").unwrap(),
-        nodes: vec![node(3 + offset)],
+        nodes: vec![node(3 + offset, subnet_id_3)],
     };
 
     let subnet5 = RouteSubnet {
-        id: "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe".to_string(),
+        id: subnet_id_2.to_string(),
         range_start: principal_to_u256("6l3jn-7icca-aaaai-b").unwrap(),
         range_end: principal_to_u256("ca5tg-macd7-776ai-b").unwrap(),
-        nodes: vec![node(2 + offset)],
+        nodes: vec![node(2 + offset, subnet_id_2)],
     };
 
     Routes {
+        node_count: 3,
         subnets: vec![
             Arc::new(subnet1),
             Arc::new(subnet2),
@@ -179,13 +198,8 @@ async fn test_persist() -> Result<(), Error> {
     // Persist the routing table
     let result = persister.persist(routing_table.clone()).await.unwrap();
     // Check the result
-    assert!(matches!(result, PersistStatus::Completed));
+    assert!(matches!(result, PersistStatus::Completed(_)));
     // Compare the persisted table state with expected
-    assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
-
-    let result = persister.persist(routing_table.clone()).await.unwrap();
-    assert!(matches!(result, PersistStatus::SkippedUnchanged));
-    // Check if the table hasn't changed
     assert_eq!(&routes, rt_init.load_full().unwrap().as_ref());
 
     // Check empty table
@@ -205,7 +219,7 @@ async fn test_persist() -> Result<(), Error> {
     let routing_table = generate_test_routing_table(1);
     let result = persister.persist(routing_table).await.unwrap();
     // Check if it was updated
-    assert!(matches!(result, PersistStatus::Completed));
+    assert!(matches!(result, PersistStatus::Completed(_)));
     // Check if the routing table matches expected one
     let routes_new = generate_test_routes(1);
     assert_eq!(&routes_new, rt_init.load_full().unwrap().as_ref());

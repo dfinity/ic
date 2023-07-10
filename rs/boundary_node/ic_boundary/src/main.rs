@@ -1,6 +1,15 @@
 // TODO: remove
 #![allow(unused)]
 
+use std::{
+    fs::File,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
@@ -21,25 +30,17 @@ use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
 use lazy_static::lazy_static;
 use nns::Load;
 use prometheus::{labels, Registry as MetricsRegistry};
-use std::{
-    fs::File,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::PathBuf,
-    str::FromStr,
-    sync::Arc,
-    time::{Duration, Instant},
-};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info};
 use url::Url;
 
 use crate::{
     acme::Acme,
-    check::Runner as CheckRunner,
+    check::{Checker, Runner as CheckRunner},
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
     metrics::{MetricParams, WithMetrics},
     nns::Loader,
-    snapshot::{HTTPClientHelper, Runner as SnapshotRunner},
+    snapshot::{DnsResolver, Runner as SnapshotRunner, TlsVerifier},
     tls::{CustomAcceptor, Provisioner, TokenSetter, WithLoad, WithStore},
 };
 
@@ -82,6 +83,26 @@ struct Cli {
     /// The registry local store path to be populated
     #[clap(long)]
     pub local_store_path: PathBuf,
+
+    // Timeout for the whole HTTP request in seconds
+    #[clap(long, default_value = "4")]
+    http_timeout: u64,
+
+    // Timeout for the HTTP connect phase in seconds
+    #[clap(long, default_value = "2")]
+    http_timeout_connect: u64,
+
+    // How frequently to run node checks in seconds
+    #[clap(long, default_value = "10")]
+    check_interval: u64,
+
+    // How many attempts to do when checking a node
+    #[clap(long, default_value = "3")]
+    check_retries: u32,
+
+    // How long to wait between retries in seconds
+    #[clap(long, default_value = "1")]
+    check_retry_interval: u64,
 
     /// Minimum registry version snapshot to process
     #[clap(long, default_value = "0")]
@@ -156,23 +177,24 @@ async fn main() -> Result<(), Error> {
     let tls_loader = Arc::new(tls_loader);
 
     // HTTP Client
-    let tls_verifier = Arc::new(HTTPClientHelper::new(&ROUTING_TABLE));
-    let dns_resolver = Arc::new(HTTPClientHelper::new(&ROUTING_TABLE));
+    let tls_verifier = Arc::new(TlsVerifier::new(&ROUTING_TABLE));
+    let dns_resolver = Arc::new(DnsResolver::new(&ROUTING_TABLE));
 
     let rustls_config = rustls::ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
-        .unwrap()
-        .with_custom_certificate_verifier(tls_verifier);
+        .context("unable to build Rustls config")?
+        .with_custom_certificate_verifier(tls_verifier)
+        .with_no_client_auth();
 
     let http_client = reqwest::Client::builder()
-        // TODO re-enable
-        // .timeout(Duration::from_secs(cli.http_timeout))
-        // .connect_timeout(Duration::from_secs(cli.http_timeout_connect))
+        .timeout(Duration::from_secs(cli.http_timeout))
+        .connect_timeout(Duration::from_secs(cli.http_timeout_connect))
         .use_preconfigured_tls(rustls_config)
         .dns_resolver(dns_resolver)
-        .build()?;
+        .build()
+        .context("unable to build HTTP client")?;
 
     // ACME
     let acme_http_client = hyper::Client::builder().build(
@@ -343,21 +365,39 @@ async fn main() -> Result<(), Error> {
     let mut snapshot_runner = snapshot_runner;
 
     // Checks
-    let persister = persist::Persister::new(&ROUTES);
+    let persister = WithMetrics(
+        persist::Persister::new(&ROUTES),
+        MetricParams::new(SERVICE_NAME, "persist"),
+    );
+    let checker = Checker::new(&http_client); // HTTP client does not need Arc
+    let checker = WithMetrics(checker, MetricParams::new(SERVICE_NAME, "check"));
+    let checker = WithRetryLimited(
+        checker,
+        cli.check_retries,
+        Duration::from_secs(cli.check_retry_interval),
+    );
 
-    let check_runner = CheckRunner::new(&ROUTING_TABLE, persister);
+    let check_runner = CheckRunner::new(
+        &ROUTING_TABLE,
+        cli.min_ok_count,
+        cli.max_height_lag,
+        persister,
+        checker,
+    );
     let check_runner = WithMetrics(check_runner, MetricParams::new(SERVICE_NAME, "run_check"));
-    let check_runner = WithThrottle(check_runner, ThrottleParams::new(10 * SECOND));
+    let check_runner = WithThrottle(
+        check_runner,
+        ThrottleParams::new(Duration::from_secs(cli.check_interval)),
+    );
     let mut check_runner = check_runner;
 
     // Runners
     let runners: Vec<Box<dyn Run>> = vec![
-        Box::new(configuration_runner),
+        // TODO FIXME Causes tokio stack over flow currently, fix & re-enable
+        //Box::new(configuration_runner),
         Box::new(snapshot_runner),
         Box::new(check_runner),
     ];
-
-    let _ = ROUTES;
 
     TokioScope::scope_and_block(|s| {
         let metrics_handler = || metrics::handler(metrics);
@@ -376,7 +416,7 @@ async fn main() -> Result<(), Error> {
                 .await
                 .context("registry replicator failed")?;
 
-            Ok(())
+            Ok::<(), Error>(())
         });
 
         // Servers
@@ -424,9 +464,15 @@ impl<T: Run> Run for WithMetrics<T> {
     }
 }
 
-struct WithRetry<T>(
+pub struct WithRetryLimited<T>(
     pub T,
-    pub Duration, // timeout
+    pub u32,      // max_attempts
+    pub Duration, // attempt_interval
+);
+
+pub struct WithRetry<T>(
+    pub T,
+    pub Duration, // attempt_interval
 );
 
 struct ThrottleParams {

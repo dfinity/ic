@@ -1,5 +1,5 @@
 {
-  "checksum": "2fbd1b5caa2d221f7316cc918071f381a41f102dc2c5213831362f542e549367",
+  "checksum": "eafc535a1a2b96174aa0daf708dc0b8cbe53a6e5610db2cade5d03593b5520f0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14842,6 +14842,10 @@
             {
               "id": "simple_asn1 0.5.4",
               "target": "simple_asn1"
+            },
+            {
+              "id": "simple_moving_average 0.1.2",
+              "target": "simple_moving_average"
             },
             {
               "id": "slog 2.7.0",
@@ -46292,6 +46296,48 @@
       },
       "license": "ISC"
     },
+    "simple_moving_average 0.1.2": {
+      "name": "simple_moving_average",
+      "version": "0.1.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/simple_moving_average/0.1.2/download",
+          "sha256": "cdd19d3808aad2604c824399fd270260d634678b010328c9d96851bb0fb63121"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simple_moving_average",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "simple_moving_average",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.15",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.2"
+      },
+      "license": "MIT"
+    },
     "simplelog 0.11.2": {
       "name": "simplelog",
       "version": "0.11.2",
@@ -54524,18 +54570,6 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -54550,6 +54584,18 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
