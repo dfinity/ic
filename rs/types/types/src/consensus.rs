@@ -58,6 +58,11 @@ pub trait HasVersion {
     fn version(&self) -> &ReplicaVersion;
 }
 
+/// Abstract messages that may be a share or not
+pub trait IsShare {
+    fn is_share(&self) -> bool;
+}
+
 impl<T: HasHeight, S> HasHeight for Signed<T, S> {
     fn height(&self) -> Height {
         self.content.height()
@@ -1152,6 +1157,25 @@ impl HasHeight for ConsensusMessageAttribute {
             ConsensusMessageAttribute::RandomTapeShare(h) => *h,
             ConsensusMessageAttribute::CatchUpPackage(h) => *h,
             ConsensusMessageAttribute::CatchUpPackageShare(h) => *h,
+        }
+    }
+}
+
+impl IsShare for ConsensusMessage {
+    fn is_share(&self) -> bool {
+        match self {
+            ConsensusMessage::RandomBeacon(_)
+            | ConsensusMessage::RandomTape(_)
+            | ConsensusMessage::Notarization(_)
+            | ConsensusMessage::Finalization(_)
+            | ConsensusMessage::CatchUpPackage(_)
+            | ConsensusMessage::BlockProposal(_) => false,
+
+            ConsensusMessage::RandomBeaconShare(_)
+            | ConsensusMessage::RandomTapeShare(_)
+            | ConsensusMessage::NotarizationShare(_)
+            | ConsensusMessage::FinalizationShare(_)
+            | ConsensusMessage::CatchUpPackageShare(_) => true,
         }
     }
 }
