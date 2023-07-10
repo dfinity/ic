@@ -2,7 +2,7 @@
 
 == Introduction
 
-SetupOS is an operating system designed for installing both the HostOS (hypervisor) and GuestOS (virtual machine). It enables Node Providers to independently onboard their nodes.
+'SetupOS' is an operating system designed for installing both the HostOS (hypervisor) and GuestOS (virtual machine). It enables Node Providers to independently onboard their nodes.
 
 == SetupOS Installation
 

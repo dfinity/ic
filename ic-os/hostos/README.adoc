@@ -2,7 +2,7 @@
 
 == Introduction
 
-HostOS refers to the operating system running on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. 
+'HostOS' refers to the operating system running on the host machine. Its main responsibility is to launch and run the GuestOS in a virtual machine. 
 
 In terms of its capabilities, HostOS is intentionally limited by design to not perform any trusted capabilities—anything related to the Internet Computer Protocol (replica, orchestrator, etc).
 
