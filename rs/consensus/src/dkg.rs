@@ -2635,6 +2635,29 @@ mod tests {
                 .dkg_pool
                 .apply_changes(&SysTimeSource::new(), change_set);
 
+            // Now we create a message with a wrong replica version and verify
+            // that it gets rejected.
+            let mut invalid_dealing_message = valid_dealing_message.clone();
+            invalid_dealing_message.content.version =
+                ReplicaVersion::try_from("invalid_version").unwrap();
+
+            node_2.dkg_pool.insert(UnvalidatedArtifact {
+                message: invalid_dealing_message.clone(),
+                peer_id: node_id_1,
+                timestamp: UNIX_EPOCH,
+            });
+
+            let change_set = node_2.dkg.on_state_change(&node_2.dkg_pool);
+            match &change_set.as_slice() {
+                &[ChangeAction::RemoveFromUnvalidated(m)] => {
+                    assert_eq!(*m, invalid_dealing_message);
+                }
+                val => panic!("Unexpected change set: {:?}", val),
+            };
+            node_2
+                .dkg_pool
+                .apply_changes(&SysTimeSource::new(), change_set);
+
             // Now we create a message, which refers a DKG interval above our finalized
             // height and make sure we skip it.
             let dkg_id_from_future = NiDkgId {
