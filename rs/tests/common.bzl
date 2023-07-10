@@ -44,6 +44,7 @@ DEPENDENCIES = [
     "//rs/prep",
     "//rs/protobuf",
     "//rs/recovery",
+    "//rs/recovery/subnet_splitting:subnet_splitting",
     "//rs/registry/canister",
     "//rs/registry/client",
     "//rs/registry/helpers",

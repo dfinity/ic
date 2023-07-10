@@ -158,6 +158,10 @@ impl SubnetSplitting {
         }
     }
 
+    pub fn get_recovery_api(&self) -> &Recovery {
+        &self.recovery
+    }
+
     fn split_state_step(&self, target_subnet: TargetSubnet) -> SplitStateStep {
         let state_split_strategy = match target_subnet {
             TargetSubnet::Source => {
