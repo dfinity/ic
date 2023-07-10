@@ -47,11 +47,7 @@ impl AdapterClientWrapper {
                 processed_block_hashes: headers,
             });
 
-        let opts = Options {
-            timeout: tokio::time::Duration::from_millis(50),
-        };
-
-        self.0.send_blocking(request, opts)
+        self.0.send_blocking(request, Options::default())
     }
 }
 
