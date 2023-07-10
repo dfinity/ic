@@ -1,21 +1,11 @@
-use crate::subnet_splitting::{SubnetSplitting, SubnetSplittingArgs};
-
 use clap::Parser;
 use ic_recovery::{cli, util, NeuronArgs, RecoveryArgs};
+use ic_subnet_splitting::subnet_splitting::{SubnetSplitting, SubnetSplittingArgs};
 use ic_types::ReplicaVersion;
 use slog::Logger;
 use url::Url;
 
 use std::path::PathBuf;
-
-mod admin_helper;
-mod agent_helper;
-mod layout;
-mod state_tool_helper;
-mod steps;
-mod subnet_splitting;
-mod target_subnet;
-mod utils;
 
 #[derive(Parser)]
 #[clap(version = "1.0")]

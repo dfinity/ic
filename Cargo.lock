@@ -16961,6 +16961,7 @@ dependencies = [
  "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",
+ "ic-subnet-splitting",
  "ic-test-identity",
  "ic-test-utilities",
  "ic-types",
