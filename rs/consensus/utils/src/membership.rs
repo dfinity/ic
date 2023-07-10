@@ -26,8 +26,8 @@ pub enum MembershipError {
 /// what its rank is and what committees it belongs to.
 pub struct Membership {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
-    pub(crate) registry_client: Arc<dyn RegistryClient>,
-    pub(crate) subnet_id: SubnetId,
+    pub registry_client: Arc<dyn RegistryClient>,
+    pub subnet_id: SubnetId,
 }
 
 impl Membership {

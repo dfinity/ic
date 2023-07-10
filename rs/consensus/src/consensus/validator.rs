@@ -101,6 +101,7 @@ enum PermanentError {
     MismatchedStateHashInCatchUpPackageShare,
     MismatchedRandomBeaconInCatchUpPackageShare,
     RepeatedSigner,
+    ReplicaVersionMismatch,
 }
 
 impl From<CryptoError> for TransientError {
@@ -273,6 +274,29 @@ impl SignatureVerify for Signed<CatchUpContent, ThresholdSignatureShare<CatchUpC
         )?;
         crypto.verify(self, transcript.dkg_id)?;
         Ok(())
+    }
+}
+
+impl SignatureVerify for CatchUpPackage {
+    fn verify_signature(
+        &self,
+        membership: &Membership,
+        crypto: &dyn ConsensusCrypto,
+        _pool: &PoolReader<'_>,
+    ) -> ValidationResult<ValidatorError> {
+        crypto
+            .verify_combined_threshold_sig_by_public_key(
+                &self.signature.signature,
+                &self.content,
+                membership.subnet_id,
+                // Using any registry version here is fine because we assume that the
+                // public key of the subnet will not change. The alternative of trying
+                // to use the registry version obtained from the pool is not an option
+                // here because we may not be able to get a proper value if we do not
+                // have the relevant portion of the chain.
+                membership.registry_client.get_latest_version(),
+            )
+            .map_err(ValidatorError::from)
     }
 }
 
@@ -634,13 +658,15 @@ impl Validator {
         (validator_fn)()
     }
 
-    /// Verify the signature of some artifact that is verifiable with the
-    /// `SignatureVerify` trait.
-    fn verify_signature<S: SignatureVerify>(
+    /// Verify the version and signature of some artifact that is verifiable with the
+    /// `SignatureVerify` and `HasVersion` traits.
+    fn verify_artifact<S: SignatureVerify + HasVersion>(
         &self,
         pool_reader: &PoolReader<'_>,
         artifact: &S,
     ) -> ValidationResult<ValidatorError> {
+        check_protocol_version(artifact.version())
+            .map_err(|_| PermanentError::ReplicaVersionMismatch)?;
         artifact.verify_signature(self.membership.as_ref(), self.crypto.as_ref(), pool_reader)
     }
 
@@ -766,8 +792,8 @@ impl Validator {
         }
         match notary_issued.content.dependencies_validated(pool_reader) {
             Ok(()) => {
-                let verification = self.verify_signature(pool_reader, &notary_issued);
-                self.compute_action_from_sig_verification(
+                let verification = self.verify_artifact(pool_reader, &notary_issued);
+                self.compute_action_from_artifact_verification(
                     pool_reader,
                     verification,
                     notary_issued.into_message(),
@@ -817,33 +843,25 @@ impl Validator {
                     .get_by_height(proposal.height())
                     .find(|notarization| &notarization.content.block == proposal.content.get_hash())
                 {
-                    if check_protocol_version(notarization.content.version()).is_err() {
-                        change_set.push(ChangeAction::RemoveFromUnvalidated(
+                    // Verify notarization signature before checking block validity.
+                    let verification = self.verify_artifact(pool_reader, &notarization);
+                    if let Err(ValidationError::Permanent(e)) = verification {
+                        change_set.push(ChangeAction::HandleInvalid(
                             notarization.into_message(),
+                            format!("{:?}", e),
                         ));
-                    } else {
-                        // Verify notarization signature before checking block validity.
-                        let verification = self.verify_signature(pool_reader, &notarization);
-                        if let Err(ValidationError::Permanent(e)) = verification {
-                            change_set.push(ChangeAction::HandleInvalid(
-                                notarization.into_message(),
-                                format!("{:?}", e),
-                            ));
-                        } else if verification.is_ok() {
-                            if get_notarized_parent(pool_reader, &proposal).is_ok() {
-                                self.metrics.observe_block(pool_reader, &proposal);
-                                known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                                change_set
-                                    .push(ChangeAction::MoveToValidated(proposal.into_message()));
-                                change_set.push(ChangeAction::MoveToValidated(
-                                    notarization.into_message(),
-                                ));
-                            }
-                            // If the parent is notarized, this block and its notarization are
-                            // validated. If not, this block currently cannot be
-                            // validated through parent either.
-                            continue;
+                    } else if verification.is_ok() {
+                        if get_notarized_parent(pool_reader, &proposal).is_ok() {
+                            self.metrics.observe_block(pool_reader, &proposal);
+                            known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()));
+                            change_set
+                                .push(ChangeAction::MoveToValidated(notarization.into_message()));
                         }
+                        // If the parent is notarized, this block and its notarization are
+                        // validated. If not, this block currently cannot be
+                        // validated through parent either.
+                        continue;
                     }
                     // Note that transient errors on notarization signature
                     // verification should cause fall through, and the block
@@ -886,28 +904,25 @@ impl Validator {
                     continue;
                 }
 
-                if check_protocol_version(proposal.content.version()).is_err() {
-                    change_set.push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()));
-                } else {
-                    match self.check_block_validity(pool_reader, &proposal) {
-                        Ok(()) => {
-                            self.metrics.observe_block(pool_reader, &proposal);
-                            known_ranks.insert(proposal.height(), Some(proposal.rank()));
-                            change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
-                        }
-                        Err(ValidationError::Permanent(err)) => {
-                            change_set.push(ChangeAction::HandleInvalid(
-                                proposal.into_message(),
-                                format!("{:?}", err),
-                            ))
-                        }
-                        Err(ValidationError::Transient(err)) => {
-                            if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
-                                warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
-                                      self.log,
-                                      "Couldn't check the block validity: {:?}", err
-                                );
-                            }
+                match self.check_block_validity(pool_reader, &proposal) {
+                    Ok(()) => {
+                        self.metrics.observe_block(pool_reader, &proposal);
+                        known_ranks.insert(proposal.height(), Some(proposal.rank()));
+                        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
+                    }
+                    Err(ValidationError::Permanent(PermanentError::ReplicaVersionMismatch)) => {
+                        change_set
+                            .push(ChangeAction::RemoveFromUnvalidated(proposal.into_message()))
+                    }
+                    Err(ValidationError::Permanent(err)) => change_set.push(
+                        ChangeAction::HandleInvalid(proposal.into_message(), format!("{:?}", err)),
+                    ),
+                    Err(ValidationError::Transient(err)) => {
+                        if self.unvalidated_for_too_long(pool_reader, &proposal.get_id()) {
+                            warn!(every_n_seconds => LOG_EVERY_N_SECONDS,
+                                  self.log,
+                                  "Couldn't check the block validity: {:?}", err
+                            );
                         }
                     }
                 }
@@ -979,7 +994,7 @@ impl Validator {
         }
 
         let parent = get_notarized_parent(pool_reader, proposal)?;
-        self.verify_signature(pool_reader, proposal)?;
+        self.verify_artifact(pool_reader, proposal)?;
 
         // Ensure registry_version, certified_height and time are non-decreasing.
         let proposal = proposal.as_ref();
@@ -1091,16 +1106,14 @@ impl Validator {
             .random_beacon()
             .get_by_height(last_beacon.content.height().increment())
             .filter_map(|beacon| {
-                if check_protocol_version(&beacon.content.version).is_err() {
-                    Some(ChangeAction::RemoveFromUnvalidated(beacon.into_message()))
-                } else if last_hash != beacon.content.parent {
+                if last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
                         "The parent hash of the beacon is not correct".to_string(),
                     ))
                 } else {
-                    let verification = self.verify_signature(pool_reader, &beacon);
-                    self.compute_action_from_sig_verification(
+                    let verification = self.verify_artifact(pool_reader, &beacon);
+                    self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
                         beacon.into_message(),
@@ -1140,17 +1153,15 @@ impl Validator {
             .random_beacon_share()
             .get_by_height(next_height)
             .filter_map(|beacon| {
-                if check_protocol_version(&beacon.content.version).is_err() {
-                    Some(ChangeAction::RemoveFromUnvalidated(beacon.into_message()))
-                } else if last_hash != beacon.content.parent {
+                if last_hash != beacon.content.parent {
                     Some(ChangeAction::HandleInvalid(
                         beacon.into_message(),
                         "The parent hash of the beacon was not correct".to_string(),
                     ))
                 } else if existing_shares < threshold {
                     self.metrics.validation_random_beacon_shares_count.add(1);
-                    let verification = self.verify_signature(pool_reader, &beacon);
-                    let ret = self.compute_action_from_sig_verification(
+                    let verification = self.verify_artifact(pool_reader, &beacon);
+                    let ret = self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
                         beacon.into_message(),
@@ -1197,9 +1208,7 @@ impl Validator {
             .get_by_height_range(range)
             .filter_map(|tape| {
                 let height = tape.height();
-                if check_protocol_version(&tape.content.version).is_err() {
-                    Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
-                } else if height == Height::from(0) {
+                if height == Height::from(0) {
                     // tape of height 0 is considered invalid
                     Some(ChangeAction::HandleInvalid(
                         tape.into_message(),
@@ -1209,8 +1218,8 @@ impl Validator {
                     // Remove if we already have a validated tape at this height
                     Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
                 } else {
-                    let verification = self.verify_signature(pool_reader, &tape);
-                    self.compute_action_from_sig_verification(
+                    let verification = self.verify_artifact(pool_reader, &tape);
+                    self.compute_action_from_artifact_verification(
                         pool_reader,
                         verification,
                         tape.into_message(),
@@ -1261,9 +1270,7 @@ impl Validator {
             .get_by_height_range(range)
             .filter_map(|tape| {
                 let height = tape.height();
-                if check_protocol_version(&tape.content.version).is_err() {
-                    Some(ChangeAction::RemoveFromUnvalidated(tape.into_message()))
-                } else if height == Height::from(0) {
+                if height == Height::from(0) {
                     // tape of height 0 is considered invalid
                     Some(ChangeAction::HandleInvalid(
                         tape.into_message(),
@@ -1280,8 +1287,8 @@ impl Validator {
                     // the threshold, then we don't need to continue validating anymore.
                     if existing_shares < threshold {
                         self.metrics.validation_random_tape_shares_count.add(1);
-                        let verification = self.verify_signature(pool_reader, &tape);
-                        let ret = self.compute_action_from_sig_verification(
+                        let verification = self.verify_artifact(pool_reader, &tape);
+                        let ret = self.compute_action_from_artifact_verification(
                             pool_reader,
                             verification,
                             tape.into_message(),
@@ -1331,35 +1338,18 @@ impl Validator {
             .filter_map(|catch_up_package| {
                 // Such heights should not make it into this loop.
                 debug_assert!(catch_up_package.height() > catch_up_height);
-                if check_protocol_version(&catch_up_package.content.version).is_err() {
-                    return Some(ChangeAction::RemoveFromUnvalidated(
-                        catch_up_package.into_message(),
-                    ));
-                } else if !catch_up_package.check_integrity() {
+                if !catch_up_package.check_integrity() {
                     return Some(ChangeAction::HandleInvalid(
                         catch_up_package.into_message(),
                         "CatchUpPackage integrity check failed".to_string(),
                     ));
                 }
-                let verification = self
-                    .crypto
-                    .verify_combined_threshold_sig_by_public_key(
-                        &catch_up_package.signature.signature,
-                        &catch_up_package.content,
-                        self.replica_config.subnet_id,
-                        // Using any registry version here is fine because we assume that the
-                        // public key of the subnet will not change. The alternative of trying
-                        // to use the registry version obtained from the pool is not an option
-                        // here because we may not be able to get a proper value if we do not
-                        // have the relevant portion of the chain.
-                        self.registry_client.get_latest_version(),
-                    )
-                    .map_err(ValidatorError::from);
+                let verification = self.verify_artifact(pool_reader, &catch_up_package);
 
                 let verification =
                     self.maybe_hold_back_cup(verification, &catch_up_package, pool_reader);
 
-                self.compute_action_from_sig_verification(
+                self.compute_action_from_artifact_verification(
                     pool_reader,
                     verification,
                     catch_up_package.into_message(),
@@ -1393,9 +1383,7 @@ impl Validator {
         shares
             .filter_map(|share| {
                 debug_assert!(share.height() > catch_up_height);
-                if check_protocol_version(&share.content.version).is_err() {
-                    return Some(ChangeAction::RemoveFromUnvalidated(share.into_message()));
-                } else if !share.check_integrity() {
+                if !share.check_integrity() {
                     return Some(ChangeAction::HandleInvalid(
                         share.into_message(),
                         "CatchUpPackageShare integrity check failed".to_string(),
@@ -1403,7 +1391,7 @@ impl Validator {
                 }
                 match self.validate_catch_up_share_content(pool_reader, &share.content) {
                     Ok(block) => {
-                        let verification = self.verify_signature(
+                        let verification = self.verify_artifact(
                             pool_reader,
                             &Signed {
                                 content: CatchUpContent::from_share_content(
@@ -1413,7 +1401,7 @@ impl Validator {
                                 signature: share.signature.clone(),
                             },
                         );
-                        self.compute_action_from_sig_verification(
+                        self.compute_action_from_artifact_verification(
                             pool_reader,
                             verification,
                             share.into_message(),
@@ -1510,7 +1498,7 @@ impl Validator {
         change_set
     }
 
-    fn compute_action_from_sig_verification(
+    fn compute_action_from_artifact_verification(
         &self,
         pool_reader: &PoolReader<'_>,
         result: ValidationResult<ValidatorError>,
@@ -1518,6 +1506,9 @@ impl Validator {
     ) -> Option<ChangeAction> {
         match result {
             Ok(()) => Some(ChangeAction::MoveToValidated(message)),
+            Err(ValidationError::Permanent(PermanentError::ReplicaVersionMismatch)) => {
+                Some(ChangeAction::RemoveFromUnvalidated(message))
+            }
             Err(ValidationError::Permanent(s)) => {
                 Some(ChangeAction::HandleInvalid(message, format!("{:?}", s)))
             }
