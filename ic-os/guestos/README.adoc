@@ -1,6 +1,8 @@
 = Guest OS
 
-GuestOS refers to the operating system running inside a QEMU virtual machine on the HostOS. A GuestOS image consists of the base Ubuntu system, along with the replica and orchestrator binaries. The IC protocol runs inside the GuestOS virtual machine.
+'GuestOS' refers to the operating system running inside a QEMU virtual machine on the HostOS. A GuestOS image consists of the base Ubuntu system, along with the replica and orchestrator binaries. The IC software runs inside the GuestOS virtual machine.
+
+The GuestOS virtual machine ensures a consistent runtime environment across various hardware platforms for the GuestOS and its services (orchestrator, replica, etc.). Moreover, it provides a method for upgrading the GuestOS and all its services in a unified manner.
 
 For more details on the goals, structure, and disk layout of GuestOS, https://docs.google.com/presentation/d/1xECozJhVCqzFC3mMMvROD7rlB-xWDHHLKvZuVnuLgJc/edit?usp=sharing[see here]
 
@@ -31,36 +33,6 @@ Instead of running GuestOS locally in qemu, you can launch a GuestOS virtual mac
 The program will spin up a new GuestOS VM on Farm, and the machine can then be accessed via SSH.
 
 For more details about the program, refer to the `rs/ic_os/launch-single-vm` directory.
-
-== Upgrade GuestOS
-
-The GuestOS disk layout contains two sets of system partitions, called partition sets "A" and "B". The A/B partitions enable a dual-boot system that can be updated and maintained without any downtime.
-
-image:docs/media/guestOS_disk-layout.png[]
-
-The image above shows the GuestOS disk layout with partition set "A" in green and partition set "B" in blue.
-
-At any given time, one partition set is "active" while the other is "passive". 
-To upgrade the GuestOS, first, the new GuestOS is written to the passive partition set. Then, the active and passive partition sets are "swapped," so that when GuestOS reboots, it will use the new GuestOS on the new partition, thereby upgrading the GuestOS.
-
-=== Building GuestOS upgrade image
-
-The same Bazel command used to build a GuestOS image will also produce a GuestOS upgrade image:
-
-    bazel build //ic-os/guestos/{prod,dev,dev-sev,dev-malicious}/...
-
-This command will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-sev,dev-malicious}, which is the tarred GuestOS update image.
-
-=== Installing GuestOS upgrade image
-
-    rootfs/opt/ic/bin/manageboot.sh upgrade-install update-img.tar
-    rootfs/opt/ic/bin/manageboot.sh upgrade-commit
-
-After these commands have been run, the newly installed system will be booted. Note that on the next boot, the system will revert back to the original GuestOS unless confirmation is given that the new system is fully operational:
-
-    rootfs/opt/ic/bin/manageboot.sh confirm
-
-For more information on the upgrade commands, see https://github.com/dfinity/ic/blob/master/ic-os/guestos/rootfs/opt/ic/bin/manageboot.sh[rootfs/opt/ic/bin/manageboot.sh]
 
 == Developing the Ubuntu system
 

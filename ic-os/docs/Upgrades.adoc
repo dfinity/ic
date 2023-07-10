@@ -1,0 +1,55 @@
+= Upgrades
+
+Both HostOS and GuestOS can be upgraded.
+
+[NOTE]
+GuestOS upgrades are often referred to as "Replica upgrades." While these upgrades indeed update the replica, they also upgrade all other GuestOS services.
+
+== Upgrade process
+
+|====
+10+^|HostOS 10+^| GuestOS
+|EFI|Grub|Config|Boot A|Root A|Var A|Boot B|Root B|Var B|Unallocated Reserve|EFI|Grub|Config|Boot A|Root A|Var A|Boot B|Root B|Var B|Empty
+|100 MB|100 MB|100 MB|1 GB|10 GB|10 GB|1 GB|10 GB|10 GB|20 GB|100 MB|100 MB|100 MB|1 GB|10 GB|10 GB|1 GB|10 GB|10 GB|100%FREE
+|====
+
+The disk layout for both the HostOS and GuestOS includes two sets of system partitions, partition sets "A" and "B". This A/B partitioning enables a dual-boot system that can be updated and maintained without any downtime.
+
+At any given moment, one partition set is "active", and the other is "passive".
+
+*The GuestOS upgrade process is as follows:*
+
+* The GuestOS Update image is written to the passive partition set. 
+* The active and passive partition sets are "swapped," (i.e. the active partition set becomes "passive," and the passive partition set becomes "active")
+* GuestOS reboots. After reboot, GuestOS will use the new GuestOS version on the newly active partition set, thereby upgrading the GuestOS.
+
+The same process is followed for HostOS upgrades.
+
+=== Building upgrade image
+
+The Bazel command used to build the HostOS/GuestOS images also generates a HostOS/GuestOS upgrade image:
+
+    $ bazel build //ic-os/{hostos,guestos}/envs/<TARGET>/...
+
+This command will output `update-img.tar{.gz,.zst}` in `/ic/bazel-bin/ic-os/{hostos,guestos}/envs/{prod,dev,dev-sev,dev-malicious}`, which is the tar archive of the HostOS/GuestOS update image.
+
+Note that the upgrade images include only the boot and root partitions in a tar archive. Full images, on the other hand, include the entire partition table.
+
+=== Installing upgrade image
+
+Each HostOS/GuestOS rootfs folder contains the manageboot script, used to install the upgrade image:
+
+    rootfs/opt/ic/bin/manageboot.sh upgrade-install update-img.tar
+    rootfs/opt/ic/bin/manageboot.sh upgrade-commit
+
+Following the execution of these commands, the system will reboot into the newly installed version. Note that unless confirmation of full operational functionality is provided, the system will rollback to the previous HostOS/GuestOS on the subsequent reboot:
+
+    rootfs/opt/ic/bin/manageboot.sh confirm
+
+For more information on the upgrade commands, see https://github.com/dfinity/ic/blob/master/ic-os/guestos/rootfs/opt/ic/bin/manageboot.sh[rootfs/opt/ic/bin/manageboot.sh]
+
+== SEV-SNP upgrades
+
+In the case of SEV-SNP enabled GuestOS upgrades, a straightforward upgrade involving shutdown and reboot into the upgraded system is not possible due to the lack of a secure method to seal data for the upgraded VM. Instead, for SEV-SNP upgrades, nodes will perform a live handover (of the KEK) between an "Active" and "Upgrade" SEV-SNP protected VM.
+
+This feature is currently under development (IC-430).

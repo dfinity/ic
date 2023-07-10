@@ -64,7 +64,7 @@ filesystem, it should be set up using integrity
 protection via +dm-verity+ by the initial ram disk
 to prevent tampering.
 
-== *A_var* / *B_var* Mutable data partition for system B
+== *A_var* / *B_var* Mutable data partition for system A/B
 
 This partition is used as mutable +/var+ filesystem for
 the OS. It is set up as encrypted block device such that
