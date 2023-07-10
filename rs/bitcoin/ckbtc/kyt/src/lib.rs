@@ -1,4 +1,5 @@
 use candid::{CandidType, Deserialize, Principal};
+use ic_btc_interface::Txid;
 use serde::Serialize;
 use std::fmt;
 
@@ -54,7 +55,7 @@ pub enum LifecycleArg {
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub struct DepositRequest {
     pub caller: Principal,
-    pub txid: [u8; 32],
+    pub txid: Txid,
     pub vout: u32,
 }
 

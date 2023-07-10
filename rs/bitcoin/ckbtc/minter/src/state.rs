@@ -18,7 +18,7 @@ use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
 use ic_base_types::CanisterId;
 pub use ic_btc_interface::Network;
-use ic_btc_interface::{OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Txid, Utxo};
 use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -88,7 +88,7 @@ pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
     pub requests: Vec<RetrieveBtcRequest>,
     /// The identifier of the unconfirmed transaction.
-    pub txid: [u8; 32],
+    pub txid: Txid,
     /// The list of UTXOs we used in the transaction.
     pub used_utxos: Vec<Utxo>,
     /// The IC time at which we submitted the Bitcoin transaction.
@@ -118,7 +118,7 @@ pub enum FinalizedStatus {
     /// The transaction that retrieves BTC got enough confirmations.
     Confirmed {
         /// The witness transaction identifier of the transaction.
-        txid: [u8; 32],
+        txid: Txid,
     },
 }
 
@@ -128,7 +128,7 @@ pub enum InFlightStatus {
     /// Awaiting signatures for transaction inputs.
     Signing,
     /// Awaiting the Bitcoin canister to accept the transaction.
-    Sending { txid: [u8; 32] },
+    Sending { txid: Txid },
 }
 
 /// The status of a retrieve_btc request.
@@ -142,13 +142,13 @@ pub enum RetrieveBtcStatus {
     /// Waiting for a signature on a transaction satisfy this request.
     Signing,
     /// Sending the transaction satisfying this request.
-    Sending { txid: [u8; 32] },
+    Sending { txid: Txid },
     /// Awaiting for confirmations on the transaction satisfying this request.
-    Submitted { txid: [u8; 32] },
+    Submitted { txid: Txid },
     /// The retrieval amount was too low. Satisfying the request is impossible.
     AmountTooLow,
     /// Confirmed a transaction satisfying this request.
-    Confirmed { txid: [u8; 32] },
+    Confirmed { txid: Txid },
 }
 
 /// Controls which operations the minter can perform.
@@ -279,9 +279,9 @@ pub struct CkBtcMinterState {
     pub stuck_transactions: Vec<SubmittedBtcTransaction>,
 
     /// Maps ID of a stuck transaction to the ID of the corresponding replacement transaction.
-    pub replacement_txid: BTreeMap<[u8; 32], [u8; 32]>,
+    pub replacement_txid: BTreeMap<Txid, Txid>,
     /// Maps ID of a replacement transaction to the ID of the corresponding stuck transaction.
-    pub rev_replacement_txid: BTreeMap<[u8; 32], [u8; 32]>,
+    pub rev_replacement_txid: BTreeMap<Txid, Txid>,
 
     /// Finalized retrieve_btc requests for which we received enough confirmations.
     pub finalized_requests: VecDeque<FinalizedBtcRetrieval>,
@@ -462,7 +462,7 @@ impl CkBtcMinterState {
             ensure!(
                 self.replacement_txid.contains_key(&tx.txid),
                 "stuck transaction {} does not have a replacement id",
-                crate::tx::DisplayTxid(&tx.txid),
+                &tx.txid,
             );
         }
 
@@ -472,7 +472,7 @@ impl CkBtcMinterState {
                     .iter()
                     .any(|tx| &tx.txid == old_txid),
                 "not found stuck transaction {}",
-                crate::tx::DisplayTxid(old_txid),
+                old_txid,
             );
 
             ensure!(
@@ -481,7 +481,7 @@ impl CkBtcMinterState {
                     .chain(self.stuck_transactions.iter())
                     .any(|tx| &tx.txid == new_txid),
                 "not found replacement transaction {}",
-                crate::tx::DisplayTxid(new_txid),
+                new_txid,
             );
         }
 
@@ -495,8 +495,8 @@ impl CkBtcMinterState {
                 self.rev_replacement_txid.get(new_txid),
                 Some(old_txid),
                 "no back link for {} -> {} TX replacement",
-                crate::tx::DisplayTxid(old_txid),
-                crate::tx::DisplayTxid(new_txid),
+                old_txid,
+                new_txid,
             );
         }
 
@@ -638,7 +638,7 @@ impl CkBtcMinterState {
         }
     }
 
-    pub(crate) fn finalize_transaction(&mut self, txid: &[u8; 32]) {
+    pub(crate) fn finalize_transaction(&mut self, txid: &Txid) {
         let finalized_tx = if let Some(pos) = self
             .submitted_transactions
             .iter()
@@ -654,7 +654,7 @@ impl CkBtcMinterState {
         } else {
             ic_cdk::trap(&format!(
                 "Attempted to finalized a non-existent transaction {}",
-                crate::tx::DisplayTxid(txid)
+                txid
             ));
         };
 
@@ -672,7 +672,7 @@ impl CkBtcMinterState {
         self.cleanup_tx_replacement_chain(txid);
     }
 
-    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &[u8; 32]) {
+    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &Txid) {
         let mut txids_to_remove = BTreeSet::new();
 
         // Collect transactions preceding the confirmed transaction.
@@ -724,11 +724,7 @@ impl CkBtcMinterState {
     }
 
     /// Replaces a stuck transaction with a newly sent transaction.
-    pub(crate) fn replace_transaction(
-        &mut self,
-        old_txid: &[u8; 32],
-        mut tx: SubmittedBtcTransaction,
-    ) {
+    pub(crate) fn replace_transaction(&mut self, old_txid: &Txid, mut tx: SubmittedBtcTransaction) {
         assert_ne!(old_txid, &tx.txid);
         assert_eq!(
             self.replacement_txid.get(old_txid),
@@ -757,7 +753,7 @@ impl CkBtcMinterState {
 
     /// Returns the identifier of the most recent replacement transaction for the given stuck
     /// transaction id.
-    pub fn find_last_replacement_tx(&self, txid: &[u8; 32]) -> Option<&[u8; 32]> {
+    pub fn find_last_replacement_tx(&self, txid: &Txid) -> Option<&Txid> {
         let mut last = self.replacement_txid.get(txid)?;
         while let Some(newer_txid) = self.replacement_txid.get(last) {
             last = newer_txid;

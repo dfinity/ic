@@ -1,5 +1,5 @@
 {
-  "checksum": "e1a961c8cbf902960ac5e51c93ed751a1b0dfc3004efb474810aa71d31f97a78",
+  "checksum": "497e286798d5e65f07e671d8387f84f13433523534c6abf72f27adafa0a786a0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22153,7 +22153,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
+            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
           },
           "strip_prefix": "interface"
         }
@@ -22206,7 +22206,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
+            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
           },
           "strip_prefix": "test-utils"
         }
@@ -22251,7 +22251,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "0e996988693f2d55fc9533c44dc20ae5310a1894"
+            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
           },
           "strip_prefix": "validation"
         }
@@ -54500,18 +54500,6 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -54526,6 +54514,18 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
