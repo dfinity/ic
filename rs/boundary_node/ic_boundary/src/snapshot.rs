@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    fmt,
     net::{IpAddr, SocketAddr, ToSocketAddrs},
     str::FromStr,
     sync::Arc,
@@ -31,9 +32,16 @@ use crate::Run;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {
     pub id: Principal,
+    pub subnet_id: Principal,
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
+}
+
+impl fmt::Display for Node {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{:?}]:{:?}", self.addr, self.port)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,12 +58,18 @@ pub struct Subnet {
     pub nodes: Vec<Node>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl fmt::Display for Subnet {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.id)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RoutingTable {
     pub registry_version: u64,
     pub nns_subnet_id: Principal,
     pub subnets: Vec<Subnet>,
-    // Store node_id->node hash map for a faster lookup
+    // Hash map for a faster lookup by DNS resolver
     pub nodes: HashMap<String, Node>,
 }
 
@@ -75,15 +89,19 @@ impl<'a> Runner<'a> {
         }
     }
 
+    // Constructs a routing table based on registry
     fn get_routing_table(&mut self) -> Result<RoutingTable, Error> {
         let version = self.registry_client.get_latest_version();
 
+        // Get NNS subnet ID
+        // TODO What do we need it for?
         let root_subnet_id = self
             .registry_client
             .get_root_subnet_id(version)
             .context("failed to get root subnet id")? // Result
             .context("root subnet id not available")?; // Option
 
+        // Get routing table with canister ranges
         let routing_table = self
             .registry_client
             .get_routing_table(version)
@@ -104,8 +122,10 @@ impl<'a> Runner<'a> {
                 .or_insert_with(|| vec![range]);
         }
 
+        // Hash to hold node_id->node mapping
         let mut nodes_map = HashMap::new();
 
+        // List of all subnet's IDs
         let subnet_ids = self
             .registry_client
             .get_subnet_ids(version)
@@ -151,6 +171,7 @@ impl<'a> Runner<'a> {
 
                         let node_route = Node {
                             id: node_id.as_ref().0,
+                            subnet_id: subnet_id.as_ref().0,
                             addr: IpAddr::from_str(http_endpoint.ip_addr.as_str())
                                 .context("unable to parse IP address")?,
                             port: http_endpoint.port as u16, // Port is u16 anyway
@@ -200,11 +221,23 @@ impl<'a> Run for Runner<'a> {
     }
 }
 
-pub struct HTTPClientHelper<'a> {
+pub struct TlsVerifier<'a> {
     published_routing_table: &'a ArcSwapOption<RoutingTable>,
 }
 
-impl<'a> HTTPClientHelper<'a> {
+impl<'a> TlsVerifier<'a> {
+    pub fn new(published_routing_table: &'a ArcSwapOption<RoutingTable>) -> Self {
+        Self {
+            published_routing_table,
+        }
+    }
+}
+
+pub struct DnsResolver<'a> {
+    published_routing_table: &'a ArcSwapOption<RoutingTable>,
+}
+
+impl<'a> DnsResolver<'a> {
     pub fn new(published_routing_table: &'a ArcSwapOption<RoutingTable>) -> Self {
         Self {
             published_routing_table,
@@ -216,7 +249,7 @@ impl<'a> HTTPClientHelper<'a> {
 // that was provided by node during TLS handshake matches its public key from the registry
 // This trait is used by Rustls in reqwest under the hood
 // We don't really check CommonName since the resolver makes sure we connect to the right IP
-impl<'a> ServerCertVerifier for HTTPClientHelper<'a> {
+impl<'a> ServerCertVerifier for TlsVerifier<'a> {
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
@@ -289,7 +322,7 @@ impl<'a> ServerCertVerifier for HTTPClientHelper<'a> {
 
 // Implement resolver based on the routing table
 // It's used by reqwest to resolve node IDs to an IP address
-impl<'a> Resolve for HTTPClientHelper<'a> {
+impl<'a> Resolve for DnsResolver<'a> {
     fn resolve(&self, name: Name) -> Resolving {
         // Load a routing table if we have one
         let rt = self.published_routing_table.load_full();
@@ -326,4 +359,4 @@ impl<'a> Resolve for HTTPClientHelper<'a> {
 }
 
 #[cfg(test)]
-mod test;
+pub mod test;

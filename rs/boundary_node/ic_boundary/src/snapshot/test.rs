@@ -37,7 +37,7 @@ fn test_certificate() -> Vec<u8> {
 }
 
 // Generate a fake registry client with some data
-fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
+pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
     let mut subnets: Vec<Vec<u8>> = vec![];
     let data_provider = ProtoRegistryDataProvider::new();
     let reg_ver = RegistryVersion::new(1);
@@ -214,7 +214,7 @@ async fn test_routing_table() -> Result<(), Error> {
 }
 
 fn check_certificate_verification(
-    helper: &HTTPClientHelper,
+    tls_verifier: &TlsVerifier,
     name: &str,
     der: Vec<u8>,
 ) -> Result<(), Error> {
@@ -224,7 +224,7 @@ fn check_certificate_verification(
     let scts: Vec<&[u8]> = vec![];
     let ocsp_response: Vec<u8> = vec![];
 
-    helper.verify_server_cert(
+    tls_verifier.verify_server_cert(
         &crt,
         intermediates.as_slice(),
         &server_name,
@@ -241,7 +241,7 @@ async fn test_verify_tls_certificate() -> Result<(), Error> {
     let rt = ArcSwapOption::const_empty();
     let reg = Arc::new(create_fake_registry_client(4));
     let mut runner = Runner::new(&rt, reg);
-    let helper = HTTPClientHelper::new(&rt);
+    let helper = TlsVerifier::new(&rt);
     runner.run().await?;
 
     let rt = rt.load_full().unwrap();
@@ -270,7 +270,7 @@ async fn test_resolve() -> Result<(), Error> {
 
     let reg = Arc::new(create_fake_registry_client(4));
     let rt = ArcSwapOption::const_empty();
-    let helper = HTTPClientHelper::new(&rt);
+    let helper = DnsResolver::new(&rt);
     let mut runner = Runner::new(&rt, reg);
     runner.run().await?;
 

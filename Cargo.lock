@@ -4963,6 +4963,7 @@ dependencies = [
  "bytes",
  "candid",
  "clap 4.3.3",
+ "dashmap 5.4.0",
  "ethnum",
  "futures",
  "futures-util",
@@ -4988,6 +4989,8 @@ dependencies = [
  "instant-acme 0.3.2",
  "lazy_static",
  "mockall 0.11.4",
+ "opentelemetry 0.18.0",
+ "opentelemetry-prometheus 0.11.0",
  "prometheus 0.13.3",
  "rcgen",
  "reqwest",
@@ -4995,6 +4998,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+ "simple_moving_average",
  "slog",
  "tempfile",
  "thiserror",
@@ -16095,6 +16099,15 @@ dependencies = [
  "num-traits",
  "thiserror",
  "time 0.3.22",
+]
+
+[[package]]
+name = "simple_moving_average"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cdd19d3808aad2604c824399fd270260d634678b010328c9d96851bb0fb63121"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

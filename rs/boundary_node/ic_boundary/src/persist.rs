@@ -5,15 +5,22 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
+use tracing::info;
 
 use crate::{
     snapshot::{Node, RoutingTable},
     Run,
 };
 
+pub struct PersistResults {
+    pub ranges_old: u32,
+    pub ranges_new: u32,
+    pub nodes_old: u32,
+    pub nodes_new: u32,
+}
+
 pub enum PersistStatus {
-    Completed,
-    SkippedUnchanged,
+    Completed(PersistResults),
     SkippedEmpty,
 }
 
@@ -47,16 +54,17 @@ fn principal_to_u256(p: &str) -> Result<u256, Error> {
 // But going u256 makes it future proof and according to spec
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteSubnet {
-    id: String,
-    range_start: u256,
-    range_end: u256,
-    nodes: Vec<Node>,
+    pub id: String,
+    pub range_start: u256,
+    pub range_end: u256,
+    pub nodes: Vec<Node>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Routes {
+    pub node_count: u32,
     // subnets should be sorted by `range_start` field for the binary search to work
-    subnets: Vec<Arc<RouteSubnet>>,
+    pub subnets: Vec<Arc<RouteSubnet>>,
 }
 
 impl Routes {
@@ -112,14 +120,20 @@ impl<'a> Persister<'a> {
 
 #[async_trait]
 impl<'a> Persist for Persister<'a> {
-    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
+    // Construct a lookup table based on provided routing table
+    async fn persist(&self, mut rt: RoutingTable) -> Result<PersistStatus, Error> {
         if rt.subnets.is_empty() {
             return Ok(PersistStatus::SkippedEmpty);
         }
 
+        // Generate a list of subnets with a single canister range
+        // Can contain several entries with the same subnet ID
         let mut subnets = vec![];
 
+        let mut node_count: u32 = 0;
         for subnet in rt.subnets.into_iter() {
+            node_count += subnet.nodes.len() as u32;
+
             for range in subnet.ranges.into_iter() {
                 subnets.push(Arc::new(RouteSubnet {
                     id: subnet.id.to_string(),
@@ -130,26 +144,32 @@ impl<'a> Persist for Persister<'a> {
             }
         }
 
+        // Sort subnets by range_start for the binary search to work in lookup()
         subnets.sort_by_key(|x| x.range_start);
 
-        let rt = Arc::new(Routes { subnets });
-        match self.published_routes.load_full() {
-            None => {
-                self.published_routes.store(Some(rt));
-                return Ok(PersistStatus::Completed);
-            }
+        let rt = Arc::new(Routes {
+            node_count,
+            subnets,
+        });
 
-            Some(rt_old) => {
-                if rt == rt_old {
-                    return Ok(PersistStatus::SkippedUnchanged);
-                }
+        // Load old subnet to get previous numbers
+        let rt_old = self.published_routes.load_full();
+        let (ranges_old, nodes_old) =
+            rt_old.map_or((0, 0), |x| (x.subnets.len() as u32, x.node_count));
 
-                self.published_routes.store(Some(rt));
-                return Ok(PersistStatus::Completed);
-            }
-        }
+        let results = PersistResults {
+            ranges_old,
+            ranges_new: rt.subnets.len() as u32,
+            nodes_old,
+            nodes_new: rt.node_count,
+        };
+
+        // Publish new subnet
+        self.published_routes.store(Some(rt));
+
+        Ok(PersistStatus::Completed(results))
     }
 }
 
 #[cfg(test)]
-mod test;
+pub mod test;
