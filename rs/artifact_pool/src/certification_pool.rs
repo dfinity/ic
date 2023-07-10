@@ -10,6 +10,7 @@ use ic_interfaces::{
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::ArtifactKind;
+use ic_types::consensus::IsShare;
 use ic_types::crypto::crypto_hash;
 use ic_types::{
     artifact::CertificationMessageFilter,
@@ -153,7 +154,9 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
             }
 
             ChangeAction::MoveToValidated(msg) => {
-                adverts.push(CertificationArtifact::message_to_advert(&msg));
+                if !msg.is_share() {
+                    adverts.push(CertificationArtifact::message_to_advert(&msg));
+                }
                 let height = msg.height();
                 match msg {
                     CertificationMessage::CertificationShare(share) => {
@@ -505,7 +508,9 @@ mod tests {
                     ChangeAction::MoveToValidated(cert_msg.clone()),
                 ],
             );
-            assert_eq!(result.adverts.len(), 2);
+            let expected = CertificationArtifact::message_to_advert(&cert_msg).id;
+            assert_eq!(result.adverts[0].id, expected);
+            assert_eq!(result.adverts.len(), 1);
             assert!(result.purged.is_empty());
             assert!(result.changed);
             assert_eq!(

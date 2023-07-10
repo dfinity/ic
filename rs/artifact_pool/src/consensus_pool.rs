@@ -600,7 +600,9 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
                     });
                 }
                 ChangeAction::MoveToValidated(to_move) => {
-                    adverts.push(ConsensusArtifact::message_to_advert(&to_move));
+                    if !to_move.is_share() {
+                        adverts.push(ConsensusArtifact::message_to_advert(&to_move));
+                    }
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
                         panic!("Timestmap is not found for MoveToValidated: {:?}", to_move)
@@ -1045,7 +1047,7 @@ mod tests {
     }
 
     #[test]
-    fn test_adverts() {
+    fn test_adverts_are_created_for_aggregates() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
@@ -1117,6 +1119,70 @@ mod tests {
 
             let result = pool.apply_changes(time_source.as_ref(), vec![]);
             assert!(!result.changed);
+        })
+    }
+
+    #[test]
+    fn test_shares_are_not_relayed() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+            );
+
+            let random_beacon = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ));
+
+            let random_beacon_share_1 =
+                RandomBeaconShare::fake(&random_beacon, node_test_id(1)).into_message();
+
+            let random_beacon_share_2 =
+                RandomBeaconShare::fake(&random_beacon, node_test_id(2)).into_message();
+
+            let random_beacon_share_3 =
+                RandomBeaconShare::fake(&random_beacon, node_test_id(3)).into_message();
+
+            pool.insert(UnvalidatedArtifact {
+                message: random_beacon_share_1,
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+
+            pool.insert(UnvalidatedArtifact {
+                message: random_beacon_share_2.clone(),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+
+            let changeset = vec![
+                ChangeAction::MoveToValidated(random_beacon_share_2.clone()),
+                ChangeAction::AddToValidated(random_beacon_share_3.clone()),
+            ];
+            let result = pool.apply_changes(time_source.as_ref(), changeset);
+            // share 3 should be added to the validated pool and create an advert
+            // share 2 should be moved to the validated pool and not create an advert
+            // share 1 should remain in the unvalidated pool
+            assert!(result.purged.is_empty());
+            assert_eq!(result.adverts.len(), 1);
+            assert!(result.changed);
+            assert_eq!(result.adverts[0].id, random_beacon_share_3.get_id());
+
+            let result = pool.apply_changes(
+                time_source.as_ref(),
+                vec![ChangeAction::PurgeValidatedBelow(Height::from(3))],
+            );
+            assert!(result.adverts.is_empty());
+            // purging genesis CUP & beacon + 2 validated beacon shares
+            assert_eq!(result.purged.len(), 4);
+            assert!(result.purged.contains(&random_beacon_share_2.get_id()));
+            assert!(result.purged.contains(&random_beacon_share_3.get_id()));
+            assert!(result.changed);
         })
     }
 

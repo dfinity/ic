@@ -2,7 +2,8 @@
 
 use crate::{
     consensus::{
-        Committee, CountBytes, HasCommittee, HasHeight, ThresholdSignature, ThresholdSignatureShare,
+        Committee, CountBytes, HasCommittee, HasHeight, IsShare, ThresholdSignature,
+        ThresholdSignatureShare,
     },
     crypto::{CryptoHash, CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
     CryptoHashOfPartialState, Height,
@@ -27,6 +28,15 @@ impl HasHeight for CertificationMessage {
         match self {
             CertificationMessage::Certification(c) => c.height,
             CertificationMessage::CertificationShare(c) => c.height,
+        }
+    }
+}
+
+impl IsShare for CertificationMessage {
+    fn is_share(&self) -> bool {
+        match self {
+            CertificationMessage::Certification(_) => false,
+            CertificationMessage::CertificationShare(_) => true,
         }
     }
 }
