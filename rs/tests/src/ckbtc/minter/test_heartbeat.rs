@@ -171,7 +171,7 @@ pub fn test_heartbeat(env: TestEnv) {
         info!(&logger, "Waiting for tx to appear in mempool");
         let mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
 
-        let btc_txid = Txid::from_hash(Hash::from_slice(&txid).unwrap());
+        let btc_txid = Txid::from_hash(Hash::from_slice(txid.as_ref()).unwrap());
         // Check if we have the txid in the bitcoind mempool
         assert!(
             mempool_txids.contains(&btc_txid),

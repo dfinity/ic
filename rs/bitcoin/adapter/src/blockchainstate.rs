@@ -3,6 +3,7 @@ use bitcoin::{blockdata::constants::genesis_block, Block, BlockHash, BlockHeader
 use ic_btc_validation::{validate_header, HeaderStore, ValidateHeaderError};
 use ic_metrics::MetricsRegistry;
 use parking_lot::Mutex;
+use std::time::SystemTime;
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
@@ -242,7 +243,11 @@ impl BlockchainState {
             return Ok(AddHeaderResult::HeaderAlreadyExists(cached_header.clone()));
         }
 
-        if let Err(err) = validate_header(&self.network, self, &header) {
+        let current_time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        if let Err(err) = validate_header(&self.network, self, &header, current_time) {
             return Err(AddHeaderError::InvalidHeader(block_hash, err));
         }
 
@@ -406,12 +411,21 @@ impl BlockchainState {
 }
 
 impl HeaderStore for BlockchainState {
-    fn get_header(&self, hash: &BlockHash) -> Option<(BlockHeader, BlockHeight)> {
-        self.get_cached_header(hash)
-            .map(|cached| (cached.header, cached.height))
+    fn get_with_block_hash(&self, hash: &BlockHash) -> Option<BlockHeader> {
+        self.get_cached_header(hash).map(|cached| cached.header)
     }
 
-    fn get_height(&self) -> BlockHeight {
+    fn get_with_height(&self, height: u32) -> Option<BlockHeader> {
+        let tip = self.get_active_chain_tip();
+        let blocks_to_traverse = tip.height.checked_sub(height)?;
+        let mut header = tip.header;
+        for _ in 0..blocks_to_traverse {
+            header = self.get_block(&header.prev_blockhash)?.header;
+        }
+        Some(header)
+    }
+
+    fn height(&self) -> u32 {
         self.get_active_chain_tip().height
     }
 
