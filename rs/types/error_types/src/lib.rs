@@ -14,7 +14,7 @@ pub enum TryFromError {
 /// handling, not for end-users. They are also used for classification
 /// of user-facing errors.
 ///
-/// See https://sdk.dfinity.org/docs/interface-spec/index.html#reject-codes
+/// See <https://sdk.dfinity.org/docs/interface-spec/index.html#reject-codes>
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RejectCode {
     SysFatal = 1,

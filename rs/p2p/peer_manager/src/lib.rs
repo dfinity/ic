@@ -3,9 +3,13 @@
 //! The peer manager component periodically checks the registry
 //! and determines the subnet membership according to the latest
 //! registry version and the version currently used by consensus.
-//! The subnet membership is made available as shared state in a tokio watcher.
-//! Components that want to use the shared state should clone the returned receiver.
-//! It is expected that there exists a 1-n relationship for the peer manager.
+//!
+//! The subnet memebership is made available as shared state via a tokio watcher.
+//!
+//! The compoment runs in a background task and should be started only once.
+//! If mutiple components require the shared state (i.e. the subnet membership)
+//! the returned receiver should be cloned.
+//!
 use std::{
     collections::{BTreeSet, HashMap},
     net::{IpAddr, SocketAddr},
@@ -30,6 +34,8 @@ const TOPOLOGY_UPDATE_INTERVAL: Duration = Duration::from_secs(3);
 
 mod metrics;
 
+/// Starts a background task that publishes the most
+/// recent `SubnetTopology` for the given `subnet_id` into a watch channel.
 pub fn start_peer_manager(
     log: ReplicaLogger,
     metrics_registry: &MetricsRegistry,
@@ -174,8 +180,7 @@ impl PeerManager {
     }
 }
 
-/// Hold P2P endpoint addresses of all peers in the subnet of this node.
-/// Note: The subnet nodes stored includes this node.
+/// Holds socket addresses of all peers in a subnet.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct SubnetTopology {
     subnet_nodes: HashMap<NodeId, SocketAddr>,

@@ -27,7 +27,6 @@ pub trait IngressSetQuery {
     fn get_expiry_lower_bound(&self) -> Time;
 }
 
-/// HashSet<MessageId> implements IngressSetQuery.
 impl IngressSetQuery for HashSet<IngressMessageId> {
     fn contains(&self, msg_id: &IngressMessageId) -> bool {
         HashSet::contains(self, msg_id)

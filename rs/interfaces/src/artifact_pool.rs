@@ -11,18 +11,18 @@ use serde::{Deserialize, Serialize};
 pub trait ChangeSetProducer<Pool>: Send {
     type ChangeSet;
 
-    /// Inspect the input [Pool] to build a [ChangeSet] of actions to
+    /// Inspect the input `Pool` to build a `ChangeSet` of actions to
     /// be executed.
     ///
-    /// The caller is then expected to apply the returned [ChangeSet] to the
-    /// input of this call, namely a mutable version of the [Pool]. The reason
+    /// The caller is then expected to apply the returned `ChangeSet` to the
+    /// input of this call, namely a mutable version of the `Pool`. The reason
     /// that P2P clients (e.g. consensus) do not directly mutate the objects are:
     ///
     /// 1. The actual mutation may need to be coupled with other things,
     /// performed in a single transaction, and so on. So it is better to leave
     /// it to the caller to decide.
     ///
-    /// 2. Because [Pool] is passed as an read-only reference, the
+    /// 2. Because `Pool` is passed as an read-only reference, the
     /// caller is free to run other readers concurrently should it choose to.
     ///
     /// 3. The call can take long time, hence the pool should _not_ be guarded
@@ -37,10 +37,10 @@ pub trait ChangeSetProducer<Pool>: Send {
 pub struct ChangeResult<Artifact: ArtifactKind> {
     pub purged: Vec<Artifact::Id>,
     pub adverts: Vec<Advert<Artifact>>,
-    /// The result of a single 'apply_changes' call can result in either:
-    /// - new changes applied to the state. So 'on_state_change' + 'apply_changes' should be
+    /// The result of a single `apply_changes` call can result in either:
+    /// - new changes applied to the state. So `on_state_change` + `apply_changes` should be
     ///   immediately called again.
-    /// - no change applied and state was unchanged. So calling 'on_state_change' + 'apply_changes' is
+    /// - no change applied and state was unchanged. So calling `on_state_change` + `apply_changes` is
     ///   not immediately required.
     pub changed: bool,
 }
