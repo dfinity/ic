@@ -141,7 +141,7 @@ impl NodeRegistration {
 
         UtilityCommand::notify_host(
             format!(
-                "Join request successful!\nNode id: {}\nIf using an HSM, it may now be safely removed.",
+                "Join request successful! The node has successfully joined the Internet Computer, and the node onboarding is now complete.\nNode id: {}\nVerify that the node has successfully onboarded by checking its status on the Internet Computer dashboard.",
                 self.node_id
             )
             .as_str(),
