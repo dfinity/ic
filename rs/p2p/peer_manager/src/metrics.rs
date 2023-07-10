@@ -5,7 +5,7 @@ use prometheus::{Histogram, IntCounter};
 pub struct PeerManagerMetrics {
     pub topology_updates: IntCounter,
     pub topology_update_errors: IntCounter,
-    pub topology_wachter_update_duration: Histogram,
+    pub topology_watcher_update_duration: Histogram,
     pub topology_update_duration: Histogram,
 }
 
@@ -21,7 +21,7 @@ impl PeerManagerMetrics {
                 "peer_manager_topology_update_errors_total",
                 "Number of times toplogy update failed.",
             ),
-            topology_wachter_update_duration: metrics_registry.histogram(
+            topology_watcher_update_duration: metrics_registry.histogram(
                 "peer_manager_topology_watcher_update_duration_seconds",
                 "Duration for updating the shared topology state.",
                 // 0.1 ms, 1ms, 10ms, 100ms

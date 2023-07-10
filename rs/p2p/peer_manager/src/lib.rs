@@ -3,7 +3,7 @@
 //! The peer manager component periodically checks the registry
 //! and determines the subnet membership according to the latest
 //! registry version and the version currently used by consensus.
-//! The subnet memebership is made available as shared state in a tokio watcher.
+//! The subnet membership is made available as shared state in a tokio watcher.
 //! Components that want to use the shared state should clone the returned receiver.
 //! It is expected that there exists a 1-n relationship for the peer manager.
 use std::{
@@ -75,8 +75,8 @@ impl PeerManager {
             self.metrics.topology_updates.inc();
 
             let mut topology = self.get_latest_subnet_topology();
-            let _timer = self.metrics.topology_wachter_update_duration.start_timer();
-            // Update shared state with new topology. Only notify wachters if state actually changed.
+            let _timer = self.metrics.topology_watcher_update_duration.start_timer();
+            // Notify watchers of latest shared state iff the latest topology is different to the old one.
             self.topology_sender
                 .send_if_modified(move |old_topology: &mut SubnetTopology| {
                     if old_topology == &topology {
@@ -89,7 +89,7 @@ impl PeerManager {
         }
     }
 
-    /// Get all nodes that are relevant for this subnet according to subnet memebership.
+    /// Get all nodes that are relevant for this subnet according to subnet membership.
     fn get_latest_subnet_topology(&self) -> SubnetTopology {
         let _timer = self.metrics.topology_update_duration.start_timer();
 
@@ -184,6 +184,13 @@ pub struct SubnetTopology {
 }
 
 impl SubnetTopology {
+    pub fn new<T: IntoIterator<Item = (NodeId, SocketAddr)>>(subnet_nodes: T) -> Self {
+        Self {
+            subnet_nodes: HashMap::from_iter(subnet_nodes),
+            ..Default::default()
+        }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&NodeId, &SocketAddr)> {
         self.subnet_nodes.iter()
     }
