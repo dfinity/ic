@@ -30,7 +30,7 @@ impl Default for Options {
         Self {
             // Since we are allowed to block only for few milliseconds the consensus thread,
             // set reasonable defaults.
-            timeout: Duration::from_millis(10),
+            timeout: Duration::from_millis(50),
         }
     }
 }

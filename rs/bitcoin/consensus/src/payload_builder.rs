@@ -19,7 +19,7 @@ use ic_types::{
     messages::CallbackId,
     CountBytes, Height, NumBytes, SubnetId,
 };
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, sync::Arc};
 use thiserror::Error;
 
 const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
@@ -148,12 +148,7 @@ impl BitcoinPayloadBuilder {
 
             // Send request to the adapter.
             let timer = Timer::start();
-            let result = adapter_client.send_blocking(
-                request.clone(),
-                Options {
-                    timeout: Duration::from_millis(50),
-                },
-            );
+            let result = adapter_client.send_blocking(request.clone(), Options::default());
 
             match result {
                 Ok(response_wrapper) => {
