@@ -6,7 +6,6 @@ use config_writer_common::vector_config_structure::{
 use serde::Serialize;
 use std::string::ParseError;
 
-use regex::Regex;
 use service_discovery::{job_types::JobType, TargetGroup};
 
 pub struct VectorConfigBuilderImpl {
@@ -59,23 +58,7 @@ impl TryFrom<TargetGroup> for VectorSystemdGatewayJournaldSource {
     type Error = ParseError;
 
     fn try_from(target_group: TargetGroup) -> Result<Self, Self::Error> {
-        let regex = Regex::new(r"\[.*\]").unwrap();
-
-        let endpoint = target_group
-            .targets
-            .into_iter()
-            .map(|g| match regex.find(&g.to_string()) {
-                Some(mat) => {
-                    let binding = mat.as_str().to_string();
-                    let mut chars = binding.chars();
-                    chars.next().unwrap();
-                    chars.next_back().unwrap();
-                    chars.as_str().to_string()
-                }
-                None => panic!("Couldn't parse url."),
-            })
-            .next()
-            .unwrap();
+        let endpoint = target_group.get_ip_as_str().unwrap();
 
         Ok(Self {
             _type: "systemd_journal_gatewayd".into(),
@@ -104,17 +87,22 @@ const IC_NAME: &str = "ic";
 const IC_NODE: &str = "ic_node";
 const IC_SUBNET: &str = "ic_subnet";
 const DC: &str = "dc";
+const ADDRESS: &str = "address";
+const NODE_PROVIDER_ID: &str = "node_provider_id";
 
 impl VectorSystemdGatewayJournaldTransform {
     fn from(target_group: TargetGroup, job: JobType) -> Self {
         let mut labels: HashMap<String, String> = HashMap::new();
-        labels.insert(IC_NAME.into(), target_group.ic_name);
+        labels.insert(IC_NAME.into(), target_group.ic_name.to_string());
         labels.insert(IC_NODE.into(), target_group.node_id.to_string());
+        labels.insert(ADDRESS.into(), target_group.get_ip_as_str().unwrap());
+        labels.insert(
+            NODE_PROVIDER_ID.into(),
+            target_group.node_provider_id.to_string(),
+        );
+        labels.insert(DC.into(), target_group.dc_id);
         if let Some(subnet_id) = target_group.subnet_id {
             labels.insert(IC_SUBNET.into(), subnet_id.to_string());
-        }
-        if let Some(dc) = target_group.dc_id {
-            labels.insert(DC.into(), dc);
         }
         Self {
             _type: "remap".into(),

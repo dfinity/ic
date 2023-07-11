@@ -222,8 +222,9 @@ mod tests {
                 )
                 .unwrap(),
             )),
-            dc_id: None,
-            operator_id: None,
+            dc_id: "test".to_string(),
+            operator_id: PrincipalId::new_anonymous(),
+            node_provider_id: PrincipalId::new_anonymous(),
         };
 
         let mut tg_set = BTreeSet::new();

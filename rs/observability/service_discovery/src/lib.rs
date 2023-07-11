@@ -37,6 +37,7 @@ use ic_types::{
     NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use job_types::{JobType, NodeOS};
+use regex::Regex;
 use serde::Serialize;
 use slog::{warn, Logger};
 use thiserror::Error;
@@ -76,8 +77,29 @@ pub struct TargetGroup {
     /// `socket_addr`.
     pub subnet_id: Option<SubnetId>,
 
-    pub dc_id: Option<String>,
-    pub operator_id: Option<PrincipalId>,
+    pub dc_id: String,
+    pub operator_id: PrincipalId,
+    pub node_provider_id: PrincipalId,
+}
+
+impl TargetGroup {
+    pub fn get_ip_as_str(&self) -> Option<String> {
+        let regex = Regex::new(r"\[.*\]").unwrap();
+
+        match self.targets.iter().next() {
+            Some(addr) => match regex.find(&addr.to_string()) {
+                Some(mat) => {
+                    let binding = mat.as_str().to_string();
+                    let mut chars = binding.chars();
+                    chars.next().unwrap();
+                    chars.next_back().unwrap();
+                    Some(chars.as_str().to_string())
+                }
+                None => None,
+            },
+            None => None,
+        }
+    }
 }
 
 /// Exposes service discovery data for a set of Internet Computers. Manages a
@@ -264,8 +286,10 @@ impl IcServiceDiscoveryImpl {
             subnet_id,
             node_id,
             ic_name: ic_name.into(),
-            dc_id: Some(node_operator.dc_id),
-            operator_id: Some(operator_id),
+            dc_id: node_operator.dc_id,
+            operator_id,
+            node_provider_id: PrincipalId::try_from(node_operator.node_provider_principal_id)
+                .unwrap_or_default(),
         });
 
         Ok(())

@@ -133,8 +133,9 @@ mod prometheus_serialize {
             ic_name: "mercury".into(),
             targets,
             subnet_id,
-            dc_id: None,
-            operator_id: None,
+            dc_id: "test".to_string(),
+            operator_id: PrincipalId::new_anonymous(),
+            node_provider_id: PrincipalId::new_anonymous(),
         }
     }
 
