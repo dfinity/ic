@@ -11966,3 +11966,51 @@ fn swap_start_and_due_timestamps_if_start_time_is_when_swap_approved() {
     );
     assert_eq!(start + duration.seconds.unwrap(), due)
 }
+
+#[test]
+fn test_maybe_reset_aging_timestamps() {
+    fn neuron_with_aging_timestamp(id: u64, aging_since_timestamp_seconds: u64) -> Neuron {
+        Neuron {
+            id: Some(NeuronId { id }),
+            controller: Some(principal(id)),
+            aging_since_timestamp_seconds,
+            ..Default::default()
+        }
+    }
+    let proto = GovernanceProto {
+        wait_for_quiet_threshold_seconds: 100,
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: hashmap! {
+            1 => neuron_with_aging_timestamp(1, 1_572_992_229), // Tue, 05 Nov 2019 22:17:09 GMT
+            2 => neuron_with_aging_timestamp(2, 1_572_992_230), // Tue, 05 Nov 2019 22:17:10 GMT
+            3 => neuron_with_aging_timestamp(3, 1_572_992_231), // Tue, 05 Nov 2019 22:17:11 GMT
+            4 => neuron_with_aging_timestamp(4, 1_620_328_630), // Thu, 06 May 2021 19:17:10 GMT (Genesis)
+            5 => neuron_with_aging_timestamp(5, 1_672_531_200), // Sun, 01 Jan 2023 00:00:00 GMT
+        },
+        ..Default::default()
+    };
+    let driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    gov.maybe_reset_aging_timestamps();
+
+    assert_eq!(
+        gov.proto
+            .neurons
+            .iter()
+            .map(|(id, neuron)| (*id, neuron.aging_since_timestamp_seconds))
+            .collect::<HashMap<u64, u64>>(),
+        hashmap! {
+            1 => 1_620_328_630, // Thu, 06 May 2021 19:17:10 GMT (Genesis)
+            2 => 1_572_992_230, // Tue, 05 Nov 2019 22:17:10 GMT
+            3 => 1_572_992_231, // Tue, 05 Nov 2019 22:17:11 GMT
+            4 => 1_620_328_630, // Thu, 06 May 2021 19:17:10 GMT (Genesis)
+            5 => 1_672_531_200, // Sun, 01 Jan 2023 00:00:00 GMT
+        }
+    );
+}
