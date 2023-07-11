@@ -6,6 +6,7 @@ use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::EcdsaKeyId;
+use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
     messaging::{MessageRouting, MessageRoutingError},
@@ -30,6 +31,7 @@ use ic_replicated_state::{NetworkTopology, ReplicatedState, SubnetTopology};
 use ic_types::{
     batch::Batch,
     malicious_flags::MaliciousFlags,
+    registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
     Height, NumBytes, RegistryVersion, SubnetId,
 };
@@ -44,7 +46,6 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    fmt::Display,
     time::Instant,
 };
 
@@ -383,24 +384,47 @@ struct BatchProcessorImpl {
     malicious_flags: MaliciousFlags,
 }
 
-fn read_failed_error<W: Display, E: Display>(what: W, err: E) -> String {
-    format!("Failed to read '{}', err: {}", what, err)
+/// Errors that can occur when reading from the registry.
+#[derive(Debug)]
+enum ReadRegistryError {
+    /// Transient errors are errors that may be resolved in between attempts to read the registry, such
+    /// as the registry at the requested version is not available (yet).
+    Transient(String),
+    /// Persistent errors are errors where repeated attemps do not make a difference such as reading a
+    /// corrupted or missing record.
+    Persistent(String),
 }
 
-fn read_failed_for_subnet_error<W: Display, E: Display>(
-    what: W,
-    subnet_id: SubnetId,
-    err: E,
-) -> String {
-    read_failed_error(format!("{} of subnet {}", what, subnet_id), err)
+/// Generates a `RegistryError` from a `RegistryClientError` including `what` failed to extracted
+/// from the registry and possibly for which subnet id. This error is persistent iff the
+/// `RegistryClientError` from which it is created is persistent.
+fn registry_error(
+    what: &str,
+    subnet_id: Option<SubnetId>,
+    err: RegistryClientError,
+) -> ReadRegistryError {
+    let errmsg = match subnet_id {
+        Some(subnet_id) => format!(
+            "'{} [for subnet {}]', RegistryClientError: {}",
+            what, subnet_id, err
+        ),
+        None => format!("'{}', RegistryClientError: {}", what, err),
+    };
+    if err.is_reproducible() {
+        ReadRegistryError::Persistent(errmsg)
+    } else {
+        ReadRegistryError::Transient(errmsg)
+    }
 }
 
-fn not_found_error<W: Display>(what: W) -> String {
-    format!("'{}' not found", what)
-}
-
-fn not_found_for_subnet_error<W: Display>(what: W, subnet_id: SubnetId) -> String {
-    not_found_error(format!("{} of subnet {}", what, subnet_id))
+/// Generates a `RegistryError` to handle cases where a record in the registry was unexpectedly
+/// absent. This error is always considered persistent.
+fn not_found_error(what: &str, subnet_id: Option<SubnetId>) -> ReadRegistryError {
+    let errmsg = match subnet_id {
+        Some(subnet_id) => format!("'{} for subnet {}' not found", what, subnet_id),
+        None => format!("'{}' not found", what),
+    };
+    ReadRegistryError::Persistent(errmsg)
 }
 
 impl BatchProcessorImpl {
@@ -483,7 +507,10 @@ impl BatchProcessorImpl {
             match self.try_to_read_registry(registry_version, own_subnet_id) {
                 Ok(result) => return result,
                 Err(err) => {
-                    self.metrics.critical_error_failed_to_read_registry.inc();
+                    // Increment the critical error counter in case of a persistent error.
+                    if let ReadRegistryError::Persistent(_) = err {
+                        self.metrics.critical_error_failed_to_read_registry.inc();
+                    }
                     warn!(
                         self.log,
                         "Unable to read registry @ version {}: {:?}. Trying again...",
@@ -506,20 +533,21 @@ impl BatchProcessorImpl {
         &self,
         registry_version: RegistryVersion,
         own_subnet_id: SubnetId,
-    ) -> Result<(NetworkTopology, SubnetFeatures, RegistryExecutionSettings), String> {
+    ) -> Result<(NetworkTopology, SubnetFeatures, RegistryExecutionSettings), ReadRegistryError>
+    {
         let network_topology = self.try_to_populate_network_topology(registry_version)?;
 
         let provisional_whitelist = self
             .registry
             .get_provisional_whitelist(registry_version)
-            .map_err(|err| read_failed_error("provisional whitelist", err))?
+            .map_err(|err| registry_error("provisional_whitelist", None, err))?
             .unwrap_or_else(|| ProvisionalWhitelist::Set(BTreeSet::new()));
 
         let subnet_record = self
             .registry
             .get_subnet_record(own_subnet_id, registry_version)
-            .map_err(|err| read_failed_for_subnet_error("subnet record", own_subnet_id, err))?
-            .ok_or_else(|| not_found_for_subnet_error("subnet record", own_subnet_id))?;
+            .map_err(|err| registry_error("subnet record", Some(own_subnet_id), err))?
+            .ok_or_else(|| not_found_error("subnet record", Some(own_subnet_id)))?;
         let subnet_features = subnet_record.features.unwrap_or_default().into();
         let max_number_of_canisters = subnet_record.max_number_of_canisters;
         let max_ecdsa_queue_size = subnet_record
@@ -559,13 +587,15 @@ impl BatchProcessorImpl {
     fn try_to_populate_network_topology(
         &self,
         registry_version: RegistryVersion,
-    ) -> Result<NetworkTopology, String> {
+    ) -> Result<NetworkTopology, ReadRegistryError> {
+        use ReadRegistryError::Persistent;
+
         // Return the list of subnets present in the registry. If no subnet list is
         // defined, as could be the case in tests, an empty `Vec` is returned.
         let subnet_ids_record = self
             .registry
             .get_subnet_ids(registry_version)
-            .map_err(|err| read_failed_error("subnet ids", err))?;
+            .map_err(|err| registry_error("subnet IDs", None, err))?;
         let subnet_ids = subnet_ids_record.unwrap_or_default();
 
         // Populate subnet topologies.
@@ -575,37 +605,44 @@ impl BatchProcessorImpl {
             let public_key = self
                 .registry
                 .get_initial_dkg_transcripts(*subnet_id, registry_version)
-                .map_err(|err| {
-                    read_failed_for_subnet_error("initial DKG transcripts", *subnet_id, err)
-                })?
+                .map_err(|err| registry_error("public key in transcript", Some(*subnet_id), err))?
                 .value
                 .map(|transcripts| {
                     ic_crypto_utils_threshold_sig_der::public_key_to_der(
                         &transcripts.high_threshold.public_key().into_bytes(),
                     )
+                    .map_err(|err| {
+                        Persistent(format!(
+                            "'public key to DER for subnet {}' failed, err: {}",
+                            *subnet_id, err
+                        ))
+                    })
                 })
                 .transpose()?
-                .ok_or_else(|| {
-                    not_found_for_subnet_error("public key in transcript", *subnet_id)
-                })?;
+                .ok_or_else(|| not_found_error("public key in transcript", Some(*subnet_id)))?;
 
             // Read the subnet record.
             let subnet_record = self
                 .registry
                 .get_subnet_record(*subnet_id, registry_version)
-                .map_err(|err| read_failed_for_subnet_error("subnet record", *subnet_id, err))?
-                .ok_or_else(|| not_found_for_subnet_error("subnet record", *subnet_id))?;
+                .map_err(|err| registry_error("subnet record", Some(*subnet_id), err))?
+                .ok_or_else(|| not_found_error("subnet record", Some(*subnet_id)))?;
 
             let nodes = get_node_ids_from_subnet_record(&subnet_record)
                 .map_err(|err| {
-                    read_failed_for_subnet_error("node IDs from the subnet record", *subnet_id, err)
+                    Persistent(format!(
+                        "'nodes from subnet record for subnet {}', err: {}",
+                        *subnet_id, err
+                    ))
                 })?
                 .into_iter()
                 .collect::<BTreeSet<_>>();
-            let subnet_type: SubnetType = subnet_record
-                .subnet_type
-                .try_into()
-                .map_err(|err| read_failed_for_subnet_error("subnet type", *subnet_id, err))?;
+            let subnet_type: SubnetType = subnet_record.subnet_type.try_into().map_err(|err| {
+                Persistent(format!(
+                    "'subnet type from subnet record for subnet {}', err: {}",
+                    *subnet_id, err
+                ))
+            })?;
             let subnet_features: SubnetFeatures = subnet_record.features.unwrap_or_default().into();
             let ecdsa_keys_held = subnet_record
                 .ecdsa_config
@@ -615,11 +652,10 @@ impl BatchProcessorImpl {
                         .into_iter()
                         .map(|k| {
                             EcdsaKeyId::try_from(k).map_err(|err| {
-                                read_failed_for_subnet_error(
-                                    "ECDSA key from the subnet record",
-                                    *subnet_id,
-                                    err,
-                                )
+                                Persistent(format!(
+                                    "'ECDSA key ID from subnet record for subnet {}', err: {}",
+                                    *subnet_id, err,
+                                ))
                             })
                         })
                         .collect::<Result<BTreeSet<_>, _>>()
@@ -639,26 +675,26 @@ impl BatchProcessorImpl {
             );
         }
 
-        let routing_table_record = self
+        let routing_table = self
             .registry
             .get_routing_table(registry_version)
-            .map_err(|err| read_failed_error("routing table", err))?;
-        let routing_table = routing_table_record.unwrap_or_default();
+            .map_err(|err| registry_error("routing table", None, err))?
+            .unwrap_or_default();
         let canister_migrations = self
             .registry
             .get_canister_migrations(registry_version)
-            .map_err(|err| read_failed_error("canister migrations", err))?
+            .map_err(|err| registry_error("canister migrations", None, err))?
             .unwrap_or_default();
 
         let nns_subnet_id = self
             .registry
             .get_root_subnet_id(registry_version)
-            .map_err(|err| read_failed_error("NNS subnet id", err))?
-            .ok_or_else(|| not_found_error("NNS subnet id"))?;
+            .map_err(|err| registry_error("NNS subnet ID", None, err))?
+            .ok_or_else(|| not_found_error("NNS subnet ID", None))?;
         let ecdsa_signing_subnets = self
             .registry
             .get_ecdsa_signing_subnets(registry_version)
-            .map_err(|err| read_failed_error("ECDSA signing subnets", err))?
+            .map_err(|err| registry_error("ECDSA signing subnets", None, err))?
             .unwrap_or_default();
 
         Ok(NetworkTopology {
