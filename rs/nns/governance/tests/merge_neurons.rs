@@ -29,11 +29,16 @@ use ic_nns_governance::{
             claim_or_refresh::By, ClaimOrRefresh, Command, Follow, Merge, NeuronIdOrSubaccount,
         },
         manage_neuron_response::{Command as CommandResponse, MergeResponse},
-        neuron::Followees,
+        neuron::{
+            DissolveState,
+            DissolveState::{DissolveDelaySeconds, WhenDissolvedTimestampSeconds},
+            Followees,
+        },
         proposal::{self},
         Empty, GovernanceError, ManageNeuron, ManageNeuronResponse, NetworkEconomics, Topic,
     },
 };
+use ic_sns_swap::pb::v1::governance_error::ErrorType::RequiresNotDissolving;
 use proptest::prelude::{proptest, TestCaseError};
 
 // Using a `pub mod` works around spurious dead code warnings; see
@@ -56,7 +61,6 @@ fn icp_to_e8s(amount: u64) -> u64 {
 /// * the list of all neurons is unchanged
 /// * the list of accounts is unchanged
 #[test]
-#[ignore] // TODO(NNS1-2386): remove
 fn test_merge_neurons_fails() {
     let mut nns = NNSBuilder::new()
         .set_economics(NetworkEconomics::with_default_values())
@@ -478,6 +482,83 @@ fn test_merge_neurons_fails() {
 }
 
 #[test]
+fn test_merge_neurons_only_works_for_non_dissolving_neurons_with_dissolve_delay() {
+    fn try_merging_dissolve_states(
+        source_dissolve_state: Option<DissolveState>,
+        target_dissolve_state: Option<DissolveState>,
+    ) -> Result<(), GovernanceError> {
+        let start_time = DEFAULT_TEST_START_TIMESTAMP_SECONDS;
+        let mut nns = NNSBuilder::new()
+            .set_start_time(start_time)
+            .set_economics(NetworkEconomics::with_default_values())
+            .with_supply(0) // causes minting account to be created
+            .add_account_for(principal(1), 0)
+            .add_neuron(
+                NeuronBuilder::new(1, icp_to_e8s(1), principal(1))
+                    .set_dissolve_state(source_dissolve_state),
+            )
+            .add_neuron(
+                NeuronBuilder::new(2, icp_to_e8s(1), principal(1))
+                    .set_dissolve_state(target_dissolve_state),
+            )
+            .create();
+
+        nns.merge_neurons(&NeuronId { id: 2 }, &principal(1), &NeuronId { id: 1 })
+    }
+    let start_time = DEFAULT_TEST_START_TIMESTAMP_SECONDS;
+
+    // Successful responses as precondition
+    assert_eq!(
+        try_merging_dissolve_states(Some(DissolveDelaySeconds(1)), Some(DissolveDelaySeconds(1))),
+        Ok(())
+    );
+
+    let cases = [
+        // None DissolveState
+        (None, None),
+        (Some(DissolveDelaySeconds(1)), None),
+        (None, Some(DissolveDelaySeconds(1))),
+        // 0 DissolveDelaySeconds
+        (Some(DissolveDelaySeconds(0)), Some(DissolveDelaySeconds(0))),
+        (Some(DissolveDelaySeconds(1)), Some(DissolveDelaySeconds(0))),
+        (Some(DissolveDelaySeconds(0)), Some(DissolveDelaySeconds(1))),
+        // Dissolving
+        (
+            Some(WhenDissolvedTimestampSeconds(start_time + 100)),
+            Some(WhenDissolvedTimestampSeconds(start_time + 100)),
+        ),
+        (
+            Some(DissolveDelaySeconds(1)),
+            Some(WhenDissolvedTimestampSeconds(start_time + 100)),
+        ),
+        (
+            Some(WhenDissolvedTimestampSeconds(start_time + 100)),
+            Some(DissolveDelaySeconds(1)),
+        ),
+        // Dissolved
+        (
+            Some(WhenDissolvedTimestampSeconds(start_time - 100)),
+            Some(WhenDissolvedTimestampSeconds(start_time - 100)),
+        ),
+        (
+            Some(DissolveDelaySeconds(1)),
+            Some(WhenDissolvedTimestampSeconds(start_time - 100)),
+        ),
+        (
+            Some(WhenDissolvedTimestampSeconds(start_time - 100)),
+            Some(DissolveDelaySeconds(1)),
+        ),
+    ];
+
+    for (source, dest) in cases {
+        assert_matches!(try_merging_dissolve_states(source, dest),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == RequiresNotDissolving as i32 &&
+           msg == "Only two non-dissolving neurons with a dissolve delay greater than 0 can be merged.");
+    }
+}
+
+#[test]
 fn test_simulate_merge_neuron_allowed_for_hotkey_controlled_neurons() {
     let mut nns = NNSBuilder::new()
         .set_economics(NetworkEconomics::with_default_values())
@@ -870,7 +951,6 @@ fn do_test_merge_neurons(
 proptest! {
 
 #[test]
-#[ignore] // TODO(NNS1-2386): remove
 fn test_merge_neurons_small(
     n1_stake in 0u64..50_000,
     n1_maturity in 0u64..500_000_000,
@@ -898,7 +978,6 @@ fn test_merge_neurons_small(
 }
 
 #[test]
-#[ignore] // TODO(NNS1-2386): remove
 fn test_merge_neurons_normal(
     n1_stake in 0u64..500_000_000,
 
@@ -930,7 +1009,6 @@ fn test_merge_neurons_normal(
 
 #[test]
 // Test that two neurons that have the same ManageNeuron following can be merged
-#[ignore] // TODO(NNS1-2386): remove
 fn test_neuron_merge_follow() {
     fn icp(amount: u64) -> u64 {
         amount * 100_000_000
