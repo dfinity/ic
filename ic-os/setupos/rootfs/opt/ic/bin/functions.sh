@@ -16,7 +16,7 @@ function log_and_reboot_on_error() {
         echo "                       INTERNET COMPUTER - SETUP - FAILED"
         echo "--------------------------------------------------------------------------------"
         echo -e "\n\n\n\n"
-        echo "        Please contact the Internet Computer Association (ICA) support."
+        echo "        Please contact the Node Provider Matrix channel for support."
         echo -e "\n\n\n\n"
         echo "--------------------------------------------------------------------------------"
         echo "                                     ERROR"
