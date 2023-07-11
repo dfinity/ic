@@ -15809,6 +15809,7 @@ dependencies = [
  "ic-utils 0.8.0",
  "itertools",
  "prometheus 0.12.0",
+ "regex",
  "registry-canister",
  "serde",
  "serde_json",

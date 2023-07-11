@@ -70,8 +70,9 @@ mod tests {
             ic_name: "mercury".into(),
             targets,
             subnet_id: Some(SubnetId::from(PrincipalId::new_anonymous())),
-            dc_id: None,
-            operator_id: None,
+            dc_id: "test".to_string(),
+            operator_id: PrincipalId::new_anonymous(),
+            node_provider_id: PrincipalId::new_anonymous(),
         }
     }
 
@@ -89,8 +90,9 @@ mod tests {
             ic_name: "mercury".into(),
             targets: BTreeSet::new(),
             subnet_id: Some(SubnetId::from(PrincipalId::new_anonymous())),
-            dc_id: None,
-            operator_id: None,
+            dc_id: "test".to_string(),
+            operator_id: PrincipalId::new_anonymous(),
+            node_provider_id: PrincipalId::new_anonymous(),
         };
         assert!(filter.filter(accepted_tg));
 
@@ -104,8 +106,9 @@ mod tests {
             ic_name: "mercury".into(),
             targets: BTreeSet::new(),
             subnet_id: Some(SubnetId::from(PrincipalId::new_anonymous())),
-            dc_id: None,
-            operator_id: None,
+            dc_id: "test".to_string(),
+            operator_id: PrincipalId::new_anonymous(),
+            node_provider_id: PrincipalId::new_anonymous(),
         };
         assert!(!filter.filter(rejected_tg));
     }
@@ -126,8 +129,9 @@ mod tests {
             ic_name: "mercury".into(),
             targets: BTreeSet::new(),
             subnet_id: Some(SubnetId::from(PrincipalId::new_anonymous())),
-            dc_id: None,
-            operator_id: None,
+            dc_id: "test".to_string(),
+            operator_id: PrincipalId::new_anonymous(),
+            node_provider_id: PrincipalId::new_anonymous(),
         };
         assert!(filterlist.filter(accepted_tg));
 
@@ -141,8 +145,9 @@ mod tests {
             ic_name: "mercury".into(),
             targets: BTreeSet::new(),
             subnet_id: Some(SubnetId::from(PrincipalId::new_anonymous())),
-            dc_id: None,
-            operator_id: None,
+            dc_id: "test".to_string(),
+            operator_id: PrincipalId::new_anonymous(),
+            node_provider_id: PrincipalId::new_anonymous(),
         };
         assert!(!filterlist.filter(rejected_tg_1));
 

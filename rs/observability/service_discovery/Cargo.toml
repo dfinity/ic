@@ -44,6 +44,7 @@ ic-registry-client-fake = { path = "../../registry/fake" }
 registry-canister = { path = "../../registry/canister" }
 ic-registry-common-proto = {path = "../../registry/proto"}
 futures = "0.3.16"
+regex = "1.7.0"
 
 [dev-dependencies]
 ic-test-utilities = { path = "../../test_utilities" }
