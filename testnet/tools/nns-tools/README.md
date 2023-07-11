@@ -73,7 +73,8 @@ For more information, run `./nns_dev_testnet.sh` without arguments.
 #### Run the entire script
 
 ```
-DIR=/tmp/$USER-nns-test ./nns_dev_testnet.sh small02
+DIR=/tmp/$USER-nns-test
+./nns_dev_testnet.sh small02
 ```
 
 #### Run only the full step 1 of the script.
@@ -92,19 +93,20 @@ DIR=/tmp/$USER-nns-test STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_dev_testnet.sh s
 
 ### Interacting Afterward
 
-Variables needed to interact with the testnet are captured in the directory used during the script's operation.  
-
-These variables are captured to files in the `DIR` (or a temporary directory) which is printed at the end of the script.
-
-Sourcing those files into your current directory will set environment variables that make interacting with the testnet
-more convenient (so you do not need to specify NNS_URL or NEURON_ID when running many of the scripts).
-
-To see what variables are set, look at the last lines in `../nns_state_deployment.sh` and `./nns_dev_testnet.sh`, or
-investigate the output of the scripts.
+Variables needed to interact with the testnet are captured in the `DIR`
+directory (or a temporary directory) which is printed at the end of the
+script. You'll want to activate those definitions in your shell. This is done
+like so:
 
 ```
-source $DIRECTORY/output_vars_nns_dev_testnet.sh
+source $DIR/output_vars_nns_dev_testnet.sh
+```
+
+Once you have those definitions, the following commands become possible:
+
+```
 dfx canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})'
+
 $IC_ADMIN --nns-url "$NNS_URL" get-topology
 
 # You define the location of your $CONFIG_FILE, then you can deploy
@@ -133,7 +135,7 @@ code you have (even if it's not committed) by running one simple command:
 ```bash
 # Assuming you have sourced the various *.sh files mentioned above,
 # and you are currently in this directory,
-canister=governance ./upgrade-canister-to-working-tree.sh "$(nns_canister_id "${canister}")"
+./upgrade-canister-to-working-tree.sh governance
 ```
 
 If all goes well, you should see "Upgrade was successful." on the last line (or
@@ -280,6 +282,31 @@ E.g. [here](https://dfinity.slack.com/archives/C018WHN6R2L/p1679358521278899).
 A few failed attempts is not bad. Therefore, if you haven't been waiting
 that long, no need to immediately call for backup. (You might want
 to start drafting a plea for help while you are waiting.)
+
+### Crash on "2. Deploy an IC to the testnet."
+
+Look at the end of the indicated log. If you see
+
+```
+EXIT received, killing all jobs
+```
+
+it might help if you try on another testnet.
+
+### Password prompt on "2. Step 2: Create subnet from the unassigned nodes"
+
+You may be prompted for a password. E.g.
+
+```
+admin@2607:f6f0:3004:1:5000:31ff:fe30:eabd's password:
+```
+
+At this point, the script is just waiting for something to happen. If you wait
+long enough, it will probably succeed. To get past this check, do `Ctrl-C` to
+break out of the script. Then, run the command again, except, prepend
+`STEPS=[3-7] ` to it. This will forcibly move onto the next step. This is safe
+to do assuming that the thing the script was waiting for actually succeed, which
+it usually does after enough time has passed. TODO: How much time is needed?
 
 ## Getting test coverage data with `get_test_coverage.sh`
 
