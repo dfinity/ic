@@ -89,18 +89,22 @@ options may be specified:
     the ipv4 blocks (e.g. "1.2.3.4/5") to be whitelisted for inbound http(s)
     traffic. Multiple block may be specified separated by commas.
 
-  --ipv6_http_ips)
+  --ipv6_http_ips
     the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound http(s)
     traffic. Multiple block may be specified separated by commas.
 
-  --ipv6_debug_ips)
+  --ipv6_debug_ips
     the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound debug
     (e.g. ssh) traffic. Multiple block may be specified separated by commas.
 
-  --ipv6_monitoring_ips)
+  --ipv6_monitoring_ips
     the ipv6 blocks (e.g. "1:2:3:4::/64") to be whitelisted for inbound
     monitoring (e.g. prometheus) traffic. Multiple block may be specified separated by
     commas.
+
+  --ic_registry_local_store
+    path to a local registry store to be used instead of the one provided by the
+    registry replicator.
 
 EOF
 }
@@ -229,6 +233,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --require_underscore_certification)
                 REQUIRE_UNDERSCORE_CERTIFICATION="$2"
+                ;;
+            --ic_registry_local_store)
+                IC_REGISTRY_LOCAL_STORE="$2"
                 ;;
             *)
                 err "Unrecognized option: $1"
@@ -363,6 +370,12 @@ EOF
         cp "${CERT_DIR}/fullchain.pem" "${BOOTSTRAP_TMPDIR}/certs"
         cp "${CERT_DIR}/privkey.pem" "${BOOTSTRAP_TMPDIR}/certs"
         cp "${CERT_DIR}/chain.pem" "${BOOTSTRAP_TMPDIR}/certs"
+    fi
+
+    # use the registry local store
+    if [[ -n "${IC_REGISTRY_LOCAL_STORE:-}" ]]; then
+        echo "Using the registry local store at ${IC_REGISTRY_LOCAL_STORE}"
+        cp -r "${IC_REGISTRY_LOCAL_STORE}" "${BOOTSTRAP_TMPDIR}/ic_registry_local_store"
     fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .

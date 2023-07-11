@@ -82,6 +82,7 @@ function process_bootstrap() {
         buildinfo
         certs
         geolite2_dbs
+        ic_registry_local_store
     )
 
     for DIR in "${DIRS[@]}"; do
