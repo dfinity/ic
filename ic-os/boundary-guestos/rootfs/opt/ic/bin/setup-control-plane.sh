@@ -28,12 +28,17 @@ function read_variables() {
             "last_known_registry_version") MIN_REGISTRY_VERSION="${value}" ;;
         esac
     done <"${BN_CONFIG}"
+
+    if [ -e "${BOOT_DIR}/ic_registry_local_store" ]; then
+        IC_REGISTRY_LOCAL_STORE="${BOOT_DIR}/ic_registry_local_store"
+    fi
 }
 
 function generate_control_plane_config() {
     mkdir -p "${RUN_DIR}"
     cat >"${ENV_FILE}" <<EOF
 MIN_REGISTRY_VERSION=${MIN_REGISTRY_VERSION:-0}
+IC_REGISTRY_LOCAL_STORE=${IC_REGISTRY_LOCAL_STORE:-"/var/opt/registry/store"}
 EOF
 }
 
