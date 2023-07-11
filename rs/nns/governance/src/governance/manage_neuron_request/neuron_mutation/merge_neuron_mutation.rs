@@ -105,7 +105,7 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
             } as i128)
                 .neg(),
             // Reset aging
-            aging_timestamp_seconds: if source_stake_less_transaction_fee_e8s > 0 {
+            aging_since_timestamp_seconds: if source_stake_less_transaction_fee_e8s > 0 {
                 now.saturating_sub(source_neuron.aging_since_timestamp_seconds) as i128
             } else {
                 0
@@ -117,7 +117,7 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
         target_neuron.id.clone().unwrap() => NeuronDeltas {
             neuron_fees_e8s: 0,
             cached_neuron_stake_e8s: (source_stake_less_transaction_fee_e8s as i128),
-            aging_timestamp_seconds: aging_timestamp_seconds_delta,
+            aging_since_timestamp_seconds: aging_timestamp_seconds_delta,
             dissolve_delay: target_dissolve_delay_increase,
             maturity_e8s_equivalent: (source_maturity_to_transfer as i128),
             staked_maturity_e8s_equivalent: (source_staked_maturity_to_transfer as i128),
@@ -182,7 +182,8 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
                 })?;
 
             let original_delta_cached_neuron_stake_e8s = source_delta.cached_neuron_stake_e8s;
-            let original_delta_aging_since_timestamp_seconds = source_delta.aging_timestamp_seconds;
+            let original_delta_aging_since_timestamp_seconds =
+                source_delta.aging_since_timestamp_seconds;
 
             let source_delta_mut = deltas.get_mut(&self.source_neuron_id).unwrap();
 
@@ -224,10 +225,10 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
                 source_neuron_mut.aging_since_timestamp_seconds =
                     saturating_add_or_subtract_u64_i128(
                         source_neuron_mut.aging_since_timestamp_seconds,
-                        source_delta_mut.aging_timestamp_seconds,
+                        source_delta_mut.aging_since_timestamp_seconds,
                     );
                 // Record that the delta was partially applied
-                source_delta_mut.aging_timestamp_seconds = 0;
+                source_delta_mut.aging_since_timestamp_seconds = 0;
             }
 
             let _block_height: u64 = gov
@@ -258,7 +259,7 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
                     // Restore the delta state of changes to be applied
                     source_delta_mut.cached_neuron_stake_e8s =
                         original_delta_cached_neuron_stake_e8s;
-                    source_delta_mut.aging_timestamp_seconds =
+                    source_delta_mut.aging_since_timestamp_seconds =
                         original_delta_aging_since_timestamp_seconds;
                     err
                 })?;

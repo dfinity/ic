@@ -173,7 +173,7 @@ pub trait GovernanceNeuronMutation: Send + Sync {
 pub struct NeuronDeltas {
     pub neuron_fees_e8s: i128,
     pub cached_neuron_stake_e8s: i128,
-    pub aging_timestamp_seconds: i128,
+    pub aging_since_timestamp_seconds: i128,
     pub dissolve_delay: u32,
     pub maturity_e8s_equivalent: i128,
     pub staked_maturity_e8s_equivalent: i128,
@@ -212,7 +212,7 @@ impl NeuronDeltas {
 
         neuron.aging_since_timestamp_seconds = saturating_add_or_subtract_u64_i128(
             neuron.aging_since_timestamp_seconds,
-            self.aging_timestamp_seconds,
+            self.aging_since_timestamp_seconds,
         );
     }
 }
