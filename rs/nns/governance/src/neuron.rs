@@ -14,6 +14,12 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use std::collections::HashMap;
 
+// Use the same logic as GTC canister for resetting the aging timestamp.
+const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
+const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
+const GTC_NEURON_PRE_AGE_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;
+
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
 
@@ -605,5 +611,48 @@ impl Neuron {
             self.cached_neuron_stake_e8s = new_stake_e8s;
             self.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
         }
+    }
+
+    /// If the aging timestamp is earlier than GENESIS - PRE_AGE, reset it to GENISIS.
+    pub fn maybe_reset_aging_timestamp(&mut self) -> bool {
+        let genesis_seconds = ic_types::time::GENESIS.as_secs_since_unix_epoch();
+        let aging_limit = genesis_seconds.saturating_sub(GTC_NEURON_PRE_AGE_SECONDS);
+        let should_reset = self.aging_since_timestamp_seconds < aging_limit;
+        if should_reset {
+            self.aging_since_timestamp_seconds = genesis_seconds;
+        }
+        should_reset
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::pb::v1::Neuron;
+
+    #[test]
+    fn reset_aging_timestamp_should_reset() {
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: 1_572_992_229, // Tue, 05 Nov 2019 22:17:09 GMT
+            ..Default::default()
+        };
+
+        assert!(neuron.maybe_reset_aging_timestamp());
+
+        assert_eq!(
+            neuron.aging_since_timestamp_seconds,
+            1_620_328_630 // Thu, 06 May 2021 19:17:10 GMT (Genesis)
+        );
+    }
+
+    #[test]
+    fn reset_aging_timestamp_no_op() {
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: 1_572_992_230, // Tue, 05 Nov 2019 22:17:10 GMT
+            ..Default::default()
+        };
+
+        assert!(!neuron.maybe_reset_aging_timestamp());
+
+        assert_eq!(neuron.aging_since_timestamp_seconds, 1_572_992_230);
     }
 }

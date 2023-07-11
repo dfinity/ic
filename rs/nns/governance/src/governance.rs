@@ -6950,6 +6950,17 @@ impl Governance {
             Some(m) => Ok(m.clone()),
         }
     }
+
+    pub fn maybe_reset_aging_timestamps(&mut self) {
+        let mut reset_count = 0;
+        for neuron in self.proto.neurons.values_mut() {
+            reset_count += neuron.maybe_reset_aging_timestamp() as u64;
+        }
+        println!(
+            "Successfully reset aging timestamps for {} neurons",
+            reset_count
+        );
+    }
 }
 
 // Returns whether the following requirements are met:
