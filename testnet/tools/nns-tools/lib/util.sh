@@ -86,7 +86,8 @@ latest_commit_with_prebuilt_artifacts() {
     IC_REPO=$(repo_root)
     pushd "$IC_REPO" >/dev/null
 
-    RECENT_CHANGES=$(git log -n 100 --pretty=format:'%H')
+    git fetch origin master
+    RECENT_CHANGES=$(git log origin/master -n 100 --pretty=format:'%H')
 
     for HASH in $RECENT_CHANGES; do
         echo >&2 "Checking $HASH..."
