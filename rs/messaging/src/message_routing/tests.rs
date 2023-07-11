@@ -467,7 +467,7 @@ fn try_to_read_registry(
     registry: Arc<FakeRegistryClient>,
     log: ReplicaLogger,
     own_subnet_id: SubnetId,
-) -> Result<(NetworkTopology, SubnetFeatures, RegistryExecutionSettings), String> {
+) -> Result<(NetworkTopology, SubnetFeatures, RegistryExecutionSettings), ReadRegistryError> {
     let (batch_processor, _, _, _) = make_batch_processor(registry.clone(), log);
     batch_processor.try_to_read_registry(registry.get_latest_version(), own_subnet_id)
 }
@@ -699,6 +699,7 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
 fn try_read_registry_succeeds_with_minimal_registry_records() {
     with_test_replica_logger(|log| {
         use Integrity::*;
+        use ReadRegistryError::*;
 
         let own_subnet_id = subnet_test_id(13);
         let own_subnet_record = SubnetRecord {
@@ -749,7 +750,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.ends_with("not found")
+            Err(Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.ends_with("not found")
         );
         let fixture = RegistryFixture::new();
         fixture
@@ -760,7 +761,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.ends_with("not found")
+            Err(Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.ends_with("not found")
         );
         let fixture = RegistryFixture::new();
         fixture
@@ -771,7 +772,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.ends_with("not found")
+            Err(Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.ends_with("not found")
         );
         let fixture = RegistryFixture::new();
         fixture
@@ -782,7 +783,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log, own_subnet_id),
-            Err(err) if err.ends_with("not found")
+            Err(Persistent(err)) if err.ends_with("not found")
         );
     });
 }
@@ -829,7 +830,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.starts_with("'subnet record") && err.ends_with("not found")
+            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.ends_with("not found")
         );
 
         // Corrupted DKG transcripts.
@@ -842,7 +843,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.starts_with("Failed to read")
+            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.contains("RegistryClientError")
         );
 
         // Missing DKG transcript (as in `None` in the catch up package contents).
@@ -855,7 +856,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.starts_with("Failed to read")
+            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.contains("RegistryClientError")
         );
 
         // Corrupted subnet record.
@@ -868,7 +869,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.starts_with("Failed to read")
+            Err(ReadRegistryError::Persistent(err)) if err.contains(&own_subnet_id.to_string()) && err.contains("err")
         );
 
         // Corrupted NNS Subnet Id.
@@ -881,7 +882,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.starts_with("Failed to read")
+            Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
         );
 
         // ECDSA signing subnets succeeds with everything. Writing random bytes will therefore not
@@ -897,7 +898,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.starts_with("Failed to read")
+            Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
         );
 
         // Corrupted routing table.
@@ -910,7 +911,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
-            Err(err) if err.starts_with("Failed to read")
+            Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
         );
 
         // Corrupted canister migrations.
@@ -923,23 +924,23 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             .unwrap();
         assert_matches!(
             try_to_read_registry(fixture.registry, log, own_subnet_id),
-            Err(err) if err.starts_with("Failed to read")
+            Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
         );
     });
 }
 
-/// Checks the critical error counter for 'read from the registry failed' is incremented in
-/// `BatchProcessorImpl::try_registry()` due to an error underneath.
+/// Checks the critical error counter for 'read from the registry failed' is not incremented in
+/// `BatchProcessorImpl::try_registry()` due to a transient error underneath.
 ///
 /// This is done by spawning a thread that attempts to read from an empty registry using the next
 /// current registry version (after an update). This will fail and thus get stuck and retry every
-/// 100ms until it succeeds. Each cycle the critical error counter must be incremented.
+/// 100ms until it succeeds.
 ///
 /// After waiting 150ms, the registry is updated with minimal input which causes the read to
-/// succeed (after at least one failed attempt) thus the future can be joined and the critical
-/// error counter should be non-zero.
+/// succeed (after at least one failed attempt) thus the future can be joined but the critical
+/// error counter should still be zero.
 #[test]
-fn check_critical_error_counter_is_incremented_for_read_failure() {
+fn check_critical_error_counter_is_not_incremented_for_transient_error() {
     with_test_replica_logger(|log| {
         use Integrity::*;
 
@@ -970,7 +971,7 @@ fn check_critical_error_counter_is_incremented_for_read_failure() {
         // Try reading the registry at the next version; should return `Err(_)`.
         assert_matches!(
             batch_processor.try_to_read_registry(next_registry_version, own_subnet_id),
-            Err(err) if err.contains("the requested version is not available locally")
+            Err(ReadRegistryError::Transient(_))
         );
         // Write minimal records to the registry, reading the registry should now work.
         fixture.write_test_records(&minimal_input).unwrap();
@@ -993,7 +994,6 @@ fn check_critical_error_counter_is_incremented_for_read_failure() {
         fixture.write_test_records(&minimal_input).unwrap();
         handle.join().unwrap();
 
-        // The critical error counter must have been incremented at least once.
-        assert_ne!(metrics.critical_error_failed_to_read_registry.get(), 0);
+        assert_eq!(metrics.critical_error_failed_to_read_registry.get(), 0);
     });
 }
