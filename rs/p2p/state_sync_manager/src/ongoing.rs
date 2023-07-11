@@ -143,6 +143,9 @@ impl OngoingStateSync {
                     }
                 }
             }
+
+            debug_assert!(self.peers.len() * PARALLEL_CHUNK_DOWNLOADS == self.allowed_downloads);
+
             // Collect metrics
             self.metrics
                 .allowed_parallel_downloads
@@ -342,4 +345,197 @@ pub(crate) enum DownloadChunkError {
         chunk_id: ChunkId,
         err: String,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use async_trait::async_trait;
+    use axum::http::{Request, Response, StatusCode};
+    use bytes::Bytes;
+    use ic_metrics::MetricsRegistry;
+    use ic_quic_transport::TransportError;
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use ic_types::{chunkable::ArtifactChunk, crypto::CryptoHash, CryptoHashOfState, Height};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use mockall::mock;
+    use tokio::runtime::Runtime;
+
+    use super::*;
+
+    mock! {
+        pub StateSync {}
+
+        impl StateSyncClient for StateSync {
+            fn latest_state(&self) -> Option<StateSyncArtifactId>;
+
+            fn start_state_sync(
+                &self,
+                id: &StateSyncArtifactId,
+            ) -> Option<Box<dyn Chunkable + Send + Sync>>;
+
+            fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
+
+            fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk>;
+
+            fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId);
+        }
+    }
+
+    mock! {
+        pub Transport {}
+
+        #[async_trait]
+        impl Transport for Transport{
+            async fn rpc(
+                &self,
+                peer: &NodeId,
+                request: Request<Bytes>,
+            ) -> Result<Response<Bytes>, TransportError>;
+
+            fn broadcast(&self, request: Request<Bytes>);
+        }
+    }
+
+    mock! {
+        pub Chunkable {}
+
+        impl Chunkable for Chunkable{
+            fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
+            fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode>;
+        }
+    }
+
+    /// Verify that state sync gets aborted if state sync should be cancelled.
+    #[test]
+    fn test_should_cancel() {
+        with_test_replica_logger(|log| {
+            let mut s = MockStateSync::default();
+            s.expect_should_cancel()
+                .return_once(|_| false)
+                .return_const(true);
+            let mut t = MockTransport::default();
+            t.expect_rpc().returning(|_, _| {
+                Ok(Response::builder()
+                    .status(StatusCode::TOO_MANY_REQUESTS)
+                    .body(Bytes::new())
+                    .unwrap())
+            });
+            let mut c = MockChunkable::default();
+            c.expect_chunks_to_download()
+                .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
+
+            let rt = Runtime::new().unwrap();
+            let ongoing = start_ongoing_state_sync(
+                log,
+                rt.handle(),
+                OngoingStateSyncMetrics::new(&MetricsRegistry::default()),
+                Arc::new(Mutex::new(Box::new(c))),
+                StateSyncArtifactId {
+                    height: Height::from(1),
+                    hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                },
+                Arc::new(s),
+                Arc::new(t),
+            );
+
+            rt.block_on(async move {
+                ongoing.sender.send(NODE_1).await.unwrap();
+                ongoing.jh.await.unwrap();
+            });
+        });
+    }
+
+    /// Verify that peer gets removed if chunk verification fails.
+    #[test]
+    fn test_chunk_verification_failed() {
+        with_test_replica_logger(|log| {
+            let mut s = MockStateSync::default();
+            s.expect_should_cancel().return_const(false);
+            let mut t = MockTransport::default();
+            t.expect_rpc().returning(|_, _| {
+                Ok(Response::builder()
+                    .status(StatusCode::OK)
+                    .extension(NODE_2)
+                    .body(Bytes::new())
+                    .unwrap())
+            });
+            let mut c = MockChunkable::default();
+            c.expect_chunks_to_download()
+                .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
+            c.expect_add_chunk()
+                .return_const(Err(ArtifactErrorCode::ChunkVerificationFailed));
+
+            let rt = Runtime::new().unwrap();
+            let ongoing = start_ongoing_state_sync(
+                log,
+                rt.handle(),
+                OngoingStateSyncMetrics::new(&MetricsRegistry::default()),
+                Arc::new(Mutex::new(Box::new(c))),
+                StateSyncArtifactId {
+                    height: Height::from(1),
+                    hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                },
+                Arc::new(s),
+                Arc::new(t),
+            );
+
+            rt.block_on(async move {
+                ongoing.sender.send(NODE_1).await.unwrap();
+                // State sync should exit because NODE_1 got removed.
+                ongoing.jh.await.unwrap();
+            });
+        });
+    }
+
+    /// Add peer multiple times to ongoing sync. Debug assertion in event loop verifies
+    /// that download budget is correct.
+    #[test]
+    fn test_add_peer_multiple_times_to_ongoing_state_sync() {
+        with_test_replica_logger(|log| {
+            let should_cancel = Arc::new(AtomicBool::default());
+            let should_cancel_c = should_cancel.clone();
+            let mut s = MockStateSync::default();
+            s.expect_should_cancel()
+                .returning(move |_| should_cancel_c.load(Ordering::SeqCst));
+            let mut t = MockTransport::default();
+            t.expect_rpc().returning(|_, _| {
+                Ok(Response::builder()
+                    .status(StatusCode::OK)
+                    .extension(NODE_2)
+                    .body(Bytes::new())
+                    .unwrap())
+            });
+            let mut c = MockChunkable::default();
+            // Endless iterator
+            c.expect_chunks_to_download()
+                .returning(|| Box::new(std::iter::once(ChunkId::from(1))));
+            c.expect_add_chunk()
+                .return_const(Err(ArtifactErrorCode::ChunksMoreNeeded));
+
+            let rt = Runtime::new().unwrap();
+            let ongoing = start_ongoing_state_sync(
+                log,
+                rt.handle(),
+                OngoingStateSyncMetrics::new(&MetricsRegistry::default()),
+                Arc::new(Mutex::new(Box::new(c))),
+                StateSyncArtifactId {
+                    height: Height::from(1),
+                    hash: CryptoHashOfState::new(CryptoHash(vec![])),
+                },
+                Arc::new(s),
+                Arc::new(t),
+            );
+
+            rt.block_on(async move {
+                ongoing.sender.send(NODE_1).await.unwrap();
+                ongoing.sender.send(NODE_1).await.unwrap();
+                should_cancel.store(true, Ordering::SeqCst);
+                ongoing.sender.send(NODE_1).await.unwrap();
+                // State sync should exit because NODE_1 got removed.
+                ongoing.jh.await.unwrap();
+            });
+        });
+    }
 }
