@@ -198,6 +198,8 @@ const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
+const FARM_GROUP_CREATED_EVENT_NAME: &str = "farm_group_name_created_event";
+const KIBANA_URL_CREATED_EVENT_NAME: &str = "kibana_url_created_event";
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
 pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
@@ -1083,12 +1085,8 @@ impl HasGroupSetup for TestEnv {
             .unwrap();
             group_setup.write_attribute(self);
             self.ssh_keygen().expect("ssh key generation failed");
-            info!(
-                log,
-                "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
-                group_setup.farm_group_name,
-                kibana_link(&group_setup.farm_group_name)
-            );
+            emit_group_event(&log, &group_setup.farm_group_name);
+            emit_kibana_url_event(&log, &kibana_link(&group_setup.farm_group_name));
         }
     }
 }
@@ -2101,4 +2099,36 @@ pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
     boundary_node
         .await_status_is_healthy()
         .expect("BN did not come up!");
+}
+
+pub fn emit_group_event(log: &slog::Logger, group: &str) {
+    #[derive(Serialize, Deserialize)]
+    pub struct GroupName {
+        message: String,
+        group: String,
+    }
+    let event = log_events::LogEvent::new(
+        FARM_GROUP_CREATED_EVENT_NAME.to_string(),
+        GroupName {
+            message: "Created new Farm group".to_string(),
+            group: group.to_string(),
+        },
+    );
+    event.emit_log(log);
+}
+
+pub fn emit_kibana_url_event(log: &slog::Logger, kibana_url: &str) {
+    #[derive(Serialize, Deserialize)]
+    pub struct KibanaUrl {
+        message: String,
+        url: String,
+    }
+    let event = log_events::LogEvent::new(
+        KIBANA_URL_CREATED_EVENT_NAME.to_string(),
+        KibanaUrl {
+            message: "Replica logs will appear in Kibana".to_string(),
+            url: kibana_url.to_string(),
+        },
+    );
+    event.emit_log(log);
 }
