@@ -5,6 +5,7 @@ members = [
   "packages/icrc-ledger-types",
   "packages/ic-ledger-hash-of",
   "packages/ic-starter-tests",
+  "packages/ic-vetkd-utils",
   "rs/artifact_manager",
   "rs/artifact_pool",
   "rs/async_utils",

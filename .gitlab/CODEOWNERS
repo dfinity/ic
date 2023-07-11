@@ -40,6 +40,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /packages/icrc-ledger-agent/         @dfinity-lab/teams/financial-integrations
 /packages/icrc-ledger-types/         @dfinity-lab/teams/financial-integrations
 /packages/ic-ledger-hash-of/         @dfinity-lab/teams/financial-integrations
+/packages/ic-vetkd-utils/            @dfinity-lab/teams/crypto-owners
 
 # [Documentation]
 /docs/                                                     @dfinity-lab/teams/docs-owners
