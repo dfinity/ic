@@ -26,7 +26,6 @@ use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Token
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-#[ignore] // TODO(NNS1-2386): remove
 fn test_merge_neurons_and_simulate_merge_neurons() {
     local_test_on_nns_subnet(|runtime| async move {
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;

@@ -117,6 +117,16 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
             ));
         }
 
+        if source_neuron.state(now) != NeuronState::NotDissolving
+            || target_neuron.state(now) != NeuronState::NotDissolving
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::RequiresNotDissolving,
+                "Only two non-dissolving neurons with a dissolve \
+                    delay greater than 0 can be merged.",
+            ));
+        }
+
         Ok(())
     }
 
