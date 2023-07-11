@@ -616,7 +616,7 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, generate_tecdsa_protocol_inputs, run_tecdsa_protocol,
-        CanisterThresholdSigTestEnvironment,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
@@ -838,14 +838,25 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                let key_transcript =
-                    generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
+                let (dealers, receivers) = env.choose_dealers_and_receivers(
+                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                    &mut rng,
+                );
+                let key_transcript = generate_key_transcript(
+                    &env,
+                    &dealers,
+                    &receivers,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
+                );
                 let derivation_path = ExtendedDerivationPath {
                     caller: user_test_id(1).get(),
                     derivation_path: vec![],
                 };
                 let sig_inputs = generate_tecdsa_protocol_inputs(
                     &env,
+                    &dealers,
+                    &receivers,
                     &key_transcript,
                     &[0; 32],
                     Randomness::from([0; 32]),
@@ -1208,14 +1219,25 @@ mod tests {
                 let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
                 let req_id = create_request_id(&mut uid_generator, Height::from(10));
                 let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-                let key_transcript =
-                    generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
+                let (dealers, receivers) = env.choose_dealers_and_receivers(
+                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                    &mut rng,
+                );
+                let key_transcript = generate_key_transcript(
+                    &env,
+                    &dealers,
+                    &receivers,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
+                );
                 let derivation_path = ExtendedDerivationPath {
                     caller: user_test_id(1).get(),
                     derivation_path: vec![],
                 };
                 let sig_inputs = generate_tecdsa_protocol_inputs(
                     &env,
+                    &dealers,
+                    &receivers,
                     &key_transcript,
                     &[0; 32],
                     Randomness::from([0; 32]),

@@ -13,9 +13,9 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript,
-    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
-    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
+    IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
@@ -146,10 +146,12 @@ pub fn swap_two_dealings_in_transcript(
 
 pub fn generate_key_transcript<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
     algorithm_id: AlgorithmId,
     rng: &mut R,
 ) -> IDkgTranscript {
-    let masked_key_params = env.params_for_random_sharing(algorithm_id, rng);
+    let masked_key_params = env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
 
     let masked_key_transcript = env
         .nodes
@@ -167,17 +169,20 @@ pub fn generate_key_transcript<R: RngCore + CryptoRng>(
 
 pub fn generate_presig_quadruple<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
     algorithm_id: AlgorithmId,
     key_transcript: &IDkgTranscript,
     rng: &mut R,
 ) -> PreSignatureQuadruple {
-    let lambda_params = env.params_for_random_sharing(algorithm_id, rng);
+    let lambda_params = env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
     let lambda_transcript = env
         .nodes
         .run_idkg_and_create_and_verify_transcript(&lambda_params, rng);
 
     let kappa_transcript = {
-        let masked_kappa_params = env.params_for_random_sharing(algorithm_id, rng);
+        let masked_kappa_params =
+            env.params_for_random_sharing(dealers, receivers, algorithm_id, rng);
 
         let masked_kappa_transcript = env
             .nodes
@@ -250,6 +255,7 @@ pub fn build_params_from_previous<R: RngCore + CryptoRng>(
 }
 
 pub mod node {
+    use crate::{IDkgParticipants, IDkgParticipantsRandom};
     use ic_crypto_internal_csp::Csp;
     use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
@@ -261,6 +267,7 @@ pub mod node {
     use ic_protobuf::log::log_entry::v1::LogEntry;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+    use ic_types::consensus::get_faults_tolerated;
     use ic_types::crypto::canister_threshold_sig::error::{
         IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
         IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
@@ -675,7 +682,7 @@ pub mod node {
                 .filter(move |node| idkg_dealers.as_ref().get().contains(&node.id))
         }
 
-        pub fn random_subset<'a, R: RngCore + CryptoRng>(
+        pub fn random_subset_with_min_size<'a, R: RngCore + CryptoRng>(
             &'a self,
             minimum_size: usize,
             rng: &'a mut R,
@@ -882,6 +889,84 @@ pub mod node {
         }
     }
 
+    impl IDkgParticipantsRandom for Nodes {
+        fn choose_dealers_and_receivers<R: RngCore + CryptoRng>(
+            &self,
+            strategy: &IDkgParticipants,
+            rng: &mut R,
+        ) -> (IDkgDealers, IDkgReceivers) {
+            let into_dealers_and_receivers = |dealer_ids, receiver_ids| {
+                (
+                    IDkgDealers::new(dealer_ids).expect("valid dealers"),
+                    IDkgReceivers::new(receiver_ids).expect("valid receivers"),
+                )
+            };
+            match strategy {
+                IDkgParticipants::Random => self.choose_dealers_and_receivers(
+                    &IDkgParticipants::RandomWithAtLeast {
+                        min_num_dealers: 1,
+                        min_num_receivers: 1,
+                    },
+                    rng,
+                ),
+                IDkgParticipants::RandomWithAtLeast {
+                    min_num_dealers,
+                    min_num_receivers,
+                } => {
+                    assert!(
+                        *min_num_dealers > 0,
+                        "minimum number of dealers must be positive"
+                    );
+                    assert!(
+                        *min_num_receivers > 0,
+                        "minimum number of receivers must be positive"
+                    );
+                    let dealers_ids = self
+                        .random_subset_with_min_size(*min_num_dealers, rng)
+                        .map(Node::id)
+                        .collect();
+                    let receivers_ids = self
+                        .random_subset_with_min_size(*min_num_receivers, rng)
+                        .map(Node::id)
+                        .collect();
+                    into_dealers_and_receivers(dealers_ids, receivers_ids)
+                }
+                IDkgParticipants::RandomForThresholdSignature => {
+                    let is_threshold_satisfied = |num_dealers, num_receivers| {
+                        let faulty_dealers = get_faults_tolerated(num_dealers);
+                        let faulty_receivers = get_faults_tolerated(num_receivers);
+                        // see IDkgTranscriptParams::collection_threshold
+                        let max_collection_threshold = [
+                            faulty_dealers + 1,             //IDkgTranscriptOperation::Random
+                            faulty_receivers + 1, //IDkgTranscriptOperation::ReshareOfMasked or ReshareOfUnmasked
+                            2 * (faulty_receivers + 1) - 1, // IDkgTranscriptOperation::UnmaskedTimesMasked
+                        ];
+                        let threshold = faulty_dealers
+                            + max_collection_threshold.iter().max().expect("non-empty");
+                        num_dealers >= threshold
+                    };
+
+                    let min_num_receivers = self.len();
+                    let min_num_dealers = (1..=min_num_receivers)
+                        .into_iter()
+                        .find(|&num_dealers| is_threshold_satisfied(num_dealers, min_num_receivers))
+                        .unwrap_or_else(||  panic!("no valid number of dealers found for {min_num_receivers} receivers and given constraint"));
+
+                    self.choose_dealers_and_receivers(
+                        &IDkgParticipants::RandomWithAtLeast {
+                            min_num_dealers,
+                            min_num_receivers,
+                        },
+                        rng,
+                    )
+                }
+                IDkgParticipants::AllNodesAsDealersAndReceivers => {
+                    into_dealers_and_receivers(self.ids(), self.ids())
+                }
+            }
+        }
+    }
+
     impl IntoIterator for Nodes {
         type Item = Node;
         type IntoIter = IntoIter<Node>;
@@ -917,6 +1002,57 @@ pub mod node {
     }
 }
 
+/// A trait to choose the dealers and receivers for an IDKG protocol run.
+pub trait IDkgParticipantsRandom {
+    fn choose_dealers_and_receivers<R: RngCore + CryptoRng>(
+        &self,
+        strategy: &IDkgParticipants,
+        rng: &mut R,
+    ) -> (IDkgDealers, IDkgReceivers);
+}
+
+/// Assembles various strategies for choosing IDkg participants.
+pub enum IDkgParticipants {
+    /// Choose dealers and receivers randomly:
+    /// - Choose a random subset with at least one node to be dealers.
+    /// - Choose a random subset with at least one node to be receivers.
+    /// Both dealers and receivers are chosen independently of each other and it could be the case
+    /// that some nodes are neither dealers nor receivers.
+    /// This is equivalent to `RandomWithAtLeast{min_num_dealers: 1, min_num_receivers: 1}`.
+    Random,
+
+    /// Choose dealers and receivers randomly:
+    /// - Choose a random subset with at least `min_num_dealers` nodes to be dealers.
+    /// - Choose a random subset with at least `min_num_receivers` nodes to be receivers.
+    /// Both dealers and receivers are chosen independently of each other and it could be the case
+    /// that some nodes are neither dealers nor receivers.
+    ///
+    /// # Panics
+    /// - If `min_num_dealers` is zero.
+    /// - If `min_num_receivers` is zero.
+    RandomWithAtLeast {
+        min_num_dealers: usize,
+        min_num_receivers: usize,
+    },
+
+    /// Choose dealers and receivers randomly such that they can be used for threshold signature,
+    /// meaning that the *same* dealers and receivers can be involved in all required `IDkgTranscriptOperation`s.
+    ///
+    /// This implies the following restrictions on how dealers and receivers can be chosen
+    /// (see `IDkgTranscriptParams::new` for details):
+    /// - dealers must be a subset of receivers
+    /// - there must be sufficiently many dealers and receivers such that the collection threshold is satisfied.
+    ///
+    /// To simplify the implementation, receivers are chosen to be *all nodes*, while dealers are chosen
+    /// to be a random subset of a certain minimum size, such that the collection threshold for the
+    /// various needed `IDkgTranscriptOperation`s is always satisfied.
+    RandomForThresholdSignature,
+
+    /// Choose all nodes as both dealers and receivers.
+    /// No random choice is involved.
+    AllNodesAsDealersAndReceivers,
+}
+
 pub struct CanisterThresholdSigTestEnvironment {
     pub nodes: Nodes,
     pub registry_data: Arc<ProtoRegistryDataProvider>,
@@ -925,7 +1061,6 @@ pub struct CanisterThresholdSigTestEnvironment {
 }
 
 impl CanisterThresholdSigTestEnvironment {
-    //TODO CRP-1731: rename to make it clear that dealers == receivers
     /// Creates a new test environment with the given number of nodes.
     pub fn new<R: RngCore + CryptoRng>(num_of_nodes: usize, rng: &mut R) -> Self {
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
@@ -952,25 +1087,28 @@ impl CanisterThresholdSigTestEnvironment {
     /// sharing in this environment.
     pub fn params_for_random_sharing<R: RngCore + CryptoRng>(
         &self,
+        dealers: &IDkgDealers,
+        receivers: &IDkgReceivers,
         algorithm_id: AlgorithmId,
         rng: &mut R,
     ) -> IDkgTranscriptParams {
-        // TODO CRP-1731: use a random subset of nodes for dealers and receivers
-        // (dealers and receivers are not necessarily disjoint).
-        // TODO CRP-1731: note that this method is also used for benches,
-        // so the current behaviour (where dealers == receivers) should be kept in some form
-        // to be used by those benches in order to avoid big variations in performance.
-        let _dealers: BTreeSet<_> = self.nodes.random_subset(1, rng).map(Node::id).collect();
-        let _receivers: BTreeSet<_> = self.nodes.random_subset(1, rng).map(Node::id).collect();
         IDkgTranscriptParams::new(
             random_transcript_id(rng),
-            self.nodes.ids(),
-            self.nodes.ids(),
+            dealers.get().clone(),
+            receivers.get().clone(),
             self.newest_registry_version,
             algorithm_id,
             IDkgTranscriptOperation::Random,
         )
         .expect("failed to create random IDkgTranscriptParams")
+    }
+
+    pub fn choose_dealers_and_receivers<R: RngCore + CryptoRng>(
+        &self,
+        strategy: &IDkgParticipants,
+        rng: &mut R,
+    ) -> (IDkgDealers, IDkgReceivers) {
+        self.nodes.choose_dealers_and_receivers(strategy, rng)
     }
 
     fn add_node(&mut self, node: Node) {
@@ -1201,6 +1339,8 @@ pub enum CorruptSignedIDkgDealingError {
 
 pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
+    dealers: &IDkgDealers,
+    receivers: &IDkgReceivers,
     key_transcript: &IDkgTranscript,
     message_hash: &[u8],
     nonce: Randomness,
@@ -1208,7 +1348,8 @@ pub fn generate_tecdsa_protocol_inputs<R: RngCore + CryptoRng>(
     algorithm_id: AlgorithmId,
     rng: &mut R,
 ) -> ThresholdEcdsaSigInputs {
-    let quadruple = generate_presig_quadruple(env, algorithm_id, key_transcript, rng);
+    let quadruple =
+        generate_presig_quadruple(env, dealers, receivers, algorithm_id, key_transcript, rng);
 
     ThresholdEcdsaSigInputs::new(
         derivation_path,

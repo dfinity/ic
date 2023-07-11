@@ -1436,7 +1436,9 @@ mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
     use assert_matches::assert_matches;
-    use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        CanisterThresholdSigTestEnvironment, IDkgParticipants,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::time_source::{SysTimeSource, TimeSource};
@@ -2670,7 +2672,16 @@ mod tests {
     fn test_ecdsa_transcript_builder() {
         let mut rng = reproducible_rng();
         let env = CanisterThresholdSigTestEnvironment::new(3, &mut rng);
-        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
+        let params = env.params_for_random_sharing(
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
         let tid = params.transcript_id();
         let (dealings, supports) = get_dealings_and_support(&env, &params);
         let block_reader =

@@ -8,7 +8,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
 use ic_crypto_test_utils_canister_threshold_sigs::{
     generate_key_transcript, generate_tecdsa_protocol_inputs,
     random_crypto_component_not_in_receivers, sig_share_from_each_receiver,
-    CanisterThresholdSigTestEnvironment,
+    CanisterThresholdSigTestEnvironment, IDkgParticipants,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
@@ -68,7 +68,15 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(rng);
-    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let key_transcript = generate_key_transcript(
+        &env,
+        &dealers,
+        &receivers,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        rng,
+    );
     let signer = env.nodes.random_receiver(&key_transcript.receivers, rng);
 
     group.bench_function("sign_share", |bench| {
@@ -77,6 +85,8 @@ fn bench_sign_share<M: Measurement, R: RngCore + CryptoRng>(
                 let (derivation_path, hashed_message, seed) = random_sig_inputs(rng);
                 let inputs = generate_tecdsa_protocol_inputs(
                     &env,
+                    &dealers,
+                    &receivers,
                     &key_transcript,
                     &hashed_message,
                     seed,
@@ -110,7 +120,15 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(rng);
-    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let key_transcript = generate_key_transcript(
+        &env,
+        &dealers,
+        &receivers,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        rng,
+    );
 
     group.bench_function("verify_sig_share", |bench| {
         bench.iter_batched_ref(
@@ -118,6 +136,8 @@ fn bench_verify_sig_share<M: Measurement, R: RngCore + CryptoRng>(
                 let (derivation_path, hashed_message, seed) = random_sig_inputs(rng);
                 let inputs = generate_tecdsa_protocol_inputs(
                     &env,
+                    &dealers,
+                    &receivers,
                     &key_transcript,
                     &hashed_message,
                     seed,
@@ -163,7 +183,15 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(rng);
-    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let key_transcript = generate_key_transcript(
+        &env,
+        &dealers,
+        &receivers,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        rng,
+    );
     let combiner = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
 
     group.bench_function("combine_sig_shares", |bench| {
@@ -172,6 +200,8 @@ fn bench_combine_sig_shares<M: Measurement, R: RngCore + CryptoRng>(
                 let (derivation_path, hashed_message, seed) = random_sig_inputs(rng);
                 let inputs = generate_tecdsa_protocol_inputs(
                     &env,
+                    &dealers,
+                    &receivers,
                     &key_transcript,
                     &hashed_message,
                     seed,
@@ -210,7 +240,15 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
     rng: &mut R,
 ) {
     let env = test_case.new_test_environment(rng);
-    let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+    let (dealers, receivers) =
+        env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+    let key_transcript = generate_key_transcript(
+        &env,
+        &dealers,
+        &receivers,
+        AlgorithmId::ThresholdEcdsaSecp256k1,
+        rng,
+    );
     let combiner = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
     let verifier = random_crypto_component_not_in_receivers(&env, &key_transcript.receivers, rng);
 
@@ -220,6 +258,8 @@ fn bench_verify_combined_sig<M: Measurement, R: RngCore + CryptoRng>(
                 let (derivation_path, hashed_message, seed) = random_sig_inputs(rng);
                 let inputs = generate_tecdsa_protocol_inputs(
                     &env,
+                    &dealers,
+                    &receivers,
                     &key_transcript,
                     &hashed_message,
                     seed,

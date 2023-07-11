@@ -1778,7 +1778,7 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::node::Node;
     use ic_crypto_test_utils_canister_threshold_sigs::node::Nodes;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment,
+        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_interfaces_registry::RegistryValue;
@@ -2028,6 +2028,10 @@ mod tests {
         let num_of_nodes = 4;
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
         let registry_version = env.newest_registry_version;
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
         let subnet_nodes: Vec<_> = env.nodes.ids();
         let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
@@ -2109,8 +2113,13 @@ mod tests {
             quadruple_ref.clone(),
         );
         */
-        let idkg_key_transcript =
-            generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
+        let idkg_key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::from(0), &idkg_key_transcript)).unwrap();
         let key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
@@ -2890,6 +2899,10 @@ mod tests {
         let num_nodes = 4;
         let subnet_id = subnet_test_id(0);
         let env = CanisterThresholdSigTestEnvironment::new(num_nodes, &mut rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
         let mut block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
         let mut sign_with_ecdsa_contexts = BTreeMap::new();
@@ -2910,8 +2923,13 @@ mod tests {
         );
         let mut ecdsa_payload = empty_ecdsa_payload(subnet_id);
 
-        let key_transcript =
-            generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &mut rng);
+        let key_transcript = generate_key_transcript(
+            &env,
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::from(0), &key_transcript)).unwrap();
         let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
@@ -3020,13 +3038,18 @@ mod tests {
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
         let registry_version = env.newest_registry_version;
         let subnet_nodes: Vec<_> = env.nodes.ids();
         let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
         let mut block_reader = TestEcdsaBlockReader::new();
         let transcript_builder = TestEcdsaTranscriptBuilder::new();
 
-        let idkg_key_transcript = generate_key_transcript(&env, algorithm, &mut rng);
+        let idkg_key_transcript =
+            generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &idkg_key_transcript)).unwrap();
         let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
@@ -3226,6 +3249,10 @@ mod tests {
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
         let mut payload = empty_ecdsa_payload(subnet_id);
         let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
         let req_1 = create_reshare_request(1, 1);
@@ -3240,7 +3267,8 @@ mod tests {
         assert!(payload.xnet_reshare_agreements.is_empty());
 
         // Two new requests, should be accepted
-        let key_transcript = generate_key_transcript(&env, algorithm, &mut rng);
+        let key_transcript =
+            generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
         let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
@@ -3293,6 +3321,10 @@ mod tests {
         let num_of_nodes = 4;
         let subnet_id = subnet_test_id(1);
         let env = CanisterThresholdSigTestEnvironment::new(num_of_nodes, &mut rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::AllNodesAsDealersAndReceivers,
+            &mut rng,
+        );
         let mut payload = empty_ecdsa_payload(subnet_id);
         let algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
         let mut block_reader = TestEcdsaBlockReader::new();
@@ -3304,7 +3336,8 @@ mod tests {
 
         reshare_requests.insert(req_1.clone());
         reshare_requests.insert(req_2.clone());
-        let key_transcript = generate_key_transcript(&env, algorithm, &mut rng);
+        let key_transcript =
+            generate_key_transcript(&env, &dealers, &receivers, algorithm, &mut rng);
         let key_transcript_ref =
             ecdsa::UnmaskedTranscript::try_from((Height::new(100), &key_transcript)).unwrap();
         let current_key_transcript = ecdsa::UnmaskedTranscriptWithAttributes::new(
@@ -3402,7 +3435,17 @@ mod tests {
             };
             fn create_key_transcript(rng: &mut ReproducibleRng) -> IDkgTranscript {
                 let env = CanisterThresholdSigTestEnvironment::new(4, rng);
-                generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng)
+                let (dealers, receivers) = env.choose_dealers_and_receivers(
+                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                    rng,
+                );
+                generate_key_transcript(
+                    &env,
+                    &dealers,
+                    &receivers,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    rng,
+                )
             }
 
             // Create a summary block with transcripts
@@ -3673,7 +3716,17 @@ mod tests {
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             fn create_key_transcript(rng: &mut ReproducibleRng) -> IDkgTranscript {
                 let env = CanisterThresholdSigTestEnvironment::new(4, rng);
-                generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1, rng)
+                let (dealers, receivers) = env.choose_dealers_and_receivers(
+                    &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                    rng,
+                );
+                generate_key_transcript(
+                    &env,
+                    &dealers,
+                    &receivers,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    rng,
+                )
             }
 
             // Create a summary block with transcripts
