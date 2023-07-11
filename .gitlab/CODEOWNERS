@@ -40,6 +40,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /packages/icrc-ledger-agent/         @dfinity-lab/teams/financial-integrations
 /packages/icrc-ledger-types/         @dfinity-lab/teams/financial-integrations
 /packages/ic-ledger-hash-of/         @dfinity-lab/teams/financial-integrations
+/packages/pocket-ic/                 @dfinity-lab/teams/ic-testing-verification
 /packages/ic-vetkd-utils/            @dfinity-lab/teams/crypto-owners
 
 # [Documentation]
@@ -166,6 +167,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/observability/                      @dfinity-lab/teams/release-team
 /rs/orchestrator/                       @dfinity-lab/teams/consensus-owners
 /rs/p2p/                                @dfinity-lab/teams/networking-team
+/rs/pocket_ic_backend                   @dfinity-lab/teams/ic-testing-verification
 /rs/prep/                               @dfinity-lab/teams/ic-testing-verification
 /rs/protobuf/                           @dfinity-lab/teams/interface-owners
 /rs/protobuf/def/bitcoin/               @dfinity-lab/teams/execution-team

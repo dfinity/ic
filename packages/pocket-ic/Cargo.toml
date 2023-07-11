@@ -1,0 +1,11 @@
+[package]
+name = "pocket-ic" 
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+candid = "^0.9"
+clap = "^4.0"
+axum = "^0.6"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.11", features = ["blocking"] }
