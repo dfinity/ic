@@ -12,6 +12,7 @@ import (
 var RED = "\033[1;31m"
 var GREEN = "\033[1;32m"
 var CYAN = "\033[0;36m"
+var PURPLE = "\033[1;35m"
 var NC = "\033[0m"
 
 // Max number of results displayed in the fuzzy search.
