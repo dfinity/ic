@@ -42,7 +42,7 @@ impl GovernanceNeuronMutation for BurnFeesMutation {
             self.neuron_id.clone() => NeuronDeltas {
             neuron_fees_e8s: (neuron_fees as i128).neg(),
             cached_neuron_stake_e8s: (neuron_fees as i128).neg(),
-            aging_timestamp_seconds: 0,
+            aging_since_timestamp_seconds: 0,
             dissolve_delay: 0,
             maturity_e8s_equivalent: 0,
             staked_maturity_e8s_equivalent: 0,
