@@ -217,7 +217,7 @@ pub(crate) mod test_utils {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        CanisterThresholdSigTestEnvironment, IntoBuilder,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
     };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_ic00_types::EcdsaKeyId;
@@ -899,7 +899,14 @@ pub(crate) mod test_utils {
         env: &CanisterThresholdSigTestEnvironment,
         rng: &mut R,
     ) -> (NodeId, IDkgTranscriptParams, IDkgTranscript) {
-        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+        let params = env.params_for_random_sharing(
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            rng,
+        );
         let dealings = env.nodes.create_and_verify_signed_dealings(&params);
         let dealings = env
             .nodes
@@ -979,7 +986,14 @@ pub(crate) mod test_utils {
         rng: &mut R,
     ) -> SignedIDkgDealing {
         let env = CanisterThresholdSigTestEnvironment::new(2, rng);
-        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1, rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
+        let params = env.params_for_random_sharing(
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            rng,
+        );
         let dealer = env.nodes.dealers(&params).into_iter().next().unwrap();
         let dealing = dealer.create_dealing_or_panic(&params);
         let mut content = create_dealing_content(transcript_id);

@@ -725,7 +725,7 @@ mod tests {
 
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment,
+        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
     };
     use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
     use ic_ic00_types::EcdsaCurve;
@@ -839,8 +839,14 @@ mod tests {
         }
 
         fn generate_key_transcript(&mut self) -> IDkgTranscript {
+            let (dealers, receivers) = self.env.choose_dealers_and_receivers(
+                &IDkgParticipants::AllNodesAsDealersAndReceivers,
+                &mut self.rng,
+            );
             generate_key_transcript(
                 &self.env,
+                &dealers,
+                &receivers,
                 AlgorithmId::ThresholdEcdsaSecp256k1,
                 &mut self.rng,
             )
