@@ -500,8 +500,6 @@ pub struct ThresholdEcdsaSigInputsRef {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CompletedSignature {
-    #[prost(message, optional, tag = "1")]
-    pub request_id: ::core::option::Option<RequestId>,
     #[prost(message, optional, tag = "3")]
     pub unreported: ::core::option::Option<super::super::state::queues::v1::Response>,
     #[prost(bytes = "vec", tag = "4")]
