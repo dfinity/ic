@@ -18,7 +18,7 @@ use std::collections::HashMap;
 const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
 const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
-const GTC_NEURON_PRE_AGE_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;
+const GTC_NEURON_PRE_AGE_DURATION_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
@@ -615,11 +615,12 @@ impl Neuron {
 
     /// If the aging timestamp is earlier than GENESIS - PRE_AGE, reset it to GENISIS.
     pub fn maybe_reset_aging_timestamp(&mut self) -> bool {
-        let genesis_seconds = ic_types::time::GENESIS.as_secs_since_unix_epoch();
-        let aging_limit = genesis_seconds.saturating_sub(GTC_NEURON_PRE_AGE_SECONDS);
-        let should_reset = self.aging_since_timestamp_seconds < aging_limit;
+        let genesis_timestamp_seconds = ic_types::time::GENESIS.as_secs_since_unix_epoch();
+        let aging_limit_timestamp_seconds =
+            genesis_timestamp_seconds.saturating_sub(GTC_NEURON_PRE_AGE_DURATION_SECONDS);
+        let should_reset = self.aging_since_timestamp_seconds < aging_limit_timestamp_seconds;
         if should_reset {
-            self.aging_since_timestamp_seconds = genesis_seconds;
+            self.aging_since_timestamp_seconds = genesis_timestamp_seconds;
         }
         should_reset
     }
