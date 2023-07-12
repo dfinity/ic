@@ -454,6 +454,7 @@ fn arb_transfer() -> impl Strategy<Value = Operation> {
             to,
             amount,
             fee,
+            spender: None,
         })
 }
 
@@ -1129,6 +1130,7 @@ pub fn test_archiving<T>(
             fee: Some(Nat::from(FEE)),
             memo: None,
             created_at_time: None,
+            spender: None,
         };
         let tx = get_archive_transaction(&env, archive_principal, i).unwrap();
         assert_eq!(tx.transfer.as_ref(), Some(&expected_tx));
@@ -1166,6 +1168,7 @@ pub fn test_archiving<T>(
                 fee: Some(Nat::from(FEE)),
                 memo: None,
                 created_at_time: None,
+                spender: None,
             })
         );
     }

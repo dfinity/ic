@@ -339,6 +339,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
                 Transaction::transfer(
                     from_account,
                     arg.to,
+                    None,
                     amount,
                     arg.fee.map(|_| expected_fee_tokens),
                     created_at_time,

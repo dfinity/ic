@@ -24,9 +24,7 @@ use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock, GetBlocksRequest, GetBlocksResponse,
 };
-use icrc_ledger_types::icrc3::transactions::{
-    Approve, Burn, Mint, Transaction, Transfer, TransferFrom,
-};
+use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
 use num_traits::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
@@ -444,6 +442,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
                 to,
                 amount,
                 fee,
+                ..
             } => {
                 let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
                     ic_cdk::trap(&format!(
@@ -465,25 +464,6 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
                     ))
                 });
                 debit(block_index, from, fee);
-            }
-            Operation::TransferFrom {
-                from,
-                to,
-                amount,
-                fee,
-                ..
-            } => {
-                let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
-                    ic_cdk::trap(&format!(
-                        "Block {} is of type TransferFrom but has no fee or effective fee!",
-                        block_index
-                    ))
-                });
-                debit(block_index, from, amount + fee);
-                credit(block_index, to, amount);
-                if let Some(fee_collector) = get_fee_collector(block_index, block) {
-                    credit(block_index, fee_collector, fee);
-                }
             }
         },
     );
@@ -536,7 +516,6 @@ fn get_accounts(block: &Block) -> Vec<Account> {
         Operation::Mint { to, .. } => vec![to],
         Operation::Transfer { from, to, .. } => vec![from, to],
         Operation::Approve { from, .. } => vec![from],
-        Operation::TransferFrom { from, to, .. } => vec![from, to],
     }
 }
 
@@ -688,12 +667,14 @@ fn encoded_block_bytes_to_flat_transaction(
         Operation::Transfer {
             from,
             to,
+            spender,
             amount,
             fee,
         } => Transaction::transfer(
             Transfer {
                 from,
                 to,
+                spender,
                 amount: amount.into(),
                 fee: fee.map(|fee| fee.into()),
                 created_at_time,
@@ -715,24 +696,6 @@ fn encoded_block_bytes_to_flat_transaction(
                 amount: amount.into(),
                 expected_allowance: expected_allowance.map(|ea| Nat::from(ea.get_e8s())),
                 expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
-                fee: fee.map(|fee| fee.into()),
-                created_at_time,
-                memo,
-            },
-            timestamp,
-        ),
-        Operation::TransferFrom {
-            spender,
-            from,
-            to,
-            amount,
-            fee,
-        } => Transaction::transfer_from(
-            TransferFrom {
-                spender,
-                from,
-                to,
-                amount: amount.into(),
                 fee: fee.map(|fee| fee.into()),
                 created_at_time,
                 memo,

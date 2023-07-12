@@ -534,6 +534,7 @@ fn test_get_account_transactions() {
             Transfer {
                 from: account(1, 0),
                 to: account(2, 0),
+                spender: None,
                 amount: 1_000_000.into(),
                 fee: None,
                 created_at_time: None,
@@ -548,6 +549,7 @@ fn test_get_account_transactions() {
             Transfer {
                 from: account(1, 0),
                 to: account(2, 0),
+                spender: None,
                 amount: 2_000_000.into(),
                 fee: None,
                 created_at_time: None,
@@ -562,6 +564,7 @@ fn test_get_account_transactions() {
             Transfer {
                 from: account(2, 0),
                 to: account(1, 1),
+                spender: None,
                 amount: 1_000_000.into(),
                 fee: None,
                 created_at_time: None,
@@ -737,7 +740,6 @@ fn test_get_account_transactions_pagination() {
                     }),
                     transfer: None,
                     approve: None,
-                    transfer_from: None,
                     timestamp: 0,
                 },
                 transaction,

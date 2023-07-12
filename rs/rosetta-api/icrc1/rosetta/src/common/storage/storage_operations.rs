@@ -65,6 +65,7 @@ pub fn store_blocks(
                 to,
                 amount,
                 fee,
+                ..
             } => (
                 "transfer",
                 Some(from.owner),
@@ -84,7 +85,6 @@ pub fn store_blocks(
                 None,
             ),
             ic_icrc1::Operation::Approve { .. } => todo!(),
-            Operation::TransferFrom { .. } => todo!(),
         };
 
         match execute(
@@ -324,6 +324,7 @@ where
                         owner: to_principal?,
                         subaccount: to_subaccount?,
                     },
+                    spender: None,
                     amount: amount?,
                     fee: fee?,
                 }),
