@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 bincode = "1.2.1"
-candid = "0.8.1"
+candid = { workspace = true }
 erased-serde = "0.3.11"
 maplit = "1.0.2"
 prost = "0.11.0"

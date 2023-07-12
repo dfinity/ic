@@ -10,7 +10,7 @@ async-scoped = { version = "0.7", features = ["use-tokio"] }
 async-trait = "0.1.56"
 axum = "0.6.1"
 bytes = "1.2.0"
-candid = "0.8.4"
+candid = { workspace = true }
 clap = { version = "3.2.6", features = ["derive"] }
 dashmap = "5.3.4"
 futures = "0.3.21"

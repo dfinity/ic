@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
 ic-base-types = { path = "../../types/base_types" }
 prost = "0.11.0"

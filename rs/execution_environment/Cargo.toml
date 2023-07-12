@@ -4,7 +4,7 @@ name = "ic-execution-environment"
 version = "0.8.0"
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }

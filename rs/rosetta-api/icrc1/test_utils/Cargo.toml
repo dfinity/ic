@@ -5,7 +5,7 @@ authors = ["The Internet Computer Project Developers"]
 edition = "2021"
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 ic-icrc1 = { path = ".." }
 ic-ledger-core = { path = "../../ledger_core" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }

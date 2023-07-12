@@ -6,7 +6,7 @@ description = "StateMachines based tests for https://github.com/dfinity/ICRC-1 l
 edition = "2021"
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
 ic-error-types = { path = "../../../../types/error_types" }
 ic-icrc1 = { path = "../.." }

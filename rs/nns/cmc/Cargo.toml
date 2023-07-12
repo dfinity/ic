@@ -9,7 +9,7 @@ edition = "2021"
 build-info = { version = "0.0.26", default-features = false, features = [] }
 
 async-trait = "0.1.42"
-candid = "0.8.1"
+candid = { workspace = true }
 dfn_candid = {path = "../../rust_canisters/dfn_candid"}
 dfn_protobuf = {path = "../../rust_canisters/dfn_protobuf"}
 dfn_core = {path = "../../rust_canisters/dfn_core"}

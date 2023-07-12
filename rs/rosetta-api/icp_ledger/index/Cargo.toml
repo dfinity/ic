@@ -10,13 +10,13 @@ name = "ic-icp-index"
 path = "src/main.rs"
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 ciborium = { workspace = true }
-ic-cdk = { version = "0.6.0" }
-ic-cdk-macros = { version = "0.6.0" }
-ic-cdk-timers = "0.1.2"
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
+ic-cdk-timers = { workspace = true }
 ic-ledger-core = { path = "../../ledger_core" }
-ic-stable-structures = "0.5.0"
+ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 icp-ledger = { path = "../" }
 num-traits = "0.2.14"

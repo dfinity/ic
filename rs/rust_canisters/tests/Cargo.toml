@@ -50,7 +50,7 @@ ic-test-identity = { path = "../../test_utilities/identity" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 dfn_candid={path="../dfn_candid"}
-candid = "0.8.1"
+candid = { workspace = true }
 
 [[bench]]
 name = "json"

@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 criterion = { version = "0.3", features = ["html_reports"] }
 ic-test-utilities = { path = "../../../test_utilities" }

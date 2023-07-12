@@ -20,7 +20,7 @@ build-info = { version = "0.0.26", default-features = false, features = [] }
 
 async-trait = "0.1.42"
 bytes = "1.0.1"
-candid = "0.8.1"
+candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
@@ -39,7 +39,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nervous-system-runtime = { path = "../../nervous_system/runtime" }
 ic-protobuf = { path = "../../protobuf" }
-ic-stable-structures = "0.5.0"
+ic-stable-structures = { workspace = true }
 ic-sns-governance = { path = "../governance" }
 # TODO(NNS1-1589): Delete hack, and uncomment this.
 # ic-sns-root = { path = "../root" }

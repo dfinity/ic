@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 tempfile = "3.1.0"
-candid = "0.8"
+candid = { workspace = true }
 tokio = { version = "1.15.0", features = ["full"] }

@@ -20,7 +20,7 @@ path = "test_canisters/governance_memory_migration_test_canister.rs"
 async-trait = "0.1.42"
 assert_matches = "1.4.0"
 bytes = "1.0.1"
-candid = "0.8.1"
+candid = { workspace = true }
 cycles-minting-canister = {path = "../../nns/cmc"}
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
@@ -34,7 +34,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nns-common = { path = "../common" }
 ic-nns-governance = { path = "../governance" }
 ic-sns-swap = { path = "../../sns/swap" }
-ic-stable-structures = "0.5.0"
+ic-stable-structures = { workspace = true }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 lifeline = { path = "../handlers/lifeline/impl" }
 prost = "0.11.0"

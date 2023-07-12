@@ -6,7 +6,7 @@ description = "Agent for the ckBTC minter."
 edition = "2021"
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 ic-agent = { workspace = true }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-ckbtc-minter = { path = "../minter" }

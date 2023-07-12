@@ -11,7 +11,7 @@ path = "src/main.rs"
 async-trait = "0.1.53"
 bech32 = "0.9.0"
 bs58 = "0.4.0"
-candid = "0.8.1"
+candid = { workspace = true }
 ciborium = { workspace = true }
 hex = "0.4.3"
 ic0 = "0.18.9"
@@ -19,8 +19,8 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-cdk = "0.7.0"
-ic-cdk-macros = "0.6.0"
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 ic-ckbtc-kyt = { path = "../kyt" }
 ic-crypto-extended-bip32 = { path = "../../../crypto/extended_bip32" }
 ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
@@ -30,7 +30,7 @@ ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
 ic-icrc1-client-cdk = { path = "../../../rosetta-api/icrc1/client/cdk" }
 ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
-ic-stable-structures = "0.5.0"
+ic-stable-structures = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 lazy_static = "1.4.0"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }

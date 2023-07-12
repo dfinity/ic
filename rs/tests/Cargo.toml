@@ -13,7 +13,7 @@ async-trait = "0.1.41"
 base64 = "0.11"
 bincode = "1.3.3"
 bitcoincore-rpc = "0.15.0"
-candid = "0.8.1"
+candid = { workspace = true }
 proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
@@ -36,7 +36,7 @@ ic-backup = { path = "../backup" }
 ic-btc-interface = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
-ic-cdk = "0.6.0"
+ic-cdk = { workspace = true }
 ic-certification = { path = "../certification" }
 ic-ckbtc-agent = { path = "../bitcoin/ckbtc/agent" }
 ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
