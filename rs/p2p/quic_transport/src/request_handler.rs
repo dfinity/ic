@@ -34,8 +34,17 @@ pub async fn start_request_handler(
 
     loop {
         tokio::select! {
-            // TODO: (NET-1468) Support unidirectional streams for broadcast
-            _ = connection.accept_uni() => {},
+            uni = connection.accept_uni() => {
+                match uni {
+                    Ok(uni_rx) => {
+                        inflight_requests.spawn(handle_uni_stream(peer_id, router.clone(), uni_rx));
+                    }
+                    Err(e) => {
+                        info!(log, "Error accepting uni dir stream {:?}", e.to_string());
+                        break;
+                    }
+                }
+            },
             bi = connection.accept_bi() => {
                 match bi {
                     Ok((bi_tx, bi_rx)) => {
@@ -90,4 +99,27 @@ async fn handle_bi_stream(peer_id: NodeId, router: Router, bi_tx: SendStream, bi
     // loop will close this connection.
     let _ = write_response(&mut send_stream, response).await;
     let _ = send_stream.get_mut().finish().await;
+}
+
+async fn handle_uni_stream(peer_id: NodeId, router: Router, uni_rx: RecvStream) {
+    let mut recv_stream = length_delimited::Builder::new().new_read(uni_rx);
+
+    let mut request = match read_request(&mut recv_stream).await {
+        Ok(request) => request,
+        Err(_) => {
+            return;
+        }
+    };
+
+    // Explicity reading to end to avoid an ungraceful shutdown of the stream.
+    // Docs: https://docs.rs/quinn/0.10.1/quinn/struct.RecvStream.html#closing-a-stream
+    if recv_stream.get_mut().read_to_end(0).await.is_err() {
+        // Discard unexpected data and notify the peer to stop sending it
+        let _ = recv_stream.get_mut().stop(0u8.into());
+        return;
+    }
+
+    request.extensions_mut().insert::<NodeId>(peer_id);
+
+    let _ = router.oneshot(request).await.expect("Infallible");
 }

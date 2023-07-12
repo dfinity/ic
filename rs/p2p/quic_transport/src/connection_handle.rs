@@ -105,4 +105,22 @@ impl ConnectionHandle {
 
         Ok(response)
     }
+
+    pub async fn push(&self, mut request: Request<Bytes>) -> Result<(), TransportError> {
+        // Propagate PeerId from this connection to lower layers.
+        request.extensions_mut().insert(self.peer_id);
+
+        let send_stream = self.connection.open_uni().await?;
+
+        let mut send_stream =
+            tokio_util::codec::length_delimited::Builder::new().new_write(send_stream);
+
+        write_request(&mut send_stream, request)
+            .await
+            .map_err(|e| TransportError::Io { error: e })?;
+
+        send_stream.get_mut().finish().await?;
+
+        Ok(())
+    }
 }

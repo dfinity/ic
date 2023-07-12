@@ -394,7 +394,13 @@ mod tests {
                 request: Request<Bytes>,
             ) -> Result<Response<Bytes>, TransportError>;
 
-            fn broadcast(&self, request: Request<Bytes>);
+            async fn push(
+                &self,
+                peer: &NodeId,
+                request: Request<Bytes>,
+            ) -> Result<(), TransportError>;
+
+            fn peers(&self) -> Vec<NodeId>;
         }
     }
 
