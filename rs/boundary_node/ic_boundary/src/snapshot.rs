@@ -20,11 +20,13 @@ use ic_registry_client_helpers::{
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
+use ic_types::replica_version::ReplicaVersion;
 use reqwest::dns::{Addrs, Resolve, Resolving};
 use rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     Certificate, CertificateError, Error as RustlsError, ServerName,
 };
+use tracing::warn;
 use x509_parser::{certificate::X509Certificate, prelude::FromDer, time::ASN1Time};
 
 use crate::Run;
@@ -36,6 +38,7 @@ pub struct Node {
     pub addr: IpAddr,
     pub port: u16,
     pub tls_certificate: Vec<u8>,
+    pub replica_version: String,
 }
 
 impl fmt::Display for Node {
@@ -56,6 +59,7 @@ pub struct Subnet {
     pub subnet_type: SubnetType,
     pub ranges: Vec<CanisterRange>,
     pub nodes: Vec<Node>,
+    pub replica_version: String,
 }
 
 impl fmt::Display for Subnet {
@@ -138,14 +142,20 @@ impl<'a> Runner<'a> {
                 let subnet = self
                     .registry_client
                     .get_subnet_record(subnet_id, version)
-                    .context("failed to get subnet")?
-                    .context("subnet not available")?;
+                    .context("failed to get subnet")? // Result
+                    .context("subnet not available")?; // Option
 
                 let node_ids = self
                     .registry_client
                     .get_node_ids_on_subnet(subnet_id, version)
                     .context("failed to get node ids")? // Result
                     .context("node ids not available")?; // Option
+
+                let replica_version = self
+                    .registry_client
+                    .get_replica_version(subnet_id, version)
+                    .context("failed to get replica version")? // Result
+                    .context("replica version not available")?; // Option
 
                 let nodes = node_ids
                     .into_iter()
@@ -176,6 +186,7 @@ impl<'a> Runner<'a> {
                                 .context("unable to parse IP address")?,
                             port: http_endpoint.port as u16, // Port is u16 anyway
                             tls_certificate: cert.certificate_der,
+                            replica_version: replica_version.to_string(),
                         };
 
                         nodes_map.insert(node_route.id.to_string(), node_route.clone());
@@ -194,6 +205,7 @@ impl<'a> Runner<'a> {
                     subnet_type: subnet.subnet_type(),
                     ranges,
                     nodes,
+                    replica_version: replica_version.to_string(),
                 };
 
                 let out: Result<Subnet, Error> = Ok(subnet_route);

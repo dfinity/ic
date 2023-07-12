@@ -83,7 +83,10 @@ impl<T: Check> Check for WithMetrics<T> {
             Ok(_) => "ok".to_string(),
             Err(e) => format!("error_{}", e.short()),
         };
-        let block_height = out.as_ref().map_or(-1, |out| out.height as i64);
+
+        let (block_height, replica_version) = out.as_ref().map_or((-1, "unknown"), |out| {
+            (out.height as i64, out.replica_version.as_str())
+        });
 
         let cx = Context::current();
         let bgg = cx.baggage();
@@ -94,8 +97,9 @@ impl<T: Check> Check for WithMetrics<T> {
             node_id = %bgg.get("node_id").unwrap(),
             addr = %bgg.get("addr").unwrap(),
             status,
-            duration = duration,
+            duration,
             block_height,
+            replica_version,
             error = ?out.as_ref().err(),
         );
 
