@@ -16,6 +16,26 @@ impl HttpRequest {
             Some(index) => &self.url[..index],
         }
     }
+
+    /// Searches for the first appearance of a parameter in the request URL.
+    /// Returns `None` if the given parameter does not appear in the query.
+    pub fn raw_query_param(&self, param: &str) -> Option<&str> {
+        const QUERY_SEPARATOR: &str = "?";
+        let query_string = self.url.split(QUERY_SEPARATOR).nth(1)?;
+        if query_string.is_empty() {
+            return None;
+        }
+        const PARAMETER_SEPARATOR: &str = "&";
+        for chunk in query_string.split(PARAMETER_SEPARATOR) {
+            const KEY_VALUE_SEPARATOR: &str = "=";
+            let mut split = chunk.splitn(2, KEY_VALUE_SEPARATOR);
+            let name = split.next()?;
+            if name == param {
+                return Some(split.next().unwrap_or_default());
+            }
+        }
+        None
+    }
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -78,4 +98,23 @@ impl HttpResponseBuilder {
     pub fn build(self) -> HttpResponse {
         self.0
     }
+}
+
+#[test]
+fn test_raw_query_param() {
+    fn request_with_url(url: String) -> HttpRequest {
+        HttpRequest {
+            method: "".to_string(),
+            url,
+            headers: vec![],
+            body: Default::default(),
+        }
+    }
+    let http_request = request_with_url("/endpoint?time=1000".to_string());
+    assert_eq!(http_request.raw_query_param("time"), Some("1000"));
+    let http_request = request_with_url("/endpoint".to_string());
+    assert_eq!(http_request.raw_query_param("time"), None);
+    let http_request =
+        request_with_url("/endpoint?time=1000&time=1001&other=abcde&time=1002".to_string());
+    assert_eq!(http_request.raw_query_param("time"), Some("1000"));
 }
