@@ -1559,8 +1559,8 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InsufficientCyclesInComputeAllocation,
                     format!(
-                        "Cannot increase compute allocation to {} due to insufficient cycles. The new freezing threshold: {} cycles, available: {} cycles.",
-                        compute_allocation, threshold, available
+                        "Cannot increase compute allocation to {} due to insufficient cycles. At least {} additional cycles are required.",
+                        compute_allocation, threshold - available
                     ),
                 )
 
@@ -1570,8 +1570,8 @@ impl From<CanisterManagerError> for UserError {
                 Self::new(
                     ErrorCode::InsufficientCyclesInMemoryAllocation,
                     format!(
-                        "Cannot increase memory allocation to {} due to insufficient cycles. The new freezing threshold: {} cycles, available: {} cycles.",
-                        memory_allocation, threshold, available
+                        "Cannot increase memory allocation to {} due to insufficient cycles. At least {} additional cycles are required.",
+                        memory_allocation, threshold - available
                     ),
                 )
 
