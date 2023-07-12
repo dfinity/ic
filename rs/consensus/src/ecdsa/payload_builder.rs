@@ -3985,12 +3985,7 @@ mod tests {
             summary_proto
                 .signature_agreements
                 .push(pb::CompletedSignature {
-                    request_id: Some(pb::RequestId {
-                        pseudo_random_id: vec![4; 32],
-                        quadruple_id: 1000,
-                        height: 100,
-                    }),
-                    pseudo_random_id: vec![0; 32],
+                    pseudo_random_id: vec![4; 32],
                     unreported: None,
                 });
             let summary_from_proto: ecdsa::EcdsaPayload =

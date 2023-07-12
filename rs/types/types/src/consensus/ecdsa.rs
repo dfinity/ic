@@ -1092,7 +1092,6 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
                 CompletedSignature::ReportedToExecution => None,
             };
             signature_agreements.push(pb::CompletedSignature {
-                request_id: None, // To be removed after upgrade
                 pseudo_random_id: pseudo_random_id.to_vec(),
                 unreported,
             });
@@ -1201,24 +1200,15 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         let key_id = try_from_option_field(payload.key_id.clone(), "EcdsaPayload::key_id")?;
         let mut signature_agreements = BTreeMap::new();
         for completed_signature in &payload.signature_agreements {
-            // NOTE: We still look at the request_id for compatibility reasons,
-            // which should be removed from protobuf after upgrading deployment.
-            let request_id: Result<RequestId, _> = try_from_option_field(
-                completed_signature.request_id.as_ref(),
-                "EcdsaPayload::completed_signature::request_id",
-            );
-            let pseudo_random_id = match request_id {
-                Ok(inner) => inner.pseudo_random_id,
-                Err(_) => {
-                    if completed_signature.pseudo_random_id.len() != 32 {
-                        return Err(ProxyDecodeError::Other(
-                            "Expects 32 bytes of pseudo_random_id".to_string(),
-                        ));
-                    }
-                    let mut x = [0; 32];
-                    x.copy_from_slice(&completed_signature.pseudo_random_id);
-                    x
+            let pseudo_random_id = {
+                if completed_signature.pseudo_random_id.len() != 32 {
+                    return Err(ProxyDecodeError::Other(
+                        "Expects 32 bytes of pseudo_random_id".to_string(),
+                    ));
                 }
+                let mut x = [0; 32];
+                x.copy_from_slice(&completed_signature.pseudo_random_id);
+                x
             };
             let signature = if let Some(unreported) = &completed_signature.unreported {
                 let response = crate::messages::Response::try_from(unreported.clone())?;
@@ -1331,32 +1321,11 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         }
 
         // Key transcript state
-        let current_key_transcript: Option<UnmaskedTranscriptWithAttributes> =
-            if let Some(proto) = &payload.current_key_transcript {
-                let unmasked = match UnmaskedTranscriptWithAttributes::try_from(proto) {
-                    Ok(unmasked) => unmasked,
-                    Err(_) => {
-                        // For compatibility reason, we will try look up in idkg_transcripts.
-                        // This part can be removed once compatibility is no longer an issue.
-                        // The error here should be propagated instead.
-                        let unmasked = UnmaskedTranscript::try_from(&pb::UnmaskedTranscript {
-                            transcript_ref: proto.transcript_ref.clone(),
-                        })
-                        .map_err(|err| ProxyDecodeError::Other(err.to_string()))?;
-                        let transcript_id = unmasked.as_ref().transcript_id;
-                        let transcript = idkg_transcripts.get(&transcript_id).ok_or_else(|| {
-                            ProxyDecodeError::Other(format!(
-                                "Key transcript {:?} does not exist in summary",
-                                transcript_id
-                            ))
-                        })?;
-                        UnmaskedTranscriptWithAttributes(transcript.to_attributes(), unmasked)
-                    }
-                };
-                Some(unmasked)
-            } else {
-                None
-            };
+        let current_key_transcript = if let Some(proto) = &payload.current_key_transcript {
+            Some(UnmaskedTranscriptWithAttributes::try_from(proto)?)
+        } else {
+            None
+        };
         let next_key_in_creation: KeyTranscriptCreation = try_from_option_field(
             payload.next_key_in_creation.as_ref(),
             "EcdsaPayload:: Missing next_key_in_creation",
