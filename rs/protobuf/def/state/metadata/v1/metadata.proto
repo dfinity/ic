@@ -146,6 +146,16 @@ message BitcoinSendTransactionInternalContextTree {
   BitcoinSendTransactionInternalContext context = 2;
 }
 
+message InstallCodeContext {
+  state.queues.v1.Request request = 1;
+  Time time = 2;
+}
+
+message InstallCodeContextTree {
+  uint64 callback_id = 1;
+  InstallCodeContext context = 2;
+}
+
 message SubnetCallContextManager {
   uint64 next_callback_id = 1;
   reserved 2;
@@ -159,6 +169,7 @@ message SubnetCallContextManager {
   repeated BitcoinGetSuccessorsContextTree bitcoin_get_successors_contexts = 8;
   repeated BitcoinSendTransactionInternalContextTree
       bitcoin_send_transaction_internal_contexts = 9;
+  repeated InstallCodeContextTree install_code_contexts = 10;    
 }
 
 message SubnetMetrics {

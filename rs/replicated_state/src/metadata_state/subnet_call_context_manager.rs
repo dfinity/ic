@@ -24,6 +24,7 @@ pub enum SubnetCallContext {
     EcdsaDealings(EcdsaDealingsContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
+    InstallCode(InstallCodeContext),
 }
 
 impl SubnetCallContext {
@@ -35,6 +36,7 @@ impl SubnetCallContext {
             SubnetCallContext::EcdsaDealings(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
+            SubnetCallContext::InstallCode(context) => &context.request,
         }
     }
 
@@ -46,6 +48,7 @@ impl SubnetCallContext {
             SubnetCallContext::EcdsaDealings(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
+            SubnetCallContext::InstallCode(context) => context.time,
         }
     }
 }
@@ -60,6 +63,7 @@ pub struct SubnetCallContextManager {
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
+    pub install_code_contexts: BTreeMap<CallbackId, InstallCodeContext>,
 }
 
 impl SubnetCallContextManager {
@@ -126,6 +130,13 @@ impl SubnetCallContextManager {
         self.bitcoin_send_transaction_internal_contexts
             .insert(callback_id, context);
         callback_id.get()
+    }
+
+    pub fn push_install_code_request(&mut self, context: InstallCodeContext) {
+        let callback_id = CallbackId::new(self.next_callback_id);
+        self.next_callback_id += 1;
+
+        self.install_code_contexts.insert(callback_id, context);
     }
 
     pub fn retrieve_context(
@@ -275,6 +286,16 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     }
                 })
                 .collect(),
+            install_code_contexts: item
+                .install_code_contexts
+                .iter()
+                .map(
+                    |(callback_id, context)| pb_metadata::InstallCodeContextTree {
+                        callback_id: callback_id.get(),
+                        context: Some(context.into()),
+                    },
+                )
+                .collect(),
         }
     }
 }
@@ -338,6 +359,14 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 .insert(CallbackId::new(entry.callback_id), context);
         }
 
+        let mut install_code_contexts = BTreeMap::<CallbackId, InstallCodeContext>::new();
+        for entry in item.install_code_contexts {
+            let pb_context =
+                try_from_option_field(entry.context, "SystemMetadata::InstallCodeContext")?;
+            let context = InstallCodeContext::try_from((time, pb_context))?;
+            install_code_contexts.insert(CallbackId::new(entry.callback_id), context);
+        }
+
         Ok(Self {
             next_callback_id: item.next_callback_id,
             setup_initial_dkg_contexts,
@@ -346,6 +375,7 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             ecdsa_dealings_contexts,
             bitcoin_get_successors_contexts,
             bitcoin_send_transaction_internal_contexts,
+            install_code_contexts,
         })
     }
 }
@@ -584,6 +614,39 @@ impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
         Ok(BitcoinSendTransactionInternalContext {
             request,
             payload,
+            time: context
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InstallCodeContext {
+    pub request: Request,
+    pub time: Time,
+}
+
+impl From<&InstallCodeContext> for pb_metadata::InstallCodeContext {
+    fn from(context: &InstallCodeContext) -> Self {
+        pb_metadata::InstallCodeContext {
+            request: Some((&context.request).into()),
+            time: Some(pb_metadata::Time {
+                time_nanos: context.time.as_nanos_since_unix_epoch(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::InstallCodeContext)> for InstallCodeContext {
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (time, context): (Time, pb_metadata::InstallCodeContext),
+    ) -> Result<Self, Self::Error> {
+        let request: Request =
+            try_from_option_field(context.request, "InstallCodeContext::request")?;
+        Ok(InstallCodeContext {
+            request,
             time: context
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),

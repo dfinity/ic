@@ -215,6 +215,22 @@ pub struct BitcoinSendTransactionInternalContextTree {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCodeContext {
+    #[prost(message, optional, tag = "1")]
+    pub request: ::core::option::Option<super::super::queues::v1::Request>,
+    #[prost(message, optional, tag = "2")]
+    pub time: ::core::option::Option<Time>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCodeContextTree {
+    #[prost(uint64, tag = "1")]
+    pub callback_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub context: ::core::option::Option<InstallCodeContext>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetCallContextManager {
     #[prost(uint64, tag = "1")]
     pub next_callback_id: u64,
@@ -231,6 +247,8 @@ pub struct SubnetCallContextManager {
     #[prost(message, repeated, tag = "9")]
     pub bitcoin_send_transaction_internal_contexts:
         ::prost::alloc::vec::Vec<BitcoinSendTransactionInternalContextTree>,
+    #[prost(message, repeated, tag = "10")]
+    pub install_code_contexts: ::prost::alloc::vec::Vec<InstallCodeContextTree>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
