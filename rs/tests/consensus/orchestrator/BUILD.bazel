@@ -217,9 +217,8 @@ system_test(
 
 system_test(
     name = "upgrade_downgrade_app_subnet_test",
-    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO: remove tags and move the test back to MR pipelines when it will work with `ic_os_fixed_version = True`
+    # TODO: remove tags and move the test back to MR pipelines if it is important to run this test there.
     tags = [
         "system_test_hourly",
         "system_test_nightly",
@@ -236,9 +235,8 @@ system_test(
 
 system_test(
     name = "upgrade_downgrade_nns_subnet_test",
-    ic_os_fixed_version = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
-    # TODO: remove tags and move the test back to MR pipelines when it will work with `ic_os_fixed_version = True`
+    # TODO: remove tags and move the test back to MR pipelines if it is important to run this test there.
     tags = [
         "system_test_hourly",
         "system_test_nightly",
