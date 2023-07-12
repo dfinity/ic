@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "@crate_index//:k256",
     "@crate_index//:lazy_static",
+    "@crate_index//:num-bigint",
     "@crate_index//:pem",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:simple_asn1",
@@ -14,6 +15,8 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/crypto/sha",
+    "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:hex",
     "@crate_index//:wycheproof",
 ]

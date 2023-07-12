@@ -5,25 +5,21 @@ edition = "2021"
 
 [dependencies]
 base64 = "0.11.0"
-hex = "0.4.2"
+ic-crypto-ecdsa-secp256r1 = { path = "../../../../ecdsa_secp256r1" }
+ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-crypto-internal-types = { path = "../../../crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-types = { path = "../../../../../types/types" }
-ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
-openssl = "0.10.55"
 p256 = { workspace = true }
 rand = "0.8"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
-zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 simple_asn1 = "0.6.1"
+zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
-ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+hex = "0.4.2"
+ic-crypto-sha = { path = "../../../../sha" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-proptest = "1.0"
-proptest-derive = "0.3.0"
-regex = "1.5"
-strum = "0.23.0"
 wycheproof = "0.5"

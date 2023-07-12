@@ -1,8 +1,8 @@
 use ic_crypto_internal_basic_sig_cose::*;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
 use ic_crypto_internal_test_vectors::*;
+use ic_crypto_sha::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
-use openssl::sha::sha256;
 
 // A COSE-encoded ECDSA-P256 public key, with a signature over an example
 // message.
@@ -146,6 +146,6 @@ fn get_der_cose_verification_result(
     let (_alg_id, pk) = parse_cose_public_key(&pk_cose).unwrap();
     let pk = public_key_from_der(&pk).unwrap();
     let msg = hex::decode(msg_hex).unwrap();
-    let msg_hash = sha256(&msg);
+    let msg_hash = Sha256::hash(&msg);
     verify(&sig, &msg_hash, &pk)
 }

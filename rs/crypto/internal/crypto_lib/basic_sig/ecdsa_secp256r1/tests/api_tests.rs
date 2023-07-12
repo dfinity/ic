@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 // ECDSA_P256_PK_1_DER_HEX was generated via the following commands:
 //   openssl ecparam -name prime256v1 -genkey -noout -out private.ec.key
 //   openssl ec -in private.ec.key -pubout -outform DER -out ecpubkey.der
@@ -12,26 +11,25 @@ const SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX : &str = "3045022100c69c75c6d6c4
 const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
 
 mod keygen {
-    use super::*;
-    use crate::{public_key_from_der, test_utils::new_keypair};
     use assert_matches::assert_matches;
+    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::{AlgorithmId, CryptoError};
 
     #[test]
     fn should_correctly_generate_ecdsa_keys() {
-        let (_sk, _pk) = new_keypair(&mut reproducible_rng()).unwrap();
+        let (_sk, _pk) = test_utils::new_keypair(&mut reproducible_rng()).unwrap();
     }
 
     #[test]
     fn should_correctly_parse_der_encoded_pk() {
-        let pk_der = hex::decode(ECDSA_P256_PK_1_DER_HEX).unwrap();
+        let pk_der = hex::decode(crate::ECDSA_P256_PK_1_DER_HEX).unwrap();
         let _pk = public_key_from_der(&pk_der).unwrap();
     }
 
     #[test]
     fn should_fail_parsing_a_corrupted_der_encoded_pk() {
-        let mut pk_der = hex::decode(ECDSA_P256_PK_1_DER_HEX).unwrap();
+        let mut pk_der = hex::decode(crate::ECDSA_P256_PK_1_DER_HEX).unwrap();
         pk_der[0] += 1;
         let pk_result = public_key_from_der(&pk_der);
         assert!(pk_result.is_err());
@@ -40,7 +38,7 @@ mod keygen {
 
     #[test]
     fn should_fail_parsing_non_ecdsa_key_without_panic() {
-        let pk_der = base64::decode(ED25519_PK_DER_BASE64).unwrap();
+        let pk_der = base64::decode(crate::ED25519_PK_DER_BASE64).unwrap();
         let pk_result = public_key_from_der(&pk_der);
         assert!(pk_result.is_err());
         assert!(pk_result.unwrap_err().is_malformed_public_key());
@@ -67,13 +65,12 @@ mod keygen {
 }
 
 mod sign {
-    use crate::api::tests::SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX;
-    use crate::{sign, signature_from_der, test_utils::new_keypair, types, verify};
+    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{types, *};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
     #[test]
     fn should_correctly_sign_and_verify() {
-        let (sk, pk) = new_keypair(&mut reproducible_rng()).unwrap();
+        let (sk, pk) = test_utils::new_keypair(&mut reproducible_rng()).unwrap();
 
         let msg = b"some message to sign";
         let signature = sign(msg, &sk).unwrap();
@@ -83,13 +80,13 @@ mod sign {
 
     #[test]
     fn should_correctly_parse_der_encoded_signature() {
-        let sig_der = hex::decode(SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
+        let sig_der = hex::decode(crate::SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
         let _sig = signature_from_der(&sig_der).unwrap();
     }
 
     #[test]
     fn should_fail_parsing_a_corrupted_der_encoded_signature() {
-        let mut sig_der = hex::decode(SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
+        let mut sig_der = hex::decode(crate::SIG_OF_MSG_2_WITH_ECDSA_P256_PK_1_DER_HEX).unwrap();
         sig_der[0] += 1;
         let sig_result = signature_from_der(&sig_der);
         assert!(sig_result.is_err());
@@ -109,7 +106,7 @@ mod sign {
     // (the number of signatures = 300 has been picked empirically)
     #[test]
     fn should_correctly_generate_and_verify_shorter_signatures() {
-        let (sk, pk) = new_keypair(&mut reproducible_rng()).unwrap();
+        let (sk, pk) = test_utils::new_keypair(&mut reproducible_rng()).unwrap();
 
         let msg = b"some message to sign";
         for _i in 1..300 {
@@ -121,81 +118,35 @@ mod sign {
 }
 
 mod verify {
-    use crate::api::{der_encoding_from_xy_coordinates, public_key_from_der};
-    use crate::types::{PublicKeyBytes, SignatureBytes};
-    use crate::{sign, test_utils::new_keypair, verify};
     use assert_matches::assert_matches;
-    use ic_crypto_internal_test_vectors::ecdsa_p256;
+    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::{types, *};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::{AlgorithmId, CryptoError};
-    use openssl::sha::sha256;
-    use std::convert::TryFrom;
-    use strum::IntoEnumIterator;
-
-    fn pk_bytes_from_x_y(x: Vec<u8>, y: Vec<u8>) -> PublicKeyBytes {
-        let der = der_encoding_from_xy_coordinates(&x, &y).unwrap();
-        public_key_from_der(&der).unwrap()
-    }
-
-    fn sig_bytes_from_r_s(r: Vec<u8>, s: Vec<u8>) -> SignatureBytes {
-        SignatureBytes::try_from([r, s].concat()).unwrap()
-    }
-
-    #[test]
-    fn should_correctly_verify_test_vectors() {
-        for test_vec in ecdsa_p256::EcdsaP256Sha256SigVerTestVector::iter() {
-            let v = ecdsa_p256::crypto_lib_sig_ver_testvec(test_vec);
-            let msg_hash = sha256(&v.msg);
-            let pk = pk_bytes_from_x_y(v.q_x, v.q_y);
-            let sig = sig_bytes_from_r_s(v.r, v.s);
-
-            let verify_result = verify(&sig, &msg_hash, &pk);
-            assert_eq!(
-                verify_result.is_ok(),
-                v.is_valid,
-                "Unexpected verification result for test vector {:?}",
-                test_vec
-            );
-            if verify_result.is_err() {
-                assert!(verify_result.unwrap_err().is_signature_verification_error());
-            }
-        }
-    }
 
     #[test]
     fn should_reject_truncated_ecdsa_pubkey() {
-        let (sk, pk) = new_keypair(&mut reproducible_rng()).unwrap();
+        let (sk, pk) = test_utils::new_keypair(&mut reproducible_rng()).unwrap();
 
-        let msg = b"abc";
-        let signature = sign(msg, &sk).unwrap();
-        assert!(verify(&signature, msg, &pk).is_ok());
+        let msg = vec![0x42; 32];
+        let signature = sign(&msg, &sk).unwrap();
+        assert!(verify(&signature, &msg, &pk).is_ok());
 
-        let invalid_pk = PublicKeyBytes(pk.0[0..pk.0.len() - 1].to_vec());
-        let result = verify(&signature, msg, &invalid_pk);
+        let invalid_pk = types::PublicKeyBytes(pk.0[0..pk.0.len() - 1].to_vec());
+        let result = verify(&signature, &msg, &invalid_pk);
 
-        // since OpenSSL 3.0.5, ec_GFp_simple_oct2point function is prefixed with ossl_,
-        // so let either version pass the test
-        //
-        // ? in regex stands for 0 or 1 occurrence
-        let re = regex::Regex::new(
-            r":elliptic curve routines:(ossl_)?ec_GFp_simple_oct2point:invalid encoding:",
-        )
-        .unwrap();
-
-        assert_matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+        assert_matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error:_})
              if algorithm == AlgorithmId::EcdsaP256
              && key_bytes == Some(invalid_pk.0)
-             && re.is_match(&internal_error[..])
         );
     }
 
     #[test]
     fn should_reject_modified_ecdsa_pubkey() {
-        let (sk, pk) = new_keypair(&mut reproducible_rng()).unwrap();
+        let (sk, pk) = test_utils::new_keypair(&mut reproducible_rng()).unwrap();
 
-        let msg = b"abc";
-        let signature = sign(msg, &sk).unwrap();
-        assert!(verify(&signature, msg, &pk).is_ok());
+        let msg = vec![0x42; 32];
+        let signature = sign(&msg, &sk).unwrap();
+        assert!(verify(&signature, &msg, &pk).is_ok());
 
         /*
         We are encoding using uncompressed coordinates so the format is (h,x,y)
@@ -203,18 +154,47 @@ mod verify {
         so there is no possibility that this does not fail when we modify
         the final byte of x
          */
-        assert_eq!(pk.0.len(), 1 + 2 * crate::types::FIELD_SIZE);
+        assert_eq!(pk.0.len(), 1 + 2 * types::FIELD_SIZE);
         let mut modified_key = pk.0;
-        modified_key[crate::types::FIELD_SIZE] ^= 0x01;
-        let invalid_pk = PublicKeyBytes(modified_key);
+        modified_key[types::FIELD_SIZE] ^= 0x01;
+        let invalid_pk = types::PublicKeyBytes(modified_key);
 
-        let result = verify(&signature, msg, &invalid_pk);
-        assert_matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+        let result = verify(&signature, &msg, &invalid_pk);
+        assert_matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error: _})
              if algorithm == AlgorithmId::EcdsaP256
              && key_bytes == Some(invalid_pk.0)
-             && internal_error.contains(
-                 ":elliptic curve routines:EC_POINT_set_affine_coordinates:point is not on curve:"
-             )
         );
+    }
+}
+
+#[cfg(test)]
+mod sig_conv_tests {
+    use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types::SignatureBytes;
+    use std::convert::TryFrom;
+
+    #[test]
+    fn should_convert_vector_to_signature_bytes() {
+        let bytes = vec![0; SignatureBytes::SIZE];
+        let _sig_bytes = SignatureBytes::try_from(bytes).expect("conversion failed");
+    }
+
+    #[test]
+    fn should_fail_conversion_to_signature_bytes_if_vector_too_long() {
+        let bytes = vec![0; SignatureBytes::SIZE + 1];
+        let result = SignatureBytes::try_from(bytes);
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("Unexpected success.")
+            .is_malformed_signature());
+    }
+
+    #[test]
+    fn should_fail_conversion_to_signature_bytes_if_vector_too_short() {
+        let bytes = vec![0; SignatureBytes::SIZE - 1];
+        let result = SignatureBytes::try_from(bytes);
+        assert!(result.is_err());
+        assert!(result
+            .expect_err("Unexpected success.")
+            .is_malformed_signature());
     }
 }

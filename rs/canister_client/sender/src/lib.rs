@@ -3,7 +3,6 @@ mod secp256k1_conversions;
 mod tests;
 
 use ic_base_types::PrincipalId;
-use ic_crypto_ecdsa_secp256k1::PrivateKey;
 use ic_crypto_internal_types::sign::eddsa::ed25519::{
     PublicKey as Ed25519PublicKey, SecretKey as Ed25519SecretKey,
 };
@@ -67,11 +66,11 @@ impl Ed25519KeyPair {
 
 impl Secp256k1KeyPair {
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        self.sk.sign_message(msg)
+        self.sk.sign_message(msg).to_vec()
     }
     pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
         let mut rng = ChaCha20Rng::from_seed(rng.gen());
-        let sk = PrivateKey::generate_using_rng(&mut rng);
+        let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(&mut rng);
         let pk = sk.public_key();
         Self { sk, pk }
     }
@@ -194,7 +193,9 @@ impl Sender {
         match self {
             Self::SigKeys(sig_keys) => match sig_keys {
                 SigKeys::Ed25519(key_pair) => Ok(Some(key_pair.sign(&msg).to_vec())),
-                SigKeys::EcdsaSecp256k1(key_pair) => Ok(Some(key_pair.sk.sign_message(&msg))),
+                SigKeys::EcdsaSecp256k1(key_pair) => {
+                    Ok(Some(key_pair.sk.sign_message(&msg).to_vec()))
+                }
             },
             Self::ExternalHsm { sign, .. } => sign(&msg).map(Some),
             Self::Anonymous => Ok(None),

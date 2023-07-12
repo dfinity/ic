@@ -1,17 +1,15 @@
 use crate::Secp256k1KeyPair;
-use ic_crypto_secrets_containers::SecretVec;
 
 // Parses pem files to secp256k1 structs.
 impl Secp256k1KeyPair {
     /// Parses a secp256k1 key pair from PEM.
     pub fn from_pem(pem: &str) -> Result<Self, String> {
-        // Note: The SecretVec zeros the internal key after use.  DO NOT REMOVE.
-        let mut der =
-            ic_crypto_utils_basic_sig::conversions::pem::pem_to_der(pem, "EC PRIVATE KEY")
-                .map_err(|err| format!("Failed to convert PEM to DER: {err:?}"))?;
+        let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::deserialize_rfc5915_pem(pem)
+            .map_err(|e| format!("{:?}", e))?;
 
-        let der = SecretVec::new_and_zeroize_argument(&mut der);
-        Self::from_der(der.expose_secret())
+        let pk = sk.public_key();
+
+        Ok(Self { sk, pk })
     }
 
     /// Parses a secp256k1 key pair from DER in RFC 5915 format
