@@ -6,8 +6,7 @@ pub(crate) mod block_maker;
 mod catchup_package_maker;
 pub mod dkg_key_manager;
 mod finalizer;
-#[cfg(feature = "malicious_code")]
-mod malicious_consensus;
+pub mod malicious_consensus;
 pub(crate) mod metrics;
 mod notary;
 mod payload;
@@ -98,11 +97,14 @@ pub const HALT_AFTER_REGISTRY_UNREACHABLE: Duration = Duration::from_secs(60 * 6
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the
 /// Consensus trait by calling each subcomponent in round-robin manner.
 pub struct ConsensusImpl {
-    notary: Notary,
-    finalizer: Finalizer,
+    /// Notary
+    pub notary: Notary,
+    /// Finalizer
+    pub finalizer: Finalizer,
     random_beacon_maker: RandomBeaconMaker,
     random_tape_maker: RandomTapeMaker,
-    block_maker: BlockMaker,
+    /// Blockmaker
+    pub block_maker: BlockMaker,
     catch_up_package_maker: CatchUpPackageMaker,
     validator: Validator,
     aggregator: ShareAggregator,
@@ -117,7 +119,8 @@ pub struct ConsensusImpl {
     replica_config: ReplicaConfig,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
-    log: ReplicaLogger,
+    /// Logger
+    pub log: ReplicaLogger,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
 }
 

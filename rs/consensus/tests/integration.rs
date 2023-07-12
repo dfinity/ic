@@ -10,6 +10,7 @@ use ic_test_utilities::{
     types::ids::{node_test_id, subnet_test_id},
     FastForwardTimeSource,
 };
+use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height};
 use rand::Rng;
 use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
@@ -61,9 +62,8 @@ fn minority_invalid_notary_share_signature_would_pass() -> Result<(), String> {
             assert!(f > 0, "This test requires NUM_NODES >= 4");
             let mut malicious: Vec<ConsensusModifier> = Vec::new();
             for _ in 0..rng.gen_range(1..=f) {
-                malicious.push(&malicious::InvalidNotaryShareSignature::new);
+                malicious.push(malicious::invalid_notary_share_signature())
             }
-            let malicious = vec![&malicious::InvalidNotaryShareSignature::new as _];
             run_n_rounds_and_collect_hashes(config, malicious, true);
         })
 }
@@ -75,7 +75,103 @@ fn majority_invalid_notary_share_signature_would_stuck() -> Result<(), String> {
         .map(|config| {
             let mut malicious: Vec<ConsensusModifier> = Vec::new();
             for _ in 0..(config.num_nodes / 3 + 1) {
-                malicious.push(&malicious::InvalidNotaryShareSignature::new);
+                malicious.push(malicious::invalid_notary_share_signature())
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, false);
+        })
+}
+
+#[test]
+fn minority_absent_notary_share_would_pass() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|config| {
+            let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
+            let f = (config.num_nodes - 1) / 3;
+            assert!(f > 0, "This test requires NUM_NODES >= 4");
+            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            for _ in 0..rng.gen_range(1..=f) {
+                malicious.push(malicious::absent_notary_share());
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, true);
+        })
+}
+
+#[test]
+fn majority_absent_notary_share_signature_would_stuck() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|config| {
+            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            for _ in 0..(config.num_nodes / 3 + 1) {
+                malicious.push(malicious::absent_notary_share());
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, false);
+        })
+}
+
+#[test]
+fn minority_maliciouly_notarize_all_would_pass() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|config| {
+            let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
+            let f = (config.num_nodes - 1) / 3;
+            assert!(f > 0, "This test requires NUM_NODES >= 4");
+            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            for _ in 0..rng.gen_range(1..=f) {
+                let malicious_flags = MaliciousFlags {
+                    maliciously_notarize_all: true,
+                    ..MaliciousFlags::default()
+                };
+                malicious.push(malicious::with_malicious_flags(malicious_flags));
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, true);
+        })
+}
+
+#[test]
+fn minority_maliciouly_finalize_all_would_pass() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|config| {
+            let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
+            let f = (config.num_nodes - 1) / 3;
+            assert!(f > 0, "This test requires NUM_NODES >= 4");
+            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            for _ in 0..rng.gen_range(1..=f) {
+                let malicious_flags = MaliciousFlags {
+                    maliciously_finalize_all: true,
+                    ..MaliciousFlags::default()
+                };
+                malicious.push(malicious::with_malicious_flags(malicious_flags));
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, true);
+        })
+}
+
+/*
+ * FIXME: This may fail when multiple blocks are finalized at a given round,
+ * but not always. So it is still probabilistic.
+ *
+ * Also when it fails, it may exhibit unexpected behavior (e.g. panic) because
+ * the invariant of having at most one finalized block each round is broken.
+ * So we don't have a good way to reliably catch this.
+ */
+#[ignore]
+#[test]
+fn majority_maliciouly_finalize_all_would_diverge() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|config| {
+            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            for _ in 0..((config.num_nodes - 1) / 3 * 2 + 1) {
+                let malicious_flags = MaliciousFlags {
+                    maliciously_notarize_all: true, // to create more than 1 branches
+                    maliciously_finalize_all: true, // to finalize more than 1 branches
+                    ..MaliciousFlags::default()
+                };
+                malicious.push(malicious::with_malicious_flags(malicious_flags));
             }
             run_n_rounds_and_collect_hashes(config, malicious, false);
         })
@@ -83,7 +179,7 @@ fn majority_invalid_notary_share_signature_would_stuck() -> Result<(), String> {
 
 fn run_n_rounds_and_collect_hashes(
     config: ConsensusRunnerConfig,
-    mut modifiers: Vec<ConsensusModifier<'_>>,
+    mut modifiers: Vec<ConsensusModifier>,
     finish: bool,
 ) -> Vec<CryptoHash> {
     let nodes = config.num_nodes;

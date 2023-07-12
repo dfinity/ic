@@ -129,7 +129,7 @@ impl<'a> ConsensusRunner<'a> {
         membership: Arc<Membership>,
         consensus_crypto: Arc<dyn ConsensusCrypto>,
         certification_crypto: Arc<dyn CertificationCrypto>,
-        modifier: Option<ConsensusModifier<'_>>,
+        modifier: Option<ConsensusModifier>,
         deps: &'a ConsensusDependencies,
         pool_config: ArtifactPoolConfig,
         pool_reader: &PoolReader<'_>,
@@ -202,7 +202,7 @@ impl<'a> ConsensusRunner<'a> {
             driver: ConsensusDriver::new(
                 node_id,
                 pool_config,
-                modifier.unwrap_or(&|x| Box::new(x))(consensus),
+                modifier.unwrap_or_else(|| Box::new(|x| Box::new(x)))(consensus),
                 consensus_gossip,
                 dkg,
                 Box::new(certifier),

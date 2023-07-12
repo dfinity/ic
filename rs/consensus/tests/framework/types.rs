@@ -273,10 +273,10 @@ impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
 }
 
 /// Consensus modifier that can potentially change its behavior.
-pub type ConsensusModifier<'a> = &'a dyn Fn(
-    ConsensusImpl,
-) -> Box<
-    dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>,
+pub type ConsensusModifier = Box<
+    dyn Fn(
+        ConsensusImpl,
+    ) -> Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
 >;
 
 /// A ConsensusDriver mainly consists of the consensus component, and the
