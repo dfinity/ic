@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{CanisterChange, EmptyBlob, Payload};
+use ic_ic00_types::{EmptyBlob, Payload};
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
@@ -14,7 +13,6 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::Cycles;
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use maplit::btreeset;
-use std::mem::size_of;
 
 ////////////////////////////////////////////////////////////////////////
 // Constants and templates
@@ -222,12 +220,17 @@ fn upgrade_fails_on_not_enough_cycles() {
     let balance_cycles = test
         .cycles_account_manager()
         .execution_cost((MAX_INSTRUCTIONS_PER_SLICE * 3).into(), test.subnet_size());
-    // canister history memory usage at the beginning of attempted upgrade
-    let canister_history_memory_usage = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+
+    let canister_memory_usage = {
+        // Create a dummy canister just to get its memory usage.
+        let id = test.canister_from_binary(old_empty_binary()).unwrap();
+        test.canister_state(id).memory_usage()
+    };
+
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
         MemoryAllocation::BestEffort,
-        NumBytes::new(canister_history_memory_usage as u64),
+        canister_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
     );

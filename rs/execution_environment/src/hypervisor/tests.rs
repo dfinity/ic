@@ -23,11 +23,11 @@ use ic_test_utilities_execution_environment::{
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, methods::WasmMethod,
     CanisterId, Cycles, NumBytes, NumInstructions,
 };
+use ic_types::{ComputeAllocation, MAX_STABLE_MEMORY_IN_BYTES};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};
@@ -5359,4 +5359,307 @@ fn stable_grow_does_not_check_freezing_threshold_in_reject() {
         test.execution_state(canister_id).stable_memory.size,
         NumWasmPages::new(10_000)
     );
+}
+
+#[test]
+fn stable_grow_checks_freezing_threshold_in_pre_upgrade() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (func (export "canister_pre_upgrade")
+                (if (i32.ne (call $stable_grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.canister_from_binary(wasm.clone()).unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert!(
+        err.description()
+            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn stable_grow_checks_freezing_threshold_in_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (func (export "canister_post_upgrade")
+                (if (i32.ne (call $stable_grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.canister_from_binary(wasm.clone()).unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert!(
+        err.description()
+            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn stable_grow_checks_freezing_threshold_in_start() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let empty_wat = "(module)";
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (func $start
+                (if (i32.ne (call $stable_grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.canister_from_wat(empty_wat).unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert!(
+        err.description().contains("Canister cannot grow memory by"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn stable_grow_checks_freezing_threshold_in_init() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (func (export "canister_init")
+                (if (i32.ne (call $stable_grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let err = test.install_canister(canister_id, wasm).unwrap_err();
+    assert!(
+        err.description().contains("Canister cannot grow memory by"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn memory_grow_does_not_check_freezing_threshold_in_pre_upgrade() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let wat = r#"
+        (module
+            (func (export "canister_pre_upgrade")
+                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.canister_from_binary(wasm.clone()).unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    test.upgrade_canister(canister_id, wasm).unwrap();
+}
+
+#[test]
+fn memory_grow_checks_freezing_threshold_in_post_upgrade() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let wat = r#"
+        (module
+            (func (export "canister_post_upgrade")
+                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.canister_from_binary(wasm.clone()).unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert!(
+        err.description()
+            .contains("Canister cannot grow memory by 655360000 bytes due to insufficient cycles"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn memory_grow_checks_freezing_threshold_in_start() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let empty_wat = "(module)";
+    let wat = r#"
+        (module
+            (func $start
+                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (start $start)
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.canister_from_wat(empty_wat).unwrap();
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let err = test.upgrade_canister(canister_id, wasm).unwrap_err();
+    assert!(
+        err.description().contains("Canister cannot grow memory by"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn memory_grow_checks_freezing_threshold_in_init() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_initial_canister_cycles(1_000_000_000_000)
+        .build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
+    test.update_freezing_threshold(canister_id, NumSeconds::new(1_000_000_000))
+        .unwrap();
+    let err = test.install_canister(canister_id, wasm).unwrap_err();
+    assert!(
+        err.description().contains("Canister cannot grow memory by"),
+        "Unexpected error: {}",
+        err.description()
+    );
+    assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+}
+
+#[test]
+fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let empty_memory_usage = {
+        let id = test.canister_from_binary(wasm.clone()).unwrap();
+        test.canister_state(id).memory_usage()
+    };
+    let freezing_threshold = NumSeconds::new(1_000_000_000);
+    let memory_allocation = 655360000 + empty_memory_usage.get();
+    let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
+        freezing_threshold,
+        ic_types::MemoryAllocation::Reserved(NumBytes::new(memory_allocation)),
+        NumBytes::new(0),
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+    );
+
+    // Overapproximation of the install code message cost.
+    let install_code_cost = Cycles::new(1_000_000_000_000);
+
+    // Install code should be a small fraction of the freezing threshold cycles.
+    // If that's not the case, then we need to increase the freezing threshold.
+    assert!(install_code_cost.get() < freezing_threshold_cycles.get() / 10);
+    let initial_balance = freezing_threshold_cycles + install_code_cost;
+    let canister_id = test
+        .create_canister_with_allocation(initial_balance, None, Some(memory_allocation))
+        .unwrap();
+    test.update_freezing_threshold(canister_id, freezing_threshold)
+        .unwrap();
+    test.install_canister(canister_id, wasm).unwrap();
+}
+
+#[test]
+fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_afer_pre_upgrade() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (func (export "canister_init")
+                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (func (export "canister_post_upgrade")
+                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
+                    (then (unreachable))
+                )
+            )
+            (memory 0)
+        )"#;
+    let wasm = wat::parse_str(wat).unwrap();
+    let freezing_threshold = NumSeconds::new(1_000_000_000);
+    let memory_usage = 655_360_000 + 1_000_000;
+    let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
+        freezing_threshold,
+        ic_types::MemoryAllocation::BestEffort,
+        NumBytes::new(memory_usage),
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+    );
+
+    // Overapproximation of the install code message cost.
+    let install_code_cost = Cycles::new(1_000_000_000_000);
+
+    let initial_cycles = freezing_threshold_cycles + install_code_cost;
+
+    let canister_id = test
+        .canister_from_cycles_and_binary(initial_cycles, wasm.clone())
+        .unwrap();
+
+    test.upgrade_canister(canister_id, wasm).unwrap();
 }

@@ -1388,6 +1388,11 @@ pub(crate) enum CanisterManagerError {
         available: Cycles,
         threshold: Cycles,
     },
+    InsufficientCyclesInMemoryGrow {
+        bytes: NumBytes,
+        available: Cycles,
+        threshold: Cycles,
+    },
 }
 
 impl From<CanisterManagerError> for UserError {
@@ -1575,6 +1580,17 @@ impl From<CanisterManagerError> for UserError {
                     ),
                 )
 
+            }
+            InsufficientCyclesInMemoryGrow { bytes, available, threshold} =>
+            {
+                Self::new(
+                    ErrorCode::InsufficientCyclesInMemoryGrow,
+                    format!(
+                        "Canister cannot grow memory by {} bytes due to insufficient cycles. \
+                         At least {} additional cycles are required.",
+                         bytes,
+                         threshold - available)
+                )
             }
         }
     }
