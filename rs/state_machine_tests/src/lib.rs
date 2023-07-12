@@ -1828,7 +1828,7 @@ fn sign_message_with_derived_key(
     let pk = PublicKey::deserialize_sec1(&derived_public_key_bytes.derived_public_key)
         .expect("couldn't deserialize sec1");
     assert!(pk.verify_signature(message_hash, &signature));
-    signature
+    signature.to_vec()
 }
 
 #[derive(Clone)]

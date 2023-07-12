@@ -7,12 +7,15 @@ edition = "2021"
 
 [dependencies]
 k256 = { workspace = true }
-pem = "1.1.0"
-zeroize = { version = "1.5", features = ["zeroize_derive"] }
-simple_asn1 = "0.6.1"
-rand = "0.8"
 lazy_static = "1.4"
+num-bigint = "0.4"
+pem = "1.1.0"
+rand = "0.8"
+simple_asn1 = "0.6.1"
+zeroize = { version = "1.5", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 hex = "0.4"
+ic-crypto-sha = { path = "../sha" }
+ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 wycheproof = "0.5"

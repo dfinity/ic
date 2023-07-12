@@ -37,16 +37,59 @@ lazy_static::lazy_static! {
     static ref SECP256K1_OID: simple_asn1::OID = simple_asn1::oid!(1, 3, 132, 0, 10);
 }
 
-fn der_encode_rfc5915_privatekey(secret_key: &[u8]) -> Vec<u8> {
+const PEM_HEADER_PKCS8: &str = "PRIVATE KEY";
+const PEM_HEADER_RFC5915: &str = "EC PRIVATE KEY";
+
+/*
+RFC 5915 <https://www.rfc-editor.org/rfc/rfc5915> specifies how to
+encode ECC private keys in ASN.1
+
+Ordinarily this encoding is used embedded within a PKCS #8 ASN.1
+PrivateKeyInfo block <https://www.rfc-editor.org/rfc/rfc5208>.
+However OpenSSL's command line utility by default uses the "bare" RFC
+5915 ECPrivateKey structure to represent ECDSA keys, and as a
+consequence many utilities originally written using OpenSSL use this
+format instead of PKCS #8.
+
+If the RFC 5915 block is destined to be included in a PKCS #8 encoding,
+then we omit the curve parameter, as the curve is instead specified in
+the PKCS #8 privateKeyAlgorithm field. This is controled by the `include_curve`
+parameter.
+
+The public key can be optionally specified in the ECPrivateKey structure;
+if the `public_key` argument is `Some` then it is included.
+*/
+fn der_encode_rfc5915_privatekey(
+    secret_key: &[u8],
+    include_curve: bool,
+    public_key: Option<Vec<u8>>,
+) -> Vec<u8> {
     use simple_asn1::*;
-    use std::str::FromStr;
 
     // simple_asn1::to_der can only fail if you use an invalid object identifier
     // so to avoid returning a Result from this function we use expect
 
-    let ecdsa_version = ASN1Block::Integer(0, BigInt::from_str("1").expect("One is an integer"));
+    let ecdsa_version = ASN1Block::Integer(0, BigInt::new(num_bigint::Sign::Plus, vec![1]));
     let key_bytes = ASN1Block::OctetString(0, secret_key.to_vec());
-    let key_blocks = vec![ecdsa_version, key_bytes];
+    let mut key_blocks = vec![ecdsa_version, key_bytes];
+
+    if include_curve {
+        let tag0 = BigUint::new(vec![0]);
+        let secp256k1_oid = Box::new(ASN1Block::ObjectIdentifier(0, SECP256K1_OID.clone()));
+        let oid_param = ASN1Block::Explicit(ASN1Class::ContextSpecific, 0, tag0, secp256k1_oid);
+        key_blocks.push(oid_param);
+    }
+
+    if let Some(public_key) = public_key {
+        let tag1 = BigUint::new(vec![1]);
+        let pk_bs = Box::new(ASN1Block::BitString(
+            0,
+            public_key.len() * 8,
+            public_key.to_vec(),
+        ));
+        let pk_param = ASN1Block::Explicit(ASN1Class::ContextSpecific, 0, tag1, pk_bs);
+        key_blocks.push(pk_param);
+    }
 
     to_der(&ASN1Block::Sequence(0, key_blocks))
         .expect("Failed to encode ECDSA private key as RFC 5915 DER")
@@ -102,18 +145,18 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
 
 fn der_encode_pkcs8_rfc5208_private_key(secret_key: &[u8]) -> Vec<u8> {
     use simple_asn1::*;
-    use std::str::FromStr;
 
     // simple_asn1::to_der can only fail if you use an invalid object identifier
     // so to avoid returning a Result from this function we use expect
 
-    let pkcs8_version = ASN1Block::Integer(0, BigInt::from_str("0").expect("Zero is an integer"));
+    let pkcs8_version = ASN1Block::Integer(0, BigInt::new(num_bigint::Sign::Plus, vec![0]));
     let ecdsa_oid = ASN1Block::ObjectIdentifier(0, ECDSA_OID.clone());
     let secp256k1_oid = ASN1Block::ObjectIdentifier(0, SECP256K1_OID.clone());
 
     let alg_id = ASN1Block::Sequence(0, vec![ecdsa_oid, secp256k1_oid]);
 
-    let octet_string = ASN1Block::OctetString(0, der_encode_rfc5915_privatekey(secret_key));
+    let octet_string =
+        ASN1Block::OctetString(0, der_encode_rfc5915_privatekey(secret_key, false, None));
 
     let blocks = vec![pkcs8_version, alg_id, octet_string];
 
@@ -192,7 +235,7 @@ impl PrivateKey {
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der = pem::parse(pem)
             .map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
-        if der.tag != "PRIVATE KEY" {
+        if der.tag != PEM_HEADER_PKCS8 {
             return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
         }
 
@@ -209,7 +252,7 @@ impl PrivateKey {
     pub fn deserialize_rfc5915_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der = pem::parse(pem)
             .map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
-        if der.tag != "EC PRIVATE KEY" {
+        if der.tag != PEM_HEADER_RFC5915 {
             return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
         }
         Self::deserialize_rfc5915_der(&der.contents)
@@ -231,17 +274,46 @@ impl PrivateKey {
 
     /// Serialize the private key as PKCS8 format in PEM encoding
     pub fn serialize_pkcs8_pem(&self) -> String {
-        pem_encode(&self.serialize_pkcs8_der(), "PRIVATE KEY")
+        pem_encode(&self.serialize_pkcs8_der(), PEM_HEADER_PKCS8)
+    }
+
+    /// Serialize the private key as RFC 5915 in DER encoding
+    pub fn serialize_rfc5915_der(&self) -> Vec<u8> {
+        let sk = self.serialize_sec1();
+        let pk = self.public_key().serialize_sec1(false);
+        der_encode_rfc5915_privatekey(&sk, true, Some(pk))
+    }
+
+    /// Serialize the private key as RFC 5915 in PEM encoding
+    pub fn serialize_rfc5915_pem(&self) -> String {
+        pem_encode(&self.serialize_rfc5915_der(), PEM_HEADER_RFC5915)
     }
 
     /// Sign a message
     ///
     /// The message is hashed with SHA-256 and the signature is
     /// normalized (using the minimum-s approach of BitCoin)
-    pub fn sign_message(&self, message: &[u8]) -> Vec<u8> {
+    pub fn sign_message(&self, message: &[u8]) -> [u8; 64] {
         use k256::ecdsa::{signature::Signer, Signature};
         let sig: Signature = self.key.sign(message);
-        sig.to_bytes().to_vec()
+        sig.to_bytes().into()
+    }
+
+    /// Sign a message digest
+    ///
+    /// The signature is normalized (using the minimum-s approach of BitCoin)
+    pub fn sign_digest(&self, digest: &[u8]) -> Option<[u8; 64]> {
+        if digest.len() < 16 {
+            // k256 arbitrarily rejects digests that are < 128 bits
+            return None;
+        }
+
+        use k256::ecdsa::{signature::hazmat::PrehashSigner, Signature};
+        let sig: Signature = self
+            .key
+            .sign_prehash(digest)
+            .expect("Failed to sign digest");
+        Some(sig.to_bytes().into())
     }
 
     /// Return the public key cooresponding to this private key
@@ -291,7 +363,7 @@ impl PublicKey {
     ///
     /// The point can optionally be compressed
     pub fn serialize_sec1(&self, compressed: bool) -> Vec<u8> {
-        self.key.to_encoded_point(compressed).to_bytes().to_vec()
+        self.key.to_encoded_point(compressed).as_bytes().to_vec()
     }
 
     /// Serialize a public key in DER as a SubjectPublicKeyInfo
@@ -316,10 +388,21 @@ impl PublicKey {
             Err(_) => return false,
         };
 
+        /*
+         * In k256 0.11 and earlier, verify required that s be normalized. There is a regression in
+         * k256 0.12 (https://github.com/RustCrypto/elliptic-curves/issues/908) which causes either s
+         * to be accepted. Until this is fixed, include an explicit check on the sign of s.
+         */
+        if signature.normalize_s().is_some() {
+            return false;
+        }
+
         self.key.verify(message, &signature).is_ok()
     }
 
     /// Verify a (message,signature) pair
+    ///
+    /// The message is hashed with SHA-256
     ///
     /// This accepts signatures without s-normalization
     ///
@@ -343,6 +426,59 @@ impl PublicKey {
             self.key.verify(message, &normalized).is_ok()
         } else {
             self.key.verify(message, &signature).is_ok()
+        }
+    }
+
+    /// Verify a (message digest,signature) pair
+    pub fn verify_signature_prehashed(&self, digest: &[u8], signature: &[u8]) -> bool {
+        use k256::ecdsa::signature::hazmat::PrehashVerifier;
+
+        let signature = match k256::ecdsa::Signature::try_from(signature) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
+
+        /*
+         * In k256 0.11 and earlier, verify required that s be normalized. There is a regression in
+         * k256 0.12 (https://github.com/RustCrypto/elliptic-curves/issues/908) which causes either s
+         * to be accepted. Until this is fixed, include an explicit check on the sign of s.
+         */
+        if signature.normalize_s().is_some() {
+            return false;
+        }
+
+        self.key.verify_prehash(digest, &signature).is_ok()
+    }
+
+    /// Verify a (message digest,signature) pair
+    ///
+    /// This accepts signatures without s-normalization
+    ///
+    /// ECDSA signatures are a tuple of integers (r,s) which satisfy a certain
+    /// equation which involves also the public key and the message.  A quirk of
+    /// ECDSA is that if (r,s) is a valid signature then (r,-s) is also a valid
+    /// signature (here negation is modulo the group order).
+    ///
+    /// This means that given a valid ECDSA signature, it is possible to create
+    /// a "new" ECDSA signature that is also valid, without having access to the
+    /// public key. Unlike `verify_signature_prehashed`, this function accepts either `s`
+    /// value.
+    pub fn verify_signature_prehashed_with_malleability(
+        &self,
+        digest: &[u8],
+        signature: &[u8],
+    ) -> bool {
+        use k256::ecdsa::signature::hazmat::PrehashVerifier;
+
+        let signature = match k256::ecdsa::Signature::try_from(signature) {
+            Ok(sig) => sig,
+            Err(_) => return false,
+        };
+
+        if let Some(normalized) = signature.normalize_s() {
+            self.key.verify_prehash(digest, &normalized).is_ok()
+        } else {
+            self.key.verify_prehash(digest, &signature).is_ok()
         }
     }
 }

@@ -8,13 +8,12 @@ package(
 )
 
 DEPENDENCIES = [
+    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
     "//rs/types/types",
     "@crate_index//:base64",
-    "@crate_index//:hex",
-    "@crate_index//:openssl",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:simple_asn1",
@@ -24,20 +23,15 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/internal/test_vectors",
+    "//rs/crypto/sha",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:assert_matches",
-    "@crate_index//:k256",
-    "@crate_index//:proptest",
+    "@crate_index//:hex",
     "@crate_index//:rand_0_8_4",
-    "@crate_index//:regex",
-    "@crate_index//:strum",
     "@crate_index//:wycheproof",
 ]
 
-MACRO_DEV_DEPENDENCIES = [
-    "@crate_index//:proptest-derive",
-]
+MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 

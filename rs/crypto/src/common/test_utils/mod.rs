@@ -11,7 +11,6 @@ pub mod crypto_component;
 pub mod multi_bls12_381;
 
 // Indirections to delete:
-pub use ic_crypto_internal_test_vectors::ecdsa_p256;
 pub use ic_crypto_internal_test_vectors::unhex::*;
 
 // Registry is a (key, value) store.

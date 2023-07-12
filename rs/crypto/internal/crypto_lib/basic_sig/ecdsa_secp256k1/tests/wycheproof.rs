@@ -1,5 +1,5 @@
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1::*;
-use openssl::sha::sha256;
+use ic_crypto_sha::Sha256;
 use std::convert::TryFrom;
 use wycheproof::ecdsa::*;
 
@@ -27,7 +27,7 @@ fn should_pass_wycheproof_test_vectors() {
                 Some(sig) => sig,
             };
 
-            let msg_hash = sha256(&test.msg);
+            let msg_hash = Sha256::hash(&test.msg);
 
             let sig_accepted = api::verify(&sig, &msg_hash, &key).is_ok();
 
