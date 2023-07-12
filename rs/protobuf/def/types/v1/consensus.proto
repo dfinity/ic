@@ -55,6 +55,7 @@ message Block {
 	SelfValidatingPayload self_validating_payload = 12;
 	EcdsaPayload ecdsa_payload = 13;
 	CanisterHttpPayload canister_http_payload = 14;
+	bytes canister_http_payload_bytes = 15;
 	bytes payload_hash = 11;
 }
 

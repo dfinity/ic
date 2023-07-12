@@ -6,7 +6,7 @@ use crate::consensus::{
 };
 use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
-    canister_http::CanisterHttpPayloadBuilder,
+    batch_payload::BatchPayloadBuilder,
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
@@ -42,7 +42,7 @@ impl PayloadBuilderImpl {
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
-        canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
+        canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         metrics: MetricsRegistry,
         logger: ReplicaLogger,
     ) -> Self {
@@ -193,9 +193,9 @@ pub(crate) mod test {
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
-        canister_http::FakeCanisterHttpPayloadBuilder,
         consensus::fake::Fake,
         ingress_selector::FakeIngressSelector,
         mock_time,

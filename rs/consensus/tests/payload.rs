@@ -5,11 +5,11 @@ use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{certification::CertifierImpl, dkg};
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_test_utilities::canister_http::FakeCanisterHttpPayloadBuilder;
 use ic_test_utilities::{
     consensus::make_genesis,
     crypto::CryptoReturningOk,

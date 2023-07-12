@@ -76,7 +76,7 @@ pub struct BatchPayload {
     pub ingress: IngressPayload,
     pub xnet: XNetPayload,
     pub self_validating: SelfValidatingPayload,
-    pub canister_http: CanisterHttpPayload,
+    pub canister_http: Vec<u8>,
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.

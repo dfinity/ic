@@ -662,6 +662,8 @@ pub struct Block {
     pub ecdsa_payload: ::core::option::Option<EcdsaPayload>,
     #[prost(message, optional, tag = "14")]
     pub canister_http_payload: ::core::option::Option<CanisterHttpPayload>,
+    #[prost(bytes = "vec", tag = "15")]
+    pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }

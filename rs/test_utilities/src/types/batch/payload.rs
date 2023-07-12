@@ -1,6 +1,4 @@
-use ic_types::batch::{
-    BatchPayload, CanisterHttpPayload, IngressPayload, SelfValidatingPayload, XNetPayload,
-};
+use ic_types::batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload};
 
 pub struct PayloadBuilder {
     payload: BatchPayload,
@@ -14,7 +12,7 @@ impl Default for PayloadBuilder {
                 xnet: super::xnet_payload::XNetPayloadBuilder::default().build(),
                 // TODO(MR-70): use payload builder
                 self_validating: SelfValidatingPayload::default(),
-                canister_http: CanisterHttpPayload::default(),
+                canister_http: vec![],
             },
         }
     }

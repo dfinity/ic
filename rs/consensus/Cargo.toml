@@ -11,6 +11,7 @@ ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
 ic-error-types = { path = "../types/error_types" }
+ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }

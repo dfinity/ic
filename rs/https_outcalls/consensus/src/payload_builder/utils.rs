@@ -1,6 +1,6 @@
 use ic_interfaces::canister_http::CanisterHttpPermanentValidationError;
 use ic_types::{
-    batch::{CanisterHttpPayload, ValidationContext},
+    batch::ValidationContext,
     canister_http::{
         CanisterHttpResponseMetadata, CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
     },
@@ -8,7 +8,7 @@ use ic_types::{
     messages::CallbackId,
     NodeId, RegistryVersion,
 };
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Checks whether the response is consistent
 ///
@@ -85,20 +85,6 @@ pub(crate) fn check_share_against_context(
     context: &ValidationContext,
 ) -> bool {
     share.content.timeout > context.time && share.content.registry_version == registry_version
-}
-
-/// Creates a [`HashSet`] of [`CallbackId`]s from `past_payloads`
-pub(crate) fn get_past_payload_ids(past_payloads: &[&CanisterHttpPayload]) -> HashSet<CallbackId> {
-    past_payloads
-        .iter()
-        .flat_map(|payload| {
-            payload
-                .responses
-                .iter()
-                .map(|response| response.content.id)
-                .chain(payload.timeouts.iter().cloned())
-        })
-        .collect()
 }
 
 /// This function takes a mapping of response metadata to supporting shares

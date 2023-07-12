@@ -1,17 +1,17 @@
 use crate::consensus::metrics::{
     PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED,
 };
+use ic_consensus_utils::pool_reader::filter_past_payloads;
 use ic_interfaces::{
-    canister_http::CanisterHttpPayloadBuilder, consensus::PayloadValidationError,
-    ingress_manager::IngressSelector, messaging::XNetPayloadBuilder,
+    batch_payload::{BatchPayloadBuilder, PastPayload},
+    consensus::PayloadValidationError,
+    ingress_manager::IngressSelector,
+    messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{error, ReplicaLogger};
 use ic_types::{
-    batch::{
-        BatchPayload, CanisterHttpPayload, IngressPayload, SelfValidatingPayload,
-        ValidationContext, XNetPayload,
-    },
+    batch::{BatchPayload, IngressPayload, SelfValidatingPayload, ValidationContext, XNetPayload},
     consensus::Payload,
     CountBytes, Height, NumBytes, Time,
 };
@@ -40,7 +40,7 @@ pub(crate) enum BatchPayloadSectionBuilder {
     Ingress(Arc<dyn IngressSelector>),
     XNet(Arc<dyn XNetPayloadBuilder>),
     SelfValidating(Arc<dyn SelfValidatingPayloadBuilder>),
-    CanisterHttp(Arc<dyn CanisterHttpPayloadBuilder>),
+    CanisterHttp(Arc<dyn BatchPayloadBuilder>),
 }
 
 impl BatchPayloadSectionBuilder {
@@ -151,45 +151,27 @@ impl BatchPayloadSectionBuilder {
                 }
             }
             Self::CanisterHttp(builder) => {
-                let past_payloads = builder.filter_past_payloads(past_payloads);
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.canister_http)
+                        }
+                    });
 
-                let canister_http = builder.get_canister_http_payload(
-                    height,
-                    validation_context,
-                    &past_payloads,
-                    max_size,
-                );
-                let size = NumBytes::new(canister_http.count_bytes() as u64);
+                let canister_http =
+                    builder.build_payload(height, max_size, &past_payloads, validation_context);
+                let size = NumBytes::new(canister_http.len() as u64);
 
                 // Check validation as safety measure
-                match builder.validate_canister_http_payload(
+                match builder.validate_payload(
                     height,
                     &canister_http,
-                    validation_context,
                     &past_payloads,
+                    validation_context,
                 ) {
-                    Ok(validation_size) => {
-                        if validation_size > size {
-                            error!(
-                                logger,
-                                "CanisterHttp is larger than byte_limit. This is a bug, @{}",
-                                CRITICAL_ERROR_PAYLOAD_TOO_LARGE
-                            );
-
-                            metrics.critical_error_payload_too_large.inc();
-                            payload.canister_http = CanisterHttpPayload::default();
-                            return NumBytes::new(0);
-                        }
-
-                        // NOTE: This is not a critical error, since it does not break any invariants.
-                        // It is nice to know about it nonetheless
-                        if validation_size < size {
-                            warn!(
-                                logger,
-                                "CanisterHttp validator reported size different from builder"
-                            );
-                        }
-
+                    Ok(()) => {
                         payload.canister_http = canister_http;
                         size
                     }
@@ -202,7 +184,7 @@ impl BatchPayloadSectionBuilder {
                         );
 
                         metrics.critical_error_validation_not_passed.inc();
-                        payload.canister_http = CanisterHttpPayload::default();
+                        payload.canister_http = vec![];
                         NumBytes::new(0)
                     }
                 }
@@ -253,14 +235,24 @@ impl BatchPayloadSectionBuilder {
                     &past_payloads,
                 )?)
             }
-            BatchPayloadSectionBuilder::CanisterHttp(builder) => {
-                let past_payloads = builder.filter_past_payloads(past_payloads);
-                Ok(builder.validate_canister_http_payload(
+            Self::CanisterHttp(builder) => {
+                let past_payloads: Vec<PastPayload> =
+                    filter_past_payloads(past_payloads, |_, _, payload| {
+                        if payload.is_summary() {
+                            None
+                        } else {
+                            Some(&payload.as_ref().as_data().batch.canister_http)
+                        }
+                    });
+
+                builder.validate_payload(
                     height,
                     &payload.canister_http,
-                    validation_context,
                     &past_payloads,
-                )?)
+                    validation_context,
+                )?;
+
+                Ok(NumBytes::new(payload.canister_http.len() as u64))
             }
         }
     }

@@ -535,31 +535,31 @@ impl<'a> PoolReader<'a> {
             registry_version,
         )
     }
+}
 
-    /// Take a slice returned by [`PoolReader::get_payloads_from_height`]
-    /// and return it in the [`PastPayload`] format that is used by the batch payload builders
-    ///
-    /// The returned vector contains only the values for which the supplied closure `filter`
-    /// returns Some(value).
-    pub fn filter_past_payloads<P>(
-        input: &'a [(Height, Time, Payload)],
-        filter: P,
-    ) -> Vec<PastPayload<'a>>
-    where
-        P: Fn(&Height, &Time, &Payload) -> Option<&'a [u8]>,
-    {
-        input
-            .iter()
-            .filter_map(|(height, time, payload)| {
-                filter(height, time, payload).map(|data| PastPayload {
-                    height: *height,
-                    time: *time,
-                    block_hash: payload.get_hash().clone(),
-                    payload: data,
-                })
+/// Take a slice returned by [`PoolReader::get_payloads_from_height`]
+/// and return it in the [`PastPayload`] format that is used by the batch payload builders
+///
+/// The returned vector contains only the values for which the supplied closure `filter`
+/// returns Some(value).
+pub fn filter_past_payloads<'a, P>(
+    input: &'a [(Height, Time, Payload)],
+    filter: P,
+) -> Vec<PastPayload<'a>>
+where
+    P: Fn(&'a Height, &'a Time, &'a Payload) -> Option<&'a [u8]>,
+{
+    input
+        .iter()
+        .filter_map(|(height, time, payload)| {
+            filter(height, time, payload).map(|data| PastPayload {
+                height: *height,
+                time: *time,
+                block_hash: payload.get_hash().clone(),
+                payload: data,
             })
-            .collect()
-    }
+        })
+        .collect()
 }
 
 #[cfg(test)]
