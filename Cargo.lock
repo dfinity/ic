@@ -5637,6 +5637,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-error-types",
  "ic-execution-environment",
+ "ic-https-outcalls-consensus",
  "ic-ic00-types",
  "ic-ingress-manager",
  "ic-interfaces",

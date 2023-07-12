@@ -43,7 +43,7 @@ use ic_consensus_utils::{
 };
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
-    canister_http::CanisterHttpPayloadBuilder,
+    batch_payload::BatchPayloadBuilder,
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool},
     dkg::DkgPool,
     ecdsa::EcdsaPool,
@@ -153,7 +153,7 @@ impl ConsensusImpl {
         ingress_selector: Arc<dyn IngressSelector>,
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
-        canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
+        canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -637,7 +637,7 @@ pub fn setup(
     ingress_selector: Arc<dyn IngressSelector>,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
-    canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
+    canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -692,13 +692,13 @@ mod tests {
     use super::*;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
-        canister_http::FakeCanisterHttpPayloadBuilder,
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,

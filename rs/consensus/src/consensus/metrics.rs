@@ -1,4 +1,5 @@
 use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
+use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
@@ -152,30 +153,23 @@ pub struct BatchStats {
     pub ingress_message_bytes_delivered: usize,
     pub xnet_bytes_delivered: usize,
     pub ingress_ids: Vec<ic_types::artifact::IngressMessageId>,
-    pub canister_http_success_delivered: usize,
-    pub canister_http_timeouts_delivered: usize,
-    pub canister_http_divergences_delivered: usize,
+    pub canister_http: CanisterHttpBatchStats,
 }
 
 impl BatchStats {
-    pub(crate) fn from_payload(batch_height: Height, payload: &BatchPayload) -> Self {
-        Self {
-            batch_height: batch_height.get(),
-            ingress_messages_delivered: payload.ingress.message_count(),
-            ingress_message_bytes_delivered: payload.ingress.count_bytes(),
-            xnet_bytes_delivered: payload.xnet.size_bytes(),
-            ingress_ids: payload.ingress.message_ids(),
-            canister_http_success_delivered: payload.canister_http.responses.len(),
-            canister_http_timeouts_delivered: payload.canister_http.timeouts.len(),
-            canister_http_divergences_delivered: payload.canister_http.divergence_responses.len(),
-        }
-    }
-
-    pub(crate) fn empty(batch_height: Height) -> Self {
+    pub(crate) fn new(batch_height: Height) -> Self {
         Self {
             batch_height: batch_height.get(),
             ..Self::default()
         }
+    }
+
+    pub(crate) fn add_from_payload(&mut self, payload: &BatchPayload) {
+        self.ingress_messages_delivered += payload.ingress.message_count();
+        self.ingress_message_bytes_delivered += payload.ingress.count_bytes();
+        self.xnet_bytes_delivered += payload.xnet.size_bytes();
+        self.ingress_ids
+            .extend_from_slice(&payload.ingress.message_ids());
     }
 }
 
@@ -338,11 +332,11 @@ impl FinalizerMetrics {
             block_stats.block_height as i64 - block_stats.block_context_certified_height as i64,
         );
         self.canister_http_success_delivered
-            .inc_by(batch_stats.canister_http_success_delivered as u64);
+            .inc_by(batch_stats.canister_http.responses as u64);
         self.canister_http_timeouts_delivered
-            .inc_by(batch_stats.canister_http_timeouts_delivered as u64);
+            .inc_by(batch_stats.canister_http.timeouts as u64);
         self.canister_http_divergences_delivered
-            .inc_by(batch_stats.canister_http_divergences_delivered as u64);
+            .inc_by(batch_stats.canister_http.divergence_responses as u64);
         if let Some(ecdsa) = &block_stats.ecdsa_stats {
             self.ecdsa_key_transcript_created
                 .inc_by(ecdsa.key_transcript_created);

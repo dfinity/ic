@@ -2,8 +2,9 @@
 
 use crate::{
     metrics::CanisterHttpPayloadBuilderMetrics,
-    payload_builder::utils::{
-        group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
+    payload_builder::{
+        parse::bytes_to_payload,
+        utils::{group_shares_by_callback_id, grouped_shares_meet_divergence_criteria},
     },
 };
 use ic_consensus_utils::{
@@ -13,8 +14,7 @@ use ic_error_types::RejectCode;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, IntoMessages, PastPayload},
     canister_http::{
-        CanisterHttpPayloadBuilder, CanisterHttpPayloadValidationError,
-        CanisterHttpPermanentValidationError, CanisterHttpPool,
+        CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError, CanisterHttpPool,
         CanisterHttpTransientValidationError,
     },
     consensus::{PayloadPermanentError, PayloadTransientError, PayloadValidationError},
@@ -47,9 +47,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use self::parse::bytes_to_payload;
-
-mod parse;
+pub(crate) mod parse;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 #[cfg(test)]
@@ -75,7 +73,7 @@ enum CandidateOrDivergence {
     Divergence(CanisterHttpResponseDivergence),
 }
 
-/// Implementation of the [`CanisterHttpPayloadBuilder`].
+/// Implementation of the [`BatchPayloadBuilder`] for the canister http feature.
 pub struct CanisterHttpPayloadBuilderImpl {
     pool: Arc<RwLock<dyn CanisterHttpPool>>,
     cache: Arc<dyn ConsensusPoolCache>,
@@ -158,7 +156,7 @@ impl CanisterHttpPayloadBuilderImpl {
         height: Height,
         validation_context: &ValidationContext,
         delivered_ids: HashSet<CallbackId>,
-        byte_limit: NumBytes,
+        max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
         let _time = self
             .metrics
@@ -176,13 +174,6 @@ impl CanisterHttpPayloadBuilderImpl {
             Ok(false) => return CanisterHttpPayload::default(),
             Ok(true) => (),
         }
-
-        // Payload size should not be bigger than MAX_CANISTER_HTTP_PAYLOAD_SIZE
-        // TODO: Remove when switching to new interface
-        let max_payload_size = std::cmp::min(
-            byte_limit,
-            NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
-        );
 
         // Get the threshold value that is needed for consensus
         let threshold = match self
@@ -345,10 +336,6 @@ impl CanisterHttpPayloadBuilderImpl {
 
             for candidate_or_divergence in candidates_and_divergences {
                 unique_includable_responses += 1;
-                // FIXME: This MUST be the same size calculation as
-                // CanisterHttpResponseWithConsensus::count_bytes. This
-                // should be explicit in the code
-
                 match candidate_or_divergence {
                     CandidateOrDivergence::Candidate((metadata, shares, content)) => {
                         let candidate_size =
@@ -404,7 +391,7 @@ impl CanisterHttpPayloadBuilderImpl {
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
         delivered_ids: HashSet<CallbackId>,
-    ) -> Result<NumBytes, CanisterHttpPayloadValidationError> {
+    ) -> Result<(), CanisterHttpPayloadValidationError> {
         let _time = self
             .metrics
             .op_duration
@@ -413,7 +400,7 @@ impl CanisterHttpPayloadBuilderImpl {
 
         // Empty payloads are always valid
         if payload.is_empty() {
-            return Ok(0.into());
+            return Ok(());
         }
 
         // Check whether feature is enabled and reject if it isn't.
@@ -434,22 +421,6 @@ impl CanisterHttpPayloadBuilderImpl {
                 CanisterHttpPermanentValidationError::TooManyResponses {
                     expected: CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK,
                     received: payload.num_non_timeout_responses(),
-                },
-            ));
-        }
-
-        // Check size of the payload
-        // TODO: Remove when switching to the new interface
-        let payload_size = payload
-            .responses
-            .iter()
-            .map(CountBytes::count_bytes)
-            .sum::<usize>();
-        if payload_size > MAX_CANISTER_HTTP_PAYLOAD_SIZE {
-            return Err(CanisterHttpPayloadValidationError::Permanent(
-                CanisterHttpPermanentValidationError::PayloadTooBig {
-                    expected: MAX_CANISTER_HTTP_PAYLOAD_SIZE,
-                    received: payload_size,
                 },
             ));
         }
@@ -626,8 +597,7 @@ impl CanisterHttpPayloadBuilderImpl {
             }
         }
 
-        // Successfully return with payload size
-        Ok(NumBytes::from(payload_size as u64))
+        Ok(())
     }
 }
 
@@ -756,30 +726,5 @@ impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPaylo
             .collect();
 
         (responses, stats)
-    }
-}
-
-// TODO: Remove after migrating to new interface
-impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
-    fn get_canister_http_payload(
-        &self,
-        height: Height,
-        validation_context: &ValidationContext,
-        past_payloads: &[&CanisterHttpPayload],
-        byte_limit: NumBytes,
-    ) -> CanisterHttpPayload {
-        let delivered_ids = utils::get_past_payload_ids(past_payloads);
-        self.get_canister_http_payload_impl(height, validation_context, delivered_ids, byte_limit)
-    }
-
-    fn validate_canister_http_payload(
-        &self,
-        height: Height,
-        payload: &CanisterHttpPayload,
-        validation_context: &ValidationContext,
-        past_payloads: &[&CanisterHttpPayload],
-    ) -> Result<NumBytes, CanisterHttpPayloadValidationError> {
-        let delivered_ids = utils::get_past_payload_ids(past_payloads);
-        self.validate_canister_http_payload_impl(height, payload, validation_context, delivered_ids)
     }
 }

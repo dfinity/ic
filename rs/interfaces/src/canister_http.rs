@@ -1,16 +1,15 @@
 //! Canister Http related public interfaces.
 use crate::validation::ValidationError;
-use ic_base_types::{NumBytes, RegistryVersion};
+use ic_base_types::RegistryVersion;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     artifact::CanisterHttpResponseId,
-    batch::{CanisterHttpPayload, ValidationContext},
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
-    consensus::{Payload, Threshold},
+    consensus::Threshold,
     crypto::{CryptoError, CryptoHashOf},
     messages::CallbackId,
     registry::RegistryClientError,
-    Height, NodeId, Time,
+    NodeId, Time,
 };
 
 #[derive(Debug)]
@@ -126,38 +125,4 @@ pub trait CanisterHttpPool: Send + Sync {
         &self,
         msg_id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare>;
-}
-
-pub trait CanisterHttpPayloadBuilder: Send + Sync {
-    fn get_canister_http_payload(
-        &self,
-        height: Height,
-        validation_context: &ValidationContext,
-        past_payloads: &[&CanisterHttpPayload],
-        byte_limit: NumBytes,
-    ) -> CanisterHttpPayload;
-
-    fn validate_canister_http_payload(
-        &self,
-        height: Height,
-        payload: &CanisterHttpPayload,
-        validation_context: &ValidationContext,
-        past_payloads: &[&CanisterHttpPayload],
-    ) -> Result<NumBytes, CanisterHttpPayloadValidationError>;
-
-    fn filter_past_payloads<'a>(
-        &self,
-        past_payloads: &'a [(Height, Time, Payload)],
-    ) -> Vec<&'a CanisterHttpPayload> {
-        past_payloads
-            .iter()
-            .filter_map(|(_, _, payload)| {
-                if payload.is_summary() {
-                    None
-                } else {
-                    Some(&payload.as_ref().as_data().batch.canister_http)
-                }
-            })
-            .collect()
-    }
 }

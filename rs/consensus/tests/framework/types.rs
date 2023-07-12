@@ -8,9 +8,10 @@ use ic_consensus::{
     consensus::{ConsensusGossipImpl, ConsensusImpl},
     dkg,
 };
+use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
-    canister_http::CanisterHttpPayloadBuilder,
+    batch_payload::BatchPayloadBuilder,
     certification::ChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
     ingress_manager::IngressSelector,
@@ -26,8 +27,7 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities::{
-    canister_http::FakeCanisterHttpPayloadBuilder, ingress_selector::FakeIngressSelector,
-    message_routing::FakeMessageRouting,
+    ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
@@ -150,7 +150,7 @@ pub struct ConsensusDependencies {
     pub(crate) xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     pub(crate) ingress_selector: Arc<dyn IngressSelector>,
     pub(crate) self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
-    pub(crate) canister_http_payload_builder: Arc<dyn CanisterHttpPayloadBuilder>,
+    pub(crate) canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,

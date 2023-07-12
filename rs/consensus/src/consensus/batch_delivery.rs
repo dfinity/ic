@@ -12,8 +12,12 @@ use crate::{
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_consensus_utils::{crypto_hashable_to_seed, get_block_hash_string, pool_reader::PoolReader};
 use ic_crypto::get_tecdsa_master_public_key;
+use ic_https_outcalls_consensus::payload_builder::CanisterHttpPayloadBuilderImpl;
 use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGResponse};
-use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
+use ic_interfaces::{
+    batch_payload::IntoMessages,
+    messaging::{MessageRouting, MessageRoutingError},
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
 use ic_protobuf::{
@@ -21,8 +25,7 @@ use ic_protobuf::{
     registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
 };
 use ic_types::{
-    batch::{Batch, BatchMessages, CanisterHttpPayload},
-    canister_http::*,
+    batch::{Batch, BatchMessages},
     consensus::{
         ecdsa::{self, CompletedSignature, EcdsaBlockReader},
         Block, BlockPayload,
@@ -78,8 +81,6 @@ pub fn deliver_batches(
                         replica_version: Some(String::from(current_replica_version.clone()))
                     }
                 );
-                // Compute consensus' responses to subnet calls.
-                let consensus_responses = generate_responses_to_subnet_calls(&block, log);
 
                 if block.payload.is_summary() {
                     info!(log, "Delivering finalized batch at CUP height of {}", h);
@@ -124,24 +125,28 @@ pub fn deliver_batches(
                 };
 
                 let block_stats = BlockStats::from(&block);
+                let mut batch_stats = BatchStats::new(h);
+
+                // Compute consensus' responses to subnet calls.
+                let consensus_responses =
+                    generate_responses_to_subnet_calls(&block, &mut batch_stats, log);
 
                 // This flag can only be true, if we've called deliver_batches with a height
                 // limit.  In this case we also want to have a checkpoint for that last height.
                 let persist_batch = Some(h) == max_batch_height_to_deliver;
                 let requires_full_state_hash = block.payload.is_summary() || persist_batch;
-                let (batch_messages, batch_stats) = if block.payload.is_summary() {
-                    (BatchMessages::default(), BatchStats::empty(h))
+                let batch_messages = if block.payload.is_summary() {
+                    BatchMessages::default()
                 } else {
                     let batch_payload = BlockPayload::from(block.payload).into_data().batch;
-                    let batch_stats = BatchStats::from_payload(h, &batch_payload);
-                    let batch_messages = batch_payload
+                    batch_stats.add_from_payload(&batch_payload);
+                    batch_payload
                         .into_messages()
                         .map_err(|err| {
                             error!(log, "batch payload deserialization failed: {:?}", err);
                             err
                         })
-                        .unwrap_or_default();
-                    (batch_messages, batch_stats)
+                        .unwrap_or_default()
                 };
 
                 let batch = Batch {
@@ -253,7 +258,11 @@ pub fn get_ecdsa_subnet_public_key(
 /// - Initial NiDKG transcript creation, where a response may come from summary payloads.
 /// - Threshold ECDSA signature creation, where a response may come from from data payloads.
 /// - CanisterHttpResponse handling, where a response to a canister http request may come from data payloads.
-pub fn generate_responses_to_subnet_calls(block: &Block, log: &ReplicaLogger) -> Vec<Response> {
+pub fn generate_responses_to_subnet_calls(
+    block: &Block,
+    stats: &mut BatchStats,
+    log: &ReplicaLogger,
+) -> Vec<Response> {
     let mut consensus_responses = Vec::<Response>::new();
     let block_payload = &block.payload;
     if block_payload.is_summary() {
@@ -274,80 +283,12 @@ pub fn generate_responses_to_subnet_calls(block: &Block, log: &ReplicaLogger) ->
             consensus_responses.append(&mut generate_responses_to_initial_dealings_calls(payload));
         }
 
-        consensus_responses.append(
-            &mut generate_execution_responses_for_canister_http_responses(
-                &block_payload.batch.canister_http,
-            ),
-        );
+        let (mut http_responses, http_stats) =
+            CanisterHttpPayloadBuilderImpl::into_messages(&block_payload.batch.canister_http);
+        consensus_responses.append(&mut http_responses);
+        stats.canister_http = http_stats;
     }
     consensus_responses
-}
-
-/// This function converts the canister http responses from the batch payload
-/// into something that is recognizable by upper layers.
-pub fn generate_execution_responses_for_canister_http_responses(
-    canister_http_payload: &CanisterHttpPayload,
-) -> Vec<Response> {
-    // Deliver responses with consenus
-    canister_http_payload
-        .responses
-        .iter()
-        .map(|canister_http_response| {
-            let content = &canister_http_response.content;
-            Response {
-                // NOTE originator and respondent are not needed for these types of calls
-                originator: CanisterId::ic_00(),
-                respondent: CanisterId::ic_00(),
-                originator_reply_callback: content.id,
-                refund: Cycles::zero(),
-                response_payload: match &content.content {
-                    CanisterHttpResponseContent::Success(data) => {
-                        ic_types::messages::Payload::Data(data.clone())
-                    }
-                    CanisterHttpResponseContent::Reject(canister_http_reject) => {
-                        ic_types::messages::Payload::Reject((canister_http_reject).into())
-                    }
-                },
-            }
-        })
-        // Deliver timeout responses
-        .chain(
-            canister_http_payload
-                .timeouts
-                .iter()
-                .map(|canister_http_timeout| Response {
-                    originator: CanisterId::ic_00(),
-                    respondent: CanisterId::ic_00(),
-                    originator_reply_callback: *canister_http_timeout,
-                    refund: Cycles::zero(),
-                    response_payload: ic_types::messages::Payload::Reject(
-                        ic_types::messages::RejectContext {
-                            code: ic_error_types::RejectCode::SysTransient,
-                            message: "Canister http request timed out".to_string(),
-                        },
-                    ),
-                }),
-        )
-        .chain(
-            canister_http_payload
-                .divergence_responses
-                .iter()
-                .filter_map(|divergence_response| {
-                    Some(Response {
-                        originator: CanisterId::ic_00(),
-                        respondent: CanisterId::ic_00(),
-                        originator_reply_callback: divergence_response.shares.get(0)?.content.id,
-                        refund: Cycles::zero(),
-                        response_payload: ic_types::messages::Payload::Reject(
-                            ic_types::messages::RejectContext {
-                                code: ic_error_types::RejectCode::SysTransient,
-                                message: "Canister http responses were different across replicas, and no consensus was reached".to_string(),
-                            },
-                        ),
-                    })
-                }),
-        )
-        .collect()
 }
 
 struct TranscriptResults {

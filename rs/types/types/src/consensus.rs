@@ -1319,7 +1319,7 @@ impl From<&Block> for pb::Block {
             xnet_payload,
             ingress_payload,
             self_validating_payload,
-            canister_http_payload,
+            canister_http_payload_bytes,
             ecdsa_payload,
         ) = if payload.is_summary() {
             (
@@ -1327,7 +1327,7 @@ impl From<&Block> for pb::Block {
                 None,
                 None,
                 None,
-                None,
+                vec![],
                 payload
                     .as_summary()
                     .ecdsa
@@ -1341,7 +1341,7 @@ impl From<&Block> for pb::Block {
                 Some(pb::XNetPayload::from(&batch.xnet)),
                 Some(pb::IngressPayload::from(&batch.ingress)),
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
-                Some(pb::CanisterHttpPayload::from(&batch.canister_http)),
+                batch.canister_http.clone(),
                 payload.as_data().ecdsa.as_ref().map(|ecdsa| ecdsa.into()),
             )
         };
@@ -1357,7 +1357,8 @@ impl From<&Block> for pb::Block {
             xnet_payload,
             ingress_payload,
             self_validating_payload,
-            canister_http_payload,
+            canister_http_payload: None,
+            canister_http_payload_bytes,
             ecdsa_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
@@ -1388,12 +1389,7 @@ impl TryFrom<pb::Block> for Block {
                 .map(crate::batch::SelfValidatingPayload::try_from)
                 .transpose()?
                 .unwrap_or_default(),
-            canister_http: block
-                .canister_http_payload
-                .map(crate::batch::CanisterHttpPayload::try_from)
-                .transpose()
-                .map_err(|e| e.to_string())?
-                .unwrap_or_default(),
+            canister_http: block.canister_http_payload_bytes,
         };
         let payload = match dkg_payload {
             dkg::Payload::Summary(summary) => {
