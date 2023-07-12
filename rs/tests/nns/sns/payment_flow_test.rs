@@ -5,7 +5,8 @@ use std::time::Duration;
 
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_deployment::{
-    generate_ticket_participants_workload, initiate_token_swap_with_oc_parameters, sns_setup_fast,
+    generate_ticket_participants_workload, initiate_token_swap_with_oc_parameters,
+    sns_setup_fast_legacy,
 };
 use ic_tests::systest;
 
@@ -34,7 +35,7 @@ fn multiple_ticket_participants(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(15 * 60)) // 15 min
-        .with_setup(sns_setup_fast)
+        .with_setup(sns_setup_fast_legacy)
         .add_test(systest!(initiate_token_swap_with_oc_parameters))
         .add_test(systest!(multiple_ticket_participants))
         .execute_from_args()?;
