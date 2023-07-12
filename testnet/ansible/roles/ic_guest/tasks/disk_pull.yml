@@ -12,7 +12,7 @@
     PROXY_CONNECT_TIMEOUT=5
     PROXY_CDN_URL="http://download.proxy-global.dfinity.network:8080"
     CDN_URL="https://download.dfinity.systems"
-    DEFAULT_UNIVERSAL_VM_IMG_SHA256="ca2ddfab45f940564503e2edf3d2c02acc05988edde4e3a7400355bd22d69d44"
+    DEFAULT_UNIVERSAL_VM_IMG_SHA256="93c094b72786ca1e5a47776ff8dba48d10ffa2bcd28701fc9759baa175e5558b"
 
     declare -A proxy_image_cdn=(
       [api]="${PROXY_CDN_URL}/ic/{{ ic_git_revision }}/boundary-api-os/disk-img{{ bn_image_type }}"
