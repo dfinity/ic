@@ -30,6 +30,7 @@ struct NodeState {
     average_latency: SingleSumSMA<Duration, u32, 10>,
     success_rate: SingleSumSMA<f32, f32, 10>,
     last_check_id: Wrapping<u64>,
+    replica_version: String,
 }
 
 struct NodeCheckResult {
@@ -144,34 +145,43 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
         // In Tokio environment where we have a thread-per-node it shouldn't deadlock
         let node_state = self.node_states.get_mut(&node.id);
 
-        let ok_count = match (&node_state, &check_result) {
-            // If first check failed, set Ok count to 0
-            (_, Err(_)) => 0,
+        // Just return the result if it's an error while also updating the state
+        if check_result.is_err() {
+            if let Some(mut x) = node_state {
+                x.success_rate.add_sample(0.0);
+                x.ok_count = 0;
+                x.last_check_id = self.last_check_id;
+            }
 
-            // If check succeeded, but is also the first check, set OK count to max-value
-            (None, Ok(_)) => self.min_ok_count,
+            return Err(check_result.err().unwrap());
+        }
 
-            // Otherwise, increment OK count
-            (Some(entry), Ok(_)) => self.min_ok_count.min(entry.ok_count + 1),
+        let check_result = check_result.unwrap();
+
+        let ok_count = match &node_state {
+            // If it's a first success -> set to max
+            None => self.min_ok_count,
+
+            Some(entry) => {
+                // If replica version has changed -> then the node just came up after the upgrade
+                // Bump to min_ok_count to bring it up immediately
+                if entry.replica_version != check_result.replica_version {
+                    self.min_ok_count
+                } else {
+                    // Otherwise, increment OK count
+                    self.min_ok_count.min(entry.ok_count + 1)
+                }
+            }
         };
-
-        // Get the check latency
-        let latency = match &check_result {
-            Err(_) => Duration::ZERO,
-            Ok(v) => v.latency,
-        };
-
-        // Map success onto 0/1 for later score computation
-        let success = check_result.is_err() as u8 as f32;
 
         // Insert or update the entry and obtain averages
         let (average_latency, success_rate) = match node_state {
             None => {
                 let mut average_latency = SingleSumSMA::from_zero(Duration::ZERO);
-                average_latency.add_sample(latency);
+                average_latency.add_sample(check_result.latency);
 
                 let mut success_rate = SingleSumSMA::from_zero(0f32);
-                success_rate.add_sample(success);
+                success_rate.add_sample(1.0);
 
                 self.node_states.insert(
                     node.id,
@@ -180,17 +190,19 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
                         success_rate,
                         ok_count,
                         last_check_id: self.last_check_id,
+                        replica_version: check_result.replica_version.clone(),
                     },
                 );
 
-                (latency.as_secs_f32(), success)
+                (check_result.latency.as_secs_f32(), 1.0)
             }
 
             Some(mut e) => {
-                e.average_latency.add_sample(latency);
-                e.success_rate.add_sample(success);
+                e.average_latency.add_sample(check_result.latency);
+                e.success_rate.add_sample(1.0);
                 e.ok_count = ok_count;
                 e.last_check_id = self.last_check_id;
+                e.replica_version = check_result.replica_version;
 
                 (
                     e.average_latency.get_average().as_secs_f32(),
@@ -199,9 +211,9 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
             }
         };
 
-        check_result.map(|x| NodeCheckResult {
+        Ok(NodeCheckResult {
             node,
-            height: x.height,
+            height: check_result.height,
             ok_count,
             average_latency,
             success_rate,
@@ -298,6 +310,7 @@ impl<'a, P: Persist, C: Check> Run for Runner<'a, P, C> {
 pub struct CheckResult {
     pub height: u64,
     pub latency: Duration,
+    pub replica_version: String,
 }
 
 #[automock]
@@ -348,6 +361,7 @@ impl<'a> Check for Checker<'a> {
         let HttpStatusResponse {
             replica_health_status,
             certified_height,
+            impl_version,
             ..
         } = match serde_cbor::from_reader(response_reader) {
             Ok(v) => v,
@@ -358,9 +372,14 @@ impl<'a> Check for Checker<'a> {
             return Err(CheckError::Health);
         }
 
+        if impl_version.is_none() {
+            return Err(CheckError::Generic("No replica version available".into()));
+        }
+
         Ok(CheckResult {
             height: certified_height.map_or(0, |v| v.get()),
             latency,
+            replica_version: impl_version.unwrap(),
         })
     }
 }

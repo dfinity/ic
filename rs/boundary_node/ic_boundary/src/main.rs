@@ -361,7 +361,7 @@ async fn main() -> Result<(), Error> {
         snapshot_runner,
         MetricParams::new(SERVICE_NAME, "run_snapshot"),
     );
-    let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(1 * MINUTE));
+    let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(10 * SECOND));
     let mut snapshot_runner = snapshot_runner;
 
     // Checks
@@ -369,6 +369,7 @@ async fn main() -> Result<(), Error> {
         persist::Persister::new(&ROUTES),
         MetricParams::new(SERVICE_NAME, "persist"),
     );
+
     let checker = Checker::new(&http_client); // HTTP client does not need Arc
     let checker = WithMetrics(checker, MetricParams::new(SERVICE_NAME, "check"));
     let checker = WithRetryLimited(
@@ -393,7 +394,7 @@ async fn main() -> Result<(), Error> {
 
     // Runners
     let runners: Vec<Box<dyn Run>> = vec![
-        // TODO FIXME Causes tokio stack over flow currently, fix & re-enable
+        // TODO FIXME Causes tokio stack overflow currently, fix & re-enable
         //Box::new(configuration_runner),
         Box::new(snapshot_runner),
         Box::new(check_runner),
@@ -402,6 +403,7 @@ async fn main() -> Result<(), Error> {
     TokioScope::scope_and_block(|s| {
         let metrics_handler = || metrics::handler(metrics);
         let metrics_router = Router::new().route("/metrics", get(metrics_handler));
+
         s.spawn(
             axum::Server::bind(&cli.metrics_addr)
                 .serve(metrics_router.into_make_service())

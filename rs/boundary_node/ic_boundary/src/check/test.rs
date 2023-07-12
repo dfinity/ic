@@ -53,6 +53,7 @@ pub fn generate_custom_routing_table(
                 addr: IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, j as u8)),
                 port: 8080,
                 tls_certificate: valid_tls_certificate().certificate_der,
+                replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
             };
 
             nodes.push(node.clone());
@@ -69,6 +70,7 @@ pub fn generate_custom_routing_table(
                     .0,
             }],
             nodes,
+            replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
         });
     }
 
@@ -84,62 +86,16 @@ fn node_id(id: u64) -> Principal {
     node_test_id(NODE_ID_OFFSET + id).get().0
 }
 
-fn check_result(height: u64, lat: u64) -> CheckResult {
+fn check_result_ver(height: u64, lat: u64, ver: &str) -> CheckResult {
     CheckResult {
         height,
         latency: Duration::from_millis(lat),
+        replica_version: ver.to_string(),
     }
 }
 
-// Ensure that all the nodes make it to the lookup table instantly even if we've set min_ok_count=5
-#[tokio::test(flavor = "multi_thread")]
-async fn test_check_healthy() -> Result<(), Error> {
-    let routes: ArcSwapOption<Routes> = ArcSwapOption::const_empty();
-    let persist = Persister::new(&routes);
-    let routing_table = ArcSwapOption::from_pointee(generate_custom_routing_table(2, 2, 0));
-
-    let mut check = MockCheck::new();
-
-    check
-        .expect_check()
-        .withf(|x: &Node| x.id == node_id(0))
-        .times(1)
-        .returning(|_| Ok(check_result(1000, 200)));
-
-    check
-        .expect_check()
-        .withf(|x: &Node| x.id == node_id(1))
-        .times(1)
-        .returning(|_| Ok(check_result(1005, 100)));
-
-    check
-        .expect_check()
-        .withf(|x: &Node| x.id == node_id(100))
-        .times(1)
-        .returning(|_| Ok(check_result(1010, 300)));
-
-    check
-        .expect_check()
-        .withf(|x: &Node| x.id == node_id(101))
-        .times(1)
-        .returning(|_| Ok(check_result(1015, 200)));
-
-    let mut check_runner = Runner::new(&routing_table, 5, 10, persist, check);
-    check_runner.run().await.expect("run should succeed");
-
-    let rt = routes
-        .load_full()
-        .ok_or_else(|| anyhow!("no routing table present"))?;
-
-    // Make sure nodes are re-sorted according to latency (lower first)
-    assert_eq!(rt.subnets[0].nodes[0].id, node_id(101));
-    assert_eq!(rt.subnets[0].nodes[1].id, node_id(100));
-    assert_eq!(rt.subnets[1].nodes[0].id, node_id(1));
-    assert_eq!(rt.subnets[1].nodes[1].id, node_id(0));
-
-    assert!(!rt.node_exists(node_id(102)));
-
-    Ok(())
+fn check_result(height: u64, lat: u64) -> CheckResult {
+    check_result_ver(height, lat, "a17247bd86c7aa4e87742bf74d108614580f216d")
 }
 
 // Ensure that nodes that have failed healthcheck or lag behind are excluded
@@ -178,10 +134,9 @@ async fn test_check_some_unhealthy() -> Result<(), Error> {
     let mut check_runner = Runner::new(&routing_table, 1, 10, persist, check);
     check_runner.run().await.expect("run should succeed");
 
-    // Make sure that nodes 1 and 101 are not included in the resulting table
-    let rt = routes
-        .load_full()
-        .ok_or_else(|| anyhow!("no routing table present"))?;
+    let rt = routes.load_full().unwrap();
+
+    // Make sure that only nodes 1 and 101 are not included in the resulting table
     assert!(rt.node_exists(node_id(0)));
     assert!(!rt.node_exists(node_id(1)));
     assert!(rt.node_exists(node_id(100)));
@@ -208,9 +163,7 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
     let mut check_runner = Runner::new(&routing_table, 1, 10, persist, check);
     check_runner.run().await.expect("run should succeed");
 
-    let rt = routes
-        .load_full()
-        .ok_or_else(|| anyhow!("no routing table present"))?;
+    let rt = routes.load_full().unwrap();
     assert!(rt.node_exists(node_id(0)));
     assert!(rt.node_exists(node_id(1)));
     assert!(rt.node_exists(node_id(100)));
@@ -223,9 +176,7 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
     check_runner.run().await.expect("run should succeed");
 
     // Check that only 2 nodes left
-    let rt = routes
-        .load_full()
-        .ok_or_else(|| anyhow!("no routing table present"))?;
+    let rt = routes.load_full().unwrap();
     assert!(rt.node_exists(node_id(0)));
     assert!(!rt.node_exists(node_id(1)));
     assert!(rt.node_exists(node_id(100)));
@@ -238,9 +189,7 @@ async fn test_check_nodes_gone() -> Result<(), Error> {
     check_runner.run().await.expect("run should succeed");
 
     // Check that nodes are back
-    let rt = routes
-        .load_full()
-        .ok_or_else(|| anyhow!("no routing table present"))?;
+    let rt = routes.load_full().unwrap();
     assert!(rt.node_exists(node_id(0)));
     assert!(rt.node_exists(node_id(1)));
     assert!(rt.node_exists(node_id(100)));
@@ -261,6 +210,13 @@ async fn test_check_min_ok() -> Result<(), Error> {
         .expect_check()
         .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
         .times(4)
+        .returning(|_| Ok(check_result(1000, 0)))
+        .in_sequence(&mut seq1);
+
+    check
+        .expect_check()
+        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .times(4)
         .returning(|_| Err(CheckError::Health))
         .in_sequence(&mut seq1);
 
@@ -275,15 +231,68 @@ async fn test_check_min_ok() -> Result<(), Error> {
     let routing_table = ArcSwapOption::from_pointee(generate_custom_routing_table(2, 2, 0));
     let mut check_runner = Runner::new(&routing_table, 5, 10, persist, check);
 
-    // Nodes should be absent for 5 checks (1 failed & 4 successful) and then be up on 6th
-    for i in 0..6 {
+    for i in 0..7 {
         check_runner.run().await.expect("run should succeed");
 
-        let rt = routes
-            .load_full()
-            .ok_or_else(|| anyhow!("no routing table present"))?;
+        let rt = routes.load_full().unwrap();
 
-        if i < 5 {
+        // Nodes should be up on 1st iteration and then gone until 5 oks are gathered
+        if i == 0 || i == 6 {
+            assert!(rt.node_exists(node_id(0)));
+            assert!(rt.node_exists(node_id(1)));
+            assert!(rt.node_exists(node_id(100)));
+            assert!(rt.node_exists(node_id(101)));
+        } else {
+            assert!(!rt.node_exists(node_id(0)));
+            assert!(!rt.node_exists(node_id(1)));
+            assert!(!rt.node_exists(node_id(100)));
+            assert!(!rt.node_exists(node_id(101)));
+        }
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_check_node_upgrade() -> Result<(), Error> {
+    let routes: ArcSwapOption<Routes> = ArcSwapOption::const_empty();
+    let persist = Persister::new(&routes);
+    let mut check = MockCheck::new();
+    let mut seq1 = Sequence::new();
+
+    check
+        .expect_check()
+        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .times(4)
+        .returning(|_| Ok(check_result_ver(1000, 0, "ver1")))
+        .in_sequence(&mut seq1);
+
+    check
+        .expect_check()
+        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .times(4)
+        .returning(|_| Err(CheckError::Health))
+        .in_sequence(&mut seq1);
+
+    check
+        .expect_check()
+        .withf(|x: &Node| vec![node_id(0), node_id(1), node_id(100), node_id(101)].contains(&x.id))
+        .times(4)
+        .returning(|_| Ok(check_result_ver(1000, 0, "ver2")))
+        .in_sequence(&mut seq1);
+
+    // Generate a table
+    let routing_table = ArcSwapOption::from_pointee(generate_custom_routing_table(2, 2, 0));
+    let mut check_runner = Runner::new(&routing_table, 5, 10, persist, check);
+
+    for i in 0..3 {
+        check_runner.run().await.expect("run should succeed");
+
+        let rt = routes.load_full().unwrap();
+
+        // Nodes should be up on 1st run, then gone on 2nd due to errors
+        // and then back again on 3rd when the version changes
+        if i == 1 {
             assert!(!rt.node_exists(node_id(0)));
             assert!(!rt.node_exists(node_id(1)));
             assert!(!rt.node_exists(node_id(100)));

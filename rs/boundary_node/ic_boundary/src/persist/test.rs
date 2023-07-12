@@ -57,6 +57,7 @@ fn node(i: u64, subnet_id: Principal) -> Node {
         addr: IpAddr::V4(Ipv4Addr::new(192, 168, 0, i as u8)),
         port: 8080,
         tls_certificate: valid_tls_certificate().certificate_der,
+        replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
     }
 }
 
@@ -89,6 +90,7 @@ pub fn generate_test_routing_table(offset: u64) -> RoutingTable {
             },
         ],
         nodes: vec![node1.clone()],
+        replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
     };
 
     let subnet2 = Subnet {
@@ -105,6 +107,7 @@ pub fn generate_test_routing_table(offset: u64) -> RoutingTable {
             },
         ],
         nodes: vec![node2.clone()],
+        replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
     };
 
     let subnet3 = Subnet {
@@ -115,6 +118,7 @@ pub fn generate_test_routing_table(offset: u64) -> RoutingTable {
             end: Principal::from_text("fij4j-bi777-7qcai").unwrap(),
         }],
         nodes: vec![node3.clone()],
+        replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
     };
 
     RoutingTable {

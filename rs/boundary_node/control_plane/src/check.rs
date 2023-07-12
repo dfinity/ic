@@ -33,6 +33,7 @@ impl CheckRunId {
 struct CheckState {
     ok_count: u8,
     last_updated: CheckRunId,
+    replica_version: String,
 }
 
 pub struct CheckPersistRunner<R: Retrieve, C: Check, P: Persist> {
@@ -138,15 +139,29 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> CheckPersistRunner<R, C, P
             node.node_id.clone(),  // node
         );
 
-        let ok_count = match (checks.get(&k), &check_result) {
+        let (ok_count, replica_version) = match (checks.get(&k), &check_result) {
             // If check failed, reset OK count to 0
-            (_, Err(_)) => 0,
+
+            // If it's not 1st check and there was an error -> just pass the previous replica_version forward
+            (Some(entry), Err(_)) => (0, entry.replica_version.clone()),
+
+            // Otherwise use empty string
+            (None, Err(_)) => (0, "".to_string()),
 
             // If check succeeded, but is also the first check, set OK count to max-value
-            (None, Ok(_)) => min_ok_count,
+            (None, Ok(v)) => (min_ok_count, v.replica_version.clone()),
 
-            // Otherwise, increment OK count
-            (Some(entry), Ok(_)) => min_ok_count.min(entry.ok_count + 1),
+            (Some(entry), Ok(v)) => {
+                let ok_count = if entry.replica_version == v.replica_version {
+                    // If versions are the same - just increment
+                    min_ok_count.min(entry.ok_count + 1)
+                } else {
+                    // If there was an upgrade -> bump to max
+                    min_ok_count
+                };
+
+                (ok_count, v.replica_version.clone())
+            }
         };
 
         // Update the `checks` entry
@@ -155,6 +170,7 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> CheckPersistRunner<R, C, P
             CheckState {
                 ok_count,
                 last_updated: current_run_id,
+                replica_version,
             },
         );
 
@@ -255,6 +271,7 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> Run for CheckPersistRunner
 
 pub struct CheckResult {
     pub height: u64,
+    pub replica_version: String,
 }
 
 #[automock]
@@ -301,6 +318,7 @@ impl Check for Checker {
         let HttpStatusResponse {
             replica_health_status,
             certified_height,
+            impl_version,
             ..
         } = serde_cbor::from_reader(response_reader).context("failed to parse cbor response")?;
 
@@ -310,6 +328,7 @@ impl Check for Checker {
 
         Ok(CheckResult {
             height: certified_height.map_or(0, |v| v.get()),
+            replica_version: impl_version.unwrap_or_default(),
         })
     }
 }
@@ -402,13 +421,23 @@ mod tests {
             .expect_check()
             .with(predicate::eq("addrA1"))
             .times(3)
-            .returning(|_addr| Ok(CheckResult { height: 10 }))
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 10,
+                    replica_version: "ver1".to_string(),
+                })
+            })
             .in_sequence(&mut na1_seq);
         check
             .expect_check()
             .with(predicate::in_iter(["addrA2", "addrA3"]))
             .times(2)
-            .returning(|_addr| Ok(CheckResult { height: 10 }))
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 10,
+                    replica_version: "ver1".to_string(),
+                })
+            })
             .in_sequence(&mut nb1_seq);
         check
             .expect_check()
@@ -420,7 +449,12 @@ mod tests {
             .expect_check()
             .with(predicate::eq("addrA3"))
             .times(1)
-            .returning(|_addr| Ok(CheckResult { height: 10 }))
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 10,
+                    replica_version: "ver1".to_string(),
+                })
+            })
             .in_sequence(&mut nb1_seq);
 
         let mut persist_seq = Sequence::new();
@@ -501,25 +535,45 @@ mod tests {
             .expect_check()
             .with(predicate::eq("addrA1"))
             .times(2)
-            .returning(|_addr| Ok(CheckResult { height: 10 }))
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 10,
+                    replica_version: "ver1".to_string(),
+                })
+            })
             .in_sequence(&mut na1_seq);
         check
             .expect_check()
             .with(predicate::eq("addrA1"))
             .times(1)
-            .returning(|_addr| Ok(CheckResult { height: 11 }))
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 11,
+                    replica_version: "ver1".to_string(),
+                })
+            })
             .in_sequence(&mut na1_seq);
         check
             .expect_check()
             .with(predicate::in_iter(["addrA2", "addrA3"]))
             .times(2)
-            .returning(|_addr| Ok(CheckResult { height: 10 }))
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 10,
+                    replica_version: "ver1".to_string(),
+                })
+            })
             .in_sequence(&mut nb1_seq);
         check
             .expect_check()
             .with(predicate::in_iter(["addrA2", "addrA3"]))
             .times(4)
-            .returning(|_addr| Ok(CheckResult { height: 1011 }))
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 1011,
+                    replica_version: "ver1".to_string(),
+                })
+            })
             .in_sequence(&mut nb1_seq);
 
         let mut persist_seq = Sequence::new();
@@ -577,5 +631,95 @@ mod tests {
         assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
         assert!(active.is_active(&("subnetA".into(), "nodeA2".into())));
         assert!(active.is_active(&("subnetA".into(), "nodeA3".into())));
+    }
+
+    // Make sure that if the node comes up with different version after being erroring out -> it is brought up immediately
+    #[tokio::test(flavor = "multi_thread")]
+    async fn node_upgrade() {
+        let mut routing = MockRetrieve::new();
+        routing.expect_retrieve().returning(single_subnet_table(
+            0,
+            "subnetA",
+            &[("nodeA1", "addrA1")],
+        ));
+
+        let mut check = MockCheck::new();
+        let mut seq = Sequence::new();
+
+        check
+            .expect_check()
+            .with(predicate::eq("addrA1"))
+            .times(1)
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 1,
+                    replica_version: "ver1".to_string(),
+                })
+            })
+            .in_sequence(&mut seq);
+        check
+            .expect_check()
+            .with(predicate::eq("addrA1"))
+            .times(1)
+            .returning(|_addr| Err(anyhow!("some_err")))
+            .in_sequence(&mut seq);
+        check
+            .expect_check()
+            .with(predicate::in_iter(["addrA1"]))
+            .times(1)
+            .returning(|_addr| {
+                Ok(CheckResult {
+                    height: 1,
+                    replica_version: "ver2".to_string(),
+                })
+            })
+            .in_sequence(&mut seq);
+
+        let mut persist_seq = Sequence::new();
+        let mut persist = MockPersist::new();
+
+        persist
+            .expect_persist()
+            .times(1)
+            .returning(|rt: &RoutingTable| {
+                let subnet_nodes = get_subnet_nodes(rt);
+                assert_eq!(subnet_nodes.len(), 1);
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA1")));
+                Ok(PersistStatus::Completed)
+            })
+            .in_sequence(&mut persist_seq);
+
+        persist
+            .expect_persist()
+            .times(1)
+            .returning(|rt: &RoutingTable| {
+                let subnet_nodes = get_subnet_nodes(rt);
+                assert_eq!(subnet_nodes.len(), 0);
+                assert!(!subnet_nodes.contains(&("subnetA", "nodeA1")));
+                Result::<_, Error>::Ok(PersistStatus::Completed)
+            })
+            .in_sequence(&mut persist_seq);
+
+        persist
+            .expect_persist()
+            .times(1)
+            .returning(|rt: &RoutingTable| {
+                let subnet_nodes = get_subnet_nodes(rt);
+                assert_eq!(subnet_nodes.len(), 1);
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA1")));
+                Result::<_, Error>::Ok(PersistStatus::Completed)
+            })
+            .in_sequence(&mut persist_seq);
+
+        let mut cpr = CheckPersistRunner::new(routing, check, persist, 0, 1000);
+        let active = cpr.get_active_checker();
+        cpr.run().await.expect("no errors");
+        assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
+
+        cpr.run().await.expect("no errors");
+        assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
+
+        cpr.run().await.expect("no errors");
+        assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
     }
 }
