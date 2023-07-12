@@ -204,9 +204,44 @@ impl InstallCodeHelper {
             self.canister.system_state.balance()
         );
 
+        round.cycles_account_manager.refund_unused_execution_cycles(
+            &mut self.canister.system_state,
+            instructions_left,
+            message_instruction_limit,
+            original.prepaid_execution_cycles,
+            round.execution_refund_error_counter,
+            original.subnet_size,
+            round.log,
+        );
+
         self.canister
             .system_state
             .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
+
+        if self.allocated_bytes > self.deallocated_bytes {
+            let threshold = round.cycles_account_manager.freeze_threshold_cycles(
+                self.canister.system_state.freeze_threshold,
+                self.canister.memory_allocation(),
+                self.canister.memory_usage(),
+                self.canister.compute_allocation(),
+                original.subnet_size,
+            );
+            if self.canister.system_state.balance() < threshold {
+                let bytes = self.allocated_bytes - self.deallocated_bytes;
+                let err = CanisterManagerError::InsufficientCyclesInMemoryGrow {
+                    bytes,
+                    available: self.canister.system_state.balance(),
+                    threshold,
+                };
+                return finish_err(
+                    clean_canister,
+                    self.instructions_left(),
+                    original,
+                    round,
+                    err,
+                );
+            }
+        }
 
         let mut subnet_available_memory = round_limits.subnet_available_memory;
         subnet_available_memory.increment(
@@ -283,16 +318,6 @@ impl InstallCodeHelper {
         // Commit all the remaining state and round limit changes.
 
         round_limits.subnet_available_memory = subnet_available_memory;
-
-        round.cycles_account_manager.refund_unused_execution_cycles(
-            &mut self.canister.system_state,
-            instructions_left,
-            message_instruction_limit,
-            original.prepaid_execution_cycles,
-            round.execution_refund_error_counter,
-            original.subnet_size,
-            round.log,
-        );
 
         if original.config.rate_limiting_of_instructions == FlagStatus::Enabled {
             self.canister.scheduler_state.install_code_debit += self.instructions_consumed();
