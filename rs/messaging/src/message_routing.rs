@@ -17,6 +17,7 @@ use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManager
 use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
 use ic_metrics::{MetricsRegistry, Timer};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     ecdsa_keys::EcdsaKeysRegistry,
@@ -33,7 +34,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
-    Height, NumBytes, RegistryVersion, SubnetId,
+    Height, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
 };
 use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]
@@ -611,7 +612,7 @@ impl BatchProcessorImpl {
                     ic_crypto_utils_threshold_sig_der::public_key_to_der(
                         &transcripts.high_threshold.public_key().into_bytes(),
                     )
-                    .map_err(|err| {
+                    .map_err(|err: String| {
                         Persistent(format!(
                             "'public key to DER for subnet {}' failed, err: {}",
                             *subnet_id, err
@@ -629,7 +630,7 @@ impl BatchProcessorImpl {
                 .ok_or_else(|| not_found_error("subnet record", Some(*subnet_id)))?;
 
             let nodes = get_node_ids_from_subnet_record(&subnet_record)
-                .map_err(|err| {
+                .map_err(|err: PrincipalIdBlobParseError| {
                     Persistent(format!(
                         "'nodes from subnet record for subnet {}', err: {}",
                         *subnet_id, err
@@ -637,12 +638,16 @@ impl BatchProcessorImpl {
                 })?
                 .into_iter()
                 .collect::<BTreeSet<_>>();
-            let subnet_type: SubnetType = subnet_record.subnet_type.try_into().map_err(|err| {
-                Persistent(format!(
-                    "'subnet type from subnet record for subnet {}', err: {}",
-                    *subnet_id, err
-                ))
-            })?;
+            let subnet_type: SubnetType =
+                subnet_record
+                    .subnet_type
+                    .try_into()
+                    .map_err(|err: ProxyDecodeError| {
+                        Persistent(format!(
+                            "'subnet type from subnet record for subnet {}', err: {}",
+                            *subnet_id, err
+                        ))
+                    })?;
             let subnet_features: SubnetFeatures = subnet_record.features.unwrap_or_default().into();
             let ecdsa_keys_held = subnet_record
                 .ecdsa_config
@@ -651,7 +656,7 @@ impl BatchProcessorImpl {
                         .key_ids
                         .into_iter()
                         .map(|k| {
-                            EcdsaKeyId::try_from(k).map_err(|err| {
+                            EcdsaKeyId::try_from(k).map_err(|err: ProxyDecodeError| {
                                 Persistent(format!(
                                     "'ECDSA key ID from subnet record for subnet {}', err: {}",
                                     *subnet_id, err,
