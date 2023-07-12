@@ -47,6 +47,7 @@ fn operation_strategy() -> impl Strategy<Value = Operation> {
             .prop_map(|(amount, to, from, fee)| Operation::Transfer {
                 from,
                 to,
+                spender: None,
                 amount: amount.into(),
                 fee
             }),
@@ -160,6 +161,7 @@ pub fn transfer_args_with_sender(
                 Operation::Transfer {
                     from: _,
                     to,
+                    spender: _,
                     amount,
                     fee: _,
                 } => TransferArg {
@@ -179,7 +181,6 @@ pub fn transfer_args_with_sender(
                     amount: amount.into(),
                 },
                 Operation::Approve { .. } => todo!(),
-                Operation::TransferFrom { .. } => todo!(),
             })
             .collect()
     })

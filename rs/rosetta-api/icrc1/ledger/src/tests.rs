@@ -142,10 +142,10 @@ fn test_approval_transfer_from() {
     let fee = 10_000;
 
     let tr = Transaction {
-        operation: Operation::TransferFrom {
+        operation: Operation::Transfer {
             from,
             to,
-            spender,
+            spender: Some(spender),
             amount: 100_000,
             fee: Some(fee),
         },
@@ -176,10 +176,10 @@ fn test_approval_transfer_from() {
     assert_eq!(ctx.balances().account_balance(&from), tokens(190_000));
 
     let tr = Transaction {
-        operation: Operation::TransferFrom {
+        operation: Operation::Transfer {
             from,
             to,
-            spender,
+            spender: Some(spender),
             amount: 100_000,
             fee: Some(fee),
         },
@@ -201,10 +201,10 @@ fn test_approval_transfer_from() {
     );
 
     let tr = Transaction {
-        operation: Operation::TransferFrom {
+        operation: Operation::Transfer {
             from,
             to,
-            spender,
+            spender: Some(spender),
             amount: 100_000,
             fee: Some(fee),
         },
@@ -367,10 +367,10 @@ fn test_self_transfer_from() {
     );
 
     let tr = Transaction {
-        operation: Operation::TransferFrom {
+        operation: Operation::Transfer {
             from,
             to,
-            spender: from,
+            spender: Some(from),
             amount: 20_000,
             fee: Some(10_000),
         },
@@ -411,10 +411,10 @@ fn test_approval_allowance_covers_fee() {
 
     let fee = 10_000;
     let tr = Transaction {
-        operation: Operation::TransferFrom {
+        operation: Operation::Transfer {
             from,
             to,
-            spender,
+            spender: Some(spender),
             amount: 10_000,
             fee: Some(fee),
         },
@@ -443,10 +443,10 @@ fn test_approval_allowance_covers_fee() {
     tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
 
     let tr = Transaction {
-        operation: Operation::TransferFrom {
+        operation: Operation::Transfer {
             from,
             to,
-            spender,
+            spender: Some(spender),
             amount: 10_000,
             fee: Some(fee),
         },

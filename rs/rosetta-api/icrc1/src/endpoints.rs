@@ -5,9 +5,7 @@ use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
-use icrc_ledger_types::icrc3::transactions::{
-    Approve, Burn, Mint, Transaction, Transfer, TransferFrom,
-};
+use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
 use serde::Deserialize;
 
 pub fn convert_transfer_error<Tokens: TokensType>(
@@ -114,7 +112,6 @@ impl From<Block> for Transaction {
             burn: None,
             transfer: None,
             approve: None,
-            transfer_from: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
@@ -142,6 +139,7 @@ impl From<Block> for Transaction {
             Operation::Transfer {
                 from,
                 to,
+                spender,
                 amount,
                 fee,
             } => {
@@ -149,6 +147,7 @@ impl From<Block> for Transaction {
                 tx.transfer = Some(Transfer {
                     from,
                     to,
+                    spender,
                     amount: Nat::from(amount),
                     fee: fee
                         .map(Nat::from)
@@ -172,26 +171,6 @@ impl From<Block> for Transaction {
                     amount: Nat::from(amount),
                     expected_allowance: expected_allowance.map(|ea| Nat::from(ea.get_e8s())),
                     expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
-                    fee: fee
-                        .map(Nat::from)
-                        .or_else(|| b.effective_fee.map(Nat::from)),
-                    created_at_time,
-                    memo,
-                });
-            }
-            Operation::TransferFrom {
-                spender,
-                from,
-                to,
-                amount,
-                fee,
-            } => {
-                tx.kind = "transfer_from".to_string();
-                tx.transfer_from = Some(TransferFrom {
-                    spender,
-                    from,
-                    to,
-                    amount: Nat::from(amount),
                     fee: fee
                         .map(Nat::from)
                         .or_else(|| b.effective_fee.map(Nat::from)),
