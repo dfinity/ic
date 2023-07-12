@@ -812,6 +812,14 @@ fn validate_export_section(
 
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
+        let valid_system_functions = vec![
+            "canister_init",
+            "canister_pre_upgrade",
+            "canister_post_upgrade",
+            "canister_inspect_message",
+            "canister_heartbeat",
+            "canister_global_timer",
+        ];
         let mut number_exported_functions = 0;
         let mut sum_exported_function_name_lengths = 0;
         for export in &module.exports {
@@ -850,7 +858,7 @@ fn validate_export_section(
                     // can be exported.
                     // TODO(EXC-350): Turn this into an actual error once we confirm that no
                     // reserved functions are exported.
-                    if !valid_exported_functions.contains_key(func_name) {
+                    if !valid_system_functions.contains(&func_name) {
                         reserved_exports += 1;
                     }
                 }

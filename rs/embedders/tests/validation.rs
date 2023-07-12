@@ -116,6 +116,7 @@ fn can_validate_valid_export_section_with_reserved_functions() {
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x))
                   (export "some_function_is_ok" (func $x))
+                  (export "canister_query" (func $x))
                   (export "canister_bar_is_reserved" (func $x))
                   (export "canister_foo_is_reserved" (func $x)))"#,
     )
@@ -123,7 +124,7 @@ fn can_validate_valid_export_section_with_reserved_functions() {
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
-            reserved_exports: 2,
+            reserved_exports: 3,
             largest_function_instruction_count: NumInstructions::new(1),
             ..Default::default()
         })
