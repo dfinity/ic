@@ -2,6 +2,7 @@
 
 # editor for convenience
 vim
+nano
 
 # packages requested by networking
 tcpdump
@@ -14,8 +15,14 @@ iputils-ping
 openssh-client
 
 # useful for first-order debugging
+gdb
 strace
 
 # useful for SELinux development
 setools
 
+# performance testing additions
+fio
+bpftrace
+linux-tools-common
+linux-tools-generic

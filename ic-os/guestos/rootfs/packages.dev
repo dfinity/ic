@@ -2,6 +2,7 @@
 
 # editor for convenience
 vim
+nano
 
 # packages requested by networking
 tcpdump
@@ -22,3 +23,9 @@ setools
 
 # flamegraphs (scalability suite)
 linux-tools-virtual-hwe-20.04
+
+# performance testing additions
+fio
+bpftrace
+linux-tools-common
+linux-tools-generic
