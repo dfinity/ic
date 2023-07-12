@@ -116,10 +116,6 @@ impl QuicTransport {
             .clone();
         Ok(conn)
     }
-
-    pub(crate) fn get_peer_handles(&self) -> Vec<ConnectionHandle> {
-        self.0.read().unwrap().values().cloned().collect()
-    }
 }
 #[async_trait]
 impl Transport for QuicTransport {
@@ -132,23 +128,13 @@ impl Transport for QuicTransport {
         peer.rpc(request).await
     }
 
-    fn broadcast(&self, request: Request<Bytes>) {
-        for peer_handle in self.get_peer_handles() {
-            let mut new_request = Request::builder()
-                .method(request.method().clone())
-                .uri(request.uri().clone())
-                .version(request.version());
-            new_request
-                .headers_mut()
-                .replace(&mut request.headers().clone());
-            let new_request = new_request
-                .body(request.body().clone())
-                .expect("Clone of valid request");
+    async fn push(&self, peer: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
+        let peer = self.get_peer_handle(peer)?;
+        peer.push(request).await
+    }
 
-            let _ = tokio::spawn(async move {
-                let _ = peer_handle.rpc(new_request).await;
-            });
-        }
+    fn peers(&self) -> Vec<NodeId> {
+        self.0.read().unwrap().keys().cloned().collect()
     }
 }
 
@@ -191,5 +177,7 @@ pub trait Transport: Send + Sync {
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError>;
 
-    fn broadcast(&self, request: Request<Bytes>);
+    async fn push(&self, peer: &NodeId, request: Request<Bytes>) -> Result<(), TransportError>;
+
+    fn peers(&self) -> Vec<NodeId>;
 }

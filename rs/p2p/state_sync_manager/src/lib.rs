@@ -40,6 +40,13 @@ mod metrics;
 mod ongoing;
 mod routes;
 
+// Interval with which state is advertised to peers.
+const ADVERT_BROADCAST_INTERVAL: Duration = Duration::from_secs(5);
+// Timeout that is applies to advert broadcasts. This should be lower than the interval itself to
+// avoid unecessary build up of pending adverts in case of timeouts.
+const ADVERT_BROADCAST_TIMEOUT: Duration =
+    ADVERT_BROADCAST_INTERVAL.saturating_sub(Duration::from_secs(2));
+
 pub fn build_axum_router(
     state_sync: Arc<dyn StateSyncClient>,
     log: ReplicaLogger,
@@ -103,7 +110,7 @@ struct StateSyncManager {
 
 impl StateSyncManager {
     async fn run(mut self) {
-        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        let mut interval = tokio::time::interval(ADVERT_BROADCAST_INTERVAL);
         loop {
             select! {
                 _ = interval.tick() => {
@@ -167,8 +174,16 @@ impl StateSyncManager {
             self.metrics
                 .latest_state_height_broadcasted
                 .set(state_id.height.get() as i64);
-            self.transport
-                .broadcast(build_advert_handler_request(state_id));
+            // Unreliable broadcast of adverts to all current peers.
+            for peer in self.transport.peers() {
+                let request = build_advert_handler_request(state_id.clone());
+                let transport_c = self.transport.clone();
+
+                self.rt.spawn(async move {
+                    tokio::time::timeout(ADVERT_BROADCAST_TIMEOUT, transport_c.push(&peer, request))
+                        .await
+                });
+            }
         }
     }
 }
