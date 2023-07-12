@@ -89,6 +89,7 @@ def system_test(
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
         uses_guestos_dev = False,
+        uses_guestos_dev_test = False,
         ic_os_fixed_version = True,
         **kwargs):
     """Declares a system-test.
@@ -111,6 +112,7 @@ def system_test(
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
       uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
+      uses_guestos_dev_test: the test uses //ic-os/guestos/envs/dev:update-img-test (will be also automatically added as dependency).
       ic_os_fixed_version: the test can work with ic-os that contains synthetic stable ic version.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
@@ -148,6 +150,10 @@ def system_test(
         _env_deps[_guestos + "update-img.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TAR_ZST_SHA256"
 
         _env_deps["//ic-os:scripts/build-bootstrap-config-image.sh"] = "ENV_DEPS__BUILD_BOOTSTRAP_CONFIG_IMAGE"
+
+    if uses_guestos_dev_test:
+        _env_deps[_guestos + "update-img-test.tar.zst.cas-url"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL"
+        _env_deps[_guestos + "update-img-test.tar.zst.sha256"] = "ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256"
 
     run_system_test(
         name = name,

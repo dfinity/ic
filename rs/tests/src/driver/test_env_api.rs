@@ -978,14 +978,14 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_ic_os_update_img_test_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/envs/dev/update-img-test.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url = self
+            .read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_CAS_URL")?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_update_img_test_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev/update-img-test.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        let sha256 = self
+            .read_dependency_from_env_to_string("ENV_DEPS__DEV_UPDATE_IMG_TEST_TAR_ZST_SHA256")?;
         bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
         Ok(sha256)
     }
