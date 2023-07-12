@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 ciborium = { workspace = true }
 clap = { version = "3.1.6", features = ["derive"] }
 hex = "0.4.2"

@@ -5,10 +5,10 @@ edition = "2021"
 
 [dependencies]
 bech32 = "0.9.0"
-candid = "0.8.1"
+candid = { workspace = true }
 ic-btc-interface = { workspace = true }
-ic-cdk = "0.7.0"
-ic-cdk-macros = "0.6.0"
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 ic-ckbtc-minter = { path = "../ckbtc/minter" }
 rand = "0.8.5"
 serde = "1.0.130"

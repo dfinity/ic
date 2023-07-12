@@ -9,8 +9,8 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [target.wasm32-unknown-unknown.dependencies]
-candid = "0.8"
-ic-cdk = "0.6"
-ic-cdk-macros = "0.6"
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 ic-certified-map = "0.3.1"
 serde = "1"

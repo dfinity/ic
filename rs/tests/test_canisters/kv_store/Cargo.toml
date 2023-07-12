@@ -10,8 +10,8 @@ name = "kv_store"
 path = "src/main.rs"
 
 [dependencies]
-ic-cdk = "0.6.6"
-ic-cdk-macros = "0.6.6"
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 ic-certified-map = "0.3"
 base64 = "0.11.0"
 flate2 = "1"

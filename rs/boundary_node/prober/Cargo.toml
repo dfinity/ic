@@ -12,7 +12,7 @@ anyhow = "1.0.56"
 async-trait = "0.1.53"
 axum = "0.6.1"
 base64 = "0.13.0"
-candid = "0.8.1"
+candid = { workspace = true }
 clap = { version = "3.1.8", features = ["derive"] }
 futures = "0.3.21"
 glob = "0.3.0"

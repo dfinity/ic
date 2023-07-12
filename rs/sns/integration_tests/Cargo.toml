@@ -21,7 +21,7 @@ path = "test_canisters/sns_governance_mem_test_canister.rs"
 async-trait = "0.1.42"
 byteorder = "1.4.3"
 canister-test = { path = "../../rust_canisters/canister_test" }
-candid = "0.8.1"
+candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_json = { path = "../../rust_canisters/dfn_json" }

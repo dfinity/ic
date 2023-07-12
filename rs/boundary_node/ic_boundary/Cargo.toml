@@ -15,7 +15,7 @@ async-trait = "0.1.56"
 axum = "0.6.1"
 axum-server = { version = "0.5.1", features = ["tls-rustls"] }
 bytes = "1.4.0"
-candid = "0.8.4"
+candid = { workspace = true }
 clap = { version = "4", features = ["derive"] }
 dashmap = "5.3.4"
 ethnum = { workspace = true }

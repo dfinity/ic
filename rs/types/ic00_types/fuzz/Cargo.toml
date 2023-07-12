@@ -7,7 +7,7 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 ic-ic00-types = {path = ".."}
 libfuzzer-sys = "0.4"
 

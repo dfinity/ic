@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1.53"
-candid = "0.8.1"
+candid = { workspace = true }
 ciborium = { workspace = true }
 dfn_http_metrics = {path = "../../../../rust_canisters/dfn_http_metrics"}
 futures = "0.3.25"
@@ -18,8 +18,8 @@ getrandom = { version = "0.2", features = ["custom"] }
 hex = "0.4.2"
 ic-base-types = { path = "../../../../types/base_types" }
 ic-crypto-tree-hash = { path = "../../../../crypto/tree_hash" }
-ic-cdk = { version = "0.6.0" }
-ic-cdk-macros = { version = "0.6.0" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 ic-icrc1 = { path = "../.." }
 ic-icrc1-benchmark-worker = { path = "../worker"}
 ic-icrc1-client = { path = "../../client"}

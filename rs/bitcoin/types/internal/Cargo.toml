@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-candid = "0.8.1"
+candid = { workspace = true }
 ic-btc-interface = { workspace = true }
 ic-protobuf = { path = "../../../protobuf" }
 serde = "1.0.132"

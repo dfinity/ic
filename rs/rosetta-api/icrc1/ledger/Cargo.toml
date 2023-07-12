@@ -11,7 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 async-trait = "0.1.53"
-candid = "0.8.1"
+candid = { workspace = true }
 ciborium = { workspace = true }
 hex = "0.4.2"
 ic-base-types = { path = "../../../types/base_types" }
@@ -19,8 +19,8 @@ ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
-ic-cdk = { version = "0.6.0" }
-ic-cdk-macros = { version = "0.6.0" }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 ic-icrc1 = { path = ".." }
 ic-icrc1-client = { path = "../client"}
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }

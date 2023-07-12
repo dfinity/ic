@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.31"
-candid = "0.8.1"
+candid = { workspace = true }
 clap = { version = "3.1.6", features = ["derive"] }
 ic-adapter-metrics-server = { path = "../../adapter_metrics_server" }
 ic-async-utils = { path = "../../../async_utils" }

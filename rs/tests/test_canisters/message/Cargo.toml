@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-candid = "0.8"
-ic-cdk = "0.6"
-ic-cdk-macros = "0.6"
+candid = { workspace = true }
+ic-cdk = { workspace = true }
+ic-cdk-macros = { workspace = true }
 dfn_candid = {path = "../../../rust_canisters/dfn_candid"}
 dfn_core = {path = "../../../rust_canisters/dfn_core"}
 serde = "1"

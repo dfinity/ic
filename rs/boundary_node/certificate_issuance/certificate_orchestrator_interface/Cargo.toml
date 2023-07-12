@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 addr = { version = "0.15.6", default-features = false, features = ["idna"] }
-candid = "0.8.4"
-ic-stable-structures = "0.5.1"
+candid = { workspace = true }
+ic-stable-structures = { workspace = true }
 serde = "1.0.148"
 serde_bytes = "0.11.7"
 thiserror = "1.0.37"

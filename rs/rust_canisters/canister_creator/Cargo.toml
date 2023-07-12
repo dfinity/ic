@@ -11,7 +11,7 @@ path = "src/main.rs"
 dfn_core = { path = "../dfn_core" }
 dfn_macro = { path = "../dfn_macro" }
 dfn_json = { path = "../dfn_json" }
-candid = "0.8.1"
+candid = { workspace = true }
 futures = "0.3.21"
 ic-ic00-types = {path = "../../types/ic00_types"}
 serde = "1.0"

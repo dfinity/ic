@@ -7,7 +7,7 @@ edition = "2021"
 anyhow = "1.0.66"
 async-trait = "0.1.59"
 axum = { version = "0.6.1", features = ["json"] }
-candid = "0.8.4"
+candid = { workspace = true }
 clap = { version = "4.0.29", features = ["derive"] }
 futures = "0.3.25"
 hyper = { version = "0.14.23", features = ["full"] }
