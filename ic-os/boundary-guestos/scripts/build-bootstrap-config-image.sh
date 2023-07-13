@@ -268,7 +268,7 @@ function build_ic_bootstrap_tar() {
     IFS="," read -a SYSTEM_DOMAINS <<<$SYSTEM_DOMAINS
 
     for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
-        if [[ ! "${DOMAIN}" =~ ^.*\..*$ ]]; then
+        if [[ ! "${DOMAIN}" =~ ^.*\..*$ && ! "${DOMAIN}" =~ ^\[[0-9a-f:]*\]$ ]]; then
             err "malformed domain name: '${DOMAIN}'"
             fail=1
         fi
@@ -281,7 +281,7 @@ function build_ic_bootstrap_tar() {
     IFS="," read -a APPLICATION_DOMAINS <<<$APPLICATION_DOMAINS
 
     for DOMAIN in "${APPLICATION_DOMAINS[@]}"; do
-        if [[ ! "${DOMAIN}" =~ ^.*\..*$ ]]; then
+        if [[ ! "${DOMAIN}" =~ ^.*\..*$ && ! "${DOMAIN}" =~ ^\[[0-9a-f:]*\]$ ]]; then
             err "malformed domain name: '${DOMAIN}'"
             fail=1
         fi

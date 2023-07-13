@@ -127,6 +127,7 @@ DEPENDENCIES = [
     "@crate_index//:rand_0_8_4",
     "@crate_index//:rand_chacha_0_3_1",
     "@crate_index//:rayon",
+    "@crate_index//:rcgen",
     "@crate_index//:regex",
     "@crate_index//:reqwest",
     "@crate_index//:ring",
