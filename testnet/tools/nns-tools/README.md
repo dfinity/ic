@@ -24,7 +24,19 @@ my_useful_function() {
 }
 ```
 
-## Spinning up a testnet
+## Replicate mainnet state in a testnet
+
+An overview of this procedure
+
+  1. Reserve a testnet using Dee.
+
+  2. Run `nns_dev_testnet.sh`. This creates and populates NNS canisters in the
+     testnet with data from mainnet.
+
+  3. `source` files written by the previous step.
+
+  4. Start using the testnet containing real data. For example, we use this to
+     do [upgrade testing](#upgrade-testing) as part of our release procedure.
 
 ### Prerequisites
 
@@ -42,40 +54,60 @@ PATH=$PATH:$HOME/bin
 
 Knowledge of testnets. Read [go/testnets](http://go/testnets) if you need to be brought up to speed.
 
-You will need to pick a testnet that has a `hosts_unassigned.ini` file. To figure out which ones fit that description, use this
-[query](https://sourcegraph.com/search?q=context:global+repo:dfinity/ic+f:hosts_unassigned.ini+f:%28small%7Cmedium%7Clarge%29&patternType=regexp&case=yes&sm=1&groupBy=repo).
-E.g. currently, small01 has such a file.
+You must reserve a testnet using Dee. The testnet must be one that has a
+`hosts_unassigned.ini` file. Use [this query][suitable-testnets] to list
+testnets that meet this requirement. E.g. currently, small01 has such a file.
 
-### nns_dev_testnet.sh
+[suitable-testnets]: https://sourcegraph.com/search?q=context:global+repo:dfinity/ic+f:hosts_unassigned.ini+f:%28small%7Cmedium%7Clarge%29&patternType=regexp&case=yes&sm=1&groupBy=repo
 
-This script creates a testnet with mainnet state using a stable shared identity and modifies it in a few ways for development purposes.
+### Basic usage of nns_dev_testnet.sh
+
+Needs to be run on zh1-spm22.zh1.dfinity.network. (Ideally, we'd be able to run
+this locally; implementing that is probably feasible, but we haven't done it
+yet.)
+
+For example, if you reserved small02, you would typically run the script like
+so:
+
+```bash
+TESTNET=small02
+export DIR=/tmp/$USER-nns-test
+./nns_dev_testnet.sh $TESTNET
+```
+
+`DIR` tells `nns_dev_testnet.sh` where to put its results, including the
+`source`-able files mentioned earlier.
+
+If you run into problems, see the
+["Troubleshooting nns_dev_testnet.sh" section](#troubleshooting-nns-dev-testnet-sh).
+
+For more information, run `./nns_dev_testnet.sh` without arguments.
+
+### What nns_dev_testnet.sh does, in greater detail
+
+The main thing this does is create a testnet with mainnet state.
+
+In addition, this does the following using `test_user.pem` to facilitate release
+testing, and other development tasks:
+
 1. Adds an application subnet.
 2. Sets CMC default subnet list to that application subnet.
 3. Creates a cycles wallet for our shared principal on the application subnet.
 4. Configures SNS-W to create SNS's on application subnet, and to respond to our principal's wallet.
 5. Uploads the latest SNS Wasms into SNS-W canister
 
-It then stores all the variables in a directory (which is output) so they can be easily referenced for
-interaction with the subnet
+At the end, this stores all the variables in a file that can be `source`-ed so
+that you can easily refer to the entities that the script made and [interact
+with the testnet](#interacting-afterwards).
 
-Needs to be run on zh1-spm22.zh1.dfinity.network. (Ideally, we'd
-be able to run this locally; implementing that is feasible, but
-we haven't done it yet.)
+### Advanced Usage
 
-### Example usage of nns_dev_testnet.sh
+It is possible to run only a subset of the steps that `nns_dev_testnet.sh`
+normally runs. The following sections show how you can use environment variables
+to control which steps it takes.
 
-When running the testnet creation script, a temporary directory is created.  If you would like to use a particular directory
-you can set `DIR` in your environment.  In our examples, we do this to make it easier to find the outputs from the 
-scripts.
-
-For more information, run `./nns_dev_testnet.sh` without arguments.
-
-#### Run the entire script
-
-```
-DIR=/tmp/$USER-nns-test
-./nns_dev_testnet.sh small02
-```
+This can be useful if you already completed some slow steps earlier, and do not
+want to redo them.
 
 #### Run only the full step 1 of the script.
 
@@ -91,7 +123,7 @@ DIR=/tmp/$USER-nns-test STEPS='1' ./nns_dev_testnet.sh small02
 DIR=/tmp/$USER-nns-test STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_dev_testnet.sh small02
 ```
 
-### Interacting Afterward
+### Interacting Afterwards
 
 Variables needed to interact with the testnet are captured in the `DIR`
 directory (or a temporary directory) which is printed at the end of the
@@ -151,6 +183,7 @@ canister=governance dfx canister \
   '(record {})'
 ```
 
+<a name="upgrade-testing"></a>
 ## NNS Canister Upgrade Testing Process
 
 This is usually done as one of the steps in the [NNS release process][1].
@@ -161,7 +194,7 @@ In order to test a canister upgrade, you will first need to spin up a testnet.  
 
 If you have a working testnet, start by sourcing variables into your local shell if you have not already done so.
 ```bash
-source /tmp/$USER-nns-test/output_vars_nns_dev_testnet.sh
+source $DIR/output_vars_nns_dev_testnet.sh
 ````
 
 Next, we test the upgrade
@@ -262,7 +295,7 @@ Once the proposal(s) have been made, make a note of the proposal ID (printed at 
 You will need to notify people about this proposal so that they know to vote on it.
 Jump back to the [release runbook in Notion][1].
 
-## Troubleshooting `nns_dev-testnet.sh`
+## Troubleshooting `nns_dev_testnet.sh`
 
 ### Could not fetch catch up package
 
