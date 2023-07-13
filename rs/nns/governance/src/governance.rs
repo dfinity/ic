@@ -1,4 +1,5 @@
 use crate::{
+    audit_event::add_audit_event,
     governance::manage_neuron_request::{
         execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
     },
@@ -6947,8 +6948,12 @@ impl Governance {
 
     pub fn maybe_reset_aging_timestamps(&mut self) {
         let mut reset_count = 0;
+        let now = self.env.now();
         for neuron in self.proto.neurons.values_mut() {
-            reset_count += neuron.maybe_reset_aging_timestamp() as u64;
+            if let Some(event) = neuron.maybe_reset_aging_timestamp(now) {
+                reset_count += 1;
+                add_audit_event(event);
+            }
         }
         println!(
             "Successfully reset aging timestamps for {} neurons",

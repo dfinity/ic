@@ -2867,6 +2867,85 @@ pub mod settle_community_fund_participation {
         Aborted(Aborted),
     }
 }
+/// Audit events in order to leave an audit trail for certain operations.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AuditEvent {
+    /// The timestamp of the event.
+    #[prost(uint64, tag = "1")]
+    pub timestamp_seconds: u64,
+    #[prost(oneof = "audit_event::Payload", tags = "2")]
+    pub payload: ::core::option::Option<audit_event::Payload>,
+}
+/// Nested message and enum types in `AuditEvent`.
+pub mod audit_event {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct ResetAging {
+        /// The neuron id whose aging was reset.
+        #[prost(fixed64, tag = "1")]
+        pub neuron_id: u64,
+        /// The aging_since_timestamp_seconds before reset.
+        #[prost(uint64, tag = "2")]
+        pub previous_aging_since_timestamp_seconds: u64,
+        /// The aging_since_timestamp_seconds after reset.
+        #[prost(uint64, tag = "3")]
+        pub new_aging_since_timestamp_seconds: u64,
+        /// Neuron's stake at the time of reset.
+        #[prost(uint64, tag = "6")]
+        pub neuron_stake_e8s: u64,
+        /// Neuron's dissolve state at the time of reset.
+        #[prost(oneof = "reset_aging::NeuronDissolveState", tags = "4, 5")]
+        pub neuron_dissolve_state: ::core::option::Option<reset_aging::NeuronDissolveState>,
+    }
+    /// Nested message and enum types in `ResetAging`.
+    pub mod reset_aging {
+        /// Neuron's dissolve state at the time of reset.
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Oneof,
+        )]
+        pub enum NeuronDissolveState {
+            #[prost(uint64, tag = "4")]
+            WhenDissolvedTimestampSeconds(u64),
+            #[prost(uint64, tag = "5")]
+            DissolveDelaySeconds(u64),
+        }
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Payload {
+        /// Reset aging timestamps for <https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26>
+        #[prost(message, tag = "2")]
+        ResetAging(ResetAging),
+    }
+}
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
 /// relationships are defined per topic.

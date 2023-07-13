@@ -5,8 +5,12 @@ use crate::{
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     pb::v1::{
-        governance_error::ErrorType, manage_neuron, neuron::DissolveState, Ballot, BallotInfo,
-        GovernanceError, Neuron, NeuronInfo, NeuronState, Topic, Vote,
+        audit_event::{Payload, ResetAging},
+        governance_error::ErrorType,
+        manage_neuron,
+        neuron::DissolveState,
+        AuditEvent, Ballot, BallotInfo, GovernanceError, Neuron, NeuronInfo, NeuronState, Topic,
+        Vote,
     },
 };
 use dfn_core::println;
@@ -614,21 +618,41 @@ impl Neuron {
     }
 
     /// If the aging timestamp is earlier than GENESIS - PRE_AGE, reset it to GENISIS.
-    pub fn maybe_reset_aging_timestamp(&mut self) -> bool {
+    pub fn maybe_reset_aging_timestamp(&mut self, now: u64) -> Option<AuditEvent> {
         let genesis_timestamp_seconds = ic_types::time::GENESIS.as_secs_since_unix_epoch();
         let aging_limit_timestamp_seconds =
             genesis_timestamp_seconds.saturating_sub(GTC_NEURON_PRE_AGE_DURATION_SECONDS);
         let should_reset = self.aging_since_timestamp_seconds < aging_limit_timestamp_seconds;
         if should_reset {
+            let event = AuditEvent {
+                timestamp_seconds: now,
+                payload: Some(Payload::ResetAging(ResetAging {
+                    neuron_id: self.id.as_ref().map(|id| id.id).unwrap_or_default(),
+                    previous_aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
+                    new_aging_since_timestamp_seconds: genesis_timestamp_seconds,
+                    neuron_dissolve_state: self
+                        .dissolve_state
+                        .clone()
+                        .map(|dissolve_state| dissolve_state.into()),
+                    neuron_stake_e8s: self.minted_stake_e8s(),
+                })),
+            };
             self.aging_since_timestamp_seconds = genesis_timestamp_seconds;
+            Some(event)
+        } else {
+            None
         }
-        should_reset
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::pb::v1::Neuron;
+    use crate::pb::v1::{
+        audit_event::{Payload, ResetAging},
+        AuditEvent, Neuron,
+    };
+
+    const NOW: u64 = 123_456_789;
 
     #[test]
     fn reset_aging_timestamp_should_reset() {
@@ -637,7 +661,19 @@ mod tests {
             ..Default::default()
         };
 
-        assert!(neuron.maybe_reset_aging_timestamp());
+        assert_eq!(
+            neuron.maybe_reset_aging_timestamp(NOW),
+            Some(AuditEvent {
+                timestamp_seconds: 123_456_789,
+                payload: Some(Payload::ResetAging(ResetAging {
+                    neuron_id: 0,
+                    previous_aging_since_timestamp_seconds: 1_572_992_229,
+                    new_aging_since_timestamp_seconds: 1_620_328_630,
+                    neuron_dissolve_state: neuron.dissolve_state.clone().map(|state| state.into()),
+                    neuron_stake_e8s: neuron.minted_stake_e8s(),
+                }))
+            })
+        );
 
         assert_eq!(
             neuron.aging_since_timestamp_seconds,
@@ -652,7 +688,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert!(!neuron.maybe_reset_aging_timestamp());
+        assert!(neuron.maybe_reset_aging_timestamp(NOW).is_none());
 
         assert_eq!(neuron.aging_since_timestamp_seconds, 1_572_992_230);
     }
