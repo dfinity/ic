@@ -28,10 +28,8 @@ impl TestNeurons<'_> {
     /// Add a new test neuron and return the details about created neuron.
     pub(crate) fn create(&mut self, neuron_setup: impl FnOnce(&mut Neuron)) -> NeuronDetails {
         let details = create_neuron(self.seed, neuron_setup, self.ledger_balances);
-        self.neurons.insert(
-            details.neuron.id.clone().unwrap().id,
-            details.neuron.clone(),
-        );
+        self.neurons
+            .insert(details.neuron.id.unwrap().id, details.neuron.clone());
         self.seed += 1;
         details
     }
@@ -42,10 +40,8 @@ impl TestNeurons<'_> {
         kp: &EdKeypair,
     ) -> NeuronDetails {
         let details = create_custom_neuron(id, neuron_setup, self.ledger_balances, kp);
-        self.neurons.insert(
-            details.neuron.id.clone().unwrap().id,
-            details.neuron.clone(),
-        );
+        self.neurons
+            .insert(details.neuron.id.unwrap().id, details.neuron.clone());
         self.seed += 1;
         details
     }

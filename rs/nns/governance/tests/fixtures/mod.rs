@@ -822,7 +822,7 @@ impl NNS {
                 controller,
                 &ManageNeuron {
                     id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id.clone())),
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(*id)),
                     command: Some(Command::MergeMaturity(MergeMaturity {
                         percentage_to_merge,
                     })),
@@ -851,7 +851,7 @@ impl NNS {
                 target,
                 controller,
                 &Merge {
-                    source_neuron_id: Some(source.clone()),
+                    source_neuron_id: Some(*source),
                 },
             )
             .now_or_never()
@@ -869,10 +869,10 @@ impl NNS {
             .simulate_manage_neuron(
                 controller,
                 ManageNeuron {
-                    id: Some(target.clone()),
+                    id: Some(*target),
                     neuron_id_or_subaccount: None,
                     command: Some(Command::Merge(Merge {
-                        source_neuron_id: Some(source.clone()),
+                        source_neuron_id: Some(*source),
                     })),
                 },
             )

@@ -33,7 +33,7 @@ impl ManageNeuronRequest<manage_neuron::Merge> {
     }
 
     fn target_neuron_id(&self) -> NeuronId {
-        self.neuron_id.clone()
+        self.neuron_id
     }
 }
 
@@ -142,8 +142,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
                     && (p.proposer.as_ref() == Some(id)
                         || (p.is_manage_neuron()
                             && p.proposal.as_ref().map_or(false, |pr| {
-                                pr.managed_neuron()
-                                    == Some(NeuronIdOrSubaccount::NeuronId(id.clone()))
+                                pr.managed_neuron() == Some(NeuronIdOrSubaccount::NeuronId(*id))
                             })))
             })
         }
@@ -184,7 +183,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         let source_neuron_id = self.source_neuron_id()?;
         let target_neuron_id = self.target_neuron_id();
         Ok(vec![
-            Box::new(BurnFeesMutation::new(source_neuron_id.clone())),
+            Box::new(BurnFeesMutation::new(source_neuron_id)),
             Box::new(MergeNeuronMutation::new(source_neuron_id, target_neuron_id)),
         ])
     }

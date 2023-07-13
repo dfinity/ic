@@ -45,7 +45,7 @@ fn test_merge_neurons_and_simulate_merge_neurons() {
             nns_builder.governance.proto.neurons.insert(
                 neuron_id_4.id,
                 Neuron {
-                    id: Some(neuron_id_4.clone()),
+                    id: Some(neuron_id_4),
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                     dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                         TWELVE_MONTHS_SECONDS
@@ -153,7 +153,7 @@ fn test_spawn_neuron() {
             nns_builder.governance.proto.neurons.insert(
                 neuron_id.id,
                 Neuron {
-                    id: Some(neuron_id.clone()),
+                    id: Some(neuron_id),
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                     dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                         TWELVE_MONTHS_SECONDS
@@ -178,9 +178,7 @@ fn test_spawn_neuron() {
                 "manage_neuron",
                 candid_one,
                 ManageNeuron {
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        neuron_id.clone(),
-                    )),
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
                     id: None,
                     command: Some(Command::Spawn(Spawn {
                         new_controller: None,
@@ -286,7 +284,7 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
     let response = nns_add_hot_key(
         &mut state_machine,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
-        neuron_id.clone(),
+        neuron_id,
         *TEST_NEURON_2_OWNER_PRINCIPAL,
     );
 

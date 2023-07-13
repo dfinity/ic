@@ -39,7 +39,7 @@ impl GovernanceNeuronMutation for BurnFeesMutation {
         }
 
         Ok(btreemap! {
-            self.neuron_id.clone() => NeuronDeltas {
+            self.neuron_id => NeuronDeltas {
             neuron_fees_e8s: (neuron_fees as i128).neg(),
             cached_neuron_stake_e8s: (neuron_fees as i128).neg(),
             aging_since_timestamp_seconds: 0,

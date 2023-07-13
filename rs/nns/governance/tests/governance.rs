@@ -2599,7 +2599,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         expected_distributed_e8s_equivalent,
     );
     for neuron in gov.proto.neurons.values() {
-        if neuron.id == Some(proposer_neuron_id.clone()) {
+        if neuron.id == Some(proposer_neuron_id) {
             continue;
         }
 
@@ -3901,7 +3901,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     assert_eq!(
         gov.proto.neurons.get(&id.id).unwrap(),
         &Neuron {
-            id: Some(id.clone()),
+            id: Some(id),
             account: to_subaccount.to_vec(),
             controller: Some(from),
             cached_neuron_stake_e8s: neuron_stake_e8s,
@@ -4397,7 +4397,7 @@ fn refresh_neuron_by_id_or_subaccount(
     assert_eq!(neuron.cached_neuron_stake_e8s, stake.get_e8s());
 
     let neuron_id_or_subaccount = match refresh_by {
-        RefreshBy::NeuronId => NeuronIdOrSubaccount::NeuronId(neuron.id.as_ref().unwrap().clone()),
+        RefreshBy::NeuronId => NeuronIdOrSubaccount::NeuronId(neuron.id.unwrap()),
         RefreshBy::Subaccount => NeuronIdOrSubaccount::Subaccount(subaccount.into()),
     };
 
@@ -4634,7 +4634,7 @@ fn test_set_dissolve_delay() {
 fn test_cant_disburse_without_paying_fees() {
     let (driver, mut gov, neuron) = create_mature_neuron(true);
 
-    let id = neuron.id.clone().unwrap();
+    let id = neuron.id.unwrap();
     let from = neuron.controller.unwrap();
     let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
     let neuron_fees_e8s = neuron.neuron_fees_e8s;
@@ -4892,7 +4892,7 @@ fn test_neuron_split() {
     assert_eq!(
         child_neuron,
         &Neuron {
-            id: Some(child_nid.clone()),
+            id: Some(child_nid),
             account: child_subaccount,
             controller: parent_neuron.controller,
             cached_neuron_stake_e8s: 100_000_000,
@@ -5024,7 +5024,7 @@ fn test_neuron_spawn() {
     assert_eq!(
         child_neuron,
         Neuron {
-            id: Some(child_nid.clone()),
+            id: Some(child_nid),
             account: child_subaccount.clone(),
             controller: Some(child_controller),
             cached_neuron_stake_e8s: 0,
@@ -5474,7 +5474,7 @@ fn test_staked_maturity() {
             &from,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("Dummy governance proposal".to_string()),
                     summary: "".to_string(),
@@ -5514,7 +5514,7 @@ fn test_staked_maturity() {
             &from,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(id)),
                 command: Some(manage_neuron::Command::Spawn(Spawn {
                     new_controller: None,
                     nonce: None,
@@ -5656,7 +5656,7 @@ fn test_disburse_to_neuron() {
     assert_eq!(
         child_neuron,
         &Neuron {
-            id: Some(child_nid.clone()),
+            id: Some(child_nid),
             account: child_subaccount,
             controller: Some(child_controller),
             cached_neuron_stake_e8s: 2 * 100_000_000,
@@ -5734,7 +5734,7 @@ async fn test_not_for_profit_neurons() {
     init_neurons.get_mut(&25).unwrap().followees.insert(
         Topic::NeuronManagement as i32,
         Followees {
-            followees: vec![normal_neuron.id.as_ref().unwrap().clone()],
+            followees: vec![normal_neuron.id.unwrap()],
         },
     );
 
@@ -5753,7 +5753,7 @@ async fn test_not_for_profit_neurons() {
                 title: Some("A Reasonable Title".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        normal_neuron.id.as_ref().unwrap().clone(),
+                        normal_neuron.id.unwrap(),
                     )),
                     id: None,
                     command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
@@ -5779,7 +5779,7 @@ async fn test_not_for_profit_neurons() {
                 title: Some("A Reasonable Title".to_string()),
                 action: Some(proposal::Action::ManageNeuron(Box::new(ManageNeuron {
                     neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        not_for_profit_neuron.id.as_ref().unwrap().clone(),
+                        not_for_profit_neuron.id.unwrap(),
                     )),
                     id: None,
                     command: Some(manage_neuron::Command::Disburse(manage_neuron::Disburse {
@@ -5827,11 +5827,11 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
             &ManageNeuron {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    first_neuron.id.as_ref().unwrap().clone(),
+                    first_neuron.id.unwrap(),
                 )),
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::NetworkEconomics as i32,
-                    followees: vec![second_neuron.id.as_ref().unwrap().clone()],
+                    followees: vec![second_neuron.id.unwrap()],
                 })),
             },
         )
@@ -5848,11 +5848,11 @@ fn test_hot_keys_cant_change_followees_of_manage_neuron_topic() {
             &ManageNeuron {
                 id: None,
                 neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    first_neuron.id.as_ref().unwrap().clone(),
+                    first_neuron.id.unwrap(),
                 )),
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::NeuronManagement as i32,
-                    followees: vec![second_neuron.id.as_ref().unwrap().clone()],
+                    followees: vec![second_neuron.id.unwrap()],
                 })),
             },
         )
@@ -5897,9 +5897,7 @@ fn test_add_and_remove_hot_key() {
             neuron.controller.as_ref().unwrap(),
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    neuron.id.as_ref().unwrap().clone(),
-                )),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron.id.unwrap())),
                 command: Some(manage_neuron::Command::Configure(
                     manage_neuron::Configure {
                         operation: Some(manage_neuron::configure::Operation::AddHotKey(
@@ -5928,9 +5926,7 @@ fn test_add_and_remove_hot_key() {
             neuron.controller.as_ref().unwrap(),
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    neuron.id.as_ref().unwrap().clone(),
-                )),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron.id.unwrap())),
                 command: Some(manage_neuron::Command::Configure(
                     manage_neuron::Configure {
                         operation: Some(manage_neuron::configure::Operation::RemoveHotKey(
@@ -5964,7 +5960,7 @@ fn test_manage_and_reward_node_providers() {
 
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
 
-    let voter_neuron = init_neurons[&42].id.as_ref().unwrap().clone();
+    let voter_neuron = init_neurons[&42].id.unwrap();
     init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     ));
@@ -5986,7 +5982,7 @@ fn test_manage_and_reward_node_providers() {
             &voter_pid,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
@@ -6032,7 +6028,7 @@ fn test_manage_and_reward_node_providers() {
             &voter_pid,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("NP reward proposal".to_string()),
                     summary: "Just want to add this NP.".to_string(),
@@ -6080,7 +6076,7 @@ fn test_manage_and_reward_node_providers() {
             &voter_pid,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("NP reward proposal".to_string()),
                     summary: "Just want to add this NP.".to_string(),
@@ -6117,7 +6113,7 @@ fn test_manage_and_reward_node_providers() {
             &voter_pid,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
@@ -6165,7 +6161,7 @@ fn test_manage_and_reward_node_providers() {
             &voter_pid,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
@@ -6212,7 +6208,7 @@ fn test_manage_and_reward_node_providers() {
             &voter_pid,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
@@ -6313,7 +6309,7 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
 
-    let voter_neuron = init_neurons[&42].id.as_ref().unwrap().clone();
+    let voter_neuron = init_neurons[&42].id.unwrap();
     init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     ));
@@ -6337,7 +6333,7 @@ fn test_manage_and_reward_multiple_node_providers() {
             &voter_pid,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("NP reward proposal".to_string()),
                     summary: "Reward this NP...".to_string(),
@@ -6386,9 +6382,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                 &voter_pid,
                 &ManageNeuron {
                     id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        voter_neuron.clone(),
-                    )),
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                     command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                         title: Some("NP reward proposal".to_string()),
                         summary: "Just want to add this other NP.".to_string(),
@@ -6438,9 +6432,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                 &voter_pid,
                 &ManageNeuron {
                     id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        voter_neuron.clone(),
-                    )),
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                     command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                         title: Some("Add NP".to_string()),
                         summary: "Just want to add this other NP.".to_string(),
@@ -6481,7 +6473,7 @@ fn test_manage_and_reward_multiple_node_providers() {
 
     let manage_neuron_cmd = ManageNeuron {
         id: None,
-        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+        neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
         command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
             title: Some("Reward NP".to_string()),
             summary: "Reward these NPs...".to_string(),
@@ -6581,7 +6573,7 @@ fn test_manage_and_reward_multiple_node_providers() {
             &voter_pid,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(voter_neuron)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("Remove NP".to_string()),
                     summary: "Just want to remove this NP.".to_string(),
@@ -6690,7 +6682,7 @@ fn test_network_economics_proposal() {
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
-    let voter_neuron = init_neurons[&42].id.as_ref().unwrap().clone();
+    let voter_neuron = init_neurons[&42].id.unwrap();
     init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     ));
@@ -6762,7 +6754,7 @@ fn make_proposal_with_action(
             proposer_p,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(proposer_n.clone())),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(*proposer_n)),
                 command: Some(manage_neuron::Command::MakeProposal(Box::new(Proposal {
                     title: Some("Dummy proposal".to_string()),
                     summary: "".to_string(),
@@ -6795,7 +6787,7 @@ fn test_default_followees() {
     let init_neurons = &mut builder.add_all_neurons_from_csv_file(&p).proto.neurons;
 
     let voter_pid = *init_neurons[&42].controller.as_ref().unwrap();
-    let voter_neuron = init_neurons[&42].id.as_ref().unwrap().clone();
+    let voter_neuron = init_neurons[&42].id.unwrap();
     init_neurons.get_mut(&42).unwrap().dissolve_state = Some(DissolveState::DissolveDelaySeconds(
         MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
     ));
@@ -6803,7 +6795,7 @@ fn test_default_followees() {
         governance_with_neurons(&init_neurons.values().cloned().collect::<Vec<Neuron>>());
 
     let default_followees = hashmap![
-        Topic::Unspecified as i32 => Followees { followees: vec![voter_neuron.clone()]},
+        Topic::Unspecified as i32 => Followees { followees: vec![voter_neuron]},
     ];
 
     gov.proto.default_followees = default_followees.clone();
@@ -6833,9 +6825,7 @@ fn test_default_followees() {
             &from,
             &ManageNeuron {
                 id: None,
-                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                    follower_neuron_id.clone(),
-                )),
+                neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(follower_neuron_id)),
                 command: Some(manage_neuron::Command::Configure(Configure {
                     operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
                         additional_dissolve_delay_seconds: (6 * ONE_MONTH_SECONDS) as u32,
@@ -6927,13 +6917,13 @@ fn test_default_followees() {
 
     let default_followees2 = hashmap![
         Topic::ExchangeRate as i32 => Followees { followees: vec![]},
-        Topic::NetworkEconomics as i32 => Followees { followees: vec![voter_neuron.clone()]},
+        Topic::NetworkEconomics as i32 => Followees { followees: vec![voter_neuron]},
         Topic::Governance as i32 => Followees { followees: vec![]},
         Topic::SnsAndCommunityFund as i32 => Followees { followees: vec![]},
-        Topic::NodeAdmin as i32 => Followees { followees: vec![voter_neuron.clone()]},
+        Topic::NodeAdmin as i32 => Followees { followees: vec![voter_neuron]},
         Topic::ParticipantManagement as i32 => Followees { followees: vec![]},
-        Topic::SubnetManagement as i32 => Followees { followees: vec![voter_neuron.clone()]},
-        Topic::NetworkCanisterManagement as i32 => Followees { followees: vec![voter_neuron.clone()]},
+        Topic::SubnetManagement as i32 => Followees { followees: vec![voter_neuron]},
+        Topic::NetworkCanisterManagement as i32 => Followees { followees: vec![voter_neuron]},
         Topic::Kyc as i32 => Followees { followees: vec![]},
     ];
 
@@ -8260,7 +8250,7 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
                 neuron_id_or_subaccount: Some(neuron_id_or_subaccount.clone()),
                 command: Some(manage_neuron::Command::Follow(manage_neuron::Follow {
                     topic: Topic::Unspecified as i32,
-                    followees: [folowee.clone()].to_vec(),
+                    followees: [folowee].to_vec(),
                 })),
             },
         )
@@ -8279,14 +8269,14 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
             .clone();
         assert_eq!(
             f,
-            vec![folowee.clone()],
+            vec![folowee],
             "failed to start following neuron {:?} by {:?}",
             folowee,
             neuron_id_or_subaccount
         );
     }
 
-    test_can_follow_by(|n| NeuronIdOrSubaccount::NeuronId(n.id.as_ref().unwrap().clone()));
+    test_can_follow_by(|n| NeuronIdOrSubaccount::NeuronId(n.id.unwrap()));
     test_can_follow_by(|n| NeuronIdOrSubaccount::Subaccount(n.account.to_vec()));
 }
 
@@ -8438,7 +8428,7 @@ fn test_merge_maturity_of_neuron(
 ) {
     let (driver, mut gov, neuron) = create_mature_neuron(false);
 
-    let id = neuron.id.clone().unwrap();
+    let id = neuron.id.unwrap();
     let controller = neuron.controller.unwrap();
     let neuron_stake_e8s = neuron.cached_neuron_stake_e8s;
     let account = AccountIdentifier::new(
@@ -8460,11 +8450,11 @@ fn test_merge_maturity_of_neuron(
 
     // Assert that maturity can't be merged by someone who doesn't control the
     // neuron
-    prop_assert!(merge_maturity(&mut gov, id.clone(), &TEST_NEURON_2_OWNER_PRINCIPAL, 10).is_err());
+    prop_assert!(merge_maturity(&mut gov, id, &TEST_NEURON_2_OWNER_PRINCIPAL, 10).is_err());
 
     // Assert percents outside of (0, 100] are rejected
-    prop_assert!(merge_maturity(&mut gov, id.clone(), &controller, 0).is_err());
-    prop_assert!(merge_maturity(&mut gov, id.clone(), &controller, 250).is_err());
+    prop_assert!(merge_maturity(&mut gov, id, &controller, 0).is_err());
+    prop_assert!(merge_maturity(&mut gov, id, &controller, 250).is_err());
 
     let mut decrement_maturity = {
         let mut remaining_maturity = starting_maturity;
@@ -8478,7 +8468,7 @@ fn test_merge_maturity_of_neuron(
     // Assert that 10% of a neuron's maturity can be merged successfully
     assert_merge_maturity_executes_as_expected(
         &mut gov,
-        id.clone(),
+        id,
         &controller,
         10,
         decrement_maturity(10),
@@ -8488,7 +8478,7 @@ fn test_merge_maturity_of_neuron(
     // Assert that 50% of a neuron's maturity can be merged successfully
     assert_merge_maturity_executes_as_expected(
         &mut gov,
-        id.clone(),
+        id,
         &controller,
         50,
         decrement_maturity(50),
@@ -8498,7 +8488,7 @@ fn test_merge_maturity_of_neuron(
     // Assert that 100% of a neuron's maturity can be merged successfully
     assert_merge_maturity_executes_as_expected(
         &mut gov,
-        id.clone(),
+        id,
         &controller,
         100,
         decrement_maturity(100),
@@ -8523,7 +8513,7 @@ fn assert_merge_maturity_executes_as_expected(
         ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
         Some(Subaccount::try_from(neuron.account.as_slice()).unwrap()),
     );
-    let response = merge_maturity(gov, id.clone(), controller, percentage_to_merge).unwrap();
+    let response = merge_maturity(gov, id, controller, percentage_to_merge).unwrap();
     let merged_maturity = response.merged_maturity_e8s;
     prop_assert_eq!(merged_maturity, expected_merged_maturity);
     let expected_resulting_maturity = neuron.maturity_e8s_equivalent - merged_maturity;

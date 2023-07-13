@@ -73,7 +73,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
 
     // Spawn disbursing in a new thread; meanwhile, on the main thread we'll await
     // for the signal that the ledger transfer has been initiated
-    let neuron_id_clone = neuron_id.clone();
+    let neuron_id_clone = neuron_id;
     thread::spawn(move || {
         let disburse = Disburse {
             amount: None,
@@ -102,7 +102,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // disburse_neuron (in particular, the locks).
     atomic::fence(AOrdering::SeqCst);
     let increase_dissolve_result =
-        increase_dissolve_delay_raw(unsafe { &mut *raw_ptr }, &owner, neuron_id.clone(), 1)
+        increase_dissolve_delay_raw(unsafe { &mut *raw_ptr }, &owner, neuron_id, 1)
             .now_or_never()
             .unwrap();
 

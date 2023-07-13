@@ -300,7 +300,7 @@ impl ManageNeuron {
             )),
             (None, None) => Ok(None),
             (None, Some(id)) => Ok(Some(id.clone())),
-            (Some(nid), None) => Ok(Some(NeuronIdOrSubaccount::NeuronId(nid.clone()))),
+            (Some(nid), None) => Ok(Some(NeuronIdOrSubaccount::NeuronId(*nid))),
         }
     }
 }
@@ -1766,7 +1766,7 @@ impl Governance {
 
                 let manage_neuron_proposal_involves_neuron = p.is_manage_neuron()
                     && p.proposal.as_ref().map_or(false, |pr| {
-                        pr.managed_neuron() == Some(NeuronIdOrSubaccount::NeuronId(id.clone()))
+                        pr.managed_neuron() == Some(NeuronIdOrSubaccount::NeuronId(*id))
                             || pr.managed_neuron()
                                 == Some(NeuronIdOrSubaccount::Subaccount(subaccount.clone()))
                     });
@@ -2533,7 +2533,7 @@ impl Governance {
         // whether the transfer will succeed, so we temporarily set the
         // stake to 0 and only change it after the transfer is successful.
         let child_neuron = Neuron {
-            id: Some(child_nid.clone()),
+            id: Some(child_nid),
             account: to_subaccount.to_vec(),
             controller: Some(*caller),
             hot_keys: parent_neuron.hot_keys.clone(),
@@ -2671,7 +2671,7 @@ impl Governance {
         let _source_lock =
             self.lock_neuron_for_command(source_neuron_id.id, in_flight_command.clone())?;
 
-        let action = ManageNeuronRequest::new(merge.clone(), id.clone(), *caller);
+        let action = ManageNeuronRequest::new(merge.clone(), *id, *caller);
         execute_manage_neuron(self, action).await
     }
 
@@ -2686,7 +2686,7 @@ impl Governance {
         };
 
         let action = match manage_neuron.command {
-            Some(Command::Merge(merge)) => ManageNeuronRequest::new(merge, id.clone(), *caller),
+            Some(Command::Merge(merge)) => ManageNeuronRequest::new(merge, id, *caller),
             Some(_) => {
                 return ManageNeuronResponse::error(GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
@@ -2811,7 +2811,7 @@ impl Governance {
             creation_timestamp_seconds + economics.neuron_spawn_dissolve_delay_seconds;
 
         let child_neuron = Neuron {
-            id: Some(child_nid.clone()),
+            id: Some(child_nid),
             account: to_subaccount.to_vec(),
             controller: Some(*child_controller),
             hot_keys: parent_neuron.hot_keys.clone(),
@@ -3134,7 +3134,7 @@ impl Governance {
         // whether the transfer will succeed, so we temporarily set the
         // stake to 0 and only change it after the transfer is successful.
         let child_neuron = Neuron {
-            id: Some(child_nid.clone()),
+            id: Some(child_nid),
             account: to_subaccount.to_vec(),
             controller: Some(*child_controller),
             hot_keys: Vec::new(),
@@ -3320,10 +3320,7 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
     ) -> Result<Neuron, GovernanceError> {
-        self.get_full_neuron_by_id_or_subaccount(
-            &NeuronIdOrSubaccount::NeuronId(id.clone()),
-            caller,
-        )
+        self.get_full_neuron_by_id_or_subaccount(&NeuronIdOrSubaccount::NeuronId(*id), caller)
     }
 
     // Returns the set of currently registered node providers.
@@ -3445,7 +3442,7 @@ impl Governance {
 
         ProposalInfo {
             id: data.id,
-            proposer: data.proposer.clone(),
+            proposer: data.proposer,
             reject_cost_e8s: data.reject_cost_e8s,
             proposal: new_proposal,
             proposal_timestamp_seconds: data.proposal_timestamp_seconds,
@@ -3880,7 +3877,7 @@ impl Governance {
                 );
                 // Transfer successful.
                 let neuron = Neuron {
-                    id: Some(nid.clone()),
+                    id: Some(nid),
                     account: to_subaccount.to_vec(),
                     controller: Some(*np_principal),
                     hot_keys: Vec::new(),
@@ -4735,7 +4732,7 @@ impl Governance {
         // Create the proposal.
         let info = ProposalData {
             id: Some(proposal_id),
-            proposer: Some(proposer_id.clone()),
+            proposer: Some(*proposer_id),
             proposal: Some(Proposal {
                 title,
                 summary: summary.to_string(),
@@ -5285,7 +5282,7 @@ impl Governance {
         };
         let mut info = ProposalData {
             id: Some(proposal_id),
-            proposer: Some(proposer_id.clone()),
+            proposer: Some(*proposer_id),
             reject_cost_e8s,
             proposal: Some(proposal.clone()),
             proposal_timestamp_seconds: now_seconds,
@@ -5732,7 +5729,7 @@ impl Governance {
         let subaccount = ledger::compute_neuron_staking_subaccount(controller, memo);
         match self.get_neuron_by_subaccount(&subaccount) {
             Some(neuron) => {
-                let nid = neuron.id.as_ref().expect("Neuron must have an id").clone();
+                let nid = neuron.id.expect("Neuron must have an id");
                 self.refresh_neuron(nid, subaccount, claim_or_refresh).await
             }
             None => {
@@ -5760,10 +5757,7 @@ impl Governance {
                 let neuron = self
                     .get_neuron_by_subaccount(&subaccount)
                     .ok_or_else(|| Self::no_neuron_for_subaccount_error(&sid))?;
-                (
-                    neuron.id.as_ref().expect("Neurons must have an id").clone(),
-                    subaccount,
-                )
+                (neuron.id.expect("Neurons must have an id"), subaccount)
             }
         };
         self.refresh_neuron(nid, subaccount, claim_or_refresh).await
@@ -5862,7 +5856,7 @@ impl Governance {
         let nid = self.new_neuron_id();
         let now = self.env.now();
         let neuron = Neuron {
-            id: Some(nid.clone()),
+            id: Some(nid),
             account: subaccount.to_vec(),
             controller: Some(controller),
             cached_neuron_stake_e8s: 0,
@@ -6125,7 +6119,7 @@ impl Governance {
             Some(NeuronIdOrSubaccount::Subaccount(sid)) => {
                 let subaccount = Self::bytes_to_subaccount(&sid)?;
                 match self.get_neuron_by_subaccount(&subaccount) {
-                    Some(neuron) => Ok(neuron.id.clone().expect("neuron doesn't have an ID")),
+                    Some(neuron) => Ok(neuron.id.expect("neuron doesn't have an ID")),
                     None => Err(GovernanceError::new_with_message(
                         ErrorType::NotFound,
                         "No neuron ID specified in the management request.",
@@ -6360,12 +6354,12 @@ impl Governance {
                 .expect("Neuron is spawning but has no spawn timestamp");
 
             if now_seconds >= spawn_timestamp_seconds {
-                let id = neuron.id.as_ref().unwrap().clone();
+                let id = neuron.id.unwrap();
                 let subaccount = neuron.account.clone();
                 // Actually mint the neuron's ICP.
                 let in_flight_command = NeuronInFlightCommand {
                     timestamp: now_seconds,
-                    command: Some(InFlightCommand::Spawn(neuron.id.as_ref().unwrap().clone())),
+                    command: Some(InFlightCommand::Spawn(neuron.id.unwrap())),
                 };
 
                 // Add the neuron to the set of neurons undergoing ledger updates.

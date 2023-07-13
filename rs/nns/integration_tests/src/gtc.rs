@@ -56,7 +56,7 @@ pub fn test_claim_neurons() {
 
         nns_init_payload_builder
             .genesis_token
-            .donate_account_recipient_neuron_id = Some(donate_account_recipient_neuron_id.clone());
+            .donate_account_recipient_neuron_id = Some(donate_account_recipient_neuron_id);
 
         let forward_all_unclaimed_accounts_recipient_neuron_id =
             get_forward_whitelisted_unclaimed_accounts_recipient_neuron_id(
@@ -66,7 +66,7 @@ pub fn test_claim_neurons() {
         nns_init_payload_builder
             .genesis_token
             .forward_whitelisted_unclaimed_accounts_recipient_neuron_id =
-            Some(forward_all_unclaimed_accounts_recipient_neuron_id.clone());
+            Some(forward_all_unclaimed_accounts_recipient_neuron_id);
 
         let nns_init_payload = nns_init_payload_builder.build();
 

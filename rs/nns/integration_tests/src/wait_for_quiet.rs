@@ -40,7 +40,7 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
         nns_init_payload_builder.governance.proto.neurons.insert(
             neuron_id_4.id,
             Neuron {
-                id: Some(neuron_id_4.clone()),
+                id: Some(neuron_id_4),
                 account: neuron_4_subaccount,
                 controller: Some(neuron_4_owner_principal_id),
                 cached_neuron_stake_e8s: 200_000_000,

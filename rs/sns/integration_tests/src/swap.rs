@@ -35,9 +35,10 @@ use ic_nns_test_utils::{
     },
     state_test_helpers::{
         icrc1_balance, icrc1_transfer, ledger_account_balance, nns_governance_get_full_neuron,
-        nns_governance_get_proposal_info, nns_governance_make_proposal, nns_join_community_fund,
-        nns_leave_community_fund, nns_stake_maturity, set_controllers, set_up_universal_canister,
-        setup_nns_canisters, sns_governance_get_mode, sns_make_proposal, update_with_sender,
+        nns_governance_get_proposal_info_as_anonymous, nns_governance_make_proposal,
+        nns_join_community_fund, nns_leave_community_fund, nns_stake_maturity, set_controllers,
+        set_up_universal_canister, setup_nns_canisters, sns_governance_get_mode, sns_make_proposal,
+        update_with_sender,
     },
 };
 use ic_sns_governance::pb::v1::{
@@ -537,7 +538,7 @@ fn begin_swap(
     );
 
     // Proposal executed successfully.
-    let proposal = nns_governance_get_proposal_info(state_machine, proposal_id.id);
+    let proposal = nns_governance_get_proposal_info_as_anonymous(state_machine, proposal_id.id);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert!(proposal.executed_timestamp_seconds > 0, "{:#?}", proposal);
 
@@ -621,7 +622,7 @@ fn stuff_ballot_box(
             .unwrap();
     }
 
-    let proposal = nns_governance_get_proposal_info(state_machine, proposal_id.0);
+    let proposal = nns_governance_get_proposal_info_as_anonymous(state_machine, proposal_id.0);
     assert!(proposal.decided_timestamp_seconds > 0, "{:#?}", proposal);
 }
 
@@ -1145,7 +1146,7 @@ fn assert_community_fund_can_change_while_proposal_is_being_voted_on_with_specif
                 nns_leave_community_fund(
                     state_machine,
                     neuron.controller.unwrap(), // sender
-                    neuron.id.as_ref().unwrap().clone(),
+                    neuron.id.unwrap(),
                 );
             }
 
@@ -1154,7 +1155,7 @@ fn assert_community_fund_can_change_while_proposal_is_being_voted_on_with_specif
                 nns_join_community_fund(
                     state_machine,
                     neuron.controller.unwrap(), // sender
-                    neuron.id.as_ref().unwrap().clone(),
+                    neuron.id.unwrap(),
                 );
             }
         },
@@ -1820,7 +1821,7 @@ fn assert_successful_swap_finalizes_correctly(
     }
 
     let sns_tokens_being_offered_e8s =
-        match &nns_governance_get_proposal_info(&mut state_machine, sns_proposal_id.0)
+        match &nns_governance_get_proposal_info_as_anonymous(&mut state_machine, sns_proposal_id.0)
             .proposal
             .as_ref()
             .unwrap()

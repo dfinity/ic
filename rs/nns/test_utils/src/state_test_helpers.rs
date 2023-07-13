@@ -24,11 +24,11 @@ use ic_nns_constants::{
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
     manage_neuron::{
-        self, configure::Operation, AddHotKey, Configure, JoinCommunityFund, LeaveCommunityFund,
-        RemoveHotKey, StakeMaturity,
+        self, configure::Operation, AddHotKey, Configure, Follow, JoinCommunityFund,
+        LeaveCommunityFund, RegisterVote, RemoveHotKey, Split, StakeMaturity,
     },
-    Governance, ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse,
-    ManageNeuron, ManageNeuronResponse, Proposal, ProposalInfo,
+    Empty, Governance, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+    ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, Proposal, ProposalInfo, Vote,
 };
 use ic_sns_governance::{
     pb::v1::{
@@ -511,12 +511,21 @@ pub fn nns_governance_get_full_neuron(
     Decode!(&result, Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError>).unwrap()
 }
 
-pub fn nns_governance_get_proposal_info(
+pub fn nns_governance_get_proposal_info_as_anonymous(
     state_machine: &mut StateMachine,
     proposal_id: u64,
 ) -> ProposalInfo {
+    nns_governance_get_proposal_info(state_machine, proposal_id, PrincipalId::new_anonymous())
+}
+
+pub fn nns_governance_get_proposal_info(
+    state_machine: &mut StateMachine,
+    proposal_id: u64,
+    sender: PrincipalId,
+) -> ProposalInfo {
     let result = state_machine
-        .execute_ingress(
+        .execute_ingress_as(
+            sender,
             GOVERNANCE_CANISTER_ID,
             "get_proposal_info",
             Encode!(&proposal_id).unwrap(),
@@ -562,6 +571,48 @@ fn manage_neuron(
     };
 
     Decode!(&result, ManageNeuronResponse).unwrap()
+}
+
+pub fn nns_cast_yes_vote(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    proposal_id: u64,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::RegisterVote(RegisterVote {
+        proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id }),
+        vote: Vote::Yes as i32,
+    });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_split_neuron(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    amount: u64,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::Split(Split { amount_e8s: amount });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn get_neuron_ids(state_machine: &mut StateMachine, sender: PrincipalId) -> Vec<u64> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "get_neuron_ids",
+            Encode!(&Empty {}).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to get_neuron_ids failed: {:#?}", s),
+    };
+
+    Decode!(&result, Vec<u64>).unwrap()
 }
 
 pub fn nns_join_community_fund(
@@ -614,6 +665,24 @@ pub fn nns_add_hot_key(
     manage_neuron(state_machine, sender, neuron_id, command)
 }
 
+pub fn nns_set_followees_for_neuron(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    followees: &[NeuronId],
+    topic: i32,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::Follow(Follow {
+        topic,
+        followees: followees
+            .iter()
+            .map(|leader| ic_nns_common::pb::v1::NeuronId { id: leader.id })
+            .collect(),
+    });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
 pub fn nns_remove_hot_key(
     state_machine: &mut StateMachine,
     sender: PrincipalId,
@@ -653,7 +722,7 @@ pub fn nns_list_proposals(state_machine: &mut StateMachine) -> ListProposalInfoR
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to list_neurons failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to list_proposals failed: {:#?}", s),
     };
 
     Decode!(&result, ListProposalInfoResponse).unwrap()
@@ -670,7 +739,7 @@ pub fn list_deployed_snses(state_machine: &mut StateMachine) -> ListDeployedSnse
 
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to list_neurons failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to list_deployed_snses failed: {:#?}", s),
     };
 
     Decode!(&result, ListDeployedSnsesResponse).unwrap()
@@ -708,7 +777,7 @@ pub fn nns_wait_for_proposal_execution(machine: &mut StateMachine, proposal_id: 
         attempt_count += 1;
 
         machine.tick();
-        let proposal = nns_governance_get_proposal_info(machine, proposal_id);
+        let proposal = nns_governance_get_proposal_info_as_anonymous(machine, proposal_id);
         if proposal.executed_timestamp_seconds > 0 {
             return;
         }
@@ -970,7 +1039,7 @@ pub fn sns_governance_get_mode(
         "get_mode",
         Encode!(&sns_pb::GetMode {}).unwrap(),
     )
-    .map_err(|e| format!("Error calling get_proposal: {}", e))?;
+    .map_err(|e| format!("Error calling get_mode: {}", e))?;
 
     let GetModeResponse { mode } = Decode!(&get_mode_response, sns_pb::GetModeResponse).unwrap();
 

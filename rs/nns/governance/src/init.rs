@@ -293,7 +293,7 @@ impl GovernanceCanisterInitPayloadBuilder {
             };
 
             let neuron = Neuron {
-                id: Some(neuron_id.clone()),
+                id: Some(neuron_id),
                 account: ledger::compute_neuron_staking_subaccount(principal_id, memo).into(),
                 controller: Some(principal_id),
                 hot_keys: vec![principal_id],
@@ -327,7 +327,7 @@ impl GovernanceCanisterInitPayloadBuilder {
     /// of neurons
     pub fn add_gtc_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
         for neuron in neurons {
-            let id = neuron.id.clone().expect("GTC neuron missing ID").id;
+            let id = neuron.id.expect("GTC neuron missing ID").id;
             assert_eq!(
                 self.proto.neurons.insert(id, neuron),
                 None,

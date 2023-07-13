@@ -22,7 +22,7 @@ impl From<&Vec<Neuron>> for AccountState {
     fn from(neurons: &Vec<Neuron>) -> AccountState {
         let neuron_ids = neurons
             .iter()
-            .map(|neuron| neuron.id.clone().expect("GTC neuron missing ID"))
+            .map(|neuron| neuron.id.expect("GTC neuron missing ID"))
             .collect();
 
         let e8s = neurons
@@ -176,10 +176,9 @@ impl GenesisTokenCanisterInitPayloadBuilder {
             accounts,
             total_alloc: self.total_alloc,
             genesis_timestamp_seconds: self.genesis_timestamp_seconds,
-            donate_account_recipient_neuron_id: self.donate_account_recipient_neuron_id.clone(),
+            donate_account_recipient_neuron_id: self.donate_account_recipient_neuron_id,
             forward_whitelisted_unclaimed_accounts_recipient_neuron_id: self
-                .forward_whitelisted_unclaimed_accounts_recipient_neuron_id
-                .clone(),
+                .forward_whitelisted_unclaimed_accounts_recipient_neuron_id,
             whitelisted_accounts_to_forward: self.forward_unclaimed_accounts_whitelist.clone(),
         }
     }

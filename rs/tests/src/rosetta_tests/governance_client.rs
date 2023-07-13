@@ -52,7 +52,7 @@ impl GovernanceClient {
         proposal: &Proposal,
     ) -> ProposalId {
         debug!(&self.logger, "[governance_client] Making Proposal");
-        let neuron_id: NeuronId = neuron_details.neuron.id.clone().unwrap().into();
+        let neuron_id: NeuronId = neuron_details.neuron.id.unwrap().into();
         let manage_neuron = create_make_proposal_payload(proposal.clone(), &neuron_id);
         let arg = &Encode!(&manage_neuron).expect("Error while encoding arg.");
         let res = self
