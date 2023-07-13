@@ -71,9 +71,13 @@ use crate::{
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::start_request_handler};
 
-const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
+/// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
+const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
+/// Timeout after which quic marks connections as broken. This timeout is used to detect connections
+/// that were not explicitly closed. I.e replica crash
+const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
+const CONNECTION_MANAGER_HEARTBEAT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const KEEP_ALIVE_INTERVAL: Duration = Duration::from_secs(2);
 const GRUEZI_HANDSHAKE: &str = "gruezi";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,6 +217,7 @@ pub fn start_connection_manager(
     let mut transport_config = quinn::TransportConfig::default();
 
     transport_config.keep_alive_interval(Some(KEEP_ALIVE_INTERVAL));
+    transport_config.max_idle_timeout(Some(IDLE_TIMEOUT.try_into().unwrap()));
     // defaults:
     // STREAM_RWN 1_250_000
     // stream_receive_window: STREAM_RWND.into(),
@@ -273,7 +278,7 @@ pub fn start_connection_manager(
 
 impl ConnectionManager {
     pub async fn run(mut self) {
-        let mut heartbeat = tokio::time::interval(HEARTBEAT_INTERVAL);
+        let mut heartbeat = tokio::time::interval(CONNECTION_MANAGER_HEARTBEAT);
         loop {
             select! {
                 Some(reconnect) = self.connect_queue.next() => {
