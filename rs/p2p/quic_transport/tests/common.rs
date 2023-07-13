@@ -1,14 +1,22 @@
 use std::{
+    collections::{HashMap, HashSet},
+    error::Error,
     future::Future,
     io::{self, IoSliceMut},
     net::{IpAddr, SocketAddr},
-    sync::Arc,
+    sync::{Arc, RwLock},
     task::Poll,
+    time::Duration,
 };
 
+use axum::Router;
+use bytes::Bytes;
+use futures::future::join_all;
+use http::Request;
 use ic_crypto_test_utils::tls::x509_certificates::CertWithPrivateKey;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_interfaces_registry_mocks::MockRegistryClient;
+use ic_quic_transport::{QuicTransport, Transport};
 use ic_types::{NodeId, RegistryVersion};
 use quinn::{
     self,
@@ -21,6 +29,7 @@ use rustls::{
     server::{ClientCertVerified, ClientCertVerifier},
     ClientConfig, DigitallySignedStruct, ServerConfig, ServerName,
 };
+use turmoil::Sim;
 
 pub struct CustomUdp {
     ip: IpAddr,
@@ -299,4 +308,125 @@ pub fn mock_registry_client() -> Arc<MockRegistryClient> {
         .return_const(RegistryVersion::from(1));
 
     Arc::new(registry_client)
+}
+
+/// Utility to check connectivity between peers.
+/// Requires that transport has the `router()` installed
+/// and periodically call `check` in a loop.
+#[derive(Clone, Debug)]
+#[allow(clippy::type_complexity)]
+pub struct ConnectivityChecker {
+    peers: Arc<RwLock<HashMap<NodeId, HashSet<NodeId>>>>,
+}
+
+impl ConnectivityChecker {
+    pub fn new(peers: &[NodeId]) -> Self {
+        let mut hm = HashMap::new();
+
+        for peer in peers {
+            hm.insert(*peer, HashSet::new());
+        }
+
+        Self {
+            peers: Arc::new(RwLock::new(hm)),
+        }
+    }
+
+    /// Router used by check function to verify connectivity.
+    pub fn router() -> Router {
+        Router::new().route("/Ping", axum::routing::get(|| async { "Pong" }))
+    }
+
+    /// Checks connectivity of this peer to peers provided in `add_peer` function.
+    pub async fn check(&self, this_peer: NodeId, transport: &QuicTransport) {
+        // Collect rpc futures to all peers
+        let mut futs = vec![];
+        for peer in transport.peers() {
+            let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
+            futs.push(async move {
+                (
+                    tokio::time::timeout(Duration::from_secs(1), transport.rpc(&peer, request))
+                        .await,
+                    peer,
+                )
+            });
+        }
+        let futs_res = join_all(futs).await;
+        // Apply results of rpc futures
+        let mut peers = self.peers.write().unwrap();
+        peers.get_mut(&this_peer).unwrap().clear();
+        for res in futs_res {
+            match res {
+                (Ok(Ok(_)), peer) => {
+                    peers.get_mut(&this_peer).unwrap().insert(peer);
+                }
+                (_, peer) => {
+                    peers.get_mut(&this_peer).unwrap().remove(&peer);
+                }
+            }
+        }
+    }
+
+    /// Every peer is connected to every other peer.
+    pub fn fully_connected(&self) -> bool {
+        let peers = self.peers.read().unwrap();
+        for p1 in peers.keys() {
+            for p2 in peers.keys() {
+                if p1 != p2 && !self.connected_pair(p1, p2) {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
+    /// This peer is not reachable by any other peer.
+    pub fn unreachable(&self, this_peer: &NodeId) -> bool {
+        let peers = self.peers.read().unwrap();
+        for p1 in peers.keys() {
+            if this_peer != p1 && !self.disconnected_from(p1, this_peer) {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Clear connected status table for this peer
+    pub fn reset(&self, peer: &NodeId) {
+        let mut peers = self.peers.write().unwrap();
+        peers.get_mut(peer).unwrap().clear();
+    }
+
+    /// Check if a both peers are connected to each other.
+    fn connected_pair(&self, peer_1: &NodeId, peer_2: &NodeId) -> bool {
+        let peers = self.peers.read().unwrap();
+
+        let connected_peer_1 = peers.get(peer_1).unwrap();
+        let connected_peer_2 = peers.get(peer_2).unwrap();
+
+        connected_peer_1.contains(peer_2) && connected_peer_2.contains(peer_1)
+    }
+
+    /// Checks if peer1 is disconnected from peer2.
+    pub fn disconnected_from(&self, peer_1: &NodeId, peer_2: &NodeId) -> bool {
+        let peers = self.peers.read().unwrap();
+
+        let connected_peer_1 = peers.get(peer_1).unwrap();
+
+        !connected_peer_1.contains(peer_2)
+    }
+}
+
+/// Runs the tokio simulation until provided closure evaluates to true.
+/// If Ok(true) is returned all clients have completed.
+pub fn wait_for<F>(sim: &mut Sim, f: F) -> Result<bool, Box<dyn Error>>
+where
+    F: Fn() -> bool,
+{
+    while !f() {
+        if sim.step()? {
+            panic!("Simulation finished while checking condtion");
+        }
+    }
+    Ok(false)
 }
