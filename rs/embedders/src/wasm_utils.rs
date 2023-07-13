@@ -36,6 +36,9 @@ pub struct WasmImportsDetails {
     pub imports_mint_cycles: bool,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
+pub struct Complexity(u64);
+
 /// Returned as a result of `validate_wasm_binary` and provides
 /// additional information about the validation.
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -47,6 +50,7 @@ pub struct WasmValidationDetails {
     pub imports_details: WasmImportsDetails,
     pub wasm_metadata: WasmMetadata,
     pub largest_function_instruction_count: NumInstructions,
+    pub max_complexity: Complexity,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -233,6 +237,7 @@ fn compile_inner(
     let module = embedder.compile(&instrumentation_output.binary)?;
     let largest_function_instruction_count =
         wasm_validation_details.largest_function_instruction_count;
+    let max_complexity = wasm_validation_details.max_complexity.0;
     let serialized_module =
         SerializedModule::new(&module, instrumentation_output, wasm_validation_details)?;
     Ok((
@@ -240,6 +245,7 @@ fn compile_inner(
         CompilationResult {
             largest_function_instruction_count,
             compilation_time: timer.elapsed(),
+            max_complexity,
         },
         serialized_module,
     ))
