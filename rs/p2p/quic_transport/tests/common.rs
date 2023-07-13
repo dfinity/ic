@@ -171,7 +171,7 @@ impl DummyTlsConfig {
         rustls::ClientConfig::builder()
             .with_safe_defaults()
             .with_custom_certificate_verifier(Arc::new(NoVerifier))
-            .with_single_cert(cert_chain, private_key)
+            .with_client_auth_cert(cert_chain, private_key)
             .expect("Failed to create TLS client config")
     }
 
