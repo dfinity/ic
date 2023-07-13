@@ -37,6 +37,7 @@ pub struct HypervisorMetrics {
     allocated_pages: IntGauge,
     largest_function_instruction_count: Histogram,
     compile: Histogram,
+    max_complexity: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -78,6 +79,11 @@ impl HypervisorMetrics {
                 "The duration of Wasm module compilation including validation and instrumentation.",
                 decimal_buckets_with_zero(-4, 1),
             ),
+            max_complexity: metrics_registry.histogram(
+                "hypervisor_wasm_max_function_complexity",
+                "The maximum function complexity in a wasm module.",
+                decimal_buckets_with_zero(1, 8), //10 - 100M.
+            )
         }
     }
 
@@ -99,10 +105,12 @@ impl HypervisorMetrics {
         let CompilationResult {
             largest_function_instruction_count,
             compilation_time,
+            max_complexity,
         } = compilation_result;
         self.largest_function_instruction_count
             .observe(largest_function_instruction_count.get() as f64);
         self.compile.observe(compilation_time.as_secs_f64());
+        self.max_complexity.observe(*max_complexity as f64);
     }
 }
 

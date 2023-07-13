@@ -47,6 +47,8 @@ pub struct CompilationResult {
     pub largest_function_instruction_count: NumInstructions,
     /// Time to compile canister (including instrumentation and validation).
     pub compilation_time: Duration,
+    /// The maximum function complexity found in the canister's wasm module.
+    pub max_complexity: u64,
 }
 
 impl CompilationResult {
@@ -54,6 +56,7 @@ impl CompilationResult {
         Self {
             largest_function_instruction_count: NumInstructions::new(0),
             compilation_time: Duration::from_millis(1),
+            max_complexity: 0,
         }
     }
 }

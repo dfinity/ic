@@ -1,7 +1,7 @@
 //! This module is responsible for validating the wasm binaries that are
 //! installed on the Internet Computer.
 
-use super::{WasmImportsDetails, WasmValidationDetails};
+use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_replicated_state::canister_state::execution_state::{
@@ -1083,8 +1083,11 @@ fn validate_custom_section(
     Ok(WasmMetadata::new(validated_custom_sections))
 }
 
-fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidationError> {
+fn validate_code_section(
+    module: &Module,
+) -> Result<(NumInstructions, Complexity), WasmValidationError> {
     let mut max_function_size = NumInstructions::new(0);
+    let mut max_complexity = 0;
 
     for (index, func_body) in module.code_sections.iter().enumerate() {
         let size = func_body.instructions.len();
@@ -1112,6 +1115,8 @@ fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidat
                 complexity,
                 allowed: WASM_FUNCTION_COMPLEXITY_LIMIT,
             });
+        } else {
+            max_complexity = cmp::max(max_complexity, complexity);
         }
 
         if size > WASM_FUNCTION_SIZE_LIMIT {
@@ -1124,7 +1129,7 @@ fn validate_code_section(module: &Module) -> Result<NumInstructions, WasmValidat
             max_function_size = cmp::max(max_function_size, NumInstructions::new(size as u64));
         }
     }
-    Ok(max_function_size)
+    Ok((max_function_size, Complexity(max_complexity as u64)))
 }
 
 /// Sets Wasmtime flags to ensure deterministic execution.
@@ -1205,7 +1210,7 @@ pub(super) fn validate_wasm_binary<'a>(
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;
-    let largest_function_instruction_count = validate_code_section(&module)?;
+    let (largest_function_instruction_count, max_complexity) = validate_code_section(&module)?;
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok((
         WasmValidationDetails {
@@ -1213,6 +1218,7 @@ pub(super) fn validate_wasm_binary<'a>(
             imports_details,
             wasm_metadata,
             largest_function_instruction_count,
+            max_complexity,
         },
         module,
     ))
