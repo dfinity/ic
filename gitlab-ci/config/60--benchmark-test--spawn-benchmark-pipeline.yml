@@ -666,7 +666,7 @@ tecdsa:
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
 
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
       cd -
 
 # BENCHMARK SUITE delegated identity
@@ -690,7 +690,7 @@ delegated-identity-bench:
       $SHELL_WRAPPER python3 experiments/run_delegation_experiment.py --testnet $TESTNET --num_procs 64 --iter_duration 30 --num_identities 200 --rps 30,100,200,500,1000
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
 
       cd -
 
@@ -718,5 +718,5 @@ maximum-capacity-boundary-nodes-queries:
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
 
-      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "scalability/results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
+      $SHELL_WRAPPER rclone --config="${CI_PROJECT_DIR}/.rclone.conf"  copyto "results/$GIT_REVISION" "performance-testing:performance-testing-results/$GIT_REVISION"
       cd -

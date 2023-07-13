@@ -192,9 +192,16 @@ async def poll(agent: Agent, canister_id, req_id: bytes, status_histogram: dict)
     # Even if it wasn't the same agent, it shouldn't matter since the ingress
     # history should be the same on all nodes.
     assert req_id is not None
-    status, result = await agent.poll_async(canister_id, req_id, timeout=POLL_TIMEOUT_SEC)
-    status_histogram[status] = status_histogram.get(status, 0) + 1
-    logging.debug(status, result)
+    status = None
+    try:
+        status, result = await agent.poll_async(canister_id, req_id, timeout=POLL_TIMEOUT_SEC)
+        status_histogram[status] = status_histogram.get(status, 0) + 1
+        logging.debug(status, result)
+    except Exception as e:
+        # If polling fails, just keep track of failure and move on.
+        key = "poll_" + str(type(e).__name__)
+        status_histogram[key] = status_histogram.get(key, 0) + 1
+        logging.debug(f"Failed to poll: {e}")
     return status == "replied"
 
 
