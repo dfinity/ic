@@ -214,10 +214,25 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             .build()
     } else if req.path() == "/logs" {
         use serde_json;
+        use std::str::FromStr;
+
+        let max_skip_timestamp = match req.raw_query_param("time") {
+            Some(arg) => match u64::from_str(arg) {
+                Ok(value) => value,
+                Err(_) => {
+                    return HttpResponseBuilder::bad_request()
+                        .with_body_and_content_length("failed to parse the 'time' parameter")
+                        .build()
+                }
+            },
+            None => 0,
+        };
+
         let mut entries: Log = Default::default();
         for entry in export_logs(&ic_ckbtc_minter::logs::P0) {
             entries.entries.push(LogEntry {
                 timestamp: entry.timestamp,
+                counter: entry.counter,
                 priority: Priority::P0,
                 file: entry.file.to_string(),
                 line: entry.line,
@@ -227,12 +242,16 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         for entry in export_logs(&ic_ckbtc_minter::logs::P1) {
             entries.entries.push(LogEntry {
                 timestamp: entry.timestamp,
+                counter: entry.counter,
                 priority: Priority::P1,
                 file: entry.file.to_string(),
                 line: entry.line,
                 message: entry.message,
             });
         }
+        entries
+            .entries
+            .retain(|entry| entry.timestamp >= max_skip_timestamp);
         HttpResponseBuilder::ok()
             .header("Content-Type", "application/json; charset=utf-8")
             .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())

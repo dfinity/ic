@@ -73,6 +73,7 @@ pub struct LogEntry {
     pub file: String,
     pub line: u32,
     pub message: String,
+    pub counter: u64,
 }
 
 #[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]

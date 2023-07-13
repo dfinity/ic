@@ -1446,3 +1446,71 @@ fn test_ledger_memo() {
     let decoded_data = minicbor::decode::<MintMemo>(&memo.0).expect("failed to decode memo");
     assert_eq!(decoded_data, MintMemo::Kyt);
 }
+
+#[test]
+fn test_filter_logs() {
+    let ckbtc = CkBtcSetup::new();
+
+    // Trigger an even to add some logs.
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: range_to_txid(1..=32),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+
+    ckbtc.deposit_utxo(user, utxo);
+
+    let system_time = ckbtc.env.time();
+
+    let nanos = system_time
+        .duration_since(std::time::SystemTime::UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_nanos();
+
+    let request = HttpRequest {
+        method: "".to_string(),
+        url: format!("/logs?time={}", nanos),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::new(),
+    };
+    let response = Decode!(
+        &assert_reply(
+            ckbtc
+                .env
+                .execute_ingress(ckbtc.minter_id, "http_request", Encode!(&request).unwrap(),)
+                .expect("failed to get minter info")
+        ),
+        HttpResponse
+    )
+    .unwrap();
+    let logs: Log =
+        serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log");
+
+    let request = HttpRequest {
+        method: "".to_string(),
+        url: format!("/logs?time={}", nanos + 30 * 1_000_000_000),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::new(),
+    };
+    let response = Decode!(
+        &assert_reply(
+            ckbtc
+                .env
+                .execute_ingress(ckbtc.minter_id, "http_request", Encode!(&request).unwrap(),)
+                .expect("failed to get minter info")
+        ),
+        HttpResponse
+    )
+    .unwrap();
+    let logs_filtered: Log =
+        serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log");
+
+    assert_ne!(logs.entries.len(), logs_filtered.entries.len());
+}
