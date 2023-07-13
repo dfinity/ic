@@ -52,11 +52,17 @@ fuzz_target!(|content: AnonymousContent| -> Corpus {
                 &validation_call_request,
                 &validation_query_request,
             );
-            assert_eq_ignoring_timestamps_in_error_messages(
-                &validation_call_request,
-                &validation_read_request,
-            );
-            Corpus::Keep
+            match validation_read_request {
+                Err(RequestValidationError::PathTooLongError { .. })
+                | Err(RequestValidationError::TooManyPathsError { .. }) => Corpus::Reject,
+                _ => {
+                    assert_eq_ignoring_timestamps_in_error_messages(
+                        &validation_call_request,
+                        &validation_read_request,
+                    );
+                    Corpus::Keep
+                }
+            }
         }
         (result_call_request, result_query_request, result_read_request) => {
             panic!("Parsing of HttpCallContent {result_call_request:?}, HttpQueryContent {result_query_request:?} and HttpReadStateContent are inconsistent {result_read_request:?}")
