@@ -26,7 +26,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_nns_common.pb.v1.NeuronId",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, Ord, PartialOrd, Eq, std::hash::Hash, comparable::Comparable)]",
+            "#[derive(candid::CandidType, candid::Deserialize, Ord, PartialOrd, Copy, Eq, std::hash::Hash, comparable::Comparable)]",
             "#[self_describing]",
         ]
         .join(" "),

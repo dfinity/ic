@@ -23,7 +23,7 @@ fn get_build_metadata_test() {
             nns_builder.governance.proto.neurons.insert(
                 neuron_id_4.id,
                 Neuron {
-                    id: Some(neuron_id_4.clone()),
+                    id: Some(neuron_id_4),
                     controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                     dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                         TWELVE_MONTHS_SECONDS

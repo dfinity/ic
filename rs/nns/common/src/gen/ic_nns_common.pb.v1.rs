@@ -15,6 +15,7 @@ pub struct CanisterId {
     candid::Deserialize,
     Ord,
     PartialOrd,
+    Copy,
     Eq,
     std::hash::Hash,
     comparable::Comparable,

@@ -43,7 +43,7 @@ fn test_time_warp() {
         let pre_existing_neuron = nns_builder.governance.proto.neurons.insert(
             neuron_id_4.id,
             Neuron {
-                id: Some(neuron_id_4.clone()),
+                id: Some(neuron_id_4),
                 controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
                 dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                     TWELVE_MONTHS_SECONDS + start_timestamp_s,
@@ -71,9 +71,7 @@ fn test_time_warp() {
                 candid_one,
                 ManageNeuron {
                     id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        neuron_id_4.clone(),
-                    )),
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
                     command: Some(Command::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
@@ -112,9 +110,7 @@ fn test_time_warp() {
                 candid_one,
                 ManageNeuron {
                     id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        neuron_id_4.clone(),
-                    )),
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
                     command: Some(Command::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
@@ -152,9 +148,7 @@ fn test_time_warp() {
                 candid_one,
                 ManageNeuron {
                     id: None,
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(
-                        neuron_id_4.clone(),
-                    )),
+                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id_4)),
                     command: Some(Command::Disburse(Disburse {
                         amount: None,
                         to_account: Some(
