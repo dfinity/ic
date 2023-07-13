@@ -1,7 +1,11 @@
+import { AgentHTTPResponseError } from '@dfinity/agent/lib/cjs/agent/http/errors';
 import { ServiceWorkerEvents } from '../typings';
 import { CanisterResolver } from './domains';
 import { RequestProcessor } from './requests';
-import { loadResponseVerification } from './requests/utils';
+import {
+  getBoundaryNodeRequestId,
+  loadResponseVerification,
+} from './requests/utils';
 import { handleErrorResponse } from './views/error';
 
 declare const self: ServiceWorkerGlobalScope;
@@ -21,14 +25,15 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     (async () => {
       const isNavigation = event.request.mode === 'navigate';
+      const request = new RequestProcessor(event.request);
 
       try {
-        const request = new RequestProcessor(event.request);
         const response = await request.perform();
 
         if (response.status >= 400) {
           return handleErrorResponse({
             isNavigation,
+            requestId: request.requestId,
             error: response.statusText ?? (await response.text()),
             request: event.request,
             response,
@@ -37,8 +42,14 @@ self.addEventListener('fetch', (event) => {
 
         return response;
       } catch (error) {
+        let requestId = request.requestId;
+        if (error instanceof AgentHTTPResponseError) {
+          requestId = getBoundaryNodeRequestId(error.response);
+        }
+
         return await handleErrorResponse({
           isNavigation,
+          requestId,
           error,
           request: event.request,
         });

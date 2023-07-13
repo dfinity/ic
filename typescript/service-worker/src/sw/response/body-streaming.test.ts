@@ -9,7 +9,7 @@ import {
 } from '../test';
 import { IDL } from '@dfinity/candid';
 import {
-  QueryResponse,
+  ApiQueryResponse,
   QueryResponseRejected,
   QueryResponseReplied,
   QueryResponseStatus,
@@ -93,7 +93,7 @@ describe('streamBody', () => {
     const chunkedBody = createBody();
     const callbackToken = 'callback_token_one';
     const streamingCallbackToken = createStreamingCallbackToken(callbackToken);
-    const responses = Array<QueryResponse>(1050).fill(
+    const responses = Array<ApiQueryResponse>(1050).fill(
       createStreamingCallbackResponse(chunkedBody, callbackToken)
     );
     const agentMock = createAgentMock(responses);
@@ -119,10 +119,16 @@ describe('streamBody', () => {
     const chunkedBody = createBody();
     const callbackToken = 'callback_token_one';
     const streamingCallbackToken = createStreamingCallbackToken(callbackToken);
-    const errorResponse: QueryResponseRejected = {
+    const errorResponse: ApiQueryResponse = {
       status: QueryResponseStatus.Rejected,
       reject_code: ReplicaRejectCode.CanisterError,
       reject_message: 'Canister got tired and went to sleep',
+      httpDetails: {
+        headers: [],
+        ok: true,
+        status: 200,
+        statusText: 'ok',
+      },
     };
     const agentMock = createAgentMock([errorResponse]);
 
@@ -147,7 +153,13 @@ describe('streamBody', () => {
     const chunkedBody = createBody();
     const callbackToken = 'callback_token_one';
     const streamingCallbackToken = createStreamingCallbackToken(callbackToken);
-    const errorResponse: QueryResponseReplied = {
+    const errorResponse: ApiQueryResponse = {
+      httpDetails: {
+        headers: [],
+        ok: true,
+        status: 200,
+        statusText: 'ok',
+      },
       status: QueryResponseStatus.Replied,
       reply: {
         arg: IDL.encode(

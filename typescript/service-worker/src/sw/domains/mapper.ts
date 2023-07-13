@@ -2,6 +2,7 @@ import { Principal } from '@dfinity/principal';
 import { ICHostInfoEvent } from '../../typings';
 import { DBHostsItem } from './typings';
 import { MalformedCanisterError } from './errors';
+import logger from '../../logger';
 
 export class ResolverMapper {
   static fromDBHostsItem(lookup: DBHostsItem): Principal | null {
@@ -59,7 +60,7 @@ export class ResolverMapper {
       );
     } catch (err) {
       // logging the error in case the event had malformed values
-      console.error(err);
+      logger.error(err);
       return null;
     }
   }

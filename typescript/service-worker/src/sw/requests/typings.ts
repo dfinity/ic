@@ -7,6 +7,7 @@ export enum HTTPHeaders {
   CacheControl = 'cache-control',
   Range = 'range',
   ContentEncoding = 'content-encoding',
+  BoundaryNodeRequestId = 'x-request-id',
 }
 
 export const cacheHeaders = [HTTPHeaders.CacheControl.toString()];
@@ -47,6 +48,11 @@ export interface HeaderDirectiveEntry {
 export interface VerifiedResponse {
   response: Response;
   certifiedHeaders: Headers;
+}
+
+export interface UpdateCallHandlerResult {
+  result: VerifiedResponse;
+  boundaryNodeRequestId?: string;
 }
 
 export interface FetchAssetRequest {

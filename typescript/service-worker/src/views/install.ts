@@ -7,6 +7,7 @@ import {
 import { getValueFromCookie } from '../utils';
 import { BaseView } from './base';
 import { ErrorView } from './error';
+import logger from '../logger';
 
 export type ServiceWorkerRegistrationResult =
   | {
@@ -70,7 +71,7 @@ export class InstallView extends BaseView {
   }
 
   async beforeRender(): Promise<boolean> {
-    console.info(
+    logger.info(
       `Installing a service worker ${process.env.VERSION} to proxy and validate content...`
     );
 
@@ -80,7 +81,7 @@ export class InstallView extends BaseView {
     // retrieved from the boundary nodes
     const registration = await this.registerServiceWorker();
     if (registration.err) {
-      console.error(`Service worker registration failed (${registration.err})`);
+      logger.error(`Service worker registration failed (${registration.err})`);
       await ErrorView.load({
         title:
           'Failed to create a secure connection with the Internet Computer.',
@@ -112,7 +113,7 @@ export class InstallView extends BaseView {
       // reload the page so the service worker can intercept the requests
       window.location.reload();
     } catch (e) {
-      console.error(`Service worker install failed (${String(e)})`);
+      logger.error(`Service worker install failed (${String(e)})`);
 
       await ErrorView.load({
         title:

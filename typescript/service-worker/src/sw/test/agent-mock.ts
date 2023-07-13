@@ -1,7 +1,7 @@
-import { HttpAgent, QueryResponse } from '@dfinity/agent';
+import { HttpAgent, ApiQueryResponse } from '@dfinity/agent';
 
 export function createAgentMock(
-  queryResponses: QueryResponse[] = []
+  queryResponses: ApiQueryResponse[] = []
 ): jest.Mocked<HttpAgent> {
   const agentMock: Partial<jest.Mocked<HttpAgent>> = {
     call: jest.fn(),
