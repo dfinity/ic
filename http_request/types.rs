@@ -1,28 +1,21 @@
 use crate::id;
-use candid::{
-    parser::types::FuncMode,
-    types::{Function, Serializer, Type},
-    CandidType, Func,
-};
+use candid::CandidType;
 use serde::{Deserialize, Serialize};
 
-/// "transform" function of type: `func (http_request) -> (http_response) query`
-#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
-pub struct TransformFunc(pub candid::Func);
+mod transform {
+    #![allow(missing_docs)]
 
-impl CandidType for TransformFunc {
-    fn _ty() -> Type {
-        Type::Func(Function {
-            modes: vec![FuncMode::Query],
-            args: vec![TransformArgs::ty()],
-            rets: vec![HttpResponse::ty()],
-        })
-    }
+    // The struct `TransformFunc` is defined by a macro.
+    // Adding doc comment directly above the macro doesn't work.
+    // The workaround is to re-export it and document there.
+    // TODO: upgrade Rust toolchain (https://dfinity.atlassian.net/browse/SDK-1183)
+    use super::*;
 
-    fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
-        serializer.serialize_function(self.0.principal.as_slice(), &self.0.method)
-    }
+    candid::define_function!(pub TransformFunc : (TransformArgs) -> (HttpResponse) query);
 }
+
+/// "transform" function of type: `func (http_response) -> (http_response) query`
+pub use transform::TransformFunc;
 
 /// Type used for encoding/decoding:
 /// `record {
@@ -59,7 +52,7 @@ impl TransformContext {
     pub fn from_name(candid_function_name: String, context: Vec<u8>) -> Self {
         Self {
             context,
-            function: TransformFunc(Func {
+            function: TransformFunc(candid::Func {
                 method: candid_function_name,
                 principal: id(),
             }),
@@ -108,7 +101,7 @@ pub enum HttpMethod {
     HEAD,
 }
 
-/// Argument type of [http_request].
+/// Argument type of [super::http_request].
 #[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
 pub struct CanisterHttpRequestArgument {
     /// The requested URL.
