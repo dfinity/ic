@@ -55,29 +55,12 @@ use ic_nns_governance::{
         NeuronInfo, NnsFunction, NodeProvider, Proposal, ProposalInfo, RewardEvent,
         RewardNodeProviders, SettleCommunityFundParticipation, UpdateNodeProvider, Vote,
     },
-};
-use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl,
+    storage::UPGRADES_MEMORY,
 };
 use prost::Message;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::{borrow::Cow, boxed::Box, cell::RefCell, ops::Deref, str::FromStr, time::SystemTime};
-
-/// Constants to define memory segments.  Must not change.
-const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
-
-thread_local! {
-
-    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
-        MemoryManager::init(DefaultMemoryImpl::default())
-    );
-
-    // The memory where the governance reads and writes its state during an upgrade.
-    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
-        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
-}
+use std::{borrow::Cow, boxed::Box, ops::Deref, str::FromStr, time::SystemTime};
 
 /// Size of the buffer for stable memory reads and writes.
 ///

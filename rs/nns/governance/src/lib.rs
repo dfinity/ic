@@ -120,6 +120,7 @@
 //! without need for a quorum of voting power to participate, and it
 //! can also always decide upon proposals in a timely manner.
 
+mod audit_event;
 /// The 'governance' module contains the canister (smart contract)
 /// that manages neurons, proposals, voting, voter following, voting
 /// rewards, and the code necessary to execute accepted proposals.
@@ -135,6 +136,7 @@ mod neuron;
 pub mod pb;
 pub mod proposals;
 mod reward;
+pub mod storage;
 
 use crate::governance::Governance;
 

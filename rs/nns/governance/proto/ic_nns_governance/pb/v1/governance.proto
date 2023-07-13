@@ -1982,3 +1982,34 @@ message SettleCommunityFundParticipation {
   message Aborted {
   }
 }
+
+// Audit events in order to leave an audit trail for certain operations.
+message AuditEvent {
+  // The timestamp of the event.
+  uint64 timestamp_seconds = 1;
+
+  oneof payload {
+    // Reset aging timestamps for https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26
+    ResetAging reset_aging = 2;
+  }
+
+  message ResetAging {
+    // The neuron id whose aging was reset.
+    fixed64 neuron_id = 1;
+
+    // The aging_since_timestamp_seconds before reset.
+    uint64 previous_aging_since_timestamp_seconds = 2;
+
+    // The aging_since_timestamp_seconds after reset.
+    uint64 new_aging_since_timestamp_seconds = 3;
+
+    // Neuron's dissolve state at the time of reset.
+    oneof neuron_dissolve_state {
+      uint64 when_dissolved_timestamp_seconds = 4;
+      uint64 dissolve_delay_seconds = 5;
+    }
+
+    // Neuron's stake at the time of reset.
+    uint64 neuron_stake_e8s = 6;
+  }
+}
