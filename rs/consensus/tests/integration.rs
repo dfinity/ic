@@ -1,4 +1,5 @@
 mod framework;
+
 use crate::framework::{
     malicious, setup_subnet, ConsensusDependencies, ConsensusInstance, ConsensusModifier,
     ConsensusRunner, ConsensusRunnerConfig,
@@ -253,4 +254,34 @@ fn run_n_rounds_and_collect_hashes(
         assert_eq!(runner.run_until(&reach_n_rounds), finish);
         hashes.as_ref().take()
     })
+}
+
+/// Run a test subnets with `num_nodes` many nodes, out of which there are `num_nodes_equivocating` many equivocating blockmaker
+fn equivocating_block_maker_test(
+    num_nodes: usize,
+    num_nodes_equivocating: usize,
+    finish: bool,
+) -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(num_nodes, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|config| {
+            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            for _ in 0..num_nodes_equivocating {
+                malicious.push(malicious::absent_notary_share());
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, finish);
+        })
+}
+
+/// Tests that as long as there is a single block maker that does not equivocate, we will occasionally
+/// have a block that gets finalized
+#[test]
+fn one_node_equivocating_passes() -> Result<(), String> {
+    equivocating_block_maker_test(4, 1, true)
+}
+
+/// Tests that if all blockmakers are equivocating, we will not be able to finalize any block ever
+#[test]
+fn all_nodes_equivocating_fail() -> Result<(), String> {
+    equivocating_block_maker_test(4, 4, false)
 }
