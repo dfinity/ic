@@ -400,7 +400,14 @@ impl SocketReaderWithTimeout {
             )
         };
 
-        debug_assert_eq!(result, 0);
+        debug_assert_eq!(
+            result,
+            0,
+            "setsockopt failed with result={}, error={}",
+            result,
+            std::io::Error::last_os_error()
+        );
+
         if result == 0 {
             self.socket_timeout = timeout;
             Ok(())
