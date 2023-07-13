@@ -32,6 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:slog",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-metrics",
     "@crate_index//:tokio-rustls",
     "@crate_index//:tokio-util",
     "@crate_index//:tower",

@@ -1,26 +1,84 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry};
 use ic_types::NodeId;
-use prometheus::{HistogramVec, IntCounter, IntGauge, IntGaugeVec};
+use prometheus::{GaugeVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use quinn::Connection;
+use tokio_metrics::TaskMonitor;
+
+const CONNECTION_RESULT_LABEL: &str = "status";
+const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
+const REQUEST_HANDLER_STREAM_TYPE_LABEL: &str = "stream";
+const REQUEST_HANDLER_ERROR_TYPE_LABEL: &str = "error";
+pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
+pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
+pub(crate) const REQUEST_HANDLER_ERROR_TYPE_ACCEPT: &str = "accept";
+pub(crate) const REQUEST_HANDLER_ERROR_TYPE_APP: &str = "app";
+pub(crate) const REQUEST_HANDLER_ERROR_TYPE_FINISH: &str = "finish";
+pub(crate) const REQUEST_HANDLER_ERROR_TYPE_READ: &str = "read";
+pub(crate) const REQUEST_HANDLER_ERROR_TYPE_WRITE: &str = "write";
+pub(crate) const REQUEST_HANDLER_STREAM_TYPE_BIDI: &str = "bidi";
+pub(crate) const REQUEST_HANDLER_STREAM_TYPE_UNI: &str = "uni";
 
 #[derive(Debug, Clone)]
 pub struct QuicTransportMetrics {
+    // Connection manager
     pub active_connections: IntGauge,
+    pub topology_size: IntGauge,
+    pub topology_changes_total: IntCounter,
+    pub peers_removed_total: IntCounter,
+    pub inbound_connection_total: IntCounter,
+    pub outbound_connection_total: IntCounter,
+    pub connection_results_total: IntCounterVec,
     pub connecting_connections: IntGauge,
     pub delay_queue_size: IntGauge,
-    pub quic_stats: IntGaugeVec,
-    pub inflight_requests: IntGaugeVec,
-    pub request_duration: HistogramVec,
-    pub closed_request_handlers: IntCounter,
+    pub closed_request_handlers_total: IntCounter,
+    // Request handler
+    pub request_task_monitor: TaskMonitor,
+    pub request_handle_errors_total: IntCounterVec,
+    // Quinn
+    quinn_frame_rx_data_blocked_total: IntGaugeVec,
+    quinn_frame_rx_stream_data_blocked_total: IntGaugeVec,
+    quinn_frame_rx_streams_blocked_bidi_total: IntGaugeVec,
+    quinn_path_rtt_duration: GaugeVec,
+    quinn_path_cwnd_size: IntGaugeVec,
 }
 
 impl QuicTransportMetrics {
     /// The constructor returns a `GossipMetrics` instance.
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        let (collector, request_task_monitor) =
+            TokioTaskMetricsCollector::new(REQUEST_TASK_MONITOR_NAME);
+        metrics_registry.register(collector);
+
         Self {
+            // Connection manager
             active_connections: metrics_registry.int_gauge(
                 "quic_transport_active_connections",
                 "Number of active quic connections.",
+            ),
+            topology_size: metrics_registry.int_gauge(
+                "quic_transport_toplogy_size",
+                "Number of peers in topology.",
+            ),
+            topology_changes_total: metrics_registry.int_counter(
+                "quic_transport_topology_changes_total",
+                "Number topology changes deliverd by peer manager.",
+            ),
+            peers_removed_total: metrics_registry.int_counter(
+                "quic_transport_peers_removed",
+                "Peers removed because they are not part of topology anymore.",
+            ),
+            inbound_connection_total: metrics_registry.int_counter(
+                "quic_transport_inbound_connection_total",
+                "Number of received inbound connection requests.",
+            ),
+            outbound_connection_total: metrics_registry.int_counter(
+                "quic_transport_outbound_connection_total",
+                "Number of outbound connection requests.",
+            ),
+            connection_results_total: metrics_registry.int_counter_vec(
+                "quic_transport_connection_results_total",
+                "Connection setup outcome.",
+                &[CONNECTION_RESULT_LABEL],
             ),
             connecting_connections: metrics_registry.int_gauge(
                 "quic_transport_connecting_connections",
@@ -28,103 +86,71 @@ impl QuicTransportMetrics {
             ),
             delay_queue_size: metrics_registry
                 .int_gauge("quic_transport_delay_queue_size", "Size of delay queue."),
-            quic_stats: metrics_registry.int_gauge_vec(
-                "quic_transport_quinn_stats",
-                "Quinn connection stat.",
-                &["peer", "stat"],
+            closed_request_handlers_total: metrics_registry.int_counter(
+                "quic_transport_closed_request_handler_total",
+                "Number of closed request handlers.",
             ),
-            inflight_requests: metrics_registry.int_gauge_vec(
-                "quic_transport_inflight_requests",
+            // Request handler
+            request_task_monitor,
+            request_handle_errors_total: metrics_registry.int_counter_vec(
+                "quic_transport_request_handle_errors_total",
+                "Request handler errors by stream type and error type.",
+                &[
+                    REQUEST_HANDLER_STREAM_TYPE_LABEL,
+                    REQUEST_HANDLER_ERROR_TYPE_LABEL,
+                ],
+            ),
+            // Quinn stats
+            // Indicates that sending data is blocked due to connection level flow control.
+            quinn_frame_rx_data_blocked_total: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_frame_rx_data_blocked_total",
                 "Quinn connection stat.",
                 &["peer"],
             ),
-            request_duration: metrics_registry.histogram_vec(
-                "quic_transport_request_duration_seconds",
-                "quic request serving duation. Without reading the request.",
-                decimal_buckets(-3, 0),
-                // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 20s, 50s
-                &["path", "part"],
+            // Indicates that sending data is blocked due to stream level flow control.
+            quinn_frame_rx_stream_data_blocked_total: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_frame_rx_stream_data_blocked_total",
+                "Blocked stream data frames received.",
+                &["peer"],
             ),
-            closed_request_handlers: metrics_registry.int_counter(
-                "quic_transport_closed_request_handler_total",
-                "Number of times request handler was closed for one peer..",
+            // Indicates that opening a new stream is blocked because already at bidi stream limit.
+            quinn_frame_rx_streams_blocked_bidi_total: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_frame_rx_streams_blocked_bidi_total",
+                "Blocked bidi stream frames received.",
+                &["peer"],
+            ),
+            quinn_path_rtt_duration: metrics_registry.gauge_vec(
+                "quic_transport_quinn_path_rtt_duration",
+                "Estimated rtt of this connection.",
+                &["peer"],
+            ),
+            // Congestion window of this connection.
+            quinn_path_cwnd_size: metrics_registry.int_gauge_vec(
+                "quic_transport_quinn_path_cwnd_size",
+                "Congestion window of this connection.",
+                &["peer"],
             ),
         }
     }
+
     pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, node_id: &NodeId) {
         let stats = conn.stats();
-        // udp stats
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "udp_tx_datagrams"])
-            .set(stats.udp_tx.datagrams as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "udp_tx_bytes"])
-            .set(stats.udp_tx.bytes as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "udp_tx_transmits"])
-            .set(stats.udp_tx.transmits as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "udp_rx_datagrams"])
-            .set(stats.udp_rx.datagrams as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "udp_rx_bytes"])
-            .set(stats.udp_rx.bytes as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "udp_rx_transmits"])
-            .set(stats.udp_rx.transmits as i64);
         // frame stats
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_tx_max_data"])
-            .set(stats.frame_tx.max_data as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_tx_max_stream_data"])
-            .set(stats.frame_tx.max_stream_data as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_tx_max_streams_bidi"])
-            .set(stats.frame_tx.max_streams_bidi as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_tx_stream_data_blocked"])
-            .set(stats.frame_tx.stream_data_blocked as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_tx_streams_blocked_bidi"])
-            .set(stats.frame_tx.streams_blocked_bidi as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_tx_stream"])
-            .set(stats.frame_tx.stream as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_rx_max_data"])
-            .set(stats.frame_rx.max_data as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_rx_max_stream_data"])
-            .set(stats.frame_rx.max_stream_data as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_rx_max_streams_bidi"])
-            .set(stats.frame_rx.max_streams_bidi as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_rx_stream_data_blocked"])
+        self.quinn_frame_rx_data_blocked_total
+            .with_label_values(&[&node_id.to_string()])
+            .set(stats.frame_rx.data_blocked as i64);
+        self.quinn_frame_rx_stream_data_blocked_total
+            .with_label_values(&[&node_id.to_string()])
             .set(stats.frame_rx.stream_data_blocked as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_rx_streams_blocked_bidi"])
+        self.quinn_frame_rx_streams_blocked_bidi_total
+            .with_label_values(&[&node_id.to_string()])
             .set(stats.frame_rx.streams_blocked_bidi as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "frame_rx_stream"])
-            .set(stats.frame_rx.stream as i64);
 
-        // path stat
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "path_cwnd"])
+        self.quinn_path_rtt_duration
+            .with_label_values(&[&node_id.to_string()])
+            .set(stats.path.rtt.as_secs_f64());
+        self.quinn_path_cwnd_size
+            .with_label_values(&[&node_id.to_string()])
             .set(stats.path.cwnd as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "path_congestion_events"])
-            .set(stats.path.congestion_events as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "path_lost_packets"])
-            .set(stats.path.lost_packets as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "path_lost_bytes"])
-            .set(stats.path.lost_bytes as i64);
-        self.quic_stats
-            .with_label_values(&[&node_id.to_string(), "path_sent_packets"])
-            .set(stats.path.sent_packets as i64);
     }
 }
