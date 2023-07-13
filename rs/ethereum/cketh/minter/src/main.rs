@@ -1,7 +1,8 @@
 use candid::candid_method;
 use ic_cdk_macros::{init, update};
 use ic_cketh_minter::address::Address;
-use ic_cketh_minter::endpoints::{InitArg, MinterArg};
+use ic_cketh_minter::endpoints::{DisplayLogsRequest, InitArg, MinterArg, ReceivedEthEvent};
+use ic_cketh_minter::eth_rpc;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use std::cell::RefCell;
 
@@ -62,6 +63,43 @@ async fn minter_address() -> String {
         ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
     });
     Address::from_pubkey(&pubkey).to_string()
+}
+
+#[update]
+async fn display_logs(req: DisplayLogsRequest) -> Vec<ReceivedEthEvent> {
+    use candid::Nat;
+    use eth_rpc::{Data, GetLogsParam, LogEntry};
+    use ethabi::param_type::ParamType;
+
+    let result: Vec<LogEntry> = eth_rpc::call(
+        "https://rpc.sepolia.org",
+        "eth_getLogs",
+        vec![GetLogsParam {
+            from_block: req.from.parse().expect("failed to parse 'from' block"),
+            to_block: req.to.parse().expect("failed to parse 'to' block"),
+            address: vec![req.address.parse().expect("failed to parse 'address'")],
+            topics: vec![],
+        }],
+    )
+    .await
+    .expect("HTTP call failed");
+    result
+        .into_iter()
+        .map(|entry| {
+            let Data(data) = entry.data;
+            let args = ethabi::decode(
+                &[ParamType::Address, ParamType::Uint(256), ParamType::String],
+                &data,
+            )
+            .expect("failed to parse event payload");
+            assert_eq!(args.len(), 3);
+            ReceivedEthEvent {
+                from_address: Address::new(args[0].clone().into_address().unwrap().0).to_string(),
+                value: Nat::from(args[1].clone().into_uint().unwrap().as_u128()),
+                principal: args[2].clone().into_string().unwrap().parse().unwrap(),
+            }
+        })
+        .collect()
 }
 
 fn main() {}
