@@ -1,4 +1,8 @@
-import { QueryResponseReplied, QueryResponseStatus } from '@dfinity/agent';
+import {
+  ApiQueryResponse,
+  QueryResponseReplied,
+  QueryResponseStatus,
+} from '@dfinity/agent';
 import {
   HttpResponse,
   Token,
@@ -45,8 +49,14 @@ export function createStreamingCallbackToken(value: string): Token {
 export function createStreamingCallbackResponse(
   body: Uint8Array,
   token?: string
-): QueryResponseReplied {
+): ApiQueryResponse {
   return {
+    httpDetails: {
+      ok: true,
+      statusText: 'ok',
+      headers: [],
+      status: 200,
+    },
     status: QueryResponseStatus.Replied,
     reply: {
       arg: IDL.encode(

@@ -5,6 +5,10 @@
 // a feature that Node.js doesn't.
 import { mockBrowserCacheAPI } from './src/mocks/browser-cache';
 
+if (!process.env.DEBUG_LOGS) {
+  jest.mock("./src/logger");
+}
+
 global.TextEncoder = require('text-encoding').TextEncoder;
 global.TextDecoder = require('text-encoding').TextDecoder;
 Object.defineProperty(self, 'location', {

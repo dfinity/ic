@@ -11,10 +11,11 @@ import { fromHex } from '@dfinity/agent/lib/cjs/utils/buffer';
 import { IDL } from '@dfinity/candid';
 import { Principal } from '@dfinity/principal';
 import fetch from 'jest-fetch-mock';
+import { v4 as uuidv4 } from 'uuid';
 import { HttpRequest } from '../../http-interface/canister_http_interface_types';
 import { CanisterResolver } from '../domains';
 import { maxCertTimeOffsetNs } from '../response';
-import { RequestProcessor } from './index';
+import { HTTPHeaders, RequestProcessor } from './index';
 import * as requestUtils from './utils';
 
 const CANISTER_ID = 'qoctq-giaaa-aaaaa-aaaea-cai';
@@ -199,7 +200,7 @@ it('should accept valid certification without callbacks', async () => {
     `https://ic0.app/api/v2/canister/${CANISTER_ID}/query`
   );
 
-  let [queryCall, req] = decodeContent<HttpRequest>(
+  const [queryCall, req] = decodeContent<HttpRequest>(
     fetch.mock.calls[1],
     HttpRequestType
   );
@@ -270,7 +271,7 @@ it('should drop if-none-match request header', async () => {
       !headerPresent(req, 'If-None-Match'),
   });
 
-  let request = new Request(`https://nns.ic0.app/`);
+  const request = new Request(`https://nns.ic0.app/`);
   request.headers.append('If-None-Match', '"some etag"');
   request.headers.append('If-None-Match2', '"some etag"');
   const requestProcessor = new RequestProcessor(request);
@@ -429,6 +430,27 @@ it('should accept certificate time almost (but not quite) too far in the future'
   expect(response.status).toEqual(200);
 });
 
+it('should extract the boundary node request id and make it available', async () => {
+  jest.setSystemTime(TEST_DATA.query_call.certificate_time);
+  const queryHttpPayload = createHttpQueryResponsePayload(
+    TEST_DATA.query_call.body,
+    getResponseTypes(IDL.Text)[0],
+    TEST_DATA.query_call.certificate
+  );
+  mockFetchResponses(TEST_DATA.query_call.root_key, {
+    query: queryHttpPayload,
+  });
+
+  const requestProcessor = new RequestProcessor(
+    new Request(`https://${CANISTER_ID}.ic0.app/`)
+  );
+  const response = await requestProcessor.perform();
+
+  expect(response.status).toEqual(200);
+  expect(requestProcessor.requestId).not.toBeUndefined();
+  expect(requestProcessor.requestId?.length).toEqual(36); // uuidv4 length
+});
+
 it('should reject certificate with time too far in the future', async () => {
   jest.setSystemTime(
     TEST_DATA.query_call.certificate_time - maxCertTimeOffsetMs - 1
@@ -494,7 +516,7 @@ it('should accept valid certification using callbacks with primitive tokens', as
       )
     );
 
-  let [queryCall, req] = decodeContent<HttpRequest>(
+  const [queryCall, req] = decodeContent<HttpRequest>(
     fetch.mock.calls[1],
     HttpRequestType
   );
@@ -502,7 +524,7 @@ it('should accept valid certification using callbacks with primitive tokens', as
   expect(req.url).toEqual('/');
   expect(req.method).toEqual('GET');
 
-  let [callbackQuery, token] = decodeContent<string>(
+  const [callbackQuery, token] = decodeContent<string>(
     fetch.mock.calls[2],
     tokenType
   );
@@ -606,7 +628,7 @@ it('should do update call on upgrade flag', async () => {
     `https://ic0.app/api/v2/canister/${CANISTER_ID}/query`
   );
 
-  let [queryCall, queryReq] = decodeContent<HttpRequest>(
+  const [queryCall, queryReq] = decodeContent<HttpRequest>(
     fetch.mock.calls[1],
     HttpRequestType
   );
@@ -619,7 +641,7 @@ it('should do update call on upgrade flag', async () => {
   expect(fetch.mock.calls[2][0]).toEqual(
     `https://ic0.app/api/v2/canister/${CANISTER_ID}/call`
   );
-  let [updateCall, updateReq] = decodeContent<HttpRequest>(
+  const [updateCall, updateReq] = decodeContent<HttpRequest>(
     fetch.mock.calls[2],
     HttpRequestType
   );
@@ -658,11 +680,11 @@ function decodeContent<T>(
   [_, request]: [unknown, RequestInit | undefined],
   argType: IDL.Type
 ): [QueryRequest | CallRequest, T] {
-  let decodedRequest = Agent.Cbor.decode<UnSigned<QueryRequest | CallRequest>>(
-    request?.body as ArrayBuffer
-  );
+  const decodedRequest = Agent.Cbor.decode<
+    UnSigned<QueryRequest | CallRequest>
+  >(request?.body as ArrayBuffer);
   // @ts-ignore
-  let decodedArg = IDL.decode([argType], decodedRequest.content.arg)[0] as T;
+  const decodedArg = IDL.decode([argType], decodedRequest.content.arg)[0] as T;
   return [decodedRequest.content, decodedArg];
 }
 
@@ -717,21 +739,28 @@ function mockFetchResponses(
   // index to track how far we are into the (sequential) httpPayloads response array
   let fetchCounter = 0;
   fetch.doMock(async (req) => {
+    const boundaryNodeResponseHeaders = new Headers();
+    boundaryNodeResponseHeaders.set(
+      HTTPHeaders.BoundaryNodeRequestId,
+      uuidv4()
+    );
+
     // status is just used to fetch the rootKey and is independent of the response payloads
     // -> no need to do anything with the fetchCounter
     if (req.url.endsWith('status')) {
       return Promise.resolve({
         status: 200,
+        headers: boundaryNodeResponseHeaders,
         body: fetchRootKeyResponse(rootKey),
       });
     }
 
     // if a predicate for the request was supplied: decode request and validate
     if (httpPayloads[fetchCounter].reqValidator) {
-      let body = await req.arrayBuffer();
-      let cborDecoded: { content: { arg: ArrayBuffer } } =
+      const body = await req.arrayBuffer();
+      const cborDecoded: { content: { arg: ArrayBuffer } } =
         Agent.Cbor.decode(body);
-      let request = IDL.decode([HttpRequestType], cborDecoded.content.arg)[0];
+      const request = IDL.decode([HttpRequestType], cborDecoded.content.arg)[0];
       if (
         !httpPayloads[fetchCounter].reqValidator?.(
           request as unknown as HttpRequest
@@ -744,6 +773,7 @@ function mockFetchResponses(
     if (req.url.endsWith('query')) {
       const promise = Promise.resolve({
         status: 200,
+        headers: boundaryNodeResponseHeaders,
         body: httpPayloads[fetchCounter].query,
       });
       // do not update the counter if we expect an update call
@@ -761,6 +791,7 @@ function mockFetchResponses(
     if (req.url.endsWith('read_state')) {
       const promise = Promise.resolve({
         status: 200,
+        headers: boundaryNodeResponseHeaders,
         body: httpPayloads[fetchCounter].update,
       });
       // update response has been fetched, go to the next response payload
@@ -784,9 +815,9 @@ function createUpgradeQueryResponse() {
 function createHttpQueryResponsePayload(
   body: string,
   responseType: IDL.Type,
-  certificate: string = '',
+  certificate = '',
   streamingStrategy: StreamingStrategy[] = [],
-  upgrade: boolean = false
+  upgrade = false
 ) {
   const response = {
     status_code: 200,
@@ -804,10 +835,7 @@ function createHttpQueryResponsePayload(
   return Agent.Cbor.encode(candidResponse);
 }
 
-function createHttpRedirectResponsePayload(
-  body: string,
-  certificate: string = ''
-) {
+function createHttpRedirectResponsePayload(body: string, certificate = '') {
   const response = {
     status_code: 302,
     headers: [
@@ -853,7 +881,7 @@ function createCallbackResponsePayload(
 }
 
 function headerPresent(req: HttpRequest, headerName: string) {
-  let result = req.headers.find(
+  const result = req.headers.find(
     ([key, _]: [string, string]) =>
       key.toLowerCase() === headerName.toLowerCase()
   );

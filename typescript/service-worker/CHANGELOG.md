@@ -2,6 +2,11 @@
 
 ## Unreleased 
 
+## 1.8.3
+
+- Upgrade agent-js to version 0.18.0
+- Add boundary node X-Request-Id to the error page and logs
+
 ## 1.8.2
 
 - Re-enable response verification v2

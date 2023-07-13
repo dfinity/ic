@@ -1,9 +1,11 @@
 import errorPageHtml from 'html-loader?{"minimize":{"removeComments":false}}!./error.html';
+import logger from '../../logger';
 
 export interface ErrorResponseProps {
   isNavigation: boolean;
   error: unknown;
   request: Request;
+  requestId?: string;
   response?: Response;
 }
 
@@ -73,6 +75,9 @@ const getErrorDetails = async (props: ErrorResponseProps): Promise<string> => {
   let errorDetails = '<textarea readonly>';
 
   errorDetails += 'Timestamp: ' + new Date().toUTCString();
+  if (props.requestId) {
+    errorDetails += '\nRequest-ID: ' + props.requestId;
+  }
 
   errorDetails +=
     '\n\nRequest: ' +
@@ -98,11 +103,15 @@ const getErrorDetails = async (props: ErrorResponseProps): Promise<string> => {
 };
 
 const logProps = (props: ErrorResponseProps): void => {
-  console.error('Error', props.error);
-  console.error('Request', props.request);
+  logger.error('Error', props.error);
+  logger.error('Request', props.request);
+
+  if (props.requestId) {
+    logger.error('RequestID', props.requestId);
+  }
 
   if (props.response) {
-    console.error('Response', props.response);
+    logger.error('Response', props.response);
   }
 };
 

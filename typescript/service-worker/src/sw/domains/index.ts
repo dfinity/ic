@@ -1,6 +1,7 @@
 import { Principal } from '@dfinity/principal';
 import { ICHostInfoEvent } from '../../typings';
 import { isMainNet } from '../requests/utils';
+import logger from '../../logger';
 import { Storage } from '../storage';
 import { MalformedCanisterError } from './errors';
 import { ResolverMapper } from './mapper';
@@ -174,7 +175,7 @@ export class CanisterResolver {
         });
       } catch (err) {
         // only log the error in case persist transaction fails
-        console.error('Failed to cache host lookup', err);
+        logger.error('Failed to cache host lookup', err);
       }
 
       return lookup;

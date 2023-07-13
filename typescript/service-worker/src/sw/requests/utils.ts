@@ -1,4 +1,10 @@
-import { Actor, ActorSubclass, HttpAgent } from '@dfinity/agent';
+import {
+  Actor,
+  ActorMethodMappedWithHttpDetails,
+  ActorSubclass,
+  HttpAgent,
+  HttpDetailsResponse,
+} from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { idlFactory } from '../../http-interface/canister_http_interface';
 import {
@@ -9,6 +15,7 @@ import initResponseVerification, {
   InitOutput,
   getMaxVerificationVersion,
 } from '@dfinity/response-verification';
+import { HTTPHeaders } from './typings';
 
 export const shouldFetchRootKey = Boolean(process.env.FORCE_FETCH_ROOT_KEY);
 export const isMainNet = !shouldFetchRootKey;
@@ -17,16 +24,29 @@ export async function createAgentAndActor(
   gatewayUrl: URL,
   canisterId: Principal,
   fetchRootKey: boolean
-): Promise<[HttpAgent, ActorSubclass<_SERVICE>]> {
+): Promise<
+  [HttpAgent, ActorSubclass<ActorMethodMappedWithHttpDetails<_SERVICE>>]
+> {
   const agent = new HttpAgent({ host: gatewayUrl.toString() });
   if (fetchRootKey) {
     await agent.fetchRootKey();
   }
-  const actor = Actor.createActor<_SERVICE>(idlFactory, {
+  const actor = Actor.createActorWithHttpDetails<_SERVICE>(idlFactory, {
     agent,
     canisterId: canisterId,
   });
+
   return [agent, actor];
+}
+
+export function getBoundaryNodeRequestId(
+  httpDetails: HttpDetailsResponse
+): string | undefined {
+  for (const [key, value] of httpDetails.headers) {
+    if (key.toLowerCase() === HTTPHeaders.BoundaryNodeRequestId) {
+      return value;
+    }
+  }
 }
 
 /**

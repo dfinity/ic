@@ -1,25 +1,35 @@
 import { Principal } from '@dfinity/principal';
+import logger from '../../logger';
 import { ResponseCache } from '../cache';
 import { CanisterResolver } from '../domains';
+import { queryCallHandler } from './query-call';
 import { VerifiedResponse } from './typings';
 import {
-  createHttpRequest,
+  shouldUpgradeToUpdateCall,
+  updateCallHandler,
+} from './upgrade-to-update-call';
+import {
   createAgentAndActor,
+  createHttpRequest,
+  getBoundaryNodeRequestId,
   loadResponseVerification,
   shouldFetchRootKey,
   updateRequestApiGateway,
 } from './utils';
-import {
-  updateCallHandler,
-  shouldUpgradeToUpdateCall,
-} from './upgrade-to-update-call';
-import { queryCallHandler } from './query-call';
 
 export class RequestProcessor {
   private readonly url: URL;
+  private _requestId?: string;
 
   constructor(private readonly request: Request) {
     this.url = new URL(this.request.url);
+  }
+
+  /**
+   * Only available if the api boundary node adds the 'X-Request-Id' header.
+   */
+  public get requestId(): string | undefined {
+    return this._requestId;
   }
 
   /**
@@ -130,10 +140,21 @@ export class RequestProcessor {
     );
 
     const httpRequest = await createHttpRequest(this.request);
-    const httpResponse = await actor.http_request(httpRequest);
+    const agentResponse = await actor.http_request(httpRequest);
+
+    this._requestId = getBoundaryNodeRequestId(agentResponse.httpDetails);
+    const httpResponse = await agentResponse.result;
 
     if (shouldUpgradeToUpdateCall(httpResponse)) {
-      return await updateCallHandler(agent, actor, canisterId, httpRequest);
+      const updateCallResult = await updateCallHandler(
+        agent,
+        actor,
+        canisterId,
+        httpRequest
+      );
+      this._requestId = updateCallResult.boundaryNodeRequestId;
+
+      return updateCallResult.result;
     }
 
     return await queryCallHandler(agent, httpRequest, httpResponse, canisterId);
@@ -146,7 +167,7 @@ export class RequestProcessor {
    * should use SRI to make sure the resource matches.
    */
   private async directRequestHandler(): Promise<Response> {
-    console.log('Direct call ...');
+    logger.info('Direct call ...');
     // todo: Do we need to check for headers and certify the content here?
     return await fetch(this.request);
   }
