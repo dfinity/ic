@@ -1,5 +1,8 @@
 name: Make Release
 
+permissions:
+  contents: write
+
 on:
   push:
     tags:
