@@ -29,34 +29,37 @@ sns_mainnet_git_commit_id() {
 reset_sns_w_versions_to_mainnet() {
     ensure_variable_set IDL2JSON
 
+    local NNS_URL=$1
+    local NEURON_ID=$2
+
     upload_canister_git_version_to_sns_wasm \
-        $NNS_URL $NEURON_ID \
-        $NNS_TOOLS_DIR/test_user.pem \
+        "$NNS_URL" "$NEURON_ID" \
+        "$NNS_TOOLS_DIR"/test_user.pem \
         root $(sns_mainnet_git_commit_id root)
 
     upload_canister_git_version_to_sns_wasm \
-        $NNS_URL $NEURON_ID \
-        $NNS_TOOLS_DIR/test_user.pem \
+        "$NNS_URL" "$NEURON_ID" \
+        "$NNS_TOOLS_DIR"/test_user.pem \
         governance $(sns_mainnet_git_commit_id governance)
 
     upload_canister_git_version_to_sns_wasm \
-        $NNS_URL $NEURON_ID \
-        $NNS_TOOLS_DIR/test_user.pem \
+        "$NNS_URL" "$NEURON_ID" \
+        "$NNS_TOOLS_DIR"/test_user.pem \
         ledger $(sns_mainnet_git_commit_id ledger)
 
     upload_canister_git_version_to_sns_wasm \
-        $NNS_URL $NEURON_ID \
-        $NNS_TOOLS_DIR/test_user.pem \
+        "$NNS_URL" "$NEURON_ID" \
+        "$NNS_TOOLS_DIR"/test_user.pem \
         archive $(sns_mainnet_git_commit_id archive)
 
     upload_canister_git_version_to_sns_wasm \
-        $NNS_URL $NEURON_ID \
-        $NNS_TOOLS_DIR/test_user.pem \
+        "$NNS_URL" "$NEURON_ID" \
+        "$NNS_TOOLS_DIR"/test_user.pem \
         swap $(sns_mainnet_git_commit_id swap)
 
     upload_canister_git_version_to_sns_wasm \
-        $NNS_URL $NEURON_ID \
-        $NNS_TOOLS_DIR/test_user.pem \
+        "$NNS_URL" "$NEURON_ID" \
+        "$NNS_TOOLS_DIR"/test_user.pem \
         index $(sns_mainnet_git_commit_id index)
 }
 
