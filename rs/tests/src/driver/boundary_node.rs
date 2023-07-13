@@ -11,8 +11,8 @@ use crate::{
     driver::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
         farm::{
-            CreateVmRequest, DnsRecord, DnsRecordType, Farm, HostFeature, ImageLocation,
-            VMCreateResponse, VmType,
+            Certificate, CreateVmRequest, DnsRecord, DnsRecordType, Farm, HostFeature,
+            ImageLocation, VMCreateResponse, VmType,
         },
         ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
         log_events,
@@ -75,6 +75,7 @@ pub struct BoundaryNodeWithVm {
     pub name: String,
     pub allocated_vm: VMCreateResponse,
     pub use_real_certs_and_dns: bool,
+    pub use_ipv6_certs: bool,
     pub nns_node_urls: Vec<Url>,
     pub nns_public_key: Option<PathBuf>,
     pub registry_local_store: Option<PathBuf>,
@@ -110,6 +111,10 @@ impl BoundaryNodeWithVm {
     /// and all their IPv4 addresses will be added to the A record.
     pub fn use_real_certs_and_dns(mut self) -> Self {
         self.use_real_certs_and_dns = true;
+        self
+    }
+    pub fn use_ipv6_certs(mut self) -> Self {
+        self.use_ipv6_certs = true;
         self
     }
     pub fn with_nns_urls(mut self, nns_node_urls: Vec<Url>) -> Self {
@@ -161,6 +166,11 @@ impl BoundaryNodeWithVm {
             .with_nns_urls(nns_urls)
     }
     pub fn start(&self, env: &TestEnv) -> Result<()> {
+        if self.use_real_certs_and_dns && self.use_ipv6_certs {
+            return Err(anyhow::Error::msg(
+                "cannot set use_real_certs_and_dns and use_ipv6_certs at the same time",
+            ));
+        }
         let logger = env.logger();
         let pot_setup = GroupSetup::read_attribute(env);
         let farm_url = env.get_farm_url()?;
@@ -208,9 +218,32 @@ impl BoundaryNodeWithVm {
             None
         };
 
-        let opt_existing_playnet_cert: Option<PlaynetCertificate> = opt_existing_playnet
-            .as_ref()
-            .map(|existing_playnet| existing_playnet.playnet_cert.clone());
+        let opt_existing_playnet_cert: Option<PlaynetCertificate> = if self.use_ipv6_certs {
+            let subject_alt_names = vec![format!("ip:{}", self.allocated_vm.ipv6)];
+            let mut params = rcgen::CertificateParams::default();
+            params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+            let root_cert = rcgen::Certificate::from_params(params)
+                .expect("failed to create X.509 self-signed CA certificate");
+            let root_cert_pem = root_cert
+                .serialize_pem()
+                .expect("failed to serialize X.509 certificate to PEM");
+            let cert =
+                rcgen::Certificate::from_params(rcgen::CertificateParams::new(subject_alt_names))
+                    .expect("failed to create X.509 self-signed certificate");
+            let cert_pem = cert.serialize_pem_with_signer(&root_cert)?;
+            Some(PlaynetCertificate {
+                playnet: format!("[{}]", self.allocated_vm.ipv6),
+                cert: Certificate {
+                    priv_key_pem: cert.serialize_private_key_pem(),
+                    cert_pem,
+                    chain_pem: root_cert_pem,
+                },
+            })
+        } else {
+            opt_existing_playnet
+                .as_ref()
+                .map(|existing_playnet| existing_playnet.playnet_cert.clone())
+        };
 
         env.write_boundary_node_vm(
             &self.name,
@@ -379,6 +412,7 @@ impl BoundaryNode {
             registry_local_store: Default::default(),
             replica_ipv6_rule: Default::default(),
             use_real_certs_and_dns: false,
+            use_ipv6_certs: false,
             has_ipv4: self.has_ipv4,
         })
     }
@@ -656,7 +690,11 @@ impl HasPublicApiUrl for BoundaryNodeSnapshot {
     }
 
     fn uses_snake_oil_certs(&self) -> bool {
-        self.playnet.is_none()
+        if let Some(playnet) = &self.playnet {
+            playnet.contains(&self.vm.ipv6.to_string())
+        } else {
+            true
+        }
     }
 
     fn uses_dns(&self) -> bool {
