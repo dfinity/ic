@@ -33,6 +33,7 @@ slog = { version = "2.5.2", features = [
     "release_max_level_debug",
 ] }
 tokio = { version = "1.15.0", features = ["full"] }
+tokio-metrics = "0.2.2"
 tokio-rustls = "0.24.0"
 tokio-util = { version = "0.7.4", features = ["codec", "time"] }
 tower = { version = "0.4.12", features = ["reconnect"] }

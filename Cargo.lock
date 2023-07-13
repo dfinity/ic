@@ -9015,6 +9015,7 @@ dependencies = [
  "serde",
  "slog",
  "tokio",
+ "tokio-metrics",
  "tokio-rustls 0.24.0",
  "tokio-util",
  "tower",

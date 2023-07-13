@@ -65,7 +65,10 @@ use tokio::{
 };
 use tokio_util::time::DelayQueue;
 
-use crate::connection_handle::ConnectionHandle;
+use crate::{
+    connection_handle::ConnectionHandle,
+    metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
+};
 use crate::{metrics::QuicTransportMetrics, request_handler::start_request_handler};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
@@ -342,17 +345,20 @@ impl ConnectionManager {
     fn handled_closed_conn(&mut self, node_id: NodeId) {
         self.peer_map.write().unwrap().remove(&node_id);
         self.connect_queue.insert(node_id, Duration::from_secs(0));
-        self.metrics.closed_request_handlers.inc();
+        self.metrics.closed_request_handlers_total.inc();
     }
 
     fn handle_topology_change(&mut self) {
+        self.metrics.topology_changes_total.inc();
         let topology = self.watcher.borrow_and_update();
 
         // Store new topology.
         self.topology = topology.clone();
         drop(topology);
 
-        let subnet_nodes = SomeOrAllNodes::Some(self.topology.get_subnet_nodes());
+        let subnet_node_set = self.topology.get_subnet_nodes();
+        self.metrics.topology_size.set(subnet_node_set.len() as i64);
+        let subnet_nodes = SomeOrAllNodes::Some(subnet_node_set);
 
         // Set new server config to only accept connections from the current set.
         match self.tls_config.server_config(
@@ -371,7 +377,6 @@ impl ConnectionManager {
         }
 
         // Connect/Disconnect from peers according to new topology
-
         for (node, _) in self.topology.iter() {
             // Add to delayqueue for connecting
             if node != &self.node_id
@@ -388,6 +393,7 @@ impl ConnectionManager {
         let mut peer_map = self.peer_map.write().unwrap();
         peer_map.retain(|node, conn_handle| {
             if !self.topology.is_member(node) {
+                self.metrics.peers_removed_total.inc();
                 conn_handle
                     .connection
                     .close(VarInt::from_u32(0), b"node not part of subnet anymore");
@@ -437,6 +443,7 @@ impl ConnectionManager {
         {
             return;
         }
+        self.metrics.outbound_connection_total.inc();
         let addr = self
             .topology
             .get_addr(&node_id)
@@ -500,22 +507,28 @@ impl ConnectionManager {
         &mut self,
         conn_res: Result<ConnectionHandle, ConnectionEstablishError>,
     ) {
-        info!(self.log, "Handle connection result: {:?}", conn_res);
-
         match conn_res {
             Ok(connection) => {
+                self.metrics
+                    .connection_results_total
+                    .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
+                    .inc();
                 let req_handler_connection = connection.clone();
                 let peer_id = connection.peer_id;
                 match self.peer_map.write().unwrap().entry(connection.peer_id) {
                     Entry::Occupied(mut entry) => {
+                        info!(
+                            self.log,
+                            "Replacing old connection to {}  with newer", peer_id
+                        );
                         // This can happen if peer closes and tries to reconnect and we didn't notice the closed connection
                         let old_connection = entry.insert(connection);
                         old_connection
                             .connection
-                            .close(VarInt::from_u32(0), b"using newer");
+                            .close(VarInt::from_u32(0), b"using newer connection");
                     }
                     Entry::Vacant(entry) => {
-                        info!(self.log, "Adding connection for node {:?}", peer_id);
+                        info!(self.log, "Adding connection for node {}", peer_id);
                         entry.insert(connection);
                     }
                 }
@@ -536,12 +549,17 @@ impl ConnectionManager {
                 );
             }
             Err(err) => {
+                self.metrics
+                    .connection_results_total
+                    .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
+                    .inc();
                 info!(self.log, "Failed to connect {}", err);
             }
         };
     }
 
     fn handle_inbound(&mut self, connecting: Connecting) {
+        self.metrics.inbound_connection_total.inc();
         let handshaker = self.sev_handshake.clone();
         let our_node_id = self.node_id;
         let earliest_registry_version = self.topology.earliest_registry_version();
