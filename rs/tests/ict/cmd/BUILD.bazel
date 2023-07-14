@@ -8,6 +8,7 @@ go_library(
         "testCmd.go",
         "testListCmd.go",
         "testnetCmd.go",
+        "testnetCreateCmd.go",
         "testnetListCmd.go",
     ],
     importpath = "github.com/dfinity/ic/rs/tests/ict/cmd",
