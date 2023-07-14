@@ -470,6 +470,17 @@ impl<'a> UniversalCanister<'a> {
             .await
     }
 
+    pub async fn composite_query<P: Into<Vec<u8>>>(
+        &self,
+        payload: P,
+    ) -> Result<Vec<u8>, AgentError> {
+        self.agent
+            .query(&self.canister_id, "composite_query")
+            .with_arg(payload.into())
+            .call()
+            .await
+    }
+
     pub async fn update<P: Into<Vec<u8>>>(&self, payload: P) -> Result<Vec<u8>, AgentError> {
         self.agent
             .update(&self.canister_id, "update")
