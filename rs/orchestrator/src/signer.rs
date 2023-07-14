@@ -16,14 +16,12 @@ pub struct Hsm;
 impl Signer for Hsm {
     fn get(&self) -> UtilityCommandResult<Sender> {
         UtilityCommand::notify_host("Starting node registration.", 1);
-        UtilityCommand::notify_host("Attaching HSM.", 1);
         UtilityCommand::try_to_attach_hsm();
         let pub_key = UtilityCommand::read_public_key(None, None).execute()?;
         UtilityCommand::try_to_detach_hsm();
         fn get_sign_command(msg: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-            UtilityCommand::notify_host("Attaching HSM.", 1);
             UtilityCommand::try_to_attach_hsm();
-            UtilityCommand::notify_host("Sending add_node request.", 1);
+            UtilityCommand::notify_host("Sending join request.", 1);
             let res = UtilityCommand::sign_message(msg.to_vec(), None, None, None)
                 .execute()
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
