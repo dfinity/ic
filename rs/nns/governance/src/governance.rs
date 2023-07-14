@@ -3213,30 +3213,44 @@ impl Governance {
     /// lifetime issues.
     pub fn set_proposal_execution_status(&mut self, pid: u64, result: Result<(), GovernanceError>) {
         match self.proto.proposals.get_mut(&pid) {
-            Some(mut proposal) => {
+            Some(mut proposal_data) => {
                 // The proposal has to be adopted before it is executed.
-                assert!(proposal.status() == ProposalStatus::Adopted);
+                assert!(proposal_data.status() == ProposalStatus::Adopted);
                 match result {
                     Ok(_) => {
-                        println!("Execution of proposal: {} succeeded.", pid);
+                        println!(
+                            "{}Execution of proposal: {} succeeded. (Proposal title: {:?})",
+                            LOG_PREFIX,
+                            pid,
+                            proposal_data
+                                .proposal
+                                .as_ref()
+                                .and_then(|proposal| proposal.title.clone())
+                        );
                         // The proposal was executed 'now'.
-                        proposal.executed_timestamp_seconds = self.env.now();
+                        proposal_data.executed_timestamp_seconds = self.env.now();
                         // If the proposal previously failed to be
                         // executed, it is no longer that case that the
                         // proposal failed to be executed.
-                        proposal.failed_timestamp_seconds = 0;
-                        proposal.failure_reason = None;
+                        proposal_data.failed_timestamp_seconds = 0;
+                        proposal_data.failure_reason = None;
                     }
                     Err(error) => {
-                        println!("Execution of proposal: {} failed. Reason: {:?}", pid, error);
+                        println!(
+                            "{}Execution of proposal: {} failed. Reason: {:?} (Proposal title: {:?})",
+                            LOG_PREFIX,
+                            pid,
+                            error,
+                            proposal_data.proposal.as_ref().and_then(|proposal| proposal.title.clone())
+                        );
                         // Only update the failure timestamp is there is
                         // not yet any report of success in executing this
                         // proposal. If success already has been reported,
                         // it may be that the failure is reported after
                         // the success, e.g., due to a retry.
-                        if proposal.executed_timestamp_seconds == 0 {
-                            proposal.failed_timestamp_seconds = self.env.now();
-                            proposal.failure_reason = Some(error);
+                        if proposal_data.executed_timestamp_seconds == 0 {
+                            proposal_data.failed_timestamp_seconds = self.env.now();
+                            proposal_data.failure_reason = Some(error);
                         }
                     }
                 }
