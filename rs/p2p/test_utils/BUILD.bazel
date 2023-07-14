@@ -1,0 +1,30 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = [
+    "//rs/p2p:__subpackages__",
+])
+
+DEPENDENCIES = [
+    "//rs/crypto/temp_crypto",
+    "//rs/crypto/tls_interfaces",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/p2p/peer_manager",
+    "//rs/protobuf",
+    "//rs/registry/fake",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/test_utilities",
+    "//rs/test_utilities/registry",
+    "//rs/types/base_types",
+    "@crate_index//:tokio",
+]
+
+rust_library(
+    name = "test_utils",
+    testonly = True,
+    srcs = glob(["src/**"]),
+    crate_name = "ic_p2p_test_utils",
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)

@@ -39,13 +39,10 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto",
-    "//rs/crypto/test_utils",
     "//rs/ic_os/sev",
-    "//rs/interfaces/registry/mocks",
+    "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
-    "@crate_index//:rustls",
     "@crate_index//:turmoil",
 ]
 

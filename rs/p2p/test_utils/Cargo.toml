@@ -1,0 +1,19 @@
+[package]
+name = "ic-p2p-test-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ic-base-types = { path = "../../types/base_types" }
+ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
+ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
+ic-logger = { path = "../../monitoring/logger" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-peer-manager = { path = "../peer_manager" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-fake = { path = "../../registry/fake" }
+ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-registry = { path = "../../test_utilities/registry" }
+tokio = { version = "1.15.0", features = ["full"] }

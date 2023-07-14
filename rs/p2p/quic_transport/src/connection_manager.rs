@@ -367,7 +367,8 @@ impl ConnectionManager {
 
         // Set new server config to only accept connections from the current set.
         match self.tls_config.server_config(
-            AllowedClients::new(subnet_nodes).unwrap(),
+            AllowedClients::new(subnet_nodes)
+                .unwrap_or_else(|_| AllowedClients::new(SomeOrAllNodes::All).unwrap()),
             self.topology.latest_registry_version(),
         ) {
             Ok(rustls_server_config) => {

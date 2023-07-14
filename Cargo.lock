@@ -6619,6 +6619,7 @@ dependencies = [
  "rand 0.8.5",
  "tempfile",
  "tokio",
+ "tokio-rustls 0.24.0",
 ]
 
 [[package]]
@@ -8885,6 +8886,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-p2p-test-utils"
+version = "0.1.0"
+dependencies = [
+ "ic-base-types",
+ "ic-crypto-temp-crypto",
+ "ic-crypto-tls-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-peer-manager",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "tokio",
+]
+
+[[package]]
 name = "ic-p8s-service-discovery"
 version = "0.8.0"
 dependencies = [
@@ -8960,14 +8980,10 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-logger",
  "ic-metrics",
- "ic-protobuf",
- "ic-registry-client-fake",
+ "ic-p2p-test-utils",
  "ic-registry-client-helpers",
- "ic-registry-keys",
- "ic-registry-proto-data-provider",
  "ic-test-utilities",
  "ic-test-utilities-logger",
- "ic-test-utilities-registry",
  "ic-types",
  "prometheus 0.12.0",
  "serde",
@@ -9073,18 +9089,15 @@ dependencies = [
  "http",
  "http-serde",
  "ic-async-utils",
- "ic-crypto",
- "ic-crypto-internal-csp",
- "ic-crypto-test-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
  "ic-icos-sev",
  "ic-icos-sev-interfaces",
  "ic-interfaces",
  "ic-interfaces-registry",
- "ic-interfaces-registry-mocks",
  "ic-logger",
  "ic-metrics",
+ "ic-p2p-test-utils",
  "ic-peer-manager",
  "ic-registry-client-helpers",
  "ic-test-utilities-logger",
@@ -9092,7 +9105,6 @@ dependencies = [
  "ic-types-test-utils",
  "prometheus 0.12.0",
  "quinn",
- "rustls 0.21.5",
  "serde",
  "slog",
  "tokio",

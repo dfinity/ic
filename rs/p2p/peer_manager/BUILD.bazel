@@ -17,13 +17,9 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/protobuf",
-    "//rs/registry/fake",
-    "//rs/registry/keys",
-    "//rs/registry/proto_data_provider",
+    "//rs/p2p/test_utils",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
-    "//rs/test_utilities/registry",
 ]
 
 MACRO_DEPENDENCIES = [

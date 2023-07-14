@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:rand_0_8_4",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-rustls",
 ]
 
 MACRO_DEPENDENCIES = [
