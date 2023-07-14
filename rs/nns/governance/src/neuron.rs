@@ -433,6 +433,47 @@ impl Neuron {
         self.dissolve_delay_seconds(now_seconds) == 0
     }
 
+    fn is_authorized_to_configure_or_err(
+        &self,
+        caller: &PrincipalId,
+        configure: &manage_neuron::configure::Operation,
+    ) -> Result<(), GovernanceError> {
+        use manage_neuron::configure::Operation::{JoinCommunityFund, LeaveCommunityFund};
+
+        match configure {
+            // The controller and hotkeys are allowed to change Neuron Fund membership.
+            JoinCommunityFund(_) | LeaveCommunityFund(_) => {
+                if self.is_hotkey_or_controller(caller) {
+                    Ok(())
+                } else {
+                    Err(GovernanceError::new_with_message(
+                        ErrorType::NotAuthorized,
+                        format!(
+                            "Caller '{:?}' must be the controller or hotkey of the neuron to join or leave the neuron fund.",
+                            caller,
+                        ),
+                    ))
+                }
+            }
+
+            // Only the controller is allowed to perform other configure operations.
+            _ => {
+                if self.is_controlled_by(caller) {
+                    Ok(())
+                } else {
+                    Err(GovernanceError::new_with_message(
+                        ErrorType::NotAuthorized,
+                        format!(
+                            "Caller '{:?}' must be the controller of the neuron to perform this operation:\n{:#?}",
+                            caller,
+                            configure,
+                        ),
+                    ))
+                }
+            }
+        }
+    }
+
     /// Apply the specified neuron configuration operation on this neuron.
     ///
     /// See [manage_neuron::Configure] for details.
@@ -442,23 +483,15 @@ impl Neuron {
         now_seconds: u64,
         cmd: &manage_neuron::Configure,
     ) -> Result<(), GovernanceError> {
-        // This group of methods can only be invoked by the
-        // controller of the neuron.
-        if !self.is_controlled_by(caller) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                format!(
-                    "Caller '{:?}' must be the controller of the neuron to perform this operation.",
-                    caller,
-                ),
-            ));
-        }
         let op = &cmd.operation.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 "Configure must have an operation.",
             )
         })?;
+
+        self.is_authorized_to_configure_or_err(caller, op)?;
+
         match op {
             manage_neuron::configure::Operation::IncreaseDissolveDelay(d) => {
                 if d.additional_dissolve_delay_seconds == 0 {

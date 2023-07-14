@@ -2,12 +2,14 @@
 
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
+use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_governance::pb::v1::{
+    governance_error::ErrorType,
     manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
     manage_neuron_response::{
         Command as CommandResponse, {self},
@@ -19,7 +21,10 @@ use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     ids::{TEST_NEURON_1_ID, TEST_NEURON_2_ID},
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
-    state_test_helpers::{list_neurons, nns_add_hot_key, nns_remove_hot_key, setup_nns_canisters},
+    state_test_helpers::{
+        list_neurons, nns_add_hot_key, nns_join_community_fund, nns_leave_community_fund,
+        nns_remove_hot_key, setup_nns_canisters,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
@@ -310,4 +315,97 @@ fn test_neuron_controller_is_not_removed_from_principal_to_neuron_index() {
 
     let list_neurons_response = list_neurons(&mut state_machine, *TEST_NEURON_2_OWNER_PRINCIPAL);
     assert_eq!(list_neurons_response.full_neurons.len(), 1);
+}
+
+#[test]
+fn test_hotkey_can_join_and_leave_community_fund() {
+    // Step 1: Prepare the world.
+
+    let mut state_machine = StateMachine::new();
+    let nns_init_payloads = NnsInitPayloadsBuilder::new().with_test_neurons().build();
+    setup_nns_canisters(&state_machine, nns_init_payloads);
+
+    let neuron_1_id = NeuronIdProto {
+        id: TEST_NEURON_1_ID,
+    };
+    let hotkey = PrincipalId::new_user_test_id(622_907);
+
+    nns_add_hot_key(
+        &mut state_machine,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        neuron_1_id,
+        hotkey,
+    );
+
+    // Step 2a: Call the code under test (indirectly). To wit, is_authorized_to_configure_or_err.
+    let join_response = nns_join_community_fund(&mut state_machine, hotkey, neuron_1_id);
+
+    // Step 3a: Inspect result. Expect success.
+    fn assert_ok(manage_neuron_response: &ManageNeuronResponse) {
+        match manage_neuron_response {
+            ManageNeuronResponse {
+                command:
+                    Some(manage_neuron_response::Command::Configure(
+                        manage_neuron_response::ConfigureResponse {},
+                    )),
+            } => (),
+            _ => panic!("{:#?}", manage_neuron_response),
+        }
+    }
+    assert_ok(&join_response);
+
+    // Step 2b: Instead of joining NF, leave it.
+    let leave_response = nns_leave_community_fund(&mut state_machine, hotkey, neuron_1_id);
+
+    // Step 3b: Again, expect success.
+    assert_ok(&leave_response);
+
+    // Step 2c: Call code under test, but this is a sad scenario: Other neuron
+    // configure operations (besides Neuron Fund membership changes) by hotkey
+    // are verboten.
+    let add_hot_key_response = nns_add_hot_key(
+        &mut state_machine,
+        hotkey,
+        neuron_1_id,
+        PrincipalId::new_user_test_id(289_896),
+    );
+    match add_hot_key_response {
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::Error(error)),
+        } => {
+            assert_eq!(
+                ErrorType::from_i32(error.error_type),
+                Some(ErrorType::NotAuthorized),
+                "{:?}",
+                error
+            );
+            assert!(
+                error.error_message.contains("must be the controller"),
+                "{:?}",
+                error
+            );
+        }
+        _ => panic!(
+            "Unexpected response to AddHotKey:\n{:#?}",
+            add_hot_key_response
+        ),
+    }
+
+    // Steps 2d, 3d: Controller can perform any neuron configure operation.
+    assert_ok(&nns_join_community_fund(
+        &mut state_machine,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        neuron_1_id,
+    ));
+    assert_ok(&nns_leave_community_fund(
+        &mut state_machine,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        neuron_1_id,
+    ));
+    assert_ok(&nns_add_hot_key(
+        &mut state_machine,
+        *TEST_NEURON_1_OWNER_PRINCIPAL,
+        neuron_1_id,
+        PrincipalId::new_user_test_id(331_685),
+    ));
 }
