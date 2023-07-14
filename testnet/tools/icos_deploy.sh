@@ -267,6 +267,7 @@ mkdir -p "${MEDIA_PATH}"
     ${ALLOW_SPECIFIED_IDS:-}
 
 SCP_PREFIX=""
+NNS_PUBLIC_KEY=$(sed '1d;$d' "${MEDIA_PATH}/nns-public-key.pem" | tr -d '\n\r')
 if [ -n "${ANSIBLE_REMOTE_USER:-}" ]; then
     SCP_PREFIX="${ANSIBLE_REMOTE_USER}@"
 fi
@@ -413,8 +414,7 @@ echo "**** Install NNS canisters - ($(dateFromEpoch "$(date '+%s')"))"
 ansible icos_network_redeploy.yml -e ic_state="install"
 
 echo "**** Start monitoring - ($(dateFromEpoch "$(date '+%s')"))"
-ansible ic_p8s_network_update.yml -e yes_i_confirm=yes
-ansible ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_key_path="${MEDIA_PATH}/nns-public-key.pem"
+ansible ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_key="${NNS_PUBLIC_KEY}"
 
 endtime="$(date '+%s')"
 echo "**** Completed deployment at $(dateFromEpoch "${endtime}") (start time was $(dateFromEpoch "${starttime}"))"
