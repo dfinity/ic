@@ -7,6 +7,8 @@ genrule(
         "//ic-os/guestos/envs/prod:hash_and_upload_update-img",
         "//ic-os/boundary-guestos/envs/dev:hash_and_upload_disk-img",
         "//ic-os/boundary-guestos/envs/prod:hash_and_upload_disk-img",
+        "//ic-os/boundary-api-guestos/envs/dev:hash_and_upload_disk-img",
+        "//ic-os/boundary-api-guestos/envs/prod:hash_and_upload_disk-img",
         "//publish/binaries:legacy_upload",
         "//publish/canisters:upload",
     ],
