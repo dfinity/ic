@@ -253,7 +253,8 @@ impl SnsClient {
         block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
 
         info!(log, "Sending deploy_new_sns to SNS WASM canister");
-        let init = SnsInitPayload::try_from(create_service_nervous_system_proposal)
+        let init = create_service_nervous_system_proposal
+            .to_legacy_sns_init_payload()
             .expect("invalid init payload");
         let res =
             block_on(deploy_new_sns_legacy(&wallet_canister, init)).expect("Deploy new SNS failed");
