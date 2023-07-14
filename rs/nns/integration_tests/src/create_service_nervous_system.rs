@@ -201,7 +201,7 @@ fn make_proposal(state_machine: &mut StateMachine, sns_number: u64) -> ManageNeu
     )
 }
 
-/// Makes test neuron 1 votes for the proposal. This should cause it to be
+/// Makes test neuron 1 vote for the proposal. This should cause it to be
 /// adopted and executed.
 fn execute_proposal(state_machine: &mut StateMachine, proposal_id: ProposalId) {
     state_machine

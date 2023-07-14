@@ -229,6 +229,16 @@ impl CreateServiceNervousSystem {
             seconds_after_utc_midnight,
         }
     }
+
+    pub fn to_legacy_sns_init_payload(self) -> Result<SnsInitPayload, String> {
+        let preliminary_result = SnsInitPayload::try_from(self);
+        if let Ok(mut sns_init_payload) = preliminary_result {
+            sns_init_payload.neuron_basket_construction_parameters = None;
+            Ok(sns_init_payload)
+        } else {
+            preliminary_result
+        }
+    }
 }
 
 fn divide_perfectly(field_name: &str, dividend: u64, divisor: u64) -> Result<u64, String> {
