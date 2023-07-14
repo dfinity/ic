@@ -1,4 +1,9 @@
 ---
+# Install the Prometheus Service Discovery server
+#
+# This all has to be parameterised by the IC that is being queried, because
+# different ICs might have different variations on the registry.
+
 - hosts: localhost
   any_errors_fatal: yes
   gather_facts: false
@@ -9,13 +14,54 @@
       fail: msg="'ic_git_revision' not given."
       when: ic_git_revision is not defined
 
-- hosts: prometheus
-  gather_facts: false
-  become: true
+    - name: Wipe targets if they exist
+      vars:
+        ic: "{{ ic_deployment_name }}"
+      uri:
+        url: "https://{{ service_discovery_server }}/service-discovery/{{ ic }}"
+        method: DELETE
+        return_content: true
+        validate_certs: no
+      register: delete_response
+      failed_when: delete_response.status not in [200, 400]
 
-  vars_files:
-    - "{{ inventory_file | dirname }}/versions.json"
-    - "config/common.yml"
+    - name: Generate scrape configurations for [host_node_exporter, node_exporter, orchestrator, replica]
+      vars:
+        ic: "{{ ic_deployment_name }}"
+      uri:
+        url: "https://{{ service_discovery_server }}/service-discovery"
+        method: POST
+        body_format: json
+        body:
+          ic_name: "{{ ic }}"
+          nns_urls: "{{ groups['nns'] | map('extract', hostvars, ['api_listen_url']) | join(',') }}"
+          nns_public_key: "{{ nns_public_key }}"
+        validate_certs: no
+        headers:
+          Content-Type: "application/json"
 
-  roles:
-    - role: ic_p8s_service_discovery_install
+    - name: Generate scrape configurations for [boundary_nodes]
+      vars:
+        ic: "{{ ic_deployment_name }}"
+      uri:
+        url: "https://{{ service_discovery_server }}/static-configs/{{ ic }}"
+        method: POST
+        body_format: json
+        body:
+          targets: "{{ groups['boundary'] | map('extract', hostvars, [item + '_metrics_addr']) | join(',') }}"
+          labels:
+            ic: "{{ ic }}"
+            env: "testnet"
+            service: "{{ item }}"
+        validate_certs: no
+        headers:
+          Content-Type: "application/json"
+      loop:
+        - control_plane
+        - denylist_updater
+        - ic_registry_replicator
+        - icx_proxy
+        - process_exporter
+        - nginx
+        - vector
+      when: "'boundary' in groups"

@@ -68,7 +68,6 @@ ANSIBLE="ansible-playbook -i "$INVENTORY" $ANSIBLE_ARGS "
 
 $ANSIBLE icos_network_redeploy.yml -e ic_state="destroy"
 
-$ANSIBLE ic_p8s_network_destroy.yml
 $ANSIBLE ic_p8s_service_discovery_destroy.yml
 
 echo -e "\e[0Ksection_end:$(date +%s):icos_destroy.sh\r\e[0K"

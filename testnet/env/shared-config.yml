@@ -10,7 +10,7 @@ prometheus:
   vars:
     stage: all
   hosts:
-    prometheus.testnet.dfinity.network:
+    ic-metrics-prometheus-staging.ch1-obsstage1.dfinity.network:
 
 data_centers:
   ch1:
@@ -189,3 +189,4 @@ all:
   vars:
     ansible_python_interpreter: python3
     become_method: sudo
+    service_discovery_server: ic-service-discovery.ch1-obsstage1.dfinity.network
