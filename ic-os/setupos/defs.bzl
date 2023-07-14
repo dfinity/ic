@@ -78,12 +78,17 @@ def _custom_partitions(mode):
         allow_symlink = True,
     )
 
+    config_dict = {
+        Label("//ic-os/setupos:config/config.ini"): "config.ini",
+        Label("//ic-os/setupos:config/ssh_authorized_keys/admin"): "ssh_authorized_keys/admin",
+    }
+
+    if mode == "dev":
+        config_dict[Label("//ic-os/setupos:config/node_operator_private_key.pem")] = "node_operator_private_key.pem"
+
     pkg_tar(
         name = "config_tar",
-        srcs = [
-            Label("//ic-os/setupos:config/config.ini"),
-            Label("//ic-os/setupos:config/ssh_authorized_keys/admin"),
-        ] + ([Label("//ic-os/setupos:config/node_operator_private_key.pem")] if mode == "dev" else []),
+        files = config_dict,
         mode = "0644",
         package_dir = "config",
     )
