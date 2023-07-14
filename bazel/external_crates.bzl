@@ -79,7 +79,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^2.2.0",
             ),
             "actix-web": crate.spec(
-                version = "^4.0.0-beta.6",
+                version = "^4.3.0",
             ),
             "addr": crate.spec(
                 version = "=0.15.6",
@@ -96,12 +96,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "assert_approx_eq": crate.spec(
                 version = "^1.1.0",
-            ),
-            "by_address": crate.spec(
-                version = "^1.1.0",
-            ),
-            "chacha20poly1305": crate.spec(
-                version = "^0.10.0",
             ),
             "anyhow": crate.spec(
                 version = "^1",
@@ -221,6 +215,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 rev = "abb2971c5d07a9b40d41a0c84b63a3156f2ff764",
                 default_features = False,
             ),
+            "by_address": crate.spec(
+                version = "^1.1.0",
+            ),
             "byte-unit": crate.spec(
                 version = "^4.0.14",
             ),
@@ -248,6 +245,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.9.0-beta.1",
             ),
             "cfg-if": crate.spec(version = "^0.1.10"),
+            "chacha20poly1305": crate.spec(
+                version = "^0.10.0",
+            ),
             "chrono": crate.spec(
                 version = "=0.4.19",
             ),
@@ -852,13 +852,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "rcgen": crate.spec(
                 version = "^0.10.0",
             ),
-            "redis": crate.spec(
-                version = "^0.22.1",
-                features = [
-                    "tokio-comp",
-                    "connection-manager",
-                ],
-            ),
             "regex": crate.spec(
                 version = "^1.3.9",
             ),
@@ -1119,7 +1112,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.3.20",
             ),
             "tokio": crate.spec(
-                version = "^1.15.0",
+                version = "^1.29.0",
                 features = [
                     "full",
                     "io-util",
@@ -1233,9 +1226,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "walrus": crate.spec(
                 version = "^0.19.0",
-            ),
-            "wait-timeout": crate.spec(
-                version = "^0.2.0",
             ),
             "walkdir": crate.spec(
                 version = "^2.3.1",

@@ -68,4 +68,3 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 mockall = "0.8.3"
-wait-timeout = "0.2.0"

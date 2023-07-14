@@ -93,6 +93,5 @@ rust_test(
         "//rs/test_utilities/logger",
         "@crate_index//:assert_cmd",
         "@crate_index//:mockall_0_8_3",
-        "@crate_index//:wait-timeout",
     ],
 )
