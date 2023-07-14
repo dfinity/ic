@@ -3111,11 +3111,11 @@ impl Governance {
                 let mut specific_follower_neuron_ids = neuron_id_to_follower_neuron_ids_on_function
                     .get(current_neuron_id)
                     .cloned()
-                    .unwrap_or_else(|| BTreeSet::new());
+                    .unwrap_or_default();
                 let mut blanket_follower_neuron_ids = neuron_id_to_blanket_follower_neuron_ids
                     .get(current_neuron_id)
                     .cloned()
-                    .unwrap_or_else(|| BTreeSet::new());
+                    .unwrap_or_default();
                 follower_neuron_ids.append(&mut specific_follower_neuron_ids);
                 follower_neuron_ids.append(&mut blanket_follower_neuron_ids);
             }

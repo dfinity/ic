@@ -7884,7 +7884,7 @@ impl From<&ic_nervous_system_clients::canister_status::CanisterStatusResultV2>
 
         // Convert data extracted from src.
         let status = swap_background_information::CanisterStatusType::from(status);
-        let module_hash = module_hash.unwrap_or_else(|| vec![]);
+        let module_hash = module_hash.unwrap_or_default();
         let cycles = u64::try_from(cycles).unwrap_or_else(|err| {
             println!(
                 "{}WARNING: Unable to convert cycles to u64: {:?}",

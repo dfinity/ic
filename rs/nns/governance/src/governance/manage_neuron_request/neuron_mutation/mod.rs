@@ -82,7 +82,7 @@ impl SimulatingGovernance<'_> {
     pub fn get_neuron(&self, neuron_id: &NeuronId) -> Result<&Neuron, GovernanceError> {
         self.neuron_map
             .get(&neuron_id.id)
-            .map(|n| Ok(n))
+            .map(Ok)
             .unwrap_or_else(|| self.real_gov.get_neuron(neuron_id))
     }
 

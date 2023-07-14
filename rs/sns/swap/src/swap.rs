@@ -2683,9 +2683,9 @@ fn compute_participation_increment(
         || requested_user_participation < min_user_participation
         || requested_user_participation > max_user_participation
     {
-        let min_user_increment = 1
-            .max(min_user_participation.saturating_sub(user_participation))
-            .min(max_available_increment);
+        let min_user_increment = min_user_participation
+            .saturating_sub(user_participation)
+            .clamp(1, max_available_increment);
         let max_user_increment = max_user_participation
             .saturating_sub(user_participation)
             .min(max_available_increment);

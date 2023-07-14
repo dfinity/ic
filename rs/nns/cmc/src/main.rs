@@ -31,7 +31,6 @@ use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
     cell::RefCell,
-    cmp::{max, min},
     collections::{btree_map::Entry, BTreeMap, BTreeSet},
     convert::TryInto,
     thread::LocalKey,
@@ -915,14 +914,10 @@ fn compute_capped_maturity_modulation(
             let difference = end_rate_value.saturating_sub(start_rate_value);
             let difference_permyriad = difference.saturating_mul(10_000);
             match difference_permyriad.checked_div(start_rate_value) {
-                Some(relative_change_permyriad) =>
-                // Bound the relative change based on the permissible range.
-                {
-                    min(
-                        max(relative_change_permyriad, MIN_MATURITY_MODULATION_PERMYRIAD),
-                        MAX_MATURITY_MODULATION_PERMYRIAD,
-                    )
-                }
+                Some(relative_change_permyriad) => relative_change_permyriad.clamp(
+                    MIN_MATURITY_MODULATION_PERMYRIAD,
+                    MAX_MATURITY_MODULATION_PERMYRIAD,
+                ),
                 None => 0,
             }
         } else {
@@ -1867,6 +1862,7 @@ mod tests {
     use super::*;
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
+    use std::cmp::{max, min};
 
     pub(crate) fn init_test_state() {
         init(Some(CyclesCanisterInitPayload {
