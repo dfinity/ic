@@ -105,31 +105,33 @@ impl Firewall {
 
         // This is the eventual list of rules fetched from the registry. It is build in the order of the priority:
         // Node > Subnet > Replica Nodes > Global
-        let mut rules = Vec::<FirewallRule>::new();
+        let mut tcp_rules = Vec::<FirewallRule>::new();
+        let mut udp_rules = Vec::<FirewallRule>::new();
 
         // First, we fetch the rules that are specific for this node
-        rules.append(
+        tcp_rules.append(
             &mut self
                 .fetch_from_registry(registry_version, &FirewallRulesScope::Node(self.node_id)),
         );
 
         // Then we fetch the rules that are specific for the subnet, if one is assigned
         if let Some(subnet_id) = subnet_id_opt {
-            rules.append(
+            tcp_rules.append(
                 &mut self
                     .fetch_from_registry(registry_version, &FirewallRulesScope::Subnet(subnet_id)),
             );
         }
 
         // Then the rules that apply to all replica nodes
-        rules.append(
+        tcp_rules.append(
             &mut self.fetch_from_registry(registry_version, &FirewallRulesScope::ReplicaNodes),
         );
 
         // Lastly, rules that apply globally to any type of node
-        rules.append(&mut self.fetch_from_registry(registry_version, &FirewallRulesScope::Global));
+        tcp_rules
+            .append(&mut self.fetch_from_registry(registry_version, &FirewallRulesScope::Global));
 
-        if !rules.is_empty() {
+        if !tcp_rules.is_empty() {
             // We found some rules in the registry, so we will not use the default rules in the config file
             self.source = DataSource::Registry;
         } else {
@@ -140,7 +142,7 @@ impl Firewall {
                 "Firewall configuration was not found in registry. Using config file instead. This warning should be ignored when firewall config is not expected to appear in the registry (e.g., on testnets)."
             );
             self.source = DataSource::Config;
-            rules.append(&mut self.configuration.default_rules.clone());
+            tcp_rules.append(&mut self.configuration.default_rules.clone());
         }
 
         // Whitelisting for node IPs
@@ -172,18 +174,29 @@ impl Firewall {
         );
 
         // Build a single rule to whitelist all v4 and v6 IP addresses of nodes
-        let node_whitelisting_rule = FirewallRule {
+        let tcp_node_whitelisting_rule = FirewallRule {
             ipv4_prefixes: node_ipv4s.clone(),
             ipv6_prefixes: node_ipv6s.clone(),
-            ports: self.configuration.ports_for_node_whitelist.clone(),
+            ports: self.configuration.tcp_ports_for_node_whitelist.clone(),
             action: FirewallAction::Allow as i32,
             comment: "Automatic node whitelisting".to_string(),
             user: None,
             direction: Some(FirewallRuleDirection::Inbound as i32),
         };
 
-        // Insert the whitelisting rule at the top of the list (highest priority)
-        rules.insert(0, node_whitelisting_rule);
+        let udp_node_whitelisting_rule = FirewallRule {
+            ipv4_prefixes: node_ipv4s.clone(),
+            ipv6_prefixes: node_ipv6s.clone(),
+            ports: self.configuration.udp_ports_for_node_whitelist.clone(),
+            action: FirewallAction::Allow as i32,
+            comment: "Automatic node whitelisting".to_string(),
+            user: None,
+            direction: Some(FirewallRuleDirection::Inbound as i32),
+        };
+
+        // Insert the whitelisting rules at the top of the list (highest priority)
+        tcp_rules.insert(0, tcp_node_whitelisting_rule);
+        udp_rules.insert(0, udp_node_whitelisting_rule);
 
         // Blacklisting for Canister HTTP requests
         // In addition to any explicit firewall rules we might apply, we also ALWAYS blacklist the ic-http-adapter used from accessing
@@ -203,10 +216,11 @@ impl Firewall {
         };
 
         // Insert the ic-http-adapter rule at the top of the list (highest priority)
-        rules.insert(0, ic_http_adapter_rule);
+        tcp_rules.insert(0, ic_http_adapter_rule);
 
         // Generate the firewall file content
-        let content = Self::generate_firewall_file_content_full(&self.configuration, rules);
+        let content =
+            Self::generate_firewall_file_content_full(&self.configuration, tcp_rules, udp_rules);
 
         let changed = content.ne(&self.compiled_config);
         if changed {
@@ -255,15 +269,16 @@ impl Firewall {
     /// Generates a string with the content for the firewall rules file
     fn generate_firewall_file_content_full(
         config: &FirewallConfig,
-        rules: Vec<FirewallRule>,
+        tcp_rules: Vec<FirewallRule>,
+        udp_rules: Vec<FirewallRule>,
     ) -> String {
         config
             .file_template
             .replace(
-                "<<IPv4_RULES>>",
+                "<<IPv4_TCP_RULES>>",
                 &Self::compile_rules(
-                    &config.ipv4_rule_template,
-                    &rules,
+                    &config.ipv4_tcp_rule_template,
+                    &tcp_rules,
                     vec![
                         FirewallRuleDirection::Inbound,
                         FirewallRuleDirection::Unspecified,
@@ -271,10 +286,32 @@ impl Firewall {
                 ),
             )
             .replace(
-                "<<IPv6_RULES>>",
+                "<<IPv4_UDP_RULES>>",
                 &Self::compile_rules(
-                    &config.ipv6_rule_template,
-                    &rules,
+                    &config.ipv4_udp_rule_template,
+                    &udp_rules,
+                    vec![
+                        FirewallRuleDirection::Inbound,
+                        FirewallRuleDirection::Unspecified,
+                    ],
+                ),
+            )
+            .replace(
+                "<<IPv6_TCP_RULES>>",
+                &Self::compile_rules(
+                    &config.ipv6_tcp_rule_template,
+                    &tcp_rules,
+                    vec![
+                        FirewallRuleDirection::Inbound,
+                        FirewallRuleDirection::Unspecified,
+                    ],
+                ),
+            )
+            .replace(
+                "<<IPv6_UDP_RULES>>",
+                &Self::compile_rules(
+                    &config.ipv6_udp_rule_template,
+                    &udp_rules,
                     vec![
                         FirewallRuleDirection::Inbound,
                         FirewallRuleDirection::Unspecified,
@@ -285,7 +322,7 @@ impl Firewall {
                 "<<IPv4_OUTBOUND_RULES>>",
                 &Self::compile_rules(
                     &config.ipv4_user_output_rule_template,
-                    &rules,
+                    &tcp_rules,
                     vec![FirewallRuleDirection::Outbound],
                 ),
             )
@@ -293,7 +330,7 @@ impl Firewall {
                 "<<IPv6_OUTBOUND_RULES>>",
                 &Self::compile_rules(
                     &config.ipv6_user_output_rule_template,
-                    &rules,
+                    &tcp_rules,
                     vec![FirewallRuleDirection::Outbound],
                 ),
             )
@@ -420,11 +457,15 @@ fn test_firewall_rule_compilation() {
         "<<IPv6_PREFIXES>>", "<<PORTS>>", "<<ACTION>>", "<<COMMENT>>"
     );
     let file_template = format!(
-        "{} {} {}",
-        "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>", "<<IPv4_RULES>>", "<<IPv6_RULES>>"
+        "{} {} {} {} {}",
+        "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>",
+        "<<IPv4_TCP_RULES>>",
+        "<<IPv4_UDP_RULES>>",
+        "<<IPv6_TCP_RULES>>",
+        "<<IPv6_UDP_RULES>>",
     );
 
-    let rules = vec![
+    let tcp_rules = vec![
         FirewallRule {
             ipv4_prefixes: vec!["test_ipv4_1".to_string()],
             ipv6_prefixes: vec!["test_ipv6_1".to_string()],
@@ -463,36 +504,66 @@ fn test_firewall_rule_compilation() {
         },
     ];
 
-    let expected_rules_compiled_v4 = vec![
+    let udp_rules = vec![FirewallRule {
+        ipv4_prefixes: vec!["test_ipv4_5_udp".to_string()],
+        ipv6_prefixes: vec!["test_ipv6_5_udp".to_string()],
+        ports: vec![13, 14, 15],
+        action: 1,
+        comment: "comment5".to_string(),
+        user: None,
+        direction: Some(FirewallRuleDirection::Inbound as i32),
+    }];
+
+    let expected_tcp_rules_compiled_v4 = vec![
         format!("{} {} {} {}", "test_ipv4_1", "1,2,3", "accept", "comment1"),
         format!("{} {} {} {}", "test_ipv4_2", "4,5,6", "drop", "comment2"),
     ];
-    let expected_rules_compiled_v6 = vec![
+
+    let expected_udp_rules_compiled_v4 = vec![format!(
+        "{} {} {} {}",
+        "test_ipv4_5_udp", "13,14,15", "accept", "comment5"
+    )];
+
+    let expected_tcp_rules_compiled_v6 = vec![
         format!("{} {} {} {}", "test_ipv6_1", "1,2,3", "accept", "comment1"),
         format!("{} {} {} {}", "test_ipv6_3", "7,8,9", "drop", "comment3"),
     ];
+
+    let expected_udp_rules_compiled_v6 = vec![format!(
+        "{} {} {} {}",
+        "test_ipv6_5_udp", "13,14,15", "accept", "comment5"
+    )];
+
     let expected_file_content = format!(
-        "{} {} {}",
+        "{} {} {} {} {}",
         max_simultaneous_connections_per_ip_address,
-        expected_rules_compiled_v4.join("\n"),
-        expected_rules_compiled_v6.join("\n")
+        expected_tcp_rules_compiled_v4.join("\n"),
+        expected_udp_rules_compiled_v4.join("\n"),
+        expected_tcp_rules_compiled_v6.join("\n"),
+        expected_udp_rules_compiled_v6.join("\n"),
     );
 
     let config = FirewallConfig {
         config_file: PathBuf::default(),
         file_template,
-        ipv4_rule_template,
-        ipv6_rule_template,
+
+        ipv4_tcp_rule_template: ipv4_rule_template.clone(),
+        ipv4_udp_rule_template: ipv4_rule_template,
+
+        ipv6_tcp_rule_template: ipv6_rule_template.clone(),
+        ipv6_udp_rule_template: ipv6_rule_template,
+
         ipv4_user_output_rule_template: "".to_string(),
         ipv6_user_output_rule_template: "".to_string(),
         default_rules: vec![],
-        ports_for_node_whitelist: vec![],
+        tcp_ports_for_node_whitelist: vec![],
+        udp_ports_for_node_whitelist: vec![],
         ports_for_http_adapter_blacklist: vec![],
         max_simultaneous_connections_per_ip_address,
     };
 
     assert_eq!(
         expected_file_content,
-        Firewall::generate_firewall_file_content_full(&config, rules)
+        Firewall::generate_firewall_file_content_full(&config, tcp_rules, udp_rules)
     );
 }

@@ -172,7 +172,8 @@
     icmp type parameter-problem accept\n\
     icmp type echo-request accept\n\
     icmp type echo-reply accept\n\
-    <<IPv4_RULES>>\n\
+    <<IPv4_TCP_RULES>>\n\
+    <<IPv4_UDP_RULES>>\n\
   }\n\
 \n\
   chain FORWARD {\n\
@@ -218,7 +219,8 @@ table ip6 filter {\n\
     icmpv6 type nd-router-advert accept\n\
     icmpv6 type nd-neighbor-solicit accept\n\
     icmpv6 type nd-neighbor-advert accept\n\
-    <<IPv6_RULES>>\n\
+    <<IPv6_TCP_RULES>>\n\
+    <<IPv6_UDP_RULES>>\n\
   }\n\
 \n\
   chain FORWARD {\n\
@@ -232,8 +234,10 @@ table ip6 filter {\n\
     <<IPv6_OUTBOUND_RULES>>\n\
   }\n\
 }\n",
-        ipv4_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
-        ipv6_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_tcp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_tcp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv4_udp_rule_template: "ip saddr {<<IPv4_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
+        ipv6_udp_rule_template: "ip6 saddr {<<IPv6_PREFIXES>>} udp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
         ipv4_user_output_rule_template: "meta skuid <<USER>> ip daddr {<<IPv4_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
         ipv6_user_output_rule_template: "meta skuid <<USER>> ip6 daddr {<<IPv6_PREFIXES>>} ct state { new } tcp dport {<<PORTS>>} <<ACTION>> # <<COMMENT>>",
         default_rules: [{
@@ -316,7 +320,8 @@ table ip6 filter {\n\
           comment: "Default rule from template",
           direction: 1,
         }],
-        ports_for_node_whitelist: [2497, 4100, 8080],
+        tcp_ports_for_node_whitelist: [2497, 4100, 8080],
+        udp_ports_for_node_whitelist: [4100],
         ports_for_http_adapter_blacklist: [22, 2497, 4100, 7070, 8080, 9090, 9091, 9100, 19531],
         max_simultaneous_connections_per_ip_address: 100,
     },
