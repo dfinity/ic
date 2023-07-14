@@ -13674,7 +13674,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
- "wait-timeout",
 ]
 
 [[package]]
