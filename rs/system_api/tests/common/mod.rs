@@ -29,6 +29,8 @@ use maplit::btreemap;
 
 pub const CANISTER_CURRENT_MEMORY_USAGE: NumBytes = NumBytes::new(0);
 
+const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
 pub fn execution_parameters() -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
@@ -41,6 +43,8 @@ pub fn execution_parameters() -> ExecutionParameters {
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
+        subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+        subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
     }
 }
 
@@ -130,7 +134,11 @@ pub fn get_system_api(
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
-        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2),
+        SubnetAvailableMemory::new(
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+            SUBNET_MEMORY_CAPACITY,
+        ),
         EmbeddersConfig::default()
             .feature_flags
             .wasm_native_stable_memory,

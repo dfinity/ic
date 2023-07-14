@@ -14,6 +14,11 @@ use std::{str::FromStr, time::Duration};
 const MIB: u64 = 1024 * 1024;
 const GIB: u64 = MIB * 1024;
 
+/// This specifies the threshold in bytes at which the subnet memory usage is
+/// considered to be high. If this value is greater or equal to the subnet
+/// capacity, then the subnet is never considered to have high usage.
+const SUBNET_MEMORY_THRESHOLD: NumBytes = NumBytes::new(450 * GIB);
+
 /// This is the upper limit on how much logical storage canisters can request to
 /// be store on a given subnet.
 ///
@@ -122,6 +127,11 @@ pub struct Config {
     /// The maximum number of instructions that the methods that are invoked to
     /// check message acceptance can run for.
     pub max_instructions_for_message_acceptance_calls: NumInstructions,
+
+    /// This specifies the threshold in bytes at which the subnet memory usage is
+    /// considered to be high. If this value is greater or equal to the subnet
+    /// capacity, then the subnet is never considered to have high usage.
+    pub subnet_memory_threshold: NumBytes,
 
     /// The maximum amount of logical storage available to all the canisters on
     /// the subnet.
@@ -260,6 +270,7 @@ impl Default for Config {
         Self {
             create_funds_whitelist: String::default(),
             max_instructions_for_message_acceptance_calls: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
+            subnet_memory_threshold: SUBNET_MEMORY_THRESHOLD,
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
             subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,

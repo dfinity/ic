@@ -136,6 +136,9 @@ impl WasmtimeInstanceBuilder {
             dirty_page_overhead,
             ComputeAllocation::default(),
         );
+
+        let subnet_memory_capacity = i64::MAX / 2;
+
         let api = ic_system_api::SystemApiImpl::new(
             self.api_type,
             sandbox_safe_system_state,
@@ -151,8 +154,14 @@ impl WasmtimeInstanceBuilder {
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,
+                subnet_memory_capacity: NumBytes::new(subnet_memory_capacity as u64),
+                subnet_memory_threshold: NumBytes::new(subnet_memory_capacity as u64),
             },
-            SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2),
+            SubnetAvailableMemory::new(
+                subnet_memory_capacity,
+                subnet_memory_capacity,
+                subnet_memory_capacity,
+            ),
             embedder.config().feature_flags.wasm_native_stable_memory,
             Memory::new_for_testing(),
             Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),

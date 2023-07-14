@@ -172,6 +172,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             state,
             data_certificate,
             subnet_available_memory,
+            self.config.subnet_memory_capacity,
             max_canister_memory_size,
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,

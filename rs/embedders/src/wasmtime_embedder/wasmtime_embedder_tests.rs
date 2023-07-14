@@ -21,9 +21,14 @@ use ic_wasm_types::BinaryEncodedWasm;
 use lazy_static::lazy_static;
 use wasmtime::{Engine, Module, Store, Val};
 
+const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
+        SUBNET_MEMORY_CAPACITY,
+        SUBNET_MEMORY_CAPACITY,
+        SUBNET_MEMORY_CAPACITY
+    );
 }
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 
@@ -59,6 +64,8 @@ fn test_wasmtime_system_api() {
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
+            subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+            subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
         EmbeddersConfig::default()

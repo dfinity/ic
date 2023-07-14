@@ -88,6 +88,8 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
 
     let canister_current_memory_usage = NumBytes::new(0);
 
+    let subnet_memory_capacity = i64::MAX / 2;
+
     let execution_parameters = ExecutionParameters {
         instruction_limits: InstructionLimits::new(
             FlagStatus::Disabled,
@@ -99,10 +101,15 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
+        subnet_memory_capacity: NumBytes::new(subnet_memory_capacity as u64),
+        subnet_memory_threshold: NumBytes::new(subnet_memory_capacity as u64),
     };
 
-    let subnet_available_memory =
-        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
+    let subnet_available_memory = SubnetAvailableMemory::new(
+        subnet_memory_capacity,
+        subnet_memory_capacity,
+        subnet_memory_capacity,
+    );
 
     let compilation_cache = Arc::new(CompilationCache::new(NumBytes::new(0)));
 
