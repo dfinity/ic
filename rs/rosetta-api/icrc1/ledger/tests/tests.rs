@@ -201,6 +201,26 @@ fn test_feature_flags() {
 }
 
 #[test]
+fn test_transfer_from_smoke() {
+    ic_icrc1_ledger_sm_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_self() {
+    ic_icrc1_ledger_sm_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_minter() {
+    ic_icrc1_ledger_sm_tests::test_transfer_from_minter(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_burn() {
+    ic_icrc1_ledger_sm_tests::test_transfer_from_burn(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_block_transformation() {
     ic_icrc1_ledger_sm_tests::icrc1_test_block_transformation(
         std::fs::read(std::env::var("IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH").unwrap())

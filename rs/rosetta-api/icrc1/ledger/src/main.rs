@@ -11,9 +11,10 @@ use ic_icrc1::{
 use ic_icrc1_ledger::{Ledger, LedgerArgument};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
+    TransferError as CoreTransferError,
 };
 use ic_ledger_core::{approvals::Approvals, timestamp::TimeStamp, tokens::Tokens};
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::DataCertificate;
 use icrc_ledger_types::{
@@ -27,6 +28,10 @@ use icrc_ledger_types::{
 use icrc_ledger_types::{
     icrc1::account::Account,
     icrc2::allowance::{Allowance, AllowanceArgs},
+};
+use icrc_ledger_types::{
+    icrc1::transfer::{TransferArg, TransferError},
+    icrc2::transfer_from::{TransferFromArgs, TransferFromError},
 };
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
@@ -261,51 +266,59 @@ fn icrc1_total_supply() -> Nat {
     Access::with_ledger(|ledger| Nat::from(ledger.balances().total_supply().get_e8s()))
 }
 
-#[update]
-#[candid_method(update)]
-async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
+async fn execute_transfer(
+    from_account: Account,
+    to: Account,
+    spender: Option<Account>,
+    fee: Option<Nat>,
+    amount: Nat,
+    memo: Option<Memo>,
+    created_at_time: Option<u64>,
+) -> Result<Nat, CoreTransferError<Tokens>> {
     let block_idx = Access::with_ledger_mut(|ledger| {
+        if spender.is_some() && !ledger.feature_flags().icrc2 {
+            ic_cdk::trap("ICRC-2 features are not enabled on the ledger.");
+        }
         let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-        let created_at_time = arg
-            .created_at_time
-            .map(TimeStamp::from_nanos_since_unix_epoch);
+        let created_at_time = created_at_time.map(TimeStamp::from_nanos_since_unix_epoch);
 
-        let from_account = Account {
-            owner: ic_cdk::api::caller(),
-            subaccount: arg.from_subaccount,
-        };
-        match arg.memo.as_ref() {
+        match memo.as_ref() {
             Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
-                ic_cdk::trap("the memo field is too large")
+                ic_cdk::trap(&format!(
+                    "the memo field size of {} bytes is above the allowed limit of {} bytes",
+                    memo.0.len(),
+                    ledger.max_memo_length()
+                ))
             }
             _ => {}
         };
-        let amount = match arg.amount.0.to_u64() {
+        let amount = match amount.0.to_u64() {
             Some(n) => Tokens::from_e8s(n),
             None => {
                 // No one can have so many tokens
-                let balance = Nat::from(ledger.balances().account_balance(&from_account).get_e8s());
-                assert!(balance < arg.amount);
-                return Err(TransferError::InsufficientFunds { balance });
+                let balance_tokens = ledger.balances().account_balance(&from_account);
+                let balance = Nat::from(balance_tokens.get_e8s());
+                assert!(balance < amount);
+                return Err(CoreTransferError::InsufficientFunds {
+                    balance: balance_tokens,
+                });
             }
         };
 
-        let (tx, effective_fee) = if &arg.to == ledger.minting_account() {
-            let expected_fee = Nat::from(0u64);
-            if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
-                return Err(TransferError::BadFee { expected_fee });
+        let (tx, effective_fee) = if &to == ledger.minting_account() {
+            let expected_fee = Tokens::ZERO;
+            if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
+                return Err(CoreTransferError::BadFee { expected_fee });
             }
 
             let balance = ledger.balances().account_balance(&from_account);
             let min_burn_amount = ledger.transfer_fee().min(balance);
             if amount < min_burn_amount {
-                return Err(TransferError::BadBurn {
-                    min_burn_amount: Nat::from(min_burn_amount.get_e8s()),
-                });
+                return Err(CoreTransferError::BadBurn { min_burn_amount });
             }
             if amount == Tokens::ZERO {
-                return Err(TransferError::BadBurn {
-                    min_burn_amount: Nat::from(ledger.transfer_fee().get_e8s()),
+                return Err(CoreTransferError::BadBurn {
+                    min_burn_amount: ledger.transfer_fee(),
                 });
             }
 
@@ -313,51 +326,48 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
                 Transaction {
                     operation: Operation::Burn {
                         from: from_account,
+                        spender,
                         amount: amount.get_e8s(),
                     },
                     created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
-                    memo: arg.memo,
+                    memo,
                 },
                 Tokens::ZERO,
             )
         } else if &from_account == ledger.minting_account() {
-            let expected_fee = Nat::from(0u64);
-            if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
-                return Err(TransferError::BadFee { expected_fee });
+            if spender.is_some() {
+                ic_cdk::trap("the minter account cannot delegate mints")
+            }
+            let expected_fee = Tokens::ZERO;
+            if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
+                return Err(CoreTransferError::BadFee { expected_fee });
             }
             (
-                Transaction::mint(arg.to, amount, created_at_time, arg.memo),
+                Transaction::mint(to, amount, created_at_time, memo),
                 Tokens::ZERO,
             )
         } else {
             let expected_fee_tokens = ledger.transfer_fee();
-            let expected_fee = Nat::from(expected_fee_tokens.get_e8s());
-            if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
-                return Err(TransferError::BadFee { expected_fee });
+            if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee_tokens.get_e8s())) {
+                return Err(CoreTransferError::BadFee {
+                    expected_fee: expected_fee_tokens,
+                });
             }
             (
                 Transaction::transfer(
                     from_account,
-                    arg.to,
-                    None,
+                    to,
+                    spender,
                     amount,
-                    arg.fee.map(|_| expected_fee_tokens),
+                    fee.map(|_| expected_fee_tokens),
                     created_at_time,
-                    arg.memo,
+                    memo,
                 ),
                 expected_fee_tokens,
             )
         };
 
-        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)
-            .map_err(convert_transfer_error)
-            .map_err(|err| {
-                let err: TransferError = match err.try_into() {
-                    Ok(err) => err,
-                    Err(err) => ic_cdk::trap(&err),
-                };
-                err
-            })?;
+        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
         Ok(block_idx)
     })?;
 
@@ -367,6 +377,60 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
 
     archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
+    let from_account = Account {
+        owner: ic_cdk::api::caller(),
+        subaccount: arg.from_subaccount,
+    };
+    execute_transfer(
+        from_account,
+        arg.to,
+        None,
+        arg.fee,
+        arg.amount,
+        arg.memo,
+        arg.created_at_time,
+    )
+    .await
+    .map_err(convert_transfer_error)
+    .map_err(|err| {
+        let err: TransferError = match err.try_into() {
+            Ok(err) => err,
+            Err(err) => ic_cdk::trap(&err),
+        };
+        err
+    })
+}
+
+#[update]
+#[candid_method(update)]
+async fn icrc2_transfer_from(arg: TransferFromArgs) -> Result<Nat, TransferFromError> {
+    let spender_account = Account {
+        owner: ic_cdk::api::caller(),
+        subaccount: arg.spender_subaccount,
+    };
+    execute_transfer(
+        arg.from,
+        arg.to,
+        Some(spender_account),
+        arg.fee,
+        arg.amount,
+        arg.memo,
+        arg.created_at_time,
+    )
+    .await
+    .map_err(convert_transfer_error)
+    .map_err(|err| {
+        let err: TransferFromError = match err.try_into() {
+            Ok(err) => err,
+            Err(err) => ic_cdk::trap(&err),
+        };
+        err
+    })
 }
 
 #[query]

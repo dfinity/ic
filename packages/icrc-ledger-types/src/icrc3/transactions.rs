@@ -27,6 +27,7 @@ pub struct Mint {
 pub struct Burn {
     pub amount: Nat,
     pub from: Account,
+    pub spender: Option<Account>,
     pub memo: Option<Memo>,
     pub created_at_time: Option<u64>,
 }

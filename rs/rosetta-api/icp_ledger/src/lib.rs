@@ -214,6 +214,7 @@ impl LedgerTransaction for Transaction {
 
     fn burn(
         from: Self::AccountId,
+        _spender: Option<Self::AccountId>,
         amount: Tokens,
         created_at_time: Option<TimeStamp>,
         memo: Option<u64>,

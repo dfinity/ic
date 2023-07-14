@@ -36,6 +36,7 @@ fn operation_strategy() -> impl Strategy<Value = Operation> {
         }),
         (any::<u16>(), account_strategy()).prop_map(|(amount, from)| Operation::Burn {
             from,
+            spender: None,
             amount: amount.into()
         }),
         (
@@ -172,7 +173,9 @@ pub fn transfer_args_with_sender(
                     memo: block.transaction.memo,
                     amount: amount.into(),
                 },
-                Operation::Burn { from: _, amount } => TransferArg {
+                Operation::Burn {
+                    from: _, amount, ..
+                } => TransferArg {
                     from_subaccount: sender.subaccount,
                     to: Principal::anonymous().into(),
                     fee: None,

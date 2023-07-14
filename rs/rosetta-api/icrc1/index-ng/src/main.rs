@@ -435,7 +435,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
         &PROFILING_DATA,
         "append_blocks.process_balance_changes",
         move || match block.transaction.operation {
-            Operation::Burn { from, amount } => debit(block_index, from, amount),
+            Operation::Burn { from, amount, .. } => debit(block_index, from, amount),
             Operation::Mint { to, amount } => credit(block_index, to, amount),
             Operation::Transfer {
                 from,
@@ -646,9 +646,14 @@ fn encoded_block_bytes_to_flat_transaction(
     let created_at_time = block.transaction.created_at_time;
     let memo = block.transaction.memo;
     match block.transaction.operation {
-        Operation::Burn { from, amount } => Transaction::burn(
+        Operation::Burn {
+            from,
+            amount,
+            spender,
+        } => Transaction::burn(
             Burn {
                 from,
+                spender,
                 amount: amount.into(),
                 created_at_time,
                 memo,

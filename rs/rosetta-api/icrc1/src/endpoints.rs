@@ -5,6 +5,7 @@ use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
 use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
 use serde::Deserialize;
 
@@ -19,38 +20,41 @@ pub struct EndpointsTransferError<Tokens>(pub CoreTransferError<Tokens>);
 impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferError {
     type Error = String;
     fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
-        use ic_ledger_canister_core::ledger::TransferError as LTE;
+        use ic_ledger_canister_core::ledger::TransferError as CTE;
         use TransferError as TE;
 
         Ok(match err.0 {
-            LTE::BadFee { expected_fee } => TE::BadFee {
+            CTE::BadFee { expected_fee } => TE::BadFee {
                 expected_fee: expected_fee.into(),
             },
-            LTE::InsufficientFunds { balance } => TE::InsufficientFunds {
+            CTE::InsufficientFunds { balance } => TE::InsufficientFunds {
                 balance: balance.into(),
             },
-            LTE::TxTooOld { .. } => TE::TooOld,
-            LTE::TxCreatedInFuture { ledger_time } => TE::CreatedInFuture {
+            CTE::TxTooOld { .. } => TE::TooOld,
+            CTE::TxCreatedInFuture { ledger_time } => TE::CreatedInFuture {
                 ledger_time: ledger_time.as_nanos_since_unix_epoch(),
             },
-            LTE::TxThrottled => TE::TemporarilyUnavailable,
-            LTE::TxDuplicate { duplicate_of } => TE::Duplicate {
+            CTE::TxThrottled => TE::TemporarilyUnavailable,
+            CTE::TxDuplicate { duplicate_of } => TE::Duplicate {
                 duplicate_of: Nat::from(duplicate_of),
             },
-            LTE::InsufficientAllowance { .. } => {
+            CTE::InsufficientAllowance { .. } => {
                 return Err(
                     "InsufficientAllowance error should not happen for transfer".to_string()
                 );
             }
-            LTE::ExpiredApproval { .. } => {
+            CTE::ExpiredApproval { .. } => {
                 return Err("ExpiredApproval error should not happen for transfer".to_string());
             }
-            LTE::AllowanceChanged { .. } => {
+            CTE::AllowanceChanged { .. } => {
                 return Err("AllowanceChanged error should not happen for transfer".to_string());
             }
-            LTE::SelfApproval { .. } => {
+            CTE::SelfApproval { .. } => {
                 return Err("SelfApproval error should not happen for transfer".to_string());
             }
+            CTE::BadBurn { min_burn_amount } => TE::BadBurn {
+                min_burn_amount: min_burn_amount.into(),
+            },
         })
     }
 }
@@ -58,38 +62,81 @@ impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferErr
 impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for ApproveError {
     type Error = String;
     fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
-        use ic_ledger_canister_core::ledger::TransferError as LTE;
+        use ic_ledger_canister_core::ledger::TransferError as CTE;
         use ApproveError as AE;
 
         Ok(match err.0 {
-            LTE::BadFee { expected_fee } => AE::BadFee {
+            CTE::BadFee { expected_fee } => AE::BadFee {
                 expected_fee: expected_fee.into(),
             },
-            LTE::InsufficientFunds { balance } => AE::InsufficientFunds {
+            CTE::InsufficientFunds { balance } => AE::InsufficientFunds {
                 balance: balance.into(),
             },
-            LTE::TxTooOld { .. } => AE::TooOld,
-            LTE::TxCreatedInFuture { ledger_time } => AE::CreatedInFuture {
+            CTE::TxTooOld { .. } => AE::TooOld,
+            CTE::TxCreatedInFuture { ledger_time } => AE::CreatedInFuture {
                 ledger_time: ledger_time.as_nanos_since_unix_epoch(),
             },
-            LTE::TxThrottled => AE::TemporarilyUnavailable,
-            LTE::TxDuplicate { duplicate_of } => AE::Duplicate {
+            CTE::TxThrottled => AE::TemporarilyUnavailable,
+            CTE::TxDuplicate { duplicate_of } => AE::Duplicate {
                 duplicate_of: Nat::from(duplicate_of),
             },
-            LTE::InsufficientAllowance { .. } => {
+            CTE::InsufficientAllowance { .. } => {
                 return Err(
                     "InsufficientAllowance error should not happen for approval".to_string()
                 );
             }
-            LTE::ExpiredApproval { ledger_time } => AE::Expired {
+            CTE::ExpiredApproval { ledger_time } => AE::Expired {
                 ledger_time: ledger_time.as_nanos_since_unix_epoch(),
             },
-            LTE::AllowanceChanged { current_allowance } => AE::AllowanceChanged {
+            CTE::AllowanceChanged { current_allowance } => AE::AllowanceChanged {
                 current_allowance: current_allowance.into(),
             },
-            LTE::SelfApproval { .. } => {
+            CTE::SelfApproval { .. } => {
                 return Err("self-approvals are not allowed".to_string());
             }
+            CTE::BadBurn { .. } => {
+                return Err("BadBurn error should not happen for Approve".to_string());
+            }
+        })
+    }
+}
+
+impl<Tokens: TokensType> TryFrom<EndpointsTransferError<Tokens>> for TransferFromError {
+    type Error = String;
+    fn try_from(err: EndpointsTransferError<Tokens>) -> Result<Self, Self::Error> {
+        use ic_ledger_canister_core::ledger::TransferError as CTE;
+        use TransferFromError as TFE;
+
+        Ok(match err.0 {
+            CTE::BadFee { expected_fee } => TFE::BadFee {
+                expected_fee: expected_fee.into(),
+            },
+            CTE::InsufficientFunds { balance } => TFE::InsufficientFunds {
+                balance: balance.into(),
+            },
+            CTE::TxTooOld { .. } => TFE::TooOld,
+            CTE::TxCreatedInFuture { ledger_time } => TFE::CreatedInFuture {
+                ledger_time: ledger_time.as_nanos_since_unix_epoch(),
+            },
+            CTE::TxThrottled => TFE::TemporarilyUnavailable,
+            CTE::TxDuplicate { duplicate_of } => TFE::Duplicate {
+                duplicate_of: Nat::from(duplicate_of),
+            },
+            CTE::InsufficientAllowance { allowance } => TFE::InsufficientAllowance {
+                allowance: allowance.into(),
+            },
+            CTE::ExpiredApproval { .. } => {
+                return Err("Expired not implemented for TransferFromError".to_string());
+            }
+            CTE::AllowanceChanged { .. } => {
+                return Err("AllowanceChanged not implemented for TransferFromError".to_string());
+            }
+            CTE::SelfApproval { .. } => {
+                return Err("self approval not implemented for TransferFromError".to_string());
+            }
+            CTE::BadBurn { min_burn_amount } => TFE::BadBurn {
+                min_burn_amount: min_burn_amount.into(),
+            },
         })
     }
 }
@@ -127,10 +174,15 @@ impl From<Block> for Transaction {
                     memo,
                 });
             }
-            Operation::Burn { from, amount } => {
+            Operation::Burn {
+                from,
+                spender,
+                amount,
+            } => {
                 tx.kind = "burn".to_string();
                 tx.burn = Some(Burn {
                     from,
+                    spender,
                     amount: Nat::from(amount),
                     created_at_time,
                     memo,
