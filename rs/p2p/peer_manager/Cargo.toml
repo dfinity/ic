@@ -18,10 +18,6 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 tokio = { version = "1.15.0", features = ["full"] }
 
 [dev-dependencies]
-ic-protobuf = { path = "../../protobuf" }
-ic-registry-client-fake = { path = "../../registry/fake" }
-ic-registry-keys = { path = "../../registry/keys" }
-ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
+ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
-ic-test-utilities-registry = { path = "../../test_utilities/registry" }

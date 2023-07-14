@@ -3,7 +3,7 @@ use std::{
     error::Error,
     future::Future,
     io::{self, IoSliceMut},
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{Arc, RwLock},
     task::Poll,
     time::Duration,
@@ -11,11 +11,17 @@ use std::{
 
 use axum::Router;
 use bytes::Bytes;
+use either::Either;
 use futures::future::join_all;
 use http::Request;
-use ic_crypto_test_utils::tls::x509_certificates::CertWithPrivateKey;
-use ic_crypto_tls_interfaces::TlsConfig;
-use ic_interfaces_registry_mocks::MockRegistryClient;
+use ic_icos_sev::Sev;
+use ic_logger::ReplicaLogger;
+use ic_metrics::MetricsRegistry;
+use ic_p2p_test_utils::{
+    create_peer_manager_and_registry_handle, temp_crypto_component_with_tls_keys,
+    RegistryConsensusHandle,
+};
+use ic_peer_manager::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_types::{NodeId, RegistryVersion};
 use quinn::{
@@ -23,11 +29,9 @@ use quinn::{
     udp::{EcnCodepoint, Transmit},
     AsyncUdpSocket,
 };
-use rustls::{
-    self,
-    client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    server::{ClientCertVerified, ClientCertVerifier},
-    ClientConfig, DigitallySignedStruct, ServerConfig, ServerName,
+use tokio::{
+    select,
+    sync::{mpsc, oneshot, watch, Notify},
 };
 use turmoil::Sim;
 
@@ -140,174 +144,6 @@ impl AsyncUdpSocket for CustomUdp {
     fn may_fragment(&self) -> bool {
         false
     }
-}
-
-pub struct DummyTlsConfig {
-    client_config: ClientConfig,
-    server_config: ServerConfig,
-}
-
-impl DummyTlsConfig {
-    pub fn new(node: NodeId) -> Self {
-        Self {
-            client_config: Self::create_client_config(node),
-            server_config: Self::create_server_config(node),
-        }
-    }
-
-    fn create_client_config(node: NodeId) -> ClientConfig {
-        let certificate = CertWithPrivateKey::builder()
-            .cn(node.to_string())
-            .build_ed25519();
-
-        let private_key = rustls::PrivateKey(
-            certificate
-                .key_pair()
-                .private_key_to_der()
-                .expect("failed to serialize private key"),
-        );
-        let cert_chain = vec![rustls::Certificate(certificate.cert_der())];
-
-        rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_custom_certificate_verifier(Arc::new(NoVerifier))
-            .with_client_auth_cert(cert_chain, private_key)
-            .expect("Failed to create TLS client config")
-    }
-
-    fn create_server_config(node: NodeId) -> ServerConfig {
-        let certificate = CertWithPrivateKey::builder()
-            .cn(node.to_string())
-            .build_ed25519();
-
-        let private_key = rustls::PrivateKey(
-            certificate
-                .key_pair()
-                .private_key_to_der()
-                .expect("failed to serialize private key"),
-        );
-        let cert_chain = vec![rustls::Certificate(certificate.cert_der())];
-
-        rustls::ServerConfig::builder()
-            .with_safe_defaults()
-            .with_client_cert_verifier(Arc::new(NoVerifier))
-            .with_single_cert(cert_chain, private_key)
-            .expect("Failed to create TLS server config")
-    }
-}
-
-impl TlsConfig for DummyTlsConfig {
-    fn server_config(
-        &self,
-        _allowed_clients: ic_crypto_tls_interfaces::AllowedClients,
-        _registry_version: ic_types::RegistryVersion,
-    ) -> Result<rustls::ServerConfig, ic_crypto_tls_interfaces::TlsConfigError> {
-        Ok(self.server_config.clone())
-    }
-
-    /// Server and client should send certificate ids
-    fn server_config_without_client_auth(
-        &self,
-        _registry_version: ic_types::RegistryVersion,
-    ) -> Result<rustls::ServerConfig, ic_crypto_tls_interfaces::TlsConfigError> {
-        unimplemented!("Not needed for transport tests");
-    }
-
-    fn client_config(
-        &self,
-        _server: ic_types::NodeId,
-        _registry_version: ic_types::RegistryVersion,
-    ) -> Result<rustls::ClientConfig, ic_crypto_tls_interfaces::TlsConfigError> {
-        Ok(self.client_config.clone())
-    }
-}
-
-struct NoVerifier;
-
-impl ServerCertVerifier for NoVerifier {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<ServerCertVerified, rustls::Error> {
-        Ok(ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls::Certificate,
-        _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls::Certificate,
-        _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
-    }
-}
-
-impl ClientCertVerifier for NoVerifier {
-    fn offer_client_auth(&self) -> bool {
-        true
-    }
-
-    fn client_auth_mandatory(&self) -> bool {
-        self.offer_client_auth()
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls::Certificate,
-        _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        unimplemented!("Should not auth with tls 1.2")
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        _message: &[u8],
-        _cert: &rustls::Certificate,
-        _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        Ok(HandshakeSignatureValid::assertion())
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        rustls::client::WebPkiVerifier::verification_schemes()
-    }
-
-    fn client_auth_root_subjects(&self) -> &[rustls::DistinguishedName] {
-        &[]
-    }
-
-    fn verify_client_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::server::ClientCertVerified, rustls::Error> {
-        Ok(ClientCertVerified::assertion())
-    }
-}
-
-pub fn mock_registry_client() -> Arc<MockRegistryClient> {
-    let mut registry_client = MockRegistryClient::new();
-    registry_client
-        .expect_get_latest_version()
-        .return_const(RegistryVersion::from(1));
-
-    Arc::new(registry_client)
 }
 
 /// Utility to check connectivity between peers.
@@ -429,4 +265,117 @@ where
         }
     }
     Ok(false)
+}
+
+// TODO: remove after first node remove test.
+#[allow(dead_code)]
+pub enum PeerManagerAction {
+    Add((NodeId, u16, RegistryVersion)),
+    Remove((NodeId, RegistryVersion)),
+}
+
+pub fn add_peer_manager_to_sim(
+    sim: &mut Sim,
+    stop_notify: Arc<Notify>,
+    log: ReplicaLogger,
+) -> (
+    mpsc::UnboundedSender<PeerManagerAction>,
+    watch::Receiver<SubnetTopology>,
+    RegistryConsensusHandle,
+) {
+    let (peer_manager_sender, mut peer_manager_receiver) = oneshot::channel();
+    let (peer_manager_cmd_sender, mut peer_manager_cmd_receiver) = mpsc::unbounded_channel();
+    sim.client("peer-manager", async move {
+        let rt = tokio::runtime::Handle::current();
+        let (_jh, topology_watcher, mut registry_handler) =
+            create_peer_manager_and_registry_handle(&rt, log);
+
+        let _ = peer_manager_sender.send((topology_watcher, registry_handler.clone()));
+
+        // Listen for peer manager actions of finished notification.
+        loop {
+            select! {
+                _ = stop_notify.notified() => {
+                    break;
+                }
+                Some(action) = peer_manager_cmd_receiver.recv() => {
+                    match action {
+                        PeerManagerAction::Add((peer, port, rv)) => {
+                            registry_handler.add_node(
+                                rv,
+                                peer,
+                                &turmoil::lookup(peer.to_string()).to_string(),
+                                port
+                            );
+                        }
+                        PeerManagerAction::Remove((peer, rv)) => {
+                            registry_handler.remove_node(
+                                rv,
+                                peer,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    });
+
+    // Get topology receiver.
+    loop {
+        if let Ok((watcher, registry_handler)) = peer_manager_receiver.try_recv() {
+            break (peer_manager_cmd_sender, watcher, registry_handler);
+        }
+        sim.step().unwrap();
+    }
+}
+
+pub fn add_transport_to_sim(
+    sim: &mut Sim,
+    log: ReplicaLogger,
+    peer: NodeId,
+    port: u16,
+    registry_handler: RegistryConsensusHandle,
+    topology_watcher: watch::Receiver<SubnetTopology>,
+    conn_checker: ConnectivityChecker,
+) {
+    let node_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, port).into();
+    let node_crypto = temp_crypto_component_with_tls_keys(&registry_handler, peer);
+    registry_handler.registry_client.update_to_latest_version();
+
+    sim.host(peer.to_string(), move || {
+        let log = log.clone();
+        let registry_client = registry_handler.registry_client.clone();
+        let node_crypto_clone = node_crypto.clone();
+        let conn_checker_clone = conn_checker.clone();
+        let topology_watcher_clone = topology_watcher.clone();
+
+        async move {
+            let udp_listener = turmoil::net::UdpSocket::bind(node_addr).await.unwrap();
+            let this_ip = turmoil::lookup(peer.to_string());
+            let custom_udp = CustomUdp::new(this_ip, udp_listener);
+
+            let router = Router::new().merge(ConnectivityChecker::router());
+
+            let sev_handshake = Sev::new(peer, registry_client.clone());
+
+            let transport = QuicTransport::build(
+                tokio::runtime::Handle::current(),
+                log,
+                node_crypto_clone,
+                registry_client,
+                Arc::new(sev_handshake),
+                peer,
+                topology_watcher_clone,
+                Either::Right(custom_udp),
+                &MetricsRegistry::default(),
+                router,
+            );
+
+            loop {
+                conn_checker_clone.check(peer, &transport).await;
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        }
+    });
 }

@@ -16,8 +16,8 @@ use ic_crypto_temp_crypto_vault::{
     RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
 };
 use ic_crypto_tls_interfaces::{
-    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake, TlsPublicKeyCert,
-    TlsServerHandshakeError, TlsStream,
+    AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsConfig, TlsConfigError,
+    TlsHandshake, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
 };
 use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_crypto_utils_time::CurrentSystemTimeSource;
@@ -78,6 +78,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::TcpStream;
+use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 
 /// A crypto component set up in a temporary directory. The directory is
 /// automatically deleted when this component goes out of scope.
@@ -846,6 +847,36 @@ impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> TlsHandshake
         self.crypto_component
             .perform_tls_client_handshake(tcp_stream, server, registry_version)
             .await
+    }
+}
+
+impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng> TlsConfig
+    for TempCryptoComponentGeneric<C, R>
+{
+    fn server_config(
+        &self,
+        allowed_clients: AllowedClients,
+        registry_version: RegistryVersion,
+    ) -> Result<ServerConfig, TlsConfigError> {
+        self.crypto_component
+            .server_config(allowed_clients, registry_version)
+    }
+
+    fn server_config_without_client_auth(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<ServerConfig, TlsConfigError> {
+        self.crypto_component
+            .server_config_without_client_auth(registry_version)
+    }
+
+    fn client_config(
+        &self,
+        server: NodeId,
+        registry_version: RegistryVersion,
+    ) -> Result<ClientConfig, TlsConfigError> {
+        self.crypto_component
+            .client_config(server, registry_version)
     }
 }
 
