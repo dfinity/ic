@@ -1215,6 +1215,8 @@ impl ExecutionEnvironment {
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode,
+            subnet_memory_capacity: self.config.subnet_memory_capacity,
+            subnet_memory_threshold: self.config.subnet_memory_threshold,
         }
     }
 

@@ -47,9 +47,14 @@ pub const LOCAL_CANISTER_ID: u64 = CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 pub const REMOTE_CANISTER_ID: u64 = 1;
 pub const USER_ID: u64 = 0;
 
+const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX;
+
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX, i64::MAX, i64::MAX);
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
+        SUBNET_MEMORY_CAPACITY,
+        SUBNET_MEMORY_CAPACITY,
+        SUBNET_MEMORY_CAPACITY
+    );
 }
 
 /// Pieces needed to execute a benchmark.
@@ -148,6 +153,8 @@ where
         compute_allocation: canister_state.compute_allocation(),
         subnet_type: hypervisor.subnet_type(),
         execution_mode: ExecutionMode::Replicated,
+        subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+        subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
     };
 
     let subnets = vec![own_subnet_id, nns_subnet_id];

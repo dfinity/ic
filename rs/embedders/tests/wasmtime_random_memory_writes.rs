@@ -32,9 +32,14 @@ use std::sync::Arc;
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 const STABLE_OP_BYTES: u64 = 37;
 
+const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
+
 lazy_static! {
-    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
+    static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory = SubnetAvailableMemory::new(
+        SUBNET_MEMORY_CAPACITY,
+        SUBNET_MEMORY_CAPACITY,
+        SUBNET_MEMORY_CAPACITY
+    );
 }
 
 fn test_api_for_update(
@@ -87,6 +92,8 @@ fn test_api_for_update(
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
+            subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+            subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
         EmbeddersConfig::default()

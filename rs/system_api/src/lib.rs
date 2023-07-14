@@ -158,6 +158,8 @@ pub struct ExecutionParameters {
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,
+    pub subnet_memory_capacity: NumBytes,
+    pub subnet_memory_threshold: NumBytes,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
