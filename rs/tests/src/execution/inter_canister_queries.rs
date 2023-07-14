@@ -350,3 +350,39 @@ pub fn inter_canister_query_first_canister_multiple_request(env: TestEnv) {
         }
     });
 }
+
+/// User calls a composite query in canister A; A calls a composite query in B;
+/// B calls a composite query in C; C replies to B; B replies to A; A replies to
+/// user.
+pub fn composite_query_three_canisters(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
+        async move {
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let canister_b =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let canister_c =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let arbitrary_bytes = b";ioapusdvzn,x";
+            assert_eq!(
+                canister_a
+                    .composite_query(wasm().composite_query(
+                        canister_b.canister_id(),
+                        call_args().other_side(wasm().composite_query(
+                            canister_c.canister_id(),
+                            call_args().other_side(wasm().reply_data(arbitrary_bytes))
+                        ))
+                    ))
+                    .await
+                    .unwrap(),
+                arbitrary_bytes
+            );
+        }
+    });
+}
