@@ -485,7 +485,7 @@ where
             steps: versions
                 .into_iter()
                 .filter(|v| v.is_complete_version())
-                .map(|v| ListUpgradeStep::new(v))
+                .map(ListUpgradeStep::new)
                 .collect(),
         }
     }
@@ -1733,7 +1733,7 @@ impl UpgradePath {
         match self
             .sns_specific_upgrade_path
             .entry(sns_governance_canister_id)
-            .or_insert_with(|| HashMap::new())
+            .or_insert_with(HashMap::new)
             .entry(from)
         {
             Entry::Occupied(occupied) => {

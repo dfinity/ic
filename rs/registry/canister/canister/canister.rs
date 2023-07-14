@@ -405,10 +405,7 @@ fn retire_replica_version_(payload: RetireReplicaVersionPayload) {
 #[export_name = "canister_update update_elected_replica_versions"]
 fn update_elected_replica_versions() {
     check_caller_is_governance_and_log("update_elected_replica_versions");
-    over(
-        candid_one,
-        |payload: UpdateElectedReplicaVersionsPayload| update_elected_replica_versions_(payload),
-    );
+    over(candid_one, update_elected_replica_versions_);
 }
 
 #[candid_method(update, rename = "update_elected_replica_versions")]
