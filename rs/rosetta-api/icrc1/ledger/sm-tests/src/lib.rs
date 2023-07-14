@@ -12,6 +12,7 @@ use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
+use icrc_ledger_types::icrc2::transfer_from::{TransferFromArgs, TransferFromError};
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use icrc_ledger_types::icrc3::blocks::BlockRange;
 use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
@@ -399,10 +400,31 @@ fn send_approval(
     .map(|n| n.0.to_u64().unwrap())
 }
 
-fn get_allowance(
+fn send_transfer_from(
     env: &StateMachine,
     ledger: CanisterId,
     from: Principal,
+    arg: &TransferFromArgs,
+) -> Result<BlockIndex, TransferFromError> {
+    Decode!(
+        &env.execute_ingress_as(
+            PrincipalId(from),
+            ledger,
+            "icrc2_transfer_from",
+            Encode!(arg)
+            .unwrap()
+        )
+        .expect("failed to apply approval")
+        .bytes(),
+        Result<Nat, TransferFromError>
+    )
+    .expect("failed to decode transfer_from response")
+    .map(|n| n.0.to_u64().unwrap())
+}
+
+fn get_allowance(
+    env: &StateMachine,
+    ledger: CanisterId,
     account: impl Into<Account>,
     spender: impl Into<Account>,
 ) -> Allowance {
@@ -411,14 +433,9 @@ fn get_allowance(
         spender: spender.into(),
     };
     Decode!(
-        &env.execute_ingress_as(
-            PrincipalId(from),
-            ledger,
-            "icrc2_allowance",
-            Encode!(&arg).unwrap()
-        )
-        .expect("failed to transfer funds")
-        .bytes(),
+        &env.query(ledger, "icrc2_allowance", Encode!(&arg).unwrap())
+            .expect("failed to guery the allowance")
+            .bytes(),
         Allowance
     )
     .expect("failed to decode allowance response")
@@ -463,7 +480,11 @@ fn arb_mint() -> impl Strategy<Value = Operation> {
 }
 
 fn arb_burn() -> impl Strategy<Value = Operation> {
-    (arb_account(), arb_amount()).prop_map(|(from, amount)| Operation::Burn { from, amount })
+    (arb_account(), arb_amount()).prop_map(|(from, amount)| Operation::Burn {
+        from,
+        spender: None,
+        amount,
+    })
 }
 
 fn arb_operation() -> impl Strategy<Value = Operation> {
@@ -1869,6 +1890,22 @@ fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs
     }
 }
 
+fn default_transfer_from_args(
+    from: impl Into<Account>,
+    to: impl Into<Account>,
+    amount: u64,
+) -> TransferFromArgs {
+    TransferFromArgs {
+        spender_subaccount: None,
+        from: from.into(),
+        to: to.into(),
+        amount: Nat::from(amount),
+        fee: Some(Nat::from(FEE)),
+        memo: None,
+        created_at_time: None,
+    }
+}
+
 pub fn test_approve_smoke<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
@@ -1895,7 +1932,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -1907,8 +1944,8 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
-    let allowance_sub_1 = get_allowance(&env, canister_id, from.0, from_sub_1, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance_sub_1 = get_allowance(&env, canister_id, from_sub_1, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(allowance_sub_1.allowance.0.to_u64().unwrap(), 1_000_000);
@@ -1942,7 +1979,7 @@ where
             ledger_time: system_time_to_nanos(env.time())
         })
     );
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 100_000);
@@ -1955,7 +1992,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, Some(expiration));
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -1968,7 +2005,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 40_000);
     assert_eq!(allowance.expires_at, Some(new_expiration));
     assert_eq!(balance_of(&env, canister_id, from.0), 80_000);
@@ -1981,7 +2018,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 300_000);
     assert_eq!(allowance.expires_at, Some(new_expiration));
     assert_eq!(balance_of(&env, canister_id, from.0), 70_000);
@@ -2015,7 +2052,7 @@ where
         .unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
     assert!(err.description().ends_with("self approval is not allowed"));
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 100_000);
@@ -2051,7 +2088,7 @@ where
             current_allowance: Nat::from(150_000)
         })
     );
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2067,7 +2104,7 @@ where
             current_allowance: Nat::from(150_000)
         })
     );
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2079,7 +2116,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 400_000);
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 80_000);
@@ -2109,7 +2146,7 @@ where
             balance: Nat::from(5_000)
         })
     );
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(balance_of(&env, canister_id, from.0), 5_000);
@@ -2138,7 +2175,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), u64::MAX);
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2172,7 +2209,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 2);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
     assert_eq!(allowance.expires_at, expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2188,8 +2225,8 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 3);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
-    let allowance_sub_1 = get_allowance(&env, canister_id, from.0, from_sub_1, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    let allowance_sub_1 = get_allowance(&env, canister_id, from_sub_1, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 0);
     assert_eq!(allowance.expires_at, None);
     assert_eq!(allowance_sub_1.allowance.0.to_u64().unwrap(), 100_000);
@@ -2225,7 +2262,7 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 140_000);
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
@@ -2240,6 +2277,7 @@ where
 
     let from = PrincipalId::new_user_test_id(1);
     let spender = PrincipalId::new_user_test_id(2);
+    let to = PrincipalId::new_user_test_id(3);
 
     let args = encode_init_args(InitArgs {
         feature_flags: None,
@@ -2255,6 +2293,7 @@ where
         account: from.0.into(),
         spender: spender.0.into(),
     };
+    let transfer_from_args = default_transfer_from_args(from.0, to.0, 10_000);
 
     fn expect_icrc2_disabled(
         env: &StateMachine,
@@ -2262,6 +2301,7 @@ where
         canister_id: CanisterId,
         approve_args: &ApproveArgs,
         allowance_args: &AllowanceArgs,
+        transfer_from_args: &TransferFromArgs,
     ) {
         let err = env
             .execute_ingress_as(
@@ -2293,9 +2333,31 @@ where
             "Expected ICRC-2 disabled error, got: {}",
             err.description()
         );
+        let err = env
+            .execute_ingress_as(
+                from,
+                canister_id,
+                "icrc2_transfer_from",
+                Encode!(&transfer_from_args).unwrap(),
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+        assert!(
+            err.description()
+                .ends_with("ICRC-2 features are not enabled on the ledger."),
+            "Expected ICRC-2 disabled error, got: {}",
+            err.description()
+        );
     }
 
-    expect_icrc2_disabled(&env, from, canister_id, &approve_args, &allowance_args);
+    expect_icrc2_disabled(
+        &env,
+        from,
+        canister_id,
+        &approve_args,
+        &allowance_args,
+        &transfer_from_args,
+    );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
         feature_flags: None,
@@ -2309,7 +2371,14 @@ where
     )
     .expect("failed to upgrade the archive canister");
 
-    expect_icrc2_disabled(&env, from, canister_id, &approve_args, &allowance_args);
+    expect_icrc2_disabled(
+        &env,
+        from,
+        canister_id,
+        &approve_args,
+        &allowance_args,
+        &transfer_from_args,
+    );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
         feature_flags: Some(FeatureFlags { icrc2: true }),
@@ -2322,6 +2391,184 @@ where
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
-    let allowance = get_allowance(&env, canister_id, from.0, from.0, spender.0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(block_index, 2);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
+    assert_eq!(balance_of(&env, canister_id, from.0), 70_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 10_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_transfer_from_smoke<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+    let to = PrincipalId::new_user_test_id(3);
+
+    let from_sub_1 = Account {
+        owner: from.0,
+        subaccount: Some([1; 32]),
+    };
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000), (from_sub_1, 100_000)],
+    );
+
+    let transfer_from_args = default_transfer_from_args(from.0, to.0, 30_000);
+    assert_eq!(
+        send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0)
+        })
+    );
+
+    let mut approve_args = default_approve_args(spender.0, 150_000);
+    send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    approve_args.from_subaccount = Some([1; 32]);
+    approve_args.amount = Nat::from(50_000);
+    send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+
+    let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(block_index, 4);
+    // `from` paid 2 fees (approval and transfer_from) and 30_000 was transfered
+    assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
+    // `from_sub_1` paid approval fee
+    assert_eq!(balance_of(&env, canister_id, from_sub_1), 90_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 110_000);
+    let allowance = get_allowance(&env, canister_id, from_sub_1, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 50_000);
+
+    let transfer_from_args = default_transfer_from_args(from_sub_1, to.0, 30_000);
+    let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(block_index, 5);
+    assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
+    // `from_sub_1` paid 2 fees (approval and transfer_from) and 30_000 was transfered
+    assert_eq!(balance_of(&env, canister_id, from_sub_1), 50_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 60_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 110_000);
+    let allowance = get_allowance(&env, canister_id, from_sub_1, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 10_000);
+
+    let transfer_from_args = default_transfer_from_args(from.0, to.0, 60_000);
+    assert_eq!(
+        send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientFunds {
+            balance: Nat::from(50_000)
+        })
+    );
+    assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
+    assert_eq!(balance_of(&env, canister_id, from_sub_1), 50_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 60_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+
+    let transfer_from_args = default_transfer_from_args(from_sub_1, to.0, 10_000);
+    assert_eq!(
+        send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(10_000)
+        })
+    );
+    assert_eq!(balance_of(&env, canister_id, from.0), 50_000);
+    assert_eq!(balance_of(&env, canister_id, from_sub_1), 50_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 60_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+pub fn test_transfer_from_self<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let to = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000)],
+    );
+
+    let transfer_from_args = default_transfer_from_args(from.0, to.0, 30_000);
+    let block_index = send_transfer_from(&env, canister_id, from.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(block_index, 1);
+    assert_eq!(balance_of(&env, canister_id, from.0), 60_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 30_000);
+}
+
+pub fn test_transfer_from_minter<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let spender = PrincipalId::new_user_test_id(2);
+    let to = PrincipalId::new_user_test_id(3);
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    let minter = minting_account(&env, canister_id).unwrap();
+
+    let mut transfer_from_args = default_transfer_from_args(minter, to.0, 30_000);
+    transfer_from_args.fee = None;
+
+    let err = env
+        .execute_ingress_as(
+            spender,
+            canister_id,
+            "icrc2_transfer_from",
+            Encode!(&transfer_from_args).unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(err
+        .description()
+        .ends_with("the minter account cannot delegate mints"));
+    assert_eq!(balance_of(&env, canister_id, to.0), 0);
+}
+
+pub fn test_transfer_from_burn<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(from.0), 100_000)],
+    );
+
+    let minter = minting_account(&env, canister_id).unwrap();
+
+    let mut transfer_from_args = default_transfer_from_args(from.0, minter, 30_000);
+    transfer_from_args.fee = None;
+    assert_eq!(
+        send_transfer_from(&env, canister_id, spender.0, &transfer_from_args),
+        Err(TransferFromError::InsufficientAllowance {
+            allowance: Nat::from(0)
+        })
+    );
+    assert_eq!(balance_of(&env, canister_id, from.0), 100_000);
+
+    let approve_args = default_approve_args(spender.0, 150_000);
+    send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(block_index, 2);
+    assert_eq!(balance_of(&env, canister_id, from.0), 60_000);
+    assert_eq!(total_supply(&env, canister_id), 60_000);
 }

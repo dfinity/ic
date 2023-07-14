@@ -51,6 +51,12 @@ pub enum Operation {
     Burn {
         #[serde(with = "compact_account")]
         from: Account,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "compact_account::opt"
+        )]
+        spender: Option<Account>,
         #[serde(rename = "amt")]
         amount: u64,
     },
@@ -92,6 +98,7 @@ impl LedgerTransaction for Transaction {
 
     fn burn(
         from: Account,
+        spender: Option<Account>,
         amount: Tokens,
         created_at_time: Option<TimeStamp>,
         memo: Option<u64>,
@@ -99,6 +106,7 @@ impl LedgerTransaction for Transaction {
         Self {
             operation: Operation::Burn {
                 from,
+                spender,
                 amount: amount.get_e8s(),
             },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
@@ -176,9 +184,28 @@ impl LedgerTransaction for Transaction {
                     .use_allowance(from, &spender.unwrap(), used_allowance, now)
                     .expect("bug: cannot use allowance");
             }
-            Operation::Burn { from, amount } => context
-                .balances_mut()
-                .burn(from, Tokens::from_e8s(*amount))?,
+            Operation::Burn {
+                from,
+                spender,
+                amount,
+            } => {
+                let amount_tokens = Tokens::from_e8s(*amount);
+                if spender.is_some() && from != &spender.unwrap() {
+                    let allowance = context.approvals().allowance(from, &spender.unwrap(), now);
+                    if allowance.amount < amount_tokens {
+                        return Err(TxApplyError::InsufficientAllowance {
+                            allowance: allowance.amount,
+                        });
+                    }
+                }
+                context.balances_mut().burn(from, amount_tokens)?;
+                if spender.is_some() && from != &spender.unwrap() {
+                    context
+                        .approvals_mut()
+                        .use_allowance(from, &spender.unwrap(), amount_tokens, now)
+                        .expect("bug: cannot use allowance");
+                }
+            }
             Operation::Mint { to, amount } => {
                 context.balances_mut().mint(to, Tokens::from_e8s(*amount))?
             }
@@ -286,6 +313,7 @@ impl TryFrom<icrc_ledger_types::icrc3::transactions::Transaction> for Transactio
                 .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
             let operation = Operation::Burn {
                 from: burn.from,
+                spender: burn.spender,
                 amount,
             };
             return Ok(Self {

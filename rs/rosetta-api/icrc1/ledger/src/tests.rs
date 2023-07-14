@@ -466,3 +466,130 @@ fn test_approval_allowance_covers_fee() {
         },
     );
 }
+
+#[test]
+fn test_burn_smoke() {
+    let now = ts(1);
+
+    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+
+    let from = test_account_id(1);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+
+    let tr = Transaction {
+        operation: Operation::Burn {
+            from,
+            spender: None,
+            amount: 100_000,
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(100_000));
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 100_000);
+}
+
+#[test]
+fn test_approval_burn_from() {
+    let now = ts(1);
+
+    let mut ctx = Ledger::from_init_args(default_init_args(), now);
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+    let fee = 10_000;
+
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+
+    let tr = Transaction {
+        operation: Operation::Burn {
+            from,
+            spender: Some(spender),
+            amount: 100_000,
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    assert_eq!(
+        tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: Tokens::ZERO
+        }
+    );
+
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+
+    let tr = Transaction {
+        operation: Operation::Approve {
+            from,
+            spender,
+            amount: 150_000,
+            expected_allowance: None,
+            expires_at: None,
+            fee: Some(fee),
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(190_000));
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 190_000);
+
+    let tr = Transaction {
+        operation: Operation::Burn {
+            from,
+            spender: Some(spender),
+            amount: 100_000,
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    tr.apply(&mut ctx, now, Tokens::ZERO).unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
+    assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 90_000);
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(50_000),
+            expires_at: None
+        },
+    );
+
+    let tr = Transaction {
+        operation: Operation::Burn {
+            from,
+            spender: Some(spender),
+            amount: 100_000,
+        },
+        created_at_time: None,
+        memo: None,
+    };
+    assert_eq!(
+        tr.apply(&mut ctx, now, Tokens::ZERO).unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: tokens(50_000)
+        }
+    );
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(50_000),
+            expires_at: None
+        },
+    );
+    assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
+    assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 90_000);
+}

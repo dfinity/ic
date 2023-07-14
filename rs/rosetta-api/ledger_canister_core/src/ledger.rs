@@ -84,6 +84,7 @@ pub trait LedgerTransaction: Sized {
     /// `from` account.
     fn burn(
         from: Self::AccountId,
+        spender: Option<Self::AccountId>,
         amount: Self::Tokens,
         at: Option<TimeStamp>,
         memo: Option<u64>,
@@ -183,6 +184,7 @@ pub trait LedgerData: LedgerContext {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum TransferError<Tokens> {
     BadFee { expected_fee: Tokens },
+    BadBurn { min_burn_amount: Tokens },
     InsufficientFunds { balance: Tokens },
     InsufficientAllowance { allowance: Tokens },
     ExpiredApproval { ledger_time: TimeStamp },
@@ -300,7 +302,7 @@ where
     };
 
     for (balance, account) in to_trim {
-        let burn_tx = L::Transaction::burn(account, balance, Some(now), Some(TRIMMED_MEMO));
+        let burn_tx = L::Transaction::burn(account, None, balance, Some(now), Some(TRIMMED_MEMO));
 
         burn_tx
             .apply(ledger, now, L::Tokens::zero())

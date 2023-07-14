@@ -75,7 +75,7 @@ pub fn store_blocks(
                 amount,
                 Some(fee),
             ),
-            ic_icrc1::Operation::Burn { from, amount } => (
+            ic_icrc1::Operation::Burn { from, amount, .. } => (
                 "burn",
                 Some(from.owner),
                 from.subaccount,
@@ -333,6 +333,7 @@ where
                         owner: from_principal?,
                         subaccount: from_subaccount?,
                     },
+                    spender: None,
                     amount: amount?,
                 }),
                 k => Err(anyhow::Error::msg(format!(
