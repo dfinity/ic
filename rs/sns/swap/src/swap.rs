@@ -185,10 +185,8 @@ impl NeuronBasketConstructionParameters {
     fn generate_vesting_schedule(&self, total_amount_e8s: u64) -> Vec<ScheduledVestingEvent> {
         assert!(
             self.count > 0,
-            "NeuronBasketConstructionParameters.count must be greater than zero"
+            "NeuronBasketConstructionParameters::count must be greater than zero"
         );
-        // For the new single-proposal flow, the parameters of this formula are
-        // validated in `SnsInitPayload::validate_neuron_basket_construction_params`.
         let dissolve_delay_seconds_list = (0..(self.count))
             .map(|i| i * self.dissolve_delay_interval_seconds)
             .collect::<Vec<u64>>();

@@ -71,7 +71,7 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1_000);
 
 // This constant is simply an encoding of a CanisterId(x) for some small value of x.
 // x is the position of the sale (a.k.a. swap) canister in the SNS application subnet.
-const SNS_SWAP_CANISTER_ID: &str = "5j7vn-7yaaa-aaaaa-qaaca-cai";
+const SNS_SALE_CANISTER_ID: &str = "5j7vn-7yaaa-aaaaa-qaaca-cai";
 
 pub const NUM_SNS_SALE_PARTICIPANTS: usize = 100;
 
@@ -256,7 +256,7 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
     env.emit_report(format!("{metrics}"));
 }
 
-/// Like [`setup_legacy`], but initiates the SNS with an "openchat-ish" init payload.
+/// Like [`setup`], but initiates the SNS with an "openchat-ish" init payload.
 /// (Not guaranteed to be exactly the same as the actual payload used by
 /// openchat.)
 ///
@@ -491,7 +491,7 @@ pub fn init_participants(env: TestEnv) {
     });
     info!(
         env.logger(),
-        "==== Successfully added {} participants ({:?}) to the token swap (elapsed {:?}) ====",
+        "==== Successfully added {} participants ({:?}) to the token sale (elapsed {:?}) ====",
         participants_str.len(),
         participants_str,
         start_time.elapsed()
@@ -533,7 +533,7 @@ pub fn check_all_participants(env: TestEnv) {
     });
     info!(
         env.logger(),
-        "==== Successfully checked {} participants ({:?}) to the token swap (elapsed {:?}) ====",
+        "==== Successfully checked {} participants ({:?}) to the token sale (elapsed {:?}) ====",
         participants_str.len(),
         participants_str,
         start_time.elapsed()
@@ -596,11 +596,11 @@ pub fn install_sns(
     );
     {
         let observed = sns_client.sns_canisters.swap().get();
-        let expected = PrincipalId::from_str(SNS_SWAP_CANISTER_ID)
-            .expect("cannot parse PrincipalId of the SNS swap canister");
+        let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
+            .expect("cannot parse PrincipalId of the SNS sale (a.k.a. swap) canister");
         assert_eq!(
             observed, expected,
-            "SNS swap canister got unexpected PrincipalId {observed:?} (expected {expected:?})"
+            "SNS sale canister got unexpected PrincipalId {observed:?} (expected {expected:?}"
         );
     }
     info!(
@@ -626,11 +626,11 @@ pub fn install_sns_legacy(
     );
     {
         let observed = sns_client.sns_canisters.swap().get();
-        let expected = PrincipalId::from_str(SNS_SWAP_CANISTER_ID)
-            .expect("cannot parse PrincipalId of the SNS swap canister");
+        let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
+            .expect("cannot parse PrincipalId of the SNS sale (a.k.a. swap) canister");
         assert_eq!(
             observed, expected,
-            "SNS swap canister got unexpected PrincipalId {observed:?} (expected {expected:?})"
+            "SNS sale canister got unexpected PrincipalId {observed:?} (expected {expected:?}"
         );
     }
     info!(
@@ -661,7 +661,7 @@ pub fn initiate_token_swap(
     block_on(sns_client.assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap));
     info!(
         log,
-        "==== The SNS token swap has been initialized successfully in {:?} ====",
+        "==== The SNS token sale has been initialized successfully in {:?} ====",
         start_time.elapsed()
     );
 }
@@ -817,7 +817,7 @@ impl SaleParticipant {
     }
 
     pub fn sns_account(&self) -> Account {
-        let owner = PrincipalId::from_str(SNS_SWAP_CANISTER_ID)
+        let owner = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
             .expect("cannot parse PrincipalId of the SNS sale (a.k.a. swap) canister")
             .into();
         let subaccount = Some(Subaccount(principal_to_subaccount(&self.principal_id)).0);
@@ -850,7 +850,7 @@ impl Identity for SaleParticipant {
 /// For testing the payment flow for multiple users with the ticketing system, see [`generate_ticket_participants_workload`].
 pub fn add_one_participant(env: TestEnv) {
     // Runbook:
-    // Our goal is to establish that the wealthy user does not initially participate in the token swap.
+    // Our goal is to establish that the wealthy user does not initially participate in the token sale.
     // For this purpose, we submit three calls:
     //   1. refresh_buyer_tokens (update) from the default user - should return an error
     //   2. refresh_buyer_tokens (update) from the wealthy user - should return an error
@@ -1057,7 +1057,7 @@ pub fn add_one_participant(env: TestEnv) {
 
     info!(
         log,
-        "==== Successfully added {:?} to the token swap participants (elapsed {:?}) ====",
+        "==== Successfully added {:?} to the token sale participants (elapsed {:?}) ====",
         wealthy_user_identity.principal_id,
         start_time.elapsed()
     );

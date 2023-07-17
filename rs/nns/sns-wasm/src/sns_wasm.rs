@@ -1779,15 +1779,9 @@ impl DeployNewSnsRequest {
             // Validate contents
             // TODO 2296: Validate based on caller()
             .and_then(|init_payload| {
-                if init_payload.is_legacy_flow() {
-                    init_payload
-                        .validate_legacy_init()
-                        .map_err(|e| e.to_string())
-                } else {
-                    init_payload
-                        .validate_pre_execution()
-                        .map_err(|e| e.to_string())
-                }
+                init_payload
+                    .validate_legacy_init()
+                    .map_err(|e| e.to_string())
             })
     }
 }
