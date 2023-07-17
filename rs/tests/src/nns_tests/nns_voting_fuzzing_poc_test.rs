@@ -82,9 +82,8 @@ async fn get_neuron_returns_not_found_error(
             NeuronId(neuron_id),
         )
         .await;
-    result.unwrap()
-        == Err(GovernanceError {
-            error_type: ErrorType::NotFound as i32,
-            error_message: "".to_string(),
-        })
+    match result.unwrap() {
+        Ok(_) => false,
+        Err(err) => err.error_type == ErrorType::NotFound as i32,
+    }
 }
