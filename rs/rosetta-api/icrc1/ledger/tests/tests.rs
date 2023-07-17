@@ -196,6 +196,11 @@ fn test_approve_max_expiration() {
 }
 
 #[test]
+fn test_approve_from_minter() {
+    ic_icrc1_ledger_sm_tests::test_approve_from_minter(ledger_wasm(), encode_init_args);
+}
+
+#[test]
 fn test_feature_flags() {
     ic_icrc1_ledger_sm_tests::test_feature_flags(ledger_wasm(), encode_init_args);
 }
