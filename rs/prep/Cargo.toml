@@ -11,6 +11,7 @@ chrono = "0.4.19"
 fs_extra = "1.2.0"
 hex = "0.4"
 ic-crypto = { path = "../crypto" }
+ic-nns-common= { path = "../nns/common" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
 ic-crypto-node-key-validation = { path = "../crypto/node_key_validation" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }

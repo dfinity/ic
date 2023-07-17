@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $NAME-init
+  namespace: $NAMESPACE
+spec:
+  containers:
+  - name: main
+    image: ubuntu:20.04
+    command: ["/bin/bash", "-c"]
+    args:
+      - |
+        apt update
+        apt install -y libssl-dev
+        sleep 130
+        /mnt/init/ic-nns-init --url 'http://[$NNS_IP]:8080' \
+          --registry-local-store-dir /mnt/init/ic_registry_local_store \
+          --wasm-dir /mnt/init/canisters \
+          --http2-only
+        sleep 3600
+    volumeMounts:
+    - name: init
+      mountPath: /mnt
+  volumes:
+  - name: init
+    persistentVolumeClaim:
+      claimName: $NAME-init
