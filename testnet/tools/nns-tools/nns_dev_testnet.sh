@@ -61,6 +61,67 @@ fi
 IC_ADMIN="$DIR/ic-admin"
 SNS_CLI="$DIR/sns"
 
+function write_vars() {
+    # Put all useful variables into a single place
+    VARS_FILE="$DIR/output_vars_nns_dev_testnet.sh"
+
+    echo "Writing variables from script to $VARS_FILE"
+
+    echo "source $DIR/output_vars_nns_state_deployment.sh" >"$VARS_FILE"
+
+    if [ -z ${SUBNET_IP+x} ]; then
+        echo "Unable to write SUBNET_IP to $VARS_FILE"
+    else
+        echo "export SUBNET_IP=$SUBNET_IP" >>"$VARS_FILE"
+    fi
+
+    if [ -z ${SUBNET_URL+x} ]; then
+        echo "Unable to write SUBNET_URL to $VARS_FILE"
+    else
+        echo "export SUBNET_URL=$SUBNET_URL" >>"$VARS_FILE"
+    fi
+
+    if [ -z ${WALLET_CANISTER+x} ]; then
+        echo "Unable to write WALLET_CANISTER to $VARS_FILE"
+    else
+        echo "export WALLET_CANISTER=$WALLET_CANISTER" >>"$VARS_FILE"
+    fi
+
+    if [ -z ${IC_ADMIN+x} ]; then
+        echo "Unable to write IC_ADMIN to $VARS_FILE"
+    else
+        echo "export IC_ADMIN=$IC_ADMIN" >>"$VARS_FILE"
+    fi
+
+    if [ -z ${SNS_CLI+x} ]; then
+        echo "Unable to write SNS_CLI to $VARS_FILE"
+    else
+        echo "export SNS_CLI=$SNS_CLI" >>"$VARS_FILE"
+    fi
+
+    if [ -z ${XRC_MOCK_CANISTER+x} ]; then
+        echo "Unable to write XRC_MOCK_CANISTER to $VARS_FILE"
+    else
+        echo "export XRC_MOCK_CANISTER=$XRC_MOCK_CANISTER" >>"$VARS_FILE"
+    fi
+
+    if [ -z ${NNS_TOOLS_DIR+x} ]; then
+        echo "Unable to write NNS_TOOLS_DIR to $VARS_FILE"
+    else
+        echo "export NNS_TOOLS_DIR=$NNS_TOOLS_DIR" >>"$VARS_FILE"
+    fi
+
+    if [ -z ${PEM+x} ]; then
+        echo "Unable to write PEM to $VARS_FILE"
+    else
+        echo "export PEM=$PEM" >>"$VARS_FILE"
+    fi
+
+    print_green "Variables from script stored at $VARS_FILE"
+}
+
+trap write_vars EXIT INT
+
 # First we just create the NNS State deployment using our special identity
 # We use this to calculate variables from the next
 NNS_STATE_DEPLOYMENT_RESULT=$DIR/nns_state_deployment_output
@@ -174,14 +235,4 @@ step --optional 8 "Upload WASMs to SNS-WASM" || time (
     done >"$LOG_FILE"
 )
 
-# Put all useful variables into a single place
-VARS_FILE="$DIR/output_vars_nns_dev_testnet.sh"
-echo "source $DIR/output_vars_nns_state_deployment.sh" >"$VARS_FILE"
-echo "export SUBNET_IP=$SUBNET_IP" >>"$VARS_FILE"
-echo "export SUBNET_URL=$SUBNET_URL" >>"$VARS_FILE"
-echo "export WALLET_CANISTER=$WALLET_CANISTER" >>"$VARS_FILE"
-echo "export IC_ADMIN=$IC_ADMIN" >>$VARS_FILE
-echo "export SNS_CLI=$SNS_CLI" >>$VARS_FILE
-echo "export XRC_MOCK_CANISTER=$XRC_MOCK_CANISTER" >>$VARS_FILE
-
-print_green "Variables from script stored at $VARS_FILE"
+print_green "All steps completed"
