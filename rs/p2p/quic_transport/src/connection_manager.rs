@@ -78,6 +78,7 @@ const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
 const CONNECTION_MANAGER_HEARTBEAT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
 const GRUEZI_HANDSHAKE: &str = "gruezi";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -309,7 +310,7 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
                     match conn_res {
-                        Ok((conn_out, _)) => self.handle_connecting_result(conn_out),
+                        Ok((conn_out, peer)) => self.handle_connecting_result(conn_out, Some(peer)),
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -320,7 +321,7 @@ impl ConnectionManager {
                 },
                 Some(conn_res) = self.inbound_connecting.join_next() => {
                     match conn_res {
-                        Ok(conn_out) => self.handle_connecting_result(conn_out),
+                        Ok(conn_out) => self.handle_connecting_result(conn_out, None),
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -383,22 +384,31 @@ impl ConnectionManager {
         }
 
         // Connect/Disconnect from peers according to new topology
-        for (node, _) in self.topology.iter() {
-            // Add to delayqueue for connecting
-            if node != &self.node_id
-                && !self.outbound_connecting.contains(node)
-                && !self.active_connections.contains(node)
-                && &self.node_id < node
-            {
-                self.connect_queue.insert(*node, Duration::from_secs(0));
+        for (peer, _) in self.topology.iter() {
+            let dialer = &self.node_id < peer;
+            let no_active_connection_attempt = !self.outbound_connecting.contains(peer);
+            let no_active_connection = !self.active_connections.contains(peer);
+            let node_in_subnet = self.topology.is_member(&self.node_id);
+            // Add to delayqueue for connecting iff
+            // - Not currently trying to connect
+            // - No active connection to this peer
+            // - Our node id is lower -> This node is dialer.
+            // - This node is part of the subnet. This can happen when a node is removed from the subnet.
+            if no_active_connection_attempt && no_active_connection && dialer && node_in_subnet {
+                self.connect_queue.insert(*peer, Duration::from_secs(0));
             }
         }
 
         // Remove peer connections that are not part of subnet anymore.
         // Also remove peer connections that have closed connections.
         let mut peer_map = self.peer_map.write().unwrap();
-        peer_map.retain(|node, conn_handle| {
-            if !self.topology.is_member(node) {
+        peer_map.retain(|peer, conn_handle| {
+            let peer_left_topology = !self.topology.is_member(peer);
+            let node_left_topology = !self.topology.is_member(&self.node_id);
+            // If peer is not member anymore or this node not part of subnet close connection.
+            let should_close_connection = peer_left_topology || node_left_topology;
+
+            if should_close_connection {
                 self.metrics.peers_removed_total.inc();
                 conn_handle
                     .connection
@@ -428,27 +438,34 @@ impl ConnectionManager {
             self.metrics
                 .collect_quic_connection_stats(&conn.connection, &conn.peer_id);
             if conn.connection.close_reason().is_some() {
-                self.connect_queue.insert(*peer, Duration::from_secs(2));
+                self.connect_queue.insert(*peer, Duration::from_secs(0));
             }
         }
     }
 
     fn handle_dial(&mut self, node_id: NodeId) {
-        info!(self.log, "Connecting to node {}", node_id);
-        // Conditions under which we don't connect
-        // - prefer lower node id
-        // - don't dial yourself
-        // - nodeid is in topology
+        let not_dialer = self.node_id >= node_id;
+        let peer_not_in_subnet = self.topology.get_addr(&node_id).is_none();
+        let active_connection_attempt = self.outbound_connecting.contains(&node_id);
+        let active_connection = self.active_connections.contains(&node_id);
+        let node_not_in_subnet = !self.topology.is_member(&self.node_id);
+
+        // Conditions under which we do NOT connect
+        // - prefer lower node id / dialing ourself
+        // - peer not in subnet
         // - currently trying to connect
         // - already connected
-        if self.node_id >= node_id
-            || self.topology.get_addr(&node_id).is_none()
-            || self.outbound_connecting.contains(&node_id)
-            || self.active_connections.contains(&node_id)
-            || self.node_id == node_id
+        // - this node is not part of subnet. This can happen when a node is removed from the subnet.
+        if not_dialer
+            || peer_not_in_subnet
+            || active_connection_attempt
+            || active_connection
+            || node_not_in_subnet
         {
             return;
         }
+
+        info!(self.log, "Connecting to node {}", node_id);
         self.metrics.outbound_connection_total.inc();
         let addr = self
             .topology
@@ -509,9 +526,14 @@ impl ConnectionManager {
             .spawn_on(node_id, timeout_conn_fut, &self.rt);
     }
 
+    /// Process connection attempt result. If successfull connection is
+    /// added to peer map. If unsuccessful and this node is dialer the
+    /// connection will be retried. `peer` is `Some` if this node was
+    /// the dialer. I.e lower node id.
     fn handle_connecting_result(
         &mut self,
         conn_res: Result<ConnectionHandle, ConnectionEstablishError>,
+        peer: Option<NodeId>,
     ) {
         match conn_res {
             Ok(connection) => {
@@ -559,6 +581,10 @@ impl ConnectionManager {
                     .connection_results_total
                     .with_label_values(&[CONNECTION_RESULT_FAILED_LABEL])
                     .inc();
+                // The peer is only present in connections that this node initiated. This node should therefore retry connecting to the peer.
+                if let Some(peer) = peer {
+                    self.connect_queue.insert(peer, CONNECT_RETRY_BACKOFF);
+                }
                 info!(self.log, "Failed to connect {}", err);
             }
         };
