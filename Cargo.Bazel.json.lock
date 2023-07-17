@@ -1,5 +1,5 @@
 {
-  "checksum": "1ad98830e84c1e784776bbef8210cef371ff84b3fb4269d5895fd08f62c79154",
+  "checksum": "c360f8a3aadae27d9abf6baddbcd9faa948d334bd53ff3c735d8116fa1dada40",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -8767,13 +8767,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.3.11": {
+    "clap 4.3.12": {
       "name": "clap",
-      "version": "4.3.11",
+      "version": "4.3.12",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.3.11/download",
-          "sha256": "1640e5cc7fb47dbb8338fd471b105e7ed6c3cb2aeb00c2e067127ffd3764a05d"
+          "url": "https://crates.io/api/v1/crates/clap/4.3.12/download",
+          "sha256": "3eab9e8ceb9afdade1ab3f0fd8dbce5b1b2f468ad653baf10e771781b2b67b73"
         }
       },
       "targets": [
@@ -8820,7 +8820,7 @@
         "deps": {
           "common": [
             {
-              "id": "clap_builder 4.3.11",
+              "id": "clap_builder 4.3.12",
               "target": "clap_builder"
             },
             {
@@ -8834,23 +8834,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "clap_derive 4.3.2",
+              "id": "clap_derive 4.3.12",
               "target": "clap_derive"
             }
           ],
           "selects": {}
         },
-        "version": "4.3.11"
+        "version": "4.3.12"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_builder 4.3.11": {
+    "clap_builder 4.3.12": {
       "name": "clap_builder",
-      "version": "4.3.11",
+      "version": "4.3.12",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_builder/4.3.11/download",
-          "sha256": "98c59138d527eeaf9b53f35a77fcc1fad9d883116070c63d5de1c7dc7b00c72b"
+          "url": "https://crates.io/api/v1/crates/clap_builder/4.3.12/download",
+          "sha256": "9f2763db829349bf00cfc06251268865ed4363b93a943174f638daf3ecdba2cd"
         }
       },
       "targets": [
@@ -8902,7 +8902,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.3.11"
+        "version": "4.3.12"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -8967,13 +8967,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_derive 4.3.2": {
+    "clap_derive 4.3.12": {
       "name": "clap_derive",
-      "version": "4.3.2",
+      "version": "4.3.12",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_derive/4.3.2/download",
-          "sha256": "b8cd2b2a819ad6eec39e8f1d6b53001af1e5469f8c177579cdaeb313115b825f"
+          "url": "https://crates.io/api/v1/crates/clap_derive/4.3.12/download",
+          "sha256": "54a9bb5758fc5dfe728d1019941681eccaf0cf8a4189b692a0ee2f2ecf90a050"
         }
       },
       "targets": [
@@ -9020,7 +9020,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.3.2"
+        "version": "4.3.12"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -14046,7 +14046,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.3.11",
+              "id": "clap 4.3.12",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -14780,7 +14780,7 @@
               "target": "serial_test"
             },
             {
-              "id": "sev 1.1.0",
+              "id": "sev 1.2.0",
               "target": "sev"
             },
             {
@@ -15232,13 +15232,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "dirs 4.0.0": {
+    "dirs 5.0.1": {
       "name": "dirs",
-      "version": "4.0.0",
+      "version": "5.0.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/dirs/4.0.0/download",
-          "sha256": "ca3aa72a6f96ea37bbc5aa912f6788242832f75369bdfdadcb0e38423f100059"
+          "url": "https://crates.io/api/v1/crates/dirs/5.0.1/download",
+          "sha256": "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
         }
       },
       "targets": [
@@ -15263,14 +15263,14 @@
         "deps": {
           "common": [
             {
-              "id": "dirs-sys 0.3.7",
+              "id": "dirs-sys 0.4.1",
               "target": "dirs_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "4.0.0"
+        "version": "5.0.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -15373,6 +15373,67 @@
         },
         "edition": "2015",
         "version": "0.3.7"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "dirs-sys 0.4.1": {
+      "name": "dirs-sys",
+      "version": "0.4.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/dirs-sys/0.4.1/download",
+          "sha256": "520f05a5cbd335fae5a99ff7a6ab8627577660ee5cfd6a94a6a929b52ff0321c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "dirs_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "dirs_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "option-ext 0.2.0",
+              "target": "option_ext"
+            }
+          ],
+          "selects": {
+            "cfg(target_os = \"redox\")": [
+              {
+                "id": "redox_users 0.4.3",
+                "target": "redox_users"
+              }
+            ],
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.147",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.48.0",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2015",
+        "version": "0.4.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -34100,6 +34161,39 @@
       },
       "license": "Apache-2.0"
     },
+    "option-ext 0.2.0": {
+      "name": "option-ext",
+      "version": "0.2.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/option-ext/0.2.0/download",
+          "sha256": "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "option_ext",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "option_ext",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "0.2.0"
+      },
+      "license": "MPL-2.0"
+    },
     "ordered-float 2.10.0": {
       "name": "ordered-float",
       "version": "2.10.0",
@@ -44833,13 +44927,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "serde-big-array 0.4.1": {
+    "serde-big-array 0.5.1": {
       "name": "serde-big-array",
-      "version": "0.4.1",
+      "version": "0.5.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde-big-array/0.4.1/download",
-          "sha256": "3323f09a748af288c3dc2474ea6803ee81f118321775bffa3ac8f7e65c5e90e7"
+          "url": "https://crates.io/api/v1/crates/serde-big-array/0.5.1/download",
+          "sha256": "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
         }
       },
       "targets": [
@@ -44870,8 +44964,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.4.1"
+        "edition": "2021",
+        "version": "0.5.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -45894,13 +45988,13 @@
       },
       "license": "MIT"
     },
-    "sev 1.1.0": {
+    "sev 1.2.0": {
       "name": "sev",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/sev/1.1.0/download",
-          "sha256": "a8c8ec2a5131be61bba9ffad92aead45bd27805c9701d265b7196d4914299b98"
+          "url": "https://crates.io/api/v1/crates/sev/1.2.0/download",
+          "sha256": "9c77eff933413b557ad3af20f6ddb198471d639d611b4738bcb78d32d7941892"
         }
       },
       "targets": [
@@ -45936,7 +46030,9 @@
         ],
         "crate_features": [
           "default",
-          "openssl"
+          "openssl",
+          "sev",
+          "snp"
         ],
         "deps": {
           "common": [
@@ -45957,8 +46053,12 @@
               "target": "codicon"
             },
             {
-              "id": "dirs 4.0.0",
+              "id": "dirs 5.0.1",
               "target": "dirs"
+            },
+            {
+              "id": "hex 0.4.3",
+              "target": "hex"
             },
             {
               "id": "iocuddle 0.1.1",
@@ -45977,7 +46077,7 @@
               "target": "serde"
             },
             {
-              "id": "serde-big-array 0.4.1",
+              "id": "serde-big-array 0.5.1",
               "target": "serde_big_array"
             },
             {
@@ -45985,7 +46085,7 @@
               "target": "serde_bytes"
             },
             {
-              "id": "sev 1.1.0",
+              "id": "sev 1.2.0",
               "target": "build_script_build"
             },
             {
@@ -46000,7 +46100,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.1.0"
+        "version": "1.2.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -58321,6 +58421,7 @@
         "crate_features": [
           "Win32",
           "Win32_Foundation",
+          "Win32_Globalization",
           "Win32_NetworkManagement",
           "Win32_NetworkManagement_IpHelper",
           "Win32_Networking",
@@ -58333,6 +58434,7 @@
           "Win32_Storage",
           "Win32_Storage_FileSystem",
           "Win32_System",
+          "Win32_System_Com",
           "Win32_System_Console",
           "Win32_System_Diagnostics",
           "Win32_System_Diagnostics_Debug",
@@ -58346,6 +58448,8 @@
           "Win32_System_Threading",
           "Win32_System_Time",
           "Win32_System_WindowsProgramming",
+          "Win32_UI",
+          "Win32_UI_Shell",
           "default"
         ],
         "deps": {
@@ -60516,7 +60620,7 @@
     "cc 1.0.79",
     "cddl 0.9.1",
     "clap 3.2.25",
-    "clap 4.3.11",
+    "clap 4.3.12",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",

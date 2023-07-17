@@ -1,12 +1,8 @@
 #[cfg(target_os = "linux")]
 mod linux {
-    use ::sev::firmware::guest::{
-        types::{AttestationReport, SnpReportReq},
-        Firmware as GuestFirmware,
-    };
+    use ::sev::firmware::guest::{AttestationReport, Firmware as GuestFirmware};
     use ::sev::firmware::host::{
-        types::{CertTableEntry, SnpCertType, SnpExtConfig, SnpStatus},
-        Firmware as HostFirmware,
+        Firmware as HostFirmware, {CertTableEntry, CertType, ExtConfig, SnpPlatformStatus},
     };
     use anyhow::{Context, Result};
     use clap::{Parser, Subcommand};
@@ -53,10 +49,10 @@ mod linux {
                     .context("error fetching identifier")?;
                 let snp_status = snp_platform_status()?;
                 println!("https://kdsintf.amd.com/vcek/v1/Milan/{}?blSPL={:02}&teeSPL={:02}&snpSPL={:02}&ucodeSPL={:02}",
-                     id, snp_status.tcb.platform_version.bootloader, snp_status.tcb.platform_version.tee,  snp_status.tcb.platform_version.snp,  snp_status.tcb.platform_version.microcode);
+                     id, snp_status.platform_tcb_version.bootloader, snp_status.platform_tcb_version.tee,  snp_status.platform_tcb_version.snp,  snp_status.platform_tcb_version.microcode);
             }
             Command::GetCerts => {
-                let certs = if let Ok((_report, certs)) = snp_get_ext_report() {
+                let certs = if let Ok((_report, certs)) = get_ext_report() {
                     certs
                 } else {
                     let config = snp_get_ext_config()?;
@@ -69,9 +65,9 @@ mod linux {
                 }
                 for c in certs {
                     match c.cert_type {
-                        SnpCertType::ARK => export_cert(&c, "ark")?,
-                        SnpCertType::ASK => export_cert(&c, "ask")?,
-                        SnpCertType::VCEK => export_cert(&c, "vcek")?,
+                        CertType::ARK => export_cert(&c, "ark")?,
+                        CertType::ASK => export_cert(&c, "ask")?,
+                        CertType::VCEK => export_cert(&c, "vcek")?,
                         _ => {
                             return Err(anyhow::anyhow!(format!("bad cert")));
                         }
@@ -95,22 +91,21 @@ mod linux {
         GuestFirmware::open().context("unable to open /dev/sev-guest")
     }
 
-    fn snp_platform_status() -> Result<SnpStatus> {
+    fn snp_platform_status() -> Result<SnpPlatformStatus> {
         host_firmware()?
             .snp_platform_status()
             .map_err(|e| anyhow::anyhow!(format!("{:?}", e)))
             .context("unable to fetch snp platform status")
     }
 
-    fn snp_get_ext_report() -> Result<(AttestationReport, Vec<CertTableEntry>)> {
-        let mut report_request = SnpReportReq::default();
+    fn get_ext_report() -> Result<(AttestationReport, Vec<CertTableEntry>)> {
         guest_firmware()?
-            .snp_get_ext_report(None, &mut report_request)
+            .get_ext_report(None, None, Some(0))
             .map_err(|e| anyhow::anyhow!(format!("{:?}", e)))
             .context("unable to fetch snp report")
     }
 
-    fn snp_get_ext_config() -> Result<SnpExtConfig> {
+    fn snp_get_ext_config() -> Result<ExtConfig> {
         host_firmware()?
             .snp_get_ext_config()
             .map_err(|e| anyhow::anyhow!(format!("{:?}", e)))
