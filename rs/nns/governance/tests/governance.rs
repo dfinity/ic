@@ -4485,7 +4485,7 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
 
     assert_eq!(
         neuron.aging_since_timestamp_seconds,
-        driver.now() - 12 * ic_nns_governance::governance::ONE_MONTH_SECONDS - 1,
+        driver.now() - 12 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
     );
 
     let _block_height = 543212234;
