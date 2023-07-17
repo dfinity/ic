@@ -14,17 +14,6 @@
       fail: msg="'ic_git_revision' not given."
       when: ic_git_revision is not defined
 
-    - name: Wipe targets if they exist
-      vars:
-        ic: "{{ ic_deployment_name }}"
-      uri:
-        url: "https://{{ service_discovery_server }}/service-discovery/{{ ic }}"
-        method: DELETE
-        return_content: true
-        validate_certs: no
-      register: delete_response
-      failed_when: delete_response.status not in [200, 400]
-
     - name: Generate scrape configurations for [host_node_exporter, node_exporter, orchestrator, replica]
       vars:
         ic: "{{ ic_deployment_name }}"
