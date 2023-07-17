@@ -216,6 +216,24 @@ impl ConnectivityChecker {
         true
     }
 
+    /// Every peer is connected to every other peer that is not in the except list.
+    pub fn fully_connected_except(&self, except_list: Vec<NodeId>) -> bool {
+        let set: HashSet<NodeId> = HashSet::from_iter(except_list.into_iter());
+        let peers = self.peers.read().unwrap();
+        for p1 in peers.keys() {
+            for p2 in peers.keys() {
+                if p1 != p2
+                    && !set.contains(p1)
+                    && !set.contains(p2)
+                    && !self.connected_pair(p1, p2)
+                {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     /// This peer is not reachable by any other peer.
     pub fn unreachable(&self, this_peer: &NodeId) -> bool {
         let peers = self.peers.read().unwrap();
@@ -234,7 +252,7 @@ impl ConnectivityChecker {
     }
 
     /// Check if a both peers are connected to each other.
-    fn connected_pair(&self, peer_1: &NodeId, peer_2: &NodeId) -> bool {
+    pub fn connected_pair(&self, peer_1: &NodeId, peer_2: &NodeId) -> bool {
         let peers = self.peers.read().unwrap();
 
         let connected_peer_1 = peers.get(peer_1).unwrap();
