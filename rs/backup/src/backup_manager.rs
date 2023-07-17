@@ -1,6 +1,7 @@
 use std::{
     collections::HashSet,
-    fs, io,
+    fs,
+    io::BufRead,
     path::PathBuf,
     process::Command,
     str::FromStr,
@@ -20,14 +21,11 @@ use slog::{error, info, Logger};
 use tokio::runtime::Handle;
 
 use crate::{
-    backup_helper::retrieve_replica_version_last_replayed,
-    util::{block_on, sleep_secs},
-};
-use crate::{
-    backup_helper::BackupHelper,
+    backup_helper::{retrieve_replica_version_last_replayed, BackupHelper},
     cmd::BackupArgs,
     config::{ColdStorage, Config, SubnetConfig},
     notification_client::NotificationClient,
+    util::{block_on, sleep_secs},
 };
 
 const DEFAULT_SYNC_NODES: usize = 5;
@@ -186,12 +184,12 @@ impl BackupManager {
         info!(log, "Configuration updated...");
     }
 
-    pub fn init(log: Logger, config_file: PathBuf) {
-        let config = BackupManager::init_config(config_file);
-        BackupManager::init_copy_states(log, config);
+    pub fn init(reader: &mut impl BufRead, log: Logger, config_file: PathBuf) {
+        let config = BackupManager::init_config(reader, config_file);
+        BackupManager::init_copy_states(reader, log, config);
     }
 
-    fn init_config(config_file: PathBuf) -> Config {
+    fn init_config(reader: &mut impl BufRead, config_file: PathBuf) -> Config {
         let mut config =
             Config::load_config(config_file.clone()).expect("Config file can't be loaded");
         if !config.subnets.is_empty() {
@@ -199,12 +197,11 @@ impl BackupManager {
             return config;
         }
 
-        let stdin = io::stdin();
         let mut thread_id = 0;
         loop {
             println!("Enter subnet ID of the subnet to backup (<ENTER> if done):");
             let mut subnet_id_str = String::new();
-            let _ = stdin.read_line(&mut subnet_id_str);
+            let _ = reader.read_line(&mut subnet_id_str);
             subnet_id_str = subnet_id_str.trim().to_string();
             if subnet_id_str.is_empty() {
                 break;
@@ -220,7 +217,7 @@ impl BackupManager {
 
             println!("Enter the current replica version of the subnet:");
             let mut replica_version_str = String::new();
-            let _ = stdin.read_line(&mut replica_version_str);
+            let _ = reader.read_line(&mut replica_version_str);
             let initial_replica_version = match ReplicaVersion::try_from(replica_version_str.trim())
             {
                 Ok(version) => version,
@@ -236,7 +233,7 @@ impl BackupManager {
                 DEFAULT_SYNC_NODES
             );
             let mut nodes_syncing_str = String::new();
-            let _ = stdin.read_line(&mut nodes_syncing_str);
+            let _ = reader.read_line(&mut nodes_syncing_str);
             let nodes_syncing = nodes_syncing_str
                 .trim()
                 .parse::<usize>()
@@ -247,7 +244,7 @@ impl BackupManager {
                 DEFAULT_SYNC_PERIOD
             );
             let mut sync_period_min = String::new();
-            let _ = stdin.read_line(&mut sync_period_min);
+            let _ = reader.read_line(&mut sync_period_min);
             let sync_period_secs = 60
                 * sync_period_min
                     .trim()
@@ -258,7 +255,7 @@ impl BackupManager {
                 DEFAULT_REPLAY_PERIOD
             );
             let mut replay_period_min = String::new();
-            let _ = stdin.read_line(&mut replay_period_min);
+            let _ = reader.read_line(&mut replay_period_min);
             let replay_period_secs = 60
                 * replay_period_min
                     .trim()
@@ -278,13 +275,13 @@ impl BackupManager {
 
         println!("Enter the Slack token:");
         let mut slack_token = String::new();
-        let _ = stdin.read_line(&mut slack_token);
+        let _ = reader.read_line(&mut slack_token);
         config.slack_token = slack_token.trim().to_string();
 
         let cold_storage_dir = loop {
             println!("Enter the directory for the cold storage:");
             let mut cold_storage_str = String::new();
-            let _ = stdin.read_line(&mut cold_storage_str);
+            let _ = reader.read_line(&mut cold_storage_str);
             let cold_storage_path = PathBuf::from(&cold_storage_str.trim());
             if !cold_storage_path.exists() {
                 println!("Directory doesn't exist!");
@@ -298,7 +295,7 @@ impl BackupManager {
                 DEFAULT_VERSIONS_HOT
             );
             let mut versions_hot_str = String::new();
-            let _ = stdin.read_line(&mut versions_hot_str);
+            let _ = reader.read_line(&mut versions_hot_str);
             versions_hot_str = versions_hot_str.trim().to_string();
             if versions_hot_str.is_empty() {
                 break DEFAULT_VERSIONS_HOT;
@@ -323,18 +320,17 @@ impl BackupManager {
         config
     }
 
-    fn init_copy_states(log: Logger, config: Config) {
+    fn init_copy_states(reader: &mut impl BufRead, log: Logger, config: Config) {
         for b in &config.subnets {
             let data_dir = &config.root_dir.join("data").join(b.subnet_id.to_string());
             if !data_dir.exists() {
                 fs::create_dir_all(data_dir).expect("Failure creating a directory");
             }
             if !data_dir.join("ic_state/checkpoints").exists() {
-                let stdin = io::stdin();
                 loop {
                     let mut state_dir_str = String::new();
                     println!("Enter ic_state directory for subnet {}:", b.subnet_id);
-                    let _ = stdin.read_line(&mut state_dir_str);
+                    let _ = reader.read_line(&mut state_dir_str);
                     let mut old_state_dir = PathBuf::from(&state_dir_str.trim());
                     if !old_state_dir.exists() {
                         println!("Error: directory {:?} doesn't exist!", old_state_dir);
@@ -495,5 +491,94 @@ fn cold_store(m: Arc<BackupManager>) {
         }
 
         sleep_secs(COLD_STORAGE_PERIOD);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs::File, io::Write};
+
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_test_utilities_tmpdir::tmpdir;
+
+    use super::*;
+
+    const FAKE_SUBNET_ID: &str = "drqnc-7tqyt-atxvj-gc6rp-lly5u-i6kqv-37nvv-uncaw-7vpwn-rx33x-aqe";
+    const FAKE_INITIAL_REPLICA_VERSION: &str = "26";
+    const FAKE_NODES_SYNCING: usize = 6;
+    const FAKE_SYNC_PERIOD_MINS: u64 = 27;
+    const FAKE_REPLAY_PERIOD_MINS: u64 = 154;
+    const FAKE_VERSIONS_HOT: usize = 7;
+    const FAKE_SLACK_TOKEN: &str = "FAKE_SLACK_TOKEN";
+
+    /// Read the config from `test_data/fake_input_config.json`, pass several fake values as inputs
+    /// to `BackupManager::init`.
+    #[test]
+    fn init_test() {
+        let dir = tmpdir("test_dir");
+        let fake_config_path = dir.as_ref().join("fake_config.json");
+        let fake_ssh_private_key_path = dir.as_ref().join("fake_ssh_private_key");
+        let fake_cold_storage_path = dir.as_ref().join("fake_cold_storage");
+        let fake_state_path = dir.as_ref().join("fake_state");
+        std::fs::create_dir_all(&fake_cold_storage_path).unwrap();
+        std::fs::create_dir_all(fake_state_path.join("ic_state/checkpoints")).unwrap();
+        File::create(&fake_ssh_private_key_path).unwrap();
+
+        let fake_input_config = include_str!("../test_data/fake_input_config.json.template")
+            .replace(
+                "SSH_PRIVATE_KEY_TEMPLATE",
+                &fake_ssh_private_key_path.to_string_lossy(),
+            );
+
+        let mut f = File::create(&fake_config_path).unwrap();
+        write!(f, "{}", fake_input_config).unwrap();
+
+        let fake_cold_storage_path_str = fake_cold_storage_path.to_string_lossy();
+        let fake_state_path_str = fake_state_path.to_string_lossy();
+
+        let mut cursor = std::io::Cursor::new(
+            (vec![
+                FAKE_SUBNET_ID,
+                FAKE_INITIAL_REPLICA_VERSION,
+                &FAKE_NODES_SYNCING.to_string(),
+                &FAKE_SYNC_PERIOD_MINS.to_string(),
+                &FAKE_REPLAY_PERIOD_MINS.to_string(),
+                /*skip*/ "",
+                FAKE_SLACK_TOKEN,
+                &fake_cold_storage_path_str,
+                &FAKE_VERSIONS_HOT.to_string(),
+                &fake_state_path_str,
+            ])
+            .join("\n"),
+        );
+
+        BackupManager::init(
+            &mut cursor,
+            no_op_logger().inner_logger.root,
+            fake_config_path.clone(),
+        );
+
+        let expected_config = Config {
+            subnets: vec![SubnetConfig {
+                subnet_id: SubnetId::from(PrincipalId::from_str(FAKE_SUBNET_ID).unwrap()),
+                initial_replica_version: ReplicaVersion::try_from(FAKE_INITIAL_REPLICA_VERSION)
+                    .unwrap(),
+                nodes_syncing: FAKE_NODES_SYNCING,
+                sync_period_secs: FAKE_SYNC_PERIOD_MINS * 60,
+                replay_period_secs: FAKE_REPLAY_PERIOD_MINS * 60,
+                thread_id: 1,
+                disable_cold_storage: false,
+            }],
+            cold_storage: Some(ColdStorage {
+                cold_storage_dir: fake_cold_storage_path,
+                versions_hot: FAKE_VERSIONS_HOT,
+            }),
+            slack_token: FAKE_SLACK_TOKEN.to_string(),
+            ..serde_json::from_str(&fake_input_config).unwrap()
+        };
+
+        let config = Config::load_config(fake_config_path).unwrap();
+
+        assert_eq!(config, expected_config);
     }
 }

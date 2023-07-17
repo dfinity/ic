@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -27,6 +27,10 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities/tmpdir",
+]
+
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
@@ -47,4 +51,11 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":backup"],
+)
+
+rust_test(
+    name = "backup_test",
+    crate = ":backup",
+    data = ["test_data/fake_input_config.json.template"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
