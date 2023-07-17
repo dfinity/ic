@@ -1,7 +1,22 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("//bazel:canisters.bzl", "rust_canister")
 
 package(default_visibility = ["//visibility:public"])
+
+sol_binary(
+    name = "minter_contract",
+    srcs = ["minter.sol"],
+)
+
+# Export the compiled bytecode and ABI files as artifacts
+filegroup(
+    name = "contract_artifacts",
+    srcs = [
+        ":minter_contract",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 rust_library(
     name = "minter",
