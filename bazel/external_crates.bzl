@@ -970,7 +970,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.8.0",
             ),
             "sev": crate.spec(
-                version = "=1.1.0",  # Pinned to 1.1.0. The crate broke semantic versioning with breaking changes in 1.2.0 (https://github.com/virtee/sev/issues/81).
+                version = "^1.2.0",
                 features = [
                     "openssl",
                 ],
