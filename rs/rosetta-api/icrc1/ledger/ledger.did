@@ -260,6 +260,71 @@ type DataCertificate = record {
     hash_tree : blob;
 };
 
+type ApproveArgs = record {
+    from_subaccount : opt Subaccount;
+    spender : Account;
+    amount : Tokens;
+    expected_allowance : opt Tokens;
+    expires_at : opt Timestamp;
+    fee : opt Tokens;
+    memo : opt blob;
+    created_at_time: opt Timestamp;
+};
+
+type ApproveError = variant {
+    BadFee : record { expected_fee : Tokens };
+    InsufficientFunds : record { balance : Tokens };
+    AllowanceChanged : record { current_allowance : Tokens };
+    Expired : record { ledger_time : nat64 };
+    TooOld;
+    CreatedInFuture : record { ledger_time : nat64 };
+    Duplicate : record { duplicate_of : BlockIndex };
+    TemporarilyUnavailable;
+    GenericError : record { error_code : nat; message : text };
+};
+
+type ApproveResult = variant {
+    Ok : BlockIndex;
+    Err : ApproveError;
+};
+
+type AllowanceArgs = record {
+    account : Account;
+    spender : Account;
+};
+
+type Allowance = record {
+    allowance : Tokens;
+    expires_at : opt Timestamp;
+};
+
+type TransferFromArgs = record {
+    spender_subaccount : opt Subaccount;
+    from : Account;
+    to : Account;
+    amount : Tokens;
+    fee : opt Tokens;
+    memo : opt blob;
+    created_at_time: opt Timestamp;
+};
+
+type TransferFromResult = variant {
+    Ok : BlockIndex;
+    Err : TransferFromError;
+};
+
+type TransferFromError = variant {
+    BadFee : record { expected_fee : Tokens };
+    BadBurn : record { min_burn_amount : Tokens };
+    InsufficientFunds : record { balance : Tokens };
+    InsufficientAllowance : record { allowance : Tokens };
+    TooOld;
+    CreatedInFuture : record { ledger_time : nat64 };
+    Duplicate : record { duplicate_of : BlockIndex };
+    TemporarilyUnavailable;
+    GenericError : record { error_code : nat; message : text };
+};
+
 service : (ledger_arg : LedgerArg) -> {
     icrc1_name : () -> (text) query;
     icrc1_symbol : () -> (text) query;
@@ -274,4 +339,7 @@ service : (ledger_arg : LedgerArg) -> {
     get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
     get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;  
     get_data_certificate : () -> (DataCertificate) query;    
+    icrc2_approve : (ApproveArgs) -> (ApproveResult);
+    icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
+    icrc2_transfer_from : (TransferFromArgs) -> (TransferFromResult);
 }
