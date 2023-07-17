@@ -614,18 +614,27 @@ impl Neuron {
     }
 
     /// Set the cached stake of this neuron to `updated_stake_e8s` and adjust
-    /// this neuron's age accordingly.
-    pub fn update_stake(&mut self, updated_stake_e8s: u64, now: u64) {
+    /// this neuron's age to be the weighted average of the priorly cached
+    /// and the added stakes. For example, if neuron N had staked 10 ICP aging
+    /// since 3 years and 5 ICP has been added, then
+    /// `N.update_stake_adjust_age(15 ICP)` will result in N staking 15 ICP aged
+    /// at (10 ICP * 3 years) / (10 ICP + 5 ICP) = 2 years.
+    ///
+    /// Only a non-dissolving neuron has a non-zero age. The age of all other
+    /// neurons (i.e., dissolving and dissolved) is represented as
+    /// `againg_since_timestamp_seconds == u64::MAX`. This method maintains
+    /// that invariant.
+    pub fn update_stake_adjust_age(&mut self, updated_stake_e8s: u64, now: u64) {
         // If the updated stake is less than the original stake, preserve the
         // age and distribute it over the new amount. This should not happen
         // in practice, so this code exists merely as a defensive fallback.
         //
-        // TODO(NNS1-954) Consider whether update_stake (and other similar
-        // methods) should use a neurons effective stake rather than the
-        // cached stake.
+        // TODO(NNS1-954) Consider whether update_stake_adjust_age (and other
+        // similar methods) should use a neurons effective stake rather than
+        // the cached stake.
         if updated_stake_e8s < self.cached_neuron_stake_e8s {
             println!(
-                "{}Reducing neuron {:?} stake via update_stake: {} -> {}",
+                "{}Reducing neuron {:?} stake via update_stake_adjust_age: {} -> {}",
                 LOG_PREFIX, self.id, self.cached_neuron_stake_e8s, updated_stake_e8s
             );
             self.cached_neuron_stake_e8s = updated_stake_e8s;
@@ -646,7 +655,27 @@ impl Neuron {
             // appropriately pro-rated to accommodate the new stake.
             assert!(new_stake_e8s == updated_stake_e8s);
             self.cached_neuron_stake_e8s = new_stake_e8s;
-            self.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
+
+            self.aging_since_timestamp_seconds =
+                if let Some(DissolveState::WhenDissolvedTimestampSeconds(_)) = self.dissolve_state {
+                    // Check if invariant is violated.
+                    if self.aging_since_timestamp_seconds != u64::MAX {
+                        println!(
+                            "{}Neuron {:?} is in state {:?}, so it should not have \
+                         an age, but aging_since_timestamp_seconds = {}",
+                            LOG_PREFIX,
+                            self.id,
+                            self.state(now),
+                            self.aging_since_timestamp_seconds
+                        );
+                    }
+                    // If, for some reason, the invariant did not already hold, we
+                    // recover by re-establishing it.
+                    u64::MAX
+                } else {
+                    // Only a non-dissolving neurons have a non-zero age.
+                    now.saturating_sub(new_age_seconds)
+                }
         }
     }
 
@@ -682,8 +711,10 @@ impl Neuron {
 mod tests {
     use crate::pb::v1::{
         audit_event::{Payload, ResetAging},
+        neuron::DissolveState,
         AuditEvent, Neuron,
     };
+    use ic_nervous_system_common::E8;
 
     const NOW: u64 = 123_456_789;
 
@@ -724,5 +755,151 @@ mod tests {
         assert!(neuron.maybe_reset_aging_timestamp(NOW).is_none());
 
         assert_eq!(neuron.aging_since_timestamp_seconds, 1_572_992_230);
+    }
+
+    const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
+
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_a_now() {
+        // WhenDissolvedTimestampSeconds(NOW) ==> dissolved
+        let original_dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(NOW));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: u64::MAX,
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        assert_eq!(neuron.aging_since_timestamp_seconds, u64::MAX);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_a_past() {
+        // WhenDissolvedTimestampSeconds(past) ==> dissolved
+        let original_dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
+            NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
+        ));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: u64::MAX,
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        assert_eq!(neuron.aging_since_timestamp_seconds, u64::MAX);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_b() {
+        let original_dissolve_state = Some(DissolveState::DissolveDelaySeconds(0));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s: u64 = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        // This is the weighted average that tells us what the age should be
+        // in seconds.
+        let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
+        // Decrease the age that we expect from now to get the exected timestamp
+        // since when the neurons should be aging.
+        assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolved_neuron_variant_c() {
+        // This should mean the neuron is dissolved.
+        let original_dissolve_state = None;
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        // This is the weighted average that tells us what the age should be
+        // in seconds.
+        let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
+        // Decrease the age that we expect from now to get the exected timestamp
+        // since when the neurons should be aging.
+        assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_non_dissolving_neuron() {
+        let original_dissolve_state =
+            Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: NOW.saturating_sub(TWELVE_MONTHS_SECONDS),
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 1_500_000_000_u64; // 15 ICP
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        // This is the weighted average that tells us what the age should be
+        // in seconds.
+        let expected_new_age_seconds = TWELVE_MONTHS_SECONDS.saturating_mul(10).saturating_div(15);
+        // Decrease the age that we expect from now to get the exected timestamp
+        // since when the neurons should be aging.
+        assert_eq!(neuron.age_seconds(NOW), expected_new_age_seconds);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_dissolving_neuron() {
+        // WhenDissolvedTimestampSeconds(future) <==> dissolving
+        let original_dissolve_state = Some(DissolveState::WhenDissolvedTimestampSeconds(
+            NOW.saturating_add(TWELVE_MONTHS_SECONDS),
+        ));
+        let mut neuron = Neuron {
+            aging_since_timestamp_seconds: u64::MAX,
+            cached_neuron_stake_e8s: 10 * E8,
+            dissolve_state: original_dissolve_state.clone(),
+            ..Default::default()
+        };
+        let new_stake_e8s = 15 * E8;
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        assert_eq!(neuron.aging_since_timestamp_seconds, u64::MAX);
+    }
+
+    #[test]
+    fn test_update_stake_adjust_age_for_invalid_cache() {
+        // For a neuron N, the value of the `N.cached_neuron_stake_e8s` should
+        // monotonically grow over time. If this invariant is violated, that
+        // means the cache was invalid. Calling `N.update_stake_adjust_age(X)`
+        // should recover an invalid cache by setting it to `X`.
+        let mut neuron = Neuron {
+            cached_neuron_stake_e8s: 10 * E8,
+            ..Default::default()
+        };
+        let original_dissolve_state = neuron.dissolve_state.clone();
+        // We expect that the age does not change in this scenario.
+        let original_aging_since_timestamp_seconds = neuron.aging_since_timestamp_seconds;
+        let new_stake_e8s = 5 * E8;
+        neuron.update_stake_adjust_age(new_stake_e8s, NOW);
+        // The only effect of the above call shoudl be an update of
+        // `cached_neuron_stake_e8s`; e.g., the operation does not simply fail.
+        assert_eq!(neuron.dissolve_state, original_dissolve_state);
+        assert_eq!(neuron.cached_neuron_stake_e8s, new_stake_e8s);
+        assert_eq!(
+            neuron.aging_since_timestamp_seconds,
+            original_aging_since_timestamp_seconds
+        );
     }
 }

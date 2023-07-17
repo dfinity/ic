@@ -5826,10 +5826,10 @@ impl Governance {
                     balance.get_e8s(),
                     neuron.cached_neuron_stake_e8s
                 );
-                neuron.update_stake(balance.get_e8s(), now);
+                neuron.update_stake_adjust_age(balance.get_e8s(), now);
             }
             Ordering::Less => {
-                neuron.update_stake(balance.get_e8s(), now);
+                neuron.update_stake_adjust_age(balance.get_e8s(), now);
             }
             // If the stake is the same as the account balance,
             // just return the neuron id (this way this method
@@ -5930,7 +5930,7 @@ impl Governance {
         match self.get_neuron_mut(&nid) {
             Ok(neuron) => {
                 // Adjust the stake.
-                neuron.update_stake(balance.get_e8s(), now);
+                neuron.update_stake_adjust_age(balance.get_e8s(), now);
                 Ok(nid)
             }
             Err(err) => {

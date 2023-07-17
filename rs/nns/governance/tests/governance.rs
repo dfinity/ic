@@ -8592,7 +8592,7 @@ fn test_update_stake() {
     let now = 10;
     neuron.cached_neuron_stake_e8s = Tokens::new(5, 0).unwrap().get_e8s();
     neuron.aging_since_timestamp_seconds = 0;
-    neuron.update_stake(Tokens::new(10, 0).unwrap().get_e8s(), now);
+    neuron.update_stake_adjust_age(Tokens::new(10, 0).unwrap().get_e8s(), now);
     assert_eq!(neuron.aging_since_timestamp_seconds, 5);
     assert_eq!(
         neuron.cached_neuron_stake_e8s,
@@ -8604,7 +8604,7 @@ fn test_update_stake() {
     let now = 10000;
     neuron.cached_neuron_stake_e8s = Tokens::new(50, 0).unwrap().get_e8s();
     neuron.aging_since_timestamp_seconds = 0;
-    neuron.update_stake(Tokens::new(58, 0).unwrap().get_e8s(), now);
+    neuron.update_stake_adjust_age(Tokens::new(58, 0).unwrap().get_e8s(), now);
     let expected_aging_since_timestamp_seconds = 1380;
     assert_eq!(
         neuron.aging_since_timestamp_seconds,
