@@ -70,7 +70,11 @@ impl RosettaApiClient {
     ) -> RosettaApiClient {
         let api_url = format!("http://[{}]:{}", vm.ipv6, port);
         debug!(&logger, "API url: {}", api_url);
-        let http_client = reqwest::Client::builder().build().unwrap();
+        let http_client = reqwest::Client::builder()
+            // https://github.com/hyperium/hyper/issues/2136#issuecomment-861826148
+            .pool_max_idle_per_host(0)
+            .build()
+            .unwrap();
         RosettaApiClient {
             http_client,
             api_url,
