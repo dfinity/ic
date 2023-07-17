@@ -242,7 +242,7 @@ impl FractionalDeveloperVotingPower {
 
         if deduped_dev_neurons.len() != developer_distribution.developer_neurons.len() {
             return Err(anyhow!(
-                "Error: Duplicate controllers detected in developer_neurons"
+                "Error: Neurons with the same controller and memo detected in developer_neurons"
             ));
         }
 
@@ -291,7 +291,7 @@ impl FractionalDeveloperVotingPower {
 
         if deduped_airdrop_neurons.len() != airdrop_distribution.airdrop_neurons.len() {
             return Err(anyhow!(
-                "Error: Duplicate controllers detected in airdrop_neurons"
+                "Error: Neurons with the same controller and memo detected in airdrop_neurons"
             ));
         }
 
