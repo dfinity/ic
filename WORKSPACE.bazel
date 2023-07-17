@@ -8,6 +8,22 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file"
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 http_archive(
+    name = "aspect_rules_sol",
+    sha256 = "4e98a4572cd2c5f9e0a4118be3b8d2f0be148c80779ea9da646d0afabe2d609c",
+    strip_prefix = "rules_sol-0.1.0",
+    url = "https://github.com/aspect-build/rules_sol/releases/download/v0.1.0/rules_sol-v0.1.0.tar.gz",
+)
+
+load("@aspect_rules_sol//sol:repositories.bzl", "rules_sol_dependencies", "sol_register_toolchains")
+
+rules_sol_dependencies()
+
+sol_register_toolchains(
+    name = "solc",
+    sol_version = "0.8.18",
+)
+
+http_archive(
     name = "io_bazel_rules_go",
     sha256 = "099a9fb96a376ccbbb7d291ed4ecbdfd42f6bc822ab77ae6f1b5cb9e914e94fa",
     urls = [
