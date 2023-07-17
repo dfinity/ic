@@ -722,14 +722,12 @@ where
         lookup(&metadata, BLOB_META_KEY),
         &Value::from(BLOB_META_VALUE)
     );
-    let standards = supported_standards(&env, canister_id);
-    assert_eq!(
-        standards,
-        vec![StandardRecord {
-            name: "ICRC-1".to_string(),
-            url: "https://github.com/dfinity/ICRC-1".to_string(),
-        }]
-    );
+    let mut standards = vec![];
+    for standard in supported_standards(&env, canister_id) {
+        standards.push(standard.name);
+    }
+    standards.sort();
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2"]);
 }
 
 pub fn test_total_supply<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -2348,6 +2346,9 @@ where
             "Expected ICRC-2 disabled error, got: {}",
             err.description()
         );
+        let standards = supported_standards(env, canister_id);
+        assert_eq!(standards.len(), 1);
+        assert_eq!(standards[0].name, "ICRC-1");
     }
 
     expect_icrc2_disabled(
@@ -2387,6 +2388,13 @@ where
 
     env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
         .expect("failed to upgrade the archive canister");
+
+    let mut standards = vec![];
+    for standard in supported_standards(&env, canister_id) {
+        standards.push(standard.name);
+    }
+    standards.sort();
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2"]);
 
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");

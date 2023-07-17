@@ -460,10 +460,18 @@ fn archives() -> Vec<ArchiveInfo> {
 #[query(name = "icrc1_supported_standards")]
 #[candid_method(query, rename = "icrc1_supported_standards")]
 fn supported_standards() -> Vec<StandardRecord> {
-    vec![StandardRecord {
+    let mut standards = vec![StandardRecord {
         name: "ICRC-1".to_string(),
-        url: "https://github.com/dfinity/ICRC-1".to_string(),
-    }]
+        url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
+    }];
+    let icrc2 = Access::with_ledger(|ledger| ledger.feature_flags().icrc2);
+    if icrc2 {
+        standards.push(StandardRecord {
+            name: "ICRC-2".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
+        });
+    }
+    standards
 }
 
 #[query]
