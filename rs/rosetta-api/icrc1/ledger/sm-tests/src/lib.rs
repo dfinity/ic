@@ -2269,6 +2269,31 @@ where
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
 }
 
+pub fn test_approve_from_minter<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
+
+    let minter = minting_account(&env, canister_id).unwrap();
+    let spender = PrincipalId::new_user_test_id(1);
+    let approve_args = default_approve_args(spender.0, 150_000);
+
+    // Delegating mints is not allowed.
+    let err = env
+        .execute_ingress_as(
+            minter.owner.into(),
+            canister_id,
+            "icrc2_approve",
+            Encode!(&approve_args).unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(err
+        .description()
+        .ends_with("the minting account cannot delegate mints"));
+}
+
 pub fn test_feature_flags<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
