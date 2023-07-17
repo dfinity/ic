@@ -404,6 +404,9 @@ rm -rf "${TMPDIR}"
 echo "-------------------------------------------------------------------------------"
 cd "${REPO_ROOT}/testnet/ansible"
 
+echo "**** Remove eventual monitoring - ($(dateFromEpoch "$(date '+%s')"))"
+ansible ic_p8s_service_discovery_destroy.yml
+
 echo "**** Create new IC instance - ($(dateFromEpoch "$(date '+%s')"))"
 ansible icos_network_redeploy.yml -e ic_state="create"
 
