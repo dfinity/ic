@@ -28,45 +28,30 @@ type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
 >;
 
-struct AdapterClientWrapper(BitcoinAdapterClient);
+fn make_get_successors_request(
+    adapter_client: &BitcoinAdapterClient,
+    anchor: Vec<u8>,
+    headers: Vec<Vec<u8>>,
+) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
+    let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+        network: Network::Regtest,
+        anchor,
+        processed_block_hashes: headers,
+    });
 
-impl AdapterClientWrapper {
-    async fn new(
-        metrics_registry: MetricsRegistry,
-        logger: ReplicaLogger,
-        uds_path: &Path,
-    ) -> Self {
-        let client = start_client(metrics_registry, logger, uds_path).await;
-        Self(client)
-    }
+    adapter_client.send_blocking(request, Options::default())
+}
 
-    fn get_successors(
-        &self,
-        anchor: Vec<u8>,
-        headers: Vec<Vec<u8>>,
-    ) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
-        let request =
-            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
-                network: Network::Regtest,
-                anchor,
-                processed_block_hashes: headers,
-            });
+fn make_send_tx_request(
+    adapter_client: &BitcoinAdapterClient,
+    raw_tx: &[u8],
+) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
+    let request = BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
+        network: Network::Regtest,
+        transaction: raw_tx.to_vec(),
+    });
 
-        self.0.send_blocking(request, Options::default())
-    }
-
-    fn send_tx(
-        &self,
-        raw_tx: &[u8],
-    ) -> Result<BitcoinAdapterResponseWrapper, ic_interfaces_adapter_client::RpcError> {
-        let request =
-            BitcoinAdapterRequestWrapper::SendTransactionRequest(SendTransactionRequest {
-                network: Network::Regtest,
-                transaction: raw_tx.to_vec(),
-            });
-
-        self.0.send_blocking(request, Options::default())
-    }
+    adapter_client.send_blocking(request, Options::default())
 }
 
 async fn start_adapter(
@@ -143,18 +128,67 @@ fn get_bitcoind_url(bitcoind: &BitcoinD) -> Option<SocketAddrV4> {
     }
 }
 
+fn start_adapter_and_client(
+    rt: &Runtime,
+    urls: Vec<SocketAddr>,
+    logger: ReplicaLogger,
+) -> (BitcoinAdapterClient, TempPath) {
+    Builder::new()
+        .make(|uds_path| {
+            Ok(rt.block_on(async {
+                let metrics_registry = MetricsRegistry::new();
+
+                start_adapter(
+                    logger.clone(),
+                    metrics_registry.clone(),
+                    urls.clone(),
+                    uds_path,
+                )
+                .await;
+
+                start_client(metrics_registry, logger.clone(), uds_path).await
+            }))
+        })
+        .unwrap()
+        .into_parts()
+}
+
+fn wait_for_blocks(client: &Client, blocks: u64) {
+    let mut tries = 0;
+    while client.get_blockchain_info().unwrap().blocks != blocks {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        tries += 1;
+        if tries > 5 {
+            panic!("Timeout in wait_for_blocks");
+        }
+    }
+}
+
+fn wait_for_connection(client: &Client, connection_count: usize) {
+    let mut tries = 0;
+    while client.get_connection_count().unwrap() != connection_count {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        tries += 1;
+        if tries > 5 {
+            panic!("Timeout in wait_for_connection");
+        }
+    }
+}
+
 fn sync_until_end_block(
-    adapter_client: &AdapterClientWrapper,
+    adapter_client: &BitcoinAdapterClient,
     client: &Client,
     start_index: u64,
     headers: &mut Vec<Vec<u8>>,
+    max_tries: u64,
 ) -> Vec<Block> {
     let mut blocks = vec![];
     let mut anchor = client.get_block_hash(start_index).unwrap()[..].to_vec();
+    let mut tries = 0;
 
     let end_hash = client.get_best_block_hash().unwrap()[..].to_vec();
-    while anchor != end_hash {
-        let res = adapter_client.get_successors(anchor.clone(), headers.clone());
+    while anchor != end_hash && tries < max_tries {
+        let res = make_get_successors_request(adapter_client, anchor.clone(), headers.clone());
         match res {
             Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(res)) => {
                 let new_blocks = res.blocks;
@@ -182,37 +216,50 @@ fn sync_until_end_block(
             Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
             Err(err) => panic!("{:?}", err),
         }
-
+        tries += 1;
         std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
     blocks
 }
 
-fn start_adapter_and_client(
-    rt: &Runtime,
-    urls: Vec<SocketAddr>,
-    logger: ReplicaLogger,
-) -> (AdapterClientWrapper, TempPath) {
-    Builder::new()
-        .make(|uds_path| {
-            Ok(rt.block_on(async {
-                let metrics_registry = MetricsRegistry::new();
+fn sync_blocks(
+    adapter_client: &BitcoinAdapterClient,
+    headers: &mut Vec<Vec<u8>>,
+    anchor: Vec<u8>,
+    len: usize,
+    max_tries: u64,
+) -> Vec<Block> {
+    let mut blocks = vec![];
 
-                start_adapter(
-                    logger.clone(),
-                    metrics_registry.clone(),
-                    urls.clone(),
-                    uds_path,
-                )
-                .await;
+    let mut tries = 0;
+    while blocks.len() < len && tries < max_tries {
+        let res = make_get_successors_request(adapter_client, anchor.clone(), headers.clone());
+        match res {
+            Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(res)) => {
+                let new_blocks = res.blocks;
+                if !new_blocks.is_empty() {
+                    let new_headers: Vec<Vec<u8>> = new_blocks
+                        .iter()
+                        .map(|block| deserialize::<Block>(block).unwrap().block_hash()[..].to_vec())
+                        .collect();
 
-                // Start the client
-                AdapterClientWrapper::new(metrics_registry, logger.clone(), uds_path).await
-            }))
-        })
-        .unwrap()
-        .into_parts()
+                    headers.extend(new_headers);
+
+                    blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
+                }
+            }
+            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_)) => {
+                panic!("Wrong type of response")
+            }
+            Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
+            Err(err) => panic!("{:?}", err),
+        }
+        tries += 1;
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    blocks
 }
 
 fn get_blackhole_address() -> Address {
@@ -293,7 +340,7 @@ fn test_receives_blocks() {
         logger,
     );
 
-    let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![]);
+    let blocks = sync_until_end_block(&adapter_client, &client, 0, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 150);
 }
@@ -347,7 +394,7 @@ fn test_receives_new_3rd_party_txs() {
         Amount::from_btc(1.0).unwrap()
     );
 
-    let blocks = sync_until_end_block(&adapter_client, &alice_client, 101, &mut vec![]);
+    let blocks = sync_until_end_block(&adapter_client, &alice_client, 101, &mut vec![], 15);
 
     assert_eq!(blocks.len(), 1);
     assert!(blocks[0].txdata.iter().any(|tx| tx.txid() == txid));
@@ -403,7 +450,7 @@ fn test_send_tx() {
         .sign_raw_transaction_with_wallet(&raw_tx, None, None)
         .unwrap();
 
-    let res = adapter_client.send_tx(&signed_tx.hex);
+    let res = make_send_tx_request(&adapter_client, &signed_tx.hex);
 
     let mut tries = 0;
     while tries < 5
@@ -422,4 +469,71 @@ fn test_send_tx() {
     } else {
         panic!("Failed to send transaction");
     }
+}
+
+/// Checks that the client (replica) receives blocks from both created forks.
+#[test]
+fn test_receives_blocks_from_forks() {
+    let logger = no_op_logger();
+    let bitcoind1 = get_default_bitcoind();
+    let client1 = Client::new(
+        bitcoind1.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
+    )
+    .unwrap();
+
+    let bitcoind2 = get_default_bitcoind();
+    let client2 = Client::new(
+        bitcoind2.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
+    )
+    .unwrap();
+
+    let url1 = get_bitcoind_url(&bitcoind1).unwrap();
+    let url2 = get_bitcoind_url(&bitcoind2).unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (adapter_client, _path) = start_adapter_and_client(
+        &rt,
+        vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
+        logger,
+    );
+
+    // Connect the nodes and mine some shared blocks
+    client1
+        .onetry_node(&url2.to_string())
+        .expect("Failed to connect to the other peer");
+
+    wait_for_connection(&client1, 2);
+    wait_for_connection(&client2, 2);
+
+    let address1 = client1.get_new_address(None, None).unwrap();
+    client1.generate_to_address(25, &address1).unwrap();
+
+    wait_for_blocks(&client1, 25);
+    wait_for_blocks(&client2, 25);
+
+    let address2 = client2.get_new_address(None, None).unwrap();
+    client2.generate_to_address(25, &address2).unwrap();
+
+    wait_for_blocks(&client1, 50);
+    wait_for_blocks(&client2, 50);
+
+    // Disconnect the nodes to create a fork
+    client1
+        .disconnect_node(&url2.to_string())
+        .expect("Failed to disconnect peers");
+
+    wait_for_connection(&client1, 1);
+    wait_for_connection(&client2, 1);
+
+    client1.generate_to_address(10, &address1).unwrap();
+    client2.generate_to_address(15, &address2).unwrap();
+
+    wait_for_blocks(&client1, 60);
+    wait_for_blocks(&client2, 65);
+
+    let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
+    let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 75, 200);
+    assert_eq!(blocks.len(), 75);
 }
