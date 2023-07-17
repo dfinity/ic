@@ -5,28 +5,6 @@ use pretty_assertions::assert_eq;
 
 const NOMINAL_SECONDS_PER_YEAR: u64 = 365 * SECONDS_PER_DAY + SECONDS_PER_DAY / 4;
 
-struct SaveAndRestoreCurrentDirectoryOnExit {
-    original: PathBuf,
-}
-
-impl SaveAndRestoreCurrentDirectoryOnExit {
-    fn new() -> Self {
-        let original = std::env::current_dir().unwrap();
-        println!("Saving original working dir: {}", original.display());
-        Self { original }
-    }
-}
-
-impl Drop for SaveAndRestoreCurrentDirectoryOnExit {
-    fn drop(&mut self) {
-        std::env::set_current_dir(self.original.clone());
-        println!(
-            "Restored original dir: {}",
-            std::env::current_dir().unwrap().display()
-        );
-    }
-}
-
 #[test]
 fn test_parse() {
     let input_path = {
@@ -204,16 +182,15 @@ fn test_parse() {
 #[test]
 fn test_convert_to_create_service_nervous_system() {
     // Step 1: Prepare the world.
-    let save_and_restore_current_directory_on_exit = SaveAndRestoreCurrentDirectoryOnExit::new();
-    let test_root_dir = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    std::env::set_current_dir(test_root_dir);
+    let test_root_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let test_root_dir = std::path::Path::new(&test_root_dir);
 
-    let contents = std::fs::read_to_string("example_sns_init_v2.yaml").unwrap();
+    let contents = std::fs::read_to_string(test_root_dir.join("example_sns_init_v2.yaml")).unwrap();
     let sns_configuration_file = serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
 
     // Step 2: Call code under test.
     let observed_create_service_nervous_system = sns_configuration_file
-        .try_convert_to_create_service_nervous_system()
+        .try_convert_to_create_service_nervous_system(test_root_dir)
         .unwrap();
 
     // Step 3: Inspect results.
@@ -273,7 +250,7 @@ fn test_convert_to_create_service_nervous_system() {
             .unwrap(),
     )
     .unwrap();
-    let expected_logo_content = std::fs::read("test.png").unwrap();
+    let expected_logo_content = std::fs::read(test_root_dir.join("test.png")).unwrap();
     assert!(
         // == is used instead of the usual assert_eq!, because when the observed
         // value is not as expected, assert_eq! would produce a ton of spam, due

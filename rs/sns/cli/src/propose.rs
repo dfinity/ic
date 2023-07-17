@@ -163,8 +163,20 @@ fn load_configuration_and_validate_or_exit(
         );
         std::process::exit(1);
     });
+    let base_path = match configuration_file_path.parent() {
+        Some(ok) => ok,
+        None => {
+            // This shouldn't happen since we were already able to read from
+            // configuration_file_path.
+            eprintln!(
+                "Configuration file path ({:?}) has no parent.",
+                configuration_file_path,
+            );
+            std::process::exit(1);
+        }
+    };
     let create_service_nervous_system = init_config_file
-        .try_convert_to_create_service_nervous_system()
+        .try_convert_to_create_service_nervous_system(base_path)
         .unwrap_or_else(|err| {
             eprintln!(
                 "Unable to parse the SNS configuration file. err = {:?}.\n\

@@ -49,3 +49,6 @@ serde_yaml = "0.8.24"
 json-patch = "0.2.6"
 tempfile = "3.1.0"
 url = "2.2.0"
+
+[dev-dependencies]
+lazy_static = "1.4.0"
