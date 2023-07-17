@@ -6,7 +6,11 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_sns_init::pb::v1::SnsInitPayload;
-use std::{fmt::Debug, path::PathBuf, str::FromStr};
+use std::{
+    fmt::Debug,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 // Alias CreateServiceNervousSystem-related types, but since we have many
 // related types in this module, put these aliases in their own module to avoid
@@ -274,6 +278,7 @@ impl<'a> AliasToPrincipalId<'a> {
 impl SnsConfigurationFile {
     pub fn try_convert_to_create_service_nervous_system(
         &self,
+        base_path: &Path,
     ) -> Result<CreateServiceNervousSystem, String> {
         // Step 1: Unpack.
         let SnsConfigurationFile {
@@ -304,6 +309,13 @@ impl SnsConfigurationFile {
         let description = Some(description.clone());
         let url = Some(url.clone());
 
+        let logo = Path::new(logo);
+        let logo = if logo.is_relative() {
+            base_path.join(logo)
+        } else {
+            logo.to_path_buf()
+        };
+        let logo = logo.as_path();
         let logo_content = std::fs::read(logo)
             .map_err(|err| {
                 defects.push(format!(
@@ -312,10 +324,10 @@ impl SnsConfigurationFile {
                 ))
             })
             .unwrap_or_default();
-        // Without &, bazel refuses to build. Without, cargo clippy fails. I
-        // think this is due to slight differences in the version of base64 that
-        // are used in the two systems. Forcing them to use the same would be
-        // ideal. However, I'm not sure how to force them to use the same.
+        // Without & in front of logo_content, bazel refuses to build. With it,
+        // cargo clippy fails. I think this is due to slight differences in the
+        // version of base64 that are used in the two systems. Forcing them to
+        // use the same would be ideal. However, I'm not sure how to do that.
         #[allow(clippy::needless_borrow)]
         let logo_content = base64::encode(&logo_content);
         let base64_encoding = Some(format!("data:image/png;base64,{}", logo_content));

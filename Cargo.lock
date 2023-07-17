@@ -9973,6 +9973,7 @@ dependencies = [
  "ic-sns-wasm",
  "icp-ledger",
  "json-patch",
+ "lazy_static",
  "maplit",
  "on_wire",
  "pretty_assertions 0.6.1",

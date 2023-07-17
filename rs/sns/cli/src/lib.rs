@@ -27,7 +27,7 @@ use std::{
     fmt::{Debug, Display},
     fs::File,
     io::{Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{exit, Command, Output},
     str::FromStr,
 };
@@ -38,6 +38,9 @@ pub mod init_config_file;
 pub mod prepare_canisters;
 pub mod propose;
 pub mod unit_helpers;
+
+#[cfg(test)]
+mod tests;
 
 /// We use a giant tail to avoid colliding with/stomping on identity that a user
 /// might have created for themselves.
@@ -216,49 +219,90 @@ impl DeployArgs {
     }
 }
 
-pub fn generate_sns_init_payload(init_config_file: &PathBuf) -> anyhow::Result<SnsInitPayload> {
-    let file = File::open(init_config_file).map_err(|err| {
-        anyhow!(
-            "Couldn't open initial parameters file ({:?}): {}",
-            init_config_file,
-            err
-        )
+pub fn generate_sns_init_payload(path: &Path) -> anyhow::Result<SnsInitPayload> {
+    // First, try format v1. If serde_yaml::Error occurred, try format v2.
+    generate_sns_init_payload_v1(path).or_else(|previous_err| {
+        use GenerateSnsInitPayloadV1Error as E;
+        match previous_err {
+            E::Misc(err) => Err(err),
+            E::Yaml(_) => generate_sns_init_payload_v2(path),
+        }
+    })
+}
+
+enum GenerateSnsInitPayloadV1Error {
+    Yaml(serde_yaml::Error),
+    Misc(anyhow::Error),
+}
+
+fn generate_sns_init_payload_v1(
+    path: &Path,
+) -> Result<SnsInitPayload, GenerateSnsInitPayloadV1Error> {
+    // Read the file.
+    let file = File::open(path).map_err(|err| {
+        GenerateSnsInitPayloadV1Error::Misc(anyhow!("Unable to read {:?}: {}", path, err))
     })?;
 
+    // Parse its contents.
     let mut sns_cli_init_config: SnsCliInitConfig =
-        serde_yaml::from_reader(file).map_err(|err| {
-            anyhow!(
-                "Couldn't parse the initial parameters file ({:?}): {}",
-                init_config_file,
-                err
-            )
-        })?;
-    // If logo path is a relative path, interpret it from the location of the configuration file
+        serde_yaml::from_reader(file).map_err(GenerateSnsInitPayloadV1Error::Yaml)?;
+
+    // Normalize logo path: if relative, convert it to absolute, using the
+    // directory where the configuration file lives as the base (as opposed to
+    // the current working directory of the runner).
     sns_cli_init_config.sns_governance.logo =
         sns_cli_init_config.sns_governance.logo.map(|logo_path| {
             if logo_path.is_absolute() {
                 logo_path
             } else {
-                init_config_file
-                    .to_path_buf()
-                    .parent()
-                    .unwrap()
-                    .join(logo_path)
+                path.parent().unwrap().join(logo_path)
             }
         });
 
-    let sns_init_payload = SnsInitPayload::try_from(sns_cli_init_config).map_err(|err| {
-        anyhow!(
-            "Error encountered when building the SnsInitPayload from the config file: {}",
-            err
-        )
-    })?;
+    // Convert.
+    let sns_init_payload = SnsInitPayload::try_from(sns_cli_init_config)
+        .map_err(GenerateSnsInitPayloadV1Error::Misc)?;
 
+    // Validate.
     sns_init_payload
         .validate_legacy_init()
-        .map_err(|err| anyhow!("Initial parameters file failed validation: {}", err))?;
+        .map_err(GenerateSnsInitPayloadV1Error::Misc)?;
 
+    // Ship it!
     Ok(sns_init_payload)
+}
+
+fn generate_sns_init_payload_v2(path: &Path) -> anyhow::Result<SnsInitPayload> {
+    // Read the file.
+    let contents = std::fs::read_to_string(path)
+        .map_err(|err| anyhow!("Unable to read {:?}: {}", path, err))?;
+
+    // Parse its contents.
+    let configuration =
+        serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)
+            .map_err(|err| anyhow!("Unable to parse contents of {:?}: {}", path, err))?;
+
+    // Convert (to CreateServiceNervousSysytem).
+    let base_path = path.parent().ok_or_else(|| {
+        anyhow!(
+            "Configuration file path ({:?}) has no parent, it seems.",
+            path,
+        )
+    })?;
+    let configuration = configuration
+        .try_convert_to_create_service_nervous_system(base_path)
+        .map_err(|err| anyhow!("Invalid configuration in {:?}: {}", path, err))?;
+
+    // Last step: more conversion (this time, to the desired type: SnsInitPayload).
+    SnsInitPayload::try_from(configuration)
+        // This shouldn't be possible -> we could just unwrap here, and there
+        // should be no danger of panic, but we handle Err anyway, because if
+        // err is returned, it still makes sense to just return that.
+        //
+        // The reason Err should be impossible is
+        // try_convert_to_create_service_nervous_system itself call
+        // SnsInitPayload::try_from as part of its validation.
+        .map_err(|err| anyhow!("Invalid configuration in {:?}: {}", path, err))
 }
 
 impl DeployTestflightArgs {
