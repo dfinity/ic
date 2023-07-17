@@ -739,7 +739,7 @@ dependencies = [
  "openssl",
  "pin-project-lite",
  "rustls 0.21.5",
- "rustls-pemfile",
+ "rustls-pemfile 1.0.2",
  "tokio",
  "tokio-openssl",
  "tokio-rustls 0.24.0",
@@ -1326,6 +1326,16 @@ dependencies = [
  "lazy_static",
  "memchr",
  "regex-automata",
+]
+
+[[package]]
+name = "buf_redux"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b953a6887648bb07a535631f2bc00fbdb2a2216f135552cb3f534ed136b9c07f"
+dependencies = [
+ "memchr",
+ "safemem",
 ]
 
 [[package]]
@@ -4473,7 +4483,7 @@ dependencies = [
  "axum-server",
  "clap 4.3.3",
  "rustls 0.21.5",
- "rustls-pemfile",
+ "rustls-pemfile 1.0.2",
  "serde_json",
  "tokio",
 ]
@@ -11559,7 +11569,7 @@ dependencies = [
  "prometheus 0.13.3",
  "rustls 0.21.5",
  "rustls-native-certs",
- "rustls-pemfile",
+ "rustls-pemfile 1.0.2",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -12160,7 +12170,7 @@ version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 dependencies = [
- "spin 0.5.2",
+ "spin",
 ]
 
 [[package]]
@@ -13036,28 +13046,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "multer"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "01acbdc23469fd8fe07ab135923371d5f5a422fbf9c522158677c8eb15bc51c2"
-dependencies = [
- "bytes",
- "encoding_rs",
- "futures-util",
- "http",
- "httparse",
- "log",
- "memchr",
- "mime",
- "spin 0.9.8",
- "version_check",
-]
-
-[[package]]
 name = "multimap"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
+
+[[package]]
+name = "multipart"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00dec633863867f29cb39df64a397cdf4a6354708ddd7759f70c7fb51c5f9182"
+dependencies = [
+ "buf_redux",
+ "httparse",
+ "log",
+ "mime",
+ "mime_guess",
+ "quick-error 1.2.3",
+ "rand 0.8.5",
+ "safemem",
+ "tempfile",
+ "twoway",
+]
 
 [[package]]
 name = "native-tls"
@@ -15232,7 +15242,7 @@ dependencies = [
  "percent-encoding 2.2.0",
  "pin-project-lite",
  "rustls 0.21.5",
- "rustls-pemfile",
+ "rustls-pemfile 1.0.2",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -15315,7 +15325,7 @@ dependencies = [
  "cc",
  "libc",
  "once_cell",
- "spin 0.5.2",
+ "spin",
  "untrusted",
  "web-sys",
  "winapi 0.3.9",
@@ -15619,9 +15629,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0167bac7a9f490495f3c33013e7722b53cb087ecbe082fb0c6387c96f634ea50"
 dependencies = [
  "openssl-probe",
- "rustls-pemfile",
+ "rustls-pemfile 1.0.2",
  "schannel",
  "security-framework",
+]
+
+[[package]]
+name = "rustls-pemfile"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5eebeaeb360c87bfb72e84abdb3447159c0eaececf1bef2aecd65a8be949d1c9"
+dependencies = [
+ "base64 0.13.1",
 ]
 
 [[package]]
@@ -15666,6 +15685,12 @@ name = "ryu"
 version = "1.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f91339c0467de62360649f8d3e185ca8de4224ff281f66000de5eb2a77a79041"
+
+[[package]]
+name = "safemem"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
 
 [[package]]
 name = "same-file"
@@ -16127,6 +16152,17 @@ dependencies = [
  "anyhow",
  "clap 3.2.23",
  "sev",
+]
+
+[[package]]
+name = "sha-1"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5058ada175748e33390e40e872bd0fe59a19f265d0158daa551c5a88a76009c"
+dependencies = [
+ "cfg-if 1.0.0",
+ "cpufeatures",
+ "digest 0.10.7",
 ]
 
 [[package]]
@@ -16627,12 +16663,6 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
-
-[[package]]
-name = "spin"
-version = "0.9.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
 name = "spki"
@@ -17555,9 +17585,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-tungstenite"
-version = "0.18.0"
+version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54319c93411147bced34cb5609a80e0a8e44c5999c93903a81cd866630ec0bfd"
+checksum = "f714dd15bead90401d77e04243611caec13726c2408afd5b31901dfcdcb3b181"
 dependencies = [
  "futures-util",
  "log",
@@ -17921,9 +17951,9 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "tungstenite"
-version = "0.18.0"
+version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30ee6ab729cd4cf0fd55218530c4522ed30b7b6081752839b68fcec8d0960788"
+checksum = "e27992fd6a8c29ee7eef28fc78349aa244134e10ad447ce3b9f0ac0ed0fa4ce0"
 dependencies = [
  "base64 0.13.1",
  "byteorder",
@@ -17932,7 +17962,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.5",
- "sha1",
+ "sha-1",
  "thiserror",
  "url",
  "utf-8",
@@ -17956,6 +17986,15 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "twoway"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59b11b2b5241ba34be09c3cc85a36e56e48f9888862e19cedf23336d35316ed1"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -18351,9 +18390,9 @@ dependencies = [
 
 [[package]]
 name = "warp"
-version = "0.3.5"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba431ef570df1287f7f8b07e376491ad54f84d26ac473489427231e1718e1f69"
+checksum = "ed7b8be92646fc3d18b06147664ebc5f48d222686cb11a8755e561a735aacc6d"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -18364,10 +18403,10 @@ dependencies = [
  "log",
  "mime",
  "mime_guess",
- "multer",
+ "multipart",
  "percent-encoding 2.2.0",
  "pin-project",
- "rustls-pemfile",
+ "rustls-pemfile 0.2.1",
  "scoped-tls",
  "serde",
  "serde_json",
