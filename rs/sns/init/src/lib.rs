@@ -106,55 +106,6 @@ impl From<RestrictedCountriesValidationError> for Result<(), String> {
     }
 }
 
-#[derive(Clone, Copy)]
-pub enum NeuronBasketConstructionParametersValidationError {
-    ExceedsMaximalDissolveDelay(u64),
-    ExceedsU64,
-    InadequateBasketSize,
-    InadequateDissolveDelay,
-    UnexpectedInLegacyFlow,
-}
-
-impl NeuronBasketConstructionParametersValidationError {
-    fn field_name() -> String {
-        "SnsInitPayload.neuron_basket_construction_parameters".to_string()
-    }
-}
-
-impl ToString for NeuronBasketConstructionParametersValidationError {
-    fn to_string(&self) -> String {
-        let msg = match self {
-            Self::ExceedsMaximalDissolveDelay(max_dissolve_delay_seconds) => {
-                format!(
-                    "must satisfy (count - 1) * dissolve_delay_interval_seconds \
-                    < SnsInitPayload.max_dissolve_delay_seconds = {max_dissolve_delay_seconds}"
-                )
-            }
-            Self::InadequateBasketSize => "basket count must be at least 2".to_string(),
-            Self::InadequateDissolveDelay => {
-                "dissolve_delay_interval_seconds must be at least 1".to_string()
-            }
-            Self::ExceedsU64 => {
-                format!(
-                    "must satisfy (count - 1) * dissolve_delay_interval_seconds \
-                    < u64::MAX = {}",
-                    u64::MAX
-                )
-            }
-            Self::UnexpectedInLegacyFlow => {
-                "must not be set with the legacy flow for SNS decentralization swaps".to_string()
-            }
-        };
-        format!("{} {msg}", Self::field_name())
-    }
-}
-
-impl From<NeuronBasketConstructionParametersValidationError> for Result<(), String> {
-    fn from(val: NeuronBasketConstructionParametersValidationError) -> Self {
-        Err(val.to_string())
-    }
-}
-
 // Token Symbols that can not be used.
 lazy_static! {
     static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {
@@ -272,11 +223,7 @@ impl SnsInitPayload {
         deployed_version: Option<Version>,
         testflight: bool,
     ) -> anyhow::Result<SnsCanisterInitPayloads> {
-        if self.is_legacy_flow() {
-            self.validate_legacy_init()?;
-        } else {
-            self.validate_pre_execution()?;
-        }
+        self.validate_legacy_init()?;
         Ok(SnsCanisterInitPayloads {
             governance: self.governance_init_args(sns_canister_ids, deployed_version)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
@@ -592,7 +539,6 @@ impl SnsInitPayload {
             self.validate_dapp_canisters(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
-            self.validate_neuron_basket_construction_params(true),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -625,7 +571,6 @@ impl SnsInitPayload {
             self.validate_dapp_canisters(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
-            self.validate_neuron_basket_construction_params(false),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -658,14 +603,9 @@ impl SnsInitPayload {
             self.validate_dapp_canisters(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
-            self.validate_neuron_basket_construction_params(false),
         ];
 
         self.join_validation_results(&validation_fns)
-    }
-
-    pub fn is_legacy_flow(&self) -> bool {
-        self.neuron_basket_construction_parameters.is_none()
     }
 
     fn join_validation_results(
@@ -1206,47 +1146,6 @@ impl SnsInitPayload {
         }
         Ok(())
     }
-
-    fn validate_neuron_basket_construction_params(&self, is_legacy: bool) -> Result<(), String> {
-        if self.neuron_basket_construction_parameters.is_none() {
-            return Ok(()); // Nothing to validate.
-        }
-        // Check that the filed is not set if we are in the legacy flow.
-        if is_legacy && self.neuron_basket_construction_parameters.is_some() {
-            return NeuronBasketConstructionParametersValidationError::UnexpectedInLegacyFlow
-                .into();
-        }
-        // Check that `NeuronBasket` dissolve delay does not exceed
-        // the maximum dissolve delay.
-        let max_dissolve_delay_seconds = self.max_dissolve_delay_seconds.unwrap_or_default();
-        // The maximal dissolve delay of a neuron from a basket created by
-        // `NeuronBasketConstructionParameters::generate_vesting_schedule`
-        // will equal `(count - 1) * dissolve_delay_interval_seconds`.
-        let neuron_basket_construction_parameters = self
-            .neuron_basket_construction_parameters
-            .clone()
-            .unwrap_or_default();
-        let max_neuron_basket_dissolve_delay = neuron_basket_construction_parameters
-            .count
-            .saturating_sub(1_u64)
-            .checked_mul(neuron_basket_construction_parameters.dissolve_delay_interval_seconds);
-        if let Some(max_neuron_basket_dissolve_delay) = max_neuron_basket_dissolve_delay {
-            if max_neuron_basket_dissolve_delay > max_dissolve_delay_seconds {
-                return NeuronBasketConstructionParametersValidationError::ExceedsMaximalDissolveDelay(max_dissolve_delay_seconds)
-                    .into();
-            }
-        } else {
-            return NeuronBasketConstructionParametersValidationError::ExceedsU64.into();
-        }
-        if neuron_basket_construction_parameters.count < 2 {
-            return NeuronBasketConstructionParametersValidationError::InadequateBasketSize.into();
-        }
-        if neuron_basket_construction_parameters.dissolve_delay_interval_seconds < 1 {
-            return NeuronBasketConstructionParametersValidationError::InadequateDissolveDelay
-                .into();
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -1256,9 +1155,8 @@ mod test {
             AirdropDistribution, DappCanisters, DeveloperDistribution,
             FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
         },
-        FractionalDeveloperVotingPower, NeuronBasketConstructionParametersValidationError,
-        RestrictedCountriesValidationError, SnsCanisterIds, SnsInitPayload,
-        MAX_CONFIRMATION_TEXT_LENGTH, MAX_DAPP_CANISTERS_COUNT,
+        FractionalDeveloperVotingPower, RestrictedCountriesValidationError, SnsCanisterIds,
+        SnsInitPayload, MAX_CONFIRMATION_TEXT_LENGTH, MAX_DAPP_CANISTERS_COUNT,
         MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MAX_TOKEN_NAME_LENGTH,
         MAX_TOKEN_SYMBOL_LENGTH,
     };
@@ -1268,34 +1166,9 @@ mod test {
     use ic_sns_governance::{
         governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
     };
-    use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
     use icrc_ledger_types::icrc1::account::Account;
     use isocountry::CountryCode;
     use std::{collections::BTreeMap, convert::TryInto};
-
-    #[inline]
-    fn assert_ok<T>(result: anyhow::Result<T>)
-    where
-        T: std::fmt::Debug,
-    {
-        assert!(
-            result.is_ok(),
-            "assertion failed: expected Ok got {result:?}"
-        );
-    }
-
-    #[inline]
-    fn assert_error<T, E>(result: anyhow::Result<T>, expected_error: E)
-    where
-        T: std::fmt::Debug,
-        E: ToString,
-    {
-        assert!(
-            result.is_err(),
-            "assertion failed: expected Err got {result:?}"
-        );
-        assert_eq!(result.unwrap_err().to_string(), expected_error.to_string());
-    }
 
     fn create_canister_ids() -> SnsCanisterIds {
         SnsCanisterIds {
@@ -1393,7 +1266,7 @@ mod test {
         assert!(sns_init_payload.validate_legacy_init().is_err());
         sns_init_payload = get_sns_init_payload();
 
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
     }
 
     #[test]
@@ -1463,7 +1336,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1494,7 +1367,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1524,7 +1397,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1551,7 +1424,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1577,7 +1450,9 @@ mod test {
                 confirmation_text: None,
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
         }
         // Test that some non-trivial value of `confirmation_text` validates.
         {
@@ -1585,7 +1460,9 @@ mod test {
                 confirmation_text: Some("Please confirm that 2+2=4".to_string()),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
         }
         // Test that `confirmation_text` set to an empty string is rejected.
         {
@@ -1613,6 +1490,14 @@ mod test {
         }
     }
 
+    fn assert_error<T, E>(result: anyhow::Result<T>, expected_error: E)
+    where
+        T: std::fmt::Debug,
+        E: ToString,
+    {
+        assert_eq!(result.unwrap_err().to_string(), expected_error.to_string())
+    }
+
     #[test]
     fn test_restricted_countries() {
         // Create valid CanisterIds
@@ -1623,7 +1508,9 @@ mod test {
                 restricted_countries: None,
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
         }
         // Test that some non-trivial value of `restricted_countries` validates.
         {
@@ -1633,7 +1520,9 @@ mod test {
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
         }
         // Test that multiple countries can be validated.
         {
@@ -1645,7 +1534,9 @@ mod test {
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
         }
         // Check that item count is checked before duplicate analysis.
         {
@@ -1731,108 +1622,6 @@ mod test {
     }
 
     #[test]
-    fn test_neuron_basket_construction_parameters() {
-        let default_dd_limit: u64 = 252_460_800;
-        // Test that `neuron_basket_construction_parameters` is indeed optional.
-        {
-            let sns_init_payload = SnsInitPayload {
-                neuron_basket_construction_parameters: None,
-                ..SnsInitPayload::with_valid_values_for_testing()
-            };
-            // Legacy flow
-            assert_ok(sns_init_payload.validate_legacy_init());
-            // Single proposal
-            assert_ok(sns_init_payload.validate_pre_execution());
-            assert_ok(sns_init_payload.validate_post_execution());
-        }
-        // Test that `neuron_basket_construction_parameters` is forbidden in
-        // the legacy flow and allowed in the single-proposal flow.
-        {
-            let sns_init_payload = SnsInitPayload {
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 2_u64,
-                    dissolve_delay_interval_seconds: default_dd_limit.saturating_div(10),
-                }),
-                ..SnsInitPayload::with_valid_values_for_testing()
-            };
-
-            // Legacy flow
-            assert_error(
-                sns_init_payload.validate_legacy_init(),
-                NeuronBasketConstructionParametersValidationError::UnexpectedInLegacyFlow,
-            );
-            // Single proposal
-            assert_ok(sns_init_payload.validate_pre_execution());
-            assert_ok(sns_init_payload.validate_post_execution());
-        }
-        // Test that validation fails when
-        // (count - 1) * dissolve_delay_interval == 1 + max_dissolve_delay_seconds
-        {
-            let sns_init_payload = SnsInitPayload {
-                max_dissolve_delay_seconds: Some(default_dd_limit),
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 2_u64,
-                    dissolve_delay_interval_seconds: default_dd_limit.saturating_add(1),
-                }),
-                ..SnsInitPayload::with_valid_values_for_testing()
-            };
-            let expected =
-                NeuronBasketConstructionParametersValidationError::ExceedsMaximalDissolveDelay(
-                    default_dd_limit,
-                );
-            println!("count = 4_u64");
-            println!(
-                "dissolve_delay_interval_seconds = {}",
-                default_dd_limit.saturating_div(3)
-            );
-            assert_error(sns_init_payload.validate_pre_execution(), expected);
-            assert_error(sns_init_payload.validate_post_execution(), expected);
-        }
-        // Test that validation fails when (count - 1) * dissolve_delay_interval
-        // does not fit u64.
-        {
-            let sns_init_payload = SnsInitPayload {
-                max_dissolve_delay_seconds: Some(default_dd_limit),
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 3_u64,
-                    dissolve_delay_interval_seconds: u64::MAX,
-                }),
-                ..SnsInitPayload::with_valid_values_for_testing()
-            };
-            let expected = NeuronBasketConstructionParametersValidationError::ExceedsU64;
-            assert_error(sns_init_payload.validate_pre_execution(), expected);
-            assert_error(sns_init_payload.validate_post_execution(), expected);
-        }
-        // Test that validation fails when basket count is too low
-        {
-            let sns_init_payload = SnsInitPayload {
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 1_u64,
-                    dissolve_delay_interval_seconds: 12_345_678_u64, // arbitrary valid value
-                }),
-                ..SnsInitPayload::with_valid_values_for_testing()
-            };
-            let expected = NeuronBasketConstructionParametersValidationError::InadequateBasketSize;
-            assert_error(sns_init_payload.validate_pre_execution(), expected);
-            assert_error(sns_init_payload.validate_post_execution(), expected);
-        }
-        // Test that validation fails when dissolve_delay_interval_seconds is too low
-        {
-            let sns_init_payload = SnsInitPayload {
-                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 2_u64,
-                    dissolve_delay_interval_seconds: 0_u64,
-                }),
-                ..SnsInitPayload::with_valid_values_for_testing()
-            };
-            let expected =
-                NeuronBasketConstructionParametersValidationError::InadequateDissolveDelay;
-            assert_error(sns_init_payload.validate_pre_execution(), expected);
-            assert_error(sns_init_payload.validate_post_execution(), expected);
-        }
-    }
-
-    #[test]
     fn test_ledger_init_args_is_valid() {
         // Build an sns_init_payload with defaults for non-ledger related configuration.
         let transaction_fee = 10_000;
@@ -1847,7 +1636,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1938,10 +1727,10 @@ mod test {
 
         sns_init_payload.dapp_canisters =
             Some(generate_unique_dapp_canisters(MAX_DAPP_CANISTERS_COUNT));
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
 
         sns_init_payload.dapp_canisters = None;
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
 
         sns_init_payload.dapp_canisters = Some(DappCanisters {
             canisters: vec![Canister { id: None }],
@@ -2079,6 +1868,6 @@ mod test {
         let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.fallback_controller_principal_ids =
             vec![PrincipalId::new_user_test_id(1).to_string()];
-        assert_ok(sns_init_payload.validate_legacy_init());
+        assert!(sns_init_payload.validate_legacy_init().is_ok());
     }
 }
