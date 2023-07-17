@@ -4921,6 +4921,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-local-store",
  "ic-registry-replicator",
+ "ic-test-utilities-tmpdir",
  "ic-types",
  "json5",
  "rand 0.8.5",

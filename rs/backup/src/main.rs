@@ -4,9 +4,8 @@ use ic_backup::{
     cmd::{BackupArgs, SubCommand},
 };
 use slog::{o, Drain};
-use std::sync::Arc;
-use tokio::runtime::Handle;
-use tokio::task::spawn_blocking;
+use std::{io::stdin, sync::Arc};
+use tokio::{runtime::Handle, task::spawn_blocking};
 
 // Here is an example config file:
 //
@@ -74,7 +73,9 @@ async fn main() {
     let rt = Handle::current();
     spawn_blocking(move || {
         match args.subcmd {
-            Some(SubCommand::Init) => BackupManager::init(log, args.config_file),
+            Some(SubCommand::Init) => {
+                BackupManager::init(&mut stdin().lock(), log, args.config_file)
+            }
             Some(SubCommand::Upgrade) => BackupManager::upgrade(log, args.config_file),
             Some(SubCommand::GetReplicaVersion { subnet_id }) => {
                 BackupManager::get_version(log, args.config_file, subnet_id.0)
