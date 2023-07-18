@@ -138,6 +138,7 @@ pub struct CanisterStateBits {
     pub freeze_threshold: NumSeconds,
     pub cycles_balance: Cycles,
     pub cycles_debit: Cycles,
+    pub reserved_balance: Cycles,
     pub status: CanisterStatus,
     pub scheduled_as_first: u64,
     pub skipped_round_due_to_no_messages: u64,
@@ -1596,6 +1597,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             freeze_threshold: item.freeze_threshold.get(),
             cycles_balance: Some(item.cycles_balance.into()),
             cycles_debit: Some(item.cycles_debit.into()),
+            reserved_balance: Some(item.reserved_balance.into()),
             canister_status: Some((&item.status).into()),
             scheduled_as_first: item.scheduled_as_first,
             skipped_round_due_to_no_messages: item.skipped_round_due_to_no_messages,
@@ -1660,6 +1662,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .transpose()?
             .unwrap_or_else(Cycles::zero);
 
+        let reserved_balance = value
+            .reserved_balance
+            .map(|c| c.try_into())
+            .transpose()?
+            .unwrap_or_else(Cycles::zero);
+
         let task_queue = value
             .task_queue
             .into_iter()
@@ -1686,6 +1694,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
             cycles_debit,
+            reserved_balance,
             status: try_from_option_field(
                 value.canister_status,
                 "CanisterStateBits::canister_status",

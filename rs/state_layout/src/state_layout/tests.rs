@@ -29,6 +29,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         freeze_threshold: NumSeconds::from(0),
         cycles_balance: Cycles::zero(),
         cycles_debit: Cycles::zero(),
+        reserved_balance: Cycles::zero(),
         status: CanisterStatus::Stopped,
         scheduled_as_first: 0,
         skipped_round_due_to_no_messages: 0,
