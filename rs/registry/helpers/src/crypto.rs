@@ -202,14 +202,13 @@ pub mod root_of_trust {
 
     /// Implementation of [`RootOfTrustProvider`] that uses the registry to
     /// obtain the root of trust.
+    #[derive(Clone)]
     pub struct RegistryRootOfTrustProvider {
         registry_client: Arc<dyn RegistryClient>,
         registry_version: RegistryVersion,
     }
 
     impl RegistryRootOfTrustProvider {
-        #[allow(dead_code)]
-        //TODO CRP-2046: use this to instantiate provider
         pub fn new(
             registry_client: Arc<dyn RegistryClient>,
             registry_version: RegistryVersion,

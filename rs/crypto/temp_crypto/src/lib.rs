@@ -62,6 +62,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::{
     verify_dealing_error::DkgVerifyDealingError,
 };
 use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgDealing, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::crypto::{
     BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
     CurrentNodePublicKeys, IndividualMultiSigOf, KeyPurpose, Signable, ThresholdSigShareOf,
@@ -652,13 +653,13 @@ impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> CanisterSigVe
         signature: &CanisterSigOf<T>,
         signed_bytes: &T,
         public_key: &UserPublicKey,
-        registry_version: RegistryVersion,
+        root_of_trust: &IcRootOfTrust,
     ) -> CryptoResult<()> {
         self.crypto_component.verify_canister_sig(
             signature,
             signed_bytes,
             public_key,
-            registry_version,
+            root_of_trust,
         )
     }
 }

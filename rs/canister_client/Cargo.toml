@@ -31,6 +31,7 @@ url = "2.1.1"
 hex = "0.4.2"
 ic-crypto-test-utils = { path = "../crypto/test_utils" }
 ic-certification-test-utils = { path = "../certification/test-utils" }
+ic-crypto-test-utils-root-of-trust = { path = "../crypto/test_utils/root_of_trust" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-validator = { path = "../validator" }
 openssl = "0.10.55"

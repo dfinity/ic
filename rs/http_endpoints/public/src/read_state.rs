@@ -153,12 +153,13 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
         };
 
         let read_state = request.content().clone();
-        let registry_client = self.registry_client.get_latest_version();
+        let registry_version = self.registry_client.get_latest_version();
         let state_reader_executor = self.state_reader_executor.clone();
         let validator_executor = self.validator_executor.clone();
         let metrics = self.metrics.clone();
         Box::pin(async move {
-            let targets_fut = validator_executor.validate_request(request.clone(), registry_client);
+            let targets_fut =
+                validator_executor.validate_request(request.clone(), registry_version);
 
             let targets = match targets_fut.await {
                 Ok(targets) => targets,

@@ -3,7 +3,9 @@ use crate::{common::validation_error_to_http_error, HttpError};
 use futures::FutureExt;
 use http::StatusCode;
 use ic_interfaces::crypto::IngressSigVerifier;
+use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
+use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_types::messages::{HttpRequest, HttpRequestContent};
 use ic_types::{malicious_flags::MaliciousFlags, time::current_time, RegistryVersion, Time};
 use ic_validator::{
@@ -19,16 +21,18 @@ const VALIDATOR_EXECUTOR_THREADS: usize = 1;
 
 #[derive(Clone)]
 pub(crate) struct ValidatorExecutor<C> {
-    validator: Arc<dyn HttpRequestVerifier<C>>,
+    registry_client: Arc<dyn RegistryClient>,
+    validator: Arc<dyn HttpRequestVerifier<C, RegistryRootOfTrustProvider>>,
     threadpool: ThreadPool,
     logger: ReplicaLogger,
 }
 
 impl<C: HttpRequestContent> ValidatorExecutor<C>
 where
-    HttpRequestVerifierImpl: HttpRequestVerifier<C>,
+    HttpRequestVerifierImpl: HttpRequestVerifier<C, RegistryRootOfTrustProvider>,
 {
     pub fn new(
+        registry_client: Arc<dyn RegistryClient>,
         ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
         malicious_flags: &MaliciousFlags,
         logger: ReplicaLogger,
@@ -36,12 +40,12 @@ where
         let validator = if malicious_flags.maliciously_disable_ingress_validation {
             pub struct DisabledHttpRequestVerifier;
 
-            impl<C: HttpRequestContent> HttpRequestVerifier<C> for DisabledHttpRequestVerifier {
+            impl<C: HttpRequestContent, R> HttpRequestVerifier<C, R> for DisabledHttpRequestVerifier {
                 fn validate_request(
                     &self,
                     _request: &HttpRequest<C>,
                     _current_time: Time,
-                    _registry_version: RegistryVersion,
+                    _root_of_trust_provider: &R,
                 ) -> Result<CanisterIdSet, RequestValidationError> {
                     Ok(CanisterIdSet::all())
                 }
@@ -51,11 +55,16 @@ where
         } else {
             Arc::new(HttpRequestVerifierImpl::new(ingress_verifier)) as Arc<_>
         };
-        Self::new_internal(validator, logger)
+        Self::new_internal(registry_client, validator, logger)
     }
 
-    fn new_internal(validator: Arc<dyn HttpRequestVerifier<C>>, logger: ReplicaLogger) -> Self {
+    fn new_internal(
+        registry_client: Arc<dyn RegistryClient>,
+        validator: Arc<dyn HttpRequestVerifier<C, RegistryRootOfTrustProvider>>,
+        logger: ReplicaLogger,
+    ) -> Self {
         ValidatorExecutor {
+            registry_client,
             validator,
             threadpool: ThreadPool::new(VALIDATOR_EXECUTOR_THREADS),
             logger,
@@ -72,11 +81,16 @@ impl<C: HttpRequestContent + Send + Sync + 'static> ValidatorExecutor<C> {
         let (tx, rx) = oneshot::channel();
 
         let message_id = request.id();
+        let root_of_trust_provider =
+            RegistryRootOfTrustProvider::new(Arc::clone(&self.registry_client), registry_version);
         let validator = self.validator.clone();
         self.threadpool.execute(move || {
             if !tx.is_closed() {
-                let _ =
-                    tx.send(validator.validate_request(&request, current_time(), registry_version));
+                let _ = tx.send(validator.validate_request(
+                    &request,
+                    current_time(),
+                    &root_of_trust_provider,
+                ));
             }
         });
         let log = self.logger.clone();
@@ -94,7 +108,9 @@ impl<C: HttpRequestContent + Send + Sync + 'static> ValidatorExecutor<C> {
 #[cfg(test)]
 mod tests {
     use super::{validation_error_to_http_error, ValidatorExecutor};
+    use ic_interfaces_registry_mocks::MockRegistryClient;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
     use ic_test_utilities::{
         crypto::temp_crypto_component_with_fake_registry,
         types::{
@@ -136,14 +152,23 @@ mod tests {
         let request = HttpRequest::<UserQuery>::try_from(request).unwrap();
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let validator = Arc::new(HttpRequestVerifierImpl::new(sig_verifier.clone()));
-        let async_validator = ValidatorExecutor::new_internal(validator.clone(), no_op_logger());
+        let async_validator = ValidatorExecutor::new_internal(
+            Arc::new(MockRegistryClient::new()),
+            validator.clone(),
+            no_op_logger(),
+        );
+        let registry_version = RegistryVersion::from(0);
+        let root_of_trust_provider = RegistryRootOfTrustProvider::new(
+            Arc::clone(sig_verifier.registry_client()),
+            registry_version,
+        );
 
         assert_eq!(
             async_validator
-                .validate_request(request.clone(), RegistryVersion::from(0),)
+                .validate_request(request.clone(), registry_version)
                 .await,
             validator
-                .validate_request(&request, current_time(), RegistryVersion::from(0),)
+                .validate_request(&request, current_time(), &root_of_trust_provider)
                 .map_err(|val_err| validation_error_to_http_error(
                     request.id(),
                     val_err,
@@ -160,14 +185,23 @@ mod tests {
             .build();
         let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
         let validator = Arc::new(HttpRequestVerifierImpl::new(sig_verifier.clone()));
-        let async_validator = ValidatorExecutor::new_internal(validator.clone(), no_op_logger());
+        let async_validator = ValidatorExecutor::new_internal(
+            Arc::new(MockRegistryClient::new()),
+            validator.clone(),
+            no_op_logger(),
+        );
+        let registry_version = RegistryVersion::from(0);
+        let root_of_trust_provider = RegistryRootOfTrustProvider::new(
+            Arc::clone(sig_verifier.registry_client()),
+            registry_version,
+        );
 
         assert_eq!(
             async_validator
-                .validate_request(request.as_ref().clone(), RegistryVersion::from(0),)
+                .validate_request(request.as_ref().clone(), registry_version)
                 .await,
             validator
-                .validate_request(request.as_ref(), current_time(), RegistryVersion::from(0),)
+                .validate_request(request.as_ref(), current_time(), &root_of_trust_provider)
                 .map_err(|val_err| validation_error_to_http_error(
                     request.id(),
                     val_err,

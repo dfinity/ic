@@ -110,6 +110,12 @@ impl From<ThresholdSigPublicKey> for PublicKeyProto {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct IcRootOfTrust(ThresholdSigPublicKey);
 
+impl AsRef<ThresholdSigPublicKey> for IcRootOfTrust {
+    fn as_ref(&self) -> &ThresholdSigPublicKey {
+        &self.0
+    }
+}
+
 impl From<ThresholdSigPublicKey> for IcRootOfTrust {
     fn from(public_key: ThresholdSigPublicKey) -> Self {
         IcRootOfTrust(public_key)

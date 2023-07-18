@@ -7,7 +7,7 @@ use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, ROOT_SUBNET_ID_KEY};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider, ThresholdSigPublicKey};
+use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
 use ic_types::messages::{HttpRequest, HttpRequestContent};
 use ic_types::time::UNIX_EPOCH;
 use ic_types::{PrincipalId, RegistryVersion, SubnetId, Time};
@@ -24,6 +24,7 @@ const IC_NNS_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGA
 
 /// An implementation of [`HttpRequestVerifier`] to verify ingress messages.
 pub struct IngressMessageVerifier {
+    root_of_trust_provider: ConstantRootOfTrustProvider,
     time_source: Arc<dyn TimeSource>,
     validator: ic_validator::HttpRequestVerifierImpl,
 }
@@ -86,12 +87,14 @@ impl Default for IngressMessageVerifier {
 }
 
 impl IngressMessageVerifier {
-    fn new_internal(
-        root_of_trust: ThresholdSigPublicKey,
+    fn new_internal<T: Into<IcRootOfTrust>>(
+        root_of_trust: T,
         time_source: Arc<dyn TimeSource>,
     ) -> Self {
+        let root_of_trust = root_of_trust.into();
         let (registry_client, registry_data) = registry_with_root_of_trust(root_of_trust);
         IngressMessageVerifier {
+            root_of_trust_provider: ConstantRootOfTrustProvider::new(root_of_trust),
             time_source,
             validator: ic_validator::HttpRequestVerifierImpl::new(Arc::new(
                 TempCryptoComponent::builder()
@@ -156,7 +159,7 @@ impl IngressMessageVerifier {
 }
 
 fn registry_with_root_of_trust(
-    root_of_trust: ThresholdSigPublicKey,
+    root_of_trust: IcRootOfTrust,
 ) -> (Arc<FakeRegistryClient>, Arc<ProtoRegistryDataProvider>) {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
@@ -186,24 +189,27 @@ fn registry_with_root_of_trust(
     (registry_client, registry_data)
 }
 
-fn nns_root_public_key() -> ThresholdSigPublicKey {
+fn nns_root_public_key() -> IcRootOfTrust {
     use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
     let decoded_nns_mainnet_key = base64::decode(IC_NNS_ROOT_PUBLIC_KEY_BASE64)
         .expect("Failed to decode mainnet public key from base64.");
-    parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)
-        .expect("Failed to decode mainnet public key.")
+    IcRootOfTrust::from(
+        parse_threshold_sig_key_from_der(&decoded_nns_mainnet_key)
+            .expect("Failed to decode mainnet public key."),
+    )
 }
 
 impl<C: HttpRequestContent> HttpRequestVerifier<C> for IngressMessageVerifier
 where
-    ic_validator::HttpRequestVerifierImpl: ic_validator::HttpRequestVerifier<C>,
+    ic_validator::HttpRequestVerifierImpl:
+        ic_validator::HttpRequestVerifier<C, ConstantRootOfTrustProvider>,
 {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError> {
         ic_validator::HttpRequestVerifier::validate_request(
             &self.validator,
             request,
             self.time_source.get_relative_time(),
-            DUMMY_REGISTRY_VERSION,
+            &self.root_of_trust_provider,
         )
         .map(|_| ())
         .map_err(to_validation_error)
@@ -249,8 +255,8 @@ fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> Auth
         ic_validator::AuthenticationError::InvalidBasicSignature(crypto_error) => {
             AuthenticationError::InvalidBasicSignature(format!("{crypto_error}"))
         }
-        ic_validator::AuthenticationError::InvalidCanisterSignature(crypto_error) => {
-            AuthenticationError::InvalidCanisterSignature(format!("{crypto_error}"))
+        ic_validator::AuthenticationError::InvalidCanisterSignature(error) => {
+            AuthenticationError::InvalidCanisterSignature(error)
         }
         ic_validator::AuthenticationError::InvalidPublicKey(crypto_error) => {
             AuthenticationError::InvalidPublicKey(format!("{crypto_error}"))
@@ -281,7 +287,7 @@ fn dummy_root_subnet_id() -> SubnetId {
 }
 
 pub struct IngressMessageVerifierBuilder {
-    root_of_trust: ThresholdSigPublicKey,
+    root_of_trust: IcRootOfTrust,
     time_provider: TimeProvider,
 }
 
@@ -295,8 +301,8 @@ impl Default for IngressMessageVerifierBuilder {
 }
 
 impl IngressMessageVerifierBuilder {
-    pub fn with_root_of_trust(mut self, public_key: ThresholdSigPublicKey) -> Self {
-        self.root_of_trust = public_key;
+    pub fn with_root_of_trust<T: Into<IcRootOfTrust>>(mut self, root_of_trust: T) -> Self {
+        self.root_of_trust = root_of_trust.into();
         self
     }
 
@@ -337,8 +343,6 @@ pub struct ConstantRootOfTrustProvider {
 }
 
 impl ConstantRootOfTrustProvider {
-    #[allow(dead_code)]
-    //TODO CRP-2046: use this to instantiate provider
     fn new<T: Into<IcRootOfTrust>>(root_of_trust: T) -> Self {
         Self {
             root_of_trust: root_of_trust.into(),

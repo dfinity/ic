@@ -380,7 +380,7 @@ impl IngressManager {
         if let Err(err) = self.request_validator.validate_request(
             signed_ingress.as_ref(),
             context.time,
-            context.registry_version,
+            &self.registry_root_of_trust_provider(context.registry_version),
         ) {
             let message_id = MessageId::from(&ingress_id);
             return Err(ValidationError::Permanent(match err {

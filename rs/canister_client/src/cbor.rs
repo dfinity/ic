@@ -294,6 +294,7 @@ mod tests {
     use super::*;
     use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
     use ic_certification_test_utils::{CertificateBuilder, CertificateData};
+    use ic_crypto_test_utils_root_of_trust::MockRootOfTrustProvider;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities::types::ids::node_test_id;
@@ -301,7 +302,7 @@ mod tests {
         HttpCanisterUpdate, HttpReadStateResponse, HttpRequest, HttpUserQuery, UserQuery,
     };
     use ic_types::time::current_time;
-    use ic_types::{PrincipalId, RegistryVersion, UserId};
+    use ic_types::{PrincipalId, UserId};
     use ic_validator::HttpRequestVerifier;
     use ic_validator::HttpRequestVerifierImpl;
     use rand::SeedableRng;
@@ -314,9 +315,6 @@ mod tests {
 
     // The node id of the node that validates message signatures
     const VALIDATOR_NODE_ID: u64 = 42;
-    fn mock_registry_version() -> RegistryVersion {
-        RegistryVersion::from(0)
-    }
 
     /// Create an HttpRequest with a non-anonymous user and then verify
     /// that `validate_message` manages to authenticate it.
@@ -358,7 +356,7 @@ mod tests {
 
         // The envelope can be successfully authenticated
         assert!(request_validator()
-            .validate_request(&request, test_start_time, mock_registry_version(),)
+            .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
             .unwrap()
             .contains(&request.content().canister_id()));
     }
@@ -401,7 +399,7 @@ mod tests {
 
         // The envelope can be successfully authenticated
         assert!(request_validator()
-            .validate_request(&request, test_start_time, mock_registry_version(),)
+            .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
             .unwrap()
             .contains(&request.content().canister_id()));
     }
@@ -436,7 +434,7 @@ mod tests {
 
         // The envelope can be successfully authenticated
         assert!(request_validator()
-            .validate_request(&request, test_start_time, mock_registry_version(),)
+            .validate_request(&request, test_start_time, &MockRootOfTrustProvider::new())
             .unwrap()
             .contains(&request.content().canister_id()));
     }
@@ -480,7 +478,7 @@ mod tests {
         assert_ok!(request_validator().validate_request(
             &read_request,
             test_start_time,
-            mock_registry_version(),
+            &MockRootOfTrustProvider::new()
         ));
     }
 
@@ -526,7 +524,7 @@ mod tests {
         assert_ok!(request_validator().validate_request(
             &read_request,
             test_start_time,
-            mock_registry_version(),
+            &MockRootOfTrustProvider::new()
         ));
     }
 

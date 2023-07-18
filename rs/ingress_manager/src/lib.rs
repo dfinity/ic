@@ -19,6 +19,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_registry_client_helpers::crypto::root_of_trust::RegistryRootOfTrustProvider;
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::messages::{HttpRequest, HttpRequestContent, SignedIngressContent};
@@ -115,7 +116,8 @@ pub struct IngressManager {
     ingress_payload_cache: Arc<RwLock<IngressPayloadCache>>,
     ingress_pool: IngressPoolSelectWrapper,
     registry_client: Arc<dyn RegistryClient>,
-    request_validator: Arc<dyn HttpRequestVerifier<SignedIngressContent>>,
+    request_validator:
+        Arc<dyn HttpRequestVerifier<SignedIngressContent, RegistryRootOfTrustProvider>>,
     metrics: IngressManagerMetrics,
     subnet_id: SubnetId,
     log: ReplicaLogger,
@@ -146,12 +148,12 @@ impl IngressManager {
         let request_validator = if malicious_flags.maliciously_disable_ingress_validation {
             pub struct DisabledHttpRequestVerifier;
 
-            impl<C: HttpRequestContent> HttpRequestVerifier<C> for DisabledHttpRequestVerifier {
+            impl<C: HttpRequestContent, R> HttpRequestVerifier<C, R> for DisabledHttpRequestVerifier {
                 fn validate_request(
                     &self,
                     _request: &HttpRequest<C>,
                     _current_time: Time,
-                    _registry_version: RegistryVersion,
+                    _root_of_trust_provider: &R,
                 ) -> Result<CanisterIdSet, RequestValidationError> {
                     Ok(CanisterIdSet::all())
                 }
@@ -216,6 +218,13 @@ impl IngressManager {
                 settings
             }),
         }
+    }
+
+    fn registry_root_of_trust_provider(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> RegistryRootOfTrustProvider {
+        RegistryRootOfTrustProvider::new(Arc::clone(&self.registry_client), registry_version)
     }
 }
 

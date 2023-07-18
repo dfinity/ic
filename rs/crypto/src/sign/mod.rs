@@ -51,6 +51,7 @@ mod tests;
 // TODO: Remove this indirection:
 pub(crate) use ic_crypto_internal_csp::imported_utilities::sign_utils as utils;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::signature::BasicSignatureBatch;
 
 impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentImpl<C> {
@@ -657,7 +658,7 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
         signature: &CanisterSigOf<S>,
         signed_bytes: &S,
         public_key: &UserPublicKey,
-        registry_version: RegistryVersion,
+        root_of_trust: &IcRootOfTrust,
     ) -> CryptoResult<()> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
@@ -669,17 +670,11 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
             crypto.description => "start",
             crypto.signed_bytes => format!("0x{}", hex::encode(signed_bytes.as_signed_bytes())),
             crypto.public_key => format!("{}", public_key),
-            crypto.registry_version => registry_version.get(),
             crypto.signature => format!("{:?}", signature),
         );
         let start_time = self.metrics.now();
-        let result = canister_sig::verify_canister_sig(
-            self.registry_client.as_ref(),
-            signature,
-            signed_bytes,
-            public_key,
-            registry_version,
-        );
+        let result =
+            canister_sig::verify_canister_sig(signature, signed_bytes, public_key, root_of_trust);
 
         // Processing of the cache statistics for metrics is deliberatly
         // part of the canister signature run time metric. It is expected to take
