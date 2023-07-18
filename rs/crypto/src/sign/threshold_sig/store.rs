@@ -159,7 +159,7 @@ impl ThresholdSigDataStore for ThresholdSigDataStoreImpl {
         public_coefficients: CspPublicCoefficients,
         indices: BTreeMap<NodeId, NodeIndex>,
     ) {
-        let mut data = self.entry_for(dkg_id);
+        let data = self.entry_for(dkg_id);
         data.transcript_data = Some(TranscriptData {
             public_coeffs: public_coefficients,
             indices,
