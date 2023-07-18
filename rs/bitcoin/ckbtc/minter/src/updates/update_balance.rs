@@ -222,7 +222,7 @@ pub async fn update_balance(
             Ok(block_index) => {
                 log!(
                     P1,
-                    "Minted {} {token_name} for account {caller_account} with value {}",
+                    "Minted {amount} {token_name} for account {caller_account} corresponding to utxo {} with value {}",
                     DisplayOutpoint(&utxo.outpoint),
                     DisplayAmount(utxo.value),
                 );
@@ -332,6 +332,11 @@ async fn mint(amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalance
             amount: Nat::from(amount),
         })
         .await
-        .map_err(|e| UpdateBalanceError::TemporarilyUnavailable(e.1))??;
+        .map_err(|(code, msg)| {
+            UpdateBalanceError::TemporarilyUnavailable(format!(
+                "cannot mint ckbtc: {} (reject_code = {})",
+                msg, code
+            ))
+        })??;
     Ok(block_index)
 }
