@@ -134,10 +134,15 @@ echo "$PERMUTATIONS" \
                 break
             fi
 
+        done
+
+        for CANISTER in $ORDERING; do
+
+            echo "Uploading ungzipped $CANISTER WASM to SNS-W" | tee -a $LOG_FILE
             WASM_GZ_FILE=$(download_sns_canister_wasm_gz_for_type "$CANISTER" "$VERSION")
 
-            ORIGINAL_HASH=$(sha_256 $WASM_GZ_FILE)
-            UNZIPPED=$(ungzip $WASM_GZ_FILE)
+            ORIGINAL_HASH=$(sha_256 "$WASM_GZ_FILE")
+            UNZIPPED=$(ungzip "$WASM_GZ_FILE")
             NEW_HASH=$(sha_256 "$UNZIPPED")
             if [ "$NEW_HASH" == "$ORIGINAL_HASH" ]; then
                 print_red "Hashes were the same, aborting rest of test..."
@@ -155,9 +160,8 @@ echo "$PERMUTATIONS" \
                 print_red "Failed upgrade for '$ORDERING' on step upgrading '$CANISTER'" | tee -a $LOG_FILE
                 break
             fi
-            #TODO - make sure the upgrade works to Version+1
-
         done
+
         print_green "Finished testing 'Upgrade Order: $ORDERING' but check for failures" | tee -a $LOG_FILE
         # Log finished with ordering
 
