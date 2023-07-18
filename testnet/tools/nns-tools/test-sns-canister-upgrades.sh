@@ -77,14 +77,15 @@ upgrade_sns() {
     SWAP_CANISTER_ID=$8
     GOV_CANISTER_ID=$9
 
-    # SNS upgrade proposal
+    # For swap testing, we want to do the NNS upgrade
     if [[ $CANISTER_NAME = "swap" ]]; then
         echo "Submitting upgrade proposal to NNS Governance for Swap" | tee -a "$LOG_FILE"
         upgrade_swap "$NNS_URL" "$NEURON_ID" "$PEM" "$SWAP_CANISTER_ID" "$VERSION_OR_WASM"
-    else
-        echo "Submitting upgrade proposal to $GOV_CANISTER_ID" | tee -a "$LOG_FILE"
-        sns_upgrade_to_next_version "$SUBNET_URL" "$PEM" "$GOV_CANISTER_ID" 0
     fi
+
+    # SNS upgrade proposal - needed even if swap was upgraded
+    echo "Submitting upgrade proposal to $GOV_CANISTER_ID" | tee -a "$LOG_FILE"
+    sns_upgrade_to_next_version "$SUBNET_URL" "$PEM" "$GOV_CANISTER_ID" 0
 }
 
 echo "$PERMUTATIONS" \
