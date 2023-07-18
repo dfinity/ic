@@ -49,8 +49,8 @@ use crate::{
     acme::Acme,
     acme_idna::WithIDNA,
     certificate::{
-        CanisterExporter, CanisterUploader, Export, WithDecode, WithPagination, WithRetries,
-        WithVerify,
+        CanisterCertGetter, CanisterExporter, CanisterUploader, Export, WithDecode, WithPagination,
+        WithRetries, WithVerify,
     },
     check::{Check, Checker},
     cloudflare::Cloudflare,
@@ -59,7 +59,7 @@ use crate::{
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, Remove, State, Update, UpdateType},
     verification::CertificateVerifier,
-    work::{Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue},
+    work::{Dispense, DispenseError, Peek, PeekError, Process, Queue, WithDetectRenewal},
 };
 
 mod acme;
@@ -263,6 +263,14 @@ async fn main() -> Result<(), Error> {
     let certificate_verifier = Arc::new(certificate_verifier);
 
     // Certificates
+    let certificate_getter =
+        CanisterCertGetter::new(agent.clone(), cli.orchestrator_canister_id, decoder.clone());
+    let certificate_getter = WithMetrics(
+        certificate_getter,
+        MetricParams::new(&meter, SERVICE_NAME, "get_certificate"),
+    );
+    let certificate_getter = Arc::new(certificate_getter);
+
     let certificate_exporter = CanisterExporter::new(agent.clone(), cli.orchestrator_canister_id);
     let certificate_exporter = WithVerify(certificate_exporter, certificate_verifier);
     let certificate_exporter = WithRetries(
@@ -274,7 +282,6 @@ async fn main() -> Result<(), Error> {
         certificate_exporter,
         MetricParams::new(&meter, SERVICE_NAME, "export_certificates"),
     );
-
     let certificate_exporter = WithPagination(
         certificate_exporter,
         50, // Page Size
@@ -435,6 +442,7 @@ async fn main() -> Result<(), Error> {
         processor,
         MetricParams::new(&meter, SERVICE_NAME, "process"),
     );
+    let processor = WithDetectRenewal::new(processor, certificate_getter.clone());
     let processor = Arc::new(processor);
 
     let sem = Arc::new(Semaphore::new(10));
@@ -453,7 +461,6 @@ async fn main() -> Result<(), Error> {
                 let processor = processor.clone();
                 let queuer = queuer.clone();
                 let registration_updater = registration_updater.clone();
-                let registration_remover = registration_remover.clone();
 
                 // First check with a query call if there's anything to dispense
                 if let Err(err) = peeker.peek().await {
@@ -500,15 +507,6 @@ async fn main() -> Result<(), Error> {
                                 .update(&id, &UpdateType::State(State::Available))
                                 .await
                                 .context("failed to update registration {id}")?;
-                        }
-                        Err(ProcessError::FailedUserConfigurationCheck) => {
-                            // Attempted a renewal, but the domain is not configured properly
-                            // (missing or wrong DNS configuration, missing well-known domains).
-                            // The custom domain and its certificate are removed.
-                            registration_remover
-                                .remove(&id)
-                                .await
-                                .context("failed to delete existing registration {id}")?;
                         }
                         Err(err) => {
                             let d: Duration = (&err).into();

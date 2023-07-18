@@ -304,6 +304,19 @@ pub enum RemoveRegistrationResponse {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum GetCertificateError {
+    NotFound,
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum GetCertificateResponse {
+    Ok(EncryptedPair),
+    Err(GetCertificateError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum UploadCertificateError {
     NotFound,
     Unauthorized,
