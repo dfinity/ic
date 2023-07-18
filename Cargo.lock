@@ -5230,6 +5230,7 @@ dependencies = [
  "ic-certification-test-utils",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-root-of-trust",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
  "ic-ic00-types",
@@ -6800,6 +6801,15 @@ version = "0.1.0"
 dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+]
+
+[[package]]
+name = "ic-crypto-test-utils-root-of-trust"
+version = "0.8.0"
+dependencies = [
+ "ic-types",
+ "mockall 0.11.4",
+ "thiserror",
 ]
 
 [[package]]
@@ -11172,10 +11182,12 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-sha",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-test-utils-root-of-trust",
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-test-utilities",
  "ic-types",
+ "mockall 0.11.4",
  "rand 0.8.5",
  "thiserror",
 ]

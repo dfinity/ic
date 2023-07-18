@@ -65,6 +65,7 @@ fn empty_ni_dkg_dealing() -> NiDkgDealing {
 }
 
 pub use ic_crypto_test_utils::dkg::empty_ni_dkg_transcripts_with_committee;
+use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types_test_utils::ids::NODE_1;
 
 #[derive(Default)]
@@ -225,7 +226,7 @@ impl<T: Signable> CanisterSigVerifier<T> for CryptoReturningOk {
         _signature: &CanisterSigOf<T>,
         _signed_bytes: &T,
         _public_key: &UserPublicKey,
-        _registry_version: RegistryVersion,
+        _root_of_trust: &IcRootOfTrust,
     ) -> CryptoResult<()> {
         Ok(())
     }

@@ -1853,7 +1853,7 @@ mod registry {
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_client_helpers::crypto::CryptoRegistry;
     use ic_registry_client_helpers::subnet::SubnetRegistry;
-    use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
+    use ic_types::crypto::threshold_sig::IcRootOfTrust;
     use ic_types::RegistryVersion;
 
     #[test]
@@ -1869,7 +1869,7 @@ mod registry {
 
     #[test]
     fn should_get_registry_with_other_subnet_public_key() {
-        let other_root_of_trust = parse_threshold_sig_key_from_der(&hex::decode("308182301D060D2B0601040182DC7C0503010201060C2B0601040182DC7C05030201036100923A67B791270CD8F5320212AE224377CF407D3A8A2F44F11FED5915A97EE67AD0E90BC382A44A3F14C363AD2006640417B4BBB3A304B97088EC6B4FC87A25558494FC239B47E129260232F79973945253F5036FD520DDABD1E2DE57ABFB40CB").unwrap()).unwrap();
+        let other_root_of_trust = IcRootOfTrust::from(parse_threshold_sig_key_from_der(&hex::decode("308182301D060D2B0601040182DC7C0503010201060C2B0601040182DC7C05030201036100923A67B791270CD8F5320212AE224377CF407D3A8A2F44F11FED5915A97EE67AD0E90BC382A44A3F14C363AD2006640417B4BBB3A304B97088EC6B4FC87A25558494FC239B47E129260232F79973945253F5036FD520DDABD1E2DE57ABFB40CB").unwrap()).unwrap());
         let (registry_client, _registry_data) = registry_with_root_of_trust(other_root_of_trust);
 
         let retrieved_root_of_trust =
@@ -1882,7 +1882,7 @@ mod registry {
     fn crypto_logic_to_retrieve_root_subnet_pubkey(
         registry: &FakeRegistryClient,
         registry_version: RegistryVersion,
-    ) -> Option<ThresholdSigPublicKey> {
+    ) -> Option<IcRootOfTrust> {
         let root_subnet_id = registry
             .get_root_subnet_id(registry_version)
             .expect("error retrieving root subnet ID")
@@ -1890,12 +1890,13 @@ mod registry {
         registry
             .get_threshold_signing_public_key_for_subnet(root_subnet_id, registry_version)
             .expect("error retrieving root public key")
+            .map(IcRootOfTrust::from)
     }
 }
 
 mod root_of_trust {
     use crate::internal::{nns_root_public_key, ConstantRootOfTrustProvider};
-    use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
+    use ic_types::crypto::threshold_sig::RootOfTrustProvider;
 
     #[test]
     fn should_retrieve_root_of_trust() {
@@ -1904,6 +1905,6 @@ mod root_of_trust {
 
         let result = provider.root_of_trust();
 
-        assert_eq!(result, Ok(IcRootOfTrust::from(root_of_trust)));
+        assert_eq!(result, Ok(root_of_trust));
     }
 }

@@ -181,12 +181,12 @@ impl Service<Request<Vec<u8>>> for QueryService {
             new_query_execution_service,
         );
 
-        let registry_client = self.registry_client.get_latest_version();
+        let registry_version = self.registry_client.get_latest_version();
         let validator_executor = self.validator_executor.clone();
         let response_body_size_bytes_metric = self.metrics.response_body_size_bytes.clone();
         async move {
             let get_authorized_canisters_fut =
-                validator_executor.validate_request(request.clone(), registry_client);
+                validator_executor.validate_request(request.clone(), registry_version);
 
             match get_authorized_canisters_fut.await {
                 Ok(targets) => {
