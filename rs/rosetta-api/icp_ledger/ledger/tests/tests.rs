@@ -157,11 +157,6 @@ fn test_account_canonicalization() {
 }
 
 #[test]
-fn test_memo_validation() {
-    ic_icrc1_ledger_sm_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn test_tx_time_bounds() {
     ic_icrc1_ledger_sm_tests::test_tx_time_bounds(ledger_wasm(), encode_init_args);
 }
