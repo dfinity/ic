@@ -153,11 +153,15 @@ pub async fn handler<V: Validate, C: HyperService<Body>>(
     uri_canister_id: Option<canister_id::UriHost>,
     host_canister_id: Option<canister_id::HostHeader>,
     query_param_canister_id: Option<canister_id::QueryParam>,
+    referer_host_canister_id: Option<canister_id::RefererHeaderHost>,
+    referer_query_param_canister_id: Option<canister_id::RefererHeaderQueryParam>,
     request: Request<Body>,
 ) -> Response<Body> {
     let uri_canister_id = uri_canister_id.map(|v| v.0);
     let host_canister_id = host_canister_id.map(|v| v.0);
     let query_param_canister_id = query_param_canister_id.map(|v| v.0);
+    let referer_canister_id = referer_host_canister_id.map(|v| v.0);
+    let referer_query_param_canister_id = referer_query_param_canister_id.map(|v| v.0);
 
     // Read the request body into a Vec
     let (parts, body) = request.into_parts();
@@ -189,7 +193,9 @@ pub async fn handler<V: Validate, C: HyperService<Body>>(
             &mut args.client,
             uri_canister_id
                 .or(host_canister_id)
-                .or(query_param_canister_id),
+                .or(query_param_canister_id)
+                .or(referer_canister_id)
+                .or(referer_query_param_canister_id),
         )
         .await;
 

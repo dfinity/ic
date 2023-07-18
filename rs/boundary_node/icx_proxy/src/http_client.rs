@@ -242,9 +242,9 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
 
     let build = HttpsConnectorBuilder::new().with_tls_config(tls_config);
 
-    #[cfg(feature = "allow_http")]
+    #[cfg(feature = "dev_proxy")]
     let build = build.https_or_http();
-    #[cfg(not(feature = "allow_http"))]
+    #[cfg(not(feature = "dev_proxy"))]
     let build = build.https_only();
 
     let connector = build
