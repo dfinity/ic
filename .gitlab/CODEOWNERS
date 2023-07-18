@@ -244,6 +244,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/message_routing        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /rs/tests/networking        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/nns        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
+/rs/tests/src/api_boundary_nodes_integration/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_integration/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_snp_tests/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
