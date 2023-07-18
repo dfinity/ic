@@ -30,8 +30,7 @@ function check_retry_interface_config() {
     fi
 }
 
-INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 while true; do
-    check_retry_interface_config 6 ${INTERFACE}
+    check_retry_interface_config 6 enp1s0
     sleep 10
 done

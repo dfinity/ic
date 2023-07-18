@@ -14,8 +14,8 @@ Wants=ic-crypto-csp.service
 # put the correct address(es) into the ic.json5, but in case
 # of dynamic assignment they only become available once all
 # network interfaces are up.
-After=network-online.target
-BindsTo=network-online.target
+After=sys-subsystem-net-devices-enp1s0.device
+BindsTo=sys-subsystem-net-devices-enp1s0.device
 After=systemd-networkd.service
 PartOf=systemd-networkd.service
 # Set up a socket to serve gRPC requests to the onchain observability adapter

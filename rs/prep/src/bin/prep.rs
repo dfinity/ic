@@ -191,11 +191,6 @@ struct CliArgs {
     /// Used only for local and testnet replicas.
     #[clap(long = "use-specified-ids-allocation-range")]
     use_specified_ids_allocation_range: bool,
-
-    /// Whitelisted firewall prefixes for initial registry state, separated by
-    /// commas.
-    #[clap(long = "whitelisted-prefixes")]
-    whitelisted_prefixes: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -305,7 +300,6 @@ struct ValidatedArgs {
     pub allow_empty_update_image: bool,
     pub guest_launch_measurement_sha256_hex: Option<String>,
     pub use_specified_ids_allocation_range: bool,
-    pub whitelisted_prefixes: Option<String>,
 }
 
 /// Structured definition of a flow provided by the `--p2p-flows` flag.
@@ -696,7 +690,6 @@ impl CliArgs {
             allow_empty_update_image: self.allow_empty_update_image,
             guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
-            whitelisted_prefixes: self.whitelisted_prefixes,
         })
     }
 }
