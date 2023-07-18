@@ -657,13 +657,13 @@ pub mod node {
             (nodes_true, nodes_false)
         }
 
-        pub fn into_receivers(
+        pub fn into_receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
             self,
-            idkg_receivers: &IDkgReceivers,
-        ) -> impl Iterator<Item = Node> + '_ {
+            idkg_receivers: T,
+        ) -> impl Iterator<Item = Node> + 'a {
             self.nodes
                 .into_iter()
-                .filter(|node| idkg_receivers.get().contains(&node.id))
+                .filter(move |node| idkg_receivers.as_ref().get().contains(&node.id))
         }
 
         pub fn receivers<'a, T: AsRef<IDkgReceivers> + 'a>(
@@ -707,9 +707,9 @@ pub mod node {
                 .expect("empty receivers")
         }
 
-        pub fn random_receiver<'a, R: Rng>(
+        pub fn random_receiver<'a, T: AsRef<IDkgReceivers> + 'a, R: Rng>(
             &'a self,
-            idkg_receivers: &'a IDkgReceivers,
+            idkg_receivers: T,
             rng: &mut R,
         ) -> &Node {
             self.receivers(idkg_receivers)
@@ -870,7 +870,7 @@ pub mod node {
         ) -> IDkgTranscript {
             let dealings = self.load_previous_transcripts_and_create_signed_dealings(params);
             let multisigned_dealings = self.support_dealings_from_all_receivers(dealings, params);
-            let transcript_creator = self.dealers(params).next().unwrap();
+            let transcript_creator = self.receivers(params).next().unwrap();
             let transcript =
                 transcript_creator.create_transcript_or_panic(params, &multisigned_dealings);
             assert!(self
@@ -1111,7 +1111,7 @@ impl CanisterThresholdSigTestEnvironment {
         self.nodes.choose_dealers_and_receivers(strategy, rng)
     }
 
-    fn add_node(&mut self, node: Node) {
+    pub fn add_node(&mut self, node: Node) {
         let node_id = node.id();
         let node_keys = node
             .crypto()
@@ -1199,7 +1199,7 @@ fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersi
     RegistryVersion::new(rng.gen_range(1..u32::MAX) as u64)
 }
 
-fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
+pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
     let id = rng.gen::<u64>();
     let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
     let height = Height::from(rng.gen::<u64>());
@@ -1207,12 +1207,16 @@ fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId
     IDkgTranscriptId::new(subnet, id, height)
 }
 
-fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
+pub fn n_random_node_ids<R: RngCore + CryptoRng>(n: usize, rng: &mut R) -> BTreeSet<NodeId> {
     let mut node_ids = BTreeSet::new();
     while node_ids.len() < n {
-        node_ids.insert(NodeId::from(PrincipalId::new_node_test_id(rng.gen())));
+        node_ids.insert(random_node_id(rng));
     }
     node_ids
+}
+
+fn random_node_id<R: RngCore + CryptoRng>(rng: &mut R) -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(rng.gen()))
 }
 
 pub fn random_receiver_id<R: RngCore + CryptoRng>(
