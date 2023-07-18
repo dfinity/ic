@@ -295,6 +295,9 @@ pub struct SystemState {
     /// completes, it will apply `ingress_induction_cycles_debit` to `cycles_balance`.
     ingress_induction_cycles_debit: Cycles,
 
+    /// Resource reservation cycles.
+    reserved_balance: Cycles,
+
     /// Tasks to execute before processing input messages.
     /// Currently the task queue is empty outside of execution rounds.
     pub task_queue: VecDeque<ExecutionTask>,
@@ -675,6 +678,7 @@ impl SystemState {
             queues: CanisterQueues::default(),
             cycles_balance: initial_cycles,
             ingress_induction_cycles_debit: Cycles::zero(),
+            reserved_balance: Cycles::zero(),
             memory_allocation: MemoryAllocation::BestEffort,
             freeze_threshold,
             status,
@@ -715,6 +719,7 @@ impl SystemState {
         canister_metrics: CanisterMetrics,
         cycles_balance: Cycles,
         ingress_induction_cycles_debit: Cycles,
+        reserved_balance: Cycles,
         task_queue: VecDeque<ExecutionTask>,
         global_timer: CanisterTimer,
         canister_version: u64,
@@ -731,6 +736,7 @@ impl SystemState {
             canister_metrics,
             cycles_balance,
             ingress_induction_cycles_debit,
+            reserved_balance,
             task_queue,
             global_timer,
             canister_version,
@@ -757,6 +763,11 @@ impl SystemState {
     /// Returns the pending 'ingress_induction_cycles_debit'.
     pub fn ingress_induction_cycles_debit(&self) -> Cycles {
         self.ingress_induction_cycles_debit
+    }
+
+    /// Returns resource reservation cycles.
+    pub fn reserved_balance(&self) -> Cycles {
+        self.reserved_balance
     }
 
     /// Records the given amount as debit that will be charged from the balance

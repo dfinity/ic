@@ -323,4 +323,6 @@ message CanisterStateBits {
   reserved 35;
   repeated ConsumedCyclesByUseCase consumed_cycles_since_replica_started_by_use_cases = 36;
   CanisterHistory canister_history = 37;
+  // Resource reservation cycles.
+  state.queues.v1.Cycles reserved_balance = 38;
 }
