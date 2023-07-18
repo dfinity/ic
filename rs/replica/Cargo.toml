@@ -44,7 +44,6 @@ ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replica-setup-ic-network =  { path = "./setup_ic_network" }
 ic-replicated-state = { path = "../replicated_state" }
-ic-backtrace = { path = "../monitoring/backtrace" }
 ic-state-manager = { path = "../state_manager" }
 ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
@@ -72,6 +71,10 @@ thread_profiler = { version = "0.3", optional = true }
 tokio = { version = "1.15.0", features = ["full"] }
 tracing = "0.1.13"
 tower = { version = "0.4.11", features = ["util"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# this library uses libunwind, which is only applicable to Linux
+ic-backtrace = { path = "../monitoring/backtrace" }
 
 [dev-dependencies]
 assert_cmd = "0.12"
