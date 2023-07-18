@@ -63,7 +63,7 @@ rust_binary(
     name = "icx-proxy-dev",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
-    crate_features = ["allow_http"],
+    crate_features = ["dev_proxy"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

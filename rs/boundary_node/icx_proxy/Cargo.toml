@@ -55,7 +55,7 @@ thiserror = "1.0.40"
 
 [features]
 skip_body_verification = []
-allow_http = []
+dev_proxy = []
 
 [dev-dependencies]
 tokio-test = "0.4.2"
