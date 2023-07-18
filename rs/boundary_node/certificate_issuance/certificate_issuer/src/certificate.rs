@@ -21,6 +21,20 @@ pub struct Pair(
 );
 
 #[derive(Debug, thiserror::Error)]
+pub enum GetCertError {
+    #[error("Not found")]
+    NotFound,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+#[automock]
+#[async_trait]
+pub trait GetCert: Send + Sync {
+    async fn get_cert(&self, id: &Id) -> Result<Pair, GetCertError>;
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum UploadError {
     #[error("Not found")]
     NotFound,
@@ -55,6 +69,53 @@ pub trait Export: Sync + Send {
         key: Option<String>,
         limit: u64,
     ) -> Result<(Vec<Package>, IcCertificate), ExportError>;
+}
+
+pub struct CanisterCertGetter {
+    agent: Arc<Agent>,
+    canister_id: Principal,
+    decoder: Arc<dyn Decode>,
+}
+
+impl CanisterCertGetter {
+    pub fn new(agent: Arc<Agent>, canister_id: Principal, decoder: Arc<dyn Decode>) -> Self {
+        Self {
+            agent,
+            canister_id,
+            decoder,
+        }
+    }
+}
+
+#[async_trait]
+impl GetCert for CanisterCertGetter {
+    async fn get_cert(&self, id: &Id) -> Result<Pair, GetCertError> {
+        use ifc::{GetCertificateError as Error, GetCertificateResponse as Response};
+
+        let args = Encode!(&id).context("failed to encode arg")?;
+
+        let resp = self
+            .agent
+            .query(&self.canister_id, "getCertificate")
+            .with_arg(args)
+            .call()
+            .await
+            .context("failed to query canister")?;
+
+        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+
+        match resp {
+            Response::Ok(enc_pair) => Ok(Pair(
+                self.decoder.decode(&enc_pair.0).await?,
+                self.decoder.decode(&enc_pair.1).await?,
+            )),
+            Response::Err(err) => Err(match err {
+                Error::NotFound => GetCertError::NotFound,
+                Error::Unauthorized => GetCertError::UnexpectedError(anyhow!("unauthorized")),
+                Error::UnexpectedError(err) => GetCertError::UnexpectedError(anyhow!(err)),
+            }),
+        }
+    }
 }
 
 pub struct CanisterUploader {

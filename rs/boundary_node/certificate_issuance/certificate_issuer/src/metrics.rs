@@ -6,6 +6,7 @@ use candid::Principal;
 use certificate_orchestrator_interface::IcCertificate;
 use ic_agent::{hash_tree::HashTree, Certificate};
 use opentelemetry::{
+    baggage::BaggageExt,
     metrics::{Counter, Histogram, Meter},
     Context, KeyValue,
 };
@@ -14,7 +15,7 @@ use trust_dns_resolver::{error::ResolveError, lookup::Lookup, proto::rr::RecordT
 
 use crate::{
     acme,
-    certificate::{self, ExportError, Package, UploadError},
+    certificate::{self, ExportError, GetCert, GetCertError, Package, Pair, UploadError},
     check::{Check, CheckError},
     dns::{self, Record, Resolve},
     registration::{
@@ -208,6 +209,42 @@ impl<T: Get> Get for WithMetrics<T> {
 }
 
 #[async_trait]
+impl<T: GetCert> GetCert for WithMetrics<T> {
+    async fn get_cert(&self, id: &Id) -> Result<Pair, GetCertError> {
+        let start_time = Instant::now();
+
+        let out = self.0.get_cert(id).await;
+
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                GetCertError::NotFound => "not-found",
+                GetCertError::UnexpectedError(_) => "fail",
+            },
+        };
+
+        let duration = start_time.elapsed().as_secs_f64();
+
+        let labels = &[KeyValue::new("status", status)];
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let cx = Context::current();
+
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
+
+        info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
+
+        out
+    }
+}
+
+#[async_trait]
 impl<T: Queue> Queue for WithMetrics<T> {
     async fn queue(&self, id: &Id, t: u64) -> Result<(), QueueError> {
         let start_time = Instant::now();
@@ -335,9 +372,14 @@ impl<T: Process> Process for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
+        let cx = Context::current();
+        let bgg = cx.baggage();
+        let is_renewal = bgg.get("is_renewal").unwrap().to_string();
+
         let labels = &[
             KeyValue::new("status", status),
             KeyValue::new("task", task.action.to_string()),
+            KeyValue::new("is_renewal", is_renewal.clone()),
         ];
 
         let MetricParams {
@@ -346,12 +388,10 @@ impl<T: Process> Process for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = Context::current();
-
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id, name = task.name, task = task.action.to_string(), status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id, name = task.name, task = task.action.to_string(), is_renewal, status, duration, error = ?out.as_ref().err());
 
         out
     }

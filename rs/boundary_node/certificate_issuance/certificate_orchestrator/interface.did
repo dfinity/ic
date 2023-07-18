@@ -85,6 +85,17 @@ type RemoveRegistrationResponse = variant {
     Err: RemoveRegistrationError;
 };
 
+type GetCertificateError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type GetCertificateResponse = variant {
+    Ok: EncryptedPair;
+    Err: GetRegistrationError;
+};
+
 type UploadCertificateError = variant {
     NotFound;
     Unauthorized;
@@ -195,6 +206,7 @@ service: (InitArg) -> {
     removeRegistration: (Id) -> (RemoveRegistrationResponse);
 
     // Certificates
+    getCertificate: (Id) -> (GetCertificateResponse) query;
     uploadCertificate: (Id, EncryptedPair) -> (UploadCertificateResponse);
     exportCertificates: () -> (ExportCertificatesResponse) query;
     exportCertificatesPaginated: (opt Id, nat64) -> (ExportCertificatesResponse) query;

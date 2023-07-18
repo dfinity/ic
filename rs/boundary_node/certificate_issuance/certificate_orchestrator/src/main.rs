@@ -4,13 +4,13 @@ use candid::candid_method;
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
     DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
-    ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetRegistrationError,
-    GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id, InitArg,
-    ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError,
-    ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError,
-    QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State,
-    UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
-    UploadCertificateResponse,
+    ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetCertificateError,
+    GetCertificateResponse, GetRegistrationError, GetRegistrationResponse, HeaderField,
+    HttpRequest, HttpResponse, Id, InitArg, ListAllowedPrincipalsError,
+    ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse,
+    Name, PeekTaskError, PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration,
+    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
+    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
 };
 use ic_cdk::{
     api::{id, time},
@@ -31,7 +31,8 @@ use work::{Peek, PeekError};
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
     certificate::{
-        Export, ExportError, Exporter, Upload, UploadError, UploadWithIcCertification, Uploader,
+        CertGetter, Export, ExportError, Exporter, GetCert, GetCertError, Upload, UploadError,
+        UploadWithIcCertification, Uploader,
     },
     ic_certification::{add_cert, init_cert_tree, set_root_hash},
     id::{Generate, Generator},
@@ -66,7 +67,7 @@ type StableValue<T> = StableMap<(), T>;
 type StorablePrincipal = BoundedString<63>;
 type StorableId = BoundedString<64>;
 
-const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 hour
+const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60 * 24 * 3); // 3 days
 const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 minutes
 
 const REGISTRATION_RATE_LIMIT_RATE: u32 = 5; // 5 subdomain registrations per hour
@@ -358,6 +359,12 @@ thread_local! {
         let e = WithAuthorize(e, &MAIN_AUTHORIZER);
         Box::new(e)
     });
+
+    static CERT_GETTER: RefCell<Box<dyn GetCert>> = RefCell::new({
+        let c = CertGetter::new(&ENCRYPTED_CERTIFICATES);
+        let c = WithAuthorize(c, &MAIN_AUTHORIZER);
+        Box::new(c)
+    });
 }
 
 // Tasks
@@ -621,6 +628,21 @@ fn remove_registration(id: Id) -> RemoveRegistrationResponse {
 }
 
 // Certificates
+
+#[query(name = "getCertificate")]
+#[candid_method(query, rename = "getCertificate")]
+fn get_certificate(id: Id) -> GetCertificateResponse {
+    match CERT_GETTER.with(|c| c.borrow().get_cert(&id)) {
+        Ok(enc_pair) => GetCertificateResponse::Ok(enc_pair),
+        Err(err) => GetCertificateResponse::Err(match err {
+            GetCertError::NotFound => GetCertificateError::NotFound,
+            GetCertError::Unauthorized => GetCertificateError::Unauthorized,
+            GetCertError::UnexpectedError(err) => {
+                GetCertificateError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
 
 #[update(name = "uploadCertificate")]
 #[candid_method(update, rename = "uploadCertificate")]

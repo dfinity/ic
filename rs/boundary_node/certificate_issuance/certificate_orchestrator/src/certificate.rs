@@ -14,6 +14,50 @@ use crate::{
 };
 
 #[derive(Debug, thiserror::Error)]
+pub enum GetCertError {
+    #[error("Not found")]
+    NotFound,
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait GetCert {
+    fn get_cert(&self, id: &Id) -> Result<EncryptedPair, GetCertError>;
+}
+
+pub struct CertGetter {
+    pairs: LocalRef<StableMap<StorableId, EncryptedPair>>,
+}
+
+impl CertGetter {
+    pub fn new(pairs: LocalRef<StableMap<StorableId, EncryptedPair>>) -> Self {
+        Self { pairs }
+    }
+}
+
+impl GetCert for CertGetter {
+    fn get_cert(&self, id: &Id) -> Result<EncryptedPair, GetCertError> {
+        self.pairs
+            .with(|pairs| pairs.borrow().get(&id.into()).ok_or(GetCertError::NotFound))
+    }
+}
+
+impl<T: GetCert, A: Authorize> GetCert for WithAuthorize<T, A> {
+    fn get_cert(&self, id: &Id) -> Result<EncryptedPair, GetCertError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => GetCertError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => GetCertError::UnexpectedError(err),
+            });
+        };
+
+        self.0.get_cert(id)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum UploadError {
     #[error("Not found")]
     NotFound,
