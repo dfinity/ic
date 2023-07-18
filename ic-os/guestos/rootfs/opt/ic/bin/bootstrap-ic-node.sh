@@ -18,13 +18,8 @@ function find_removable_devices() {
     for DEV in $(ls -C /sys/class/block); do
         echo "Consider device $DEV" >&2
         if [ -e /sys/class/block/"${DEV}"/removable ]; then
-            # In production, a removable device is used to pass configuration
-            # into the VM.
-            # In some test environments where this is not available, the
-            # configuration device is identified by the serial "config".
             local IS_REMOVABLE=$(cat /sys/class/block/"${DEV}"/removable)
-            local CONFIG_SERIAL=$(udevadm info --name=/dev/"${DEV}" | grep "ID_SCSI_SERIAL=config")
-            if [ "${IS_REMOVABLE}" == 1 ] || [ "${CONFIG_SERIAL}" != "" ]; then
+            if [ "${IS_REMOVABLE}" == 1 ]; then
                 # If this is a partitioned device (and it usually is), then
                 # the first partition is of relevance.
                 # return first partition for use instead.

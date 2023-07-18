@@ -40,11 +40,10 @@ function generate_name_server_list() {
 #       Should be /run/systemd/network/ for production.
 function generate_config_files() {
     TARGET_DIR="$1"
-    INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
     (
         cat <<EOF
 [Match]
-Name=${INTERFACE}
+Name=enp1s0
 Virtualization=!container
 
 EOF
@@ -69,7 +68,7 @@ IPv6AcceptRA=true
 EOF
         fi
         generate_name_server_list
-    ) >"${TARGET_DIR}/10-${INTERFACE}.network"
+    ) >"${TARGET_DIR}/10-enp1s0.network"
 }
 
 if [ -e "$1" ]; then
