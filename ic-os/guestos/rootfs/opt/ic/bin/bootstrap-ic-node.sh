@@ -13,6 +13,55 @@
 
 set -eo pipefail
 
+SCRIPT="$(basename $0)[$$]"
+METRICS_DIR="/run/node_exporter/collector_textfile"
+GUESTOS_VERSION_FILE="/opt/ic/share/version.txt"
+
+write_log() {
+    local message=$1
+
+    if [ -t 1 ]; then
+        echo "${SCRIPT} ${message}" >/dev/stdout
+    fi
+
+    logger -t ${SCRIPT} "${message}"
+}
+
+write_metric_attr() {
+    local name=$1
+    local attr=$2
+    local value=$3
+    local help=$4
+    local type=$5
+
+    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name}${attr} ${value}" >"${METRICS_DIR}/${name}.prom"
+}
+
+write_metric() {
+    local name=$1
+    local value=$2
+    local help=$3
+    local type=$4
+
+    echo -e "# HELP ${name} ${help}\n# TYPE ${type}\n${name} ${value}" >"${METRICS_DIR}/${name}.prom"
+}
+
+function get_guestos_version() {
+    if [ -r ${GUESTOS_VERSION_FILE} ]; then
+        GUESTOS_VERSION=$(cat ${GUESTOS_VERSION_FILE})
+        GUESTOS_VERSION_OK=1
+    else
+        GUESTOS_VERSION="unknown"
+        GUESTOS_VERSION_OK=0
+    fi
+    write_log "GuestOS version ${GUESTOS_VERSION}"
+    write_metric_attr "guestos_version" \
+        "{version=\"${GUESTOS_VERSION}\"}" \
+        "${GUESTOS_VERSION_OK}" \
+        "GuestOS version string" \
+        "gauge"
+}
+
 # List all block devices marked as "removable".
 function find_removable_devices() {
     for DEV in $(ls -C /sys/class/block); do
@@ -96,6 +145,8 @@ function process_bootstrap() {
 }
 
 MAX_TRIES=10
+
+get_guestos_version
 
 if [ -f /boot/config/CONFIGURED ]; then
     echo "Bootstrap completed already"
