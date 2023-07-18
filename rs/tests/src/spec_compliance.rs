@@ -1,9 +1,10 @@
 use crate::canister_http::lib::get_universal_vm_address;
+use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
-    TopologySnapshot,
+    await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasRegistryLocalStore,
+    HasTopologySnapshot, IcNodeContainer, SubnetSnapshot, TopologySnapshot,
 };
 use crate::driver::universal_vm::UniversalVm;
 use ic_registry_routing_table::canister_id_into_u64;
@@ -14,6 +15,8 @@ use slog::{info, Logger};
 use std::process::{Command, Stdio};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
+
+const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
 const REPLICATION_FACTOR: usize = 2;
 
@@ -76,6 +79,20 @@ pub fn config_impl(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+        .allocate_vm(&env)
+        .expect("Allocation of BoundaryNode failed.")
+        .for_ic(&env, "")
+        .use_ipv6_certs()
+        .with_registry_local_store(
+            std::fs::canonicalize(
+                env.registry_local_store_path("")
+                    .expect("failed to obtain path to registry local store"),
+            )
+            .expect("failed to derive absolute path to registry local store"),
+        )
+        .start(&env)
+        .expect("failed to setup BoundaryNode VM");
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
             .nodes()
@@ -109,6 +126,7 @@ pub fn config_impl(env: TestEnv) {
         })
     })
     .expect("Httpbin server should respond to incoming requests!");
+    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }
 
 fn find_subnet(
@@ -163,7 +181,7 @@ pub fn test_subnet(
 
 fn subnet_config(subnet: &SubnetSnapshot) -> String {
     format!(
-        "(\"{}\",{},{},[{}])",
+        "(\"{}\",{},{},[{}],[{}])",
         subnet.subnet_id,
         match subnet.subnet_type() {
             SubnetType::VerifiedApplication => "verified_application",
@@ -180,6 +198,11 @@ fn subnet_config(subnet: &SubnetSnapshot) -> String {
                 canister_id_into_u64(r.end)
             ))
             .collect::<Vec<String>>()
+            .join(","),
+        subnet
+            .nodes()
+            .map(|n| format!("\"{}\"", n.get_public_url()))
+            .collect::<Vec<String>>()
             .join(",")
     )
 }
@@ -194,7 +217,11 @@ pub fn with_endpoint(
     excluded_tests: Vec<&str>,
     included_tests: Vec<&str>,
 ) {
-    let node = test_subnet.nodes().next().unwrap();
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
     let test_subnet_config = subnet_config(&test_subnet);
     let peer_subnet_config = subnet_config(&peer_subnet);
     info!(log, "test-subnet-config: {}", test_subnet_config);
@@ -204,17 +231,19 @@ pub fn with_endpoint(
             "IC_TEST_DATA",
             env.get_dependency_path("rs/tests/ic-hs/test-data"),
         )
-        .arg("-j12")
+        .arg("-j16")
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests, included_tests))
         .arg("--endpoint")
-        .arg(node.get_public_url().to_string())
+        .arg(boundary_node.get_public_url().to_string())
         .arg("--httpbin")
         .arg(&httpbin)
         .arg("--test-subnet-config")
         .arg(test_subnet_config)
         .arg("--peer-subnet-config")
         .arg(peer_subnet_config)
+        .arg("--allow-self-signed-certs")
+        .arg("True")
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
