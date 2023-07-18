@@ -1,4 +1,5 @@
 use ic_base_types::SubnetId;
+use ic_protobuf::types::v1 as pb;
 use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::read_file,
@@ -6,8 +7,25 @@ use ic_recovery::{
 };
 use ic_registry_routing_table::CanisterIdRange;
 use ic_state_manager::manifest::{manifest_from_path, manifest_hash};
+use ic_types::{consensus::CatchUpPackage, Time};
 
-use std::path::Path;
+use std::{fmt::Display, path::Path};
+
+// TODO(kpop): remove this once we start using the function to get the `batch_time` to pass to the
+// `state-tool`.
+#[allow(dead_code)]
+pub(crate) fn get_batch_time_from_cup(cup_path: &Path) -> RecoveryResult<Time> {
+    let cup_proto = pb::CatchUpPackage::read_from_file(cup_path)
+        .map_err(|err| cup_error("Failed to decode the CUP file", cup_path, err))?;
+
+    CatchUpPackage::try_from(&cup_proto)
+        .map(|cup| cup.content.block.as_ref().context.time)
+        .map_err(|err| cup_error("Failed to deserialize the CUP file", cup_path, err))
+}
+
+fn cup_error(message: impl Display, cup_path: &Path, error: impl Display) -> RecoveryError {
+    RecoveryError::UnexpectedError(format!("{} ({}): {}", message, cup_path.display(), error))
+}
 
 pub(crate) fn canister_id_range_to_string(canister_id_range: &CanisterIdRange) -> String {
     format!("{}:{}", canister_id_range.start, canister_id_range.end)

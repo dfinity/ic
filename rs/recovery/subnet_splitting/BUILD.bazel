@@ -13,7 +13,6 @@ DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:clap",
     "@crate_index//:hex",
-    "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
