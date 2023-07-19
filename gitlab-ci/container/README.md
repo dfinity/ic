@@ -100,3 +100,12 @@ PODMAN_RUN_USR_ARGS=(
     -e TESTVARIABLE="something-i-expect"
 )
 ```
+
+### How to run parallel bazel tests
+
+By default `container-run.sh` bind-mounts `~/.cache` which is used for (output_base)[https://bazel.build/docs/user-manual#output-base]. If you need to run 2nd build/test in parallel but not interfere with the 1st one, follow the steps below.
+
+```bash
+mkdir ~/.cache2
+./gitlab-ci/container/container-run.sh -c ~/.cache2
+```
