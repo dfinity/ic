@@ -82,8 +82,8 @@ export BINARIES_DIR_FULL="$ROOT_DIR/$BINARIES_DIR"
 export CANISTERS_DIR_FULL="$ROOT_DIR/$CANISTERS_DIR"
 export DISK_DIR_FULL="$ROOT_DIR/$DISK_DIR"
 
-is_inside_container_or_ci() {
-    [ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI_JOB_URL:-}" ]
+is_inside_DFINITY_container() {
+    [ -e /home/ubuntu/.DFINITY-TAG ] && ([ -e /.dockerenv ] || [ -e /run/.containerenv ] || [ -n "${CI:-}" ])
 }
 
 validate_build_env() {
@@ -154,11 +154,11 @@ if "$BUILD_BIN"; then BUILD_CMD="${BUILD_CMD}${BUILD_BINARIES_CMD}"; fi
 if "$BUILD_CAN"; then BUILD_CMD="${BUILD_CMD}${BUILD_CANISTERS_CMD}"; fi
 if "$BUILD_IMG"; then BUILD_CMD="${BUILD_CMD}${BUILD_IMAGES_CMD}"; fi
 
-if is_inside_container_or_ci; then
-    echo_blue "Building already inside a container or CI"
+if is_inside_DFINITY_container; then
+    echo_blue "Building already inside a DFINITY container or CI"
     eval "$BUILD_CMD"
 else
-    echo_blue "Building by using a new container"
+    echo_blue "Building by using a new DFINITY container"
     "$ROOT_DIR"/gitlab-ci/container/container-run.sh bash -c "$BUILD_CMD"
 fi
 
