@@ -159,8 +159,8 @@ impl ConnectivityChecker {
     pub fn new(peers: &[NodeId]) -> Self {
         let mut hm = HashMap::new();
 
-        for peer in peers {
-            hm.insert(*peer, HashSet::new());
+        for peer_id in peers {
+            hm.insert(*peer_id, HashSet::new());
         }
 
         Self {
@@ -235,10 +235,10 @@ impl ConnectivityChecker {
     }
 
     /// This peer is not reachable by any other peer.
-    pub fn unreachable(&self, this_peer: &NodeId) -> bool {
+    pub fn unreachable(&self, unreachable_peer: &NodeId) -> bool {
         let peers = self.peers.read().unwrap();
-        for p1 in peers.keys() {
-            if this_peer != p1 && !self.disconnected_from(p1, this_peer) {
+        for peer_id in peers.keys() {
+            if unreachable_peer != peer_id && !self.disconnected_from(peer_id, unreachable_peer) {
                 return false;
             }
         }
