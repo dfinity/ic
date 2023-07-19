@@ -95,6 +95,8 @@ RUN curl -sSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/
     echo "c5a92a572b3bd0024c7b1fe8072be3251156874c05f017c23f9db7b3254ae71a  ${YQ_BIN}" | shasum -a 256 -c - && \
     chmod +x "${YQ_BIN}"
 
+COPY ./gitlab-ci/container/TAG /home/ubuntu/.DFINITY-TAG
+
 WORKDIR /
 USER 0
 
