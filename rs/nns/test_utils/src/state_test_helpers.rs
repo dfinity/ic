@@ -573,15 +573,16 @@ fn manage_neuron(
     Decode!(&result, ManageNeuronResponse).unwrap()
 }
 
-pub fn nns_cast_yes_vote(
+pub fn nns_cast_vote(
     state_machine: &mut StateMachine,
     sender: PrincipalId,
     neuron_id: NeuronId,
     proposal_id: u64,
+    vote: Vote,
 ) -> ManageNeuronResponse {
     let command = manage_neuron::Command::RegisterVote(RegisterVote {
         proposal: Some(ic_nns_common::pb::v1::ProposalId { id: proposal_id }),
-        vote: Vote::Yes as i32,
+        vote: vote as i32,
     });
 
     manage_neuron(state_machine, sender, neuron_id, command)
@@ -613,6 +614,22 @@ pub fn get_neuron_ids(state_machine: &mut StateMachine, sender: PrincipalId) -> 
     };
 
     Decode!(&result, Vec<u64>).unwrap()
+}
+
+pub fn get_pending_proposals(state_machine: &mut StateMachine) -> Vec<ProposalInfo> {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "get_pending_proposals",
+            Encode!(&Empty {}).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to get_pending_proposals failed: {:#?}", s),
+    };
+
+    Decode!(&result, Vec<ProposalInfo>).unwrap()
 }
 
 pub fn nns_join_community_fund(
