@@ -117,10 +117,24 @@ build:check --@rules_rust//rust/settings:pipelined_compilation=True
 build:check --output_groups=build_metadata
 
 # Fuzzing configuration
+build:fuzzing --action_env="DFINITY_OPENSSL_STATIC=1"
+# sanitizers are only supported in nightly
 build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
 build:fuzzing --build_tag_filters=fuzz_test
 # Ignoring transitions for now since it doesn't add any additional improvement to current setup.
 build:fuzzing --//bazel:enable_fuzzing_code=True
+
+# AFL configuration
+build:afl --action_env="AR=llvm-ar-15"
+build:afl --action_env="AS=llvm-as-15"
+build:afl --action_env="CC=afl-clang-lto"
+build:afl --action_env="CXX=afl-clang-lto++"
+build:afl --action_env="LD=afl-clang-lto++"
+build:afl --action_env="LLVM_CONFIG=llvm-config-15"
+build:afl --action_env="RANLIB=llvm-ranlib-15"
+build:afl --config=fuzzing
+build:afl --build_tag_filters=afl
+build:afl --run_under="/ic/bin/afl_wrapper.sh"
 
 # Suppress all additional output to make it more convenient in scripts
 query --ui_event_filters=-info,-debug --noshow_progress

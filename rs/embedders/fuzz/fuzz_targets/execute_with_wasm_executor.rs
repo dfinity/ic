@@ -1,4 +1,3 @@
-#![no_main]
 use ic_config::{embedders::Config, flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_embedders::{
     wasm_executor::{WasmExecutor, WasmExecutorImpl},
@@ -26,23 +25,17 @@ use ic_types::{
     ComputeAllocation, MemoryAllocation, NumBytes, NumInstructions,
 };
 use ic_wasm_types::CanisterModule;
-
-use libfuzzer_sys::fuzz_target;
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
-mod ic_wasm;
-use ic_wasm::ICWasmConfig;
-use wasm_smith::ConfiguredModule;
 
 // The fuzzer creates valid wasms and tries to execute a query method via WasmExecutor.
 // The fuzzing success rate directly depends upon the IC valid wasm corpus provided.
 // The fuzz test is only compiled but not executed by CI.
 //
 // To execute the fuzzer run
-// bazel run --config=fuzzing --build_tag_filters=fuzz_test //rs/embedders/fuzz:execute_with_wasm_executor -- corpus/
+// bazel run --config=fuzzing //rs/embedders/fuzz:execute_with_wasm_executor_libfuzzer -- corpus/
 
-fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
-    let wasm = module.module.to_bytes();
-    let canister_module = CanisterModule::new(wasm);
+pub fn do_fuzz_task(data: Vec<u8>) {
+    let canister_module = CanisterModule::new(data);
     let wasm_binary = WasmBinary::new(canister_module);
 
     let wasm_method = WasmMethod::Query("test".to_string());
@@ -65,7 +58,7 @@ fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
     let wasm_execution_input = setup_wasm_execution_input(func_ref);
     let (_compilation_result, _execution_result) =
         Arc::new(wasm_executor).execute(wasm_execution_input, &execution_state);
-});
+}
 
 fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
