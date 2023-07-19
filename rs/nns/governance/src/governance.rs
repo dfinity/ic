@@ -1731,13 +1731,6 @@ impl Governance {
             .ok_or_else(|| Self::neuron_not_found_error(nid))
     }
 
-    pub fn get_neuron_mut(&mut self, nid: &NeuronId) -> Result<&mut Neuron, GovernanceError> {
-        self.proto
-            .neurons
-            .get_mut(&nid.id)
-            .ok_or_else(|| Self::neuron_not_found_error(nid))
-    }
-
     fn find_neuron(&self, find_by: &NeuronIdOrSubaccount) -> Result<&Neuron, GovernanceError> {
         match find_by {
             NeuronIdOrSubaccount::NeuronId(nid) => self.get_neuron(nid),
@@ -1907,11 +1900,6 @@ impl Governance {
     ///   `topic_followee_index`)
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
-        let neuron_id = &neuron.id.as_ref().expect("Neuron must have a NeuronId");
-
-        // Must clobber an existing neuron.
-        let old_neuron = self.get_neuron_mut(neuron_id)?;
-
         // The controller principal is self-authenticating.
         if !neuron.controller.unwrap().is_self_authenticating() {
             return Err(GovernanceError::new_with_message(
@@ -1921,26 +1909,30 @@ impl Governance {
             ));
         }
 
-        // Must NOT clobber hot keys.
-        if old_neuron.hot_keys != neuron.hot_keys {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot update neuron's hot_keys via update_neuron.".to_string(),
-            ));
-        }
+        let neuron_id = neuron.id.expect("Neuron must have a NeuronId");
+        // Must clobber an existing neuron.
+        self.with_neuron_mut(&neuron_id, |old_neuron| {
+            // Must NOT clobber hot keys.
+            if old_neuron.hot_keys != neuron.hot_keys {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot update neuron's hot_keys via update_neuron.".to_string(),
+                ));
+            }
 
-        // Must NOT clobber followees.
-        if old_neuron.followees != neuron.followees {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot update neuron's followees via update_neuron.".to_string(),
-            ));
-        }
+            // Must NOT clobber followees.
+            if old_neuron.followees != neuron.followees {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot update neuron's followees via update_neuron.".to_string(),
+                ));
+            }
 
-        // Now that neuron has been validated, update old_neuron.
-        *old_neuron = neuron;
+            // Now that neuron has been validated, update old_neuron.
+            *old_neuron = neuron;
 
-        Ok(())
+            Ok(())
+        })? // We have to unwrap the parent result, but return the child result
     }
 
     /// Add a neuron to the list of neurons and update
@@ -2256,8 +2248,10 @@ impl Governance {
         let donor_neuron = donor_neuron.clone();
         self.remove_neuron(donor_neuron_id.id, donor_neuron)?;
 
-        let recipient_neuron = self.get_neuron_mut(recipient_neuron_id)?;
-        recipient_neuron.cached_neuron_stake_e8s += transfer_amount_doms;
+        self.with_neuron_mut(recipient_neuron_id, |recipient_neuron| {
+            recipient_neuron.cached_neuron_stake_e8s += transfer_amount_doms;
+        })?;
+
         Ok(())
     }
 
@@ -2640,16 +2634,17 @@ impl Governance {
 
         // Get the neuron again, but this time a mutable reference.
         // Expect it to exist, since we acquired a lock above.
-        let parent_neuron = self.get_neuron_mut(id).expect("Neuron not found");
+        self.with_neuron_mut(id, |parent_neuron| {
+            // Update the state of the parent and child neurons.
+            parent_neuron.cached_neuron_stake_e8s -= split.amount_e8s;
+        })
+        .expect("Neuron not found");
 
-        // Update the state of the parent and child neurons.
-        parent_neuron.cached_neuron_stake_e8s -= split.amount_e8s;
+        self.with_neuron_mut(&child_nid, |child_neuron| {
+            child_neuron.cached_neuron_stake_e8s = staked_amount;
+        })
+        .expect("Expected the child neuron to exist");
 
-        let child_neuron = self
-            .get_neuron_mut(&child_nid)
-            .expect("Expected the child neuron to exist");
-
-        child_neuron.cached_neuron_stake_e8s = staked_amount;
         Ok(child_nid)
     }
 
@@ -2883,11 +2878,12 @@ impl Governance {
         // `add_neuron` will verify that `child_neuron.controller` `is_self_authenticating()`, so we don't need to check it here.
         self.add_neuron(child_nid.id, child_neuron)?;
 
-        // Get the neurons again, but this time mutable references.
-        let parent_neuron = self.get_neuron_mut(id).expect("Neuron not found");
-
-        // Reset the parent's maturity.
-        parent_neuron.maturity_e8s_equivalent -= maturity_to_spawn;
+        // Get the parent neuron again, but this time mutable references.
+        self.with_neuron_mut(id, |parent_neuron| {
+            // Reset the parent's maturity.
+            parent_neuron.maturity_e8s_equivalent -= maturity_to_spawn;
+        })
+        .expect("Neuron not found");
 
         Ok(child_nid)
     }
@@ -2966,33 +2962,35 @@ impl Governance {
         let _neuron_lock = self.lock_neuron_for_command(nid.id, in_flight_command)?;
 
         // Adjust the maturity of the neuron
-        let neuron = self
-            .get_neuron_mut(nid)
+        let responses = self
+            .with_neuron_mut(nid, |neuron| {
+                neuron.maturity_e8s_equivalent = neuron
+                    .maturity_e8s_equivalent
+                    .saturating_sub(maturity_to_stake);
+
+                neuron.staked_maturity_e8s_equivalent = Some(
+                    neuron
+                        .staked_maturity_e8s_equivalent
+                        .unwrap_or(0)
+                        .saturating_add(maturity_to_stake),
+                );
+                let staked_maturity_e8s = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+                let new_stake_e8s = neuron.cached_neuron_stake_e8s + staked_maturity_e8s;
+
+                (
+                    StakeMaturityResponse {
+                        maturity_e8s: neuron.maturity_e8s_equivalent,
+                        staked_maturity_e8s,
+                    },
+                    MergeMaturityResponse {
+                        merged_maturity_e8s: maturity_to_stake,
+                        new_stake_e8s,
+                    },
+                )
+            })
             .expect("Expected the neuron to exist");
 
-        neuron.maturity_e8s_equivalent = neuron
-            .maturity_e8s_equivalent
-            .saturating_sub(maturity_to_stake);
-
-        neuron.staked_maturity_e8s_equivalent = Some(
-            neuron
-                .staked_maturity_e8s_equivalent
-                .unwrap_or(0)
-                .saturating_add(maturity_to_stake),
-        );
-        let staked_maturity_e8s = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
-        let new_stake_e8s = neuron.cached_neuron_stake_e8s + staked_maturity_e8s;
-
-        Ok((
-            StakeMaturityResponse {
-                maturity_e8s: neuron.maturity_e8s_equivalent,
-                staked_maturity_e8s,
-            },
-            MergeMaturityResponse {
-                merged_maturity_e8s: maturity_to_stake,
-                new_stake_e8s,
-            },
-        ))
+        Ok(responses)
     }
 
     /// Disburse part of the stake of a neuron into a new neuron, possibly
@@ -3234,16 +3232,17 @@ impl Governance {
         }
 
         // Get the neurons again, but this time mutable references.
-        let parent_neuron = self.get_neuron_mut(id).expect("Neuron not found");
+        self.with_neuron_mut(id, |parent_neuron| {
+            // Update the state of the parent and child neurons.
+            parent_neuron.cached_neuron_stake_e8s -= disburse_to_neuron.amount_e8s;
+        })
+        .expect("Neuron not found");
 
-        // Update the state of the parent and child neurons.
-        parent_neuron.cached_neuron_stake_e8s -= disburse_to_neuron.amount_e8s;
+        self.with_neuron_mut(&child_nid, |child_neuron| {
+            child_neuron.cached_neuron_stake_e8s = staked_amount;
+        })
+        .expect("Expected the child neuron to exist");
 
-        let child_neuron = self
-            .get_neuron_mut(&child_nid)
-            .expect("Expected the child neuron to exist");
-
-        child_neuron.cached_neuron_stake_e8s = staked_amount;
         Ok(child_nid)
     }
 
@@ -5858,29 +5857,30 @@ impl Governance {
                 ),
             ));
         }
-        let neuron = self.get_neuron_mut(&nid)?;
-        match neuron.cached_neuron_stake_e8s.cmp(&balance.get_e8s()) {
-            Ordering::Greater => {
-                println!(
-                    "{}ERROR. Neuron cached stake was inconsistent.\
+        self.with_neuron_mut(&nid, |neuron| {
+            match neuron.cached_neuron_stake_e8s.cmp(&balance.get_e8s()) {
+                Ordering::Greater => {
+                    println!(
+                        "{}ERROR. Neuron cached stake was inconsistent.\
                      Neuron account: {} has less e8s: {} than the cached neuron stake: {}.\
                      Stake adjusted.",
-                    LOG_PREFIX,
-                    account,
-                    balance.get_e8s(),
-                    neuron.cached_neuron_stake_e8s
-                );
-                neuron.update_stake_adjust_age(balance.get_e8s(), now);
-            }
-            Ordering::Less => {
-                neuron.update_stake_adjust_age(balance.get_e8s(), now);
-            }
-            // If the stake is the same as the account balance,
-            // just return the neuron id (this way this method
-            // also serves the purpose of allowing to discover the
-            // neuron id based on the memo and the controller).
-            Ordering::Equal => (),
-        };
+                        LOG_PREFIX,
+                        account,
+                        balance.get_e8s(),
+                        neuron.cached_neuron_stake_e8s
+                    );
+                    neuron.update_stake_adjust_age(balance.get_e8s(), now);
+                }
+                Ordering::Less => {
+                    neuron.update_stake_adjust_age(balance.get_e8s(), now);
+                }
+                // If the stake is the same as the account balance,
+                // just return the neuron id (this way this method
+                // also serves the purpose of allowing to discover the
+                // neuron id based on the memo and the controller).
+                Ordering::Equal => (),
+            };
+        })?;
 
         Ok(nid)
     }
@@ -5970,13 +5970,11 @@ impl Governance {
             ));
         }
 
-        // Ok, we are able to stake the neuron.
-        match self.get_neuron_mut(&nid) {
-            Ok(neuron) => {
-                // Adjust the stake.
-                neuron.update_stake_adjust_age(balance.get_e8s(), now);
-                Ok(nid)
-            }
+        match self.with_neuron_mut(&nid, |neuron| {
+            // Adjust the stake.
+            neuron.update_stake_adjust_age(balance.get_e8s(), now);
+        }) {
+            Ok(_) => Ok(nid),
             Err(err) => {
                 // This should not be possible, but let's be defensive and provide a
                 // reasonable error message, but still panic so that the lock remains
@@ -6440,16 +6438,18 @@ impl Governance {
                             LOG_PREFIX, neuron
                         );
 
-                        let mut neuron = self.get_neuron_mut(&id).unwrap();
+                        let neuron_clone = self
+                            .with_neuron_mut(&id, |neuron| {
+                                // Reset the neuron's maturity and set that it's spawning before we actually mint
+                                // the stake. This is conservative to prevent a neuron having _both_ the stake and
+                                // the maturity at any point in time.
+                                neuron.maturity_e8s_equivalent = 0;
+                                neuron.spawn_at_timestamp_seconds = None;
+                                neuron.cached_neuron_stake_e8s = neuron_stake;
 
-                        // Reset the neuron's maturity and set that it's spawning before we actually mint
-                        // the stake. This is conservative to prevent a neuron having _both_ the stake and
-                        // the maturity at any point in time.
-                        neuron.maturity_e8s_equivalent = 0;
-                        neuron.spawn_at_timestamp_seconds = None;
-                        neuron.cached_neuron_stake_e8s = neuron_stake;
-
-                        let neuron_clone = neuron.clone();
+                                neuron.clone()
+                            })
+                            .unwrap();
 
                         // Do the transfer, this is a minting transfer, from the governance canister's
                         // (which is also the minting canister) main account into the neuron's
@@ -6644,24 +6644,26 @@ impl Governance {
             );
         } else {
             for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
-                match self.get_neuron_mut(&neuron_id) {
-                    Ok(mut neuron) => {
-                        // Note that " as u64" rounds toward zero; this is the desired
-                        // behavior here. Also note that `total_voting_rights` has
-                        // to be positive because (1) voters_to_used_voting_right
-                        // is non-empty (otherwise we wouldn't be here in the
-                        // first place) and (2) the voting power of all ballots is
-                        // positive (non-zero).
-                        let reward = (used_voting_rights * total_available_e8s_equivalent_float
-                            / total_voting_rights) as u64;
-                        // If the neuron has auto-stake-maturity on, add the new maturity to the
-                        // staked maturity, otherwise add it to the un-staked maturity.
-                        if neuron.auto_stake_maturity.unwrap_or(false) {
-                            neuron.staked_maturity_e8s_equivalent =
-                                Some(neuron.staked_maturity_e8s_equivalent.unwrap_or(0) + reward);
-                        } else {
-                            neuron.maturity_e8s_equivalent += reward;
-                        }
+                match self.with_neuron_mut(&neuron_id, |neuron| {
+                    // Note that " as u64" rounds toward zero; this is the desired
+                    // behavior here. Also note that `total_voting_rights` has
+                    // to be positive because (1) voters_to_used_voting_right
+                    // is non-empty (otherwise we wouldn't be here in the
+                    // first place) and (2) the voting power of all ballots is
+                    // positive (non-zero).
+                    let reward = (used_voting_rights * total_available_e8s_equivalent_float
+                        / total_voting_rights) as u64;
+                    // If the neuron has auto-stake-maturity on, add the new maturity to the
+                    // staked maturity, otherwise add it to the un-staked maturity.
+                    if neuron.auto_stake_maturity.unwrap_or(false) {
+                        neuron.staked_maturity_e8s_equivalent =
+                            Some(neuron.staked_maturity_e8s_equivalent.unwrap_or(0) + reward);
+                    } else {
+                        neuron.maturity_e8s_equivalent += reward;
+                    }
+                    reward
+                }) {
+                    Ok(reward) => {
                         actually_distributed_e8s_equivalent += reward;
                     }
                     Err(e) => println!(
