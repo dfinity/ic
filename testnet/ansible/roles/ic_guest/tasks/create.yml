@@ -151,7 +151,6 @@
   vars:
     ic_memory_kib: "{{ ic_memory_gb | int * (1024 | pow(2)) }}"
     mac_address: "{{ hostvars[item].mac_address }}"
-    ipv4_interface: "{{ hostvars[item].ipv4_interface | default('vlan66') }}"
     ipv6_interface: "{{ hostvars[item].ipv6_interface | default('vlan66') }}"
   template:
     src: "../ic_guest/templates/guest.xml"
