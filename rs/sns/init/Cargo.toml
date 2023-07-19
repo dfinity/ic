@@ -7,7 +7,6 @@ edition = "2021"
 path = "src/lib.rs"
 
 [dependencies]
-anyhow = "1.0.57"
 base64 = "0.13.0"
 candid = { workspace = true }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }

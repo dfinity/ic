@@ -2,7 +2,6 @@ use crate::pb::v1::{
     sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
     FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload,
 };
-use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index::InitArgs as IndexInitArgs;
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
@@ -271,7 +270,7 @@ impl SnsInitPayload {
         sns_canister_ids: &SnsCanisterIds,
         deployed_version: Option<Version>,
         testflight: bool,
-    ) -> anyhow::Result<SnsCanisterInitPayloads> {
+    ) -> Result<SnsCanisterInitPayloads, String> {
         if self.is_legacy_flow() {
             self.validate_legacy_init()?;
         } else {
@@ -291,7 +290,7 @@ impl SnsInitPayload {
         &self,
         sns_canister_ids: &SnsCanisterIds,
         deployed_version: Option<Version>,
-    ) -> anyhow::Result<Governance> {
+    ) -> Result<Governance, String> {
         let mut governance = GovernanceCanisterInitPayloadBuilder::new().build();
         governance.ledger_canister_id = Some(sns_canister_ids.ledger);
         governance.root_canister_id = Some(sns_canister_ids.root);
@@ -306,7 +305,7 @@ impl SnsInitPayload {
         governance.neurons = self.get_initial_neurons(&parameters)?;
 
         governance.sns_initialization_parameters = serde_yaml::to_string(self)
-            .map_err(|e| anyhow!(format!("Could not create initialization parameters {}", e)))?;
+            .map_err(|e| format!("Could not create initialization parameters {}", e))?;
 
         Ok(governance)
     }
@@ -334,7 +333,7 @@ impl SnsInitPayload {
     fn ledger_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<LedgerArgument> {
+    ) -> Result<LedgerArgument, String> {
         let root_canister_id = CanisterId::new(sns_canister_ids.root).unwrap();
         let token_symbol = self
             .token_symbol
@@ -462,7 +461,7 @@ impl SnsInitPayload {
     fn get_all_ledger_accounts(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<BTreeMap<Account, Tokens>> {
+    ) -> Result<BTreeMap<Account, Tokens>, String> {
         match &self.initial_token_distribution {
             None => Ok(btreemap! {}),
             Some(FractionalDeveloperVotingPower(f)) => {
@@ -477,7 +476,7 @@ impl SnsInitPayload {
     fn get_initial_neurons(
         &self,
         parameters: &NervousSystemParameters,
-    ) -> anyhow::Result<BTreeMap<String, Neuron>> {
+    ) -> Result<BTreeMap<String, Neuron>, String> {
         match &self.initial_token_distribution {
             None => Ok(btreemap! {}),
             Some(FractionalDeveloperVotingPower(f)) => f.get_initial_neurons(parameters),
@@ -566,7 +565,7 @@ impl SnsInitPayload {
 
     /// Validates the SnsInitPayload. This is called before building each SNS canister's
     /// payload and must pass.
-    pub fn validate_legacy_init(&self) -> anyhow::Result<Self> {
+    pub fn validate_legacy_init(&self) -> Result<Self, String> {
         let validation_fns = [
             self.validate_token_symbol(),
             self.validate_token_name(),
@@ -598,7 +597,10 @@ impl SnsInitPayload {
         self.join_validation_results(&validation_fns)
     }
 
-    pub fn validate_pre_execution(&self) -> anyhow::Result<Self> {
+    /// Validates all the fields that are shared with CreateServiceNervousSystem
+    /// For use in e.g. the SNS CLI or in NNS Governance before the proposal has
+    /// been executed.
+    pub fn validate_pre_execution(&self) -> Result<Self, String> {
         // TODO NNS1-2296: validate new fields in SnsInitPayload when generated from a CreateServiceNervousSystemProposal
         let validation_fns = [
             self.validate_token_symbol(),
@@ -631,7 +633,7 @@ impl SnsInitPayload {
         self.join_validation_results(&validation_fns)
     }
 
-    pub fn validate_post_execution(&self) -> anyhow::Result<Self> {
+    pub fn validate_post_execution(&self) -> Result<Self, String> {
         // TODO NNS1-2296: validate new fields in SnsInitPayload when generated from a CreateServiceNervousSystemProposal
         let validation_fns = [
             self.validate_token_symbol(),
@@ -671,7 +673,7 @@ impl SnsInitPayload {
     fn join_validation_results(
         &self,
         validation_fns: &[Result<(), String>],
-    ) -> anyhow::Result<Self> {
+    ) -> Result<Self, String> {
         let defect_msg = validation_fns
             .iter()
             .filter_map(|validation_fn| match validation_fn {
@@ -685,7 +687,7 @@ impl SnsInitPayload {
         if defect_msg.is_empty() {
             Ok(self.clone())
         } else {
-            Err(anyhow!(defect_msg))
+            Err(defect_msg)
         }
     }
 
@@ -770,9 +772,7 @@ impl SnsInitPayload {
         let nervous_system_parameters = self.get_nervous_system_parameters();
 
         match initial_token_distribution {
-            FractionalDeveloperVotingPower(f) => f
-                .validate(&nervous_system_parameters)
-                .map_err(|err| err.to_string())?,
+            FractionalDeveloperVotingPower(f) => f.validate(&nervous_system_parameters)?,
         }
 
         Ok(())
@@ -1274,27 +1274,16 @@ mod test {
     use std::{collections::BTreeMap, convert::TryInto};
 
     #[inline]
-    fn assert_ok<T>(result: anyhow::Result<T>)
+    fn assert_error<T, E1, E2>(result: Result<T, E1>, expected_error: E2)
     where
         T: std::fmt::Debug,
+        E1: ToString,
+        E2: ToString,
     {
-        assert!(
-            result.is_ok(),
-            "assertion failed: expected Ok got {result:?}"
-        );
-    }
-
-    #[inline]
-    fn assert_error<T, E>(result: anyhow::Result<T>, expected_error: E)
-    where
-        T: std::fmt::Debug,
-        E: ToString,
-    {
-        assert!(
-            result.is_err(),
-            "assertion failed: expected Err got {result:?}"
-        );
-        assert_eq!(result.unwrap_err().to_string(), expected_error.to_string());
+        match result {
+            Ok(result) => panic!("assertion failed: expected Err, got Ok({result:?})"),
+            Err(err) => assert_eq!(err.to_string(), expected_error.to_string()),
+        }
     }
 
     fn create_canister_ids() -> SnsCanisterIds {
@@ -1393,7 +1382,7 @@ mod test {
         assert!(sns_init_payload.validate_legacy_init().is_err());
         sns_init_payload = get_sns_init_payload();
 
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
     }
 
     #[test]
@@ -1463,7 +1452,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1494,7 +1483,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1524,7 +1513,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1551,7 +1540,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1577,7 +1566,9 @@ mod test {
                 confirmation_text: None,
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Test that some non-trivial value of `confirmation_text` validates.
         {
@@ -1585,7 +1576,9 @@ mod test {
                 confirmation_text: Some("Please confirm that 2+2=4".to_string()),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Test that `confirmation_text` set to an empty string is rejected.
         {
@@ -1623,7 +1616,9 @@ mod test {
                 restricted_countries: None,
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Test that some non-trivial value of `restricted_countries` validates.
         {
@@ -1633,7 +1628,9 @@ mod test {
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Test that multiple countries can be validated.
         {
@@ -1645,7 +1642,9 @@ mod test {
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert_ok(sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false));
+            sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .unwrap();
         }
         // Check that item count is checked before duplicate analysis.
         {
@@ -1740,10 +1739,10 @@ mod test {
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             // Legacy flow
-            assert_ok(sns_init_payload.validate_legacy_init());
+            sns_init_payload.validate_legacy_init().unwrap();
             // Single proposal
-            assert_ok(sns_init_payload.validate_pre_execution());
-            assert_ok(sns_init_payload.validate_post_execution());
+            sns_init_payload.validate_pre_execution().unwrap();
+            sns_init_payload.validate_post_execution().unwrap();
         }
         // Test that `neuron_basket_construction_parameters` is forbidden in
         // the legacy flow and allowed in the single-proposal flow.
@@ -1762,8 +1761,8 @@ mod test {
                 NeuronBasketConstructionParametersValidationError::UnexpectedInLegacyFlow,
             );
             // Single proposal
-            assert_ok(sns_init_payload.validate_pre_execution());
-            assert_ok(sns_init_payload.validate_post_execution());
+            sns_init_payload.validate_pre_execution().unwrap();
+            sns_init_payload.validate_post_execution().unwrap();
         }
         // Test that validation fails when
         // (count - 1) * dissolve_delay_interval == 1 + max_dissolve_delay_seconds
@@ -1847,7 +1846,7 @@ mod test {
         };
 
         // Assert that this payload is valid in the view of the library
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
 
         // Create valid CanisterIds
         let sns_canister_ids = create_canister_ids();
@@ -1938,10 +1937,10 @@ mod test {
 
         sns_init_payload.dapp_canisters =
             Some(generate_unique_dapp_canisters(MAX_DAPP_CANISTERS_COUNT));
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
 
         sns_init_payload.dapp_canisters = None;
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
 
         sns_init_payload.dapp_canisters = Some(DappCanisters {
             canisters: vec![Canister { id: None }],
@@ -2079,6 +2078,6 @@ mod test {
         let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.fallback_controller_principal_ids =
             vec![PrincipalId::new_user_test_id(1).to_string()];
-        assert_ok(sns_init_payload.validate_legacy_init());
+        sns_init_payload.validate_legacy_init().unwrap();
     }
 }
