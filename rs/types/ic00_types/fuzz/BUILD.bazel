@@ -1,4 +1,4 @@
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "rust_fuzz_test_binary_afl")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -25,10 +25,27 @@ rust_fuzz_test_binary(
 )
 
 rust_fuzz_test_binary(
-    name = "decode_install_code_args",
-    srcs = ["fuzz_targets/decode_install_code_args.rs"],
+    name = "decode_install_code_args_libfuzzer",
+    srcs = [
+        "fuzz_targets/decode_install_code_args.rs",
+        "fuzz_targets/decode_install_code_args_libfuzzer.rs",
+    ],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary_afl(
+    name = "decode_install_code_args_afl",
+    srcs = [
+        "fuzz_targets/decode_install_code_args.rs",
+        "fuzz_targets/decode_install_code_args_afl.rs",
+    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [
+        "//rs/types/ic00_types",
+        "@crate_index//:candid",
+        "@crate_index//:libc",
+    ],
 )
 
 rust_fuzz_test_binary(

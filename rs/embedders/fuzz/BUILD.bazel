@@ -1,4 +1,4 @@
-load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary")
+load("//bazel:fuzz_testing.bzl", "rust_fuzz_test_binary", "rust_fuzz_test_binary_afl")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -34,19 +34,30 @@ WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
     "//rs/system_api",
     "//rs/types/types",
     "//rs/types/wasm_types",
-    "@crate_index//:libfuzzer-sys",
     "@crate_index//:arbitrary",
     "@crate_index//:wasm-smith",
 ]
 
 rust_fuzz_test_binary(
-    name = "execute_with_wasm_executor",
+    name = "execute_with_wasm_executor_libfuzzer",
     srcs = [
         "fuzz_targets/execute_with_wasm_executor.rs",
+        "fuzz_targets/execute_with_wasm_executor_libfuzzer.rs",
         "fuzz_targets/ic_wasm.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
+    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES + ["@crate_index//:libfuzzer-sys"],
+)
+
+rust_fuzz_test_binary_afl(
+    name = "execute_with_wasm_executor_afl",
+    srcs = [
+        "fuzz_targets/execute_with_wasm_executor.rs",
+        "fuzz_targets/execute_with_wasm_executor_afl.rs",
+        "fuzz_targets/ic_wasm.rs",
+    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES + ["@crate_index//:libc"],
 )
 
 EMBEDDERS_FUZZER_DEPENDENCIES = [
