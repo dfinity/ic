@@ -345,6 +345,75 @@ fn test_receives_blocks() {
     assert_eq!(blocks.len(), 150);
 }
 
+/// Checks that the adapter can connect to multiple BitcoinD peers.
+#[test]
+fn test_connection_to_multiple_peers() {
+    let logger = no_op_logger();
+
+    let bitcoind1 = get_default_bitcoind();
+    let client1 = Client::new(
+        bitcoind1.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
+    )
+    .unwrap();
+
+    let bitcoind2 = get_default_bitcoind();
+    let client2 = Client::new(
+        bitcoind2.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
+    )
+    .unwrap();
+
+    let bitcoind3 = get_default_bitcoind();
+    let client3 = Client::new(
+        bitcoind3.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind3.params.cookie_file.clone()),
+    )
+    .unwrap();
+
+    let url1 = SocketAddr::V4(get_bitcoind_url(&bitcoind1).unwrap());
+    let url2 = SocketAddr::V4(get_bitcoind_url(&bitcoind2).unwrap());
+    let url3 = SocketAddr::V4(get_bitcoind_url(&bitcoind3).unwrap());
+
+    client1
+        .add_node(&url2.to_string())
+        .expect("Failed to connect to peer");
+    client2
+        .add_node(&url3.to_string())
+        .expect("Failed to connect to peer");
+    client3
+        .add_node(&url1.to_string())
+        .expect("Failed to connect to peer");
+
+    wait_for_connection(&client1, 2);
+    wait_for_connection(&client2, 2);
+    wait_for_connection(&client3, 2);
+
+    assert_eq!(client1.get_connection_count().unwrap(), 2);
+    assert_eq!(client2.get_connection_count().unwrap(), 2);
+    assert_eq!(client3.get_connection_count().unwrap(), 2);
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let _temp = Builder::new()
+        .make(|uds_path| {
+            rt.block_on(async {
+                start_adapter(
+                    logger.clone(),
+                    MetricsRegistry::new(),
+                    vec![url1, url2, url3],
+                    uds_path,
+                )
+                .await;
+            });
+            Ok(())
+        })
+        .unwrap();
+
+    wait_for_connection(&client1, 3);
+    wait_for_connection(&client2, 3);
+    wait_for_connection(&client3, 3);
+}
+
 /// The client (replica) receives newly created transactions by 3rd parties using the gRPC service.
 #[test]
 fn test_receives_new_3rd_party_txs() {
