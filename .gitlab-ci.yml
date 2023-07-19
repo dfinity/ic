@@ -10,7 +10,6 @@ include:
   - local: /gitlab-ci/config/00--common.yml
   - local: /gitlab-ci/config/20--test--container-image-autobuild.yml
   - local: /gitlab-ci/config/20--test--dependencies.yml
-  - local: /gitlab-ci/config/30--cargo-build.yml
   - local: /gitlab-ci/config/40--rust-test--benchmarks.yml
   - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
   - local: /gitlab-ci/config/54--host-os-test--host-os-upgrade-test.yml
