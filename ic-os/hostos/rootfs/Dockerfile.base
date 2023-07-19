@@ -143,18 +143,27 @@ RUN cd /tmp/ && \
     rm /tmp/node_exporter-1.3.1.linux-amd64.tar.gz
 
 # If CPU_SUPPORT is "sev", install the patched qemu and the host kernel
-# QEMU installed previously will be over-written by the patched QEMU
+# QEMU installed previously will be over-written by the patched QEMU (7.2.0)
+# Installing libsnappy package only for "sev" configuration
 # TODO: Generate SEV build conditionally so that QEMU 6.2 is not built unnecessarily
 COPY --from=download /tmp/snp-release-2023-05-24.tar.gz /tmp/snp-release-2023-05-24.tar.gz
+ARG sev_snp_host_kernel_version=6.1.0-rc4-snp-host-93fa8c5918a4
 RUN \
     echo "CPU_SUPPORT: ${CPU_SUPPORT}" && \
     if [ "${CPU_SUPPORT}" = "sev" ] ; then \
         cd /tmp/ && \
+        apt-get -y update && apt-get -y upgrade && apt-get -y --no-install-recommends install libsnappy-dev && \
         tar xf snp-release-2023-05-24.tar.gz && \
         cd snp-release-2023-05-24 && \
-        apt-get -y install qemu ovmf && \
+        cp usr/local/bin/qemu-system-x86_64 /usr/local/bin && \
+        cp -r usr/local/share/qemu /usr/local/share/qemu && \
         dpkg -i linux/host/linux-image-*.deb && \
         cp kvm.conf /etc/modprobe.d/ && \
+        ln -sf vmlinuz-${sev_snp_host_kernel_version} /boot/vmlinuz && \
+        ln -sf initrd.img-${sev_snp_host_kernel_version} /boot/initrd.img && \
+        find /boot -name "*.old" | xargs -L 1 unlink && \
+        find /boot -name "*generic" | xargs rm && \
+        find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf && \
         rm -rf /tmp/snp-release-2023-05-24 ; \
     fi
 
