@@ -1,10 +1,9 @@
 use std::{
-    collections::{HashMap, HashSet},
-    error::Error,
+    collections::{BTreeSet, HashMap, HashSet},
     future::Future,
     io::{self, IoSliceMut},
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     task::Poll,
     time::Duration,
 };
@@ -14,7 +13,9 @@ use bytes::Bytes;
 use either::Either;
 use futures::future::join_all;
 use http::Request;
+use ic_crypto_tls_interfaces::{AllowedClients, TlsConfig, TlsConfigError, TlsStream};
 use ic_icos_sev::Sev;
+use ic_icos_sev_interfaces::{ValidateAttestationError, ValidateAttestedStream};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
@@ -30,9 +31,11 @@ use quinn::{
     AsyncUdpSocket,
 };
 use tokio::{
+    io::{AsyncRead, AsyncWrite},
     select,
     sync::{mpsc, oneshot, watch, Notify},
 };
+use tokio_rustls::rustls::{ClientConfig, ServerConfig};
 use turmoil::Sim;
 
 pub struct CustomUdp {
@@ -273,7 +276,7 @@ impl ConnectivityChecker {
 
 /// Runs the tokio simulation until provided closure evaluates to true.
 /// If Ok(true) is returned all clients have completed.
-pub fn wait_for<F>(sim: &mut Sim, f: F) -> Result<bool, Box<dyn Error>>
+pub fn wait_for<F>(sim: &mut Sim, f: F) -> turmoil::Result
 where
     F: Fn() -> bool,
 {
@@ -282,7 +285,29 @@ where
             panic!("Simulation finished while checking condtion");
         }
     }
-    Ok(false)
+    Ok(())
+}
+
+/// Runs the tokio simulation until the timeout is reached.
+/// Panics if simulation finishes or condition evaluates to true.
+pub fn wait_for_timeout<F>(sim: &mut Sim, f: F, timeout: Duration) -> turmoil::Result
+where
+    F: Fn() -> bool,
+{
+    let now = sim.elapsed();
+    loop {
+        if f() {
+            return Err("Provided condition evaluated to true".into());
+        }
+
+        if sim.elapsed() > timeout + now {
+            break;
+        }
+        if sim.step()? {
+            panic!("Simulation finished while checking condtion");
+        }
+    }
+    Ok(())
 }
 
 // TODO: remove after first node remove test.
@@ -356,15 +381,22 @@ pub fn add_transport_to_sim(
     registry_handler: RegistryConsensusHandle,
     topology_watcher: watch::Receiver<SubnetTopology>,
     conn_checker: ConnectivityChecker,
+    crypto: Option<Arc<dyn TlsConfig + Send + Sync>>,
+    sev: Option<Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>>,
 ) {
     let node_addr: SocketAddr = (Ipv4Addr::UNSPECIFIED, port).into();
-    let node_crypto = temp_crypto_component_with_tls_keys(&registry_handler, peer);
+
+    let node_crypto =
+        crypto.unwrap_or_else(|| temp_crypto_component_with_tls_keys(&registry_handler, peer));
+    let sev_handshake =
+        sev.unwrap_or_else(|| Arc::new(Sev::new(peer, registry_handler.registry_client.clone())));
     registry_handler.registry_client.update_to_latest_version();
 
     sim.host(peer.to_string(), move || {
         let log = log.clone();
         let registry_client = registry_handler.registry_client.clone();
         let node_crypto_clone = node_crypto.clone();
+        let sev_handshake_clone = sev_handshake.clone();
         let conn_checker_clone = conn_checker.clone();
         let topology_watcher_clone = topology_watcher.clone();
 
@@ -375,14 +407,12 @@ pub fn add_transport_to_sim(
 
             let router = Router::new().merge(ConnectivityChecker::router());
 
-            let sev_handshake = Sev::new(peer, registry_client.clone());
-
             let transport = QuicTransport::build(
                 tokio::runtime::Handle::current(),
                 log,
                 node_crypto_clone,
                 registry_client,
-                Arc::new(sev_handshake),
+                sev_handshake_clone,
                 peer,
                 topology_watcher_clone,
                 Either::Right(custom_udp),
@@ -396,4 +426,98 @@ pub fn add_transport_to_sim(
             }
         }
     });
+}
+
+pub struct PeerRestrictedSevHandshake {
+    allowed_peers: Arc<Mutex<Vec<NodeId>>>,
+}
+
+impl Default for PeerRestrictedSevHandshake {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PeerRestrictedSevHandshake {
+    pub fn new() -> Self {
+        Self {
+            allowed_peers: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    pub fn set_allowed_peers(&self, peers: Vec<NodeId>) {
+        println!("STE {peers:?}");
+        *self.allowed_peers.lock().unwrap() = peers;
+    }
+}
+
+#[async_trait::async_trait]
+impl<S> ValidateAttestedStream<S> for PeerRestrictedSevHandshake
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    async fn perform_attestation_validation(
+        &self,
+        stream: S,
+        peer: NodeId,
+        _latest_registry_version: RegistryVersion,
+        _earliest_registry_version: RegistryVersion,
+    ) -> Result<S, ValidateAttestationError> {
+        let peers = self.allowed_peers.lock().unwrap();
+        if peers.contains(&peer) {
+            Ok(stream)
+        } else {
+            Err(ValidateAttestationError::HandshakeError {
+                description: "Peer rejected".to_string(),
+            })
+        }
+    }
+}
+
+pub struct PeerRestrictedTlsConfig {
+    allowed_peers: Arc<Mutex<Vec<NodeId>>>,
+    crypto: Arc<dyn TlsConfig + Send + Sync>,
+}
+
+impl PeerRestrictedTlsConfig {
+    pub fn new(node_id: NodeId, registry_handler: &RegistryConsensusHandle) -> Self {
+        let crypto = temp_crypto_component_with_tls_keys(registry_handler, node_id);
+        Self {
+            allowed_peers: Arc::new(Mutex::new(Vec::new())),
+            crypto,
+        }
+    }
+
+    pub fn set_allowed_peers(&self, peers: Vec<NodeId>) {
+        *self.allowed_peers.lock().unwrap() = peers;
+    }
+}
+
+impl TlsConfig for PeerRestrictedTlsConfig {
+    fn server_config(
+        &self,
+        _allowed_clients: AllowedClients,
+        registry_version: RegistryVersion,
+    ) -> Result<ServerConfig, TlsConfigError> {
+        let allowed_clients = AllowedClients::new_with_nodes(BTreeSet::from_iter(
+            self.allowed_peers.lock().unwrap().clone().into_iter(),
+        ))
+        .unwrap();
+        self.crypto.server_config(allowed_clients, registry_version)
+    }
+
+    fn server_config_without_client_auth(
+        &self,
+        _registry_version: RegistryVersion,
+    ) -> Result<ServerConfig, TlsConfigError> {
+        todo!()
+    }
+
+    fn client_config(
+        &self,
+        server: NodeId,
+        registry_version: RegistryVersion,
+    ) -> Result<ClientConfig, TlsConfigError> {
+        self.crypto.client_config(server, registry_version)
+    }
 }
