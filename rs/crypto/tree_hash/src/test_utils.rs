@@ -95,3 +95,57 @@ pub fn merge_path_into_labeled_tree<T: core::fmt::Debug + std::cmp::PartialEq + 
         _ => panic!("Trying to merge into existing tree path"),
     }
 }
+
+/// Creates a HashTreeBuilderImpl for the passed `labeled_tree`.
+pub fn hash_tree_builder_from_labeled_tree(
+    labeled_tree: &LabeledTree<Vec<u8>>,
+) -> HashTreeBuilderImpl {
+    let mut builder = HashTreeBuilderImpl::new();
+    hash_tree_builder_from_labeled_tree_impl(labeled_tree, &mut builder);
+    builder
+}
+
+fn hash_tree_builder_from_labeled_tree_impl(
+    labeled_tree: &LabeledTree<Vec<u8>>,
+    builder: &mut HashTreeBuilderImpl,
+) {
+    match labeled_tree {
+        LabeledTree::<Vec<u8>>::SubTree(labeled_subtree) => {
+            builder.start_subtree();
+            for (label, subtree) in labeled_subtree.iter() {
+                builder.new_edge(label.clone());
+                hash_tree_builder_from_labeled_tree_impl(subtree, builder);
+            }
+            builder.finish_subtree();
+        }
+        LabeledTree::<Vec<u8>>::Leaf(content) => {
+            builder.start_leaf();
+            builder.write_leaf(content.clone());
+            builder.finish_leaf();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::arbitrary::arbitrary_labeled_tree;
+    use assert_matches::assert_matches;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn hash_tree_builder_from_labeled_tree_works_correctly(tree in arbitrary_labeled_tree()){
+            let builder = hash_tree_builder_from_labeled_tree(&tree);
+            // check that the witness is correct by pruning it completely
+            let wg = builder
+                .witness_generator()
+                .expect("Failed to retrieve a witness constructor");
+            let witness = wg
+                .witness(&tree)
+                .expect("Failed to build a witness for the whole tree");
+            let witness = prune_witness(&witness, &tree).expect("failed to prune witness");
+            assert_matches!(witness, Witness::Pruned { digest: _ });
+        }
+    }
+}

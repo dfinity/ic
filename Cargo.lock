@@ -6893,10 +6893,12 @@ name = "ic-crypto-tree-hash"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
+ "criterion 0.3.6",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-protobuf",
+ "ic-types-test-utils",
  "maplit",
  "proptest",
  "prost",

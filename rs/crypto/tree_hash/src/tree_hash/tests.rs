@@ -2927,7 +2927,7 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: RngCore + Cr
     labeled_tree: &LabeledTree<Vec<u8>>,
     rng: &mut R,
 ) {
-    let builder = test_utils::hash_tree_builder_from_labeled_tree(labeled_tree);
+    let builder = crate::test_utils::hash_tree_builder_from_labeled_tree(labeled_tree);
 
     // split the tree into paths with exactly one leaf or empty subtree at the end
     let leaf_partial_trees =
@@ -3115,7 +3115,7 @@ fn pruning_depth_0_tree_works_correctly() {
     const RANDOM_TREE_MAX_DEPTH: u32 = 10;
 
     for (labeled_tree, expected_hash) in depth_0_inputs() {
-        let builder = test_utils::hash_tree_builder_from_labeled_tree(&labeled_tree);
+        let builder = crate::test_utils::hash_tree_builder_from_labeled_tree(&labeled_tree);
 
         let witness = builder
             .witness_generator()
