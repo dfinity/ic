@@ -224,13 +224,13 @@ impl OngoingStateSync {
                         break;
                     }
                     // Spawn chunk download to random peer.
-                    let peer = peers.get(small_rng.gen_range(0..peers.len())).unwrap();
+                    let peer_id = peers.get(small_rng.gen_range(0..peers.len())).unwrap();
                     self.downloading_chunks.spawn_on(
                         chunk,
                         self.metrics
                             .download_task_monitor
                             .instrument(Self::download_chunk_task(
-                                *peer,
+                                *peer_id,
                                 self.transport.clone(),
                                 self.tracker.clone(),
                                 self.artifact_id.clone(),
@@ -390,13 +390,13 @@ mod tests {
         impl Transport for Transport{
             async fn rpc(
                 &self,
-                peer: &NodeId,
+                peer_id: &NodeId,
                 request: Request<Bytes>,
             ) -> Result<Response<Bytes>, TransportError>;
 
             async fn push(
                 &self,
-                peer: &NodeId,
+                peer_id: &NodeId,
                 request: Request<Bytes>,
             ) -> Result<(), TransportError>;
 

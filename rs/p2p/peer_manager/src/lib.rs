@@ -138,7 +138,7 @@ impl PeerManager {
                 }
             };
 
-            for (peer, info) in transport_info {
+            for (peer_id, info) in transport_info {
                 let maybe_endpoint = info
                     .p2p_flow_endpoints
                     .get(0)
@@ -149,14 +149,16 @@ impl PeerManager {
                         if let Ok(ip_addr) = flow_endpoint.ip_addr.parse::<IpAddr>() {
                             // Insert even if already present because we prefer to have the value
                             // with the highest registry version.
-                            subnet_nodes
-                                .insert(peer, SocketAddr::new(ip_addr, flow_endpoint.port as u16));
+                            subnet_nodes.insert(
+                                peer_id,
+                                SocketAddr::new(ip_addr, flow_endpoint.port as u16),
+                            );
                         } else {
                             warn!(
                                 self.log,
                                 "Failed to get parse Ip addr {} for peer {} at registry version {}",
                                 flow_endpoint.ip_addr,
-                                peer,
+                                peer_id,
                                 version
                             );
                         }
@@ -165,7 +167,7 @@ impl PeerManager {
                         warn!(
                             self.log,
                             "Failed to get flow endpoint for peer {} at registry version {}",
-                            peer,
+                            peer_id,
                             version
                         );
                     }

@@ -121,15 +121,15 @@ impl QuicTransport {
 impl Transport for QuicTransport {
     async fn rpc(
         &self,
-        peer: &NodeId,
+        peer_id: &NodeId,
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError> {
-        let peer = self.get_peer_handle(peer)?;
+        let peer = self.get_peer_handle(peer_id)?;
         peer.rpc(request).await
     }
 
-    async fn push(&self, peer: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
-        let peer = self.get_peer_handle(peer)?;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
+        let peer = self.get_peer_handle(peer_id)?;
         peer.push(request).await
     }
 
@@ -173,11 +173,11 @@ impl std::fmt::Display for TransportError {
 pub trait Transport: Send + Sync {
     async fn rpc(
         &self,
-        peer: &NodeId,
+        peer_id: &NodeId,
         request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError>;
 
-    async fn push(&self, peer: &NodeId, request: Request<Bytes>) -> Result<(), TransportError>;
+    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError>;
 
     fn peers(&self) -> Vec<NodeId>;
 }

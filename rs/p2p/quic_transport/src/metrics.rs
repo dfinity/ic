@@ -5,6 +5,7 @@ use quinn::Connection;
 use tokio_metrics::TaskMonitor;
 
 const CONNECTION_RESULT_LABEL: &str = "status";
+const PEER_ID_LABEL: &str = "peer";
 const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
 const REQUEST_HANDLER_STREAM_TYPE_LABEL: &str = "stream";
 const REQUEST_HANDLER_ERROR_TYPE_LABEL: &str = "error";
@@ -64,7 +65,7 @@ impl QuicTransportMetrics {
                 "Number topology changes deliverd by peer manager.",
             ),
             peers_removed_total: metrics_registry.int_counter(
-                "quic_transport_peers_removed",
+                "quic_transport_peers_removed_total",
                 "Peers removed because they are not part of topology anymore.",
             ),
             inbound_connection_total: metrics_registry.int_counter(
@@ -105,52 +106,52 @@ impl QuicTransportMetrics {
             quinn_frame_rx_data_blocked_total: metrics_registry.int_gauge_vec(
                 "quic_transport_quinn_frame_rx_data_blocked_total",
                 "Quinn connection stat.",
-                &["peer"],
+                &[PEER_ID_LABEL],
             ),
             // Indicates that sending data is blocked due to stream level flow control.
             quinn_frame_rx_stream_data_blocked_total: metrics_registry.int_gauge_vec(
                 "quic_transport_quinn_frame_rx_stream_data_blocked_total",
                 "Blocked stream data frames received.",
-                &["peer"],
+                &[PEER_ID_LABEL],
             ),
             // Indicates that opening a new stream is blocked because already at bidi stream limit.
             quinn_frame_rx_streams_blocked_bidi_total: metrics_registry.int_gauge_vec(
                 "quic_transport_quinn_frame_rx_streams_blocked_bidi_total",
                 "Blocked bidi stream frames received.",
-                &["peer"],
+                &[PEER_ID_LABEL],
             ),
             quinn_path_rtt_duration: metrics_registry.gauge_vec(
                 "quic_transport_quinn_path_rtt_duration",
                 "Estimated rtt of this connection.",
-                &["peer"],
+                &[PEER_ID_LABEL],
             ),
             // Congestion window of this connection.
             quinn_path_cwnd_size: metrics_registry.int_gauge_vec(
                 "quic_transport_quinn_path_cwnd_size",
                 "Congestion window of this connection.",
-                &["peer"],
+                &[PEER_ID_LABEL],
             ),
         }
     }
 
-    pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, node_id: &NodeId) {
+    pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, peer_id: &NodeId) {
         let stats = conn.stats();
         // frame stats
         self.quinn_frame_rx_data_blocked_total
-            .with_label_values(&[&node_id.to_string()])
+            .with_label_values(&[&peer_id.to_string()])
             .set(stats.frame_rx.data_blocked as i64);
         self.quinn_frame_rx_stream_data_blocked_total
-            .with_label_values(&[&node_id.to_string()])
+            .with_label_values(&[&peer_id.to_string()])
             .set(stats.frame_rx.stream_data_blocked as i64);
         self.quinn_frame_rx_streams_blocked_bidi_total
-            .with_label_values(&[&node_id.to_string()])
+            .with_label_values(&[&peer_id.to_string()])
             .set(stats.frame_rx.streams_blocked_bidi as i64);
 
         self.quinn_path_rtt_duration
-            .with_label_values(&[&node_id.to_string()])
+            .with_label_values(&[&peer_id.to_string()])
             .set(stats.path.rtt.as_secs_f64());
         self.quinn_path_cwnd_size
-            .with_label_values(&[&node_id.to_string()])
+            .with_label_values(&[&peer_id.to_string()])
             .set(stats.path.cwnd as i64);
     }
 }

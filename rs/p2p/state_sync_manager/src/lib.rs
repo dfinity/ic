@@ -116,19 +116,19 @@ impl StateSyncManager {
                 _ = interval.tick() => {
                     self.handle_advert_tick();
                 },
-                Some((advert, peer)) = self.advert_receiver.recv() =>{
-                    self.handle_advert(advert, peer).await;
+                Some((advert, peer_id)) = self.advert_receiver.recv() =>{
+                    self.handle_advert(advert, peer_id).await;
                 }
             }
         }
     }
 
-    async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer: NodeId) {
+    async fn handle_advert(&mut self, artifact_id: StateSyncArtifactId, peer_id: NodeId) {
         self.metrics.adverts_received_total.inc();
         // Remove ongoing state sync if finished or try to add peer if ongoing.
         if let Some(ongoing) = &mut self.ongoing_state_sync {
             // Try to add peer to state sync peer set.
-            let _ = ongoing.sender.send(peer).await;
+            let _ = ongoing.sender.send(peer_id).await;
             if ongoing.jh.is_finished() {
                 info!(self.log, "Cleaning up state sync {}", artifact_id.height);
                 self.ongoing_state_sync = None;
@@ -162,7 +162,7 @@ impl StateSyncManager {
             // Add peer that initiated this state sync to ongoing state sync.
             ongoing
                 .sender
-                .send(peer)
+                .send(peer_id)
                 .await
                 .expect("Receive side is not dropped");
             self.ongoing_state_sync = Some(ongoing);
@@ -175,13 +175,16 @@ impl StateSyncManager {
                 .latest_state_height_broadcasted
                 .set(state_id.height.get() as i64);
             // Unreliable broadcast of adverts to all current peers.
-            for peer in self.transport.peers() {
+            for peer_id in self.transport.peers() {
                 let request = build_advert_handler_request(state_id.clone());
                 let transport_c = self.transport.clone();
 
                 self.rt.spawn(async move {
-                    tokio::time::timeout(ADVERT_BROADCAST_TIMEOUT, transport_c.push(&peer, request))
-                        .await
+                    tokio::time::timeout(
+                        ADVERT_BROADCAST_TIMEOUT,
+                        transport_c.push(&peer_id, request),
+                    )
+                    .await
                 });
             }
         }
