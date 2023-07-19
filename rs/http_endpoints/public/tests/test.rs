@@ -151,7 +151,7 @@ fn test_healthy_behind() {
 // specified through the url `/api/v2/canister/<effective_canister_id>/read_state`. Read state requests that request paths
 // with different canister ids should be rejected.
 #[test]
-fn test_unathorized_controller() {
+fn test_unauthorized_controller() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -207,7 +207,7 @@ fn test_unathorized_controller() {
 
 // Test that that http endpoint rejects queries with mismatch between canister id an effective canister id.
 #[test]
-fn test_unathorized_query() {
+fn test_unauthorized_query() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
@@ -293,7 +293,7 @@ fn test_unathorized_query() {
 
 // Test that that http endpoint rejects calls with mismatch between canister id an effective canister id.
 #[test]
-fn test_unathorized_call() {
+fn test_unauthorized_call() {
     let rt = Runtime::new().unwrap();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
