@@ -118,7 +118,7 @@ pub fn exec(args: ProposeArgs) {
         Ok(MakeProposalResponse {
             proposal_id: Some(ProposalId { id }),
         }) => {
-            println!("🚀 Succes!");
+            println!("🚀 Success!");
             if network == "ic" {
                 println!("View the proposal here:");
                 println!("https://dashboard.internetcomputer.org/proposal/{}", id);
@@ -126,7 +126,6 @@ pub fn exec(args: ProposeArgs) {
                 // TODO: Support other networks.
                 println!("Proposal ID: {}", id);
             }
-            println!("Godspeed!")
         }
         err => {
             println!("{:?}", err);
