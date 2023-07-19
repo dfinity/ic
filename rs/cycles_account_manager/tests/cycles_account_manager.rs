@@ -26,8 +26,6 @@ use ic_types::{
 use prometheus::IntCounter;
 use std::{convert::TryFrom, time::Duration};
 
-const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
-
 #[test]
 fn test_can_charge_application_subnets() {
     with_test_replica_logger(|log| {
@@ -234,6 +232,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         .with_subnet_type(SubnetType::System)
         .build();
 
+    let initial_balance = system_state.balance();
     let cycles = cycles_account_manager
         .prepay_execution_cycles(
             &mut system_state,
@@ -243,7 +242,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
             subnet_size,
         )
         .unwrap();
-    assert_eq!(system_state.balance(), INITIAL_CYCLES);
+    assert_eq!(system_state.balance(), initial_balance);
 
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     cycles_account_manager.refund_unused_execution_cycles(
@@ -255,7 +254,7 @@ fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
         subnet_size,
         &no_op_logger(),
     );
-    assert_eq!(system_state.balance(), INITIAL_CYCLES);
+    assert_eq!(system_state.balance(), initial_balance);
 }
 
 #[test]
@@ -267,6 +266,8 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
         .build();
 
     let initial_instructions_charged_for = NumInstructions::from(1_000_000);
+
+    let initial_balance = system_state.balance();
 
     let cycles = cycles_account_manager
         .prepay_execution_cycles(
@@ -288,7 +289,7 @@ fn larger_instructions_left_value_doesnt_mint_cycles() {
         subnet_size,
         &no_op_logger(),
     );
-    assert!(system_state.balance() <= INITIAL_CYCLES);
+    assert!(system_state.balance() <= initial_balance);
 }
 
 #[test]
