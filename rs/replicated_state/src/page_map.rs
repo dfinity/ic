@@ -20,7 +20,6 @@ use int_map::IntMap;
 use libc::off_t;
 use page_allocator::Page;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::ops::Range;
@@ -28,12 +27,8 @@ use std::os::unix::io::RawFd;
 use std::path::Path;
 use std::sync::Arc;
 
-// When persisting PageDeltas, the maximum gap between dirty pages
-// that can be combined into a single vectorized write
-const MAXIMUM_GAP: u64 = 200;
-// When persisting PageDeltas, the maximum write amplification
-// (written pages/dirty pages)
-const MAXIMUM_WRITE_AMPLIFICATION: f64 = 5.0;
+// When persisting data we expand dirty pages to an aligned bucket of given size.
+const WRITE_BUCKET_PAGES: u64 = 16;
 
 struct WriteBuffer<'a> {
     content: Vec<&'a [u8]>,
@@ -101,58 +96,6 @@ impl PageDelta {
     /// Enumerates all the pages in this delta.
     fn iter(&self) -> impl Iterator<Item = (PageIndex, &'_ Page)> {
         self.0.iter().map(|(idx, page)| (PageIndex::new(idx), page))
-    }
-
-    /// When persisting PageDelta to disk, it is beneficial to reduce
-    /// the number of write syscalls due to file fragmentation. We
-    /// achieve this by grouping neighboring dirty pages, as well as
-    /// re-writing small gaps between pages. This function determines
-    /// the maximum gap size to re-write, in order to keep write
-    /// amplification (ratio of writes to dirty pages) below the
-    /// target.
-    /// Note that the file system internally would also group
-    /// neighbouring write calls as long as there is no fsync between
-    /// them. As such, the main benefit comes from rewriting small
-    /// gaps, as opposed to the vectored writes.
-    fn write_amplification_to_gap(
-        &self,
-        maximum_gap: u64,
-        maximum_write_amplification: f64,
-    ) -> u64 {
-        if self.is_empty() || maximum_write_amplification <= 1.0 {
-            return 0;
-        }
-
-        // Histogram of gaps and number of dirty pages
-        let (gaps, dirty_pages) = {
-            let mut gaps: BTreeMap<u64, u64> = BTreeMap::default();
-            assert!(!self.is_empty());
-            let mut last_index = self.iter().next().unwrap().0;
-            let mut count: u64 = 0;
-            for (index, _) in self.iter().skip(1) {
-                assert!(index.get() > last_index.get());
-                let gap = index.get() - last_index.get() - 1;
-                if gap > 0 && gap <= maximum_gap {
-                    *gaps.entry(gap).or_default() += 1;
-                }
-                last_index = index;
-                count += 1;
-            }
-            (gaps, count)
-        };
-
-        let mut amplified: u64 = 0;
-        for (gap, count) in gaps {
-            if (amplified + gap * count) as f64
-                > dirty_pages as f64 * (maximum_write_amplification - 1.0)
-            {
-                assert!(gap > 0);
-                return gap - 1;
-            }
-            amplified += gap * count;
-        }
-
-        maximum_gap
     }
 
     /// Returns true if the page delta contains no pages.
@@ -598,37 +541,41 @@ impl PageMap {
         page_delta: &PageDelta,
         path: &Path,
     ) -> Result<(), PersistenceError> {
-        let mut opt_buffer: Option<WriteBuffer> = None;
-        let maximum_gap =
-            page_delta.write_amplification_to_gap(MAXIMUM_GAP, MAXIMUM_WRITE_AMPLIFICATION);
+        // Empty delta
+        if page_delta.max_page_index().is_none() {
+            return Ok(());
+        }
 
-        for (index, page) in page_delta.iter() {
-            if let Some(buffer) = &mut opt_buffer {
-                let next_index = buffer.start_index.get() + buffer.content.len() as u64;
-                if index.get() <= next_index + maximum_gap {
-                    // TODO(MR-233) Consider using get_memory_region
-                    for copy_index in next_index..index.get() {
-                        let content = self.get_page(copy_index.into());
-                        buffer.content.push(content);
-                    }
+        assert!(page_delta.max_page_index().unwrap() <= self.page_delta.max_page_index().unwrap());
+        let mut last_applied_index: Option<PageIndex> = None;
+        // Max page index in {page_delta, checkpoint}
+        let max_page_index = match self.checkpoint.num_pages() {
+            0 => self.page_delta.max_page_index().unwrap(),
+            m => std::cmp::max(
+                PageIndex::from(m as u64 - 1),
+                self.page_delta.max_page_index().unwrap(),
+            ),
+        };
+        for (index, _) in page_delta.iter() {
+            if last_applied_index.is_some() && last_applied_index.unwrap() >= index {
+                continue;
+            }
 
-                    buffer.content.push(page.contents());
-                    continue;
+            let bucket_start_index =
+                PageIndex::from((index.get() / WRITE_BUCKET_PAGES) * WRITE_BUCKET_PAGES);
+            let mut buffer = WriteBuffer {
+                content: vec![],
+                start_index: bucket_start_index,
+            };
+            for i in 0..WRITE_BUCKET_PAGES {
+                let index_to_apply = PageIndex::from(bucket_start_index.get() + i);
+                // We don't expand past the end of file to make bucketing transparent.
+                if index_to_apply <= max_page_index {
+                    let content = self.get_page(index_to_apply);
+                    buffer.content.push(content);
+                    last_applied_index = Some(index_to_apply);
                 }
             }
-
-            if let Some(buffer) = &mut opt_buffer {
-                buffer.apply_to_file(file, path)?;
-            }
-
-            let content = page.contents();
-
-            opt_buffer = Some(WriteBuffer {
-                content: vec![content],
-                start_index: index,
-            });
-        }
-        if let Some(buffer) = &mut opt_buffer {
             buffer.apply_to_file(file, path)?;
         }
 

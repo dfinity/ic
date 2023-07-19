@@ -49,6 +49,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde_cbor",
+    "@crate_index//:static_assertions",
 ]
 
 MACRO_DEV_DEPENDENCIES = []
