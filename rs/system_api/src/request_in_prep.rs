@@ -67,8 +67,8 @@ impl RequestInPrep {
             let max_size_local_subnet = max_size_remote_subnet * multiplier_max_size_local_subnet;
             if method_name_len as u64 > max_size_local_subnet.get() {
                 return Err(HypervisorError::ContractViolation(format!(
-                    "RequestInPrep: size of method_name {} exceeded the allowed limit local-subnet {} remote-subnet {}",
-                    callee_size, max_size_local_subnet, max_size_remote_subnet
+                    "Size of method_name {} exceeds the allowed limit local-subnet {}",
+                    callee_size, max_size_local_subnet
                 )));
             }
             let method_name = valid_subslice(
@@ -126,8 +126,11 @@ impl RequestInPrep {
             self.max_size_remote_subnet * self.multiplier_max_size_local_subnet;
         if size as u64 > max_size_local_subnet.get() - current_size as u64 {
             Err(HypervisorError::ContractViolation(format!(
-                "RequestInPrep: current_size {} exceeded the allowed limit local-subnet {} remote-subnet {}",
-                current_size, max_size_local_subnet, self.max_size_remote_subnet
+                "Request to {}:{} has a payload size of {}, which exceeds the allowed local-subnet limit of {}",
+                self.callee,
+                self.method_name,
+                current_size + size as usize,
+                max_size_local_subnet
             )))
         } else {
             let data = valid_subslice("ic0.call_data_append", src, size, heap)?;
@@ -174,7 +177,9 @@ pub(crate) fn into_request(
         let max_size_local_subnet = max_size_remote_subnet * multiplier_max_size_local_subnet;
         if payload_size > max_size_local_subnet.get() {
             return Err(HypervisorError::ContractViolation(format!(
-                "RequestInPrep: size of message {} exceeded the allowed remote-subnet limit {}",
+                "Request to {}:{} has a payload size of {}, which exceeds the allowed remote-subnet limit of {}",
+                destination_canister,
+                method_name,
                 payload_size, max_size_remote_subnet
             )));
         }
