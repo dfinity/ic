@@ -2,7 +2,7 @@
 
 use crate::{
     body::BodyReceiverLayer,
-    common::{cbor_response, into_cbor, make_plaintext_response},
+    common::{cbor_response, into_cbor, make_plaintext_response, remove_effective_canister_id},
     metrics::LABEL_UNKNOWN,
     state_reader_executor::StateReaderExecutor,
     types::ApiReqType,
@@ -110,16 +110,12 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
         }
         let (mut parts, body) = request.into_parts();
         // By removing the canister id we get ownership and avoid having to clone it when creating the future.
-        let effective_canister_id = match parts.extensions.remove::<CanisterId>() {
-            Some(canister_id) => canister_id,
-            _ => {
+        let effective_canister_id = match remove_effective_canister_id(&mut parts) {
+            Ok(canister_id) => canister_id,
+            Err(res) => {
                 error!(
                     self.log,
                     "Effective canister ID is not attached to read state request. This is a bug."
-                );
-                let res = make_plaintext_response(
-                    StatusCode::BAD_REQUEST,
-                    "Malformed request".to_string(),
                 );
                 return Box::pin(async move { Ok(res) });
             }
