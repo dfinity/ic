@@ -198,7 +198,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     sub2.on_scan_job_failed.assert_not_called()
 
 
-def test_on_periodic_job_one_finding_in_jira_clear_risk(jira_lib_mock):
+def test_on_periodic_job_one_finding_in_jira_clear_risk_and_keep_risk_note(jira_lib_mock):
     # one finding, present in JIRA
     repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
     fake_bazel = FakeBazel(2)
@@ -207,6 +207,8 @@ def test_on_periodic_job_one_finding_in_jira_clear_risk(jira_lib_mock):
     assert len(jira_finding.vulnerabilities) > 1
     # drop vulnerability
     jira_finding.vulnerabilities = jira_finding.vulnerabilities[:1]
+    # add risk note
+    jira_finding.vulnerabilities[0].risk_note = "please keep me"
     jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {jira_finding.id(): jira_finding}
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [])
@@ -214,6 +216,7 @@ def test_on_periodic_job_one_finding_in_jira_clear_risk(jira_lib_mock):
     scanner_job.do_periodic_scan([repository])
 
     assert jira_finding.risk is None
+    assert jira_finding.vulnerabilities[0].risk_note == "please keep me"
 
 
 def test_on_periodic_job_one_finding_in_jira_leave_risk(jira_lib_mock):
@@ -231,6 +234,29 @@ def test_on_periodic_job_one_finding_in_jira_leave_risk(jira_lib_mock):
     scanner_job.do_periodic_scan([repository])
 
     assert jira_finding.risk == SecurityRisk.HIGH
+
+
+def test_on_periodic_job_set_risk_for_related_finding(jira_lib_mock):
+    # one finding, present in JIRA
+    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
+    fake_bazel = FakeBazel(2)
+    jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
+    # different version means the finding is related
+    original_version = jira_finding.vulnerable_dependency.version
+    jira_finding.vulnerable_dependency.version = "another version"
+    assert original_version != jira_finding.vulnerable_dependency.version
+    for vulnerability in jira_finding.vulnerabilities:
+        vulnerability.risk_note = "medium"
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {jira_finding.id(): jira_finding}
+
+    scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [])
+
+    scanner_job.do_periodic_scan([repository])
+
+    jira_finding.vulnerable_dependency.version = original_version
+    jira_finding.risk = SecurityRisk.MEDIUM
+    jira_finding.risk_assessor = jira_lib_mock.get_risk_assessor()
+    jira_lib_mock.create_or_update_open_finding.assert_called_once_with(jira_finding)
 
 
 def test_on_periodic_job_failure(jira_lib_mock):

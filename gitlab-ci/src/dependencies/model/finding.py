@@ -159,3 +159,65 @@ class Finding:
             if team not in self.owning_teams:
                 self.owning_teams.append(team)
         self.owning_teams.sort()
+
+    def __copy_vulnerability_notes_and_update_risk(self, vulnerabilities: List[Vulnerability], determine_risk_from_vulnerabilities: bool, related_finding_risk: Optional[SecurityRisk] = None):
+        if determine_risk_from_vulnerabilities:
+            self.risk = SecurityRisk.INFORMATIONAL
+
+        previous_vulnerabilities_by_id = {}
+        for prev_vulnerability in vulnerabilities:
+            previous_vulnerabilities_by_id[prev_vulnerability.id] = prev_vulnerability
+        for cur_vulnerability in self.vulnerabilities:
+            if cur_vulnerability.id in previous_vulnerabilities_by_id:
+                cur_vulnerability.risk_note = previous_vulnerabilities_by_id[cur_vulnerability.id].risk_note
+                if determine_risk_from_vulnerabilities:
+                    vulnerability_risk = cur_vulnerability.get_risk()
+                    # risk assessment might be only done on finding level and not on vulnerability level => if vulnerability doesn't have a risk, fallback to risk of finding
+                    self.risk = SecurityRisk.new_risk_from(self.risk, vulnerability_risk if vulnerability_risk else related_finding_risk)
+            else:
+                self.risk = None
+
+    def update_risk_and_vulnerabilities_for_same_finding(self, same_finding: 'Finding'):
+        if self.id() != same_finding.id():
+            raise RuntimeError(f"update_risk_and_vulnerabilities_for_same_finding called with finding with different id {self.id()} != {same_finding.id()}")
+        old_vulnerabilities = self.vulnerabilities
+        self.vulnerabilities = same_finding.vulnerabilities
+        self.__copy_vulnerability_notes_and_update_risk(old_vulnerabilities, False)
+
+    def update_risk_and_vulnerabilities_for_related_findings(self, related_findings: List['Finding']):
+        if len(related_findings) == 0:
+            return
+
+        vulnerability_ids_with_risk_consistency = set()
+        previous_vulnerabilities_by_id = {}
+        related_finding_risk = related_findings[0].risk
+        for finding in related_findings:
+            if self.repository != finding.repository or self.scanner != finding.scanner or self.vulnerable_dependency.id != finding.vulnerable_dependency.id:
+                raise RuntimeError(f"update_risk_and_vulnerabilities_for_related_findings called with finding with different id components {self.id()} != {finding.id()}")
+
+            # if all related findings have the same risk, we use this as fallback if a vulnerability doesn't have a risk set
+            if finding.risk != related_finding_risk:
+                related_finding_risk = None
+
+            for vulnerability in finding.vulnerabilities:
+                if vulnerability.id in vulnerability_ids_with_risk_consistency:
+                    continue
+
+                if vulnerability.id in previous_vulnerabilities_by_id:
+                    # this vul was already seen before
+                    other_vulnerability = previous_vulnerabilities_by_id[vulnerability.id]
+                    if vulnerability.has_risk_note() and other_vulnerability.has_risk_note():
+                        if vulnerability.get_risk() != other_vulnerability.get_risk():
+                            # both vul have a risk note set and the risk ratings of those don't match
+                            # we remember the vul id to ignore future vul with same id and remove it from storage
+                            # this means if self also contains this vul the risk rating will be reset and risk assessment is necessary
+                            vulnerability_ids_with_risk_consistency.add(vulnerability.id)
+                            del previous_vulnerabilities_by_id[vulnerability.id]
+                    elif vulnerability.has_risk_note():
+                        # the new vul has a risk note and the stored vul not, so replace the stored vul
+                        previous_vulnerabilities_by_id[vulnerability.id] = vulnerability
+                else:
+                    # first time we see this vul, remember it
+                    previous_vulnerabilities_by_id[vulnerability.id] = vulnerability
+
+        self.__copy_vulnerability_notes_and_update_risk(list(previous_vulnerabilities_by_id.values()), True, related_finding_risk)

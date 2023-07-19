@@ -69,7 +69,7 @@ JIRA_OWNER_GROUP_BY_TEAM = {
 }
 JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"
-
+JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL = "MIGRATE_ME"
 
 class JiraFindingDataSource(FindingDataSource):
     jira: JIRA
@@ -90,9 +90,9 @@ class JiraFindingDataSource(FindingDataSource):
 
     @staticmethod
     def __finding_to_jira_vulnerabilities(vulnerabilities: List[Vulnerability]) -> str:
-        vuln_table: str = "||*id*||*name*||*description*||*score*||\n"
+        vuln_table: str = "||*id*||*name*||*description*||*score*||*risk*||\n"
         for vuln in vulnerabilities:
-            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.description)}|{vuln.score}|\n"
+            vuln_table += f"|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.id)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.name)}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.description)}|{vuln.score}|{JiraFindingDataSource.__finding_to_jira_escape_wiki_renderer_chars(vuln.risk_note if vuln.risk_note != JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL else ' ')}|\n"
         return vuln_table
 
     @staticmethod
@@ -100,15 +100,23 @@ class JiraFindingDataSource(FindingDataSource):
         if vulnerability_table is None or len(vulnerability_table) <= 0:
             return None
 
+        # the jira editor removes the trailing newline when the vulnerability table is edited (e.g., because risk notes are added to a vulnerability)
+        # if this is the case, we have to add it again so that the following split on "|\n" works as expected
+        if not vulnerability_table.endswith("\n"):
+            vulnerability_table += "\n"
+
         res: List[Vulnerability] = []
-        vuln_table: List[str] = vulnerability_table.splitlines()
+        vuln_table: List[str] = vulnerability_table.split("|\n")
         if len(vuln_table) <= 1:
             return None
 
-        for row in vuln_table[1:]:
+        for row in vuln_table[1:-1]:
             parts: List[str] = row.split("|")
-            if len(parts) == 6:
-                res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4])))
+            if len(parts) == 5:
+                # backwards compatibility for entries that don't have risk column
+                res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4]), risk_note=JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL))
+            elif len(parts) == 6:
+                res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4]), risk_note=parts[5]))
             else:
                 return None
 
@@ -327,7 +335,7 @@ class JiraFindingDataSource(FindingDataSource):
             summary_update_needed = True
             dep_update_needed = True
             patch_version_update_needed = True
-        if finding_old is None or finding_old.vulnerabilities != finding_new.vulnerabilities:
+        if finding_old is None or finding_old.vulnerabilities != finding_new.vulnerabilities or finding_new.vulnerabilities[0].risk_note == JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL:
             res[
                 JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]
             ] = JiraFindingDataSource.__finding_to_jira_vulnerabilities(finding_new.vulnerabilities)
@@ -547,6 +555,17 @@ class JiraFindingDataSource(FindingDataSource):
             self.jira.transition_issue(jira_issue.id, "41")
             for sub in self.subscribers:
                 sub.on_finding_deleted(finding_stored)
+
+    def link_findings(self, finding_a: Finding, finding_b: Finding):
+        logging.debug(f"link_findings({finding_a}, {finding_b})")
+        self.__load_findings_for_scanner(finding_a.scanner)
+        self.__load_findings_for_scanner(finding_b.scanner)
+
+        if finding_a.id() in self.findings and finding_b.id() in self.findings:
+            _, jira_issue_a = self.findings[finding_a.id()]
+            _, jira_issue_b = self.findings[finding_b.id()]
+            self.jira.create_issue_link(type="Relates", inwardIssue=jira_issue_a.key, outwardIssue=jira_issue_b.key)
+
 
     def get_risk_assessor(self) -> List[User]:
         logging.debug("get_risk_assessor()")
