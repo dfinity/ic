@@ -122,3 +122,6 @@ mod sns_wasm_allowed_principals;
 
 #[cfg(test)]
 mod neuron_following;
+
+#[cfg(test)]
+mod neuron_voting;
