@@ -1,4 +1,4 @@
-use ic_base_types::{NodeId, RegistryVersion};
+use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_logger::ReplicaLogger;
@@ -10,13 +10,20 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_node_record_key;
+use ic_registry_local_registry::LocalRegistry;
+use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{consensus::MockConsensusCache, types::ids::subnet_test_id};
 use ic_test_utilities_registry::add_subnet_record;
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc, Mutex,
+use std::{
+    str::FromStr,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
+    time::Duration,
 };
+use tempfile::TempDir;
 use tokio::{runtime::Handle, sync::watch::Receiver, task::JoinHandle};
 
 /// Creates a temp crypto component with TLS key and specified node id.
@@ -148,5 +155,69 @@ pub fn create_peer_manager_and_registry_handle(
             registry_client,
             data_provider: data_provider_proto,
         },
+    )
+}
+
+/// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
+fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
+    let tempdir = TempDir::new().unwrap();
+    let store = LocalStoreImpl::new(tempdir.path());
+    let changelog =
+        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
+            .expect("")
+            .1;
+
+    for (v, changelog_entry) in changelog.into_iter().enumerate() {
+        let v = RegistryVersion::from((v + 1) as u64);
+        store.store(v, changelog_entry).unwrap();
+    }
+    (tempdir, store)
+}
+
+pub fn create_peer_manager_with_local_store(
+    rt: &Handle,
+    log: ReplicaLogger,
+    subnet_id: SubnetId,
+) -> (
+    JoinHandle<()>,
+    Receiver<SubnetTopology>,
+    Arc<LocalRegistry>,
+    Arc<AtomicU64>,
+    TempDir,
+) {
+    let oldest_registry_version = Arc::new(AtomicU64::new(0));
+    let oldest_registry_version_c = oldest_registry_version.clone();
+    let mut mock_cache = MockConsensusCache::new();
+    mock_cache
+        .expect_get_oldest_registry_version_in_use()
+        .returning(move || RegistryVersion::from(oldest_registry_version.load(Ordering::SeqCst)));
+
+    let (tmp, _local_store) = get_mainnet_delta_00_6d_c1();
+    let local_registry = LocalRegistry::new(tmp.path(), Duration::from_millis(500)).unwrap();
+
+    let registry_client = Arc::new(local_registry);
+
+    let (jh, rcv) = start_peer_manager(
+        log,
+        &MetricsRegistry::default(),
+        rt,
+        subnet_id,
+        Arc::new(mock_cache) as Arc<_>,
+        registry_client.clone() as Arc<_>,
+    );
+    (jh, rcv, registry_client, oldest_registry_version_c, tmp)
+}
+
+pub fn mainnet_nns_subnet() -> SubnetId {
+    SubnetId::new(
+        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap(),
+    )
+}
+
+pub fn mainnet_app_subnet() -> SubnetId {
+    SubnetId::new(
+        PrincipalId::from_str("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae")
+            .unwrap(),
     )
 }

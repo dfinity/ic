@@ -8934,9 +8934,13 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-keys",
+ "ic-registry-local-registry",
+ "ic-registry-local-store",
+ "ic-registry-local-store-artifacts",
  "ic-registry-proto-data-provider",
  "ic-test-utilities",
  "ic-test-utilities-registry",
+ "tempfile",
  "tokio",
 ]
 

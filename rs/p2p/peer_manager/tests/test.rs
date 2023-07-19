@@ -1,4 +1,10 @@
-use ic_p2p_test_utils::create_peer_manager_and_registry_handle;
+use std::sync::atomic::Ordering;
+
+use ic_interfaces_registry::RegistryClient;
+use ic_p2p_test_utils::{
+    create_peer_manager_and_registry_handle, create_peer_manager_with_local_store,
+    mainnet_app_subnet, mainnet_nns_subnet,
+};
 use ic_test_utilities::types::ids::node_test_id;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::RegistryVersion;
@@ -167,6 +173,70 @@ fn test_add_multiple_nodes_remove_node() {
             assert!(receiver.borrow().iter().count() == 9);
 
             // If join handle finished sth went wrong and we propagate the error.
+            if jh.is_finished() {
+                jh.await.unwrap();
+                panic!("Join handle should not finish.");
+            }
+        });
+    })
+}
+
+#[test]
+fn test_can_read_nns_mainnet_registry() {
+    with_test_replica_logger(|log| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let (jh, mut receiver, registry_client, oldest, _tmp) =
+            create_peer_manager_with_local_store(rt.handle(), log, mainnet_nns_subnet());
+        let highest_version = registry_client.get_latest_version();
+        let interval = 5;
+
+        rt.block_on(async move {
+            for v in (highest_version.get() - interval)..(highest_version.get() + interval) {
+                oldest.store(v, Ordering::SeqCst);
+                receiver.changed().await.unwrap();
+                let peer_num = receiver.borrow().iter().count();
+                // NNS subnet usually has 30-40 nodes. Sanity check by verifying that there are
+                // always at least 30 nodes.
+                assert!(
+                    peer_num > 30,
+                    "Mainnet nns subnet should always have at least 30 nodes"
+                );
+            }
+
+            // If join handle finished sth went wrong and we propagate the error.
+            if jh.is_finished() {
+                jh.await.unwrap();
+                panic!("Join handle should not finish.");
+            }
+        });
+    })
+}
+
+#[test]
+fn test_can_read_app_mainnet_registry() {
+    with_test_replica_logger(|log| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+
+        let (jh, mut receiver, registry_client, oldest, _tmp) =
+            create_peer_manager_with_local_store(rt.handle(), log, mainnet_app_subnet());
+        let highest_version = registry_client.get_latest_version();
+        let interval = 5;
+
+        rt.block_on(async move {
+            for v in (highest_version.get() - interval)..(highest_version.get() + interval) {
+                oldest.store(v, Ordering::SeqCst);
+                receiver.changed().await.unwrap();
+                let peer_num = receiver.borrow().iter().count();
+                // App subnets usually have 13 nodes. Sanity check by verifying that there are
+                // always at least 11 nodes.
+                assert!(
+                    peer_num > 11,
+                    "Mainnet app subnet should always have at least 11 nodes"
+                );
+            }
+
+            // If join handle finished something went wrong and we propagate the error.
             if jh.is_finished() {
                 jh.await.unwrap();
                 panic!("Join handle should not finish.");
