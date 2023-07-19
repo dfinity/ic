@@ -179,9 +179,9 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
         JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0]: "||*id*||*name*||*version*||\n"
         "|https://crates.io/crates/chrono|chrono|0.4.19|\n"
         "|https://crates.io/crates/syn|syn|1.0|\n",
-        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||\n"
-        "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1|\n"
-        "|https://rustsec.org/advisories/RUSTSEC-2022-0051|RUSTSEC-2022-0051|Memory corruption in liblz4|100|\n",
+        JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
+        "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1| |\n"
+        "|https://rustsec.org/advisories/RUSTSEC-2022-0051|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[
             0
         ]: "||*dep / vuln*||RUSTSEC-2020-0159||RUSTSEC-2022-0051||\n"
@@ -219,10 +219,12 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
     assert res1.vulnerabilities[0].name == "RUSTSEC-2020-0159"
     assert res1.vulnerabilities[0].description == "Potential segfault in localtime_r invocations"
     assert res1.vulnerabilities[0].score == -1
+    assert res1.vulnerabilities[0].risk_note == " "
     assert res1.vulnerabilities[1].id == "https://rustsec.org/advisories/RUSTSEC-2022-0051"
     assert res1.vulnerabilities[1].name == "RUSTSEC-2022-0051"
     assert res1.vulnerabilities[1].description == "Memory corruption in liblz4"
     assert res1.vulnerabilities[1].score == 100
+    assert res1.vulnerabilities[1].risk_note == "crit"
     assert len(res1.first_level_dependencies) == 1
     assert res1.first_level_dependencies[0].id == "https://crates.io/crates/syn"
     assert res1.first_level_dependencies[0].name == "syn"
@@ -370,7 +372,7 @@ def test_update_open_finding_create_issue(jira_ds, jira_lib_mock):
             JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerable_dependency_version")[0]: "1.0",
             JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[
                 0
-            ]: "||*id*||*name*||*description*||*score*||\n|VID1|CVE-123|huuughe vuln|100|\n",
+            ]: "||*id*||*name*||*description*||*score*||*risk*||\n|VID1|CVE-123|huuughe vuln|100| |\n",
             JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0]: "* foo\n* bar\n* bear\n",
             JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]: [{"accountId": "risk assessor 1"}],
             JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]: {"id": JIRA_SECURITY_RISK_TO_ID[SecurityRisk.MEDIUM]},
@@ -452,7 +454,7 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
         "repo",
         "scanner",
         Dependency("id{code}and|pipe{code}", "{code}name{code}", "ver|sion", {"id{code}": ["123;456", ";789"]}),
-        [Vulnerability("id{code}", "{code}na|me{code}", "|description|")],
+        [Vulnerability("id{code}", "{code}na|me{code}", "|description|", 0, "pipe|and{code}")],
         [Dependency("|id|", "{code}name", "ver{code}|sion", {"id{code}": [";321;", "98;7"]})],
         ["proj1{code}", "|proj2", "pr{code}oject3|"],
         [],
@@ -475,7 +477,7 @@ def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
     )
     assert (
         mem.store[key][JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]]
-        == "||*id*||*name*||*description*||*score*||\n|id\\{code}|\\{code}na:me\\{code}|:description:|-1|\n"
+        == "||*id*||*name*||*description*||*score*||*risk*||\n|id\\{code}|\\{code}na:me\\{code}|:description:|0|pipe:and\\{code}|\n"
     )
     assert (
         mem.store[key][JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]]

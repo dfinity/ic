@@ -26,5 +26,8 @@ class DummyFindingDataSource(FindingDataSource):
     def delete_finding(self, finding: Finding):
         pass
 
+    def link_findings(self, finding_a: Finding, finding_b: Finding):
+        pass
+
     def get_risk_assessor(self) -> List[User]:
         return []

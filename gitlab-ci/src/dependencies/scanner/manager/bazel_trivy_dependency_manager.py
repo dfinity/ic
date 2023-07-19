@@ -17,7 +17,7 @@ from scanner.process_executor import ProcessExecutor
 TRIVY_SCANNER_ID = "BAZEL_TRIVY_CS"
 RE_SHA256_HASH = re.compile(r"^[\da-fA-F]{64}$")
 RE_ROOTFS_FILE = re.compile(r"^/tmp/tmp\.\w+/tmp_rootfs/(.+)$")
-
+RE_VULNERABLE_DEPENDENCY_ID_REPLACEMENTS = [re.compile(r"^(?P<dependency_id>linux-modules-[^-]+).*$")]
 
 class TrivyResultParser(abc.ABC):
     """Base class for helper classes for converting different trivy results to findings."""
@@ -100,6 +100,16 @@ class TrivyResultParser(abc.ABC):
             vulnerabilities_by_vuln_dep[vulnerable_dependency_id] = [vulnerable_dependency, vulnerabilities]
         return [*vulnerabilities_by_vuln_dep.values()]
 
+    @staticmethod
+    def sanitize_dependency_id(vulnerable_dependency_id: str):
+        """Removes version information from the dependency id for selected dependencies (allows linking findings on dependency updates)"""
+
+        for regex in RE_VULNERABLE_DEPENDENCY_ID_REPLACEMENTS:
+            match = regex.match(vulnerable_dependency_id)
+            if match:
+                return match.group("dependency_id")
+        return vulnerable_dependency_id
+
     def convert_project_for_finding(self, project: Project):
         proj = project.path if project.link is None else f"{project.path} ({project.link})"
         return f"{self.get_parser_id()}: {proj}"
@@ -158,6 +168,7 @@ class OSPackageTrivyResultParser(TrivyResultParser):
             dependencies.sort(key=lambda x: x.id)
             finding.vulnerable_dependency = dependencies[0]
             finding.first_level_dependencies = dependencies[1:]
+            finding.vulnerable_dependency.id = self.sanitize_dependency_id(finding.vulnerable_dependency.id)
             finding.vulnerabilities.sort(key=lambda x: x.id)
             findings.append(finding)
         return findings
@@ -189,7 +200,7 @@ class BinaryTrivyResultParser(TrivyResultParser):
         binary_name = binary_id.split("/")[-1] if "/" in binary_id and not binary_id.endswith("/") else binary_id
         if binary_id not in file_to_hash:
             raise RuntimeError(f"binary {binary_id} not found in file hash list in repo {repository} project {project}")
-        vulnerable_dependency = Dependency(id=binary_id, name=binary_name, version=file_to_hash[binary_id])
+        vulnerable_dependency = Dependency(id=self.sanitize_dependency_id(binary_id), name=binary_name, version=file_to_hash[binary_id])
         all_vulnerability_ids = set()
         max_score = 0
         for _, vulnerabilities in vulnerabilities_by_vuln_dep:
@@ -243,7 +254,7 @@ class SecretTrivyResultParser(TrivyResultParser):
         """For secrets one finding is created"""
         secret_id: str = trivy_data["Results"][result_index]["Target"]
         secret_name = secret_id.split("/")[-1] if "/" in secret_id and not secret_id.endswith("/") else secret_id
-        vulnerable_dependency = Dependency(id=secret_id, name=secret_name, version="current")
+        vulnerable_dependency = Dependency(id=self.sanitize_dependency_id(secret_id), name=secret_name, version="current")
         vulnerabilities = []
         for secret in trivy_data["Results"][result_index]["Secrets"]:
             vulnerabilities.append(

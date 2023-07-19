@@ -21,6 +21,8 @@ class FindingDataSource(metaclass=abc.ABCMeta):
             and callable(subclass.create_or_update_open_finding)
             and hasattr(subclass, "delete_finding")
             and callable(subclass.delete_finding)
+            and hasattr(subclass, "link_findings")
+            and callable(subclass.link_findings)
             and hasattr(subclass, "get_risk_assessor")
             and callable(subclass.get_risk_assessor)
         )
@@ -49,8 +51,14 @@ class FindingDataSource(metaclass=abc.ABCMeta):
         """Updates the given finding or creates a new one if none exists yet."""
         raise NotImplementedError
 
+    @abc.abstractmethod
     def delete_finding(self, finding: Finding):
         """Deletes the given finding from the data source."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def link_findings(self, finding_a: Finding, finding_b: Finding):
+        """Creates a link between the two findings if supported by the datasource. Both findings must exist in the datasource."""
         raise NotImplementedError
 
     @abc.abstractmethod
