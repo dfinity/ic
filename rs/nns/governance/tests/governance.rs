@@ -3769,13 +3769,22 @@ fn test_get_neuron_ids_by_principal() {
     let mut principal2_neuron_ids = gov.get_neuron_ids_by_principal(&principal2);
     principal2_neuron_ids.sort_unstable();
 
-    assert_eq!(gov.get_neuron_ids_by_principal(&principal1), vec![1]);
-    assert_eq!(principal2_neuron_ids, vec![2, 3, 4]);
+    assert_eq!(
+        gov.get_neuron_ids_by_principal(&principal1),
+        vec![NeuronId { id: 1 }]
+    );
+    assert_eq!(
+        principal2_neuron_ids,
+        vec![NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
+    );
     assert_eq!(
         gov.get_neuron_ids_by_principal(&principal3),
-        Vec::<u64>::new()
+        Vec::<NeuronId>::new()
     );
-    assert_eq!(gov.get_neuron_ids_by_principal(&principal4), vec![4]);
+    assert_eq!(
+        gov.get_neuron_ids_by_principal(&principal4),
+        vec![NeuronId { id: 4 }]
+    );
 }
 
 /// *Test fixture for general tests*
@@ -3912,7 +3921,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
             ..Default::default()
         }
     );
-    assert_eq!(gov.get_neuron_ids_by_principal(&from), vec![id.id]);
+    assert_eq!(gov.get_neuron_ids_by_principal(&from), vec![id]);
 
     let neuron = gov.proto.neurons.get_mut(&id.id).unwrap();
 
@@ -4914,7 +4923,7 @@ fn test_neuron_split() {
 
     let mut neuron_ids = gov.get_neuron_ids_by_principal(&from);
     neuron_ids.sort_unstable();
-    let mut expected_neuron_ids = vec![id.id, child_nid.id];
+    let mut expected_neuron_ids = vec![id, child_nid];
     expected_neuron_ids.sort_unstable();
     assert_eq!(neuron_ids, expected_neuron_ids);
 }
@@ -5927,7 +5936,7 @@ fn test_add_and_remove_hot_key() {
         .principal_to_neuron_ids_index
         .get(&new_controller)
         .unwrap()
-        .contains(&neuron.id.as_ref().unwrap().id));
+        .contains(neuron.id.as_ref().unwrap()));
     // Add a hot key to the neuron and make sure that gets reflected in the
     // principal to neuron ids index.
     let result = gov
@@ -5955,7 +5964,7 @@ fn test_add_and_remove_hot_key() {
         .principal_to_neuron_ids_index
         .get(&new_controller)
         .unwrap()
-        .contains(&neuron.id.as_ref().unwrap().id));
+        .contains(neuron.id.as_ref().unwrap()));
 
     // Remove a hot key from that neuron and make sure that gets reflected in
     // the principal to neuron ids index.
@@ -5984,7 +5993,7 @@ fn test_add_and_remove_hot_key() {
         .principal_to_neuron_ids_index
         .get(&new_controller)
         .unwrap()
-        .contains(&neuron.id.as_ref().unwrap().id));
+        .contains(neuron.id.as_ref().unwrap()));
 }
 
 #[test]
@@ -11784,17 +11793,26 @@ async fn test_metrics() {
     let neurons: HashMap<u64, Neuron> = hashmap! {
         // Not Dissolving neurons: 100m + 200m.
         1 => Neuron {
+            id: Some(NeuronId {
+                id: 1
+            }),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
             ..Default::default()
         },
         2 => Neuron {
+            id: Some(NeuronId {
+                id: 2
+            }),
             cached_neuron_stake_e8s: 200_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             ..Default::default()
         },
         // Dissolving neurons: 300m.
         3 => Neuron {
+            id: Some(NeuronId {
+                id: 3
+            }),
             cached_neuron_stake_e8s: 300_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 3,
@@ -11803,6 +11821,9 @@ async fn test_metrics() {
         },
         // Dissolved neurons: 400m.
         4 => Neuron {
+            id: Some(NeuronId {
+                id: 4
+            }),
             cached_neuron_stake_e8s: 400_000_000,
             ..Default::default()
         }

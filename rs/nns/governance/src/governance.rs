@@ -1191,7 +1191,9 @@ impl GovernanceProto {
     /// index (per topic) from followee to set of followers. The
     /// neurons themselves map followers (the neuron ID) to a set of
     /// followees (per topic).
-    pub fn build_topic_followee_index(&self) -> BTreeMap<Topic, BTreeMap<u64, BTreeSet<u64>>> {
+    pub fn build_topic_followee_index(
+        &self,
+    ) -> BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>> {
         let mut topic_followee_index = BTreeMap::new();
         for neuron in self.neurons.values() {
             GovernanceProto::add_neuron_to_topic_followee_index(&mut topic_followee_index, neuron);
@@ -1200,9 +1202,10 @@ impl GovernanceProto {
     }
 
     pub fn add_neuron_to_topic_followee_index(
-        index: &mut BTreeMap<Topic, BTreeMap<u64, BTreeSet<u64>>>,
+        index: &mut BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
         neuron: &Neuron,
     ) {
+        let neuron_id = neuron.id.expect("Neuron must have an id");
         for (itopic, followees) in neuron.followees.iter() {
             // Note: if there are topics in the data (e.g.,
             // file) that the Governance struct was
@@ -1216,27 +1219,26 @@ impl GovernanceProto {
                 let followee_index = index.entry(topic).or_insert_with(BTreeMap::new);
                 for followee in followees.followees.iter() {
                     followee_index
-                        .entry(followee.id)
+                        .entry(*followee)
                         .or_insert_with(BTreeSet::new)
-                        .insert(neuron.id.as_ref().expect("Neuron must have an id").id);
+                        .insert(neuron_id);
                 }
             }
         }
     }
 
     pub fn remove_neuron_from_topic_followee_index(
-        index: &mut BTreeMap<Topic, BTreeMap<u64, BTreeSet<u64>>>,
+        index: &mut BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
         neuron: &Neuron,
     ) {
         for (itopic, followees) in neuron.followees.iter() {
             if let Some(topic) = Topic::from_i32(*itopic) {
                 if let Some(followee_index) = index.get_mut(&topic) {
                     for followee in followees.followees.iter() {
-                        if let Some(followee_set) = followee_index.get_mut(&followee.id) {
-                            followee_set
-                                .remove(&neuron.id.as_ref().expect("Neuron must have an id").id);
+                        if let Some(followee_set) = followee_index.get_mut(followee) {
+                            followee_set.remove(&neuron.id.expect("Neuron must have an id"));
                             if followee_set.is_empty() {
-                                followee_index.remove(&followee.id);
+                                followee_index.remove(followee);
                             }
                         }
                     }
@@ -1248,22 +1250,23 @@ impl GovernanceProto {
     /// Update `index` to map all the given Neuron's hot keys and controller to
     /// `neuron_id`
     pub fn add_neuron_to_principal_to_neuron_ids_index(
-        index: &mut BTreeMap<PrincipalId, HashSet<u64>>,
-        neuron_id: u64,
+        index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
         neuron: &Neuron,
     ) {
-        let principals = neuron.hot_keys.iter().chain(neuron.controller.iter());
+        let principal_ids = neuron.hot_keys.iter().chain(neuron.controller.iter());
 
-        for principal in principals {
+        for principal_id in principal_ids {
             Self::add_neuron_to_principal_in_principal_to_neuron_ids_index(
-                index, neuron_id, principal,
+                index,
+                neuron.id.expect("Neuron must have an id"),
+                principal_id,
             );
         }
     }
 
     pub fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
-        index: &mut BTreeMap<PrincipalId, HashSet<u64>>,
-        neuron_id: u64,
+        index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
+        neuron_id: NeuronId,
         principal: &PrincipalId,
     ) {
         let neuron_ids = index.entry(*principal).or_insert_with(HashSet::new);
@@ -1273,31 +1276,26 @@ impl GovernanceProto {
     /// Update `index` to remove the neuron from the list of neurons mapped to
     /// principals.
     pub fn remove_neuron_from_principal_to_neuron_ids_index(
-        index: &mut BTreeMap<PrincipalId, HashSet<u64>>,
+        index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
         neuron: &Neuron,
     ) {
-        let principals = neuron.hot_keys.iter().chain(neuron.controller.iter());
+        let principal_ids = neuron.hot_keys.iter().chain(neuron.controller.iter());
 
-        for principal in principals {
+        for principal_id in principal_ids {
             Self::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
                 index,
-                neuron.id.as_ref(),
-                principal,
+                neuron.id.expect("Neuron must have an id"),
+                principal_id,
             );
         }
     }
 
     pub fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-        index: &mut BTreeMap<PrincipalId, HashSet<u64>>,
-        neuron_id: Option<&NeuronId>,
-        principal: &PrincipalId,
+        index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
+        neuron_id: NeuronId,
+        principal_id: &PrincipalId,
     ) {
-        let neuron_id = match neuron_id {
-            Some(id) => id.id,
-            None => return,
-        };
-
-        let neuron_ids = index.get_mut(principal);
+        let neuron_ids = index.get_mut(principal_id);
         // Shouldn't fail if the index is broken, so just continue.
         if neuron_ids.is_none() {
             return;
@@ -1306,15 +1304,15 @@ impl GovernanceProto {
         neuron_ids.retain(|nid| *nid != neuron_id);
         // If there are no neurons left, remove the entry from the index.
         if neuron_ids.is_empty() {
-            index.remove(principal);
+            index.remove(principal_id);
         }
     }
 
-    pub fn build_principal_to_neuron_ids_index(&self) -> BTreeMap<PrincipalId, HashSet<u64>> {
+    pub fn build_principal_to_neuron_ids_index(&self) -> BTreeMap<PrincipalId, HashSet<NeuronId>> {
         let mut index = BTreeMap::new();
 
-        for (id, neuron) in self.neurons.iter() {
-            Self::add_neuron_to_principal_to_neuron_ids_index(&mut index, *id, neuron);
+        for neuron in self.neurons.values() {
+            Self::add_neuron_to_principal_to_neuron_ids_index(&mut index, neuron);
         }
 
         index
@@ -1566,14 +1564,14 @@ pub struct Governance {
     /// is saved and restored.
     ///
     /// Topic -> (neuron ID of followee) -> set of followers.
-    pub topic_followee_index: BTreeMap<Topic, BTreeMap<u64, BTreeSet<u64>>>,
+    pub topic_followee_index: BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
 
     /// Maps Principals to the Neuron IDs of all Neurons that have this
     /// Principal as their controller or as one of their hot keys
     ///
     /// This is a cached index and will be removed and recreated when the state
     /// is saved and restored.
-    pub principal_to_neuron_ids_index: BTreeMap<PrincipalId, HashSet<u64>>,
+    pub principal_to_neuron_ids_index: BTreeMap<PrincipalId, HashSet<NeuronId>>,
 
     /// Set of all names given to Known Neurons, to prevent duplication.
     ///
@@ -1990,7 +1988,6 @@ impl Governance {
 
         GovernanceProto::add_neuron_to_principal_to_neuron_ids_index(
             &mut self.principal_to_neuron_ids_index,
-            neuron_id,
             &neuron,
         );
 
@@ -2007,9 +2004,11 @@ impl Governance {
     /// Remove a neuron from the list of neurons and update
     /// `principal_to_neuron_ids_index`
     ///
-    /// Fail if the given `neuron_id` doesn't exist in `self.proto.neurons`
-    fn remove_neuron(&mut self, neuron_id: u64, neuron: Neuron) -> Result<(), GovernanceError> {
-        if !self.proto.neurons.contains_key(&neuron_id) {
+    /// Fail if the given `neuron_id` doesn't exist in `self.proto.neurons`.
+    /// Caller should make sure neuron.id = Some(NeuronId {id: neuron_id}).
+    fn remove_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
+        let neuron_id = neuron.id.expect("Neuron must have an id");
+        if !self.proto.neurons.contains_key(&neuron_id.id) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
                 format!(
@@ -2029,14 +2028,16 @@ impl Governance {
             &neuron,
         );
 
-        self.proto.neurons.remove(&neuron_id);
+        self.proto
+            .neurons
+            .remove(&neuron.id.expect("Neuron must have an id").id);
 
         Ok(())
     }
 
     /// Return the Neuron IDs of all Neurons that have `principal` as their
     /// controller or as one of their hot keys.
-    pub fn get_neuron_ids_by_principal(&self, principal: &PrincipalId) -> Vec<u64> {
+    pub fn get_neuron_ids_by_principal(&self, principal: &PrincipalId) -> Vec<NeuronId> {
         self.principal_to_neuron_ids_index
             .get(principal)
             .map(|ids| ids.iter().copied().collect())
@@ -2046,20 +2047,20 @@ impl Governance {
     /// Return the union of `followees` with the set of Neuron IDs of all
     /// Neurons that directly follow the `followees` w.r.t. the
     /// topic `NeuronManagement`.
-    pub fn get_managed_neuron_ids_for(&self, followees: &[u64]) -> Vec<u64> {
+    pub fn get_managed_neuron_ids_for(&self, followees: Vec<NeuronId>) -> Vec<u64> {
         // Tap into the `topic_followee_index` for followers of level zero neurons.
-        let mut managed: HashSet<u64> = followees.iter().copied().collect();
+        let mut managed: HashSet<NeuronId> = followees.iter().copied().collect();
         for followee in followees {
             if let Some(followers) = self
                 .topic_followee_index
                 .get(&Topic::NeuronManagement)
-                .and_then(|m| m.get(followee))
+                .and_then(|m| m.get(&followee))
             {
                 managed.extend(followers)
             }
         }
 
-        managed.iter().copied().collect()
+        managed.iter().map(|neuron_id| neuron_id.id).collect()
     }
 
     /// See `ListNeurons`.
@@ -2074,22 +2075,25 @@ impl Governance {
         } else {
             Vec::new()
         };
+        let request_neuron_ids: Vec<NeuronId> = req
+            .neuron_ids
+            .iter()
+            .map(|id| NeuronId { id: *id })
+            .collect();
         let requested_list = || {
-            req.neuron_ids
+            request_neuron_ids
                 .iter()
                 .chain(implicitly_requested_neurons.iter())
         };
         ListNeuronsResponse {
             neuron_infos: requested_list()
                 .filter_map(|id| {
-                    self.with_neuron(&NeuronId { id: *id }, |neuron| {
-                        (*id, neuron.get_neuron_info(now))
-                    })
-                    .ok()
+                    self.with_neuron(id, |neuron| (id.id, neuron.get_neuron_info(now)))
+                        .ok()
                 })
                 .collect(),
             full_neurons: requested_list()
-                .filter_map(|x| self.get_full_neuron(&NeuronId { id: *x }, caller).ok())
+                .filter_map(|neuron_id| self.get_full_neuron(neuron_id, caller).ok())
                 .collect(),
         }
     }
@@ -2182,13 +2186,13 @@ impl Governance {
 
             GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
                 &mut self.principal_to_neuron_ids_index,
-                Some(&neuron_id),
+                neuron_id,
                 &old_controller,
             );
 
             GovernanceProto::add_neuron_to_principal_in_principal_to_neuron_ids_index(
                 &mut self.principal_to_neuron_ids_index,
-                neuron_id.id,
+                neuron_id,
                 &new_controller,
             );
         }
@@ -2246,7 +2250,7 @@ impl Governance {
             .await?;
 
         let donor_neuron = donor_neuron.clone();
-        self.remove_neuron(donor_neuron_id.id, donor_neuron)?;
+        self.remove_neuron(donor_neuron)?;
 
         self.with_neuron_mut(recipient_neuron_id, |recipient_neuron| {
             recipient_neuron.cached_neuron_stake_e8s += transfer_amount_doms;
@@ -2623,7 +2627,7 @@ impl Governance {
             // If we've got an error, we assume the transfer didn't happen for
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
-            self.remove_neuron(child_nid.id, child_neuron)?;
+            self.remove_neuron(child_neuron)?;
             println!(
                 "Neuron stake transfer of split_neuron: {:?} \
                      failed with error: {:?}. Neuron can't be staked.",
@@ -3222,7 +3226,7 @@ impl Governance {
             // If we've got an error, we assume the transfer didn't happen for
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
-            self.remove_neuron(child_nid.id, child_neuron)?;
+            self.remove_neuron(child_neuron)?;
             println!(
                 "Neuron minting transfer of to neuron: {:?}\
                                   failed with error: {:?}. Neuron can't be staked.",
@@ -3398,8 +3402,8 @@ impl Governance {
         match proposal_data {
             None => None,
             Some(pd) => {
-                let empty = HashSet::<u64>::new();
-                let caller_neurons: &HashSet<u64> = self
+                let empty = HashSet::<NeuronId>::new();
+                let caller_neurons: &HashSet<NeuronId> = self
                     .principal_to_neuron_ids_index
                     .get(caller)
                     .unwrap_or(&empty);
@@ -3420,8 +3424,8 @@ impl Governance {
     /// retrieve dropped payloads by calling `get_proposal_info` for
     /// each proposal of interest.
     pub fn get_pending_proposals(&self, caller: &PrincipalId) -> Vec<ProposalInfo> {
-        let empty = HashSet::<u64>::new();
-        let caller_neurons: &HashSet<u64> = self
+        let empty = HashSet::<NeuronId>::new();
+        let caller_neurons: &HashSet<NeuronId> = self
             .principal_to_neuron_ids_index
             .get(caller)
             .unwrap_or(&empty);
@@ -3451,7 +3455,7 @@ impl Governance {
     fn proposal_data_to_info(
         &self,
         data: &ProposalData,
-        caller_neurons: &HashSet<u64>,
+        caller_neurons: &HashSet<NeuronId>,
         now_seconds: u64,
         multi_query: bool,
     ) -> ProposalInfo {
@@ -3479,12 +3483,12 @@ impl Governance {
         /// in `except_from`.
         fn remove_ballots_not_cast_by(
             all_ballots: &HashMap<u64, Ballot>,
-            except_from: &HashSet<u64>,
+            except_from: &HashSet<NeuronId>,
         ) -> HashMap<u64, Ballot> {
             let mut ballots = HashMap::new();
-            for n in except_from.iter() {
-                if let Some(v) = all_ballots.get(n) {
-                    ballots.insert(*n, v.clone());
+            for neuron_id in except_from.iter() {
+                if let Some(v) = all_ballots.get(&neuron_id.id) {
+                    ballots.insert(neuron_id.id, v.clone());
                 }
             }
             ballots
@@ -3518,7 +3522,7 @@ impl Governance {
     fn proposal_is_visible_to_neurons(
         &self,
         info: &ProposalData,
-        caller_neurons: &HashSet<u64>,
+        caller_neurons: &HashSet<NeuronId>,
     ) -> bool {
         // Is 'info' a manage neuron proposal?
         if let Some(ref managed_id) = info.proposal.as_ref().and_then(|x| x.managed_neuron()) {
@@ -3530,7 +3534,7 @@ impl Governance {
             {
                 // Find one ID in the list of manager IDs that is also
                 // in 'caller_neurons'.
-                if mgr_ids.iter().any(|x| caller_neurons.contains(&x.id)) {
+                if mgr_ids.iter().any(|x| caller_neurons.contains(x)) {
                     // If such an ID is found, the caller is
                     // permitted to list this proposal.
                     return true;
@@ -3583,8 +3587,8 @@ impl Governance {
         caller: &PrincipalId,
         req: &ListProposalInfo,
     ) -> ListProposalInfoResponse {
-        let empty = HashSet::<u64>::new();
-        let caller_neurons: &HashSet<u64> = self
+        let empty = HashSet::<NeuronId>::new();
+        let caller_neurons: &HashSet<NeuronId> = self
             .principal_to_neuron_ids_index
             .get(caller)
             .unwrap_or(&empty);
@@ -4620,7 +4624,7 @@ impl Governance {
 
         for principal in principal_set {
             for neuron_id in self.get_neuron_ids_by_principal(principal) {
-                self.with_neuron_mut(&NeuronId { id: neuron_id }, |neuron| {
+                self.with_neuron_mut(&neuron_id, |neuron| {
                     if neuron.controller.as_ref() == Some(principal) {
                         neuron.kyc_verified = true;
                     }
@@ -5394,7 +5398,7 @@ impl Governance {
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         topic: Topic,
-        topic_followee_index: &BTreeMap<Topic, BTreeMap<u64, BTreeSet<u64>>>,
+        topic_followee_index: &BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
         neurons: &mut HashMap<u64, Neuron>,
     ) {
         assert!(topic != Topic::NeuronManagement && topic != Topic::Unspecified);
@@ -5402,7 +5406,7 @@ impl Governance {
         // neuron ID to the neuron's vote - 'yes' or 'no' (other
         // values not allowed).
         let mut induction_votes = BTreeMap::new();
-        induction_votes.insert(voting_neuron_id.id, vote_of_neuron);
+        induction_votes.insert(*voting_neuron_id, vote_of_neuron);
         let topic_cache = topic_followee_index.get(&topic);
         let unspecified_cache = topic_followee_index.get(&Topic::Unspecified);
         loop {
@@ -5413,10 +5417,10 @@ impl Governance {
             for (k, v) in induction_votes.iter() {
                 // The new/induction votes cannot be unspecified.
                 assert!(*v != Vote::Unspecified);
-                if let Some(k_ballot) = ballots.get_mut(k) {
+                if let Some(k_ballot) = ballots.get_mut(&k.id) {
                     // Neuron with ID k is eligible to vote.
                     if k_ballot.vote == (Vote::Unspecified as i32) {
-                        if let Some(k_neuron) = neurons.get_mut(k) {
+                        if let Some(k_neuron) = neurons.get_mut(&k.id) {
                             // Only update a vote if it was previously
                             // unspecified. Following can trigger votes
                             // for neurons that have already voted
@@ -5467,7 +5471,7 @@ impl Governance {
             // new set now.
             induction_votes.clear();
             for f in all_followers.iter() {
-                if let Some(f_neuron) = neurons.get(f) {
+                if let Some(f_neuron) = neurons.get(&f.id) {
                     let f_vote = f_neuron.would_follow_ballots(topic, ballots);
                     if f_vote != Vote::Unspecified {
                         // f_vote is yes or no, i.e., f_neuron's
@@ -5664,8 +5668,8 @@ impl Governance {
                     // We need to remove this neuron as a follower
                     // for all followees.
                     for followee in &neuron_followees.followees {
-                        if let Some(all_followers) = followee_index.get_mut(&followee.id) {
-                            all_followers.remove(&id.id);
+                        if let Some(all_followers) = followee_index.get_mut(followee) {
+                            all_followers.remove(id);
                         }
                         // Note: we don't check that the
                         // topic_followee_index actually contains this
@@ -5695,8 +5699,8 @@ impl Governance {
                 // We need to to add this neuron as a follower for
                 // all followees.
                 for followee in &f.followees {
-                    let all_followers = cache.entry(followee.id).or_insert_with(BTreeSet::new);
-                    all_followers.insert(id.id);
+                    let all_followers = cache.entry(*followee).or_insert_with(BTreeSet::new);
+                    all_followers.insert(*id);
                 }
                 Ok(())
             } else {
@@ -5742,7 +5746,7 @@ impl Governance {
                     let hot_key = k.new_hot_key.as_ref().expect("Must have a hot key");
                     GovernanceProto::add_neuron_to_principal_in_principal_to_neuron_ids_index(
                         &mut self.principal_to_neuron_ids_index,
-                        id.id,
+                        *id,
                         hot_key,
                     );
                 }
@@ -5751,7 +5755,7 @@ impl Governance {
                     if neuron.controller.as_ref() != Some(hot_key) {
                         GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
                             &mut self.principal_to_neuron_ids_index,
-                            Some(id),
+                            *id,
                             hot_key,
                         );
                     }
@@ -5958,7 +5962,7 @@ impl Governance {
             // To prevent this method from creating non-staked
             // neurons, we must also remove the neuron that was
             // previously created.
-            self.remove_neuron(nid.id, neuron)?;
+            self.remove_neuron(neuron)?;
             return Err(GovernanceError::new_with_message(
                 ErrorType::InsufficientFunds,
                 format!(
