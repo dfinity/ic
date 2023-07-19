@@ -73,9 +73,7 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
         result.swap_start_timestamp_seconds = swap_start_timestamp_seconds;
         result.swap_due_timestamp_seconds = swap_due_timestamp_seconds;
 
-        result
-            .validate_post_execution()
-            .map_err(|err| err.to_string())?;
+        result.validate_post_execution()?;
 
         Ok(result)
     }
@@ -469,9 +467,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             swap_due_timestamp_seconds: None,
         };
 
-        result
-            .validate_pre_execution()
-            .map_err(|err| err.to_string())?;
+        result.validate_pre_execution()?;
 
         Ok(result)
     }

@@ -25,7 +25,6 @@ BASE_DEPENDENCIES = [
     "//rs/rust_canisters/dfn_core",
     "//rs/sns/root",
     "//rs/types/base_types",
-    "@crate_index//:anyhow",
     "@crate_index//:candid",
     "@crate_index//:isocountry",
     "@crate_index//:lazy_static",

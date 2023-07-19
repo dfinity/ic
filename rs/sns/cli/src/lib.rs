@@ -4,7 +4,6 @@ use crate::{
     prepare_canisters::PrepareCanistersArgs,
     propose::ProposeArgs,
 };
-use anyhow::anyhow;
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
@@ -214,12 +213,12 @@ pub struct AddSnsWasmForTestsArgs {
 }
 
 impl DeployArgs {
-    pub fn generate_sns_init_payload(&self) -> anyhow::Result<SnsInitPayload> {
+    pub fn generate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
         generate_sns_init_payload(&self.init_config_file)
     }
 }
 
-pub fn generate_sns_init_payload(path: &Path) -> anyhow::Result<SnsInitPayload> {
+pub fn generate_sns_init_payload(path: &Path) -> Result<SnsInitPayload, std::string::String> {
     // First, try format v1. If serde_yaml::Error occurred, try format v2.
     generate_sns_init_payload_v1(path).or_else(|previous_err| {
         use GenerateSnsInitPayloadV1Error as E;
@@ -232,7 +231,7 @@ pub fn generate_sns_init_payload(path: &Path) -> anyhow::Result<SnsInitPayload> 
 
 enum GenerateSnsInitPayloadV1Error {
     Yaml(serde_yaml::Error),
-    Misc(anyhow::Error),
+    Misc(String),
 }
 
 fn generate_sns_init_payload_v1(
@@ -240,7 +239,7 @@ fn generate_sns_init_payload_v1(
 ) -> Result<SnsInitPayload, GenerateSnsInitPayloadV1Error> {
     // Read the file.
     let file = File::open(path).map_err(|err| {
-        GenerateSnsInitPayloadV1Error::Misc(anyhow!("Unable to read {:?}: {}", path, err))
+        GenerateSnsInitPayloadV1Error::Misc(format!("Unable to read {:?}: {}", path, err))
     })?;
 
     // Parse its contents.
@@ -272,26 +271,26 @@ fn generate_sns_init_payload_v1(
     Ok(sns_init_payload)
 }
 
-fn generate_sns_init_payload_v2(path: &Path) -> anyhow::Result<SnsInitPayload> {
+fn generate_sns_init_payload_v2(path: &Path) -> Result<SnsInitPayload, String> {
     // Read the file.
     let contents = std::fs::read_to_string(path)
-        .map_err(|err| anyhow!("Unable to read {:?}: {}", path, err))?;
+        .map_err(|err| format!("Unable to read {:?}: {}", path, err))?;
 
     // Parse its contents.
     let configuration =
         serde_yaml::from_str::<crate::init_config_file::friendly::SnsConfigurationFile>(&contents)
-            .map_err(|err| anyhow!("Unable to parse contents of {:?}: {}", path, err))?;
+            .map_err(|err| format!("Unable to parse contents of {:?}: {}", path, err))?;
 
     // Convert (to CreateServiceNervousSysytem).
     let base_path = path.parent().ok_or_else(|| {
-        anyhow!(
+        format!(
             "Configuration file path ({:?}) has no parent, it seems.",
             path,
         )
     })?;
     let configuration = configuration
         .try_convert_to_create_service_nervous_system(base_path)
-        .map_err(|err| anyhow!("Invalid configuration in {:?}: {}", path, err))?;
+        .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))?;
 
     // Last step: more conversion (this time, to the desired type: SnsInitPayload).
     SnsInitPayload::try_from(configuration)
@@ -302,11 +301,11 @@ fn generate_sns_init_payload_v2(path: &Path) -> anyhow::Result<SnsInitPayload> {
         // The reason Err should be impossible is
         // try_convert_to_create_service_nervous_system itself call
         // SnsInitPayload::try_from as part of its validation.
-        .map_err(|err| anyhow!("Invalid configuration in {:?}: {}", path, err))
+        .map_err(|err| format!("Invalid configuration in {:?}: {}", path, err))
 }
 
 impl DeployTestflightArgs {
-    pub fn generate_sns_init_payload(&self) -> anyhow::Result<SnsInitPayload> {
+    pub fn generate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
         match &self.init_config_file {
             Some(init_config_file) => generate_sns_init_payload(init_config_file),
             None => {
