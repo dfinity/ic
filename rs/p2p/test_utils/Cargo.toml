@@ -13,7 +13,11 @@ ic-peer-manager = { path = "../peer_manager" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-local-registry = { path = "../../registry/local_registry" }
+ic-registry-local-store = { path = "../../registry/local_store" }
+ic-registry-local-store-artifacts = { path = "../../registry/local_store/artifacts" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-registry = { path = "../../test_utilities/registry" }
 tokio = { version = "1.15.0", features = ["full"] }
+tempfile = "3.0"
