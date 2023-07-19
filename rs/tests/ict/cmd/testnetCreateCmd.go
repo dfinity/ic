@@ -16,8 +16,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// This defines timeout on the Bazel level.
+var TESTNET_DEPLOYMENT_TIMEOUT_SEC = 1200
+
 var FARM_BASE_URL = "https://farm.dfinity.systems"
 var FARM_API = FARM_BASE_URL + "/swagger-ui"
+var FARM_GROUP_KEEPALIVE_TTL_SEC = 90
+var KEEPALIVE_PERIOD = 30 * time.Second
 
 // This restriction is defined in an ad-hoc way to avoid accidental resources abuse.
 var MAX_TESTNET_LIFETIME_MINS = 180
@@ -143,54 +148,65 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations ..."
 		command = append(command, args[1:]...)
 		command = append(command, "--cache_test_results=no")
-		lifetimeMins := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(cfg.lifetimeMins*60))
+		lifetimeMins := fmt.Sprintf("--test_timeout=%s", strconv.Itoa(TESTNET_DEPLOYMENT_TIMEOUT_SEC))
 		command = append(command, lifetimeMins)
-		if cfg.isDetached {
-			command = append(command, "--test_arg=--no-delete-farm-group")
-		} else {
-			command = append(command, "--test_arg=--debug-keepalive")
-		}
+		// We let the test-driver (and Bazel command) finish without deleting Farm group.
+		// Afterwards, we interact with the group's ttl via Farm API.
+		command = append(command, "--test_arg=--no-delete-farm-group")
 		// Print Bazel command for debugging puroposes.
 		cmd.PrintErrln(CYAN + "Raw Bazel command to be invoked: \n$ " + strings.Join(command, " ") + NC)
 		if cfg.isDryRun {
 			return nil
-		} else {
-			timeNow := time.Now()
-			outputDir, err := CreateOutputDir(cfg.outputDir)
-			if err != nil {
-				return fmt.Errorf("couldn't create output directory %s, err: %v", cfg.outputDir, err)
-			}
-			OutputFilepath := NewOutputFilepath(outputDir, timeNow)
-			cmd.PrintErrln(GREEN + "Testnet is being deployed, please wait ... " + NC + "(check progress in " + OutputFilepath.logPath + ")")
-			testnetExpirationTime := timeNow.Add(time.Minute * time.Duration(cfg.lifetimeMins))
-			testnetCmd := exec.Command(command[0], command[1:]...)
-			// Create buffer to capture both stdout and stderr.
-			stdoutPipe, err := testnetCmd.StderrPipe()
-			if err != nil {
-				return err
-			}
-			// Redirect stdout to the same pipe as stderr.
-			testnetCmd.Stdout = testnetCmd.Stderr
-			if err := testnetCmd.Start(); err != nil {
-				return err
-			}
-			group, err := ProcessLogs(stdoutPipe, cmd, OutputFilepath, cfg, testnetExpirationTime)
-			if err != nil {
-				return err
-			}
-			if cfg.isDetached {
-				if err := SetTestnetLifetime(group, cfg.lifetimeMins); err != nil {
-					return err
-				}
-				if expiration, err := GetTestnetExpiration(group); err != nil {
-					return err
-				} else {
-					cmd.PrintErrf("%sTestnet will expire on %s%s\n", PURPLE, expiration, NC)
-					cmd.PrintErrf("%sNOTE: All further interactions with testnet (e.g., increasing testnet lifetime), should be done manually via Farm API, see %s%s\n", YELLOW, FARM_API, NC)
-				}
-			}
-			return testnetCmd.Wait()
 		}
+		outputDir, err := CreateOutputDir(cfg.outputDir)
+		if err != nil {
+			return fmt.Errorf("couldn't create output directory %s, err: %v", cfg.outputDir, err)
+		}
+		outputFilepath := NewOutputFilepath(outputDir, time.Now())
+		cmd.PrintErrln(GREEN + "Testnet is being deployed, please wait ... " + NC + "(check progress in the docker dir " + outputFilepath.logPath + ")")
+		testnetCmd := exec.Command(command[0], command[1:]...)
+		// Create buffer to capture both stdout and stderr.
+		stdoutPipe, err := testnetCmd.StderrPipe()
+		if err != nil {
+			return err
+		}
+		// Redirect stdout to the same pipe as stderr.
+		testnetCmd.Stdout = testnetCmd.Stderr
+		if err := testnetCmd.Start(); err != nil {
+			return err
+		}
+		// Process life logs output of the test-driver.
+		group, err := ProcessLogs(stdoutPipe, cmd, outputFilepath, cfg)
+		if err != nil {
+			return err
+		}
+		if err = testnetCmd.Wait(); err != nil {
+			return err
+		}
+		cmd.PrintErrf("%sCongrats, testnet with Farm group=%s was deployed successfully!%s\n", GREEN, group, NC)
+		if cfg.isDetached {
+			if err := SetTestnetLifetime(group, cfg.lifetimeMins*60); err != nil {
+				return err
+			}
+			if expiration, err := GetTestnetExpiration(group); err != nil {
+				return err
+			} else {
+				cmd.PrintErrf("%sTestnet will expire on %s%s\n", PURPLE, expiration, NC)
+				cmd.PrintErrf("%sNOTE: All further interactions with testnet (e.g., increasing testnet lifetime), should be done manually via Farm API, see %s%s\n", YELLOW, FARM_API, NC)
+			}
+		} else {
+			testnetExpirationTime := time.Now().Add(time.Minute * time.Duration(cfg.lifetimeMins))
+			cmd.PrintErrf("%sTestnet will expire on %s or earlier if you close this terminal%s\n", PURPLE, testnetExpirationTime.Format(time.UnixDate), NC)
+			if err = KeepTestnetAlive(group, testnetExpirationTime, outputFilepath, cfg, cmd); err != nil {
+				return err
+			}
+			if err = DeleteTestnet(group); err != nil {
+				cmd.PrintErrln("failed to delete testnet: %v", err)
+				return err
+			}
+			cmd.PrintErrln(GREEN + "Testnet was deleted successfully" + NC)
+		}
+		return nil
 	}
 }
 
@@ -205,7 +221,7 @@ func NewTestnetCreateCmd() *cobra.Command {
 		RunE:              TestnetCommand(&cfg),
 	}
 	cmd.Flags().BoolVarP(&cfg.verbose, "verbose", "", false, "Print all testnet deployment log to stdout")
-	cmd.Flags().StringVarP(&cfg.outputDir, "output-dir", "", "", fmt.Sprintf("Path to testnet deployment result files (default: %s)", os.TempDir()))
+	cmd.Flags().StringVarP(&cfg.outputDir, "output-dir", "", "", fmt.Sprintf("Docker path to testnet deployment result files (default: %s)", os.TempDir()))
 	cmd.Flags().IntVar(&cfg.lifetimeMins, "lifetime-mins", 0, fmt.Sprintf("Keep testnet alive for this duration in mins, max=%d", MAX_TESTNET_LIFETIME_MINS))
 	cmd.Flags().BoolVarP(&cfg.isFuzzyMatch, "fuzzy", "", false, "Use fuzzy matching to find similar testnet names. Default: substring match")
 	cmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution")
@@ -214,7 +230,7 @@ func NewTestnetCreateCmd() *cobra.Command {
 	return cmd
 }
 
-func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFilepath, cfg *TestnetConfig, expiration time.Time) (string, error) {
+func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFilepath, cfg *TestnetConfig) (string, error) {
 	fullLogFile, err := os.Create(outputFiles.logPath)
 	if err != nil {
 		return "", fmt.Errorf("creating log file %s failed with err: %v", outputFiles.logPath, err)
@@ -249,15 +265,51 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 			if err != nil {
 				return "", err
 			}
-			cmd.PrintErrf("%sCongrats, testnet with Farm group=%s was deployed successfully!%s\n", GREEN, group, NC)
-			if !cfg.isDetached {
-				cmd.PrintErrf("%sTestnet will expire on %s or earlier if you close this terminal%s\n", PURPLE, expiration.Format(time.UnixDate), NC)
-			}
 		} else {
 			summary.add_event(&event)
 		}
 	}
 	return group, nil
+}
+
+func DeleteTestnet(group string) error {
+	url := FARM_BASE_URL + "/group/" + group
+	request, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+	client := http.Client{}
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	body, err := io.ReadAll((response.Body))
+	if err != nil {
+		return err
+	}
+	if response.StatusCode != 200 {
+		return fmt.Errorf("failed to delete group via %s, status_code=%d, body={%s}", url, response.StatusCode, string(body))
+	}
+	return nil
+}
+
+func KeepTestnetAlive(group string, expiration time.Time, outputFiles *OutputFilepath, cfg *TestnetConfig, cmd *cobra.Command) error {
+	file, err := os.OpenFile(outputFiles.logPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		return err
+	}
+	for time.Now().Before(expiration) {
+		if err := SetTestnetLifetime(group, FARM_GROUP_KEEPALIVE_TTL_SEC); err != nil {
+			return err
+		}
+		msg := fmt.Sprintf("Testnet lifetime was set to %d sec, next invocation in %.1f sec\n", FARM_GROUP_KEEPALIVE_TTL_SEC, KEEPALIVE_PERIOD.Seconds())
+		file.WriteString(msg)
+		if cfg.verbose {
+			cmd.PrintErrf(msg)
+		}
+		time.Sleep(KEEPALIVE_PERIOD)
+	}
+	return nil
 }
 
 func HasDeploymentSucceeded(jsonReport interface{}) error {
@@ -345,9 +397,9 @@ func GetTestnetExpiration(group string) (string, error) {
 	return expiration, nil
 }
 
-func SetTestnetLifetime(group string, lifetimeMins int) error {
+func SetTestnetLifetime(group string, lifetimeSec int) error {
 	// Farm uses ttl (time-to-live) in seconds.
-	ttl := strconv.Itoa(lifetimeMins * 60)
+	ttl := strconv.Itoa(lifetimeSec)
 	url := FARM_BASE_URL + "/group/" + group + "/ttl/" + ttl
 	request, err := http.NewRequest("PUT", url, nil)
 	if err != nil {
