@@ -51,10 +51,16 @@ impl GovernanceMutationProxy<'_> {
     }
 
     /// Retrieve a mutable reference to a neuron, if it exists.
-    pub fn get_neuron_mut(&mut self, neuron_id: &NeuronId) -> Result<&mut Neuron, GovernanceError> {
+    pub fn with_neuron_mut<R>(
+        &mut self,
+        neuron_id: &NeuronId,
+        f: impl FnOnce(&mut Neuron) -> R,
+    ) -> Result<R, GovernanceError> {
         match self {
-            GovernanceMutationProxy::Committing(real) => real.get_neuron_mut(neuron_id),
-            GovernanceMutationProxy::Simulating(simulating) => simulating.get_neuron_mut(neuron_id),
+            GovernanceMutationProxy::Committing(real) => real.with_neuron_mut(neuron_id, f),
+            GovernanceMutationProxy::Simulating(simulating) => {
+                simulating.with_neuron_mut(neuron_id, f)
+            }
         }
     }
 
@@ -86,13 +92,17 @@ impl SimulatingGovernance<'_> {
             .unwrap_or_else(|| self.real_gov.get_neuron(neuron_id))
     }
 
-    pub fn get_neuron_mut(&mut self, neuron_id: &NeuronId) -> Result<&mut Neuron, GovernanceError> {
+    pub fn with_neuron_mut<R>(
+        &mut self,
+        neuron_id: &NeuronId,
+        f: impl FnOnce(&mut Neuron) -> R,
+    ) -> Result<R, GovernanceError> {
         let neuron = match self.neuron_map.entry(neuron_id.id) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(entry) => entry.insert(self.real_gov.get_neuron(neuron_id)?.clone()),
         };
 
-        Ok(neuron)
+        Ok(f(neuron))
     }
 }
 
@@ -103,7 +113,9 @@ fn apply_neuron_deltas(
 ) -> Result<(), GovernanceError> {
     let now_seconds = gov_proxy.now();
     for (neuron_id, delta) in deltas {
-        delta.apply(gov_proxy.get_neuron_mut(neuron_id)?, now_seconds);
+        gov_proxy.with_neuron_mut(neuron_id, |neuron| {
+            delta.apply(neuron, now_seconds);
+        })?;
     }
     Ok(())
 }

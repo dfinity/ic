@@ -28,6 +28,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+mod stake_maturity;
+
 #[test]
 fn test_time_warp() {
     let w = TimeWarp { delta_s: 0_i64 };

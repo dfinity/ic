@@ -4460,31 +4460,34 @@ fn test_refresh_neuron_by_subaccount_by_proxy() {
 fn test_claim_or_refresh_neuron_does_not_overflow() {
     let (mut driver, mut gov, neuron) = create_mature_neuron(true);
     let nid = neuron.id.unwrap();
-    let neuron = gov.get_neuron_mut(&nid).unwrap();
     let _account = neuron.account.clone();
     let subaccount = subaccount_from_slice(&neuron.account).unwrap().unwrap();
 
-    // Increase the dissolve delay, this will make the neuron start aging from
-    // 'now'.
-    neuron
-        .configure(
-            &TEST_NEURON_1_OWNER_PRINCIPAL,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
-                    additional_dissolve_delay_seconds: 6
-                        * ic_nns_governance::governance::ONE_MONTH_SECONDS as u32,
-                })),
-            },
-        )
-        .unwrap();
+    gov.with_neuron_mut(&nid, |neuron| {
+        // Increase the dissolve delay, this will make the neuron start aging from
+        // 'now'.
+        neuron
+            .configure(
+                &TEST_NEURON_1_OWNER_PRINCIPAL,
+                driver.now(),
+                &Configure {
+                    operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
+                        additional_dissolve_delay_seconds: 6
+                            * ic_nns_governance::governance::ONE_MONTH_SECONDS as u32,
+                    })),
+                },
+            )
+            .unwrap();
+    })
+    .unwrap();
 
     // Advance the current time, so that the neuron has accumulated
     // some age.
     driver.advance_time_by(12 * ic_nns_governance::governance::ONE_MONTH_SECONDS);
 
     assert_eq!(
-        neuron.aging_since_timestamp_seconds,
+        gov.with_neuron(&nid, |neuron| neuron.aging_since_timestamp_seconds)
+            .unwrap(),
         driver.now() - 12 * ic_nns_governance::governance::ONE_MONTH_SECONDS,
     );
 
@@ -4512,8 +4515,11 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
     .unwrap();
 
     assert_eq!(nid_result, nid);
-    let neuron = gov.get_neuron_mut(&nid).unwrap();
-    assert_eq!(neuron.cached_neuron_stake_e8s, 100_000_100_000_000);
+    assert_eq!(
+        gov.with_neuron(&nid, |neuron| neuron.cached_neuron_stake_e8s)
+            .unwrap(),
+        100_000_100_000_000
+    );
 }
 
 #[test]
@@ -4943,24 +4949,30 @@ fn test_neuron_spawn() {
         nonce,
     );
 
-    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
-
+    let now = driver.now();
     assert_eq!(
-        neuron.get_neuron_info(driver.now()).state(),
+        gov.with_neuron(&id, |neuron| neuron.get_neuron_info(now).state())
+            .unwrap(),
         NeuronState::NotDissolving
     );
 
-    // Starts with too little maturity
-    neuron.maturity_e8s_equivalent = 187;
-    assert!(
-        neuron.maturity_e8s_equivalent
-            < NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
-    );
     let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+
+    let neuron_before = gov
+        .with_neuron_mut(&id, |neuron| {
+            // Starts with too little maturity
+            neuron.maturity_e8s_equivalent = 187;
+            assert!(
+                neuron.maturity_e8s_equivalent
+                    < NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
+            );
+
+            neuron.clone()
+        })
+        .expect("Neuron did not exist");
 
     // An attempt to spawn a neuron should simply return an error and
     // change nothing.
-    let neuron_before = neuron.clone();
     let spawn_res = gov
         .spawn_neuron(
             &id,
@@ -4977,16 +4989,23 @@ fn test_neuron_spawn() {
         spawn_res,
         Err(GovernanceError{error_type: code, error_message: msg})
             if code == InsufficientFunds as i32 && msg.to_lowercase().contains("maturity"));
-    assert_eq!(*gov.get_neuron(&id).unwrap(), neuron_before);
 
-    // Artificially set the neuron's maturity to sufficient value
-    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
+    assert_eq!(
+        gov.with_neuron(&id, |neuron| { neuron.clone() }).unwrap(),
+        neuron_before
+    );
+
     let parent_maturity_e8s_equivalent: u64 = 123_456_789;
     assert!(
         parent_maturity_e8s_equivalent
             > NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
     );
-    neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+
+    // Artificially set the neuron's maturity to sufficient value
+    gov.with_neuron_mut(&id, |neuron| {
+        neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+    })
+    .expect("Neuron did not exist");
 
     // Advance the time so that we can check that the spawned neuron has the age
     // and the right creation timestamp
@@ -5011,15 +5030,17 @@ fn test_neuron_spawn() {
     // .. but only one ledger account since the neuron's maturity hasn't been minted yet.
     driver.assert_num_neuron_accounts_exist(1);
 
-    let child_neuron = gov
-        .get_neuron(&child_nid)
-        .expect("The child neuron is missing")
-        .clone();
-    let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
-    let child_subaccount = child_neuron.account.clone();
+    gov.with_neuron(&id, |parent_neuron| {
+        // Maturity on the parent neuron should be reset.
+        assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
+    })
+    .expect("The parent neuron is missing");
 
-    // Maturity on the parent neuron should be reset.
-    assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
+    let child_neuron = gov
+        .with_neuron(&child_nid, |neuron| neuron.clone())
+        .expect("The child neuron is missing");
+
+    let child_subaccount = child_neuron.account.clone();
 
     assert_eq!(
         child_neuron,
@@ -5059,9 +5080,9 @@ fn test_neuron_spawn() {
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .get_neuron(&child_nid)
-        .expect("The child neuron is missing")
-        .clone();
+        .with_neuron(&child_nid, |neuron| neuron.clone())
+        .expect("The child neuron is missing");
+
     assert_eq!(
         child_neuron,
         Neuron {
@@ -5106,24 +5127,29 @@ fn test_neuron_spawn_with_subaccount() {
         nonce,
     );
 
-    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
-
+    let now = driver.now();
     assert_eq!(
-        neuron.get_neuron_info(driver.now()).state(),
+        gov.with_neuron(&id, |neuron| neuron.get_neuron_info(now).state())
+            .unwrap(),
         NeuronState::NotDissolving
     );
 
-    // Starts with too little maturity
-    neuron.maturity_e8s_equivalent = 187;
-    assert!(
-        neuron.maturity_e8s_equivalent
-            < NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
-    );
+    let neuron_before = gov
+        .with_neuron_mut(&id, |neuron| {
+            // Starts with too little maturity
+            neuron.maturity_e8s_equivalent = 187;
+            assert!(
+                neuron.maturity_e8s_equivalent
+                    < NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
+            );
+            neuron.clone()
+        })
+        .expect("Neuron did not exist");
+
     let child_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
 
     // An attempt to spawn a neuron should simply return an error and
     // change nothing.
-    let neuron_before = neuron.clone();
     let spawn_res = gov
         .spawn_neuron(
             &id,
@@ -5140,16 +5166,21 @@ fn test_neuron_spawn_with_subaccount() {
         spawn_res,
         Err(GovernanceError{error_type: code, error_message: msg})
             if code == InsufficientFunds as i32 && msg.to_lowercase().contains("maturity"));
-    assert_eq!(*gov.get_neuron(&id).unwrap(), neuron_before);
+    assert_eq!(
+        gov.with_neuron(&id, |neuron| { neuron.clone() }).unwrap(),
+        neuron_before
+    );
 
     // Artificially set the neuron's maturity to sufficient value
-    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
     let parent_maturity_e8s_equivalent: u64 = 123_456_789;
     assert!(
         parent_maturity_e8s_equivalent
             > NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
     );
-    neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+    gov.with_neuron_mut(&id, |neuron| {
+        neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+    })
+    .expect("Neuron did not exist");
 
     // Advance the time so that we can check that the spawned neuron has the age
     // and the right creation timestamp
@@ -5183,7 +5214,9 @@ fn test_neuron_spawn_with_subaccount() {
     run_periodic_tasks_on_governance_often_enough_to_spawn(&mut gov);
     driver.assert_num_neuron_accounts_exist(1);
 
-    let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
+    let parent_neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("The parent neuron is missing");
     // Maturity on the parent neuron should be reset.
     assert_eq!(parent_neuron.maturity_e8s_equivalent, 0);
 
@@ -5194,9 +5227,8 @@ fn test_neuron_spawn_with_subaccount() {
     driver.assert_num_neuron_accounts_exist(2);
 
     let child_neuron = gov
-        .get_neuron(&child_nid)
-        .expect("The child neuron is missing")
-        .clone();
+        .with_neuron(&child_nid, |neuron| neuron.clone())
+        .expect("The child neuron is missing");
     let child_subaccount = child_neuron.account.clone();
 
     // Verify that the sub-account was created according to spawn input.
@@ -5281,7 +5313,9 @@ fn assert_neuron_spawn_partial(
         nonce,
     );
 
-    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
+    let neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("Neuron did not exist");
     assert_eq!(
         neuron.get_neuron_info(driver.now()).state(),
         NeuronState::NotDissolving
@@ -5291,17 +5325,19 @@ fn assert_neuron_spawn_partial(
 
     // An attempt to spawn a neuron should simply return an error and
     // change nothing.
-    let neuron_before = neuron.clone();
+    let neuron_before = neuron;
     assert_eq!(*gov.get_neuron(&id).unwrap(), neuron_before);
 
     // Artificially set the neuron's maturity to sufficient value
-    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
     let parent_maturity_e8s_equivalent: u64 = parent_maturity;
     assert!(
         parent_maturity_e8s_equivalent
             > NetworkEconomics::with_default_values().neuron_minimum_stake_e8s
     );
-    neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+    gov.with_neuron_mut(&id, |neuron| {
+        neuron.maturity_e8s_equivalent = parent_maturity_e8s_equivalent;
+    })
+    .expect("Neuron did not exist");
 
     // Advance the time so that we can check that the spawned neuron has the age
     // and the right creation timestamp
@@ -5405,8 +5441,10 @@ fn test_neuron_with_non_self_authenticating_controller_cannot_be_spawned() {
         nonce,
     );
 
-    let neuron = gov.get_neuron_mut(&id).expect("Neuron did not exist");
-    neuron.maturity_e8s_equivalent = 123_456_789;
+    gov.with_neuron_mut(&id, |neuron| {
+        neuron.maturity_e8s_equivalent = 123_456_789;
+    })
+    .expect("Neuron did not exist");
 
     let non_self_authenticating_principal_id = PrincipalId::new_user_test_id(144);
 
@@ -8443,10 +8481,9 @@ fn test_merge_maturity_of_neuron(
         .get_e8s();
     prop_assert_eq!(neuron_stake_e8s, account_balance);
 
-    {
-        let neuron = gov.get_neuron_mut(&id).unwrap();
+    gov.with_neuron_mut(&id, |neuron| {
         neuron.maturity_e8s_equivalent = starting_maturity;
-    }
+    }).unwrap();
 
     // Assert that maturity can't be merged by someone who doesn't control the
     // neuron
