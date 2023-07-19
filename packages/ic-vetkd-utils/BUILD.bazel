@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 
 COMMON_DEPS = [
     "@crate_index//:zeroize",
@@ -28,5 +28,14 @@ rust_library(
     deps = COMMON_DEPS + [
         "@crate_index//:wasm-bindgen",
         "@crate_index//:getrandom",
+    ],
+)
+
+rust_test_suite(
+    name = "vetkd_tests",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = [
+        ":ic-vetkd-utils",
+        "@crate_index//:hex",
     ],
 )

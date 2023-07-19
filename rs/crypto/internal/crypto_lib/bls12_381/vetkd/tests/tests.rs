@@ -125,21 +125,12 @@ fn should_encrypted_key_share_be_functional() {
     )
     .unwrap();
 
-    let k = tsk.decrypt(&ek, &dpk, did).unwrap();
+    let _k = tsk.decrypt(&ek, &dpk, did).unwrap();
 
     let derived_key = tsk
         .decrypt_and_hash(&ek, &dpk, did, 32, b"aes-256-gcm-siv")
         .unwrap();
     assert_eq!(derived_key.len(), 32);
-
-    let msg = b"is this thing on?";
-    let ctext = IBECiphertext::encrypt(&dpk, did, msg, &mut rng);
-    let ctext_bytes = ctext.serialize();
-
-    let ctext = IBECiphertext::deserialize(&ctext_bytes).unwrap();
-    let recovered = ctext.decrypt(&k).unwrap();
-
-    assert_eq!(recovered, msg);
 }
 
 fn random_node_indexes<R: rand::Rng>(rng: &mut R, count: usize) -> Vec<NodeIndex> {

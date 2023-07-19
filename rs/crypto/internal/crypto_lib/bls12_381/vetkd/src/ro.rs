@@ -44,12 +44,6 @@ impl RandomOracle {
         output
     }
 
-    pub(crate) fn finalize_to_array<const N: usize>(mut self) -> [u8; N] {
-        let mut output = [0u8; N];
-        self.finalize(&mut output);
-        output
-    }
-
     pub(crate) fn finalize_to_scalar(mut self) -> Scalar {
         let mut output = [0u8; 2 * Scalar::BYTES];
         self.finalize(&mut output);

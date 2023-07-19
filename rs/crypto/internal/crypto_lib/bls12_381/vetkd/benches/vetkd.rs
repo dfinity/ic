@@ -244,43 +244,5 @@ fn vetkd_bench(c: &mut Criterion) {
     }
 }
 
-fn ibe_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("crypto_bls12_381_vetkd");
-
-    let mut rng = rand::thread_rng();
-
-    let derivation_path = DerivationPath::new(&[1, 2, 3, 4], &[&[1, 2, 3]]);
-    let did = rng.gen::<[u8; 32]>();
-
-    // Ordinarily the master secret key would be f(0) where f is a
-    // suitable polynomial, but since we do not need to recombine
-    // shares in this benchmark, just create a random key directly.
-    let master_sk = Scalar::random(&mut rng);
-    let master_pk = G2Affine::from(G2Affine::generator() * &master_sk);
-
-    let msg = rng.gen::<[u8; 32]>();
-
-    let dpk = DerivedPublicKey::compute_derived_key(&master_pk, &derivation_path);
-
-    group.bench_function("IBECiphertext::encrypt", |b| {
-        b.iter(|| IBECiphertext::encrypt(&dpk, &did, &msg, &mut rng))
-    });
-
-    let ctext = IBECiphertext::encrypt(&dpk, &did, &msg, &mut rng);
-
-    group.bench_function("IBECiphertext::serialize", |b| b.iter(|| ctext.serialize()));
-
-    let ctext_bytes = ctext.serialize();
-
-    group.bench_function("IBECiphertext::deserialize", |b| {
-        b.iter(|| IBECiphertext::deserialize(&ctext_bytes).unwrap())
-    });
-
-    let ctext = IBECiphertext::deserialize(&ctext_bytes).unwrap();
-
-    let k = G1Affine::from(G1Affine::generator() * Scalar::random(&mut rng));
-    group.bench_function("IBECiphertext::decrypt", |b| b.iter(|| ctext.decrypt(&k)));
-}
-
-criterion_group!(benches, transport_key_bench, vetkd_bench, ibe_bench);
+criterion_group!(benches, transport_key_bench, vetkd_bench);
 criterion_main!(benches);
