@@ -14,47 +14,6 @@ pub(crate) fn get_num_leaves_and_empty_subtrees<T>(labeled_tree: &LabeledTree<T>
     }
 }
 
-/// Creates a HashTreeBuilderImpl for the passed `labeled_tree`.
-pub(crate) fn hash_tree_builder_from_labeled_tree(
-    labeled_tree: &LabeledTree<Vec<u8>>,
-) -> HashTreeBuilderImpl {
-    let mut builder = HashTreeBuilderImpl::new();
-    hash_tree_builder_from_labeled_tree_impl(labeled_tree, &mut builder);
-    {
-        // check that the witness is correct by pruning it completely
-        let wg = builder
-            .witness_generator()
-            .expect("Failed to retrieve a witness constructor");
-        let witness = wg
-            .witness(labeled_tree)
-            .expect("Failed to build a witness for the whole tree");
-        let witness = prune_witness(&witness, labeled_tree).expect("failed to prune witness");
-        assert_matches!(witness, Witness::Pruned { digest: _ });
-    }
-    builder
-}
-
-fn hash_tree_builder_from_labeled_tree_impl(
-    labeled_tree: &LabeledTree<Vec<u8>>,
-    builder: &mut HashTreeBuilderImpl,
-) {
-    match labeled_tree {
-        LabeledTree::<Vec<u8>>::SubTree(labeled_subtree) => {
-            builder.start_subtree();
-            for (label, subtree) in labeled_subtree.iter() {
-                builder.new_edge(label.clone());
-                hash_tree_builder_from_labeled_tree_impl(subtree, builder);
-            }
-            builder.finish_subtree();
-        }
-        LabeledTree::<Vec<u8>>::Leaf(content) => {
-            builder.start_leaf();
-            builder.write_leaf(content.clone());
-            builder.finish_leaf();
-        }
-    }
-}
-
 /// Generates a random [`LabeledTree`] using `rng`.
 ///
 /// `max_depth` and `min_leaves` are hard limits. `desired_size` is not.

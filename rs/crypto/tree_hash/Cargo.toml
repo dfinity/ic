@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
+assert_matches = "1.5.0"
 ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
 ic-crypto-sha = { path = "../sha" }
 ic-protobuf = { path = "../../protobuf" }
@@ -11,10 +12,15 @@ serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
 
 [dev-dependencies]
-assert_matches = "1.5.0"
+criterion = "0.3"
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
+ic-types-test-utils = { path = "../../types/types_test_utils" }
 maplit = "1.0.2"
 proptest = "1.0"
 prost = "0.11.0"
 rand = "0.8.4"
 serde_cbor = "0.11.1"
+
+[[bench]]
+name = "tree_hash"
+harness = false
