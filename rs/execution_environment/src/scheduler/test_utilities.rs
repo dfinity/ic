@@ -57,6 +57,7 @@ use ic_types::{
 };
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
+use std::time::Duration;
 
 use crate::{
     as_round_instructions, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits,
@@ -528,8 +529,12 @@ impl SchedulerTest {
     }
 
     pub fn charge_for_resource_allocations(&mut self) {
+        let subnet_size = self.subnet_size();
         self.scheduler
-            .charge_canisters_for_resource_allocation_and_usage(self.state.as_mut().unwrap(), 1)
+            .charge_canisters_for_resource_allocation_and_usage(
+                self.state.as_mut().unwrap(),
+                subnet_size,
+            )
     }
 
     pub fn induct_messages_on_same_subnet(&mut self) {
@@ -578,6 +583,12 @@ impl SchedulerTest {
             response_size_limit,
             self.subnet_size(),
         )
+    }
+
+    pub fn memory_cost(&self, bytes: NumBytes, duration: Duration) -> Cycles {
+        self.scheduler
+            .cycles_account_manager
+            .memory_cost(bytes, duration, self.subnet_size())
     }
 }
 

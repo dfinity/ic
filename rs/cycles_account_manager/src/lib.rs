@@ -819,7 +819,7 @@ impl CyclesAccountManager {
         duration_between_blocks: Duration,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let bytes_to_charge = match canister.memory_allocation() {
+        let canister_memory_bytes_to_charge = match canister.memory_allocation() {
             // The canister has explicitly asked for a memory allocation, so charge
             // based on it accordingly.
             MemoryAllocation::Reserved(bytes) => bytes,
@@ -828,13 +828,29 @@ impl CyclesAccountManager {
         };
         if let Err(err) = self.charge_for_memory(
             &mut canister.system_state,
-            bytes_to_charge,
+            canister_memory_bytes_to_charge,
             duration_between_blocks,
             subnet_size,
         ) {
             info!(
                 log,
                 "Charging canister {} for memory allocation/usage failed with {}",
+                canister.canister_id(),
+                err
+            );
+            return Err(err);
+        }
+
+        let message_memory_bytes_to_charge = canister.message_memory_usage();
+        if let Err(err) = self.charge_for_memory(
+            &mut canister.system_state,
+            message_memory_bytes_to_charge,
+            duration_between_blocks,
+            subnet_size,
+        ) {
+            info!(
+                log,
+                "Charging canister {} for message memory usage failed with {}",
                 canister.canister_id(),
                 err
             );
