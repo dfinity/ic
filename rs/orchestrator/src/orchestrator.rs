@@ -210,6 +210,7 @@ impl Orchestrator {
             Arc::clone(&registry),
             Arc::clone(&metrics),
             config.firewall.clone(),
+            cup_provider.clone(),
             logger.clone(),
         );
 
