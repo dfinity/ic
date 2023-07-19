@@ -258,7 +258,8 @@ impl GovernanceProto {
                 for followee in followees.followees.iter() {
                     let nid = followee.to_string();
                     if let Some(followee_set) = followee_index.get_mut(&nid) {
-                        followee_set.remove(neuron.id.as_ref().expect("Neuron must have an id"));
+                        followee_set
+                            .remove(neuron.id.as_ref().expect("Neuron must have a NeuronId"));
                         if followee_set.is_empty() {
                             followee_index.remove(&nid);
                         }
@@ -276,7 +277,6 @@ impl GovernanceProto {
         neuron: &Neuron,
     ) {
         let neuron_id = neuron.id.as_ref().expect("Neuron must have a NeuronId");
-
         neuron
             .permissions
             .iter()

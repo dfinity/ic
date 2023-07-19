@@ -722,7 +722,7 @@ fn get_neuron_ids_() -> Vec<NeuronId> {
     let votable = governance().get_neuron_ids_by_principal(&caller());
 
     governance()
-        .get_managed_neuron_ids_for(&votable)
+        .get_managed_neuron_ids_for(votable)
         .into_iter()
         .map(NeuronId)
         .collect()
