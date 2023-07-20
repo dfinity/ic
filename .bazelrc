@@ -61,8 +61,6 @@ build:fmt --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect
 build:fmt --output_groups=+rustfmt_checks
 build --@rules_rust//:rustfmt.toml=//:rustfmt.toml
 
-build --@rules_rust//:source_path_prefix=""
-
 build --flag_alias=ic_version=//bazel:ic_version
 build --flag_alias=ic_version_rc_only=//bazel:ic_version_rc_only
 build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
