@@ -107,8 +107,6 @@ def ic_prep(subnets, version, root_subnet=0):
             tmpfile.name,
             "--dkg-interval-length",
             "10",
-            "--p2p-flows",
-            "1234-1",
             "--nns-subnet-index",
             "%d" % root_subnet,
             "--nodes",

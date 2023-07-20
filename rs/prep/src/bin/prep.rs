@@ -106,17 +106,9 @@ struct CliArgs {
     #[clap(long, parse(try_from_str = parse_nodes_deprecated), group = "node_spec", multiple_values(true))]
     pub nodes: Vec<Node>,
 
-    /// JSON5 node definition
-    #[clap(long, group = "node_spec", multiple_values(true))]
-    pub node: Vec<Node>,
-
     /// Path to working directory for node states.
     #[clap(long, parse(from_os_str))]
     pub working_dir: PathBuf,
-
-    /// Flows per node.
-    #[clap(long, parse(try_from_str = parse_flows))]
-    pub p2p_flows: FlowConfig,
 
     /// Skip generating subnet records
     #[clap(long)]
@@ -302,33 +294,6 @@ struct ValidatedArgs {
     pub use_specified_ids_allocation_range: bool,
 }
 
-/// Structured definition of a flow provided by the `--p2p-flows` flag.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct FlowConfig {
-    /// The initial flow starting tag
-    start_tag: u32,
-
-    /// The number of flows to create
-    num_flows: u32,
-}
-
-/// Parse a `--p2p-flows` flag value in to a FlowConfig.
-fn parse_flows(src: &str) -> Result<FlowConfig> {
-    let parts = src.splitn(2, '-').collect::<Vec<&str>>();
-    let start_tag = parts[0]
-        .parse::<u32>()
-        .with_context(|| format!("did not parse {} as u32", parts[0]))?;
-
-    let num_flows = parts[1]
-        .parse::<u32>()
-        .with_context(|| format!("did not parse {} as u32", parts[0]))?;
-
-    Ok(FlowConfig {
-        start_tag,
-        num_flows,
-    })
-}
-
 /// Structured definition of a node provided by the `--nodes` flag.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct Node {
@@ -376,10 +341,11 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
 
     let http_addr: SocketAddr = parts[5]
         .parse()
-        .with_context(|| format!("did not parse {} as SocketAddr", parts[3]))?;
+        .with_context(|| format!("did not parse {} as SocketAddr", parts[5]))?;
 
-    // P2P is special, and needs a custom protocol
-    let p2p_addr: Url = format!("org.internetcomputer.p2p1://{}", parts[2]).parse()?;
+    let p2p_addr: SocketAddr = parts[2]
+        .parse()
+        .with_context(|| format!("did not parse {} as SocketAddr", parts[2]))?;
 
     // chip_id is optional
     let mut chip_id = vec![];
@@ -393,7 +359,7 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
         config: NodeConfiguration {
             xnet_api: ConnectionEndpoint::from(xnet_addr),
             public_api: ConnectionEndpoint::from(http_addr),
-            p2p_addr: ConnectionEndpoint::try_from(p2p_addr)?,
+            p2p_addr: ConnectionEndpoint::from(p2p_addr),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id,
@@ -539,12 +505,6 @@ impl CliArgs {
         let mut subnets: BTreeMap<SubnetIndex, BTreeMap<NodeIndex, NodeConfiguration>> =
             BTreeMap::new();
 
-        let nodes: Vec<_> = if self.nodes.is_empty() {
-            self.node
-        } else {
-            self.nodes
-        };
-
         for (
             i,
             Node {
@@ -552,7 +512,7 @@ impl CliArgs {
                 subnet_index,
                 config,
             },
-        ) in nodes.iter().enumerate()
+        ) in self.nodes.iter().enumerate()
         {
             if !node_idx_set.insert(node_index) {
                 bail!("the {}'th entry repeats the node index {}", i, node_index);
@@ -761,35 +721,6 @@ fn fetch_replica_version_sha256(version_id: ReplicaVersion) -> Result<String> {
 }
 
 #[cfg(test)]
-mod test_flag_p2p_flows_parser {
-    use super::*;
-    use anyhow::Result;
-    use pretty_assertions::assert_eq;
-
-    /// "1234-1" deconstructs in to a start_tag and num_flows
-    #[test]
-    fn valid_flow() -> Result<()> {
-        let got = parse_flows("1234-1")?;
-        let want = FlowConfig {
-            start_tag: 1234,
-            num_flows: 1,
-        };
-
-        assert_eq!(got, want);
-        Ok(())
-    }
-
-    /// An invalid value is recognised
-    #[test]
-    fn invalid_flow() -> Result<()> {
-        let got = parse_flows("x-x");
-
-        assert!(got.is_err());
-        Ok(())
-    }
-}
-
-#[cfg(test)]
 mod test_flag_nodes_parser_deprecated {
     use super::*;
     use pretty_assertions::assert_eq;
@@ -804,7 +735,7 @@ mod test_flag_nodes_parser_deprecated {
             config: NodeConfiguration {
                 xnet_api: "http://2.3.4.5:81".parse().unwrap(),
                 public_api: "http://3.4.5.6:82".parse().unwrap(),
-                p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
+                p2p_addr: "http://1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: vec![],
@@ -825,7 +756,7 @@ mod test_flag_nodes_parser_deprecated {
             config: NodeConfiguration {
                 xnet_api: "http://2.3.4.5:81".parse().unwrap(),
                 public_api: "http://3.4.5.6:82".parse().unwrap(),
-                p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
+                p2p_addr: "http://1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: vec![],
@@ -842,7 +773,7 @@ mod test_flag_node_parser {
     use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
 
-    const GOOD_FLAG: &str = r#"idx:1,subnet_idx:2,xnet_api:"http://1.2.3.4:81",public_api:"http://3.4.5.6:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#;
+    const GOOD_FLAG: &str = r#"idx:1,subnet_idx:2,xnet_api:"http://1.2.3.4:81",public_api:"http://3.4.5.6:82",p2p_addr:"http://1.2.3.4:80""#;
 
     /// Verifies that a good flag parses correctly
     #[test]
@@ -854,7 +785,7 @@ mod test_flag_node_parser {
             config: NodeConfiguration {
                 xnet_api: "http://1.2.3.4:81".parse().unwrap(),
                 public_api: "http://3.4.5.6:82".parse().unwrap(),
-                p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
+                p2p_addr: "http://1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: vec![],
@@ -869,11 +800,11 @@ mod test_flag_node_parser {
     fn missing_fields() {
         // Each flag variant omits a field, starting with `idx`.
         let flags = vec![
-            r#"subnet_idx:2,xnet_api:"http://1.2.3.4:81",public_api:"http://3.4.5.6:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
+            r#"subnet_idx:2,xnet_api:"http://1.2.3.4:81",public_api:"http://3.4.5.6:82",p2p_addr:"http://1.2.3.4:80""#,
             // Omitting subnet index yields an unassigned node.
-            // r#"idx:1,xnet_api:"http://1.2.3.4:81",public_api:"http://3.4.5.6:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,public_api:"http://3.4.5.6:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:"http://1.2.3.4:81",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
+            // r#"idx:1,xnet_api:"http://1.2.3.4:81",public_api:"http://3.4.5.6:82",p2p_addr:"http://1.2.3.4:80""#,
+            r#"idx:1,subnet_idx:2,public_api:"http://3.4.5.6:82",p2p_addr:"http://1.2.3.4:80""#,
+            r#"idx:1,subnet_idx:2,xnet_api:"http://1.2.3.4:81",p2p_addr:"http://1.2.3.4:80""#,
             r#"idx:1,subnet_idx:2,xnet_api:"http://1.2.3.4:81",public_api:"http://3.4.5.6:82""#,
         ];
 
