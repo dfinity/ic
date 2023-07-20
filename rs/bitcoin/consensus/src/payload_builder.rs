@@ -26,7 +26,6 @@ const ADAPTER_REQUEST_STATUS_FAILURE: &str = "failed";
 const ADAPTER_REQUEST_STATUS_SUCCESS: &str = "success";
 const BUILD_PAYLOAD_STATUS_SUCCESS: &str = "success";
 const VALIDATION_STATUS_VALID: &str = "valid";
-const INVALID_SELF_VALIDATING_PAYLOAD: &str = "InvalidSelfValidatingPayload";
 
 // Internal error type, to simplify error handling.
 #[derive(Error, Debug)]
@@ -252,29 +251,9 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
             byte_limit,
         ) {
             Ok(payload) => {
-                // As a safety measure, the payload is validated, before submitting it.
-                match self.validate_self_validating_payload(
-                    &payload,
-                    validation_context,
-                    past_payloads,
-                ) {
-                    Ok(_) => {
-                        self.metrics
-                            .observe_build_duration(BUILD_PAYLOAD_STATUS_SUCCESS, timer);
-                        payload
-                    }
-                    Err(e) => {
-                        log!(
-                            self.log,
-                            slog::Level::Error,
-                            "Created an invalid SelfValidatingPayload: {:?}",
-                            e
-                        );
-                        self.metrics
-                            .observe_build_duration(INVALID_SELF_VALIDATING_PAYLOAD, timer);
-                        SelfValidatingPayload::default()
-                    }
-                }
+                self.metrics
+                    .observe_build_duration(BUILD_PAYLOAD_STATUS_SUCCESS, timer);
+                payload
             }
             Err(e) => {
                 log!(self.log, e.log_level(), "{}", e);
