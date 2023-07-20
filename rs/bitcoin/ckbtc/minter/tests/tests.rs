@@ -3,7 +3,7 @@ use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
-use ic_btc_interface::{Network, Txid};
+use ic_btc_interface::Network;
 use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
@@ -149,15 +149,6 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
         new_out_value + relay_cost <= prev_out_value,
         "the transaction fees should have increased by at least {relay_cost}. prev out value: {prev_out_value}, new out value: {new_out_value}"
     );
-}
-
-fn vec_to_txid(vec: Vec<u8>) -> Txid {
-    let bytes: [u8; 32] = vec.try_into().expect("Vector length must be exactly 32");
-    bytes.into()
-}
-
-fn range_to_txid(range: std::ops::RangeInclusive<u8>) -> Txid {
-    vec_to_txid(range.collect::<Vec<u8>>())
 }
 
 #[test]
@@ -844,7 +835,7 @@ impl CkBtcSetup {
         }
     }
 
-    pub fn await_btc_transaction(&self, block_index: u64, max_ticks: usize) -> Txid {
+    pub fn await_btc_transaction(&self, block_index: u64, max_ticks: usize) -> [u8; 32] {
         let mut last_status = None;
         for _ in 0..max_ticks {
             match self.retrieve_btc_status(block_index) {
@@ -895,7 +886,7 @@ impl CkBtcSetup {
         }
     }
 
-    pub fn await_finalization(&self, block_index: u64, max_ticks: usize) -> Txid {
+    pub fn await_finalization(&self, block_index: u64, max_ticks: usize) -> [u8; 32] {
         let mut last_status = None;
         for _ in 0..max_ticks {
             match self.retrieve_btc_status(block_index) {
@@ -931,14 +922,14 @@ impl CkBtcSetup {
                 value: change_utxo.value,
                 height: 0,
                 outpoint: OutPoint {
-                    txid: vec_to_txid(tx.txid().to_vec()),
+                    txid: tx.txid().to_vec(),
                     vout: 1,
                 },
             },
         );
     }
 
-    pub fn mempool(&self) -> BTreeMap<Txid, bitcoin::Transaction> {
+    pub fn mempool(&self) -> BTreeMap<[u8; 32], bitcoin::Transaction> {
         Decode!(
             &assert_reply(
                 self.env
@@ -950,9 +941,10 @@ impl CkBtcSetup {
         .unwrap()
         .iter()
         .map(|tx_bytes| {
+            use bitcoin::hashes::Hash;
             let tx = bitcoin::Transaction::deserialize(tx_bytes)
                 .expect("failed to parse a bitcoin transaction");
-            (vec_to_txid(tx.txid().to_vec()), tx)
+            (tx.txid().as_hash().into_inner(), tx)
         })
         .collect()
     }
@@ -981,7 +973,7 @@ fn test_transaction_finalization() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
+            txid: (1..=32).collect::<Vec<u8>>(),
             vout: 1,
         },
         value: deposit_value,
@@ -1071,7 +1063,7 @@ fn test_transaction_resubmission_finalize_new() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
+            txid: (1..=32).collect::<Vec<u8>>(),
             vout: 1,
         },
         value: deposit_value,
@@ -1146,7 +1138,7 @@ fn test_transaction_resubmission_finalize_old() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
+            txid: (1..=32).collect::<Vec<u8>>(),
             vout: 1,
         },
         value: deposit_value,
@@ -1214,7 +1206,7 @@ fn test_transaction_resubmission_finalize_middle() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
+            txid: (1..=32).collect::<Vec<u8>>(),
             vout: 1,
         },
         value: deposit_value,
@@ -1310,7 +1302,7 @@ fn test_taproot_transaction_finalization() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
+            txid: (1..=32).collect::<Vec<u8>>(),
             vout: 1,
         },
         value: deposit_value,
@@ -1368,7 +1360,7 @@ fn test_ledger_memo() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
+            txid: (1..=32).collect::<Vec<u8>>(),
             vout: 1,
         },
         value: deposit_value,
@@ -1457,7 +1449,7 @@ fn test_filter_logs() {
     let utxo = Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: range_to_txid(1..=32),
+            txid: (1..=32).collect::<Vec<u8>>(),
             vout: 1,
         },
         value: deposit_value,

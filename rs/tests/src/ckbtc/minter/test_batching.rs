@@ -287,7 +287,7 @@ pub fn test_batching(env: TestEnv) {
         let finalized_txid =
             wait_for_finalization_no_new_blocks(&minter_agent, block_indexes[0]).await;
         // We don't need to check which input has been used as there is only one input in the possession of the minter
-        assert_eq!(txid.as_hash().to_vec(), finalized_txid.as_ref().to_vec());
+        assert_eq!(txid.as_hash().to_vec(), finalized_txid);
 
         // We can now check that the destination_btc_address received some utxos
         let unspent_result = btc_rpc

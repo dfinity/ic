@@ -14,7 +14,7 @@ use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_btc_interface::{Network, OutPoint, Satoshi, Txid, Utxo};
+use ic_btc_interface::{Network, OutPoint, Satoshi, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
 use proptest::proptest;
 use proptest::{
@@ -30,11 +30,9 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
 
 fn dummy_utxo_from_value(v: u64) -> Utxo {
-    let mut bytes = [0u8; 32];
-    bytes[0..8].copy_from_slice(&v.to_be_bytes());
     Utxo {
         outpoint: OutPoint {
-            txid: bytes.into(),
+            txid: v.to_be_bytes().to_vec(),
             vout: 0,
         },
         value: v,
@@ -95,8 +93,8 @@ fn address_to_btc_address(address: &BitcoinAddress, network: Network) -> bitcoin
     }
 }
 
-fn as_txid(hash: &Txid) -> bitcoin::Txid {
-    bitcoin::Txid::from_hash(bitcoin::hashes::Hash::from_slice(hash.as_ref()).unwrap())
+fn as_txid(hash: &[u8]) -> bitcoin::Txid {
+    bitcoin::Txid::from_hash(bitcoin::hashes::Hash::from_slice(hash).unwrap())
 }
 
 fn p2wpkh_script_code(pkhash: &[u8; 20]) -> bitcoin::Script {
@@ -186,7 +184,7 @@ fn test_min_change_amount() {
     let mut available_utxos = BTreeSet::new();
     available_utxos.insert(Utxo {
         outpoint: OutPoint {
-            txid: [0; 32].into(),
+            txid: vec![0; 32],
             vout: 0,
         },
         value: 100_000,
@@ -195,7 +193,7 @@ fn test_min_change_amount() {
 
     available_utxos.insert(Utxo {
         outpoint: OutPoint {
-            txid: [1; 32].into(),
+            txid: vec![1; 32],
             vout: 1,
         },
         value: 100_000,
@@ -254,7 +252,7 @@ fn test_no_dust_outputs() {
     let mut available_utxos = BTreeSet::new();
     available_utxos.insert(Utxo {
         outpoint: OutPoint {
-            txid: [0; 32].into(),
+            txid: vec![0; 32],
             vout: 0,
         },
         value: 100_000,
@@ -312,16 +310,8 @@ fn arb_amount() -> impl Strategy<Value = Satoshi> {
     1..10_000_000_000u64
 }
 
-fn vec_to_txid(vec: Vec<u8>) -> Txid {
-    let bytes: [u8; 32] = vec.try_into().expect("Can't convert to [u8; 32]");
-    bytes.into()
-}
-
 fn arb_out_point() -> impl Strategy<Value = tx::OutPoint> {
-    (pvec(any::<u8>(), 32), any::<u32>()).prop_map(|(txid, vout)| tx::OutPoint {
-        txid: vec_to_txid(txid),
-        vout,
-    })
+    (pvec(any::<u8>(), 32), any::<u32>()).prop_map(|(txid, vout)| tx::OutPoint { txid, vout })
 }
 
 fn arb_unsigned_input(
@@ -369,10 +359,7 @@ fn arb_tx_out() -> impl Strategy<Value = tx::TxOut> {
 
 fn arb_utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utxo> {
     (amount, pvec(any::<u8>(), 32), 0..5u32).prop_map(|(value, txid, vout)| Utxo {
-        outpoint: OutPoint {
-            txid: vec_to_txid(txid),
-            vout,
-        },
+        outpoint: OutPoint { txid, vout },
         value,
         height: 0,
     })
@@ -521,7 +508,7 @@ proptest! {
 
         prop_assert_eq!(btc_tx.serialize(), tx_bytes);
         prop_assert_eq!(&decoded_btc_tx, &btc_tx);
-        prop_assert_eq!(&arb_tx.txid().as_ref().to_vec(), &*btc_tx.txid());
+        prop_assert_eq!(&arb_tx.txid(), &*btc_tx.txid());
     }
 
     #[test]

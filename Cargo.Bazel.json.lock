@@ -1,5 +1,5 @@
 {
-  "checksum": "f1058a7ec282333f49d13de78889cbf331c5934b459cff4a5823f304c513b529",
+  "checksum": "69ec34d8a2b88bd2ca46a3fe0220f3f31726f1706e751ba66054065fbc0256e0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22473,7 +22473,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
+            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
           },
           "strip_prefix": "interface"
         }
@@ -22526,7 +22526,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
+            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
           },
           "strip_prefix": "test-utils"
         }
@@ -22571,7 +22571,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
+            "Rev": "0e996988693f2d55fc9533c44dc20ae5310a1894"
           },
           "strip_prefix": "validation"
         }
@@ -55317,8 +55317,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -55329,8 +55329,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
