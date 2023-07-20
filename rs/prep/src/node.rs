@@ -16,7 +16,7 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{
         ConnectionEndpoint as pbConnectionEndpoint, FlowEndpoint as pbFlowEndpoint,
-        NodeRecord as pbNodeRecord, Protocol,
+        NodeRecord as pbNodeRecord,
     },
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
@@ -227,9 +227,6 @@ pub enum NodeConfigurationTryFromError {
 
     #[error("public_api endpoint has no entries")]
     EmptyPublicApiEndpoint,
-
-    #[error("invalid protocol for P2P endpoint: {endpoint}")]
-    InvalidP2pProtocol { endpoint: ConnectionEndpoint },
 }
 
 impl TryFrom<NodeConfiguration> for pbNodeRecord {
@@ -240,12 +237,6 @@ impl TryFrom<NodeConfiguration> for pbNodeRecord {
 
         // p2p
         let p2p_base_endpoint = pbConnectionEndpoint::from(&node_configuration.p2p_addr);
-        if p2p_base_endpoint.protocol() != Protocol::P2p1Tls13 {
-            return Err(NodeConfigurationTryFromError::InvalidP2pProtocol {
-                endpoint: node_configuration.p2p_addr,
-            });
-        }
-
         pb_node_record.p2p_flow_endpoints = vec![pbFlowEndpoint {
             endpoint: Some(p2p_base_endpoint),
         }];
@@ -370,6 +361,7 @@ impl NodeSecretKeyStore {
 #[cfg(test)]
 mod node_configuration {
     use super::*;
+    use ic_protobuf::registry::node::v1::Protocol;
     use pretty_assertions::assert_eq;
 
     #[test]

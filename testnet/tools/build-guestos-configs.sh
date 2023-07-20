@@ -242,7 +242,6 @@ function generate_prep_material() {
         "--nns-subnet-index" "0" \
         "--dkg-interval-length" "${DKG_INTERVAL_LENGTH}" \
         "--max-ingress-bytes-per-message" "${MAX_INGRESS_BYTES_PER_MESSAGE}" \
-        "--p2p-flows" "1234-1" \
         "--nodes" ${NODES_NNS[*]} ${NODES_APP[*]} \
         "--provisional-whitelist" "${WHITELIST}" \
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
