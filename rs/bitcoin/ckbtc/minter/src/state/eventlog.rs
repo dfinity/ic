@@ -5,7 +5,7 @@ use crate::state::{
     RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
 };
 use candid::Principal;
-use ic_btc_interface::{Txid, Utxo};
+use ic_btc_interface::Utxo;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
@@ -65,7 +65,7 @@ pub enum Event {
         request_block_indices: Vec<u64>,
         /// The Txid of the Bitcoin transaction.
         #[serde(rename = "txid")]
-        txid: Txid,
+        txid: [u8; 32],
         /// UTXOs used for the transaction.
         #[serde(rename = "utxos")]
         utxos: Vec<Utxo>,
@@ -88,10 +88,10 @@ pub enum Event {
     ReplacedBtcTransaction {
         /// The Txid of the old Bitcoin transaction.
         #[serde(rename = "old_txid")]
-        old_txid: Txid,
+        old_txid: [u8; 32],
         /// The Txid of the new Bitcoin transaction.
         #[serde(rename = "new_txid")]
-        new_txid: Txid,
+        new_txid: [u8; 32],
         /// The output with the minter's change.
         #[serde(rename = "change_output")]
         change_output: ChangeOutput,
@@ -108,7 +108,7 @@ pub enum Event {
     #[serde(rename = "confirmed_transaction")]
     ConfirmedBtcTransaction {
         #[serde(rename = "txid")]
-        txid: Txid,
+        txid: [u8; 32],
     },
 
     /// Indicates that the given UTXO went through a KYT check.
@@ -241,7 +241,7 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                     None => {
                         return Err(ReplayLogError::InconsistentLog(format!(
                             "Cannot replace a non-existent transaction {}",
-                            &old_txid
+                            crate::tx::DisplayTxid(&old_txid)
                         )))
                     }
                 };

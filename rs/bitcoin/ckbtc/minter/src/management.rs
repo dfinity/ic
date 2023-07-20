@@ -299,12 +299,14 @@ pub async fn fetch_utxo_alerts(
     caller: Principal,
     utxo: &Utxo,
 ) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
+    let txid = TryInto::<[u8; 32]>::try_into(utxo.outpoint.txid.as_ref())
+        .unwrap_or_else(|_| panic!("BUG: UTXO ID {:?} is not 32 bytes long", utxo.outpoint.txid));
     let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
         kyt_principal,
         "fetch_utxo_alerts",
         (DepositRequest {
             caller,
-            txid: utxo.outpoint.txid,
+            txid,
             vout: utxo.outpoint.vout,
         },),
     )
