@@ -1,7 +1,6 @@
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
-use ic_config::execution_environment::MAX_COMPILATION_CACHE_SIZE;
+use ic_config::execution_environment::{Config, MAX_COMPILATION_CACHE_SIZE};
 use ic_config::flag_status::FlagStatus;
-use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::{WasmExecutionResult, WasmExecutor};
 use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
@@ -197,18 +196,9 @@ impl Hypervisor {
         dirty_page_overhead: NumInstructions,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
-        let mut embedder_config = EmbeddersConfig::new();
-        embedder_config.query_execution_threads_per_canister =
-            config.query_execution_threads_per_canister;
-        embedder_config.feature_flags.rate_limiting_of_debug_prints =
-            config.rate_limiting_of_debug_prints;
-        embedder_config.cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;
-        embedder_config.max_sandbox_count = config.max_sandbox_count;
-        embedder_config.max_sandbox_idle_time = config.max_sandbox_idle_time;
-        embedder_config.stable_memory_dirty_page_limit = config.stable_memory_dirty_page_limit;
+        let mut embedder_config = config.embedders_config.clone();
         embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
-        embedder_config.trace_execution = config.trace_execution;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
@@ -241,7 +231,9 @@ impl Hypervisor {
             cycles_account_manager,
             compilation_cache: Arc::new(CompilationCache::new(config.max_compilation_cache_size)),
             deterministic_time_slicing: config.deterministic_time_slicing,
-            cost_to_compile_wasm_instruction: config.cost_to_compile_wasm_instruction,
+            cost_to_compile_wasm_instruction: config
+                .embedders_config
+                .cost_to_compile_wasm_instruction,
             dirty_page_overhead,
         }
     }

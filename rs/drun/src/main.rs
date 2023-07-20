@@ -44,7 +44,11 @@ async fn drun_main() -> Result<(), String> {
         // Enable composite queries in drun by default to allow local
         // development and testing.
         default_config.hypervisor.composite_queries = FlagStatus::Enabled;
-        default_config.hypervisor.rate_limiting_of_debug_prints = FlagStatus::Disabled;
+        default_config
+            .hypervisor
+            .embedders_config
+            .feature_flags
+            .rate_limiting_of_debug_prints = FlagStatus::Disabled;
         default_config.hypervisor.rate_limiting_of_heap_delta = FlagStatus::Disabled;
         default_config.hypervisor.rate_limiting_of_instructions = FlagStatus::Disabled;
         let cfg = Config::load_with_default(&source, default_config).unwrap_or_else(|err| {

@@ -64,6 +64,8 @@ pub const STABLE_MEMORY_ACCESSED_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
+    /// If this flag is enabled, then the output of the `debug_print` system-api
+    /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
@@ -86,9 +88,11 @@ impl Default for FeatureFlags {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
     pub max_wasm_stack_size: usize,
+
+    /// The number of threads to use for query execution per canister.
     pub query_execution_threads_per_canister: usize,
 
     /// Maximum number of globals allowed in a Wasm module.
