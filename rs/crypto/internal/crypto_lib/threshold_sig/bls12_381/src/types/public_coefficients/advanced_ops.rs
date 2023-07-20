@@ -2,8 +2,9 @@
 
 use super::super::ThresholdError;
 use super::*;
-use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
-use std::ops::MulAssign;
+use ic_crypto_internal_bls12_381_type::{
+    G1Projective, G2Projective, LagrangeCoefficients, NodeIndex, Scalar,
+};
 
 impl PublicCoefficients {
     /// Evaluate the public coefficients at x
@@ -31,9 +32,9 @@ impl PublicCoefficients {
     /// # Returns
     /// The generator `g` of G1 multiplied by to the constant term of the interpolated polynomial `f(x)`. If `samples` contains multiple entries for the same scalar `x`, only the first sample contributes toward the interpolation and the subsequent entries are discarded.
     pub fn interpolate_g1(
-        samples: &[(Scalar, G1Projective)],
+        samples: &[(NodeIndex, G1Projective)],
     ) -> Result<G1Projective, ThresholdError> {
-        let all_x: Vec<Scalar> = samples.iter().map(|(x, _)| x.clone()).collect();
+        let all_x: Vec<NodeIndex> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
         let mut result = G1Projective::identity();
         for (coefficient, sample) in coefficients.iter().zip(samples.iter().map(|(_, y)| y)) {
@@ -50,27 +51,15 @@ impl PublicCoefficients {
     /// # Returns
     /// The generator `g` of G2 multiplied by to the constant term of the interpolated polynomial `f(x)`, i.e. `f(0)`. If `samples` contains multiple entries for the same scalar `x`, only the first sample contributes toward the interpolation and the subsequent entries are discarded.
     pub fn interpolate_g2(
-        samples: &[(Scalar, G2Projective)],
+        samples: &[(NodeIndex, G2Projective)],
     ) -> Result<G2Projective, ThresholdError> {
-        let all_x: Vec<Scalar> = samples.iter().map(|(x, _)| x.clone()).collect();
+        let all_x: Vec<NodeIndex> = samples.iter().map(|(x, _)| *x).collect();
         let coefficients = Self::lagrange_coefficients_at_zero(&all_x)?;
         let mut result = G2Projective::identity();
         for (coefficient, sample) in coefficients.iter().zip(samples.iter().map(|(_, y)| y)) {
             result += sample * coefficient;
         }
         Ok(result)
-    }
-
-    fn contains_duplicates(scalars: &[Scalar]) -> bool {
-        let mut set = std::collections::HashSet::new();
-
-        for scalar in scalars {
-            if !set.insert(scalar.serialize().to_vec()) {
-                return true;
-            }
-        }
-
-        false
     }
 
     /// Compute the Lagrange coefficients at x=0.
@@ -86,54 +75,16 @@ impl PublicCoefficients {
     /// # Errors
     /// `ThresholdError::DuplicateX`: in case the interpolation points `samples` are not all distinct.
     pub fn lagrange_coefficients_at_zero(
-        samples: &[Scalar],
+        samples: &[NodeIndex],
     ) -> Result<Vec<Scalar>, ThresholdError> {
-        let len = samples.len();
-        if len == 0 {
+        if samples.is_empty() {
             return Ok(Vec::new());
         }
-        if len == 1 {
-            return Ok(vec![Scalar::one()]);
-        }
 
-        if Self::contains_duplicates(samples) {
-            return Err(ThresholdError::DuplicateX);
+        match LagrangeCoefficients::at_zero(samples) {
+            Ok(c) => Ok(c.coefficients().to_vec()),
+            Err(_) => Err(ThresholdError::DuplicateX),
         }
-
-        // The j'th numerator is the product of all `x_prod[i]` for `i!=j`.
-        // Note: The usual subtractions can be omitted as we are computing the Lagrange
-        // coefficient at zero.
-        let mut x_prod: Vec<Scalar> = Vec::with_capacity(len);
-        let mut tmp = Scalar::one();
-        x_prod.push(tmp.clone());
-        for x in samples.iter().take(len - 1) {
-            tmp *= x;
-            x_prod.push(tmp.clone());
-        }
-        tmp = Scalar::one();
-        for (i, x) in samples[1..].iter().enumerate().rev() {
-            tmp *= x;
-            x_prod[i] *= &tmp;
-        }
-
-        for (lagrange_0, x_i) in x_prod.iter_mut().zip(samples) {
-            // Compute the value at 0 of the Lagrange polynomial that is `0` at the other
-            // data points but `1` at `x`.
-            let mut denom = Scalar::one();
-            for x_j in samples.iter().filter(|x_j| *x_j != x_i) {
-                let diff = x_j - x_i;
-                denom *= &diff;
-            }
-
-            let inv = match denom.inverse() {
-                None => return Err(ThresholdError::DuplicateX),
-                Some(i) => i,
-            };
-
-            //lagrange_0 *= inv;
-            lagrange_0.mul_assign(inv);
-        }
-        Ok(x_prod)
     }
 
     pub(super) fn remove_zeros(&mut self) {

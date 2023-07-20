@@ -74,7 +74,7 @@ fn public_key_for_public_coefficients_should_be_correct() {
     for _ in 0..3 {
         let polynomial = Polynomial::random(5, &mut rng);
         let public_coefficients = PublicCoefficients::from(&polynomial);
-        let public_key = public_key_from_secret_key(&polynomial.coefficients[0]);
+        let public_key = public_key_from_secret_key(polynomial.coeff(0));
         test_vectors.push((public_coefficients, public_key.0));
     }
     for (public_coefficients, expected_public_key) in test_vectors {
