@@ -5,12 +5,12 @@ use crate::consensus::{
     certification::CertificationContent,
     dkg::DealingContent,
     ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent, EcdsaSigShare},
-    Block, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent, NotarizationContent,
-    RandomBeaconContent, RandomTapeContent,
+    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use crate::crypto::hash::{
-    DOMAIN_BLOCK, DOMAIN_CATCH_UP_CONTENT, DOMAIN_CERTIFICATION_CONTENT,
+    DOMAIN_BLOCK_METADATA, DOMAIN_CATCH_UP_CONTENT, DOMAIN_CERTIFICATION_CONTENT,
     DOMAIN_CRYPTO_HASH_OF_CANISTER_HTTP_RESPONSE_METADATA, DOMAIN_DEALING_CONTENT,
     DOMAIN_ECDSA_COMPLAINT_CONTENT, DOMAIN_ECDSA_OPENING_CONTENT, DOMAIN_FINALIZATION_CONTENT,
     DOMAIN_IC_ONCHAIN_OBSERVABILITY_REPORT, DOMAIN_IDKG_DEALING, DOMAIN_NOTARIZATION_CONTENT,
@@ -59,7 +59,7 @@ mod private {
 
     pub trait SignatureDomainSeal {}
 
-    impl SignatureDomainSeal for Block {}
+    impl SignatureDomainSeal for BlockMetadata {}
     impl SignatureDomainSeal for DealingContent {}
     impl SignatureDomainSeal for NotarizationContent {}
     impl SignatureDomainSeal for FinalizationContent {}
@@ -87,9 +87,9 @@ impl SignatureDomain for CanisterHttpResponseMetadata {
     }
 }
 
-impl SignatureDomain for Block {
+impl SignatureDomain for BlockMetadata {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(DOMAIN_BLOCK)
+        domain_with_prepended_length(DOMAIN_BLOCK_METADATA)
     }
 }
 

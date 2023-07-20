@@ -277,7 +277,7 @@ impl Block {
     }
 }
 
-impl SignedBytesWithoutDomainSeparator for Block {
+impl SignedBytesWithoutDomainSeparator for BlockMetadata {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {
         serde_cbor::to_vec(&self).unwrap()
     }
@@ -286,8 +286,26 @@ impl SignedBytesWithoutDomainSeparator for Block {
 /// HashedBlock contains a Block together with its hash
 pub type HashedBlock = Hashed<CryptoHashOf<Block>, Block>;
 
-/// A BlockProposal is a HashedBlock that is signed by the block maker.
-pub type BlockProposal = Signed<HashedBlock, BasicSignature<Block>>;
+/// BlockMetadata contains the version, height and hash of a block
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct BlockMetadata {
+    version: ReplicaVersion,
+    height: Height,
+    hash: CryptoHashOf<Block>,
+}
+
+impl From<&HashedBlock> for BlockMetadata {
+    fn from(block: &HashedBlock) -> Self {
+        Self {
+            version: block.version().clone(),
+            height: block.height(),
+            hash: block.get_hash().clone(),
+        }
+    }
+}
+
+/// A BlockProposal is a HashedBlock with BlockMetadata signed by the block maker.
+pub type BlockProposal = Signed<HashedBlock, BasicSignature<BlockMetadata>>;
 
 impl From<&BlockProposal> for pb::BlockProposal {
     fn from(block_proposal: &BlockProposal) -> Self {
