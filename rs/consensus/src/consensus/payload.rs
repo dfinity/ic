@@ -131,8 +131,16 @@ impl BatchPayloadSectionBuilder {
                     max_size,
                 );
 
-                // NOTE: At the moment, the payload builder is calling it's own validator,
-                // so we don't have to do that here
+                // As a safety measure, the payload is validated, before submitting it.
+                if let Err(e) = builder.validate_self_validating_payload(
+                    &self_validating,
+                    validation_context,
+                    &past_payloads,
+                ) {
+                    error!(logger, "Created an invalid SelfValidatingPayload: {:?}", e);
+                    payload.self_validating = SelfValidatingPayload::default();
+                    return NumBytes::new(0);
+                }
 
                 // Check that the size limit is respected
                 if size > max_size {
