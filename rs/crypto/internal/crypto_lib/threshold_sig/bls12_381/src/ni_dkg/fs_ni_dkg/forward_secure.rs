@@ -643,7 +643,7 @@ impl FsEncryptionCiphertext {
         let ciphertext_chunks = self
             .cc
             .iter()
-            .map(|cj| G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(cj))
+            .map(G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>)
             .collect();
 
         FsEncryptionCiphertextBytes {

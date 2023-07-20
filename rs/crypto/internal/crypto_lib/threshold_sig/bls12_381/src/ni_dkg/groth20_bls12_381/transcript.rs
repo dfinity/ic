@@ -6,7 +6,6 @@ use super::dealing::{
 };
 use super::encryption::decrypt;
 use crate::api::ni_dkg_errors;
-use crate::crypto::x_for_index;
 use crate::ni_dkg::fs_ni_dkg::forward_secure::SecretKey as ForwardSecureSecretKey;
 use crate::types as threshold_types;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381 as g20;
@@ -204,8 +203,7 @@ fn compute_transcript(
     // Combine the dealings
     let public_coefficients: g20::PublicCoefficientsBytes = {
         let lagrange_coefficients = {
-            let reshare_x: Vec<threshold_types::SecretKey> =
-                csp_dealings.keys().copied().map(x_for_index).collect();
+            let reshare_x: Vec<NodeIndex> = csp_dealings.keys().copied().collect();
 
             threshold_types::PublicCoefficients::lagrange_coefficients_at_zero(&reshare_x)
                 .expect("Cannot fail because all x are distinct.")
@@ -293,11 +291,7 @@ pub fn compute_threshold_signing_key(
     // Interpolate
     let combined_shares = {
         let lagrange_coefficients = {
-            let reshare_x: Vec<threshold_types::SecretKey> = shares_from_each_dealer
-                .keys()
-                .copied()
-                .map(x_for_index)
-                .collect();
+            let reshare_x: Vec<NodeIndex> = shares_from_each_dealer.keys().copied().collect();
 
             threshold_types::PublicCoefficients::lagrange_coefficients_at_zero(&reshare_x)
                 .expect("Cannot fail because all x are distinct.")

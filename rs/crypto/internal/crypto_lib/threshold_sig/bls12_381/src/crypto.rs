@@ -33,16 +33,6 @@ pub fn public_key_from_secret_key(secret_key: &SecretKey) -> PublicKey {
     PublicKey(G2Affine::generator() * secret_key)
 }
 
-/// Yields the polynomial-evaluation point `x` given the `index` of the
-/// corresponding share.
-///
-/// The polynomial `f(x)` is computed at a value `x` for every share of a
-/// threshold key. Shares are ordered and numbered `0...N`.
-pub(crate) fn x_for_index(index: NodeIndex) -> Scalar {
-    // It is important that this is never zero and that values are unique.
-    Scalar::from_u64(u64::from(index)) + Scalar::one()
-}
-
 /// Generates keys for a (t,n)-threshold signature scheme.
 ///
 /// At least `t=threshold` contributions out of `n` are required to combine
@@ -124,7 +114,7 @@ pub(crate) fn threshold_share_secret_key(
     let mut rng = seed.into_rng();
     let polynomial = {
         let mut polynomial = Polynomial::random(threshold.get() as usize, &mut rng);
-        polynomial.coefficients[0] = secret.clone();
+        polynomial.set_coeff(0, secret.clone());
         polynomial
     };
     Ok(keygen_from_polynomial(polynomial, receivers))
@@ -162,7 +152,7 @@ fn keygen_from_polynomial(
 ) -> (PublicCoefficients, Vec<SecretKey>) {
     let public_coefficients = PublicCoefficients::from(&polynomial);
     let shares = (0..receivers.get())
-        .map(|idx| polynomial.evaluate_at(&x_for_index(idx)))
+        .map(|idx| polynomial.evaluate_at(&Scalar::from_node_index(idx)))
         .collect();
     (public_coefficients, shares)
 }
@@ -173,7 +163,7 @@ pub(crate) fn individual_public_key(
     public_coefficients: &PublicCoefficients,
     index: NodeIndex,
 ) -> PublicKey {
-    PublicKey(public_coefficients.evaluate_at(&x_for_index(index)))
+    PublicKey(public_coefficients.evaluate_at(&Scalar::from_node_index(index)))
 }
 
 /// Computes the public key used to verify combined signatures.
@@ -183,7 +173,7 @@ pub(crate) fn individual_public_key(
 /// constant term of the polynomial.  The corresponding public key is the first
 /// element of the public coefficients.
 ///
-/// Note: polynomial.evaluated_at(0) != polynomial.evaluated_at(x_for_index(0)).
+/// Note: polynomial.evaluated_at(0) != polynomial.evaluated_at(Scalar::from_node_index(0)).
 pub fn combined_public_key(public_coefficients: &PublicCoefficients) -> PublicKey {
     PublicKey::from(public_coefficients)
 }
@@ -225,11 +215,11 @@ pub(crate) fn combine_signatures(
     if signatures.is_empty() {
         return Ok(Signature::identity());
     }
-    let signatures: Vec<(Scalar, Signature)> = signatures
+    let signatures: Vec<(NodeIndex, Signature)> = signatures
         .iter()
         .cloned()
         .zip(0_u32..)
-        .filter_map(|(signature, index)| signature.map(|signature| (x_for_index(index), signature)))
+        .filter_map(|(signature, index)| signature.map(|signature| (index, signature)))
         .collect();
     Ok(PublicCoefficients::interpolate_g1(&signatures).expect("Duplicate indices"))
 }

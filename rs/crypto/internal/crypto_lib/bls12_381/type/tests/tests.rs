@@ -56,7 +56,7 @@ fn scalar_miracl_random_generates_expected_values() {
 }
 
 #[test]
-fn scalar_random_generates_expected_values() {
+fn scalar_random_is_stable() {
     let seed = 802;
 
     let mut rng = ChaCha20Rng::seed_from_u64(seed);
@@ -75,7 +75,7 @@ fn scalar_random_generates_expected_values() {
 }
 
 #[test]
-fn scalar_batch_random_generates_expected_values() {
+fn scalar_batch_random_is_stable() {
     let seed = 802;
 
     let mut rng = ChaCha20Rng::seed_from_u64(seed);
@@ -113,6 +113,77 @@ fn test_scalar_batch_random_generates_unique_values() {
         the code.
          */
         assert_no_duplicates(&random);
+    }
+}
+
+#[test]
+fn test_polynomial_random_is_stable() {
+    let seed = [1u8; 32];
+    let mut rng = ChaCha20Rng::from_seed(seed);
+    let poly = Polynomial::random(3, &mut rng);
+
+    assert_eq!(
+        hex::encode(poly.coeff(0).serialize()),
+        "023f37203a2476c42566a61cc55c3ca875dbb4cc41c0deb789f8e7bf88183638",
+    );
+    assert_eq!(
+        hex::encode(poly.coeff(1).serialize()),
+        "1ecc3686b60ee3b84b6c7d321d70d5c06e9dac63a4d0a79d731b17c0d04d030d",
+    );
+    assert_eq!(
+        hex::encode(poly.coeff(2).serialize()),
+        "01274dd1ee5216c204fb698daea45b52e98b6f0fdd046dcc3a86bb079e36f024",
+    );
+}
+
+#[test]
+fn test_polynomial_addition() {
+    let mut rng = reproducible_rng();
+
+    for coeff_x in 0..32 {
+        for coeff_y in 0..32 {
+            let x = Polynomial::random(coeff_x, &mut rng);
+            let y = Polynomial::random(coeff_y, &mut rng);
+
+            let z = &x + &y;
+
+            assert_eq!(z.degree(), std::cmp::max(x.degree(), y.degree()));
+
+            for i in 0..z.degree() {
+                assert_eq!(*z.coeff(i), x.coeff(i) + y.coeff(i));
+            }
+        }
+    }
+}
+
+#[test]
+fn test_polynomial_evaluation() {
+    let mut rng = reproducible_rng();
+
+    for coeff in 0..32 {
+        let p = Polynomial::random(coeff, &mut rng);
+        // Check that f(0) will always just equal the constant term:
+        assert_eq!(p.evaluate_at(&Scalar::zero()), *p.coeff(0));
+
+        // Check that f(1) will equal the sum of the various coefficients:
+        assert_eq!(
+            p.evaluate_at(&Scalar::one()),
+            p.coefficients()
+                .iter()
+                .fold(Scalar::zero(), |acc, s| acc + s)
+        );
+
+        // Compute f(r) for some random r then check it:
+        let r = Scalar::random(&mut rng);
+        let pr = p.evaluate_at(&r);
+
+        assert_eq!(
+            pr,
+            p.coefficients()
+                .iter()
+                .rev()
+                .fold(Scalar::zero(), |acc, s| acc * &r + s)
+        );
     }
 }
 
@@ -1304,6 +1375,97 @@ fn test_hash_to_g2_matches_draft() {
         G2Affine::hash(&dst[..], format!("a512_{}", "a".repeat(512)).as_bytes()),
         "91fca2ff525572795a801eed17eb12785887c7b63fb77a42be46ce4a34131d71f7a73e95fee3f812aea3de78b4d0156901a6ba2f9a11fa5598b2d8ace0fbe0a0eacb65deceb476fbbcb64fd24557c2f4b18ecfc5663e54ae16a84f5ab7f62534"
     );
+}
+
+fn random_node_indexes<R: rand::Rng>(rng: &mut R, count: usize) -> Vec<NodeIndex> {
+    let mut set = std::collections::BTreeSet::new();
+
+    while set.len() != count {
+        let r = rng.gen::<NodeIndex>();
+        set.insert(r);
+    }
+
+    set.iter().cloned().collect()
+}
+
+#[test]
+fn should_g1_interpolation_at_zero_work() -> Result<(), InterpolationError> {
+    let mut rng = reproducible_rng();
+
+    for num_coefficients in 1..30 {
+        let poly = Polynomial::random(num_coefficients, &mut rng);
+
+        let sk = poly.coeff(0);
+        let pk = G1Affine::from(G1Affine::generator() * sk);
+
+        let node_ids = random_node_indexes(&mut rng, num_coefficients);
+        let mut node_shares = Vec::with_capacity(num_coefficients);
+
+        for r in &node_ids {
+            let p_r = poly.evaluate_at(&Scalar::from_node_index(*r));
+            let g_p_r = G1Affine::from(G1Affine::generator() * &p_r);
+            node_shares.push(g_p_r);
+        }
+
+        let coefficients = LagrangeCoefficients::at_zero(&node_ids)?;
+        let g0 = coefficients.interpolate_g1(&node_shares)?;
+        assert_eq!(g0, pk);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn should_g2_interpolation_at_zero_work() -> Result<(), InterpolationError> {
+    let mut rng = reproducible_rng();
+
+    for num_coefficients in 1..30 {
+        let poly = Polynomial::random(num_coefficients, &mut rng);
+
+        let sk = poly.coeff(0);
+        let pk = G2Affine::from(G2Affine::generator() * sk);
+
+        let node_ids = random_node_indexes(&mut rng, num_coefficients);
+        let mut node_shares = Vec::with_capacity(num_coefficients);
+
+        for r in &node_ids {
+            let p_r = poly.evaluate_at(&Scalar::from_node_index(*r));
+            let g_p_r = G2Affine::from(G2Affine::generator() * &p_r);
+            node_shares.push(g_p_r);
+        }
+
+        let coefficients = LagrangeCoefficients::at_zero(&node_ids)?;
+        let g0 = coefficients.interpolate_g2(&node_shares)?;
+        assert_eq!(g0, pk);
+    }
+
+    Ok(())
+}
+
+/// Verify that x_for_index(i) == i+1 (in the field).
+#[test]
+fn test_scalar_from_node_index_returns_correct_value() {
+    // First N values:
+    let mut x = Scalar::one();
+    for i in 0..100 {
+        assert_eq!(Scalar::from_node_index(i), x);
+        x += Scalar::one();
+    }
+    // Binary 0, 1, 11, 111, ... all the way up to the maximum NodeIndex.
+    // The corresponding x values are binary 1, 10, 100, ... and the last value is
+    // one greater than the maximum NodeIndex.
+
+    let two = Scalar::from_u64(2);
+    let mut x = Scalar::one();
+    let mut i: NodeIndex = 0;
+    loop {
+        assert_eq!(Scalar::from_node_index(i), x);
+        if i == NodeIndex::max_value() {
+            break;
+        }
+        i = i * 2 + 1;
+        x *= &two;
+    }
 }
 
 /// A trait generating "biased" values
