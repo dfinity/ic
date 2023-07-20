@@ -65,7 +65,7 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 pub enum RestrictedCountriesValidationError {
     EmptyList,
     TooManyItems(usize),
-    NotIsoComplient(String),
+    NotIsoCompliant(String),
     ContainsDuplicates(String),
 }
 
@@ -88,7 +88,7 @@ impl ToString for RestrictedCountriesValidationError {
                     num_items,
                 )
             }
-            Self::NotIsoComplient(item) => {
+            Self::NotIsoCompliant(item) => {
                 format!("must include only ISO 3166-1 alpha-2 country codes, found '{item}'",)
             }
             Self::ContainsDuplicates(item) => {
@@ -1195,7 +1195,7 @@ impl SnsInitPayload {
             let mut unique_iso_codes = BTreeSet::<String>::new();
             for item in &restricted_countries.iso_codes {
                 if CountryCode::for_alpha2(item).is_err() {
-                    return RestrictedCountriesValidationError::NotIsoComplient(item.clone())
+                    return RestrictedCountriesValidationError::NotIsoCompliant(item.clone())
                         .into();
                 }
                 if !unique_iso_codes.insert(item.clone()) {
@@ -1682,7 +1682,7 @@ mod test {
             };
             assert_error(
                 sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
-                RestrictedCountriesValidationError::NotIsoComplient(item),
+                RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
         // Test that alpha3 is rejected.
@@ -1696,7 +1696,7 @@ mod test {
             };
             assert_error(
                 sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
-                RestrictedCountriesValidationError::NotIsoComplient(item),
+                RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
         // Test that a non-existing country code is rejected.
@@ -1710,7 +1710,7 @@ mod test {
             };
             assert_error(
                 sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
-                RestrictedCountriesValidationError::NotIsoComplient(item),
+                RestrictedCountriesValidationError::NotIsoCompliant(item),
             );
         }
         // Test that duplicate country codes are rejected.
