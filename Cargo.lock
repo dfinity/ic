@@ -9045,6 +9045,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-interfaces-registry",
  "ic-logger",
+ "ic-nns-common",
  "ic-protobuf",
  "ic-registry-client",
  "ic-registry-keys",

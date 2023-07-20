@@ -196,8 +196,9 @@ if [ "${MALICIOUS_BEHAVIOR_CONFIG_FILE}" != "" -a -e "${MALICIOUS_BEHAVIOR_CONFI
     read_malicious_behavior_variables "${MALICIOUS_BEHAVIOR_CONFIG_FILE}"
 fi
 
+INTERFACE=($(find /sys/class/net -type l -not -lname '*virtual*' -exec basename '{}' ';'))
 IPV6_ADDRESS="${ipv6_address%/*}"
-IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 enp1s0 12)}"
+IPV6_ADDRESS="${IPV6_ADDRESS:-$(get_if_address_retries 6 ${INTERFACE} 12)}"
 NNS_URL="${nns_url:-http://[::1]:8080}"
 NODE_INDEX="${node_index:-0}"
 # Default value is 24h
