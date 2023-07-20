@@ -10,6 +10,7 @@ use ic00::{
 };
 use ic_base_types::PrincipalId;
 use ic_config::{
+    embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
@@ -106,7 +107,10 @@ fn complexity_env(
             },
             HypervisorConfig {
                 deterministic_time_slicing: FlagStatus::Enabled,
-                cost_to_compile_wasm_instruction: 0.into(),
+                embedders_config: EmbeddersConfig {
+                    cost_to_compile_wasm_instruction: 0.into(),
+                    ..EmbeddersConfig::default()
+                },
                 ..Default::default()
             },
         )))

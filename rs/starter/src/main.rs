@@ -25,6 +25,8 @@ use ic_config::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
     crypto::CryptoConfig,
+    embedders::Config as EmbeddersConfig,
+    embedders::FeatureFlags,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     http_handler::Config as HttpHandlerConfig,
@@ -656,7 +658,13 @@ impl ValidatedConfig {
             } else {
                 FlagStatus::Disabled
             },
-            rate_limiting_of_debug_prints: FlagStatus::Disabled,
+            embedders_config: EmbeddersConfig {
+                feature_flags: FeatureFlags {
+                    rate_limiting_of_debug_prints: FlagStatus::Disabled,
+                    ..FeatureFlags::default()
+                },
+                ..EmbeddersConfig::default()
+            },
             rate_limiting_of_heap_delta: FlagStatus::Disabled,
             rate_limiting_of_instructions: FlagStatus::Disabled,
             composite_queries: FlagStatus::Enabled,

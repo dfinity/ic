@@ -1517,7 +1517,10 @@ fn install_puts_canister_back_after_invalid_wasm() {
             (res.0, res.1),
             (
                 MAX_NUM_INSTRUCTIONS
-                    - Config::default().cost_to_compile_wasm_instruction * wasm_len as u64,
+                    - Config::default()
+                        .embedders_config
+                        .cost_to_compile_wasm_instruction
+                        * wasm_len as u64,
                 Err(CanisterManagerError::Hypervisor(
                     canister_id,
                     HypervisorError::InvalidWasm(WasmValidationError::InvalidImportSection(

@@ -1490,10 +1490,12 @@ impl Default for ExecutionTestBuilder {
             bitcoin_privileged_access: Vec::default(),
             bitcoin_get_successors_follow_up_responses: BTreeMap::default(),
             cost_to_compile_wasm_instruction: ic_config::execution_environment::Config::default()
+                .embedders_config
                 .cost_to_compile_wasm_instruction
                 .get(),
             max_query_call_graph_instructions: max_instructions_per_composite_query_call,
             stable_memory_dirty_page_limit: ic_config::execution_environment::Config::default()
+                .embedders_config
                 .stable_memory_dirty_page_limit,
             time: mock_time(),
         }
@@ -1866,6 +1868,11 @@ impl ExecutionTestBuilder {
             FlagStatus::Disabled
         };
         let config = Config {
+            embedders_config: EmbeddersConfig {
+                cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
+                stable_memory_dirty_page_limit: self.stable_memory_dirty_page_limit,
+                ..EmbeddersConfig::default()
+            },
             rate_limiting_of_instructions,
             deterministic_time_slicing,
             canister_sandboxing_flag,
@@ -1880,9 +1887,7 @@ impl ExecutionTestBuilder {
                 privileged_access: self.bitcoin_privileged_access,
                 ..Default::default()
             },
-            cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
             max_query_call_graph_instructions: self.max_query_call_graph_instructions,
-            stable_memory_dirty_page_limit: self.stable_memory_dirty_page_limit,
             ..Config::default()
         };
 

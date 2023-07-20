@@ -130,8 +130,11 @@ fn dts_state_machine_config(subnet_config: SubnetConfig) -> StateMachineConfig {
     StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
+            embedders_config: EmbeddersConfig {
+                cost_to_compile_wasm_instruction: 0.into(),
+                ..EmbeddersConfig::default()
+            },
             deterministic_time_slicing: FlagStatus::Enabled,
-            cost_to_compile_wasm_instruction: 0.into(),
             ..Default::default()
         },
     )
