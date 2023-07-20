@@ -13,15 +13,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
         cargo_lockfile = cargo_lockfile,
         lockfile = lockfile,
         cargo_config = "//:bazel/cargo.config",
-        generator_urls = {
-            "aarch64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-aarch64-apple-darwin",
-            "x86_64-pc-windows-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-pc-windows-gnu.exe",
-            "x86_64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-unknown-linux-gnu",
-            "x86_64-pc-windows-msvc": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-pc-windows-msvc.exe",
-            "x86_64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-apple-darwin",
-            "x86_64-unknown-linux-musl": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-unknown-linux-musl",
-            "aarch64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-aarch64-unknown-linux-gnu",
-        },
         annotations = {
             "ic_bls12_381": [crate.annotation(
                 rustc_flags = [
@@ -33,6 +24,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 build_script_env = {
                     "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
                 },
+            )],
+            "ic-wasm": [crate.annotation(
+                gen_binaries = True,
             )],
             "openssl-sys": [] if not static_openssl else [crate.annotation(
                 build_script_data = [
@@ -516,6 +510,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "ic-wasm": crate.spec(
                 version = "^0.1.3",
+                features = [
+                    "exe",
+                ],
             ),
             "ic-xrc-types": crate.spec(
                 version = "^1.0.0",

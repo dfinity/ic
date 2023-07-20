@@ -59,11 +59,10 @@ http_archive(
     ],
 )
 
-git_repository(
+http_archive(
     name = "rules_rust",
-    commit = "0ebd7aa2ed02bffb545a4980946f1ea9b5f5d347",
-    remote = "https://github.com/dfinity-lab/rules_rust.git",
-    shallow_since = "1679674976 +0000",
+    sha256 = "4a9cb4fda6ccd5b5ec393b2e944822a62e050c7c06f1ea41607f14c4fdec57a2",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.25.1/rules_rust-v0.25.1.tar.gz"],
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
