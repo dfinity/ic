@@ -45,6 +45,10 @@ type MetadataValue = variant {
     Blob : blob;
 };
 
+type FeatureFlags = record {
+    icrc2 : bool;
+};
+
 // The initialization parameters of the Ledger
 type InitArgs = record {
     minting_account : Account;
@@ -62,6 +66,7 @@ type InitArgs = record {
         node_max_memory_size_bytes : opt nat64;
         controller_id : principal;
     };
+    feature_flags : opt FeatureFlags;
 };
 
 type ChangeFeeCollector = variant {
@@ -75,6 +80,7 @@ type UpgradeArgs = record {
     transfer_fee : opt nat64;
     change_fee_collector : opt ChangeFeeCollector;
     max_memo_length : opt nat16;
+    feature_flags : opt FeatureFlags;
 };
 
 type LedgerArg = variant {
