@@ -546,16 +546,8 @@ impl PageMap {
             return Ok(());
         }
 
-        assert!(page_delta.max_page_index().unwrap() <= self.page_delta.max_page_index().unwrap());
         let mut last_applied_index: Option<PageIndex> = None;
-        // Max page index in {page_delta, checkpoint}
-        let max_page_index = match self.checkpoint.num_pages() {
-            0 => self.page_delta.max_page_index().unwrap(),
-            m => std::cmp::max(
-                PageIndex::from(m as u64 - 1),
-                self.page_delta.max_page_index().unwrap(),
-            ),
-        };
+        let num_host_pages = self.num_host_pages() as u64;
         for (index, _) in page_delta.iter() {
             if last_applied_index.is_some() && last_applied_index.unwrap() >= index {
                 continue;
@@ -570,7 +562,7 @@ impl PageMap {
             for i in 0..WRITE_BUCKET_PAGES {
                 let index_to_apply = PageIndex::from(bucket_start_index.get() + i);
                 // We don't expand past the end of file to make bucketing transparent.
-                if index_to_apply <= max_page_index {
+                if index_to_apply.get() < num_host_pages {
                     let content = self.get_page(index_to_apply);
                     buffer.content.push(content);
                     last_applied_index = Some(index_to_apply);
