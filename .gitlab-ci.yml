@@ -12,5 +12,5 @@ include:
   - local: /gitlab-ci/config/20--test--dependencies.yml
   - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
   - local: /gitlab-ci/config/spawn-pipeline--prod.yml
-  - local: /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml
+  - local: /gitlab-ci/config/spawn-pipeline--benchmark.yml
   - local: /testnet/tests/pipeline/pipeline.yml
