@@ -13,7 +13,6 @@ ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
-ic-btc-interface = { workspace = true }
 num-traits = "0.2.14"
 serde = "1.0.136"
 serde_json = "1.0"
