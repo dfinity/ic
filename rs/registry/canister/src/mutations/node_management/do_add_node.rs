@@ -11,7 +11,7 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord},
 };
 
 use crate::mutations::node_management::common::{
@@ -103,7 +103,6 @@ pub struct AddNodePayload {
 /// Parses the ConnectionEndpoint string
 ///
 /// The string is written in form: `ipv4:port` or `[ipv6]:port`.
-// TODO(P2P-520): Support parsing the protocol
 pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
     match endpoint.parse::<SocketAddr>() {
         Err(e) => panic!(
@@ -113,7 +112,6 @@ pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
         Ok(sa) => ConnectionEndpoint {
             ip_addr: sa.ip().to_string(),
             port: sa.port() as u32, // because protobufs don't have u16
-            protocol: Protocol::Http1 as i32,
         },
     }
 }
@@ -134,7 +132,6 @@ pub fn flow_endpoint_from_string(endpoint: &str) -> FlowEndpoint {
             endpoint: Some(ConnectionEndpoint {
                 ip_addr: sa.ip().to_string(),
                 port: sa.port() as u32, // because protobufs don't have u16
-                protocol: Protocol::Http1 as i32,
             }),
         },
     }
@@ -350,7 +347,6 @@ mod tests {
             ConnectionEndpoint {
                 ip_addr: "192.168.1.3".to_string(),
                 port: 8080u32,
-                protocol: Protocol::Http1 as i32,
             }
         );
     }
@@ -368,7 +364,6 @@ mod tests {
             ConnectionEndpoint {
                 ip_addr: "fe80::1".to_string(),
                 port: 80u32,
-                protocol: Protocol::Http1 as i32,
             }
         );
     }
@@ -399,7 +394,6 @@ mod tests {
                 endpoint: Some(ConnectionEndpoint {
                     ip_addr: "127.0.0.1".to_string(),
                     port: 8080u32,
-                    protocol: Protocol::Http1 as i32,
                 })
             }
         );

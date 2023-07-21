@@ -8,7 +8,7 @@ use std::{
 
 use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
     subnet::v1::{SubnetListRecord, SubnetRecord},
 };
@@ -77,7 +77,6 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
         let http_endpoint = ConnectionEndpoint {
             ip_addr: node_ip,
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
 
         data_provider

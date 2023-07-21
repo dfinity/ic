@@ -1,5 +1,5 @@
 use ic_cup_explorer::get_catchup_content;
-use ic_protobuf::registry::{node::v1::NodeRecord, node::v1::Protocol, subnet::v1::SubnetRecord};
+use ic_protobuf::registry::{node::v1::NodeRecord, subnet::v1::SubnetRecord};
 use ic_registry_keys::{make_node_record_key, make_subnet_record_key};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{NodeId, PrincipalId, SubnetId};
@@ -56,16 +56,9 @@ fn http_url(n: &NodeRecord) -> Url {
     let c = n.http.as_ref().unwrap();
     // Parse IP address (using IpAddr::parse())
     let ip_addr = c.ip_addr.parse().unwrap();
-    // Default protocol is HTTP, unless HTTPS is specified.
-    let scheme = if n.http.as_ref().unwrap().protocol == Protocol::Http1Tls13 as i32 {
-        "https"
-    } else {
-        "http"
-    };
     Url::parse(
         format!(
-            "{}://{}",
-            scheme,
+            "http://{}",
             SocketAddr::new(ip_addr, u16::try_from(c.port).unwrap())
         )
         .as_str(),

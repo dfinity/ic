@@ -197,7 +197,6 @@ fn make_nodes_registry(
             http: Some(ConnectionEndpoint {
                 ip_addr: "2a00:fb01:400:42:5000:22ff:fe5e:e3c4".into(),
                 port: 1234,
-                protocol: 0,
             }),
             p2p_flow_endpoints: vec![],
             chip_id: vec![],

@@ -84,7 +84,10 @@ mod tests {
     use crate::subnet_configuration::SubnetConfig;
     use ic_crypto::threshold_sig_public_key_from_der;
     use ic_registry_subnet_type::SubnetType;
+    use ic_types::registry::connection_endpoint::ConnectionEndpoint;
     use std::collections::BTreeMap;
+    use std::net::SocketAddr;
+    use std::str::FromStr;
     use tempfile::TempDir;
 
     #[test]
@@ -121,9 +124,9 @@ mod tests {
         subnet_nodes.insert(
             0,
             NodeConfiguration {
-                xnet_api: "http://1.2.3.4:1".parse()?,
-                public_api: "http://1.2.3.4:2".parse()?,
-                p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:4".parse()?,
+                xnet_api: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:8080").unwrap()),
+                public_api: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:8081").unwrap()),
+                p2p_addr: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:1234").unwrap()),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: vec![],

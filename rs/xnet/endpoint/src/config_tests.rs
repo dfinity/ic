@@ -1,7 +1,7 @@
 use super::*;
 use ic_interfaces_registry::RegistryClientResult;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord, Protocol};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord};
 use ic_registry_keys::make_node_record_key;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -76,7 +76,7 @@ fn config_node_not_found() {
 
 #[test]
 #[should_panic(
-    expected = "Node hr2go-2qeaa-aaaaa-aaaap-2ai XNet endpoint [ConnectionEndpoint { ip_addr: \"dfinity.org\", port: 2197, protocol: Http1 }]: IP address does not parse: dfinity.org"
+    expected = "Node hr2go-2qeaa-aaaaa-aaaap-2ai XNet endpoint [ConnectionEndpoint { ip_addr: \"dfinity.org\", port: 2197 }]: IP address does not parse: dfinity.org"
 )]
 fn config_invalid_xnet_ip_addr() {
     with_test_replica_logger(|log| {
@@ -84,7 +84,6 @@ fn config_invalid_xnet_ip_addr() {
             xnet: Some(ConnectionEndpoint {
                 ip_addr: "dfinity.org".into(),
                 port: 2197,
-                protocol: Protocol::Http1 as i32,
             }),
             ..Default::default()
         };
@@ -120,7 +119,6 @@ fn config_ipv4_success() {
             xnet: Some(ConnectionEndpoint {
                 ip_addr: "192.168.0.4".into(),
                 port: 2197,
-                protocol: Protocol::Http1 as i32,
             }),
             ..Default::default()
         };
@@ -145,7 +143,6 @@ fn config_ipv6_success() {
             xnet: Some(ConnectionEndpoint {
                 ip_addr: "fde4:8dba:82e1::c4".into(),
                 port: 2197,
-                protocol: Protocol::Http1 as i32,
             }),
             ..Default::default()
         };
