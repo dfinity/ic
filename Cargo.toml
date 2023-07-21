@@ -318,7 +318,6 @@ members = [
   "rs/tests/test_canisters/message",
   "rs/transport",
   "rs/transport/test_utils",
-  "rs/transport_test_client",
   "rs/tree_deserializer",
   "rs/types/types",
   "rs/types/types_test_utils",
