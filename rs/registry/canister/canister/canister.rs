@@ -62,7 +62,10 @@ use registry_canister::{
         prepare_canister_migration::PrepareCanisterMigrationPayload,
         reroute_canister_ranges::RerouteCanisterRangesPayload,
     },
-    pb::v1::{NodeProvidersMonthlyXdrRewards, RegistryCanisterStableStorage},
+    pb::v1::{
+        GetSubnetForCanisterRequest, GetSubnetForCanisterResponse, NodeProvidersMonthlyXdrRewards,
+        RegistryCanisterStableStorage,
+    },
     proto_on_wire::protobuf,
     registry::{EncodedVersion, Registry, MAX_REGISTRY_DELTAS_SIZE},
     registry_lifecycle,
@@ -823,6 +826,29 @@ fn get_node_operators_and_dcs_of_node_provider_(
     node_provider: PrincipalId,
 ) -> Result<Vec<(DataCenterRecord, NodeOperatorRecord)>, String> {
     registry().get_node_operators_and_dcs_of_node_provider(node_provider)
+}
+
+#[export_name = "canister_query get_subnet_for_canister"]
+fn get_subnet_for_canister() {
+    over(
+        candid_one,
+        |arg: GetSubnetForCanisterRequest| -> Result<GetSubnetForCanisterResponse, String> {
+            get_subnet_for_canister_(arg)
+        },
+    )
+}
+
+#[candid_method(query, rename = "get_subnet_for_canister")]
+fn get_subnet_for_canister_(
+    arg: GetSubnetForCanisterRequest,
+) -> Result<GetSubnetForCanisterResponse, String> {
+    let Some(principal) = arg.principal else {
+        return Err("No principal supplied".to_string());
+    };
+
+    registry()
+        .get_subnet_for_canister(&principal)
+        .map_err(|e| e.to_string())
 }
 
 #[export_name = "canister_update add_node"]
