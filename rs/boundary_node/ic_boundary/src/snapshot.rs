@@ -77,14 +77,14 @@ pub struct RoutingTable {
     pub nodes: HashMap<String, Node>,
 }
 
-pub struct Runner<'a> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
+pub struct Runner {
+    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
     registry_client: Arc<dyn RegistryClient>,
 }
 
-impl<'a> Runner<'a> {
+impl Runner {
     pub fn new(
-        published_routing_table: &'a ArcSwapOption<RoutingTable>,
+        published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
         registry_client: Arc<dyn RegistryClient>,
     ) -> Self {
         Self {
@@ -224,7 +224,7 @@ impl<'a> Runner<'a> {
 }
 
 #[async_trait]
-impl<'a> Run for Runner<'a> {
+impl Run for Runner {
     async fn run(&mut self) -> Result<(), Error> {
         // Obtain routing table & publish it
         let rt = self.get_routing_table()?;
@@ -233,24 +233,24 @@ impl<'a> Run for Runner<'a> {
     }
 }
 
-pub struct TlsVerifier<'a> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
+pub struct TlsVerifier {
+    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
 }
 
-impl<'a> TlsVerifier<'a> {
-    pub fn new(published_routing_table: &'a ArcSwapOption<RoutingTable>) -> Self {
+impl TlsVerifier {
+    pub fn new(published_routing_table: Arc<ArcSwapOption<RoutingTable>>) -> Self {
         Self {
             published_routing_table,
         }
     }
 }
 
-pub struct DnsResolver<'a> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
+pub struct DnsResolver {
+    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
 }
 
-impl<'a> DnsResolver<'a> {
-    pub fn new(published_routing_table: &'a ArcSwapOption<RoutingTable>) -> Self {
+impl DnsResolver {
+    pub fn new(published_routing_table: Arc<ArcSwapOption<RoutingTable>>) -> Self {
         Self {
             published_routing_table,
         }
@@ -261,7 +261,7 @@ impl<'a> DnsResolver<'a> {
 // that was provided by node during TLS handshake matches its public key from the registry
 // This trait is used by Rustls in reqwest under the hood
 // We don't really check CommonName since the resolver makes sure we connect to the right IP
-impl<'a> ServerCertVerifier for TlsVerifier<'a> {
+impl ServerCertVerifier for TlsVerifier {
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
@@ -334,7 +334,7 @@ impl<'a> ServerCertVerifier for TlsVerifier<'a> {
 
 // Implement resolver based on the routing table
 // It's used by reqwest to resolve node IDs to an IP address
-impl<'a> Resolve for DnsResolver<'a> {
+impl Resolve for DnsResolver {
     fn resolve(&self, name: Name) -> Resolving {
         // Load a routing table if we have one
         let rt = self.published_routing_table.load_full();

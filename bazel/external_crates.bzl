@@ -1179,6 +1179,17 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.3",
                 features = [
                     "trace",
+                    "request-id",
+                    "util",
+                ],
+            ),
+            "tower-http-0_4": crate.spec(
+                package = "tower-http",
+                version = "^0.4",
+                features = [
+                    "trace",
+                    "request-id",
+                    "util",
                 ],
             ),
             "tower-request-id": crate.spec(
