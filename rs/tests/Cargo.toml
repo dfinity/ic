@@ -594,3 +594,7 @@ path = "consensus/throughput_with_large_messages.rs"
 [[bin]]
 name = "ic-systest-consensus-performance-requests"
 path = "consensus/throughput_with_small_messages.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-performance"
+path = "consensus/tecdsa/tecdsa_performance.rs"

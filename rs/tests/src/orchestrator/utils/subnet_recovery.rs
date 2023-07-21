@@ -256,11 +256,11 @@ pub(crate) fn print_app_and_unassigned_nodes(env: &TestEnv, logger: &Logger) {
     });
 }
 
-/// Enable ECDSA key and signing on the root subnet using the given NNS node.
-pub(crate) fn enable_ecdsa_on_nns(
+/// Enable ECDSA key and signing on the subnet using the given NNS node.
+pub(crate) fn enable_ecdsa_on_subnet(
     nns_node: &IcNodeSnapshot,
     canister: &MessageCanister,
-    root_subnet_id: SubnetId,
+    subnet_id: SubnetId,
     rotation_period: Option<Duration>,
     enable_signing: bool,
     logger: &Logger,
@@ -271,14 +271,14 @@ pub(crate) fn enable_ecdsa_on_nns(
 
     block_on(add_ecdsa_key_with_timeout_and_rotation_period(
         &governance,
-        root_subnet_id,
+        subnet_id,
         make_key(KEY_ID1),
         None,
         rotation_period,
     ));
 
     if enable_signing {
-        enable_ecdsa_signing_on_subnet(nns_node, canister, root_subnet_id, logger)
+        enable_ecdsa_signing_on_subnet(nns_node, canister, subnet_id, logger)
     } else {
         get_ecdsa_pub_key(canister, logger)
     }

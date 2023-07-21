@@ -35,7 +35,7 @@ use crate::{
             generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
             wait_until_authentication_is_granted, AuthMean,
         },
-        subnet_recovery::{enable_ecdsa_on_nns, run_ecdsa_signature_test},
+        subnet_recovery::{enable_ecdsa_on_subnet, run_ecdsa_signature_test},
         upgrade::{
             assert_assigned_replica_version, bless_public_replica_version,
             get_assigned_replica_version, update_subnet_replica_version, UpdateImageType,
@@ -151,7 +151,7 @@ pub fn test(env: TestEnv) {
         &agent,
         nns_node.effective_canister_id(),
     ));
-    let key = enable_ecdsa_on_nns(
+    let key = enable_ecdsa_on_subnet(
         &nns_node,
         &nns_canister,
         env.topology_snapshot().root_subnet_id(),

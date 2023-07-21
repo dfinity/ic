@@ -152,7 +152,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
                 &logger,
             )
         } else {
-            enable_ecdsa_on_nns(
+            enable_ecdsa_on_subnet(
                 &nns_node,
                 &nns_canister,
                 root_subnet_id,
