@@ -131,7 +131,7 @@ mod tests {
         registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
         // Node Provider 1
-        let dc_id_1: String = "NY1".into();
+        let dc_id_1: String = "ny1".into();
         let node_operator_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(principal(1)),
             node_allowance: 5,
@@ -159,7 +159,7 @@ mod tests {
             gps: None,
         };
 
-        let dc_id_2: String = "ZH1".into();
+        let dc_id_2: String = "zh1".into();
         let node_operator_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(principal(3)),
             node_allowance: 7,
@@ -178,7 +178,7 @@ mod tests {
         };
 
         // Node provider 2
-        let dc_id_3: String = "LA1".into();
+        let dc_id_3: String = "la1".into();
         let node_operator_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(principal(4)),
             node_allowance: 7,
@@ -237,7 +237,7 @@ mod tests {
         let mut registry = Registry::new();
         registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
-        let dc_id_1: String = "NY1".into();
+        let dc_id_1: String = "ny1".into();
         let node_operator_payload = AddNodeOperatorPayload {
             node_operator_principal_id: Some(principal(1)),
             node_allowance: 5,

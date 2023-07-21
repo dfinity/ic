@@ -223,7 +223,7 @@ pub fn make_node_record_key(node_id: NodeId) -> String {
 
 /// Makes a key for a DataCenterRecord registry entry.
 pub fn make_data_center_record_key(dc_id: &str) -> String {
-    format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id)
+    format!("{}{}", DATA_CENTER_KEY_PREFIX, dc_id.to_lowercase())
 }
 
 /// Checks whether a given key is a node record key

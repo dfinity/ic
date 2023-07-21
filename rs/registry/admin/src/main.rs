@@ -2955,7 +2955,11 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             node_operator_principal_id: Some(self.node_operator_principal_id),
             node_allowance: self.node_allowance,
             node_provider_principal_id: Some(self.node_provider_principal_id),
-            dc_id: self.dc_id.clone().unwrap_or_default(),
+            dc_id: self
+                .dc_id
+                .as_ref()
+                .map(|dc| dc.to_lowercase())
+                .unwrap_or_default(),
             rewardable_nodes,
             ipv6: self.ipv6.clone(),
         }
@@ -3025,7 +3029,7 @@ impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOpe
         UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(self.node_operator_id),
             node_allowance: self.node_allowance,
-            dc_id: self.dc_id.clone(),
+            dc_id: self.dc_id.as_ref().map(|dc| dc.to_lowercase()),
             rewardable_nodes,
             node_provider_id: self.node_provider_id,
             ipv6: self.ipv6.clone(),
