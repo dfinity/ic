@@ -234,6 +234,11 @@ function generate_prep_material() {
     NODE_OPERATOR_ID="5o66h-77qch-43oup-7aaui-kz5ty-tww4j-t2wmx-e3lym-cbtct-l3gpw-wae"
 
     set -x
+    # Fix backward compatibility of removed ic-prep argument
+    if ${IC_PREP_DIR}/bin/ic-prep --help | grep -q 'p2p-flows'; then
+        P2P_FLOWS=""--p2p-flows" "1234-1""
+    fi
+
     # Generate key material for assigned nodes
     # See subnet_crypto_install, line 5
     "${IC_PREP_DIR}/bin/ic-prep" \
@@ -242,6 +247,7 @@ function generate_prep_material() {
         "--nns-subnet-index" "0" \
         "--dkg-interval-length" "${DKG_INTERVAL_LENGTH}" \
         "--max-ingress-bytes-per-message" "${MAX_INGRESS_BYTES_PER_MESSAGE}" \
+        ${P2P_FLOWS:-} \
         "--nodes" ${NODES_NNS[*]} ${NODES_APP[*]} \
         "--provisional-whitelist" "${WHITELIST}" \
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
