@@ -77,6 +77,15 @@ impl Neuron {
         self.is_controlled_by(principal) || self.hot_keys.contains(principal)
     }
 
+    // Returns all principal ids with special permissions..
+    pub fn principal_ids_with_special_permissions(&self) -> Vec<PrincipalId> {
+        self.hot_keys
+            .iter()
+            .chain(self.controller.iter())
+            .copied()
+            .collect()
+    }
+
     /// Returns true if this is a community fund neuron.
     pub(crate) fn is_community_fund_neuron(&self) -> bool {
         self.joined_community_fund_timestamp_seconds.is_some()
