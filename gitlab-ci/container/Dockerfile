@@ -58,6 +58,14 @@ COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
 RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh
 RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
+# Add cocogitto
+ARG COCOGITTO_VERSION="5.4.0"
+ARG COCOGITTO_BIN="/usr/local/bin/cog"
+ARG COCOGITTO_OUT="cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+RUN curl -fsSL "https://github.com/cocogitto/cocogitto/releases/download/${COCOGITTO_VERSION}/cocogitto-${COCOGITTO_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar -xz -C "/usr/local/bin" && \
+    rm "/usr/local/bin/LICENSE" && \
+    echo "26a64a7ace621a0c8aabf9305987b91aa9e84c35db949e8809d4a97ae977fa34  ${COCOGITTO_BIN}" | shasum -a 256 -c -
+
 USER ubuntu
 
 # Set PATH for ubuntu user
