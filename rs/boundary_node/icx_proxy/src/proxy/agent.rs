@@ -241,6 +241,16 @@ async fn process_request_inner(
                     .unwrap())
             }
         }
+
+        #[cfg(feature = "dev_proxy")]
+        Some(_) if request.uri().path().starts_with("/api") => {
+            info!("forwarding");
+            let proxied_request = create_proxied_request(&addr.ip(), replica_uri.clone(), request)?;
+            let response = client.call(proxied_request).await?;
+            let (parts, body) = response.into_parts();
+            return Ok(Response::from_parts(parts, body.into()));
+        }
+
         Some(canister_id) => canister_id,
     };
 
