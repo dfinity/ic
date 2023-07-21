@@ -28,7 +28,9 @@ use std::time::{Duration, SystemTime};
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::subnet_recovery::{enable_ecdsa_on_nns, run_ecdsa_signature_test};
+use crate::orchestrator::utils::subnet_recovery::{
+    enable_ecdsa_on_subnet, run_ecdsa_signature_test,
+};
 use crate::util::{block_on, get_nns_node, MessageCanister};
 use anyhow::bail;
 use ic_base_types::{NodeId, RegistryVersion};
@@ -96,7 +98,7 @@ pub fn test(env: TestEnv) {
     let mut init_keys: HashMap<NodeId, PublicKey> = HashMap::new();
     let mut rotated_keys: HashMap<NodeId, PublicKey> = HashMap::new();
 
-    let pub_key = enable_ecdsa_on_nns(
+    let pub_key = enable_ecdsa_on_subnet(
         &nns_node,
         &nns_canister,
         root_subnet_id,
