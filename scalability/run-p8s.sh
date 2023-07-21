@@ -6,8 +6,10 @@
 
 set -euo pipefail
 
-grafana_dashboards_repo="dfinity-lab/pfops"
-grafana_dashboards_path="environments/mainnet/dashboards"
+grafana_dashboards_path=$(
+    cd "$(dirname "$(dirname "${BASH_SOURCE[0]}")")"
+    pwd -P
+)/rs/tests/dashboards
 
 function usage() {
     cat <<EOF
@@ -30,9 +32,9 @@ Usage:
 
   --dont-provision-grafana-dashboards
 
-    By default the mainnet grafana dashboards from the repo:
+    By default the mainnet grafana dashboards from:
 
-      https://github.com/$grafana_dashboards_repo/tree/master/$grafana_dashboards_path
+      $grafana_dashboards_path
 
     are automatically provisioned in the local grafana server.
 
@@ -149,11 +151,8 @@ cat <<EOF >"$grafana_data_dir/datasources/datasource.yaml"
 EOF
 
 if [ -z "${DONT_PROVISION_GRAFANA_DASHBOARDS:-}" ]; then
-    tmp_grafana_dashboards_repo="$(mktemp -d -t grafana_dashboards_repo.XXXX)"
-    git clone --depth=1 "git@github.com:$grafana_dashboards_repo" "$tmp_grafana_dashboards_repo"
     provisioned_grafana_dashboards="$grafana_data_dir/dashboards/provisioned"
-    mv "$tmp_grafana_dashboards_repo/$grafana_dashboards_path" "$provisioned_grafana_dashboards"
-    rm -rf "$tmp_grafana_dashboards_repo"
+    cp -r "$grafana_dashboards_path" "$provisioned_grafana_dashboards"
     cat <<EOF >"$grafana_data_dir/dashboards/dashboard.yaml"
 {
     "apiVersion": 1,
