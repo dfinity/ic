@@ -44,7 +44,7 @@ container-autobuild:
         - requirements.txt
         - .bazelversion
         - gitlab-ci/container/**/*
-        - gitlab-ci/config/20--test--container-image-autobuild.yml
+        - gitlab-ci/config/container-image-autobuild.yml
   needs: []
   script:
     - |
