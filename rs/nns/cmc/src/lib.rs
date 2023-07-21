@@ -367,6 +367,11 @@ pub struct IcpXdrConversionRateCertifiedResponse {
     pub certificate: Vec<u8>,
 }
 
+#[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq, Debug, Default)]
+pub struct AuthorizedSubnetsResponse {
+    pub data: Vec<(PrincipalId, Vec<SubnetId>)>,
+}
+
 #[cfg(test)]
 mod tests {
     use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
