@@ -90,6 +90,10 @@ test --test_timeout=-1,-1,1800,9000 # timeout in seconds for short, moderate(def
 # TODO(IDX-2374): enable alltests in CI when we will have actual system tests.
 #test:ci --config=alltests
 
+# Run all tests once by default, run flaky tests up to 3 times in CI.
+test    --flaky_test_attempts=1
+test:ci --flaky_test_attempts=default
+
 build:ci --noremote_local_fallback
 build:ci --build_tag_filters="-system_test,-fuzz_test"
 
