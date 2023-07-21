@@ -11,7 +11,7 @@ prod-nightly-pipeline:
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   trigger:
     include:
-      - local: gitlab-ci/config/00--prod-test-child-pipeline.yml
+      - local: gitlab-ci/config/child-pipeline--prod.yml
     strategy: depend
 
 prod-hotfix-pipeline:
@@ -25,7 +25,7 @@ prod-hotfix-pipeline:
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   trigger:
     include:
-      - local: gitlab-ci/config/00--prod-test-child-pipeline.yml
+      - local: gitlab-ci/config/child-pipeline--prod.yml
     strategy: depend
 
 prod-hourly-triggered:
@@ -40,7 +40,7 @@ prod-hourly-triggered:
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   trigger:
     include:
-      - local: gitlab-ci/config/00--prod-test-child-pipeline.yml
+      - local: gitlab-ci/config/child-pipeline--prod.yml
     strategy: depend
 
 prod-nightly-triggered:
@@ -59,7 +59,7 @@ prod-nightly-triggered:
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   trigger:
     include:
-      - local: gitlab-ci/config/00--prod-test-child-pipeline.yml
+      - local: gitlab-ci/config/child-pipeline--prod.yml
     strategy: depend
 
 prod-hotfix-triggered:
@@ -76,5 +76,5 @@ prod-hotfix-triggered:
     PARENT_PIPELINE_ID: "${CI_PIPELINE_ID}"
   trigger:
     include:
-      - local: gitlab-ci/config/00--prod-test-child-pipeline.yml
+      - local: gitlab-ci/config/child-pipeline--prod.yml
     strategy: depend
