@@ -577,6 +577,25 @@ impl KeyTranscriptCreationState {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CertificationMessage {
+    #[prost(oneof = "certification_message::Msg", tags = "1, 2")]
+    pub msg: ::core::option::Option<certification_message::Msg>,
+}
+/// Nested message and enum types in `CertificationMessage`.
+pub mod certification_message {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        Certification(super::super::super::messaging::xnet::v1::Certification),
+        #[prost(message, tag = "2")]
+        CertificationShare(super::super::super::messaging::xnet::v1::CertificationShare),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ValidatedConsensusArtifact {
     #[prost(message, optional, tag = "1")]
     pub msg: ::core::option::Option<ConsensusMessage>,
