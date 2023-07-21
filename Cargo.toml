@@ -385,7 +385,7 @@ ic-cdk = "0.7.4"
 ic-cdk-macros = "0.6.10"
 ic-cdk-timers = "0.1.2"
 ic-agent = "0.24.1"
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "bed90536df60ff215675a048d5ebaf19411c95cb" }
+ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7" }
 ic-utils = "0.24.1"
 k256 = { version = "0.13", default_features = false, features = [
   "arithmetic",

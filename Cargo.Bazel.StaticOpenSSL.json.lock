@@ -1,5 +1,5 @@
 {
-  "checksum": "095fb2f31d205ae5a3c3ac727ca28e249098acdf5ef58eedc4267a80f1d23855",
+  "checksum": "2e2dafd4fd44f2e43ab22464f571455c5ab3e9315e8c80c460a323bbc316cf15",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21578,7 +21578,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
+            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
           },
           "strip_prefix": "interface"
         }
@@ -21628,7 +21628,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
+            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
           },
           "strip_prefix": "test-utils"
         }
@@ -21670,7 +21670,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "bed90536df60ff215675a048d5ebaf19411c95cb"
+            "Rev": "0e996988693f2d55fc9533c44dc20ae5310a1894"
           },
           "strip_prefix": "validation"
         }

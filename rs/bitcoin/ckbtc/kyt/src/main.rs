@@ -1,6 +1,5 @@
 use candid::candid_method;
 use candid::Principal;
-use ic_btc_interface::Txid;
 use ic_canisters_http_types as http;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
 use ic_cdk_macros::{init, post_upgrade, query, update};
@@ -16,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
+use std::fmt;
 
 mod dashboard;
 mod json_rpc;
@@ -169,7 +169,7 @@ pub enum EventKind {
     #[serde(rename = "utxo_check")]
     UtxoCheck {
         #[serde(rename = "txid")]
-        txid: Txid,
+        txid: [u8; 32],
 
         #[serde(rename = "vout")]
         vout: u32,
@@ -321,6 +321,17 @@ fn record_event(kind: EventKind) {
             }))
         })
         .expect("failed to append an event");
+}
+
+pub struct DisplayTxid<'a>(pub &'a [u8]);
+
+impl fmt::Display for DisplayTxid<'_> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0.iter().rev() {
+            write!(fmt, "{:02x}", *b)?
+        }
+        Ok(())
+    }
 }
 
 fn caller_is_maintainer() -> Result<(), String> {
@@ -699,7 +710,7 @@ async fn http_register_tx(
         json_rpc::RegisterTransferRequest {
             network: json_rpc::Network::Bitcoin,
             asset: json_rpc::Asset::Btc,
-            transfer_reference: format!("{}:{}", &req.txid, req.vout),
+            transfer_reference: format!("{}:{}", DisplayTxid(&req.txid), req.vout),
             direction: json_rpc::Direction::Received,
         },
     )
