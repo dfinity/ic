@@ -9,6 +9,7 @@ use ic_crypto_test_utils_ni_dkg::{
     run_ni_dkg_and_create_single_transcript, verify_dealing, NiDkgTestEnvironment,
     RandomNiDkgConfig,
 };
+use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::{
     config::NiDkgConfig, NiDkgDealing, NiDkgTag, NiDkgTranscript,
 };
@@ -276,6 +277,7 @@ fn prepare_create_reshare_dealing_test_vectors(
         .subnet_size(test_case.num_of_nodes)
         .dkg_tag(test_case.dkg_tag)
         .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build();
     let mut env = NiDkgTestEnvironment::new_for_config(config0.get());
     let transcript0 =
@@ -304,6 +306,7 @@ fn prepare_create_initial_dealing_test_vectors(
         .subnet_size(test_case.num_of_nodes)
         .dkg_tag(test_case.dkg_tag)
         .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build();
     let env = NiDkgTestEnvironment::new_for_config(config.get());
     (env, config)
@@ -320,6 +323,7 @@ fn prepare_verify_dealing_test_vectors(
         .subnet_size(test_case.num_of_nodes)
         .dkg_tag(test_case.dkg_tag)
         .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build();
     let env = NiDkgTestEnvironment::new_for_config(config.get());
 
@@ -351,6 +355,7 @@ fn prepare_create_transcript_test_vectors(
         .subnet_size(test_case.num_of_nodes)
         .dkg_tag(test_case.dkg_tag)
         .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build();
     let mut env = NiDkgTestEnvironment::new_for_config(config.get());
     let dealings = create_dealings(config.get(), &env.crypto_components);
@@ -367,6 +372,7 @@ fn prepare_load_transcript_test_vectors(
         .subnet_size(test_case.num_of_nodes)
         .dkg_tag(test_case.dkg_tag)
         .dealer_count(test_case.num_of_dealers)
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build();
     let env = NiDkgTestEnvironment::new_for_config(config.get());
     let transcript = run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
@@ -389,6 +395,7 @@ fn prepare_retain_keys_test_vectors(
         .dkg_tag(test_case.dkg_tag)
         .dealer_count(test_case.num_of_dealers)
         .registry_version(ic_base_types::RegistryVersion::from(1))
+        .max_corrupt_dealers(get_faults_tolerated(test_case.num_of_dealers))
         .build();
     let mut env = NiDkgTestEnvironment::new_for_config(config0.get());
     let transcript0 =

@@ -181,6 +181,7 @@ pub struct RandomNiDkgConfigBuilder {
     dealer_count: Option<usize>,
     dkg_tag: Option<NiDkgTag>,
     registry_version: Option<RegistryVersion>,
+    max_corrupt_dealers: Option<usize>,
 }
 
 impl RandomNiDkgConfigBuilder {
@@ -201,6 +202,11 @@ impl RandomNiDkgConfigBuilder {
 
     pub fn registry_version(mut self, registry_version: RegistryVersion) -> Self {
         self.registry_version = Some(registry_version);
+        self
+    }
+
+    pub fn max_corrupt_dealers(mut self, max_corrupt_dealers: usize) -> Self {
+        self.max_corrupt_dealers = Some(max_corrupt_dealers);
         self
     }
 
@@ -231,7 +237,17 @@ impl RandomNiDkgConfigBuilder {
             required_dealer_count + dealer_surplus
         });
 
-        RandomNiDkgConfig::new(subnet_size, dkg_tag, registry_version, dealer_count)
+        let max_corrupt_dealers = self
+            .max_corrupt_dealers
+            .unwrap_or_else(|| thread_rng().gen_range(0..dealer_count));
+
+        RandomNiDkgConfig::new(
+            subnet_size,
+            dkg_tag,
+            registry_version,
+            dealer_count,
+            max_corrupt_dealers,
+        )
     }
 }
 
@@ -255,6 +271,7 @@ impl RandomNiDkgConfig {
             dealer_count: None,
             dkg_tag: None,
             registry_version: None,
+            max_corrupt_dealers: None,
         }
     }
 
@@ -265,9 +282,9 @@ impl RandomNiDkgConfig {
         dkg_tag: NiDkgTag,
         registry_version: RegistryVersion,
         num_of_dealers: usize,
+        max_corrupt_dealers: usize,
     ) -> Self {
         assert!(subnet_size > 0, "subnet must not be empty");
-        let rng = &mut thread_rng();
 
         let receivers = Self::random_node_ids(subnet_size);
         let threshold = dkg_tag.threshold_for_subnet_of_size(subnet_size);
@@ -289,7 +306,7 @@ impl RandomNiDkgConfig {
                 // The first DKG is always done by NNS for another (remote) subnet
                 target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(random())),
             },
-            max_corrupt_dealers: Self::number_of_nodes_from_usize(rng.gen_range(0..dealers.len())),
+            max_corrupt_dealers: Self::number_of_nodes_from_usize(max_corrupt_dealers),
             dealers,
             max_corrupt_receivers: {
                 Self::number_of_nodes_from_usize(get_faults_tolerated(subnet_size))
