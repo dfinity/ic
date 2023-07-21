@@ -5,7 +5,7 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::{start_peer_manager, SubnetTopology};
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord},
     subnet::v1::SubnetRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
@@ -68,7 +68,6 @@ impl RegistryConsensusHandle {
         let connection_endpoint = Some(ConnectionEndpoint {
             ip_addr: ip.to_string(),
             port: port as u32,
-            protocol: Protocol::P2p1Tls13 as i32,
         });
         let flow_end_point = FlowEndpoint {
             endpoint: connection_endpoint,

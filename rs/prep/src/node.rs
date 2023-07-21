@@ -1,11 +1,9 @@
 use std::{
-    convert::TryFrom,
     io,
     path::{Path, PathBuf},
 };
 
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::util::{write_proto_to_file_raw, write_registry_entry};
@@ -22,9 +20,8 @@ use ic_protobuf::registry::{
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::{
-    crypto::KeyPurpose,
-    registry::connection_endpoint::{ConnectionEndpoint, ConnectionEndpointTryFromError},
-    NodeId, PrincipalId, RegistryVersion,
+    crypto::KeyPurpose, registry::connection_endpoint::ConnectionEndpoint, NodeId, PrincipalId,
+    RegistryVersion,
 };
 use std::os::unix::fs::PermissionsExt;
 
@@ -73,7 +70,7 @@ impl InitializedNode {
         version: RegistryVersion,
     ) -> Result<(), InitializeNodeError> {
         let node_id = &self.node_id;
-        let node_record = pbNodeRecord::try_from(self.node_config.clone())?;
+        let node_record = pbNodeRecord::from(self.node_config.clone());
 
         // add node transport information
         write_registry_entry(
@@ -187,7 +184,7 @@ impl InitializedNode {
 }
 
 /// Internal version of proto:registry.node.v1.NodeRecord
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
     pub xnet_api: ConnectionEndpoint,
@@ -210,29 +207,14 @@ pub struct NodeConfiguration {
     ///
     /// **Note**: The path of the secret key store will be *copied* to a new
     /// directory chosen by ic-prep.
-    #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
 
     /// The SEV-SNP chip_identifier for this node.
     pub chip_id: Vec<u8>,
 }
 
-#[derive(Error, Debug)]
-pub enum NodeConfigurationTryFromError {
-    #[error("could not parse connection endpoint: {source}")]
-    ConnectionEndpointFailed {
-        #[from]
-        source: ConnectionEndpointTryFromError,
-    },
-
-    #[error("public_api endpoint has no entries")]
-    EmptyPublicApiEndpoint,
-}
-
-impl TryFrom<NodeConfiguration> for pbNodeRecord {
-    type Error = NodeConfigurationTryFromError;
-
-    fn try_from(node_configuration: NodeConfiguration) -> Result<Self, Self::Error> {
+impl From<NodeConfiguration> for pbNodeRecord {
+    fn from(node_configuration: NodeConfiguration) -> Self {
         let mut pb_node_record = pbNodeRecord::default();
 
         // p2p
@@ -250,9 +232,7 @@ impl TryFrom<NodeConfiguration> for pbNodeRecord {
             .map(|id| id.to_vec())
             .unwrap_or_else(Vec::new);
 
-        // TODO: Check that none of the endpoints are listening on the same IP:port
-
-        Ok(pb_node_record)
+        pb_node_record
     }
 }
 
@@ -266,11 +246,6 @@ pub enum InitializeNodeError {
     CouldNotCopySks {
         #[from]
         source: fs_extra::error::Error,
-    },
-    #[error("could not transform into pb struct: {source}")]
-    CreatePbMessage {
-        #[from]
-        source: NodeConfigurationTryFromError,
     },
 }
 
@@ -361,15 +336,16 @@ impl NodeSecretKeyStore {
 #[cfg(test)]
 mod node_configuration {
     use super::*;
-    use ic_protobuf::registry::node::v1::Protocol;
     use pretty_assertions::assert_eq;
+    use std::net::SocketAddr;
+    use std::str::FromStr;
 
     #[test]
     fn into_proto_http() {
         let node_configuration = NodeConfiguration {
-            xnet_api: "http://1.2.3.4:8080".parse().unwrap(),
-            public_api: "http://1.2.3.4:8081".parse().unwrap(),
-            p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:1234".parse().unwrap(),
+            xnet_api: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:8080").unwrap()),
+            public_api: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:8081").unwrap()),
+            p2p_addr: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:1234").unwrap()),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: vec![],
@@ -383,18 +359,15 @@ mod node_configuration {
                 endpoint: Some(pbConnectionEndpoint {
                     ip_addr: "1.2.3.4".to_string(),
                     port: 1234,
-                    protocol: Protocol::P2p1Tls13 as i32,
                 }),
             }],
             http: Some(pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 8081,
-                protocol: Protocol::Http1 as i32,
             }),
             xnet: Some(pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 8080,
-                protocol: Protocol::Http1 as i32,
             }),
             chip_id: vec![],
             hostos_version_id: None,

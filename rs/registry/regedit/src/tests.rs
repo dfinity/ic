@@ -13,9 +13,12 @@ use ic_prep_lib::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::registry::connection_endpoint::ConnectionEndpoint;
 use std::{
     collections::{BTreeMap, HashSet},
+    net::SocketAddr,
     path::PathBuf,
+    str::FromStr,
 };
 use tempfile::TempDir;
 
@@ -127,11 +130,9 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
     subnet_nodes.insert(
         NODE_INDEX,
         NodeConfiguration {
-            xnet_api: "http://0.0.0.0:0".parse().expect("can't fail"),
-            public_api: "http://0.0.0.0:8080".parse().expect("can't fail"),
-            p2p_addr: "org.internetcomputer.p2p1://0.0.0.0:0"
-                .parse()
-                .expect("can't fail"),
+            xnet_api: ConnectionEndpoint::from(SocketAddr::from_str("0.0.0.0:0").unwrap()),
+            public_api: ConnectionEndpoint::from(SocketAddr::from_str("0.0.0.0:8080").unwrap()),
+            p2p_addr: ConnectionEndpoint::from(SocketAddr::from_str("0.0.0.0:0").unwrap()),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: vec![],

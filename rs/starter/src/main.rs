@@ -89,11 +89,9 @@ fn main() -> Result<()> {
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: "http://0.0.0.0:0".parse().expect("can't fail"),
+                xnet_api: ConnectionEndpoint::from(SocketAddr::from_str("0.0.0.0:0").unwrap()),
                 public_api: ConnectionEndpoint::from(config.http_listen_addr),
-                p2p_addr: "org.internetcomputer.p2p1://0.0.0.0:0"
-                    .parse()
-                    .expect("can't fail"),
+                p2p_addr: ConnectionEndpoint::from(SocketAddr::from_str("0.0.0.0:0").unwrap()),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: vec![],

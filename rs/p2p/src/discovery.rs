@@ -113,7 +113,7 @@ mod tests {
     use super::*;
     use crate::download_management::tests::new_test_gossip_impl_with_registry;
     use ic_interfaces_registry::RegistryClient;
-    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint, Protocol};
+    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint};
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities::{
         consensus::MockConsensusCache,
@@ -136,7 +136,6 @@ mod tests {
                 endpoint: Some(ConnectionEndpoint {
                     ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
                     port: 200,
-                    protocol: Protocol::P2p1Tls13 as i32,
                 }),
             });
 
@@ -152,14 +151,12 @@ mod tests {
                 endpoint: Some(ConnectionEndpoint {
                     ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
                     port: 100,
-                    protocol: Protocol::P2p1Tls13 as i32,
                 }),
             });
             node_record.p2p_flow_endpoints.push(FlowEndpoint {
                 endpoint: Some(ConnectionEndpoint {
                     ip_addr: "2001:db8:0:1:1:1:1:2".to_string(),
                     port: 200,
-                    protocol: Protocol::P2p1Tls13 as i32,
                 }),
             });
 

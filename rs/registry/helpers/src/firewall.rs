@@ -151,18 +151,15 @@ mod tests {
                             endpoint: Some(ConnectionEndpoint {
                                 ip_addr: ip.to_string(),
                                 port: 4000,
-                                protocol: 3,
                             }),
                         }],
                         http: Some(ConnectionEndpoint {
                             ip_addr: ip.to_string(),
                             port: 8080,
-                            protocol: 2,
                         }),
                         xnet: Some(ConnectionEndpoint {
                             ip_addr: ip.to_string(),
                             port: 2457,
-                            protocol: 2,
                         }),
                         node_operator_id: vec![],
                         chip_id: vec![],

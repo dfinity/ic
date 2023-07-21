@@ -14,10 +14,6 @@ pub struct ConnectionEndpoint {
     pub ip_addr: ::prost::alloc::string::String,
     #[prost(uint32, tag = "2")]
     pub port: u32,
-    /// Protocol that is used on this endpoint. If PROTOCOL_UNSPECIFIED then
-    /// code should default to PROTOCOL_HTTP1 for backwards compatability.
-    #[prost(enumeration = "Protocol", tag = "4")]
-    pub protocol: i32,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -50,28 +46,4 @@ pub struct NodeRecord {
     /// ID of the HostOS version to run.
     #[prost(string, optional, tag = "17")]
     pub hostos_version_id: ::core::option::Option<::prost::alloc::string::String>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum Protocol {
-    Unspecified = 0,
-    Http1 = 1,
-    Http1Tls13 = 2,
-    P2p1Tls13 = 3,
-}
-impl Protocol {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            Protocol::Unspecified => "PROTOCOL_UNSPECIFIED",
-            Protocol::Http1 => "PROTOCOL_HTTP1",
-            Protocol::Http1Tls13 => "PROTOCOL_HTTP1_TLS_1_3",
-            Protocol::P2p1Tls13 => "PROTOCOL_P2P1_TLS_1_3",
-        }
-    }
 }

@@ -23,7 +23,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, NodeRecord},
     node_operator::v1::NodeOperatorRecord,
     subnet::v1::SubnetRecord,
 };
@@ -57,12 +57,10 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
             let xnet_connection_endpoint = ConnectionEndpoint {
                 ip_addr: "129.0.0.1".to_string(),
                 port: 1234,
-                protocol: Protocol::Http1 as i32,
             };
             let http_connection_endpoint = ConnectionEndpoint {
                 ip_addr: "129.0.0.1".to_string(),
                 port: 4321,
-                protocol: Protocol::Http1 as i32,
             };
             NodeRecord {
                 node_operator_id: user_test_id(NO_ID).get().to_vec(),
@@ -75,12 +73,10 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
             let xnet_connection_endpoint = ConnectionEndpoint {
                 ip_addr: "129.0.1.1".to_string(),
                 port: 1234,
-                protocol: Protocol::Http1 as i32,
             };
             let http_connection_endpoint = ConnectionEndpoint {
                 ip_addr: "129.0.1.1".to_string(),
                 port: 4321,
-                protocol: Protocol::Http1 as i32,
             };
             NodeRecord {
                 node_operator_id: user_test_id(NO_ID).get().to_vec(),
@@ -193,12 +189,10 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
             let xnet_connection_endpoint = ConnectionEndpoint {
                 ip_addr: "129.0.1.1".to_string(),
                 port: 1234,
-                protocol: Protocol::Http1 as i32,
             };
             let http_connection_endpoint = ConnectionEndpoint {
                 ip_addr: "129.0.1.1".to_string(),
                 port: 4321,
-                protocol: Protocol::Http1 as i32,
             };
             NodeRecord {
                 node_operator_id: user_test_id(NO_ID).get().to_vec(),
@@ -337,12 +331,10 @@ fn remove_nodes_removes_all_keys() {
             let xnet_connection_endpoint = ConnectionEndpoint {
                 ip_addr: "129.0.1.1".to_string(),
                 port: 1234,
-                protocol: Protocol::Http1 as i32,
             };
             let http_connection_endpoint = ConnectionEndpoint {
                 ip_addr: "129.0.1.1".to_string(),
                 port: 4321,
-                protocol: Protocol::Http1 as i32,
             };
             NodeRecord {
                 node_operator_id: user_test_id(NO_ID).get().to_vec(),

@@ -4,7 +4,7 @@ use super::*;
 use ic_base_types::PrincipalId;
 use ic_interfaces_state_manager::CertificationScope;
 use ic_protobuf::registry::{
-    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
+    node::v1::{ConnectionEndpoint, NodeRecord},
     subnet::v1::SubnetListRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
@@ -280,7 +280,6 @@ pub(crate) fn get_registry_and_urls_for_test(
         let xnet_endpoint = ConnectionEndpoint {
             ip_addr: node_ip.clone(),
             port: xnet_port as u32,
-            protocol: Protocol::Http1 as i32,
         };
         data_provider
             .add(
@@ -345,7 +344,6 @@ fn add_node_record_with_node_operator_id(
     let xnet_endpoint = ConnectionEndpoint {
         ip_addr: node_ip,
         port: 2197,
-        protocol: Protocol::Http1 as i32,
     };
 
     data_provider

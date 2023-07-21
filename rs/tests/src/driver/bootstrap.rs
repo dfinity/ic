@@ -390,9 +390,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     NodeConfiguration {
         xnet_api: xnet_api.into(),
         public_api: public_api.into(),
-        p2p_addr: format!("org.internetcomputer.p2p1://{}", p2p_addr)
-            .parse()
-            .expect("can't fail"),
+        p2p_addr: p2p_addr.into(),
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),

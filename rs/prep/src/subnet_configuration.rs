@@ -30,7 +30,7 @@ use ic_types::{
 };
 
 use crate::internet_computer::INITIAL_REGISTRY_VERSION;
-use crate::node::{InitializedNode, NodeConfiguration, NodeConfigurationTryFromError, NodeIndex};
+use crate::node::{InitializedNode, NodeConfiguration, NodeIndex};
 use crate::{initialized_subnet::InitializedSubnet, node::InitializeNodeError};
 pub type SubnetIndex = u64;
 pub mod constants;
@@ -106,12 +106,6 @@ pub struct SubnetConfig {
 
 #[derive(Error, Debug)]
 pub enum InitializeSubnetError {
-    #[error("converting node to proto failed: {source}")]
-    TryFrom {
-        #[from]
-        source: NodeConfigurationTryFromError,
-    },
-
     #[error("threshold signature public key: {source}")]
     ThresholdSigPublicKey {
         #[from]

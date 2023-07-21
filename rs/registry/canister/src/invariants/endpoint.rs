@@ -10,7 +10,7 @@ use std::{
 
 use prost::alloc::collections::BTreeSet;
 
-use ic_protobuf::registry::node::v1::{ConnectionEndpoint, Protocol};
+use ic_protobuf::registry::node::v1::ConnectionEndpoint;
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
@@ -152,19 +152,6 @@ fn validate_endpoint(
     tolerate_unspecified_ip: bool,
     strict: bool,
 ) -> Result<(IpAddr, u16), InvariantCheckError> {
-    if endpoint.protocol() != Protocol::Http1
-        && endpoint.protocol() != Protocol::Http1Tls13
-        && endpoint.protocol() != Protocol::P2p1Tls13
-    {
-        return Err(InvariantCheckError {
-            msg: format!(
-                "Endpoint protocol is not supported: {:?}",
-                endpoint.protocol
-            ),
-            source: None,
-        });
-    }
-
     let ip: IpAddr = endpoint
         .ip_addr
         .parse::<IpAddr>()
@@ -353,21 +340,18 @@ mod tests {
         let loopback_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "127.0.0.1".to_string(),
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&loopback_ipv4_endpoint, false, true).is_err());
 
         let loopback_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "::1".to_string(),
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&loopback_ipv6_endpoint, false, true).is_err());
 
         let bad_port_endpoint = ConnectionEndpoint {
             ip_addr: "212.13.11.77".to_string(),
             port: 80802,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&bad_port_endpoint, false, true).is_err());
         assert!(validate_endpoint(&bad_port_endpoint, false, false).is_err());
@@ -375,7 +359,6 @@ mod tests {
         let bad_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "280.13.11.77".to_string(),
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&bad_ipv4_endpoint, false, true).is_err());
         assert!(validate_endpoint(&bad_ipv4_endpoint, false, false).is_err());
@@ -383,7 +366,6 @@ mod tests {
         let bad_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "0fab:12345::".to_string(),
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&bad_ipv6_endpoint, false, true).is_err());
         assert!(validate_endpoint(&bad_ipv6_endpoint, false, false).is_err());
@@ -391,7 +373,6 @@ mod tests {
         let multicast_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "224.0.0.1".to_string(),
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&multicast_ipv4_endpoint, false, true).is_err());
         assert!(validate_endpoint(&multicast_ipv4_endpoint, false, false).is_err());
@@ -399,7 +380,6 @@ mod tests {
         let multicast_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "ff00:1:2::".to_string(),
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&multicast_ipv6_endpoint, false, true).is_err());
         assert!(validate_endpoint(&multicast_ipv6_endpoint, false, false).is_err());
@@ -407,7 +387,6 @@ mod tests {
         let private_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "192.168.0.1".to_string(),
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&private_ipv4_endpoint, false, true).is_err());
         assert!(validate_endpoint(&private_ipv4_endpoint, false, false).is_ok());
@@ -415,7 +394,6 @@ mod tests {
         let unique_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "fc00:1234::".to_string(),
             port: 8080,
-            protocol: Protocol::Http1 as i32,
         };
         assert!(validate_endpoint(&unique_ipv6_endpoint, false, true).is_err());
         assert!(validate_endpoint(&unique_ipv6_endpoint, false, false).is_ok());
@@ -435,18 +413,15 @@ mod tests {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.1".to_string(),
                         port: 8080,
-                        protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
-                    protocol: Protocol::Http1 as i32,
                 }),
                 xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9001,
-                    protocol: Protocol::Http1 as i32,
                 }),
                 chip_id: vec![],
                 hostos_version_id: None,
@@ -466,18 +441,15 @@ mod tests {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.3".to_string(),
                         port: 8080,
-                        protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
-                    protocol: Protocol::Http1 as i32,
                 }),
                 xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.1".to_string(),
                     port: 9001,
-                    protocol: Protocol::Http1 as i32,
                 }),
                 chip_id: vec![],
                 hostos_version_id: None,
@@ -499,18 +471,15 @@ mod tests {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.3".to_string(),
                         port: 8080,
-                        protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9000,
-                    protocol: Protocol::Http1 as i32,
                 }),
                 xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9001,
-                    protocol: Protocol::Http1 as i32,
                 }),
                 chip_id: vec![],
                 hostos_version_id: None,

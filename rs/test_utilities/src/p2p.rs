@@ -9,7 +9,7 @@ use ic_interfaces::artifact_manager::JoinGuard;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord};
 use ic_registry_keys::make_node_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
@@ -246,7 +246,6 @@ pub fn test_group_set_registry(
         let connection_endpoint = Some(ConnectionEndpoint {
             ip_addr: "127.0.0.1".to_string(),
             port: node_port_allocation[node_num as usize] as u32,
-            protocol: Protocol::P2p1Tls13 as i32,
         });
         let flow_end_point = FlowEndpoint {
             endpoint: connection_endpoint,
@@ -258,7 +257,6 @@ pub fn test_group_set_registry(
             http: Some(ConnectionEndpoint {
                 ip_addr: "127.0.0.1".to_string(),
                 port: node_num as u32, /* NOTE: this port is not used in any test */
-                protocol: Protocol::Http1 as i32,
             }),
             ..Default::default()
         };
