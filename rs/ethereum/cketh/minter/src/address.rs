@@ -65,10 +65,5 @@ impl fmt::Display for Address {
 }
 
 fn keccak(bytes: &[u8]) -> [u8; 32] {
-    use tiny_keccak::Hasher;
-    let mut hash = tiny_keccak::Keccak::v256();
-    hash.update(bytes.as_ref());
-    let mut output = [0u8; 32];
-    hash.finalize(&mut output);
-    output
+    ic_crypto_sha3::Keccak256::hash(bytes)
 }

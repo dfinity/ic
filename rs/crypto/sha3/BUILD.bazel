@@ -1,0 +1,54 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:sha3",
+]
+
+DEV_DEPENDENCIES = [
+    "@crate_index//:hex",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "sha3",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_sha3",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "sha3_test",
+    crate = ":sha3",
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "sha3_integration",
+    srcs = glob(
+        ["tests/*.rs"],
+    ),
+    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
+    deps = [":sha3"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc(
+    name = "sha3_doc",
+    crate = ":sha3",
+)
+
+rust_doc_test(
+    name = "sha3_doc_test",
+    crate = ":sha3",
+    deps = [":sha3"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
