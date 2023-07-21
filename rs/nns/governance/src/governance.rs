@@ -48,6 +48,9 @@ use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError,
 };
+use ic_nervous_system_governance::index::neuron_principal::{
+    InMemoryNeuronPrincipalIndex, NeuronPrincipalIndex,
+};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -1247,77 +1250,6 @@ impl GovernanceProto {
         }
     }
 
-    /// Update `index` to map all the given Neuron's hot keys and controller to
-    /// `neuron_id`
-    pub fn add_neuron_to_principal_to_neuron_ids_index(
-        index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
-        neuron: &Neuron,
-    ) {
-        let principal_ids = neuron.hot_keys.iter().chain(neuron.controller.iter());
-
-        for principal_id in principal_ids {
-            Self::add_neuron_to_principal_in_principal_to_neuron_ids_index(
-                index,
-                neuron.id.expect("Neuron must have an id"),
-                principal_id,
-            );
-        }
-    }
-
-    pub fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
-        index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
-        neuron_id: NeuronId,
-        principal: &PrincipalId,
-    ) {
-        let neuron_ids = index.entry(*principal).or_insert_with(HashSet::new);
-        neuron_ids.insert(neuron_id);
-    }
-
-    /// Update `index` to remove the neuron from the list of neurons mapped to
-    /// principals.
-    pub fn remove_neuron_from_principal_to_neuron_ids_index(
-        index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
-        neuron: &Neuron,
-    ) {
-        let principal_ids = neuron.hot_keys.iter().chain(neuron.controller.iter());
-
-        for principal_id in principal_ids {
-            Self::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                index,
-                neuron.id.expect("Neuron must have an id"),
-                principal_id,
-            );
-        }
-    }
-
-    pub fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-        index: &mut BTreeMap<PrincipalId, HashSet<NeuronId>>,
-        neuron_id: NeuronId,
-        principal_id: &PrincipalId,
-    ) {
-        let neuron_ids = index.get_mut(principal_id);
-        // Shouldn't fail if the index is broken, so just continue.
-        if neuron_ids.is_none() {
-            return;
-        }
-        let neuron_ids = neuron_ids.unwrap();
-        neuron_ids.retain(|nid| *nid != neuron_id);
-        // If there are no neurons left, remove the entry from the index.
-        if neuron_ids.is_empty() {
-            index.remove(principal_id);
-        }
-    }
-
-    pub fn build_principal_to_neuron_ids_index(&self) -> BTreeMap<PrincipalId, HashSet<NeuronId>> {
-        let mut index = BTreeMap::new();
-
-        for neuron in self.neurons.values() {
-            Self::add_neuron_to_principal_to_neuron_ids_index(&mut index, neuron);
-        }
-
-        index
-    }
-
     pub fn build_known_neuron_name_index(&self) -> HashSet<String> {
         self.neurons
             .iter()
@@ -1571,7 +1503,7 @@ pub struct Governance {
     ///
     /// This is a cached index and will be removed and recreated when the state
     /// is saved and restored.
-    pub principal_to_neuron_ids_index: BTreeMap<PrincipalId, HashSet<NeuronId>>,
+    pub principal_to_neuron_ids_index: InMemoryNeuronPrincipalIndex<NeuronId>,
 
     /// Set of all names given to Known Neurons, to prevent duplication.
     ///
@@ -1629,7 +1561,7 @@ impl Governance {
             ledger,
             cmc,
             topic_followee_index: BTreeMap::new(),
-            principal_to_neuron_ids_index: BTreeMap::new(),
+            principal_to_neuron_ids_index: InMemoryNeuronPrincipalIndex::new(),
             known_neuron_name_set: HashSet::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
@@ -1682,9 +1614,59 @@ impl Governance {
     /// Must be called after the state has been externally changed (e.g. by
     /// setting a new proto).
     fn initialize_indices(&mut self) {
+        self.build_principal_to_neuron_ids_index();
         self.topic_followee_index = self.proto.build_topic_followee_index();
-        self.principal_to_neuron_ids_index = self.proto.build_principal_to_neuron_ids_index();
         self.known_neuron_name_set = self.proto.build_known_neuron_name_index();
+    }
+
+    pub fn build_principal_to_neuron_ids_index(&mut self) {
+        for neuron in self.proto.neurons.values() {
+            self.principal_to_neuron_ids_index
+                .add_neuron_id_principal_ids(
+                    &neuron.id.unwrap(),
+                    neuron.principal_ids_with_special_permissions(),
+                );
+        }
+    }
+
+    /// Update `index` to map all the given Neuron's hot keys and controller to
+    /// `neuron_id`
+    pub fn add_neuron_to_principal_to_neuron_ids_index(
+        &mut self,
+        neuron_id: NeuronId,
+        principal_ids: Vec<PrincipalId>,
+    ) {
+        self.principal_to_neuron_ids_index
+            .add_neuron_id_principal_ids(&neuron_id, principal_ids);
+    }
+
+    pub fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
+        &mut self,
+        neuron_id: NeuronId,
+        principal_id: PrincipalId,
+    ) {
+        self.principal_to_neuron_ids_index
+            .add_neuron_id_principal_id(&neuron_id, principal_id);
+    }
+
+    /// Update `index` to remove the neuron from the list of neurons mapped to
+    /// principals.
+    pub fn remove_neuron_from_principal_to_neuron_ids_index(
+        &mut self,
+        neuron_id: NeuronId,
+        principal_ids: Vec<PrincipalId>,
+    ) {
+        self.principal_to_neuron_ids_index
+            .remove_neuron_id_principal_ids(&neuron_id, principal_ids);
+    }
+
+    pub fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
+        &mut self,
+        neuron_id: NeuronId,
+        principal_id: PrincipalId,
+    ) {
+        self.principal_to_neuron_ids_index
+            .remove_neuron_id_principal_id(&neuron_id, principal_id);
     }
 
     fn transaction_fee(&self) -> u64 {
@@ -1986,9 +1968,9 @@ impl Governance {
             ));
         }
 
-        GovernanceProto::add_neuron_to_principal_to_neuron_ids_index(
-            &mut self.principal_to_neuron_ids_index,
-            &neuron,
+        self.add_neuron_to_principal_to_neuron_ids_index(
+            NeuronId { id: neuron_id },
+            neuron.principal_ids_with_special_permissions(),
         );
 
         GovernanceProto::add_neuron_to_topic_followee_index(
@@ -2018,9 +2000,9 @@ impl Governance {
             ));
         }
 
-        GovernanceProto::remove_neuron_from_principal_to_neuron_ids_index(
-            &mut self.principal_to_neuron_ids_index,
-            &neuron,
+        self.remove_neuron_from_principal_to_neuron_ids_index(
+            neuron_id,
+            neuron.principal_ids_with_special_permissions(),
         );
 
         GovernanceProto::remove_neuron_from_topic_followee_index(
@@ -2037,11 +2019,11 @@ impl Governance {
 
     /// Return the Neuron IDs of all Neurons that have `principal` as their
     /// controller or as one of their hot keys.
-    pub fn get_neuron_ids_by_principal(&self, principal: &PrincipalId) -> Vec<NeuronId> {
+    pub fn get_neuron_ids_by_principal(&self, principal_id: &PrincipalId) -> Vec<NeuronId> {
         self.principal_to_neuron_ids_index
-            .get(principal)
-            .map(|ids| ids.iter().copied().collect())
-            .unwrap_or_default()
+            .get_neuron_ids(*principal_id)
+            .into_iter()
+            .collect()
     }
 
     /// Return the union of `followees` with the set of Neuron IDs of all
@@ -2184,16 +2166,13 @@ impl Governance {
                 })
                 .unwrap();
 
-            GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                &mut self.principal_to_neuron_ids_index,
+            self.remove_neuron_from_principal_in_principal_to_neuron_ids_index(
                 neuron_id,
-                &old_controller,
+                old_controller,
             );
-
-            GovernanceProto::add_neuron_to_principal_in_principal_to_neuron_ids_index(
-                &mut self.principal_to_neuron_ids_index,
+            self.add_neuron_to_principal_in_principal_to_neuron_ids_index(
                 neuron_id,
-                &new_controller,
+                new_controller,
             );
         }
 
@@ -3402,13 +3381,10 @@ impl Governance {
         match proposal_data {
             None => None,
             Some(pd) => {
-                let empty = HashSet::<NeuronId>::new();
-                let caller_neurons: &HashSet<NeuronId> = self
-                    .principal_to_neuron_ids_index
-                    .get(caller)
-                    .unwrap_or(&empty);
+                let caller_neurons: HashSet<NeuronId> =
+                    self.principal_to_neuron_ids_index.get_neuron_ids(*caller);
                 let now = self.env.now();
-                Some(self.proposal_data_to_info(pd, caller_neurons, now, false))
+                Some(self.proposal_data_to_info(pd, &caller_neurons, now, false))
             }
         }
     }
@@ -3424,14 +3400,11 @@ impl Governance {
     /// retrieve dropped payloads by calling `get_proposal_info` for
     /// each proposal of interest.
     pub fn get_pending_proposals(&self, caller: &PrincipalId) -> Vec<ProposalInfo> {
-        let empty = HashSet::<NeuronId>::new();
-        let caller_neurons: &HashSet<NeuronId> = self
-            .principal_to_neuron_ids_index
-            .get(caller)
-            .unwrap_or(&empty);
+        let caller_neurons: HashSet<NeuronId> =
+            self.principal_to_neuron_ids_index.get_neuron_ids(*caller);
         let now = self.env.now();
         self.get_pending_proposals_data()
-            .map(|data| self.proposal_data_to_info(data, caller_neurons, now, true))
+            .map(|data| self.proposal_data_to_info(data, &caller_neurons, now, true))
             .collect()
     }
 
@@ -3587,11 +3560,8 @@ impl Governance {
         caller: &PrincipalId,
         req: &ListProposalInfo,
     ) -> ListProposalInfoResponse {
-        let empty = HashSet::<NeuronId>::new();
-        let caller_neurons: &HashSet<NeuronId> = self
-            .principal_to_neuron_ids_index
-            .get(caller)
-            .unwrap_or(&empty);
+        let caller_neurons: HashSet<NeuronId> =
+            self.principal_to_neuron_ids_index.get_neuron_ids(*caller);
         let exclude_topic: HashSet<i32> = req.exclude_topic.iter().cloned().collect();
         let include_reward_status: HashSet<i32> =
             req.include_reward_status.iter().cloned().collect();
@@ -3620,7 +3590,7 @@ impl Governance {
             // include_all_manage_neuron_proposals is true the proposal is
             // always included.
             req.include_all_manage_neuron_proposals.unwrap_or(false)
-                || self.proposal_is_visible_to_neurons(data, caller_neurons)
+                || self.proposal_is_visible_to_neurons(data, &caller_neurons)
         };
         let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
             MAX_LIST_PROPOSAL_RESULTS
@@ -3641,7 +3611,7 @@ impl Governance {
         //
         let proposal_info = limited_rng
             .map(|(_, y)| y)
-            .map(|pd| self.proposal_data_to_info(pd, caller_neurons, now, true))
+            .map(|pd| self.proposal_data_to_info(pd, &caller_neurons, now, true))
             .collect();
         // Ignore the keys and clone to a vector.
         ListProposalInfoResponse { proposal_info }
@@ -5744,19 +5714,13 @@ impl Governance {
             match op {
                 manage_neuron::configure::Operation::AddHotKey(k) => {
                     let hot_key = k.new_hot_key.as_ref().expect("Must have a hot key");
-                    GovernanceProto::add_neuron_to_principal_in_principal_to_neuron_ids_index(
-                        &mut self.principal_to_neuron_ids_index,
-                        *id,
-                        hot_key,
-                    );
+                    self.add_neuron_to_principal_in_principal_to_neuron_ids_index(*id, *hot_key);
                 }
                 manage_neuron::configure::Operation::RemoveHotKey(k) => {
                     let hot_key = k.hot_key_to_remove.as_ref().expect("Must have a hot key");
                     if neuron.controller.as_ref() != Some(hot_key) {
-                        GovernanceProto::remove_neuron_from_principal_in_principal_to_neuron_ids_index(
-                            &mut self.principal_to_neuron_ids_index,
-                            *id,
-                            hot_key,
+                        self.remove_neuron_from_principal_in_principal_to_neuron_ids_index(
+                            *id, *hot_key,
                         );
                     }
                 }

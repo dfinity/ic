@@ -29,6 +29,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
+use ic_nervous_system_governance::index::neuron_principal::NeuronPrincipalIndex;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -5934,8 +5935,7 @@ fn test_add_and_remove_hot_key() {
 
     assert!(!gov
         .principal_to_neuron_ids_index
-        .get(&new_controller)
-        .unwrap()
+        .get_neuron_ids(new_controller)
         .contains(neuron.id.as_ref().unwrap()));
     // Add a hot key to the neuron and make sure that gets reflected in the
     // principal to neuron ids index.
@@ -5962,8 +5962,7 @@ fn test_add_and_remove_hot_key() {
     assert!(result.is_ok());
     assert!(gov
         .principal_to_neuron_ids_index
-        .get(&new_controller)
-        .unwrap()
+        .get_neuron_ids(new_controller)
         .contains(neuron.id.as_ref().unwrap()));
 
     // Remove a hot key from that neuron and make sure that gets reflected in
@@ -5991,8 +5990,7 @@ fn test_add_and_remove_hot_key() {
     assert!(result.is_ok());
     assert!(!gov
         .principal_to_neuron_ids_index
-        .get(&new_controller)
-        .unwrap()
+        .get_neuron_ids(new_controller)
         .contains(neuron.id.as_ref().unwrap()));
 }
 

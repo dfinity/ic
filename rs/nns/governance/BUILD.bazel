@@ -24,6 +24,7 @@ BASE_DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nervous_system/root",
     "//rs/nervous_system/runtime",
+    "//rs/nervous_system/governance",
     "//rs/nns/constants",
     "//rs/protobuf",
     "//rs/registry/canister",
