@@ -1,4 +1,4 @@
-# DO NOT put any configurations in this file! Common configurations must go in 00--common.yml
+# DO NOT put any configurations in this file! Common configurations must go in common.yml
 # or 00--common-rules.yml. The child pipeline [e.g. cargo pipeline] will not inherit any
 # configurations from this file.
 #
@@ -7,7 +7,7 @@
 include:
   - local: /gitlab-ci/config/rosetta.yml
   - local: /gitlab-ci/config/main.yml
-  - local: /gitlab-ci/config/00--common.yml
+  - local: /gitlab-ci/config/common.yml
   - local: /gitlab-ci/config/20--test--container-image-autobuild.yml
   - local: /gitlab-ci/config/20--test--dependencies.yml
   - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
