@@ -7,44 +7,40 @@ pub mod protobuf;
 #[cfg(test)]
 mod tests;
 
-impl TryFrom<&Vec<u8>> for PublicKeyBytes {
+impl TryFrom<Vec<u8>> for PublicKeyBytes {
     type Error = CryptoError;
 
-    fn try_from(key: &Vec<u8>) -> Result<Self, CryptoError> {
-        if key.len() != PublicKeyBytes::SIZE {
-            return Err(CryptoError::MalformedPublicKey {
+    fn try_from(key: Vec<u8>) -> Result<Self, CryptoError> {
+        let array = <[u8; PublicKeyBytes::SIZE]>::try_from(key).map_err(|key| {
+            CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::Ed25519,
-                key_bytes: Some(key.to_vec()),
                 internal_error: format!(
                     "Incorrect key length: expected {}, got {}.",
                     PublicKeyBytes::SIZE,
                     key.len()
                 ),
-            });
-        }
-        let mut buffer = [0u8; PublicKeyBytes::SIZE];
-        buffer.copy_from_slice(key);
-        Ok(PublicKeyBytes(buffer))
+                key_bytes: Some(key),
+            }
+        })?;
+        Ok(PublicKeyBytes(array))
     }
 }
 
-impl TryFrom<&Vec<u8>> for SignatureBytes {
+impl TryFrom<Vec<u8>> for SignatureBytes {
     type Error = CryptoError;
 
-    fn try_from(signature_bytes: &Vec<u8>) -> Result<Self, CryptoError> {
-        if signature_bytes.len() != SignatureBytes::SIZE {
-            return Err(CryptoError::MalformedSignature {
+    fn try_from(signature_bytes: Vec<u8>) -> Result<Self, CryptoError> {
+        let array = <[u8; SignatureBytes::SIZE]>::try_from(signature_bytes).map_err(|sig| {
+            CryptoError::MalformedSignature {
                 algorithm: AlgorithmId::Ed25519,
-                sig_bytes: signature_bytes.clone(),
                 internal_error: format!(
                     "Incorrect signature length: expected {}, got {}.",
                     SignatureBytes::SIZE,
-                    signature_bytes.len()
+                    sig.len()
                 ),
-            });
-        }
-        let mut buffer = [0u8; SignatureBytes::SIZE];
-        buffer.copy_from_slice(signature_bytes);
-        Ok(SignatureBytes(buffer))
+                sig_bytes: sig,
+            }
+        })?;
+        Ok(SignatureBytes(array))
     }
 }

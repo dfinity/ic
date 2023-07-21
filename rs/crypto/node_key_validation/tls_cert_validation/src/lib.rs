@@ -204,7 +204,7 @@ fn ed25519_pubkey_from_x509_cert(
     x509_cert: &X509Certificate,
 ) -> Result<BasicSigEd25519PublicKeyBytes, TlsCertValidationError> {
     BasicSigEd25519PublicKeyBytes::try_from(
-        &x509_cert
+        x509_cert
             .tbs_certificate
             .subject_pki
             .subject_public_key
@@ -243,7 +243,7 @@ fn verify_ed25519_signature(
     x509_cert: &X509Certificate,
     public_key: &BasicSigEd25519PublicKeyBytes,
 ) -> CryptoResult<()> {
-    let sig = BasicSigEd25519SignatureBytes::try_from(&x509_cert.signature_value.data.to_vec())?;
+    let sig = BasicSigEd25519SignatureBytes::try_from(x509_cert.signature_value.data.to_vec())?;
     let msg = x509_cert.tbs_certificate.as_ref();
     ic_crypto_internal_basic_sig_ed25519::verify(&sig, msg, public_key)
 }

@@ -53,6 +53,32 @@ fn should_verify_valid_canister_signature() {
 }
 
 #[test]
+fn should_error_when_user_public_key_algorithm_id_wrong() {
+    use strum::IntoEnumIterator;
+
+    let mut rng = reproducible_rng();
+    let mut data = new_valid_sig_and_crypto_component(&mut rng, false);
+
+    AlgorithmId::iter()
+        .filter(|algorithm_id| *algorithm_id != AlgorithmId::IcCanisterSignature)
+        .for_each(|wrong_algorithm_id| {
+            data.canister_pk.algorithm_id = wrong_algorithm_id;
+
+            let result = data.crypto.verify_canister_sig(
+                &data.canister_sig,
+                &data.msg,
+                &data.canister_pk,
+                &data.root_of_trust,
+            );
+
+            assert_matches!(
+                result,
+                Err(CryptoError::AlgorithmNotSupported { algorithm, .. }) if algorithm == wrong_algorithm_id
+            );
+        });
+}
+
+#[test]
 fn should_fail_to_verify_on_wrong_signature() {
     let mut rng = reproducible_rng();
     for with_delegation in [false, true] {

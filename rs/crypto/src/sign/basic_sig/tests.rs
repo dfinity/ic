@@ -491,61 +491,6 @@ mod verify_basic_sig_by_public_key {
         assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
     }
 
-    #[test]
-    fn should_delegate_to_csp_for_verify_basic_sig_by_public_key() {
-        let request_id = request_id();
-        let (sig, pk) = request_id_signature_and_public_key(&request_id, AlgorithmId::Ed25519);
-        let mut csp = MockAllCryptoServiceProvider::new();
-        let msg_clone = request_id.clone();
-        let expected_signature = SigConverter::for_target(AlgorithmId::Ed25519)
-            .try_from_basic(&sig)
-            .expect("invalid signature");
-        let expected_public_key = CspPublicKey::try_from(&pk).expect("invalid public key");
-        csp.expect_verify()
-            .times(1)
-            .withf(move |signature, message_bytes, algorithm_id, public_key| {
-                *signature == expected_signature
-                    && *message_bytes == msg_clone.as_signed_bytes()
-                    && *algorithm_id == AlgorithmId::Ed25519
-                    && *public_key == expected_public_key
-            })
-            .return_const(Ok(()));
-        let crypto = crypto_component_with_csp(csp, registry_panicking_on_usage());
-
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &request_id, &pk)
-            .is_ok());
-    }
-
-    #[test]
-    fn should_return_error_from_csp_for_verify_basic_sig_by_public_key() {
-        let request_id = request_id();
-        let (sig, pk) = request_id_signature_and_public_key(&request_id, AlgorithmId::Ed25519);
-        let mut csp = MockAllCryptoServiceProvider::new();
-        let msg_clone = request_id.clone();
-        let expected_signature = SigConverter::for_target(AlgorithmId::Ed25519)
-            .try_from_basic(&sig)
-            .expect("invalid signature");
-        let expected_public_key = CspPublicKey::try_from(&pk).expect("invalid public key");
-        let expected_error = CryptoError::InvalidArgument {
-            message: "invalid arg from csp".to_string(),
-        };
-        csp.expect_verify()
-            .times(1)
-            .withf(move |signature, message_bytes, algorithm_id, public_key| {
-                *signature == expected_signature
-                    && *message_bytes == msg_clone.as_signed_bytes()
-                    && *algorithm_id == AlgorithmId::Ed25519
-                    && *public_key == expected_public_key
-            })
-            .return_const(Err(expected_error.clone()));
-        let crypto = crypto_component_with_csp(csp, registry_panicking_on_usage());
-
-        let result = crypto.verify_basic_sig_by_public_key(&sig, &request_id, &pk);
-
-        assert_matches!(result, Err(error) if error == expected_error)
-    }
-
     fn request_id() -> MessageId {
         request_id_1()
     }

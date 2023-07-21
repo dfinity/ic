@@ -23,6 +23,7 @@ ic-crypto-internal-threshold-sig-ecdsa = { path = "internal/crypto_lib/threshold
 ic-crypto-internal-basic-sig-iccsa = { path = "internal/crypto_lib/basic_sig/iccsa" }
 ic-crypto-internal-test-vectors = { path = "internal/test_vectors" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
+ic-crypto-standalone-sig-verifier = { path = "standalone-sig-verifier" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }

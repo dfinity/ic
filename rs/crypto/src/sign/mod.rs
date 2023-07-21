@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::sign::basic_sig::BasicSigVerifierInternal;
-use crate::sign::basic_sig::{BasicSignVerifierByPublicKeyInternal, BasicSignerInternal};
+use crate::sign::basic_sig::BasicSignerInternal;
 use crate::sign::multi_sig::MultiSigVerifierInternal;
 use crate::sign::multi_sig::MultiSignerInternal;
 use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerInternal};
@@ -37,7 +37,6 @@ pub use threshold_sig::ThresholdSigDataStore;
 pub use threshold_sig::ThresholdSigDataStoreImpl;
 
 mod basic_sig;
-mod canister_sig;
 mod canister_threshold_sig;
 mod multi_sig;
 mod threshold_sig;
@@ -240,11 +239,11 @@ impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
         );
         let start_time = self.metrics.now();
         let metrics_label = format!("verify_basic_sig_by_public_key_{}", public_key.algorithm_id);
-        let result = BasicSignVerifierByPublicKeyInternal::verify_basic_sig_by_public_key(
-            &self.csp,
-            signature,
-            signed_bytes,
-            public_key,
+        let result = ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+            public_key.algorithm_id,
+            &signed_bytes.as_signed_bytes(),
+            &signature.get_ref().0,
+            &public_key.key,
         );
         self.metrics.observe_duration_seconds(
             MetricsDomain::BasicSignature,
@@ -673,8 +672,13 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
             crypto.signature => format!("{:?}", signature),
         );
         let start_time = self.metrics.now();
-        let result =
-            canister_sig::verify_canister_sig(signature, signed_bytes, public_key, root_of_trust);
+        ensure_ic_canister_signature(public_key.algorithm_id)?;
+        let result = ic_crypto_standalone_sig_verifier::verify_canister_sig(
+            &signed_bytes.as_signed_bytes(),
+            &signature.get_ref().0,
+            &public_key.key,
+            root_of_trust,
+        );
 
         // Processing of the cache statistics for metrics is deliberatly
         // part of the canister signature run time metric. It is expected to take
@@ -845,6 +849,16 @@ fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
         return format!("{}", error);
     }
     "none".to_string()
+}
+
+fn ensure_ic_canister_signature(algorithm_id: AlgorithmId) -> CryptoResult<()> {
+    if algorithm_id != AlgorithmId::IcCanisterSignature {
+        return Err(CryptoError::AlgorithmNotSupported {
+            algorithm: algorithm_id,
+            reason: format!("Expected {:?}", AlgorithmId::IcCanisterSignature),
+        });
+    }
+    Ok(())
 }
 
 pub fn log_ok_content<T: fmt::Display, E>(result: &Result<T, E>) -> String {

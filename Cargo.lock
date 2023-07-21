@@ -5861,6 +5861,7 @@ dependencies = [
  "ic-crypto-node-key-generation",
  "ic-crypto-node-key-validation",
  "ic-crypto-sha",
+ "ic-crypto-standalone-sig-verifier",
  "ic-crypto-tecdsa",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
@@ -6591,6 +6592,26 @@ version = "0.8.0"
 dependencies = [
  "hex",
  "sha3 0.10.8",
+]
+
+[[package]]
+name = "ic-crypto-standalone-sig-verifier"
+version = "0.8.0"
+dependencies = [
+ "assert_matches",
+ "hex",
+ "ic-crypto-iccsa",
+ "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
+ "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
+ "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-internal-basic-sig-rsa-pkcs1",
+ "ic-crypto-internal-csp",
+ "ic-crypto-internal-test-vectors",
+ "ic-crypto-sha",
+ "ic-crypto-test-utils-canister-sigs",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-types",
+ "strum 0.23.0",
 ]
 
 [[package]]
