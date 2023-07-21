@@ -16,9 +16,11 @@ use tracing::info;
 use crate::{
     firewall::Rule,
     metrics::{MetricParams, WithMetrics},
-    tls::{self, Provision},
     Run,
 };
+
+#[cfg(feature = "tls")]
+use crate::tls::{self, Provision};
 
 #[derive(Clone, PartialEq)]
 pub enum ServiceConfiguration {
@@ -28,6 +30,7 @@ pub enum ServiceConfiguration {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigureError {
+    #[cfg(feature = "tls")]
     #[error(transparent)]
     ProvisionError(#[from] tls::ProvisionError),
 
@@ -94,11 +97,13 @@ impl Configure for Configurator {
     }
 }
 
+#[cfg(feature = "tls")]
 pub struct TlsConfigurator {
     acceptor: Arc<ArcSwapOption<RustlsAcceptor>>,
     provisioner: Box<dyn Provision>,
 }
 
+#[cfg(feature = "tls")]
 impl TlsConfigurator {
     pub fn new(
         acceptor: Arc<ArcSwapOption<RustlsAcceptor>>,
@@ -111,6 +116,7 @@ impl TlsConfigurator {
     }
 }
 
+#[cfg(feature = "tls")]
 #[async_trait]
 impl Configure for TlsConfigurator {
     async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
@@ -130,6 +136,18 @@ impl Configure for TlsConfigurator {
             self.acceptor.store(acceptor);
         }
 
+        Ok(())
+    }
+}
+
+// No-op configurator when the feature is off
+#[cfg(not(feature = "tls"))]
+pub struct TlsConfigurator {}
+
+#[cfg(not(feature = "tls"))]
+#[async_trait]
+impl Configure for TlsConfigurator {
+    async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
         Ok(())
     }
 }

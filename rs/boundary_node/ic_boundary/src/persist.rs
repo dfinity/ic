@@ -69,8 +69,8 @@ pub struct Routes {
 
 impl Routes {
     // Look up the subnet by canister_id
-    pub fn lookup(&self, canister_id: &str) -> Result<Arc<RouteSubnet>, Error> {
-        let canister_id_u256 = principal_to_u256(canister_id)?;
+    pub fn lookup(&self, canister_id: Principal) -> Option<Arc<RouteSubnet>> {
+        let canister_id_u256 = principal_bytes_to_u256(canister_id.as_slice());
 
         let idx = match self
             .subnets
@@ -96,10 +96,10 @@ impl Routes {
 
         let subnet = self.subnets[idx].clone();
         if canister_id_u256 < subnet.range_start || canister_id_u256 > subnet.range_end {
-            return Err(anyhow!("Route for canister '{canister_id}' not found"));
+            return None;
         }
 
-        Ok(subnet)
+        Some(subnet)
     }
 }
 
@@ -108,18 +108,18 @@ pub trait Persist: Send + Sync {
     async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error>;
 }
 
-pub struct Persister<'a> {
-    published_routes: &'a ArcSwapOption<Routes>,
+pub struct Persister {
+    published_routes: Arc<ArcSwapOption<Routes>>,
 }
 
-impl<'a> Persister<'a> {
-    pub fn new(published_routes: &'a ArcSwapOption<Routes>) -> Self {
+impl Persister {
+    pub fn new(published_routes: Arc<ArcSwapOption<Routes>>) -> Self {
         Self { published_routes }
     }
 }
 
 #[async_trait]
-impl<'a> Persist for Persister<'a> {
+impl Persist for Persister {
     // Construct a lookup table based on provided routing table
     async fn persist(&self, mut rt: RoutingTable) -> Result<PersistStatus, Error> {
         if rt.subnets.is_empty() {
@@ -164,7 +164,7 @@ impl<'a> Persist for Persister<'a> {
             nodes_new: rt.node_count,
         };
 
-        // Publish new subnet
+        // Publish new routing table
         self.published_routes.store(Some(rt));
 
         Ok(PersistStatus::Completed(results))

@@ -160,9 +160,9 @@ fn create_nodes() -> Vec<(&'static str, IpAddr, u16)> {
 
 #[tokio::test]
 async fn test_routing_table() -> Result<(), Error> {
-    let rt = ArcSwapOption::const_empty();
+    let rt = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(&rt, reg);
+    let mut runner = Runner::new(Arc::clone(&rt), reg);
     runner.run().await?;
     let rt = rt.load_full().unwrap();
 
@@ -238,10 +238,10 @@ fn check_certificate_verification(
 
 #[tokio::test]
 async fn test_verify_tls_certificate() -> Result<(), Error> {
-    let rt = ArcSwapOption::const_empty();
+    let rt = Arc::new(ArcSwapOption::empty());
     let reg = Arc::new(create_fake_registry_client(4));
-    let mut runner = Runner::new(&rt, reg);
-    let helper = TlsVerifier::new(&rt);
+    let mut runner = Runner::new(Arc::clone(&rt), reg);
+    let helper = TlsVerifier::new(Arc::clone(&rt));
     runner.run().await?;
 
     let rt = rt.load_full().unwrap();
@@ -269,9 +269,9 @@ async fn test_resolve() -> Result<(), Error> {
     use hyper::client::connect::dns::Name;
 
     let reg = Arc::new(create_fake_registry_client(4));
-    let rt = ArcSwapOption::const_empty();
-    let helper = DnsResolver::new(&rt);
-    let mut runner = Runner::new(&rt, reg);
+    let rt = Arc::new(ArcSwapOption::empty());
+    let helper = DnsResolver::new(Arc::clone(&rt));
+    let mut runner = Runner::new(Arc::clone(&rt), reg);
     runner.run().await?;
 
     // Check that resolved node's IPs match expected ones

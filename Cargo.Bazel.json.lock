@@ -1,5 +1,5 @@
 {
-  "checksum": "bab71f1bf3a0c3edbd923c6bf083b8f995aad1942d8e646f0a7fc42d18561b79",
+  "checksum": "faf099de136cc42ee37d72074a81ca9a11e7d1cf07db65734232a7fea498df25",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14351,6 +14351,11 @@
             {
               "id": "tower-http 0.3.5",
               "target": "tower_http"
+            },
+            {
+              "id": "tower-http 0.4.3",
+              "target": "tower_http",
+              "alias": "tower_http_0_4"
             },
             {
               "id": "tower-request-id 0.2.1",
@@ -50708,8 +50713,12 @@
         "crate_features": {
           "common": [
             "default",
+            "request-id",
+            "tower",
             "trace",
-            "tracing"
+            "tracing",
+            "util",
+            "uuid"
           ],
           "selects": {}
         },
@@ -50748,6 +50757,10 @@
               "target": "pin_project_lite"
             },
             {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
               "id": "tower-layer 0.3.2",
               "target": "tower_layer"
             },
@@ -50758,12 +50771,115 @@
             {
               "id": "tracing 0.1.37",
               "target": "tracing"
+            },
+            {
+              "id": "uuid 1.4.0",
+              "target": "uuid"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
         "version": "0.3.5"
+      },
+      "license": "MIT"
+    },
+    "tower-http 0.4.3": {
+      "name": "tower-http",
+      "version": "0.4.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/tower-http/0.4.3/download",
+          "sha256": "55ae70283aba8d2a8b411c695c437fe25b8b5e44e23e780662002fc72fb47a82"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tower_http",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "tower_http",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "request-id",
+            "tower",
+            "trace",
+            "tracing",
+            "util",
+            "uuid"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "bitflags 2.3.3",
+              "target": "bitflags"
+            },
+            {
+              "id": "bytes 1.4.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.28",
+              "target": "futures_core"
+            },
+            {
+              "id": "futures-util 0.3.28",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "http-body 0.4.5",
+              "target": "http_body"
+            },
+            {
+              "id": "http-range-header 0.3.0",
+              "target": "http_range_header"
+            },
+            {
+              "id": "pin-project-lite 0.2.10",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "tower 0.4.13",
+              "target": "tower"
+            },
+            {
+              "id": "tower-layer 0.3.2",
+              "target": "tower_layer"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
+            },
+            {
+              "id": "uuid 1.4.0",
+              "target": "uuid"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.4.3"
       },
       "license": "MIT"
     },

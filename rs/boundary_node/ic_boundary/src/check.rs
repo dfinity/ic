@@ -77,8 +77,8 @@ impl fmt::Display for CheckError {
     }
 }
 
-pub struct Runner<'a, P: Persist, C: Check> {
-    published_routing_table: &'a ArcSwapOption<RoutingTable>,
+pub struct Runner<P: Persist, C: Check> {
+    published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
     node_states: Arc<DashMap<Principal, NodeState>>,
     last_check_id: Wrapping<u64>,
     min_ok_count: u8,
@@ -110,9 +110,9 @@ fn nodes_sort_by_score(mut nodes: Vec<NodeCheckResult>) -> Vec<Node> {
     nodes.into_iter().map(|x| x.node).collect()
 }
 
-impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
+impl<P: Persist, C: Check> Runner<P, C> {
     pub fn new(
-        published_routing_table: &'a ArcSwapOption<RoutingTable>,
+        published_routing_table: Arc<ArcSwapOption<RoutingTable>>,
         min_ok_count: u8,
         max_height_lag: u64,
         persist: P,
@@ -264,7 +264,7 @@ impl<'a, P: Persist, C: Check> Runner<'a, P, C> {
 }
 
 #[async_trait]
-impl<'a, P: Persist, C: Check> Run for Runner<'a, P, C> {
+impl<P: Persist, C: Check> Run for Runner<P, C> {
     async fn run(&mut self) -> Result<(), Error> {
         // Clone the the latest routing table from the registry if there's one
         let routing_table = self
@@ -319,18 +319,18 @@ pub trait Check: Send + Sync {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError>;
 }
 
-pub struct Checker<'a> {
-    http_client: &'a reqwest::Client,
+pub struct Checker {
+    http_client: Arc<reqwest::Client>,
 }
 
-impl<'a> Checker<'a> {
-    pub fn new(http_client: &'a reqwest::Client) -> Self {
+impl Checker {
+    pub fn new(http_client: Arc<reqwest::Client>) -> Self {
         Self { http_client }
     }
 }
 
 #[async_trait]
-impl<'a> Check for Checker<'a> {
+impl Check for Checker {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
         let request = match self
             .http_client

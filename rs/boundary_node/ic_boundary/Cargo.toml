@@ -7,6 +7,9 @@ edition = "2021"
 name = "ic-boundary"
 path = "src/main.rs"
 
+[features]
+tls = []
+
 [dependencies]
 anyhow = "1.0.56"
 arc-swap = "1"
@@ -22,6 +25,7 @@ ethnum = { workspace = true }
 futures = "0.3.21"
 futures-util = "0.3.28"
 hex = "0.4.3"
+http = "0.2.6"
 hyper = "0.14.18"
 hyper-rustls = "0.24.0"
 ic-config = { path = "../../config" }
@@ -40,6 +44,7 @@ mockall = "0.11.4"
 opentelemetry = "0.18.0"
 opentelemetry-prometheus = "0.11.0"
 prometheus = "0.13"
+rand = "0.8.4"
 rcgen = "0.10.0"
 # same feature as in bazel
 reqwest = { version = "0.11.18", features = [ "blocking", "json", "multipart", "native-tls", "rustls-tls", "stream"] }
@@ -53,6 +58,8 @@ tempfile = "3.6.0"
 thiserror = "1.0.40"
 tokio = { version = "1.19.2", features = ["full"] }
 tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
+tower = { version = "0.4.11", features = ["buffer", "limit", "load-shed", "steer", "timeout", "util"] }
+tower-http = { version = "0.4.3", features = ["trace", "request-id", "util"] }
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["json"] }
 url = "2.1.1"
