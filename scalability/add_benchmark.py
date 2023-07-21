@@ -11,7 +11,7 @@ def camel_to_snake(s: str):
 
 
 def generate_cd_job(benchmark_name, benchmark_path, is_max_capacity_run):
-    CD_JOB_FILE = "60--benchmark-test--spawn-benchmark-pipeline.yml"
+    CD_JOB_FILE = "spawn-pipeline--benchmark.yml"
     CD_JOB_DIR = "../gitlab-ci/config"
     compiler = pybars.Compiler()
 
