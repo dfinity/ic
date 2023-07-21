@@ -99,6 +99,10 @@ type SubnetTypesToSubnetsResponse = record {
   data: vec record { text; vec principal };
 };
 
+type PrincipalsAuthorizedToCreateCanistersToSubnetsResponse = record {
+  data: vec record { principal; vec principal };
+};
+
 type AccountIdentifier = record {
   bytes: blob;
 };
@@ -131,4 +135,8 @@ service : (opt CyclesCanisterInitPayload) -> {
 
   // Returns the current mapping of subnet types to subnets.
   get_subnet_types_to_subnets : () -> (SubnetTypesToSubnetsResponse) query;
+
+  // Returns the mapping from principals to subnets in which they are authorized
+  // to create canisters.
+  get_principals_authorized_to_create_canisters_to_subnets : () -> (PrincipalsAuthorizedToCreateCanistersToSubnetsResponse) query;
 }
