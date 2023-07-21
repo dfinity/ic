@@ -164,7 +164,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         payload = UpdateNodeOperatorConfigPayload {
             node_operator_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
             node_allowance: Some(10),
-            dc_id: Some("AN1".into()),
+            dc_id: Some("an1".into()),
             rewardable_nodes: rewardable_nodes.clone(),
             node_provider_id: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
@@ -188,7 +188,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             NodeOperatorRecord {
                 node_operator_principal_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
                 node_allowance: 10,
-                dc_id: "AN1".into(),
+                dc_id: "an1".into(),
                 rewardable_nodes,
                 node_provider_principal_id: (*TEST_NEURON_2_OWNER_PRINCIPAL).to_vec(),
                 ipv6: Some("0:0:0:0:0:0:0:0".into()),

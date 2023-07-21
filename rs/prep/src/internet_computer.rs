@@ -210,7 +210,7 @@ impl From<NodeOperatorEntry> for NodeOperatorRecord {
                 .node_provider_principal_id
                 .map(|x| x.to_vec())
                 .unwrap_or_else(Vec::new),
-            dc_id: item.dc_id,
+            dc_id: item.dc_id.to_lowercase(),
             rewardable_nodes: item.rewardable_nodes,
             ipv6: item.ipv6,
         }

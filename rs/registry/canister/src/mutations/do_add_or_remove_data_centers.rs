@@ -1,6 +1,6 @@
 use crate::{common::LOG_PREFIX, mutations::common::encode_or_panic, registry::Registry};
 
-use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
+use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
 
@@ -27,6 +27,10 @@ impl Registry {
 
         let latest_version = self.latest_version();
         for dc in payload.data_centers_to_add {
+            let dc = DataCenterRecord {
+                id: dc.id.to_lowercase(),
+                ..dc
+            };
             let key = make_data_center_record_key(&dc.id);
 
             // panic if we already have a record for that data center
@@ -67,7 +71,7 @@ mod test {
 
     #[test]
     #[should_panic(
-        expected = "do_add_or_remove_data_centers: Cannot add DataCenterRecord with ID: 'AN1' already exists"
+        expected = "do_add_or_remove_data_centers: Cannot add DataCenterRecord with ID: 'an1' already exists"
     )]
     fn cannot_add_second_data_center_with_same_id() {
         // Given a registry instance
@@ -75,7 +79,7 @@ mod test {
         registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
         // when we try to add two data centers with same id
         let first_record = DataCenterRecord {
-            id: "AN1".into(),
+            id: "an1".into(),
             region: "BEL".into(),
             owner: "Alice".into(),
             gps: None,
@@ -115,7 +119,7 @@ mod test {
         registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
         // when we try to add two data centers with same id
         let first_record = DataCenterRecord {
-            id: "AN1".into(),
+            id: "an1".into(),
             region: "BEL".into(),
             owner: "Alice".into(),
             gps: None,
@@ -156,8 +160,82 @@ mod test {
         // second addition fails with same ID and panics
         registry.do_add_or_remove_data_centers(payload);
         let dc_record_2 = get_dc_record(&registry, "AN1");
-        assert_eq!(dc_record_2.id, "AN1");
+        assert_eq!(dc_record_2.id, "an1");
         assert_eq!(dc_record_2.region, "OTHER");
+    }
+
+    #[test]
+    fn lower_upper_case_data_center() {
+        // Given a registry instance
+        let mut registry = Registry::new();
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
+        // when we try to add two data centers with same id
+        let first_record_uppercase = DataCenterRecord {
+            id: "AN1".into(),
+            region: "BEL".into(),
+            owner: "Alice".into(),
+            gps: None,
+        };
+        let first_record_lowercase = DataCenterRecord {
+            id: first_record_uppercase.id.to_lowercase(),
+            ..first_record_uppercase.clone()
+        };
+
+        let second_record = DataCenterRecord {
+            id: "fr1".into(),
+            region: "DE".into(),
+            owner: "Alice".into(),
+            gps: None,
+        };
+
+        let payload = AddOrRemoveDataCentersProposalPayload {
+            data_centers_to_add: vec![first_record_uppercase.clone(), second_record.clone()],
+            data_centers_to_remove: vec![],
+        };
+
+        registry.do_add_or_remove_data_centers(payload);
+
+        // assert first record can be retrieved both with lower and upper case
+        let dc_record_1 = get_dc_record(&registry, "an1");
+        assert_eq!(dc_record_1, first_record_lowercase);
+
+        let dc_record_1 = get_dc_record(&registry, "AN1");
+        assert_eq!(dc_record_1, first_record_lowercase);
+
+        let dc_record_2 = get_dc_record(&registry, "fr1");
+        assert_eq!(dc_record_2, second_record);
+
+        let dc_record_2 = get_dc_record(&registry, "FR1");
+        assert_eq!(dc_record_2, second_record);
+
+        // remove record
+        let payload = AddOrRemoveDataCentersProposalPayload {
+            data_centers_to_add: vec![],
+            data_centers_to_remove: vec![first_record_uppercase.id],
+        };
+
+        registry.do_add_or_remove_data_centers(payload);
+        assert_no_dc_record(&registry, "AN1");
+        assert_no_dc_record(&registry, "an1");
+
+        let dc_record_2 = get_dc_record(&registry, "fr1");
+        assert_eq!(dc_record_2, second_record);
+
+        let dc_record_2 = get_dc_record(&registry, "FR1");
+        assert_eq!(dc_record_2, second_record);
+
+        let payload = AddOrRemoveDataCentersProposalPayload {
+            data_centers_to_add: vec![],
+            data_centers_to_remove: vec![second_record.id],
+        };
+
+        // second addition fails with same ID and panics
+        registry.do_add_or_remove_data_centers(payload);
+
+        assert_no_dc_record(&registry, "AN1");
+        assert_no_dc_record(&registry, "an1");
+        assert_no_dc_record(&registry, "FR1");
+        assert_no_dc_record(&registry, "fr1");
     }
 
     fn get_dc_record(registry: &Registry, id_string: &str) -> DataCenterRecord {
