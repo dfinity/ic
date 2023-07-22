@@ -5,10 +5,12 @@ use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_protobuf::registry::subnet::v1 as pb;
-use ic_types::consensus::ecdsa::{EcdsaBlockReader, TranscriptRef};
-use ic_types::consensus::ecdsa::{
-    EcdsaMessage, EcdsaPayload, IDkgTranscriptParamsRef, RequestId, ThresholdEcdsaSigInputsRef,
-    TranscriptLookupError,
+use ic_types::consensus::{
+    ecdsa::{
+        EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, RequestId,
+        ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
+    },
+    HasHeight,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings,
@@ -20,29 +22,25 @@ use std::sync::Arc;
 
 pub(crate) struct EcdsaBlockReaderImpl {
     chain: Arc<dyn ConsensusBlockChain>,
-    tip_height: Height,
-    tip_ecdsa_payload: Option<Arc<EcdsaPayload>>,
 }
 
 impl EcdsaBlockReaderImpl {
     pub(crate) fn new(chain: Arc<dyn ConsensusBlockChain>) -> Self {
-        let (tip_height, tip_ecdsa_payload) = chain.tip();
-        Self {
-            chain,
-            tip_height,
-            tip_ecdsa_payload,
-        }
+        Self { chain }
     }
 }
 
 impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     fn tip_height(&self) -> Height {
-        self.tip_height
+        self.chain.tip().height()
     }
 
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_transcript_configs_in_creation()
             })
@@ -51,16 +49,22 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
     fn requested_signatures(
         &self,
     ) -> Box<dyn Iterator<Item = (&RequestId, &ThresholdEcdsaSigInputsRef)> + '_> {
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |payload| {
                 Box::new(payload.ongoing_signatures.iter())
             })
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(BTreeSet::new(), |payload| payload.active_transcripts())
     }
 
@@ -68,8 +72,11 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         // TODO: chain iters for multiple key_id support
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_xnet_transcripts_source_subnet()
             })
@@ -79,8 +86,11 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
         // TODO: chain iters for multiple key_id support
-        self.tip_ecdsa_payload
+        self.chain
+            .tip()
+            .payload
             .as_ref()
+            .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_xnet_transcripts_target_subnet()
             })
