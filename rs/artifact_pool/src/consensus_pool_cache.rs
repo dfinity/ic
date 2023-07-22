@@ -8,8 +8,7 @@ use ic_interfaces::consensus_pool::{
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::{
-        ecdsa::EcdsaPayload, Block, BlockPayload, CatchUpPackage, ConsensusMessage, Finalization,
-        HasHeight,
+        ecdsa::EcdsaPayload, Block, CatchUpPackage, ConsensusMessage, Finalization, HasHeight,
     },
     Height, Time,
 };
@@ -256,9 +255,8 @@ pub(crate) fn update_summary_block(
 
 #[derive(Clone)]
 pub(crate) struct ConsensusBlockChainImpl {
-    /// The ECDSA payload of the blocks in the chain between [summary_block, tip],
-    /// ends inclusive. So this can never be empty.
-    blocks: BTreeMap<Height, Option<Arc<EcdsaPayload>>>,
+    /// Blocks in the chain between [summary_block, tip], ends inclusive. So this can never be empty.
+    blocks: BTreeMap<Height, Block>,
 }
 
 impl ConsensusBlockChainImpl {
@@ -330,37 +328,28 @@ impl ConsensusBlockChainImpl {
         consensus_pool: &dyn ConsensusPool,
         start_height: Height,
         tip: &Block,
-        blocks: &mut BTreeMap<Height, Option<Arc<EcdsaPayload>>>,
+        blocks: &mut BTreeMap<Height, Block>,
     ) {
         BlockChainIterator::new(consensus_pool, tip.clone())
             .take_while(|block| block.height() >= start_height)
             .for_each(|block| {
-                let height = block.height();
-                let ecdsa_payload = BlockPayload::from(block.payload)
-                    .as_ecdsa()
-                    .map(|ecdsa_payload| Arc::new(ecdsa_payload.clone()));
-                blocks.insert(height, ecdsa_payload);
+                blocks.insert(block.height(), block);
             })
     }
 }
 
 impl ConsensusBlockChain for ConsensusBlockChainImpl {
-    fn tip(&self) -> (Height, Option<Arc<EcdsaPayload>>) {
-        let (height, ecdsa_payload) = self.blocks.iter().next_back().unwrap();
-        (*height, ecdsa_payload.clone())
+    fn tip(&self) -> &Block {
+        let (_, block) = self.blocks.iter().next_back().unwrap();
+        block
     }
 
-    fn ecdsa_payload(&self, height: Height) -> Result<Arc<EcdsaPayload>, ConsensusBlockChainErr> {
-        let payload_option = self
-            .blocks
+    fn ecdsa_payload(&self, height: Height) -> Result<&EcdsaPayload, ConsensusBlockChainErr> {
+        self.blocks
             .get(&height)
-            .ok_or(ConsensusBlockChainErr::BlockNotFound(height))?;
-
-        if let Some(payload) = payload_option {
-            Ok(payload.clone())
-        } else {
-            Err(ConsensusBlockChainErr::EcdsaPayloadNotFound(height))
-        }
+            .ok_or(ConsensusBlockChainErr::BlockNotFound(height))
+            .map(|block| block.payload.as_ref().as_ecdsa())?
+            .ok_or(ConsensusBlockChainErr::EcdsaPayloadNotFound(height))
     }
 
     fn len(&self) -> usize {
@@ -371,6 +360,7 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test_utils::fake_block_proposal;
     use ic_ic00_types::EcdsaKeyId;
     use ic_interfaces::consensus_pool::HEIGHT_CONSIDERED_BEHIND;
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
@@ -383,7 +373,7 @@ mod test {
         FastForwardTimeSource,
     };
     use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
-    use ic_types::consensus::*;
+    use ic_types::{batch::BatchPayload, consensus::*};
     use std::str::FromStr;
     use std::sync::Arc;
     use std::time::Duration;
@@ -398,7 +388,7 @@ mod test {
         }
 
         assert_eq!(
-            finalized_chain.tip().0,
+            finalized_chain.tip().height(),
             *expected.iter().next_back().unwrap()
         );
     }
@@ -547,8 +537,8 @@ mod test {
             chain.ecdsa_payload(height).err().unwrap(),
             ConsensusBlockChainErr::BlockNotFound(height)
         );
-
-        chain.blocks.insert(height, None);
+        let block = fake_block_proposal(height).as_ref().clone();
+        chain.blocks.insert(height, block);
         assert_eq!(chain.len(), 1);
         assert_eq!(
             chain.ecdsa_payload(height).err().unwrap(),
@@ -556,9 +546,11 @@ mod test {
         );
 
         let height = Height::new(200);
-        chain.blocks.insert(
-            height,
-            Some(Arc::new(EcdsaPayload {
+        let mut block = fake_block_proposal(height).as_ref().clone();
+        let block_payload = BlockPayload::from((
+            BatchPayload::default(),
+            dkg::Dealings::new_empty(height),
+            Some(EcdsaPayload {
                 signature_agreements: BTreeMap::new(),
                 ongoing_signatures: BTreeMap::new(),
                 available_quadruples: BTreeMap::new(),
@@ -572,8 +564,10 @@ mod test {
                     next_in_creation: ecdsa::KeyTranscriptCreation::Begin,
                     key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
                 },
-            })),
-        );
+            }),
+        ));
+        block.payload = Payload::new(ic_types::crypto::crypto_hash, block_payload);
+        chain.blocks.insert(height, block);
         assert_eq!(chain.len(), 2);
         assert!(chain.ecdsa_payload(height).is_ok());
     }

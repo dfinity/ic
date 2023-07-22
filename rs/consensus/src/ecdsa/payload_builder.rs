@@ -1759,7 +1759,7 @@ pub fn block_chain_cache(
             chain_len,
             start.height(),
             end.height(),
-            chain.tip().0,
+            chain.tip().height(),
             pool_reader.get_notarized_height(),
             pool_reader.get_finalized_height(),
             pool_reader.get_catch_up_height()

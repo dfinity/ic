@@ -345,12 +345,12 @@ pub trait ConsensusBlockCache: Send + Sync {
 /// Snapshot of the block chain
 #[allow(clippy::len_without_is_empty)]
 pub trait ConsensusBlockChain: Send + Sync {
-    /// Returns the height and the ECDSA payload of the tip in the block chain.
-    fn tip(&self) -> (Height, Option<Arc<EcdsaPayload>>);
+    /// Returns the block at the tip in the block chain.
+    fn tip(&self) -> &Block;
 
     /// Returns the ECDSA payload from the block at the given height.
     /// The implementation can choose the number of past blocks to cache.
-    fn ecdsa_payload(&self, height: Height) -> Result<Arc<EcdsaPayload>, ConsensusBlockChainErr>;
+    fn ecdsa_payload(&self, height: Height) -> Result<&EcdsaPayload, ConsensusBlockChainErr>;
 
     /// Returns the length of the chain.
     fn len(&self) -> usize;
