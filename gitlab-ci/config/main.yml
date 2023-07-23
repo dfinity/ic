@@ -661,6 +661,7 @@ benchmarks:
   parallel:
     matrix:
       - TARGETS: "//rs/crypto/..."
+      - TARGETS: "//rs/state_manager/..."
       # IDX-2849
       #- TARGETS: "//rs/execution_environment/..."
       # IDX-2850
