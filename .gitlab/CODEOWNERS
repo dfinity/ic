@@ -63,7 +63,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /gitlab-ci/                                                             @dfinity-lab/teams/idx
 /gitlab-ci/src/std-fs-check/                                            @dfinity-lab/teams/node-team
 /gitlab-ci/src/dependencies/                                            @dfinity-lab/teams/prodsec
-/gitlab-ci/config/20--test--dependencies.yml                            @dfinity-lab/teams/prodsec
+/gitlab-ci/config/dependencies.yml                                      @dfinity-lab/teams/prodsec
 /gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification
 /gitlab-ci/config/child-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/spawn-pipeline--benchmark.yml                         @dfinity-lab/teams/runtime-owners
