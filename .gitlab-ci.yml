@@ -10,7 +10,7 @@ include:
   - local: /gitlab-ci/config/common.yml
   - local: /gitlab-ci/config/container-image-autobuild.yml
   - local: /gitlab-ci/config/dependencies.yml
-  - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
+  - local: /gitlab-ci/config/base-images-build.yml
   - local: /gitlab-ci/config/spawn-pipeline--prod.yml
   - local: /gitlab-ci/config/spawn-pipeline--benchmark.yml
   - local: /testnet/tests/pipeline/pipeline.yml

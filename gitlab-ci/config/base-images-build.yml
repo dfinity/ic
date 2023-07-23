@@ -6,7 +6,7 @@
       allow_failure: true
     - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
       changes:
-        - gitlab-ci/config/46--guest-os-build--guest-base-image.yml
+        - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
         - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
         - ic-os/guestos/rootfs/Dockerfile.base
