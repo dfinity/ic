@@ -181,7 +181,7 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
         "|https://crates.io/crates/syn|syn|1.0|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0]: "||*id*||*name*||*description*||*score*||*risk*||\n"
         "|https://rustsec.org/advisories/RUSTSEC-2020-0159|RUSTSEC-2020-0159|Potential segfault in localtime_r invocations|-1| |\n"
-        "|https://rustsec.org/advisories/RUSTSEC-2022-0051|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit|\n",
+        "|[https://rustsec.org/advisories/RUSTSEC-2022-0051|https://rustsec.org/advisories/RUSTSEC-2022-0051]|RUSTSEC-2022-0051|Memory corruption in liblz4|100|crit|\n",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[
             0
         ]: "||*dep / vuln*||RUSTSEC-2020-0159||RUSTSEC-2022-0051||\n"
