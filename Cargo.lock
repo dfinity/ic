@@ -8132,6 +8132,9 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-client-helpers",
  "ic-registry-keys",
+ "ic-registry-local-registry",
+ "ic-registry-local-store",
+ "ic-registry-local-store-artifacts",
  "ic-registry-proto-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
@@ -8153,6 +8156,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "slog",
+ "tempfile",
  "xnet-test",
 ]
 
