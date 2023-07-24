@@ -1041,7 +1041,8 @@ fn test_scenario_happy() {
             .expect("Transaction fee not known.");
         let neuron_basket_transfer_fund_calls =
             |amount_sns_tokens_e8s: u64, count: u64, investor: TestInvestor| -> Vec<LedgerExpect> {
-                let split_amount = apportion_approximately_equally(amount_sns_tokens_e8s, count);
+                let split_amount =
+                    apportion_approximately_equally(amount_sns_tokens_e8s, count).unwrap();
 
                 let starting_memo = match investor {
                     TestInvestor::CommunityFund(starting_memo) => starting_memo,
@@ -1408,7 +1409,8 @@ async fn test_finalize_swap_ok() {
     let neuron_basket_transfer_fund_calls =
         |amount_sns_tokens_e8s: u64, count: u64, buyer: u64| -> Vec<LedgerCall> {
             let buyer_principal_id = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
-            let split_amount = apportion_approximately_equally(amount_sns_tokens_e8s, count);
+            let split_amount =
+                apportion_approximately_equally(amount_sns_tokens_e8s, count).unwrap();
             split_amount
                 .iter()
                 .enumerate()
