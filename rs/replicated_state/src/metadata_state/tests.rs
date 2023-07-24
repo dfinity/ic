@@ -1,5 +1,6 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
+use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{EcdsaCurve, IC_00};
@@ -511,7 +512,7 @@ fn system_metadata_split() {
     };
 
     // Split off subnet A', phase 1.
-    let metadata_a_phase_1 = system_metadata.clone().split(SUBNET_A);
+    let metadata_a_phase_1 = system_metadata.clone().split(SUBNET_A, None).unwrap();
 
     // Metadata should be identical, plus a split marker pointing to subnet A.
     let mut expected = system_metadata.clone();
@@ -533,12 +534,14 @@ fn system_metadata_split() {
     assert_eq!(expected, metadata_a_phase_2);
 
     // Split off subnet B, phase 1.
-    let metadata_b_phase_1 = system_metadata.clone().split(SUBNET_B);
+    let metadata_b_phase_1 = system_metadata.clone().split(SUBNET_B, None).unwrap();
 
-    // Should only retain ingress history; plus a split marker pointing to subnet A.
+    // Should only retain ingress history and batch time; and a split marker
+    // pointing back to subnet A.
     let mut expected = SystemMetadata::new(SUBNET_B, SubnetType::VerifiedApplication);
     expected.ingress_history = system_metadata.ingress_history;
     expected.split_from = Some(SUBNET_A);
+    expected.batch_time = system_metadata.batch_time;
     assert_eq!(expected, metadata_b_phase_1);
 
     // Split off subnet B, phase 2.
@@ -554,6 +557,59 @@ fn system_metadata_split() {
         .ingress_history
         .prune_after_split(is_canister_on_subnet_b);
     assert_eq!(expected, metadata_b_phase_2);
+}
+
+#[test]
+fn system_metadata_split_with_batch_time() {
+    // We will be splitting subnet A into A' and B. C is a third-party subnet.
+    const SUBNET_A: SubnetId = SUBNET_0;
+    const SUBNET_B: SubnetId = SUBNET_1;
+
+    let mut system_metadata = SystemMetadata::new(SUBNET_A, SubnetType::Application);
+    system_metadata.prev_state_hash = Some(CryptoHash(vec![1, 2, 3]).into());
+    system_metadata.batch_time = current_time();
+    system_metadata.subnet_metrics = SubnetMetrics {
+        consumed_cycles_by_deleted_canisters: 2197.into(),
+        ..Default::default()
+    };
+
+    // Try splitting off subnet A' with an explicit batch time. It should fail, even
+    // though it is the exact same batch time.
+    assert_matches!(
+        system_metadata
+            .clone()
+            .split(SUBNET_A, Some(system_metadata.batch_time)),
+        Err(_)
+    );
+
+    let assert_valid_subnet_b_split = |batch_time: Time| {
+        let split_metadata = system_metadata
+            .clone()
+            .split(SUBNET_B, Some(batch_time))
+            .unwrap();
+
+        let mut expected = SystemMetadata::new(SUBNET_B, SubnetType::Application);
+        expected.split_from = Some(SUBNET_A);
+        expected.batch_time = batch_time;
+        assert_eq!(expected, split_metadata);
+    };
+
+    // Providing an equal batch time when splitting `SUBNET_B` should work.
+    assert_valid_subnet_b_split(system_metadata.batch_time);
+    // As should a later batch time.
+    assert_valid_subnet_b_split(Time::from_nanos_since_unix_epoch(
+        system_metadata.batch_time.as_nanos_since_unix_epoch() + 1,
+    ));
+    // But an earlier batch time should fail.
+    assert_matches!(
+        system_metadata.clone().split(
+            SUBNET_B,
+            Some(Time::from_nanos_since_unix_epoch(
+                system_metadata.batch_time.as_nanos_since_unix_epoch() - 1,
+            ))
+        ),
+        Err(_)
+    );
 }
 
 #[test]

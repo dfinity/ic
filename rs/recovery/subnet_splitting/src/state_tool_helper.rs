@@ -7,7 +7,7 @@ use ic_recovery::{
     util::block_on,
 };
 use ic_registry_routing_table::CanisterIdRange;
-use ic_types::ReplicaVersion;
+use ic_types::{ReplicaVersion, Time};
 use slog::{info, Logger};
 
 use std::{
@@ -60,6 +60,7 @@ impl StateToolHelper {
         manifest_path: &Path,
         source_subnet: SubnetId,
         destination_subnet: SubnetId,
+        batch_time: Time,
         canister_id_ranges: &[CanisterIdRange],
         output_path: &Path,
     ) -> RecoveryResult<()> {
@@ -69,6 +70,10 @@ impl StateToolHelper {
                 .args(["--from-subnet", source_subnet.to_string().as_str()])
                 .args(["--to-subnet", destination_subnet.to_string().as_str()])
                 .args(["--subnet-type", "application"])
+                .args([
+                    "--batch-time-nanos",
+                    batch_time.as_nanos_since_unix_epoch().to_string().as_str(),
+                ])
                 .args(
                     once("--migrated-ranges".to_string())
                         .chain(canister_id_ranges_to_strings(canister_id_ranges).into_iter()),

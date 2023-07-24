@@ -12,6 +12,7 @@ use ic_state_layout::{
 use ic_types::state_sync::{
     ChunkInfo, FileInfo, Manifest, ManifestData, StateSyncVersion, MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
+use ic_types::Time;
 use prost::Message;
 use std::path::PathBuf;
 
@@ -27,7 +28,8 @@ mod tests;
 /// of the subnet IDs. This also means, among other things, that both resulting
 /// manifests will include a new `split_from.pbuf` file; and that the `subnet_b`
 /// manifest will have an empty `subnet_queues.pbuf` and a fresh, minimal
-/// `system_metadata.pbuf`.
+/// `system_metadata.pbuf` (having the `subnet_b` own ID; and the given original
+/// state subnet type and batch time).
 ///
 /// Only supports manifest versions 3 and up (because earlier versions had
 /// position-dependent file hashes and this function for the sake of simplicity
@@ -37,6 +39,7 @@ pub fn split_manifest(
     subnet_a: SubnetId,
     subnet_b: SubnetId,
     subnet_type: SubnetType,
+    batch_time: Time,
     routing_table: &RoutingTable,
 ) -> Result<(Manifest, Manifest), ManifestValidationError> {
     if manifest.version > MAX_SUPPORTED_STATE_SYNC_VERSION
@@ -113,7 +116,7 @@ pub fn split_manifest(
                     manifest_a.append(file, chunks);
 
                     // Replace with default on subnet B.
-                    manifest_b.append_system_metadata(subnet_b, subnet_type);
+                    manifest_b.append_system_metadata(subnet_b, subnet_type, batch_time);
                 }
                 _ => {
                     return Err(ManifestValidationError::InconsistentManifest {
@@ -161,7 +164,7 @@ impl ManifestBuilder {
         Ok(manifest)
     }
 
-    //. Appends `file_info` and `chunks` to `manifest`, adjusting chunk file indices
+    /// Appends `file_info` and `chunks` to `manifest`, adjusting chunk file indices
     /// as necessary.
     fn append(&mut self, file_info: &FileInfo, chunks: &[ChunkInfo]) {
         for mut chunk_info in chunks.iter().cloned() {
@@ -173,9 +176,18 @@ impl ManifestBuilder {
         self.manifest.file_table.push(file_info.clone());
     }
 
-    fn append_system_metadata(&mut self, subnet_id: SubnetId, subnet_type: SubnetType) {
+    /// Appends a `SystemMetadata` consisting of only the provided `own_subnet_id`,
+    /// `own_subnet_type` and `batch_time`.
+    fn append_system_metadata(
+        &mut self,
+        subnet_id: SubnetId,
+        subnet_type: SubnetType,
+        batch_time: Time,
+    ) {
+        let mut system_metadata = SystemMetadata::new(subnet_id, subnet_type);
+        system_metadata.batch_time = batch_time;
         let mut system_metadata_bytes = Vec::new();
-        pb_metadata::SystemMetadata::from(&SystemMetadata::new(subnet_id, subnet_type))
+        pb_metadata::SystemMetadata::from(&system_metadata)
             .encode(&mut system_metadata_bytes)
             .unwrap();
 
