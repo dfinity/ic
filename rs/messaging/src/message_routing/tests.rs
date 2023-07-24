@@ -6,6 +6,8 @@ use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_local_registry::LocalRegistry;
+use ic_registry_local_store::{compact_delta_to_changelog, LocalStoreImpl, LocalStoreWriter};
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
 use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::{EcdsaConfig, SevFeatureStatus};
@@ -27,7 +29,8 @@ use ic_types::{
     NodeId, PrincipalId, Randomness,
 };
 use maplit::{btreemap, btreeset};
-use std::{fmt::Debug, sync::Arc, time::Duration};
+use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
+use tempfile::TempDir;
 
 /// Helper function for testing the values of the
 /// `METRIC_DELIVER_BATCH_COUNT` metric.
@@ -434,7 +437,7 @@ impl StateMachine for FakeStateMachine {
 /// an `Arc` to the underlying state manager; and an `Arc` to the registry settings
 /// which are stored by the fake state machine.
 fn make_batch_processor(
-    registry: Arc<FakeRegistryClient>,
+    registry: Arc<impl RegistryClient + 'static>,
     log: ReplicaLogger,
 ) -> (
     BatchProcessorImpl,
@@ -995,5 +998,58 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
         handle.join().unwrap();
 
         assert_eq!(metrics.critical_error_failed_to_read_registry.get(), 0);
+    });
+}
+
+/// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
+fn get_mainnet_delta_00_6d_c1() -> (TempDir, LocalStoreImpl) {
+    let tempdir = TempDir::new().unwrap();
+    let store = LocalStoreImpl::new(tempdir.path());
+    let changelog =
+        compact_delta_to_changelog(ic_registry_local_store_artifacts::MAINNET_DELTA_00_6D_C1)
+            .expect("")
+            .1;
+
+    for (v, changelog_entry) in changelog.into_iter().enumerate() {
+        let v = RegistryVersion::from((v + 1) as u64);
+        store.store(v, changelog_entry).unwrap();
+    }
+    (tempdir, store)
+}
+
+pub fn mainnet_nns_subnet() -> SubnetId {
+    SubnetId::new(
+        PrincipalId::from_str("tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe")
+            .unwrap(),
+    )
+}
+
+pub fn mainnet_app_subnet() -> SubnetId {
+    SubnetId::new(
+        PrincipalId::from_str("6pbhf-qzpdk-kuqbr-pklfa-5ehhf-jfjps-zsj6q-57nrl-kzhpd-mu7hc-vae")
+            .unwrap(),
+    )
+}
+
+/// Tests `BatchProcessorImpl::try_to_read_registry()` successfully reads a snapshot of the mainnet
+/// registry.
+#[test]
+fn reading_mainnet_registry_succeeds() {
+    with_test_replica_logger(|log| {
+        let (tmp, _local_store) = get_mainnet_delta_00_6d_c1();
+        let registry =
+            Arc::new(LocalRegistry::new(tmp.path(), Duration::from_millis(500)).unwrap());
+
+        let registry_version = registry.get_latest_version();
+
+        let (batch_processor, _, _, _) = make_batch_processor(registry, log);
+        assert_matches!(
+            batch_processor.try_to_read_registry(registry_version, mainnet_nns_subnet()),
+            Ok(_)
+        );
+        assert_matches!(
+            batch_processor.try_to_read_registry(registry_version, mainnet_app_subnet()),
+            Ok(_)
+        );
     });
 }
