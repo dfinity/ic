@@ -327,6 +327,34 @@ fn test_open_with_delay() {
     assert_eq!(swap.sns_token_e8s().unwrap(), params.sns_token_e8s);
     assert_eq!(swap.lifecycle(), Adopted);
 
+    // This is a regression test. Previously, SaleClosed was returned, but that
+    // indicates that the swap has already completed. Whereas, SaleNotOpen is
+    // the correct response, because that indicates that it hasn't even started
+    // yet (despite the incredibly similar name).
+    {
+        let request = NewSaleTicketRequest::default();
+        let caller = PrincipalId::new_user_test_id(440_934);
+        let response = swap.new_sale_ticket(&request, caller, START_TIMESTAMP_SECONDS - 1);
+        use new_sale_ticket_response::Result::Err;
+        match response {
+            NewSaleTicketResponse {
+                result: Some(Err(err)),
+            } => {
+                use new_sale_ticket_response::{err::Type, Err};
+                assert_eq!(
+                    err,
+                    Err {
+                        error_type: Type::SaleNotOpen as i32,
+                        invalid_user_amount: None,
+                        existing_ticket: None,
+                    },
+                );
+            }
+
+            _ => panic!("{:#?}", response),
+        }
+    }
+
     // Try opening before delay elapses, it should NOT succeed.
     let timestamp_before_delay = START_TIMESTAMP_SECONDS + delay_seconds - 1;
     assert!(!swap.can_open(START_TIMESTAMP_SECONDS));

@@ -50,6 +50,7 @@ use rust_decimal::prelude::ToPrimitive;
 use std::{
     borrow::Cow,
     collections::BTreeMap,
+    fmt,
     num::{NonZeroU128, NonZeroU64},
     ops::{
         Bound::{Included, Unbounded},
@@ -2052,15 +2053,28 @@ impl Swap {
         caller: PrincipalId,
         time: u64,
     ) -> NewSaleTicketResponse {
-        if self.lifecycle() < Lifecycle::Open {
+        // Return an error if we are not in Lifecycle::Open.
+        if self.lifecycle().is_before_open() {
             return NewSaleTicketResponse::err_sale_not_open();
         }
-        if self.lifecycle() > Lifecycle::Open {
+        if self.lifecycle().is_after_open() {
             return NewSaleTicketResponse::err_sale_closed();
         }
+        if self.lifecycle() != Lifecycle::Open {
+            // It must be that we are in Lifecycle::Unspecified, but this also
+            // accounts for cases that might have been overlooked.
+            log!(
+                ERROR,
+                "We are not in Lifecycle::Open. Swap:\n{:#?}",
+                SwapDigest::new(self),
+            );
+            return NewSaleTicketResponse::err_sale_not_open();
+        }
+
         if caller.is_anonymous() {
             return NewSaleTicketResponse::err_invalid_principal();
         }
+
         // subaccounts must be 32 bytes
         if request
             .subaccount
@@ -3003,6 +3017,81 @@ impl NewSaleTicketResponse {
 
 fn insert_buyer_into_buyers_list_index(buyer_principal_id: PrincipalId) -> Result<(), GrowFailed> {
     memory::BUYERS_LIST_INDEX.with(|buyer_list| buyer_list.borrow_mut().push(&buyer_principal_id))
+}
+
+/// A version of Swap that implements a shorter version of Debug, suitable for
+/// logs. Potentially large collection fields are summarized and/or decimated.
+struct SwapDigest<'a> {
+    swap: &'a Swap,
+}
+
+impl<'a> SwapDigest<'a> {
+    fn new(swap: &'a Swap) -> Self {
+        Self { swap }
+    }
+}
+
+impl<'a> fmt::Debug for SwapDigest<'a> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        let Swap {
+            lifecycle,
+            init,
+            params,
+            open_sns_token_swap_proposal_id,
+            finalize_swap_in_progress,
+            decentralization_sale_open_timestamp_seconds,
+            next_ticket_id,
+            purge_old_tickets_last_completion_timestamp_nanoseconds,
+            purge_old_tickets_next_principal,
+            already_tried_to_auto_finalize,
+
+            // These are (potentially large) collections. To avoid an
+            // overwhelmingly large log message, we need summarize and/or
+            // decimate these.
+            cf_participants,
+            buyers,
+            neuron_recipes,
+        } = self.swap;
+
+        formatter
+            .debug_struct("Swap(digest)")
+            .field("lifecycle", lifecycle)
+            .field("init", init)
+            .field("params", params)
+            .field(
+                "open_sns_token_swap_proposal_id",
+                open_sns_token_swap_proposal_id,
+            )
+            .field("finalize_swap_in_progress", finalize_swap_in_progress)
+            .field(
+                "decentralization_sale_open_timestamp_seconds",
+                decentralization_sale_open_timestamp_seconds,
+            )
+            .field("next_ticket_id", next_ticket_id)
+            .field(
+                "purge_old_tickets_last_completion_timestamp_nanoseconds",
+                purge_old_tickets_last_completion_timestamp_nanoseconds,
+            )
+            .field(
+                "purge_old_tickets_next_principal",
+                purge_old_tickets_next_principal,
+            )
+            .field(
+                "already_tried_to_auto_finalize",
+                already_tried_to_auto_finalize,
+            )
+            // Summarize and/or decimate (potentially large) collection fields.
+            //
+            // TODO: Include some samples? E.g. the first, and last element, and
+            // maybe some random elements in the middle.
+            .field(
+                "cf_participants",
+                &format!("<len={}>", cf_participants.len()),
+            )
+            .field("buyers", &format!("<len={}>", buyers.len()))
+            .field("neuron_recipes", &format!("<len={}>", neuron_recipes.len()))
+            .finish()
+    }
 }
 
 #[cfg(test)]

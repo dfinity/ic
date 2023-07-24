@@ -901,7 +901,7 @@ impl CfNeuron {
 }
 
 impl Lifecycle {
-    pub fn is_terminal(&self) -> bool {
+    pub fn is_terminal(self) -> bool {
         match self {
             Self::Committed | Self::Aborted => true,
 
@@ -910,6 +910,40 @@ impl Lifecycle {
                 log!(ERROR, "A wild Lifecycle::Unspecified appeared.",);
                 false
             }
+        }
+    }
+
+    pub fn is_before_open(self) -> bool {
+        match self {
+            Self::Pending | Self::Adopted => true,
+
+            // Everything else is false. We list everything explicitly so that
+            // if more states are added, the compiler will force us to
+            // re-examine this, and make appropriate changes.
+
+            // Because this is ==.
+            Self::Open => false,
+            // Because these are after.
+            Self::Committed | Self::Aborted => false,
+            // Because this is neither before nor after.
+            Self::Unspecified => false,
+        }
+    }
+
+    pub fn is_after_open(self) -> bool {
+        match self {
+            Self::Committed | Self::Aborted => true,
+
+            // Everything else is false. We list everything explicitly so that
+            // if more states are added, the compiler will force us to
+            // re-examine this, and make appropriate changes.
+
+            // Because these are before.
+            Self::Pending | Self::Adopted => false,
+            // Because this is ==.
+            Self::Open => false,
+            // Because this is neither before nor after.
+            Self::Unspecified => false,
         }
     }
 }
@@ -1131,6 +1165,7 @@ impl TryInto<NeuronId> for SaleNeuronId {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         pb::v1::{
             CfNeuron, CfParticipant, Init, ListDirectParticipantsResponse,
@@ -1609,5 +1644,28 @@ mod tests {
             .swap_opening_field_states(Some(&open_request))
             .values()
             .any(|x| x.map(|y| y.is_contradiction()).unwrap_or(false)));
+    }
+
+    #[test]
+    fn test_life_cycle_order_methods() {
+        use Lifecycle::{Aborted, Adopted, Committed, Open, Pending, Unspecified};
+
+        let before_open = [Pending, Adopted];
+        let after_open = [Committed, Aborted];
+
+        for lifecycle in before_open {
+            assert!(lifecycle.is_before_open(), "{:?}", lifecycle);
+            assert!(!lifecycle.is_after_open(), "{:?}", lifecycle);
+        }
+
+        for lifecycle in after_open {
+            assert!(lifecycle.is_after_open(), "{:?}", lifecycle);
+            assert!(!lifecycle.is_before_open(), "{:?}", lifecycle);
+        }
+
+        assert!(!Open.is_before_open());
+        assert!(!Open.is_after_open());
+        assert!(!Unspecified.is_before_open());
+        assert!(!Unspecified.is_after_open());
     }
 }
