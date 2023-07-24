@@ -923,3 +923,23 @@ notify-gitlab-failure:
       cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" notify-slack -- notify_slack/notify_slack.py \
           "${MESSAGE}" --channel "release-management-alerts"
+
+commit-lint:
+  needs: []
+  extends:
+    - .build-k8s
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      allow_failure: true
+  script:
+    - |
+      set -eEuo pipefail
+
+      git config --global user.email "idx@dfinity.org"
+      git config --global user.name "IDX GitLab Automation"
+
+      if ! cog verify  "${CI_MERGE_REQUEST_TITLE}"; then
+        echo "Your commit message - '${CI_MERGE_REQUEST_TITLE}' does not respect conventional commit conventions" >&2
+        echo "Please visit https://www.conventionalcommits.org/en/v1.0.0/ to learn more about conventional commit" >&2
+        exit 1
+      fi
