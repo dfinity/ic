@@ -3,7 +3,7 @@ use crate::{
     layout::Layout,
     state_tool_helper::StateToolHelper,
     target_subnet::TargetSubnet,
-    utils::{find_expected_state_hash_for_subnet_id, get_state_hash},
+    utils::{find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_state_hash},
 };
 
 use ic_base_types::SubnetId;
@@ -117,6 +117,12 @@ impl Step for SplitStateStep {
             self.subnet_id.get(),
             self.state_split_strategy.retained_canister_id_ranges(),
             self.state_split_strategy.dropped_canister_id_ranges(),
+            match self.target_subnet {
+                TargetSubnet::Source => None,
+                TargetSubnet::Destination => Some(get_batch_time_from_cup(
+                    &self.layout.pre_split_source_cup_file(),
+                )?),
+            },
             &MetricsRegistry::new(),
             self.logger.clone().into(),
         )
@@ -191,6 +197,7 @@ impl Step for ComputeExpectedManifestsStep {
             self.layout.original_state_manifest_file(),
             self.source_subnet_id,
             self.destination_subnet_id,
+            get_batch_time_from_cup(&self.layout.pre_split_source_cup_file())?,
             &self.canister_id_ranges_to_move,
             self.layout.expected_manifests_file(),
         )
@@ -243,7 +250,7 @@ impl Step for ValidateCUPStep {
             self.layout.data_dir(TargetSubnet::Source),
             Some(ic_replay::cmd::SubCommand::VerifySubnetCUP(
                 ic_replay::cmd::VerifySubnetCUPCmd {
-                    cup_file: self.layout.cup_file(TargetSubnet::Source),
+                    cup_file: self.layout.pre_split_source_cup_file(),
                     public_key_file: self.layout.subnet_public_key_file(self.subnet_id),
                 },
             )),

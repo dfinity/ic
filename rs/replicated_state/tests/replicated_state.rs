@@ -693,7 +693,11 @@ fn split() {
     //
     // Split off subnet A', phase 1.
     //
-    let state_a_phase_1 = fixture.state.clone().split(SUBNET_A, &routing_table);
+    let state_a_phase_1 = fixture
+        .state
+        .clone()
+        .split(SUBNET_A, &routing_table, None)
+        .unwrap();
 
     // Start off with the original state.
     let mut expected = fixture.state.clone();
@@ -725,7 +729,11 @@ fn split() {
     //
     // Split off subnet B, phase 1.
     //
-    let state_b_phase_1 = fixture.state.clone().split(SUBNET_B, &routing_table);
+    let state_b_phase_1 = fixture
+        .state
+        .clone()
+        .split(SUBNET_B, &routing_table, None)
+        .unwrap();
 
     // Subnet B state is based off of an empty state.
     let mut expected = ReplicatedState::new(SUBNET_B, fixture.state.metadata.own_subnet_type);

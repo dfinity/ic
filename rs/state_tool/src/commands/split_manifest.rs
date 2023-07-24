@@ -7,7 +7,7 @@ use ic_state_manager::manifest::split::split_manifest;
 use ic_state_manager::manifest::{manifest_hash, validate_manifest};
 use ic_types::crypto::CryptoHash;
 use ic_types::state_sync::Manifest;
-use ic_types::{CanisterId, CryptoHashOfState, SubnetId};
+use ic_types::{CanisterId, CryptoHashOfState, SubnetId, Time};
 use std::fs::File;
 use std::path::PathBuf;
 
@@ -18,12 +18,14 @@ use std::path::PathBuf;
 ///
 /// `subnet_a` is expected to have subnet type `subnet_type` (although there is
 /// no wau to validate this); and this same subnet type will be assigned to
-/// `subnet_b`.
+/// `subnet_b`. Same with `batch_time`, which is assumed to be the batch time
+/// of `subnet_a` just before halting.
 pub fn do_split_manifest(
     path: PathBuf,
     subnet_a: SubnetId,
     subnet_b: SubnetId,
     subnet_type: SubnetType,
+    batch_time: Time,
     migrated_ranges: Vec<CanisterIdRange>,
 ) -> Result<(), String> {
     let (version, files, chunks, hash) = parse_manifest(
@@ -58,9 +60,15 @@ pub fn do_split_manifest(
     // Reassign `migrated_ranges` to `subnet_b`.
     assign_ranges(migrated_ranges, subnet_b)?;
 
-    let (manifest_a, manifest_b) =
-        split_manifest(&manifest, subnet_a, subnet_b, subnet_type, &routing_table)
-            .map_err(|e| format!("Failed to split manifest: {}", e))?;
+    let (manifest_a, manifest_b) = split_manifest(
+        &manifest,
+        subnet_a,
+        subnet_b,
+        subnet_type,
+        batch_time,
+        &routing_table,
+    )
+    .map_err(|e| format!("Failed to split manifest: {}", e))?;
 
     print_manifest(subnet_a, &manifest_a);
     print_manifest(subnet_b, &manifest_b);

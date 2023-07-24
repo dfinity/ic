@@ -7,7 +7,7 @@
 use clap::Parser;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::PrincipalId;
+use ic_types::{PrincipalId, Time};
 use std::path::PathBuf;
 
 mod commands;
@@ -163,6 +163,11 @@ enum Opt {
         /// Canister ID ranges to drop (assigned to other subnet in the routing table).
         #[clap(long, multiple_values(true))]
         drop: Vec<CanisterIdRange>,
+        /// New subnet's batch time (original subnet always retains its batch time).
+        ///
+        /// If not specified, the new subnet uses the batch time of the original subnet.
+        #[clap(long)]
+        batch_time_nanos: Option<u64>,
     },
 
     /// Splits a manifest, to verify the manifests resulting from a subnet split.
@@ -180,6 +185,9 @@ enum Opt {
         /// Type of the original subnet (to also be applied to `to_subnet`).
         #[clap(long, required = true)]
         subnet_type: SubnetType,
+        /// Batch time to apply to the state of `to_subnet` (the new subnet).
+        #[clap(long, required = true)]
+        batch_time_nanos: u64,
         /// Canister ID ranges migrated to the new subnet.
         #[clap(long, required = true, multiple_values(true))]
         migrated_ranges: Vec<CanisterIdRange>,
@@ -217,18 +225,27 @@ fn main() {
             subnet_id,
             retain,
             drop,
-        } => commands::split::do_split(root, subnet_id, retain, drop),
+            batch_time_nanos,
+        } => commands::split::do_split(
+            root,
+            subnet_id,
+            retain,
+            drop,
+            batch_time_nanos.map(Time::from_nanos_since_unix_epoch),
+        ),
         Opt::SplitManifest {
             path,
             from_subnet,
             to_subnet,
             subnet_type,
+            batch_time_nanos,
             migrated_ranges,
         } => commands::split_manifest::do_split_manifest(
             path,
             from_subnet.into(),
             to_subnet.into(),
             subnet_type,
+            Time::from_nanos_since_unix_epoch(batch_time_nanos),
             migrated_ranges,
         ),
     };
