@@ -58,7 +58,7 @@ pub(crate) const ADDRESS_LENGTH: usize = 44;
 
 pub(crate) const TRANSFER_FEE: u64 = 1_000;
 
-pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 100;
+pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 10000;
 
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 

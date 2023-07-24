@@ -139,13 +139,13 @@ mod tests {
     fn test_state_args() -> InitArgs {
         InitArgs {
             btc_network: BtcNetwork::Regtest,
-            ecdsa_key_name: "".to_string(),
-            retrieve_btc_min_amount: 0,
+            ecdsa_key_name: "some_key".to_string(),
+            retrieve_btc_min_amount: 2000,
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
             mode: crate::state::Mode::GeneralAvailability,
-            kyt_principal: None,
+            kyt_principal: Some(CanisterId::from(0)),
             kyt_fee: None,
         }
     }

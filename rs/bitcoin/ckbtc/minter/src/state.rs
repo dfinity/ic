@@ -419,6 +419,18 @@ impl CkBtcMinterState {
         }
     }
 
+    pub fn validate_config(&self) {
+        if self.kyt_fee > self.retrieve_btc_min_amount {
+            ic_cdk::trap("kyt_fee cannot be greater than retrieve_btc_min_amount");
+        }
+        if self.ecdsa_key_name.is_empty() {
+            ic_cdk::trap("ecdsa_key_name is not set");
+        }
+        if self.kyt_principal.is_none() {
+            ic_cdk::trap("KYT principal is not set");
+        }
+    }
+
     pub fn check_invariants(&self) -> Result<(), String> {
         for utxo in self.available_utxos.iter() {
             ensure!(
