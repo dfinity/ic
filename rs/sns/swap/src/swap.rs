@@ -194,7 +194,13 @@ impl NeuronBasketConstructionParameters {
             .map(|i| i * self.dissolve_delay_interval_seconds)
             .collect::<Vec<u64>>();
 
-        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count);
+        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count)
+            // TODO: Bubble up. The only cases in which AAE returns Err are
+            // 1. the second argument is nonzero, but we already asserted that
+            // it isn't 2. AAE detects that it has a bug, but ofc, we do not
+            // know how that can happen (other than the fact that humans are
+            // fallible).
+            .expect("Internal bug.");
 
         assert_eq!(dissolve_delay_seconds_list.len(), chunks_e8s.len());
 
@@ -216,15 +222,63 @@ impl NeuronBasketConstructionParameters {
 /// More precisely, result.len() == len. result.sum() == total. Each element of
 /// result is approximately equal to the others. However, unless len divides
 /// total evenly, the elements of result will inevitabley be not equal.
-pub fn apportion_approximately_equally(total: u64, len: u64) -> Vec<u64> {
-    assert!(len > 0, "len must be greater than zero");
-    let quotient = total.saturating_div(len);
-    let remainder = total % len;
+///
+/// There are two ways that Err can be returned:
+///
+///   1. Caller mistake: len == 0
+///
+///   2. This has a bug. See implementation comments for why we know of know way
+///      this can happen, but can detect if it does.
+pub fn apportion_approximately_equally(total: u64, len: u64) -> Result<Vec<u64>, String> {
+    let quotient = total
+        .checked_div(len)
+        .ok_or_else(|| format!("Unable to divide total={} by len={}", total, len))?;
+    let remainder = total % len; // For unsigned integers, % cannot overflow.
 
+    // So far, we have only apportioned quotient * len. To reach the desired
+    // total, we must still somehow add remainder (per Euclid's Division
+    // Theorem). That is accomplished right after this.
     let mut result = vec![quotient; len as usize];
-    *result.first_mut().unwrap() += remainder;
 
-    result
+    // Divy out the remainder: Starting from the last element, increment
+    // elements by 1. The number of such increments performed here is remainder,
+    // bringing our total back to the desired amount.
+    assert!(
+        remainder < result.len() as u64, // By Euclid's Division Theorem,
+        "{} vs. {}",
+        remainder,
+        result.len(),
+    );
+    let mut iter_mut = result.iter_mut();
+    for _ in 0..remainder {
+        let element: &mut u64 = iter_mut
+            .next_back()
+            // We can prove that this will not panic:
+            // The number of iterations of this loop is total % len.
+            // This must be < len (by Euclid's Division Theorem).
+            // Thus, the number of iterations that this loop goes through is < len.
+            // Thus, the number of times next_back is called is < len.
+            // next_back only returns None after len calls.
+            // Therefore, next_back does not return None here.
+            // Therefore, this expect will never panic.
+            .ok_or_else(|| {
+                format!(
+                    "Ran out of elements to increment. total={}, len={}",
+                    total, len,
+                )
+            })?;
+
+        // This cannot overflow because the result must be <= total. Thus, this
+        // will not panic.
+        *element = element.checked_add(1).ok_or_else(|| {
+            format!(
+                "Incrementing element by 1 resulted in overflow. total={}, len={}",
+                total, len,
+            )
+        })?;
+    }
+
+    Ok(result)
 }
 
 // High level documentation in the corresponding Protobuf message.
@@ -3465,23 +3519,23 @@ mod tests {
                 .generate_vesting_schedule(/* total_amount_e8s = */ 9),
             vec![
                 ScheduledVestingEvent {
-                    amount_e8s: 5,
+                    amount_e8s: 1,
                     dissolve_delay_seconds: 0,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 100,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 200,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 300,
                 },
                 ScheduledVestingEvent {
-                    amount_e8s: 1,
+                    amount_e8s: 2,
                     dissolve_delay_seconds: 400,
                 },
             ],
@@ -3517,10 +3571,12 @@ mod tests {
                     .sum::<u64>(),
                 total_e8s,
             );
-            for i in 1..vesting_schedule.len() {
-                assert_eq!(
-                    vesting_schedule.get(i).unwrap().amount_e8s,
-                    total_e8s / count,
+            let lower_bound_e8s = total_e8s / count;
+            let upper_bound_e8s = lower_bound_e8s + 1;
+            for scheduled_vesting_event in &vesting_schedule {
+                assert!(
+                    lower_bound_e8s <= scheduled_vesting_event.amount_e8s
+                        && scheduled_vesting_event.amount_e8s <= upper_bound_e8s,
                     "{:#?}",
                     vesting_schedule,
                 );
