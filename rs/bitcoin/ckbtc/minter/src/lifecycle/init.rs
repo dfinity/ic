@@ -87,5 +87,7 @@ pub struct InitArgs {
 }
 
 pub fn init(args: InitArgs) {
-    replace_state(CkBtcMinterState::from(args));
+    let state: CkBtcMinterState = CkBtcMinterState::from(args);
+    state.validate_config();
+    replace_state(state);
 }
