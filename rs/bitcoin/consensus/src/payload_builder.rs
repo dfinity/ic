@@ -148,7 +148,12 @@ impl BitcoinPayloadBuilder {
 
             // Send request to the adapter.
             let timer = Timer::start();
-            let result = adapter_client.send_blocking(request.clone(), Options::default());
+            let result = adapter_client.send_blocking(
+                request.clone(),
+                Options {
+                    timeout: std::time::Duration::from_millis(250),
+                },
+            );
 
             match result {
                 Ok(response_wrapper) => {
