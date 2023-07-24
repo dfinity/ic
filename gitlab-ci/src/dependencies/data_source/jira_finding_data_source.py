@@ -117,9 +117,12 @@ class JiraFindingDataSource(FindingDataSource):
                 res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4]), risk_note=JIRA_VULNERABILITY_TABLE_RISK_NOTE_MIGRATION_LABEL))
             elif len(parts) == 6:
                 res.append(Vulnerability(id=parts[1], name=parts[2], description=parts[3], score=int(parts[4]), risk_note=parts[5]))
+            elif len(parts) == 7:
+                # temporary fix to handle markdown rendering of id as [url | url]
+                # Ex: |[https://avd.aquasec.com/nvd/cve-2023-35823|https://avd.aquasec.com/nvd/cve-2023-35823]|CVE-2023-35823|race condition ()|7|Low
+                res.append(Vulnerability(id=parts[1].lstrip("["), name=parts[3], description=parts[4], score=int(parts[5]), risk_note=parts[6]))
             else:
                 return None
-
         return res
 
     @staticmethod
