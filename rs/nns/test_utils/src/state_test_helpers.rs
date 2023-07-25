@@ -9,9 +9,10 @@ use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{
-    CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    UpdateSettingsArgs,
+    CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResult,
+    CanisterStatusResultV2, UpdateSettingsArgs,
 };
+
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_common::pb::v1::NeuronId;
@@ -231,6 +232,23 @@ pub fn get_controllers(
     )
     .unwrap();
     result.controllers()
+}
+
+/// Get status for a canister.
+pub fn get_canister_status(
+    machine: &StateMachine,
+    sender: PrincipalId,
+    target: CanisterId,
+    canister_target: CanisterId,
+) -> Result<CanisterStatusResult, String> {
+    update_with_sender(
+        machine,
+        canister_target,
+        "canister_status",
+        candid_one,
+        &CanisterIdRecord::from(target),
+        sender,
+    )
 }
 
 /// Compiles the universal canister, builds it's initial payload and installs it with cycles
