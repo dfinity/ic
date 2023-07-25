@@ -82,7 +82,8 @@ async fn display_logs(req: DisplayLogsRequest) -> Vec<ReceivedEthEvent> {
         }],
     )
     .await
-    .expect("HTTP call failed");
+    .expect("HTTP call failed")
+    .unwrap();
     result
         .into_iter()
         .map(|entry| {

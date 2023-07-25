@@ -208,10 +208,31 @@ struct JsonRpcRequest<T> {
     params: T,
 }
 
+#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsonRpcReply<T> {
+    pub id: u32,
+    #[serde(flatten)]
+    pub result: JsonRpcResult<T>,
+}
+
 /// An envelope for all JSON-RPC replies.
-#[derive(Deserialize)]
-struct JsonRpcReply<T> {
-    result: T,
+#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum JsonRpcResult<T> {
+    Result(T),
+    Error { code: i64, message: String },
+}
+
+impl<T> JsonRpcResult<T> {
+    pub fn unwrap(self) -> T {
+        match self {
+            Self::Result(t) => t,
+            Self::Error { code, message } => panic!(
+                "expected JSON RPC call to succeed, got an error: error_code = {code}, message = {message}"
+            ),
+        }
+    }
 }
 
 #[query]
@@ -226,7 +247,7 @@ pub async fn call<I: Serialize, O: DeserializeOwned>(
     url: &'static str,
     method: impl Into<String>,
     params: I,
-) -> CallResult<O> {
+) -> CallResult<JsonRpcResult<O>> {
     const KIB: u64 = 1024;
     let payload = serde_json::to_string(&JsonRpcRequest {
         jsonrpc: "2.0",
