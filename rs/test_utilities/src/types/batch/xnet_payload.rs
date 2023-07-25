@@ -18,12 +18,12 @@ impl Default for XNetPayloadBuilder {
 }
 
 impl XNetPayloadBuilder {
-    /// Create a new XNetPayloadBuilder
+    /// Creates a new `XNetPayloadBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Sets the `xnet_payload.stream_slices` field to `stream_slices`.
+    /// Replaces the `stream_slices` field.
     pub fn stream_slices(
         mut self,
         stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
@@ -45,7 +45,7 @@ impl XNetPayloadBuilder {
         self
     }
 
-    /// Return the built XNetPayload.
+    /// Returns the built `XNetPayload`.
     pub fn build(self) -> XNetPayload {
         self.xnet_payload
     }

@@ -20,26 +20,30 @@ impl Default for QueueIdBuilder {
 }
 
 impl QueueIdBuilder {
+    /// Creates a new `QueueIdBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    pub fn src_canister(mut self, can_id: CanisterId) -> Self {
-        self.queue_id.src_canister = can_id;
+    /// Sets the `src_canister` field.
+    pub fn src_canister(mut self, canister_id: CanisterId) -> Self {
+        self.queue_id.src_canister = canister_id;
         self
     }
 
-    pub fn dst_canister(mut self, can_id: CanisterId) -> Self {
-        self.queue_id.dst_canister = can_id;
+    /// Sets the `dst_canister` field.
+    pub fn dst_canister(mut self, canister_id: CanisterId) -> Self {
+        self.queue_id.dst_canister = canister_id;
         self
     }
 
+    /// Sets the `session_id` field.
     pub fn session_id(mut self, session_id: SessionId) -> Self {
         self.queue_id.session_id = session_id;
         self
     }
 
-    // Returns the built QueueId
+    /// Returns the built `QueueId`.
     pub fn build(&self) -> QueueId {
         self.queue_id.clone()
     }
