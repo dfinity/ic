@@ -25,3 +25,7 @@ serde_cbor = "0.11.1"
 [[bench]]
 name = "tree_hash"
 harness = false
+
+[[bench]]
+name = "flat_map"
+harness = false
