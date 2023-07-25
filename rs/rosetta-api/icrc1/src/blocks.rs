@@ -2,6 +2,7 @@ use crate::{Block, Transaction};
 use ciborium::into_writer;
 use ciborium::value::{Integer, Value as CiboriumValue};
 use ic_ledger_core::block::{BlockType, EncodedBlock};
+use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc3::transactions::GenericTransaction;
@@ -119,14 +120,14 @@ pub fn generic_transaction_from_generic_block(
     }
 }
 
-impl TryFrom<GenericBlock> for Block {
+impl<Tokens: TokensType> TryFrom<GenericBlock> for Block<Tokens> {
     type Error = String;
     fn try_from(value: GenericBlock) -> Result<Self, Self::Error> {
-        Block::decode(generic_block_to_encoded_block(value)?)
+        Self::decode(generic_block_to_encoded_block(value)?)
     }
 }
 
-impl TryFrom<GenericBlock> for Transaction {
+impl<Tokens: TokensType> TryFrom<GenericBlock> for Transaction<Tokens> {
     type Error = String;
     fn try_from(value: GenericBlock) -> Result<Self, Self::Error> {
         Ok(Block::try_from(value)?.transaction)

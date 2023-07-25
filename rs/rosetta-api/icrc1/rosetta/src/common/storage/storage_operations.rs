@@ -1,12 +1,16 @@
 use crate::common::storage::types::RosettaBlock;
+use anyhow::{anyhow, bail};
 use candid::Principal;
 use ic_icrc1::{Operation, Transaction};
+use ic_icrc1_tokens_u64::U64;
 use ic_ledger_core::block::EncodedBlock;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use rusqlite::{params, Params};
 use rusqlite::{Connection, Statement, ToSql};
 use serde_bytes::ByteBuf;
+
+type Tokens = U64;
 
 // Stores a batch of RosettaBlocks
 pub fn store_blocks(
@@ -73,7 +77,7 @@ pub fn store_blocks(
                 Some(to.owner),
                 to.subaccount,
                 amount,
-                Some(fee),
+                fee,
             ),
             ic_icrc1::Operation::Burn { from, amount, .. } => (
                 "burn",
@@ -98,8 +102,8 @@ pub fn store_blocks(
                 to_principal.map(|x| x.as_slice().to_vec()),
                 to_subaccount,
                 transaction.memo.map(|x| x.0.as_slice().to_vec()),
-                amount,
-                fee,
+                amount.to_u64(),
+                fee.map(Tokens::to_u64),
                 transaction.created_at_time
             ],
         ) {
@@ -190,7 +194,7 @@ pub fn get_blockchain_gaps(
 pub fn get_transaction_at_idx(
     connection: &Connection,
     block_idx: u64,
-) -> anyhow::Result<Option<Transaction>> {
+) -> anyhow::Result<Option<Transaction<Tokens>>> {
     let command = format!("SELECT * FROM transactions WHERE block_idx = {}", block_idx);
     let mut stmt = connection.prepare(&command)?;
     read_single_transaction(&mut stmt, params![])
@@ -201,7 +205,7 @@ pub fn get_transaction_at_idx(
 pub fn get_transactions_by_hash(
     connection: &Connection,
     hash: ByteBuf,
-) -> anyhow::Result<Vec<Transaction>> {
+) -> anyhow::Result<Vec<Transaction<Tokens>>> {
     let mut stmt = connection.prepare("SELECT * FROM transactions WHERE tx_hash = ?1")?;
     read_transactions(&mut stmt, params![hash.as_slice().to_vec()])
 }
@@ -249,57 +253,55 @@ where
 fn read_single_transaction<P>(
     stmt: &mut Statement,
     params: P,
-) -> anyhow::Result<Option<Transaction>>
+) -> anyhow::Result<Option<Transaction<Tokens>>>
 where
     P: Params,
 {
-    let transactions: Vec<Transaction> = read_transactions(stmt, params)?;
+    let transactions: Vec<Transaction<Tokens>> = read_transactions(stmt, params)?;
     if transactions.len() == 1 {
         // Return the block if only one block was found
-        Ok(Some(transactions[0].clone()))
+        Ok(transactions.into_iter().next())
     } else if transactions.is_empty() {
         // Return None if no block was found
         Ok(None)
     } else {
         // If more than one block was found return an error
-        Err(anyhow::Error::msg(
-            "Multiple transactions found with given parameters".to_owned(),
-        ))
+        bail!("Multiple transactions found with given parameters")
     }
 }
 
 // Executes the constructed statement that reads transactions.
-fn read_transactions<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Vec<Transaction>>
+fn read_transactions<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Vec<Transaction<Tokens>>>
 where
     P: Params,
 {
+    fn opt_bytes_to_principal(bytes: Option<Vec<u8>>) -> Option<Principal> {
+        Some(Principal::from_slice(bytes?.as_slice()))
+    }
+    fn opt_bytes_to_memo(bytes: Option<Vec<u8>>) -> Option<Memo> {
+        Some(Memo(ByteBuf::from(bytes?)))
+    }
+
     let rows = stmt.query_map(params, |row| {
         Ok((
-            row.get::<usize, String>(2)
-                .map_err(|e| anyhow::Error::msg(e.to_string())),
-            row.get(3)
-                .map(|bytes: Vec<u8>| Principal::from_slice(bytes.as_slice()))
-                .map_err(|e| anyhow::Error::msg(e.to_string())),
-            row.get(4).map_err(|e| anyhow::Error::msg(e.to_string())),
-            row.get(5)
-                .map(|bytes: Vec<u8>| Principal::from_slice(bytes.as_slice()))
-                .map_err(|e| anyhow::Error::msg(e.to_string())),
-            row.get(6).map_err(|e| anyhow::Error::msg(e.to_string())),
-            row.get(7)
-                .map(|bytes: Option<Vec<u8>>| bytes.map(|memo| Memo(ByteBuf::from(memo))))
-                .map_err(|e| anyhow::Error::msg(e.to_string())),
-            row.get(8).map_err(|e| anyhow::Error::msg(e.to_string())),
-            row.get(9).map_err(|e| anyhow::Error::msg(e.to_string())),
-            row.get(10).map_err(|e| anyhow::Error::msg(e.to_string())),
+            row.get::<usize, String>(2)?,
+            row.get(3).map(opt_bytes_to_principal)?,
+            row.get(4)?,
+            row.get(5).map(opt_bytes_to_principal)?,
+            row.get(6)?,
+            row.get(7).map(opt_bytes_to_memo)?,
+            row.get(8)?,
+            row.get::<usize, Option<u64>>(9)?,
+            row.get(10)?,
         ))
     })?;
     let mut result = vec![];
     for row in rows {
         let (
             operation_type,
-            from_principal,
+            maybe_from_principal,
             from_subaccount,
-            to_principal,
+            maybe_to_principal,
             to_subaccount,
             memo,
             amount,
@@ -307,42 +309,47 @@ where
             transaction_created_at_time,
         ) = row?;
         result.push(Transaction {
-            operation: match operation_type?.as_str() {
-                "mint" => Ok(Operation::Mint {
+            operation: match operation_type.as_str() {
+                "mint" => Operation::Mint {
                     to: Account {
-                        owner: to_principal?,
-                        subaccount: to_subaccount?,
+                        owner: maybe_to_principal.ok_or_else(|| {
+                            anyhow!("a mint transaction is missing the to_principal field")
+                        })?,
+                        subaccount: to_subaccount,
                     },
-                    amount: amount?,
-                }),
-                "transfer" => Ok(Operation::Transfer {
+                    amount: Tokens::new(amount),
+                },
+                "transfer" => Operation::Transfer {
                     from: Account {
-                        owner: from_principal?,
-                        subaccount: from_subaccount?,
+                        owner: maybe_from_principal.ok_or_else(|| {
+                            anyhow!("a transfer transaction is missing the from_principal field")
+                        })?,
+                        subaccount: from_subaccount,
                     },
                     to: Account {
-                        owner: to_principal?,
-                        subaccount: to_subaccount?,
+                        owner: maybe_to_principal.ok_or_else(|| {
+                            anyhow!("a transfer transaction is missing the to_principal field")
+                        })?,
+                        subaccount: to_subaccount,
                     },
                     spender: None,
-                    amount: amount?,
-                    fee: fee?,
-                }),
-                "burn" => Ok(Operation::Burn {
+                    amount: Tokens::new(amount),
+                    fee: fee.map(Tokens::new),
+                },
+                "burn" => Operation::Burn {
                     from: Account {
-                        owner: from_principal?,
-                        subaccount: from_subaccount?,
+                        owner: maybe_from_principal.ok_or_else(|| {
+                            anyhow!("a burn transaction is missing the from_principal field")
+                        })?,
+                        subaccount: from_subaccount,
                     },
                     spender: None,
-                    amount: amount?,
-                }),
-                k => Err(anyhow::Error::msg(format!(
-                    "Operation type {} is not supported",
-                    k
-                ))),
-            }?,
-            memo: memo?,
-            created_at_time: transaction_created_at_time?,
+                    amount: Tokens::new(amount),
+                },
+                k => bail!("Operation type {} is not supported", k),
+            },
+            memo,
+            created_at_time: transaction_created_at_time,
         });
     }
     Ok(result)

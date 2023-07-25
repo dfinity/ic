@@ -426,7 +426,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
                 owner: user.into(),
                 subaccount: None,
             },
-            100000000,
+            Nat::from(100_000_000),
         ));
     } else {
         panic!("bug: expected Init got Upgrade");
@@ -703,7 +703,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
                 owner: user.into(),
                 subaccount: None,
             },
-            100000000,
+            Nat::from(100_000_000),
         ));
     } else {
         panic!("bug: expected Init got Upgrade");

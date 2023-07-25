@@ -13,6 +13,7 @@ use ic_icrc1_index_ng::{
     DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
+use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::storable::Blob;
 use ic_stable_structures::{
@@ -47,6 +48,8 @@ const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
 const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
 
+type Tokens = ic_icrc1_tokens_u64::U64;
+
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
 type BlockLog = StableLog<Vec<u8>, VM, VM>;
@@ -58,7 +61,7 @@ type AccountBlockIdsMap = StableBTreeMap<AccountBlockIdsMapKey, (), VM>;
 // The second element of this tuple is the account represented
 // as principal of type Blob<29> and the effective subaccount
 type AccountDataMapKey = (AccountDataType, (Blob<29>, [u8; 32]));
-type AccountDataMap = StableBTreeMap<AccountDataMapKey, u64, VM>;
+type AccountDataMap = StableBTreeMap<AccountDataMapKey, Tokens, VM>;
 
 thread_local! {
     /// Static memory manager to manage the memory available for stable structures.
@@ -218,23 +221,27 @@ fn with_account_data<R>(f: impl FnOnce(&mut AccountDataMap) -> R) -> R {
 /// This function can trap if the index at the given block cannot be decoded
 /// because all blocks stored in the transaction log should be decodable
 /// (see [append_blocks]). If not then something is wrong with the log.
-fn get_decoded_block(block_index: BlockIndex64) -> Option<Block> {
+fn get_decoded_block(block_index: BlockIndex64) -> Option<Block<Tokens>> {
     with_blocks(|blocks| blocks.get(block_index))
         .map(EncodedBlock::from)
         .map(|block| decode_encoded_block_or_trap(block_index, block))
 }
 
 /// A helper function to access the balance of an account.
-fn get_balance(account: Account) -> u64 {
-    with_account_data(|account_data| account_data.get(&balance_key(account)).unwrap_or(0))
+fn get_balance(account: Account) -> Tokens {
+    with_account_data(|account_data| {
+        account_data
+            .get(&balance_key(account))
+            .unwrap_or_else(|| Tokens::zero())
+    })
 }
 
 /// A helper function to change the balance of an account.
 /// It removes an account balance if the balance is 0.
-fn change_balance(account: Account, f: impl FnOnce(u64) -> u64) {
+fn change_balance(account: Account, f: impl FnOnce(Tokens) -> Tokens) {
     let key = balance_key(account);
     let new_balance = f(get_balance(account));
-    if new_balance == 0 {
+    if Tokens::is_zero(&new_balance) {
         with_account_data(|account_data| account_data.remove(&key));
     } else {
         with_account_data(|account_data| account_data.insert(key, new_balance));
@@ -403,7 +410,7 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) {
     }
 }
 
-fn index_fee_collector(block_index: BlockIndex64, block: &Block) {
+fn index_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) {
     if let Some(fee_collector) = get_fee_collector(block_index, block) {
         mutate_state(|s| {
             s.fee_collectors
@@ -430,7 +437,7 @@ fn push_block(block_ranges: &mut Vec<Range<BlockIndex64>>, block_index: BlockInd
     }
 }
 
-fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
+fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
     measure_span(
         &PROFILING_DATA,
         "append_blocks.process_balance_changes",
@@ -450,7 +457,15 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
                         block_index
                     ))
                 });
-                debit(block_index, from, amount + fee);
+                debit(
+                    block_index,
+                    from,
+                    amount.checked_add(&fee).unwrap_or_else(|| {
+                        ic_cdk::trap(&format!(
+                            "token amount overflow while indexing block {block_index}"
+                        ))
+                    }),
+                );
                 credit(block_index, to, amount);
                 if let Some(fee_collector) = get_fee_collector(block_index, block) {
                     credit(block_index, fee_collector, fee);
@@ -469,23 +484,21 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
     );
 }
 
-fn debit(block_index: BlockIndex64, account: Account, amount: u64) {
+fn debit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
-        if balance < amount {
+        balance.checked_sub(&amount).unwrap_or_else(|| {
             ic_cdk::trap(&format!("Block {} caused an underflow for account {} when calculating balance {} - amount {}",
                 block_index, account, balance, amount));
-        }
-        balance - amount
+        })
     })
 }
 
-fn credit(block_index: BlockIndex64, account: Account, amount: u64) {
+fn credit(block_index: BlockIndex64, account: Account, amount: Tokens) {
     change_balance(account, |balance| {
-        if u64::MAX - balance < amount {
+        balance.checked_add(&amount).unwrap_or_else(|| {
             ic_cdk::trap(&format!("Block {} caused an overflow for account {} when calculating balance {} + amount {}",
-                block_index, account, balance, amount));
-        }
-        balance + amount
+                block_index, account, balance, amount))
+        })
     });
 }
 
@@ -501,8 +514,8 @@ fn generic_block_to_encoded_block_or_trap(
     })
 }
 
-fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block {
-    Block::decode(block).unwrap_or_else(|e| {
+fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block<Tokens> {
+    Block::<Tokens>::decode(block).unwrap_or_else(|e| {
         trap(&format!(
             "Unable to decode encoded block at index {}. Error: {}",
             block_index, e
@@ -510,7 +523,7 @@ fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) 
     })
 }
 
-fn get_accounts(block: &Block) -> Vec<Account> {
+fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
@@ -519,7 +532,7 @@ fn get_accounts(block: &Block) -> Vec<Account> {
     }
 }
 
-fn get_fee_collector(block_index: BlockIndex64, block: &Block) -> Option<Account> {
+fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option<Account> {
     if block.fee_collector.is_some() {
         block.fee_collector
     } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {
@@ -636,7 +649,7 @@ fn encoded_block_bytes_to_flat_transaction(
     block_index: BlockIndex64,
     block: Vec<u8>,
 ) -> Transaction {
-    let block = Block::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
+    let block = Block::<Tokens>::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
         trap(&format!(
             "Unable to decode encoded block at index {}. Error: {}",
             block_index, e
@@ -699,7 +712,7 @@ fn encoded_block_bytes_to_flat_transaction(
                 from,
                 spender,
                 amount: amount.into(),
-                expected_allowance: expected_allowance.map(|ea| Nat::from(ea.get_e8s())),
+                expected_allowance: expected_allowance.map(Into::into),
                 expires_at: expires_at.map(|exp| exp.as_nanos_since_unix_epoch()),
                 fee: fee.map(|fee| fee.into()),
                 created_at_time,

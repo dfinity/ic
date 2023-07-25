@@ -16,7 +16,7 @@ use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceE
 use ic_ckbtc_minter::{
     Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
 };
-use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_state_machine_tests::{Cycles, StateMachine, StateMachineBuilder, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
@@ -78,29 +78,11 @@ fn kyt_wasm() -> Vec<u8> {
 }
 
 fn install_ledger(env: &StateMachine) -> CanisterId {
-    let args = LedgerArgument::Init(LedgerInitArgs {
-        minting_account: Account {
-            owner: Principal::anonymous(),
-            subaccount: None,
-        },
-        initial_balances: vec![],
-        transfer_fee: 0,
-        token_name: "Test Token".to_string(),
-        token_symbol: "TST".to_string(),
-        metadata: vec![],
-        archive_options: ArchiveOptions {
-            trigger_threshold: 0,
-            num_blocks_to_archive: 0,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: Default::default(),
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        },
-        fee_collector_account: None,
-        max_memo_length: None,
-        feature_flags: None,
-    });
+    let args = LedgerArgument::Init(
+        LedgerInitArgsBuilder::for_tests()
+            .with_transfer_fee(0)
+            .build(),
+    );
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
 }
@@ -521,29 +503,13 @@ impl CkBtcSetup {
         env.install_existing_canister(
             ledger_id,
             ledger_wasm(),
-            Encode!(&LedgerArgument::Init(LedgerInitArgs {
-                minting_account: Account {
-                    owner: minter_id.into(),
-                    subaccount: None,
-                },
-                initial_balances: vec![],
-                transfer_fee: TRANSFER_FEE,
-                token_name: "ckBTC".to_string(),
-                token_symbol: "ckBTC".to_string(),
-                metadata: vec![],
-                archive_options: ArchiveOptions {
-                    trigger_threshold: 0,
-                    num_blocks_to_archive: 0,
-                    node_max_memory_size_bytes: None,
-                    max_message_size_bytes: None,
-                    controller_id: Default::default(),
-                    cycles_for_archive_creation: None,
-                    max_transactions_per_response: None,
-                },
-                fee_collector_account: None,
-                max_memo_length: Some(CKBTC_LEDGER_MEMO_SIZE),
-                feature_flags: None,
-            }))
+            Encode!(&LedgerArgument::Init(
+                LedgerInitArgsBuilder::with_symbol_and_name("ckBTC", "ckBTC")
+                    .with_minting_account(minter_id.get().0)
+                    .with_transfer_fee(TRANSFER_FEE)
+                    .with_max_memo_length(CKBTC_LEDGER_MEMO_SIZE)
+                    .build()
+            ))
             .unwrap(),
         )
         .expect("failed to install the ledger");

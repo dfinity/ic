@@ -59,6 +59,7 @@ DEV_DEPENDENCIES = [
     "//rs/sns/init/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
     "@crate_index//:assert_approx_eq",
+    "@crate_index//:num-traits",
     "@crate_index//:tempfile",
 ]
 

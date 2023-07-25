@@ -4,6 +4,7 @@ use ic_icrc1::blocks::{
 };
 use ic_icrc1::{Block, Transaction};
 use ic_icrc1_test_utils::blocks_strategy;
+use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use proptest::prelude::*;
@@ -17,10 +18,10 @@ proptest! {
         let generic_block = encoded_block_to_generic_block(&block.clone().encode());
         let encoded_block = generic_block_to_encoded_block(generic_block.clone()).unwrap();
         assert_eq!(generic_block, encoded_block_to_generic_block(&encoded_block));
-        assert_eq!(block, Block::decode(encoded_block.clone()).unwrap());
-        assert_eq!(Block::try_from(generic_block.clone()).unwrap(), block);
-        assert_eq!(Transaction::try_from(generic_block.clone()).unwrap(), block.transaction);
-        assert_eq!(generic_block.hash(), Block::block_hash(&encoded_block).as_slice());
+        assert_eq!(block, Block::<U64>::decode(encoded_block.clone()).unwrap());
+        assert_eq!(Block::<U64>::try_from(generic_block.clone()).unwrap(), block);
+        assert_eq!(Transaction::<U64>::try_from(generic_block.clone()).unwrap(), block.transaction);
+        assert_eq!(generic_block.hash(), Block::<U64>::block_hash(&encoded_block).as_slice());
     }
 
     #[test]
@@ -33,6 +34,6 @@ proptest! {
             let generic_transaction = generic_transaction_from_generic_block(generic_block).unwrap();
 
             //Check that the hash of the generic transaction and the transaction object are the same
-            assert_eq!(generic_transaction.hash().to_vec(), <Transaction as LedgerTransaction>::hash(&block.transaction).as_slice().to_vec());
+            assert_eq!(generic_transaction.hash().to_vec(), <Transaction<U64> as LedgerTransaction>::hash(&block.transaction).as_slice().to_vec());
         }
 }

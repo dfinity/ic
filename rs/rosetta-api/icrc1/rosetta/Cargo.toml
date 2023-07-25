@@ -29,6 +29,7 @@ ciborium = { workspace = true }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-icrc1-ledger = { path = "../ledger" }
 ic-icrc1 = { path = ".." }
+ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 proptest = "1.0"
 rand = "0.8.4"
 axum = "0.6.1"

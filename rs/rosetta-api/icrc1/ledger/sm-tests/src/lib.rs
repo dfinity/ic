@@ -3,6 +3,7 @@ use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_icrc1_ledger::FeatureFlags;
+use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::HashOf;
@@ -31,6 +32,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 pub const FEE: u64 = 10_000;
+pub const DECIMAL_PLACES: u8 = 8;
 pub const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 pub const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
 pub const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -59,8 +61,9 @@ const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_n
 pub struct InitArgs {
     pub minting_account: Account,
     pub fee_collector_account: Option<Account>,
-    pub initial_balances: Vec<(Account, u64)>,
-    pub transfer_fee: u64,
+    pub initial_balances: Vec<(Account, Nat)>,
+    pub decimals: Option<u8>,
+    pub transfer_fee: Nat,
     pub token_name: String,
     pub token_symbol: String,
     pub metadata: Vec<(String, Value)>,
@@ -79,11 +82,12 @@ pub struct UpgradeArgs {
     pub metadata: Option<Vec<(String, Value)>>,
     pub token_name: Option<String>,
     pub token_symbol: Option<String>,
-    pub transfer_fee: Option<u64>,
+    pub transfer_fee: Option<Nat>,
     pub change_fee_collector: Option<ChangeFeeCollector>,
     pub feature_flags: Option<FeatureFlags>,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
 pub enum LedgerArgument {
     Init(InitArgs),
@@ -441,8 +445,8 @@ fn get_allowance(
     .expect("failed to decode allowance response")
 }
 
-fn arb_amount() -> impl Strategy<Value = u64> {
-    any::<u64>()
+fn arb_amount() -> impl Strategy<Value = U64> {
+    any::<u64>().prop_map(U64::new)
 }
 
 fn arb_account() -> impl Strategy<Value = Account> {
@@ -459,7 +463,7 @@ fn arb_account() -> impl Strategy<Value = Account> {
         })
 }
 
-fn arb_transfer() -> impl Strategy<Value = Operation> {
+fn arb_transfer() -> impl Strategy<Value = Operation<U64>> {
     (
         arb_account(),
         arb_account(),
@@ -475,11 +479,11 @@ fn arb_transfer() -> impl Strategy<Value = Operation> {
         })
 }
 
-fn arb_mint() -> impl Strategy<Value = Operation> {
+fn arb_mint() -> impl Strategy<Value = Operation<U64>> {
     (arb_account(), arb_amount()).prop_map(|(to, amount)| Operation::Mint { to, amount })
 }
 
-fn arb_burn() -> impl Strategy<Value = Operation> {
+fn arb_burn() -> impl Strategy<Value = Operation<U64>> {
     (arb_account(), arb_amount()).prop_map(|(from, amount)| Operation::Burn {
         from,
         spender: None,
@@ -487,11 +491,11 @@ fn arb_burn() -> impl Strategy<Value = Operation> {
     })
 }
 
-fn arb_operation() -> impl Strategy<Value = Operation> {
+fn arb_operation() -> impl Strategy<Value = Operation<U64>> {
     prop_oneof![arb_transfer(), arb_mint(), arb_burn()]
 }
 
-fn arb_transaction() -> impl Strategy<Value = Transaction> {
+fn arb_transaction() -> impl Strategy<Value = Transaction<U64>> {
     (
         arb_operation(),
         any::<Option<u64>>(),
@@ -504,11 +508,11 @@ fn arb_transaction() -> impl Strategy<Value = Transaction> {
         })
 }
 
-fn arb_block() -> impl Strategy<Value = Block> {
+fn arb_block() -> impl Strategy<Value = Block<U64>> {
     (
         any::<Option<[u8; 32]>>(),
         arb_transaction(),
-        proptest::option::of(any::<u64>()),
+        proptest::option::of(arb_amount()),
         any::<u64>(),
         proptest::option::of(arb_account()),
         proptest::option::of(any::<u64>()),
@@ -529,10 +533,14 @@ fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
     InitArgs {
         minting_account: MINTER,
         fee_collector_account: None,
-        initial_balances,
-        transfer_fee: FEE,
+        initial_balances: initial_balances
+            .into_iter()
+            .map(|(account, value)| (account, Nat::from(value)))
+            .collect(),
+        transfer_fee: FEE.into(),
         token_name: TOKEN_NAME.to_string(),
         token_symbol: TOKEN_SYMBOL.to_string(),
+        decimals: Some(DECIMAL_PLACES),
         metadata: vec![
             Value::entry(NAT_META_KEY, NAT_META_VALUE),
             Value::entry(INT_META_KEY, INT_META_VALUE),
@@ -653,7 +661,10 @@ where
         lookup(&metadata, "icrc1:symbol"),
         &Value::from(TOKEN_SYMBOL)
     );
-    assert_eq!(lookup(&metadata, "icrc1:decimals"), &Value::from(8u64));
+    assert_eq!(
+        lookup(&metadata, "icrc1:decimals"),
+        &Value::from(DECIMAL_PLACES as u64)
+    );
 
     let standards = supported_standards(&env, canister_id);
     assert_eq!(
@@ -688,7 +699,7 @@ where
     );
 
     assert_eq!(
-        8,
+        DECIMAL_PLACES,
         Decode!(
             &env.query(canister_id, "icrc1_decimals", Encode!().unwrap())
                 .unwrap()
@@ -704,7 +715,10 @@ where
         lookup(&metadata, "icrc1:symbol"),
         &Value::from(TOKEN_SYMBOL)
     );
-    assert_eq!(lookup(&metadata, "icrc1:decimals"), &Value::from(8u64));
+    assert_eq!(
+        lookup(&metadata, "icrc1:decimals"),
+        &Value::from(DECIMAL_PLACES as u64)
+    );
     //Not all ICRC-1 impelmentations have the same metadata entries. Thus only certain basic fields are shared by all ICRC-1 implementaions
     assert_eq!(
         lookup(&metadata, NAT_META_KEY),
@@ -1366,8 +1380,8 @@ pub fn block_hashes_are_unique() {
         .run(&(arb_block(), arb_block()), |(lhs, rhs)| {
             prop_assume!(lhs != rhs);
 
-            let lhs_hash = Block::block_hash(&lhs.encode());
-            let rhs_hash = Block::block_hash(&rhs.encode());
+            let lhs_hash = Block::<U64>::block_hash(&lhs.encode());
+            let rhs_hash = Block::<U64>::block_hash(&rhs.encode());
 
             prop_assert_ne!(lhs_hash, rhs_hash);
             Ok(())
@@ -1381,9 +1395,9 @@ pub fn block_hashes_are_stable() {
     runner
         .run(&arb_block(), |block| {
             let encoded_block = block.encode();
-            let hash1 = Block::block_hash(&encoded_block);
-            let decoded = Block::decode(encoded_block).unwrap();
-            let hash2 = Block::block_hash(&decoded.encode());
+            let hash1 = Block::<U64>::block_hash(&encoded_block);
+            let decoded = Block::<U64>::decode(encoded_block).unwrap();
+            let hash2 = Block::<U64>::block_hash(&decoded.encode());
             prop_assert_eq!(hash1, hash2);
             Ok(())
         })
@@ -1444,7 +1458,7 @@ where
         )]),
         token_name: Some(OTHER_TOKEN_NAME.into()),
         token_symbol: Some(OTHER_TOKEN_SYMBOL.into()),
-        transfer_fee: Some(NEW_FEE),
+        transfer_fee: Some(NEW_FEE.into()),
         ..UpgradeArgs::default()
     }));
 
@@ -1677,7 +1691,7 @@ where
             |(account_from, account_to, fee_collector_account, amount)| {
                 let args = encode_init_args(InitArgs {
                     fee_collector_account: Some(fee_collector_account),
-                    initial_balances: vec![(account_from, (amount + FEE) * 6)],
+                    initial_balances: vec![(account_from, Nat::from((amount + FEE) * 6))],
                     ..init_args(vec![])
                 });
                 let args = Encode!(&args).unwrap();
@@ -1896,26 +1910,32 @@ pub fn icrc1_test_block_transformation<T>(
     {
         assert_eq!(block_pre_upgrade, block_post_upgrade);
         assert_eq!(
-            Block::try_from(block_pre_upgrade.clone()).unwrap(),
-            Block::try_from(block_post_upgrade.clone()).unwrap()
+            Block::<U64>::try_from(block_pre_upgrade.clone()).unwrap(),
+            Block::<U64>::try_from(block_post_upgrade.clone()).unwrap()
         );
         assert_eq!(
-            Block::try_from(block_pre_upgrade.clone()).unwrap().encode(),
-            Block::try_from(block_post_upgrade.clone())
+            Block::<U64>::try_from(block_pre_upgrade.clone())
+                .unwrap()
+                .encode(),
+            Block::<U64>::try_from(block_post_upgrade.clone())
                 .unwrap()
                 .encode()
         );
         assert_eq!(
-            Block::block_hash(&Block::try_from(block_pre_upgrade.clone()).unwrap().encode()),
-            Block::block_hash(
-                &Block::try_from(block_post_upgrade.clone())
+            Block::<U64>::block_hash(
+                &Block::<U64>::try_from(block_pre_upgrade.clone())
+                    .unwrap()
+                    .encode()
+            ),
+            Block::<U64>::block_hash(
+                &Block::<U64>::try_from(block_post_upgrade.clone())
                     .unwrap()
                     .encode()
             )
         );
         assert_eq!(
-            Transaction::try_from(block_pre_upgrade.clone()).unwrap(),
-            Transaction::try_from(block_post_upgrade.clone()).unwrap()
+            Transaction::<U64>::try_from(block_pre_upgrade.clone()).unwrap(),
+            Transaction::<U64>::try_from(block_post_upgrade.clone()).unwrap()
         );
     }
 }
