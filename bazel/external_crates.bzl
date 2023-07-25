@@ -933,7 +933,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "serde": crate.spec(
-                version = "^1.0.99",
+                version = "=1.0.171",
                 features = [
                     "derive",
                 ],
