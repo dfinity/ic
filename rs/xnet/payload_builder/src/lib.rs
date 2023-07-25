@@ -909,8 +909,12 @@ impl XNetEndpointResolver {
         let xnet_endpoint = node_record.xnet.ok_or(Error::MissingXNetEndpoint(node))?;
 
         let socket_addr = SocketAddr::new(
-            xnet_endpoint.ip_addr.parse().unwrap(),
-            u16::try_from(xnet_endpoint.port).unwrap(),
+            xnet_endpoint.ip_addr.parse().map_err(|_| {
+                Error::InvalidXNetEndpoint(node, format!("bad ip addr {}", xnet_endpoint.ip_addr))
+            })?,
+            u16::try_from(xnet_endpoint.port).map_err(|_| {
+                Error::InvalidXNetEndpoint(node, format!("bad port {}", xnet_endpoint.port))
+            })?,
         );
 
         let authority = XNetAuthority {
