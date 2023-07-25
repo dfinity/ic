@@ -3,8 +3,8 @@ load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "
 
 package(default_visibility = ["//visibility:public"])
 
-II_TEST_CANISTER_RUNTIME_DEPS = [
-    "@ii_test_canister//file",
+II_DEV_CANISTER_RUNTIME_DEPS = [
+    "@ii_dev_canister//file",
 ]
 
 system_test(
@@ -12,7 +12,7 @@ system_test(
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + II_TEST_CANISTER_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS + II_DEV_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
