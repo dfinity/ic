@@ -1,8 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use ic_crypto_tree_hash::{
-    flatmap, lookup_path, test_utils::hash_tree_builder_from_labeled_tree, FlatMap, HashTree,
-    HashTreeBuilder, Label, LabeledTree, LabeledTree::*, MixedHashTree, WitnessGenerator,
+    flatmap, lookup_path, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, LabeledTree::*,
+    MixedHashTree, WitnessGenerator,
 };
+use ic_crypto_tree_hash_test_utils::hash_tree_builder_from_labeled_tree;
 use ic_types_test_utils::ids::message_test_id;
 
 fn new_request_status_tree(num_subtrees: usize) -> LabeledTree<Vec<u8>> {

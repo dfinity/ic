@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
@@ -13,6 +13,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tree_hash/test_utils",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
@@ -35,6 +36,13 @@ rust_test(
     name = "tree_hash_test",
     crate = ":tree_hash",
     deps = DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "tree_hash_integration",
+    srcs = glob(["tests/**"]),
+    edition = "2021",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
 )
 
 rust_doc_test(

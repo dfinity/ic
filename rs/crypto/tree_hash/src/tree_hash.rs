@@ -15,9 +15,6 @@ use std::iter::Peekable;
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
-mod test_utils;
-
 const DOMAIN_HASHTREE_LEAF: &str = "ic-hashtree-leaf";
 const DOMAIN_HASHTREE_EMPTY_SUBTREE: &str = "ic-hashtree-empty";
 const DOMAIN_HASHTREE_NODE: &str = "ic-hashtree-labeled";

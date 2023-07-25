@@ -1,8 +1,8 @@
-use crate::{flatmap, Digest, FlatMap, Label, LabeledTree, MixedHashTree as T};
+use ic_crypto_tree_hash::{flatmap, Digest, FlatMap, Label, LabeledTree, MixedHashTree as T};
 use proptest::collection::btree_map;
 use proptest::prelude::*;
 
-pub(crate) fn arbitrary_mixed_hash_tree_leaf() -> impl Strategy<Value = T> {
+pub fn arbitrary_mixed_hash_tree_leaf() -> impl Strategy<Value = T> {
     prop::collection::vec(any::<u8>(), 0..100).prop_map(T::Leaf)
 }
 
@@ -35,7 +35,7 @@ fn fix_labels(mut t: T) -> T {
     t
 }
 
-pub(crate) fn arbitrary_mixed_hash_tree() -> impl Strategy<Value = T> {
+pub fn arbitrary_mixed_hash_tree() -> impl Strategy<Value = T> {
     let leaf = prop_oneof![
         Just(T::Empty),
         arbitrary_mixed_hash_tree_leaf(),
@@ -56,11 +56,11 @@ pub(crate) fn arbitrary_mixed_hash_tree() -> impl Strategy<Value = T> {
     .prop_map(fix_labels)
 }
 
-pub(crate) fn arbitrary_well_formed_mixed_hash_tree() -> impl Strategy<Value = T> {
+pub fn arbitrary_well_formed_mixed_hash_tree() -> impl Strategy<Value = T> {
     arbitrary_well_formed_mixed_hash_tree_with_params(8, 256, 1)
 }
 
-pub(crate) fn arbitrary_well_formed_mixed_hash_tree_with_params(
+pub fn arbitrary_well_formed_mixed_hash_tree_with_params(
     max_depth: u32,
     expected_size: u32,
     expected_iterms_per_collection: u32,
@@ -85,7 +85,7 @@ pub(crate) fn arbitrary_well_formed_mixed_hash_tree_with_params(
     prop_oneof![Just(T::Empty), arbitrary_mixed_hash_tree_leaf(), tree,].prop_map(fix_labels)
 }
 
-pub(crate) fn arbitrary_labeled_tree() -> impl Strategy<Value = LabeledTree<Vec<u8>>> {
+pub fn arbitrary_labeled_tree() -> impl Strategy<Value = LabeledTree<Vec<u8>>> {
     let leaf = prop_oneof![
         Just(LabeledTree::SubTree::<Vec<u8>>(flatmap!())),
         arbitrary_labeled_tree_leaf(),
@@ -107,10 +107,10 @@ pub(crate) fn arbitrary_labeled_tree() -> impl Strategy<Value = LabeledTree<Vec<
     )
 }
 
-pub(crate) fn arbitrary_label() -> impl Strategy<Value = Label> {
+pub fn arbitrary_label() -> impl Strategy<Value = Label> {
     prop::collection::vec(any::<u8>(), 0..100).prop_map(Label::from)
 }
 
-pub(crate) fn arbitrary_labeled_tree_leaf() -> impl Strategy<Value = LabeledTree<Vec<u8>>> {
+pub fn arbitrary_labeled_tree_leaf() -> impl Strategy<Value = LabeledTree<Vec<u8>>> {
     prop::collection::vec(any::<u8>(), 0..100).prop_map(LabeledTree::Leaf)
 }

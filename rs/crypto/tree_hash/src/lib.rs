@@ -13,17 +13,7 @@ use std::ops::DerefMut;
 pub mod flat_map;
 pub mod hasher;
 pub mod proto;
-pub mod test_utils;
 pub(crate) mod tree_hash;
-
-#[cfg(test)]
-pub(crate) mod arbitrary;
-#[cfg(test)]
-mod conversion_tests;
-#[cfg(test)]
-mod encoding_tests;
-#[cfg(test)]
-mod merge_tests;
 
 pub use flat_map::FlatMap;
 pub use tree_hash::*;

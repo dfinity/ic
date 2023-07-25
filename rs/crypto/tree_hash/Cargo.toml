@@ -14,6 +14,7 @@ serde_bytes = "0.11"
 [dev-dependencies]
 criterion = "0.3"
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
+ic-crypto-tree-hash-test-utils = { path = "test_utils" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 maplit = "1.0.2"
 proptest = "1.0"

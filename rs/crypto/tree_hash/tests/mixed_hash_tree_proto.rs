@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
-use crate::arbitrary::arbitrary_mixed_hash_tree;
-use crate::MixedHashTree as T;
+use ic_crypto_tree_hash::MixedHashTree as T;
+use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;
 use ic_protobuf::messaging::xnet::v1::{mixed_hash_tree::TreeEnum, MixedHashTree as PbTree};
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 

@@ -1,12 +1,12 @@
 use ic_canonical_state::hash_tree::{crypto_hash_lazy_tree, hash_lazy_tree, HashTree};
 use ic_canonical_state::lazy_tree::{LazyFork, LazyTree};
 use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, SEED_LEN};
-use ic_crypto_tree_hash::test_utils::{
-    merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
-};
 use ic_crypto_tree_hash::{
     flatmap, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, Witness,
     WitnessGenerator, WitnessGeneratorImpl,
+};
+use ic_crypto_tree_hash_test_utils::{
+    merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
 };
 use rand::{CryptoRng, Rng, SeedableRng};
 use std::sync::Arc;
