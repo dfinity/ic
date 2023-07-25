@@ -64,10 +64,10 @@ impl SampledMetricsCollector {
                     .with_label_values(&["sampled", &status.code().to_string()])
                     .inc();
 
-                return Err(MetricsCollectError::RpcRequestFailure(format!(
+                Err(MetricsCollectError::RpcRequestFailure(format!(
                     "Request failed {:?}",
                     status.code()
-                )));
+                )))
             }
         }
     }

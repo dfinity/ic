@@ -1048,6 +1048,7 @@ impl StateMachine {
                 .metadata()
                 .expect("failed to get file permission")
                 .permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
             permissions.set_readonly(false);
             file.set_permissions(permissions)
                 .expect("failed to set file persmission");

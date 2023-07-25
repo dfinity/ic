@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn test_disabled_logger() {
-        let inner_logger = DisabledLogger::default();
+        let inner_logger = DisabledLogger;
         let logger = ContextLogger::<TestContext, DisabledLogger>::new(inner_logger);
 
         info!(logger)

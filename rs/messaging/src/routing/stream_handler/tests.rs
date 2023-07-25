@@ -59,7 +59,7 @@ fn oversized_reject_message_is_truncated() {
         if let RequestOrResponse::Response(response) = generate_reject_response(
             test_request(*LOCAL_CANISTER, *OTHER_LOCAL_CANISTER).into(),
             RejectCode::SysTransient,
-            (0..msg_len).into_iter().map(|_| "a").collect(),
+            (0..msg_len).map(|_| "a").collect(),
         ) {
             if let Payload::Reject(context) = &response.response_payload {
                 assert_eq!(context.message.len(), len_after_truncation);

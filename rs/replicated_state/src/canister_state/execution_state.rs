@@ -350,17 +350,12 @@ impl SandboxMemoryHandle {
 }
 
 /// Next scheduled method: round-robin across GlobalTimer; Heartbeat; and Message.
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+#[derive(Clone, Copy, Eq, Debug, PartialEq, Default)]
 pub enum NextScheduledMethod {
+    #[default]
     GlobalTimer,
     Heartbeat,
     Message,
-}
-
-impl Default for NextScheduledMethod {
-    fn default() -> Self {
-        NextScheduledMethod::GlobalTimer
-    }
 }
 
 impl From<pb::NextScheduledMethod> for NextScheduledMethod {
@@ -465,17 +460,17 @@ impl PartialEq for ExecutionState {
         // Destruction is done on purpose, to ensure if the new
         // field is added to 'ExecutionState' compiler will throw
         // an error. Hence pointing to appropriate change here.
-        let &ExecutionState {
+        let ExecutionState {
             canister_root: _,
             session_nonce: _,
-            ref wasm_binary,
-            ref wasm_memory,
-            ref stable_memory,
-            ref exported_globals,
-            ref exports,
-            ref metadata,
-            ref last_executed_round,
-            ref next_scheduled_method,
+            wasm_binary,
+            wasm_memory,
+            stable_memory,
+            exported_globals,
+            exports,
+            metadata,
+            last_executed_round,
+            next_scheduled_method,
         } = rhs;
 
         (

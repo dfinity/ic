@@ -640,7 +640,7 @@ impl Neuron {
                 )
             })?;
 
-        let mut existing_permission = self
+        let existing_permission = self
             .permissions
             .get_mut(existing_permission_position)
             .expect("Expected permission to exist");

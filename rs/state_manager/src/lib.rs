@@ -2381,33 +2381,31 @@ impl StateManager for StateManagerImpl {
         states
             .states_metadata
             .get(&height)
-            .ok_or_else(
-                || match states.certifications_metadata.iter().rev().next() {
-                    Some((key, _)) => {
-                        if *key < height {
-                            StateHashError::Transient(StateNotCommittedYet(height))
-                        } else {
-                            // If the state is older than the oldest state we still have,
-                            // we report it as having been removed
-                            let oldest_kept = states
-                                .certifications_metadata
-                                .iter()
-                                .next()
-                                .map(|(height, _)| *height)
-                                .unwrap(); // certifications_metadata cannot be empty in this branch
+            .ok_or_else(|| match states.certifications_metadata.iter().next_back() {
+                Some((key, _)) => {
+                    if *key < height {
+                        StateHashError::Transient(StateNotCommittedYet(height))
+                    } else {
+                        // If the state is older than the oldest state we still have,
+                        // we report it as having been removed
+                        let oldest_kept = states
+                            .certifications_metadata
+                            .iter()
+                            .next()
+                            .map(|(height, _)| *height)
+                            .unwrap(); // certifications_metadata cannot be empty in this branch
 
-                            if height < oldest_kept {
-                                // The state might have been not fully certified in addition to
-                                // being removed. We don't know anymore.
-                                StateHashError::Permanent(StateRemoved(height))
-                            } else {
-                                StateHashError::Permanent(StateNotFullyCertified(height))
-                            }
+                        if height < oldest_kept {
+                            // The state might have been not fully certified in addition to
+                            // being removed. We don't know anymore.
+                            StateHashError::Permanent(StateRemoved(height))
+                        } else {
+                            StateHashError::Permanent(StateNotFullyCertified(height))
                         }
                     }
-                    None => StateHashError::Transient(StateNotCommittedYet(height)),
-                },
-            )
+                }
+                None => StateHashError::Transient(StateNotCommittedYet(height)),
+            })
             .map(|metadata| metadata.root_hash().cloned())
             .transpose()
             .unwrap_or(Err(StateHashError::Transient(HashNotComputedYet(height))))

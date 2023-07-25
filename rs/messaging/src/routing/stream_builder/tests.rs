@@ -96,7 +96,6 @@ fn reject_local_request() {
 
         // Reject the message.
         let reject_message = (0..MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN + 1)
-            .into_iter()
             .map(|_| "a")
             .collect::<String>();
         stream_builder.reject_local_request(

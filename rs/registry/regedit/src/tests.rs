@@ -41,7 +41,7 @@ fn adding_deleting_values_shows_up_in_diff() {
     let obj = snapshot.as_object_mut().unwrap();
 
     // remove last key (arbitrary choice)
-    let removed_key = obj.keys().rev().next().unwrap().clone();
+    let removed_key = obj.keys().next_back().unwrap().clone();
     assert!(obj.remove(&removed_key).is_some());
 
     let arbitrary_bytes: Vec<u8> = (b'A'..b'z').collect();

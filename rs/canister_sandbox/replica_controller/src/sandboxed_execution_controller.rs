@@ -1695,6 +1695,39 @@ pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
     }
 }
 
+/// Service responsible for printing the history of a canister's activity when
+/// it unexpectedly exits.
+struct ExitWatcher {
+    logger: ReplicaLogger,
+    backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+}
+
+impl ControllerLauncherService for ExitWatcher {
+    fn sandbox_exited(
+        &self,
+        req: protocol::ctllaunchersvc::SandboxExitedRequest,
+    ) -> ic_canister_sandbox_common::rpc::Call<protocol::ctllaunchersvc::SandboxExitedReply> {
+        let guard = self.backends.lock().unwrap();
+        let sandbox_process = match guard.get(&req.canister_id).unwrap_or_else(|| {
+            panic!(
+                "Sandbox exited for unrecognized canister id {}",
+                req.canister_id,
+            )
+        }) {
+            Backend::Active {
+                sandbox_process, ..
+            } => sandbox_process,
+            Backend::Evicted { .. } | Backend::Empty => {
+                return rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply));
+            }
+        };
+        sandbox_process
+            .history
+            .replay(&self.logger, req.canister_id, sandbox_process.pid);
+        rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs::{self, File};
@@ -1793,38 +1826,5 @@ mod tests {
             "History for canister {} with pid {}: CreateExecutionState",
             canister_id, sandbox_pid
         )));
-    }
-}
-
-/// Service responsible for printing the history of a canister's activity when
-/// it unexpectedly exits.
-struct ExitWatcher {
-    logger: ReplicaLogger,
-    backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
-}
-
-impl ControllerLauncherService for ExitWatcher {
-    fn sandbox_exited(
-        &self,
-        req: protocol::ctllaunchersvc::SandboxExitedRequest,
-    ) -> ic_canister_sandbox_common::rpc::Call<protocol::ctllaunchersvc::SandboxExitedReply> {
-        let guard = self.backends.lock().unwrap();
-        let sandbox_process = match guard.get(&req.canister_id).unwrap_or_else(|| {
-            panic!(
-                "Sandbox exited for unrecognized canister id {}",
-                req.canister_id,
-            )
-        }) {
-            Backend::Active {
-                sandbox_process, ..
-            } => sandbox_process,
-            Backend::Evicted { .. } | Backend::Empty => {
-                return rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply));
-            }
-        };
-        sandbox_process
-            .history
-            .replay(&self.logger, req.canister_id, sandbox_process.pid);
-        rpc::Call::new_resolved(Ok(protocol::ctllaunchersvc::SandboxExitedReply))
     }
 }

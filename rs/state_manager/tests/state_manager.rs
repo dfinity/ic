@@ -62,6 +62,7 @@ const NUM_THREADS: u32 = 3;
 
 fn make_mutable(path: &Path) -> std::io::Result<()> {
     let mut perms = std::fs::metadata(path)?.permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
     std::fs::set_permissions(path, perms)?;
     Ok(())
@@ -283,7 +284,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                 );
                 assert_eq!(
                     dst_state_manager.checkpoint_heights(),
-                    (1..=i).into_iter().map(|i| height(i)).collect::<Vec<_>>()
+                    (1..=i).map(|i| height(i)).collect::<Vec<_>>()
                 );
             }
 

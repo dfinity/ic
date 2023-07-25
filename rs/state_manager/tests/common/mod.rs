@@ -551,7 +551,7 @@ pub fn state_manager_test_with_verifier_result<F: FnOnce(&MetricsRegistry, State
     let verifier: Arc<dyn Verifier> = if should_pass_verification {
         Arc::new(FakeVerifier::new())
     } else {
-        Arc::new(RejectingVerifier::default())
+        Arc::new(RejectingVerifier)
     };
 
     with_test_replica_logger(|log| {
@@ -584,7 +584,7 @@ fn state_manager_test_with_state_sync_and_verifier_result<
     let verifier: Arc<dyn Verifier> = if should_pass_verification {
         Arc::new(FakeVerifier::new())
     } else {
-        Arc::new(RejectingVerifier::default())
+        Arc::new(RejectingVerifier)
     };
 
     with_test_replica_logger(|log| {

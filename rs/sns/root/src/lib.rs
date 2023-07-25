@@ -875,7 +875,7 @@ mod tests {
             arg: Vec<u8>,
         ) -> Result<Vec<u8>, (i32, String)> {
             let mut calls = self.calls.lock().unwrap();
-            let result = match calls.pop_front().unwrap() {
+            match calls.pop_front().unwrap() {
                 EnvironmentCall::CallCanister {
                     expected_canister,
                     expected_method,
@@ -902,9 +902,7 @@ mod tests {
 
                     result
                 }
-            };
-
-            result
+            }
         }
     }
 

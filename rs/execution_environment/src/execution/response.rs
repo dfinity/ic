@@ -211,6 +211,7 @@ impl ResponseHelper {
     /// DTS relies on the invariant that once this validation succeeds, it will
     /// also continue to succeed later on for the same canister while DTS
     /// execution is in progress.
+    #[allow(clippy::result_large_err)]
     fn validate(
         self,
         call_context: &CallContext,

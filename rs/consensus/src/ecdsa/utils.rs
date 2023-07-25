@@ -935,7 +935,7 @@ pub(crate) mod test_utils {
         let (node_id, params, mut transcript) = create_valid_transcript(env, rng);
         let to_corrupt = *transcript.verified_dealings.keys().next().unwrap();
         let complainer_index = params.receiver_index(node_id).unwrap();
-        let mut signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
+        let signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
         let mut rng = rand::thread_rng();
         let builder = signed_dealing.content.clone().into_builder();
         signed_dealing.content = builder
@@ -1004,7 +1004,7 @@ pub(crate) mod test_utils {
             AlgorithmId::ThresholdEcdsaSecp256k1,
             rng,
         );
-        let dealer = env.nodes.dealers(&params).into_iter().next().unwrap();
+        let dealer = env.nodes.dealers(&params).next().unwrap();
         let dealing = dealer.create_dealing_or_panic(&params);
         let mut content = create_dealing_content(transcript_id);
         content.internal_dealing_raw = dealing.content.internal_dealing_raw;

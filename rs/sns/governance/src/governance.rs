@@ -1667,7 +1667,7 @@ impl Governance {
 
         // Re-borrow the neuron mutably to update now that the maturity has been
         // disbursed.
-        let mut neuron = self.get_neuron_result_mut(id)?;
+        let neuron = self.get_neuron_result_mut(id)?;
         neuron.maturity_e8s_equivalent = neuron
             .maturity_e8s_equivalent
             .saturating_sub(maturity_to_deduct);
@@ -1690,7 +1690,7 @@ impl Governance {
     /// - The proposal's decision status is ProposalStatusAdopted
     pub fn set_proposal_execution_status(&mut self, pid: u64, result: Result<(), GovernanceError>) {
         match self.proto.proposals.get_mut(&pid) {
-            Some(mut proposal) => {
+            Some(proposal) => {
                 // The proposal has to be adopted before it is executed.
                 assert_eq!(proposal.status(), ProposalDecisionStatus::Adopted);
                 match result {

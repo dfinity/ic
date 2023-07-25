@@ -127,7 +127,7 @@ where
     })
 }
 
-#[cfg(any(target_os = "linux"))]
+#[cfg(target_os = "linux")]
 /// Copies only valid regions of file preserving the sparseness
 /// of the file. Also utilizes copy_file_range which performs
 /// in_kernel copy without the additional cost of transferring data
@@ -376,7 +376,7 @@ where
     path.as_ref().with_extension(extension)
 }
 
-#[cfg(any(target_family = "unix"))]
+#[cfg(target_family = "unix")]
 /// Write the given string to file `dest` in a crash-safe mannger
 pub fn write_string_using_tmp_file<P>(dest: P, content: &str) -> io::Result<()>
 where
@@ -385,7 +385,7 @@ where
     write_using_tmp_file(dest, |f| f.write_all(content.as_bytes()))
 }
 
-#[cfg(any(target_family = "unix"))]
+#[cfg(target_family = "unix")]
 /// Serialize given protobuf message to file `dest` in a crash-safe manner
 pub fn write_protobuf_using_tmp_file<P>(dest: P, message: &impl prost::Message) -> io::Result<()>
 where
@@ -461,7 +461,7 @@ where
     std::fs::remove_file(path)
 }
 
-#[cfg(any(target_family = "unix"))]
+#[cfg(target_family = "unix")]
 /// Create and open a file exclusively with the given name.
 ///
 /// If the file already exists, attempt to remove the file and retry.
@@ -491,7 +491,7 @@ where
     }
 }
 
-#[cfg(any(target_family = "unix"))]
+#[cfg(target_family = "unix")]
 /// Write to file `dest` using `action` in a crash-safe manner
 ///
 /// A new temporary file `dest.tmp` will be created. If it already exists,

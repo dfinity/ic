@@ -533,9 +533,9 @@ impl StateLayout {
         }
     }
 
-    pub fn scratchpad_to_checkpoint<'a, T>(
+    pub fn scratchpad_to_checkpoint<T>(
         &self,
-        layout: CheckpointLayout<RwPolicy<'a, T>>,
+        layout: CheckpointLayout<RwPolicy<'_, T>>,
         height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
@@ -1999,6 +1999,7 @@ fn copy_file_and_set_permissions(
     let mut permissions = dst_metadata.permissions();
     match dst_permissions {
         FilePermissions::ReadOnly => permissions.set_readonly(true),
+        #[allow(clippy::permissions_set_readonly_false)]
         FilePermissions::ReadWrite => permissions.set_readonly(false),
     }
     std::fs::set_permissions(dst, permissions)?;

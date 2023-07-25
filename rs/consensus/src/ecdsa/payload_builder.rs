@@ -1,6 +1,7 @@
 //! This module implements the ECDSA payload builder.
 #![allow(clippy::too_many_arguments)]
 #![allow(clippy::enum_variant_names)]
+#![allow(clippy::result_large_err)]
 
 use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
 use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
@@ -1919,7 +1920,7 @@ mod tests {
     ) -> Block {
         pool.advance_round_normal_operation_n(advance_by - 1);
         let mut block_proposal = pool.make_next_block();
-        let mut block = block_proposal.content.as_mut();
+        let block = block_proposal.content.as_mut();
         block.payload = Payload::new(ic_types::crypto::crypto_hash, block_payload);
         block_proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
         pool.advance_round_with_block(&block_proposal);

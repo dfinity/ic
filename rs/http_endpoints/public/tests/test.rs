@@ -126,7 +126,7 @@ fn test_healthy_behind() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -169,7 +169,7 @@ fn test_unauthorized_controller() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -225,7 +225,7 @@ fn test_unauthorized_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -311,7 +311,7 @@ fn test_unauthorized_call() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -412,7 +412,7 @@ async fn test_connection_read_timeout() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let (mut request_sender, status_code) = create_conn_and_send_request(addr).await;
@@ -447,7 +447,7 @@ fn test_request_timeout() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -514,7 +514,7 @@ fn test_payload_too_large() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let request = |body: Vec<u8>| {
@@ -565,7 +565,7 @@ fn test_request_too_slow() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     rt.block_on(async {
@@ -612,7 +612,7 @@ fn test_status_code_when_ingress_filter_fails() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -671,7 +671,7 @@ fn test_graceful_shutdown_of_the_endpoint() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let agent = Agent::builder()
@@ -722,7 +722,7 @@ fn test_too_long_paths_are_rejected() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();

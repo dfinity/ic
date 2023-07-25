@@ -306,21 +306,16 @@ fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxE
 
 /// The type of the connection that should be used. This enum is mostly useful
 /// for testing to avoid setting up the registry and keystore for TLS.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 enum ConnectionType {
     /// Only accept TLS connections.
     #[allow(dead_code)]
+    #[default]
     Tls,
     /// Only accept raw unencrypted connections. Should only be used for
     /// testing.
     #[allow(dead_code)]
     Raw,
-}
-
-impl Default for ConnectionType {
-    fn default() -> Self {
-        ConnectionType::Tls
-    }
 }
 
 // TLS connector for the client side.

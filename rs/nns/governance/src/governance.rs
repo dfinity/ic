@@ -3236,7 +3236,7 @@ impl Governance {
     /// lifetime issues.
     pub fn set_proposal_execution_status(&mut self, pid: u64, result: Result<(), GovernanceError>) {
         match self.proto.proposals.get_mut(&pid) {
-            Some(mut proposal_data) => {
+            Some(proposal_data) => {
                 // The proposal has to be adopted before it is executed.
                 assert!(proposal_data.status() == ProposalStatus::Adopted);
                 match result {
@@ -5546,7 +5546,7 @@ impl Governance {
             ));
         }
 
-        let mut neuron_ballot = proposal.ballots.get_mut(&neuron_id.id).ok_or_else(||
+        let neuron_ballot = proposal.ballots.get_mut(&neuron_id.id).ok_or_else(||
             // This neuron is not eligible to vote on this proposal.
             GovernanceError::new_with_message(ErrorType::NotAuthorized, "Neuron not authorized to vote on proposal."))?;
         if neuron_ballot.vote != (Vote::Unspecified as i32) {

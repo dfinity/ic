@@ -147,7 +147,7 @@ impl IDkgComplaintInternal {
 
         // Decrypt the ciphertext using the proven shared secret
         let opening = match (&dealing.ciphertext, &dealing.commitment) {
-            (&MEGaCiphertext::Single(ref c), &PolynomialCommitment::Simple(_)) => {
+            (MEGaCiphertext::Single(c), &PolynomialCommitment::Simple(_)) => {
                 let opening = c.decrypt_from_shared_secret(
                     associated_data,
                     dealer_index,
@@ -158,7 +158,7 @@ impl IDkgComplaintInternal {
 
                 CommitmentOpening::Simple(opening)
             }
-            (&MEGaCiphertext::Pairs(ref c), &PolynomialCommitment::Pedersen(_)) => {
+            (MEGaCiphertext::Pairs(c), &PolynomialCommitment::Pedersen(_)) => {
                 let opening = c.decrypt_from_shared_secret(
                     associated_data,
                     dealer_index,

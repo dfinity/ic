@@ -3,7 +3,7 @@ use crate::visitor::{Control, Visitor};
 use ic_replicated_state::ReplicatedState;
 
 /// Traverses lazy tree using specified visitor.
-fn traverse_lazy_tree<'a, V: Visitor>(t: &LazyTree<'a>, v: &mut V) -> Result<(), V::Output> {
+fn traverse_lazy_tree<V: Visitor>(t: &LazyTree<'_>, v: &mut V) -> Result<(), V::Output> {
     match t {
         LazyTree::Blob(b, _) => v.visit_blob(b),
         LazyTree::LazyBlob(thunk) => {

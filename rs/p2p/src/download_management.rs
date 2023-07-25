@@ -1648,7 +1648,7 @@ pub mod tests {
         let artifact_id = ArtifactId::DkgMessage(CryptoHashOf::from(
             ic_types::crypto::crypto_hash(&msg).get(),
         ));
-        for mut advert in &mut adverts {
+        for advert in &mut adverts {
             advert.artifact_id = artifact_id.clone();
         }
 

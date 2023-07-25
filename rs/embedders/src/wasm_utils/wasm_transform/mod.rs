@@ -231,7 +231,7 @@ impl<'a> Module<'a> {
                         .into_iter()
                         .map(|sec| {
                             sec.map_err(Error::from)
-                                .and_then(|data| parser_to_internal::data_segment(data))
+                                .and_then(parser_to_internal::data_segment)
                         })
                         .collect::<Result<_, _>>()?;
                 }

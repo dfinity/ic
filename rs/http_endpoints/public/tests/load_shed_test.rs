@@ -52,7 +52,7 @@ fn test_load_shedding_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let query_exec_running = Arc::new(Notify::new());
@@ -187,7 +187,7 @@ fn test_load_shedding_read_state() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let ok_agent = Agent::builder()
@@ -390,7 +390,7 @@ fn test_load_shedding_update_call() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     let ingress_filter_running = Arc::new(Notify::new());

@@ -948,7 +948,6 @@ pub mod node {
 
                     let min_num_receivers = self.len();
                     let min_num_dealers = (1..=min_num_receivers)
-                        .into_iter()
                         .find(|&num_dealers| is_threshold_satisfied(num_dealers, min_num_receivers))
                         .unwrap_or_else(||  panic!("no valid number of dealers found for {min_num_receivers} receivers and given constraint"));
 

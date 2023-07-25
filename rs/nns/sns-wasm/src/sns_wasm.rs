@@ -1055,7 +1055,6 @@ where
             ])
             .await,
         )
-        .into_iter()
         .map(|(label, result)| {
             result.map_err(|e| format!("Error installing {} WASM: {}", label, e))
         })
@@ -1394,14 +1393,14 @@ where
             };
         }
 
-        return if defects.is_empty() {
+        if defects.is_empty() {
             Ok(result)
         } else {
             Err(format!(
                 "Could not get the controllers of all dapp_canisters for the following reason(s):\n  -{}",
                 defects.join("\n  -"),
             ))
-        };
+        }
     }
 
     /// Dispatch the the CanisterStatus call to NNS Root and handle error cases.

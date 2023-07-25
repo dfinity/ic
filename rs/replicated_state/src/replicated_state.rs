@@ -41,20 +41,15 @@ pub enum InputQueueType {
 }
 
 /// Next input queue: round-robin across local subnet; ingress; or remote subnet.
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+#[derive(Clone, Copy, Eq, Debug, PartialEq, Default)]
 pub enum NextInputQueue {
     /// Local subnet input messages.
+    #[default]
     LocalSubnet,
     /// Ingress messages.
     Ingress,
     /// Remote subnet input messages.
     RemoteSubnet,
-}
-
-impl Default for NextInputQueue {
-    fn default() -> Self {
-        NextInputQueue::LocalSubnet
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug, Hash)]

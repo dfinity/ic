@@ -307,10 +307,10 @@ async fn kyt_check_utxo(
                 "The KYT provider is temporarily unavailable: {}",
                 reason
             );
-            return Err(UpdateBalanceError::TemporarilyUnavailable(format!(
+            Err(UpdateBalanceError::TemporarilyUnavailable(format!(
                 "The KYT provider is temporarily unavailable: {}",
                 reason
-            )));
+            )))
         }
     }
 }

@@ -3035,7 +3035,6 @@ mod verify_dealing_public {
         let other_dealer = env
             .nodes
             .dealers(&params)
-            .into_iter()
             .find(|node| *node != dealer)
             .expect("not enough nodes");
         let signed_dealing = dealer
@@ -3786,7 +3785,7 @@ fn corrupt_signed_dealing_for_one_receiver(
     dealings: &mut BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
     receiver_index: NodeIndex,
 ) {
-    let mut signed_dealing = dealings
+    let signed_dealing = dealings
         .get_mut(&dealing_index_to_corrupt)
         .unwrap_or_else(|| panic!("Missing dealing at index {:?}", dealing_index_to_corrupt));
     let invalidated_internal_dealing_raw = {

@@ -484,24 +484,21 @@ impl CanisterTimer {
 /// All long execution start in the Opportunistic mode, and then the scheduler
 /// prioritizes top `long_execution_cores` some of them. This is to enforce FIFO
 /// behavior, and guarantee the progress for long executions.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash)]
+#[derive(
+    Clone, Copy, Debug, Deserialize, Eq, PartialEq, PartialOrd, Ord, Serialize, Hash, Default,
+)]
 pub enum LongExecutionMode {
     /// The long execution might be opportunistically scheduled on the new execution cores,
     /// so its progress depends on the number of new messages to execute.
+    #[default]
     Opportunistic = 0,
     /// The long execution is prioritized to be scheduled on the long execution cores,
     /// so it's quite likely the execution will be finished with no aborts.
     Prioritized = 1,
 }
 
-impl Default for LongExecutionMode {
-    fn default() -> Self {
-        LongExecutionMode::Opportunistic
-    }
-}
-
 /// Represents the memory allocation of a canister.
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Hash)]
+#[derive(Copy, Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Hash)]
 pub enum MemoryAllocation {
     /// A reserved number of bytes between 0 and 2^48 inclusively that is
     /// guaranteed to be available to the canister. Charging happens based on
@@ -510,6 +507,7 @@ pub enum MemoryAllocation {
     /// Memory growth of the canister happens dynamically and is subject to the
     /// available memory of the subnet. The canister will be charged for the
     /// memory it's using at any given time.
+    #[default]
     BestEffort,
 }
 
@@ -540,12 +538,6 @@ impl fmt::Display for MemoryAllocation {
             MemoryAllocation::Reserved(bytes) => write!(f, "{}", bytes.display()),
             MemoryAllocation::BestEffort => write!(f, "best-effort"),
         }
-    }
-}
-
-impl Default for MemoryAllocation {
-    fn default() -> Self {
-        MemoryAllocation::BestEffort
     }
 }
 

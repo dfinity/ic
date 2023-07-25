@@ -525,7 +525,7 @@ impl ChunkableArtifact for StateSyncMessage {
 // 2. Even if we use it for other purposes (e.g. in a HashSet), this
 //    is still safe because identical (height, root_hash) should
 //    lead to identical checkpoint_root.
-#[allow(clippy::derive_hash_xor_eq)]
+#[allow(clippy::derived_hash_with_manual_eq)]
 impl std::hash::Hash for StateSyncMessage {
     fn hash<Hasher: std::hash::Hasher>(&self, state: &mut Hasher) {
         self.height.hash(state);
