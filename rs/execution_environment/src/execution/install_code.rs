@@ -225,6 +225,7 @@ impl InstallCodeHelper {
                 self.canister.memory_usage(),
                 self.canister.compute_allocation(),
                 original.subnet_size,
+                self.canister.system_state.reserved_balance(),
             );
             if self.canister.system_state.balance() < threshold {
                 let bytes = self.allocated_bytes - self.deallocated_bytes;
@@ -376,6 +377,7 @@ impl InstallCodeHelper {
             self.canister.system_state.balance(),
             round.cycles_account_manager,
             original.subnet_size,
+            self.canister.system_state.reserved_balance(),
         )?;
 
         match original.mode {

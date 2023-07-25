@@ -5607,6 +5607,7 @@ fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
         NumBytes::new(0),
         ComputeAllocation::zero(),
         test.subnet_size(),
+        Cycles::zero(),
     );
 
     // Overapproximation of the install code message cost.
@@ -5650,6 +5651,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_afer_pre_u
         NumBytes::new(memory_usage),
         ComputeAllocation::zero(),
         test.subnet_size(),
+        Cycles::zero(),
     );
 
     // Overapproximation of the install code message cost.

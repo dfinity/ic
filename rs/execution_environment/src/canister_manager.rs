@@ -403,6 +403,7 @@ impl CanisterManager {
             canister_cycles_balance,
             &self.cycles_account_manager,
             subnet_size,
+            Cycles::zero(),
         )
     }
 
@@ -481,6 +482,7 @@ impl CanisterManager {
             canister.system_state.balance(),
             &self.cycles_account_manager,
             subnet_size,
+            canister.system_state.reserved_balance(),
         )?;
 
         let is_controllers_change =

@@ -276,6 +276,7 @@ pub(crate) fn validate_canister_settings(
     canister_cycles_balance: Cycles,
     cycles_account_manager: &CyclesAccountManager,
     subnet_size: usize,
+    canister_reserved_balance: Cycles,
 ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
     if let Some(new_memory_allocation) = settings.memory_allocation {
         // The new memory allocation cannot be lower than the current canister
@@ -365,6 +366,7 @@ pub(crate) fn validate_canister_settings(
         canister_memory_usage,
         new_compute_allocation,
         subnet_size,
+        canister_reserved_balance,
     );
 
     if canister_cycles_balance < threshold {
