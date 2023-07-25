@@ -177,6 +177,7 @@ impl<'a> QueryContext<'a> {
             old_canister.memory_usage(),
             old_canister.scheduler_state.compute_allocation,
             subnet_size,
+            old_canister.system_state.reserved_balance(),
         ) > old_canister.system_state.balance()
         {
             return Err(UserError::new(

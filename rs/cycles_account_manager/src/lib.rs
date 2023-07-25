@@ -189,7 +189,8 @@ impl CyclesAccountManager {
             + self.compute_allocation_cost(compute_allocation, day, subnet_size)
     }
 
-    /// Returns the freezing threshold for this canister in Cycles.
+    /// Returns the freezing threshold for this canister in cycles after
+    /// taking the reserved balance into account.
     pub fn freeze_threshold_cycles(
         &self,
         freeze_threshold: NumSeconds,
@@ -197,6 +198,7 @@ impl CyclesAccountManager {
         memory_usage: NumBytes,
         compute_allocation: ComputeAllocation,
         subnet_size: usize,
+        reserved_balance: Cycles,
     ) -> Cycles {
         let idle_cycles_burned_rate: u128 = self
             .idle_cycles_burned_rate(
@@ -208,7 +210,12 @@ impl CyclesAccountManager {
             .get();
         let seconds_per_day = 24 * 60 * 60;
 
-        Cycles::from(idle_cycles_burned_rate * freeze_threshold.get() as u128 / seconds_per_day)
+        let threshold = Cycles::from(
+            idle_cycles_burned_rate * freeze_threshold.get() as u128 / seconds_per_day,
+        );
+
+        // Here we rely on the saturating subtraction for Cycles.
+        threshold - reserved_balance
     }
 
     /// Withdraws `cycles` worth of cycles from the canister's balance.
@@ -232,6 +239,7 @@ impl CyclesAccountManager {
         cycles_balance: &mut Cycles,
         cycles: Cycles,
         subnet_size: usize,
+        reserved_balance: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.withdraw_with_threshold(
             canister_id,
@@ -243,6 +251,7 @@ impl CyclesAccountManager {
                 canister_current_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
+                reserved_balance,
             ),
         )
     }
@@ -270,6 +279,7 @@ impl CyclesAccountManager {
             canister_current_memory_usage,
             canister_compute_allocation,
             subnet_size,
+            canister.system_state.reserved_balance(),
         );
         if canister.has_paused_execution() || canister.has_paused_install_code() {
             if canister.system_state.debited_balance() < cycles + threshold {
@@ -319,6 +329,7 @@ impl CyclesAccountManager {
             canister_current_memory_usage,
             canister_compute_allocation,
             subnet_size,
+            system_state.reserved_balance(),
         );
         self.consume_with_threshold(system_state, cycles, threshold, use_case)
     }
@@ -351,6 +362,7 @@ impl CyclesAccountManager {
                 canister_current_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
+                system_state.reserved_balance(),
             ),
             CyclesUseCase::Instructions,
         )
@@ -575,6 +587,7 @@ impl CyclesAccountManager {
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
+        reserved_balance: Cycles,
     ) -> Result<Vec<(CyclesUseCase, Cycles)>, CanisterOutOfCyclesError> {
         // The total amount charged consists of:
         //   - the fee to do the xnet call (request + response)
@@ -599,6 +612,7 @@ impl CyclesAccountManager {
                 canister_current_memory_usage,
                 canister_compute_allocation,
                 subnet_size,
+                reserved_balance,
             ),
         )?;
 
@@ -684,6 +698,7 @@ impl CyclesAccountManager {
             canister_current_memory_usage,
             canister_compute_allocation,
             subnet_size,
+            system_state.reserved_balance(),
         );
 
         if threshold + requested > system_state.balance() {
@@ -707,9 +722,25 @@ impl CyclesAccountManager {
         threshold: Cycles,
         use_case: CyclesUseCase,
     ) -> Result<(), CanisterOutOfCyclesError> {
+        let effective_cycles_balance = match use_case {
+            CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
+                // The resource use cases first drain the `reserved_balance` and
+                // after that the main balance.
+                system_state.balance() + system_state.reserved_balance()
+            }
+            CyclesUseCase::IngressInduction
+            | CyclesUseCase::Instructions
+            | CyclesUseCase::RequestAndResponseTransmission
+            | CyclesUseCase::CanisterCreation
+            | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::HTTPOutcalls
+            | CyclesUseCase::DeletedCanisters
+            | CyclesUseCase::NonConsumed => system_state.balance(),
+        };
+
         self.verify_cycles_balance_with_treshold(
             system_state.canister_id,
-            system_state.balance(),
+            effective_cycles_balance,
             cycles,
             threshold,
         )?;

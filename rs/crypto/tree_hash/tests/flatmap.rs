@@ -1,5 +1,7 @@
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{flatmap, FlatMap};
 use maplit::*;
+use rand::Rng;
 use std::collections::BTreeMap;
 
 #[test]
@@ -54,6 +56,44 @@ fn flatmap_macro() {
     assert_eq!(Some((&2, &20)), iter.next());
     assert_eq!(Some((&3, &30)), iter.next());
     assert_eq!(None, iter.next());
+}
+
+#[test]
+fn from_key_values_randomized() {
+    fn test_impl(key_values: Vec<(u32, u32)>) {
+        let map = FlatMap::from_key_values(key_values.clone());
+
+        // each input key is in the map
+        for (input_k, _input_v) in key_values.clone() {
+            assert!(map.contains_key(&input_k), "map={map:?}, k={input_k:?}");
+        }
+
+        // each (key, value) from map is in the input
+        for (map_k, map_v) in map.iter() {
+            assert!(
+                key_values.contains(&(*map_k, *map_v)),
+                "map_k={map_k}, map={map:?}, key_values={key_values:?}"
+            );
+        }
+    }
+
+    let rng = &mut reproducible_rng();
+
+    let mut input_sizes: Vec<_> = (0..100).map(|_| rng.gen_range(5..=100)).collect();
+    input_sizes.extend([1, 2, 3, 4]);
+
+    for size in input_sizes {
+        let key_values: Vec<_> = (0..size).map(|_| (rng.gen(), rng.gen())).collect();
+
+        // random key values
+        test_impl(key_values.clone());
+
+        // sorted and deduplicated key values
+        let mut key_values_sorted_deduped = key_values;
+        key_values_sorted_deduped.sort();
+        key_values_sorted_deduped.dedup_by(|a, b| a.0 == b.0);
+        test_impl(key_values_sorted_deduped);
+    }
 }
 
 #[test]

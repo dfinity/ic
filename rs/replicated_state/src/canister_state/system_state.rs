@@ -616,6 +616,12 @@ impl TryFrom<pb::CanisterHistory> for CanisterHistory {
     }
 }
 
+#[derive(Debug)]
+pub struct InsufficientCyclesError {
+    pub requested: Cycles,
+    pub available: Cycles,
+}
+
 impl SystemState {
     pub fn new_running(
         canister_id: CanisterId,
@@ -1215,17 +1221,54 @@ impl SystemState {
         }
     }
 
-    /// Decreases 'cycles_balance' for 'amount'.
-    pub fn remove_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
-        self.cycles_balance -= amount;
-        self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::Yes);
+    /// Decreases 'cycles_balance' for 'requested_amount'.
+    /// The resource use cases first drain the `reserved_balance` and only after
+    /// that drain the main `cycles_balance`.
+    pub fn remove_cycles(&mut self, requested_amount: Cycles, use_case: CyclesUseCase) {
+        let remaining_amount = match use_case {
+            CyclesUseCase::Memory | CyclesUseCase::ComputeAllocation | CyclesUseCase::Uninstall => {
+                let covered_by_reserved_balance = requested_amount.min(self.reserved_balance);
+                self.reserved_balance -= covered_by_reserved_balance;
+                requested_amount - covered_by_reserved_balance
+            }
+            CyclesUseCase::IngressInduction
+            | CyclesUseCase::Instructions
+            | CyclesUseCase::RequestAndResponseTransmission
+            | CyclesUseCase::CanisterCreation
+            | CyclesUseCase::ECDSAOutcalls
+            | CyclesUseCase::HTTPOutcalls
+            | CyclesUseCase::DeletedCanisters
+            | CyclesUseCase::NonConsumed => requested_amount,
+        };
+        self.cycles_balance -= remaining_amount;
+        self.observe_consumed_cycles_with_use_case(
+            requested_amount,
+            use_case,
+            ConsumingCycles::Yes,
+        );
     }
 
-    /// Removes all cycles from 'cycles_balance'.
-    pub fn burn_remaining_balance(&mut self, use_case: CyclesUseCase) {
-        let balance = self.cycles_balance;
+    /// Moves the given amount of cycles from the main balance to the reserved balance.
+    /// Returns an error if the main balance is lower than the requested amount.
+    pub fn reserve_cycles(&mut self, amount: Cycles) -> Result<(), InsufficientCyclesError> {
+        if amount > self.cycles_balance {
+            Err(InsufficientCyclesError {
+                requested: amount,
+                available: self.cycles_balance,
+            })
+        } else {
+            self.cycles_balance -= amount;
+            self.reserved_balance += amount;
+            Ok(())
+        }
+    }
+
+    /// Removes all cycles from `cycles_balance` and `reserved_balance` as part
+    /// of canister uninstallation due to it running out of cycles.
+    pub fn burn_remaining_balance_for_uninstall(&mut self) {
+        let balance = self.cycles_balance + self.reserved_balance;
         self.observe_consumed_cycles(balance);
-        self.remove_cycles(balance, use_case);
+        self.remove_cycles(balance, CyclesUseCase::Uninstall);
     }
 
     /// Increments the metric `consumed_cycles_since_replica_started` with the

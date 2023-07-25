@@ -503,6 +503,7 @@ pub struct SandboxSafeSystemState {
     memory_allocation: MemoryAllocation,
     compute_allocation: ComputeAllocation,
     initial_cycles_balance: Cycles,
+    reserved_balance: Cycles,
     call_context_balances: BTreeMap<CallContextId, Cycles>,
     cycles_account_manager: CyclesAccountManager,
     // None indicates that we are in a context where the canister cannot
@@ -528,6 +529,7 @@ impl SandboxSafeSystemState {
         memory_allocation: MemoryAllocation,
         compute_allocation: ComputeAllocation,
         initial_cycles_balance: Cycles,
+        reserved_balance: Cycles,
         call_context_balances: BTreeMap<CallContextId, Cycles>,
         cycles_account_manager: CyclesAccountManager,
         next_callback_id: Option<u64>,
@@ -551,6 +553,7 @@ impl SandboxSafeSystemState {
             compute_allocation,
             system_state_changes: SystemStateChanges::default(),
             initial_cycles_balance,
+            reserved_balance,
             call_context_balances,
             cycles_account_manager,
             next_callback_id,
@@ -609,6 +612,7 @@ impl SandboxSafeSystemState {
             system_state.memory_allocation,
             compute_allocation,
             system_state.balance(),
+            system_state.reserved_balance(),
             call_context_balances,
             cycles_account_manager,
             system_state
@@ -804,6 +808,7 @@ impl SandboxSafeSystemState {
                 &mut new_balance,
                 amount,
                 self.subnet_size,
+                self.reserved_balance,
             )
             .map_err(HypervisorError::InsufficientCyclesBalance);
         self.update_balance_change(new_balance);
@@ -830,6 +835,7 @@ impl SandboxSafeSystemState {
             prepayment_for_response_execution,
             prepayment_for_response_transmission,
             self.subnet_size,
+            self.reserved_balance,
         ) {
             Ok(consumed_cycles) => consumed_cycles,
             Err(_) => return Err(msg),
@@ -910,6 +916,7 @@ impl SandboxSafeSystemState {
                     new_memory_usage,
                     self.compute_allocation,
                     self.subnet_size,
+                    self.reserved_balance,
                 );
                 if self.cycles_balance() >= threshold {
                     Ok(())

@@ -325,6 +325,7 @@ impl ExecutionTest {
             memory_usage,
             compute_allocation,
             self.subnet_size(),
+            canister.system_state.reserved_balance(),
         )
     }
 

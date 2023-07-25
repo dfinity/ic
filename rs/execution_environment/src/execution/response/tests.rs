@@ -3,7 +3,6 @@ use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{CanisterStatus, NumWasmPages};
@@ -2408,7 +2407,7 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
     // Change the cycles balance to force the response resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance(CyclesUseCase::Memory);
+        .burn_remaining_balance_for_uninstall();
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -2493,7 +2492,7 @@ fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
     // Change the cycles balance to force the cleanup resuming to fail.
     test.canister_state_mut(a_id)
         .system_state
-        .burn_remaining_balance(CyclesUseCase::Memory);
+        .burn_remaining_balance_for_uninstall();
 
     test.execute_slice(a_id);
     assert_eq!(

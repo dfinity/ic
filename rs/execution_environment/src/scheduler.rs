@@ -1014,9 +1014,7 @@ impl SchedulerImpl {
                     canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
                     canister.system_state.clear_canister_history();
                     // Burn the remaining balance of the canister.
-                    canister
-                        .system_state
-                        .burn_remaining_balance(CyclesUseCase::Uninstall);
+                    canister.system_state.burn_remaining_balance_for_uninstall();
 
                     info!(
                         self.log,

@@ -835,6 +835,7 @@ pub fn execute_response(
         clean_canister.memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
+        clean_canister.system_state.reserved_balance(),
     );
 
     let original = OriginalContext {
