@@ -18,6 +18,7 @@ rust_library(
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger",
+        "//rs/rosetta-api/icrc1/tokens_u64",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
         "//rs/state_machine_tests",

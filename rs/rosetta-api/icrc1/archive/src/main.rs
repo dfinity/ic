@@ -2,6 +2,7 @@ use candid::{candid_method, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
+use ic_icrc1_tokens_u64::U64;
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -16,6 +17,8 @@ use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, Transaction
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
+
+type Tokens = U64;
 
 const WASM_PAGE_SIZE: u64 = 65536;
 
@@ -118,7 +121,7 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 }
 
 fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
-    Block::decode(EncodedBlock::from(bytes))
+    Block::<Tokens>::decode(EncodedBlock::from(bytes))
         .unwrap_or_else(|e| ic_cdk::api::trap(&format!("failed to decode block {}: {}", txid, e)))
         .into()
 }

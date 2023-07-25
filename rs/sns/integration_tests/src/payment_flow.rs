@@ -155,24 +155,15 @@ impl PaymentProtocolTestSetup {
             .unwrap()
     }
     pub fn default_icrc1_init_args() -> Icrc1InitArgs {
-        Icrc1InitArgs {
-            minting_account: *DEFAULT_MINTING_ACCOUNT,
-            initial_balances: vec![(
-                Account {
-                    owner: PrincipalId::from(*DEFAULT_SNS_SALE_CANISTER_ID).0,
-                    subaccount: None,
-                },
+        ic_icrc1_ledger::InitArgsBuilder::with_symbol_and_name("STK", "SNS Token")
+            .with_minting_account(*DEFAULT_MINTING_ACCOUNT)
+            .with_transfer_fee(DEFAULT_TRANSFER_FEE)
+            .with_archive_options(DEFAULT_ICRC1_ARCHIVE_OPTIONS.clone())
+            .with_initial_balance(
+                DEFAULT_SNS_SALE_CANISTER_ID.get().0,
                 *DEFAULT_INITIAL_BALANCE,
-            )],
-            transfer_fee: DEFAULT_TRANSFER_FEE.get_e8s(),
-            token_name: "SNS Token".to_string(),
-            token_symbol: "STK".to_string(),
-            metadata: vec![],
-            archive_options: DEFAULT_ICRC1_ARCHIVE_OPTIONS.clone(),
-            fee_collector_account: None,
-            max_memo_length: None,
-            feature_flags: None,
-        }
+            )
+            .build()
     }
 
     pub fn default_sns_sale_init_args() -> Init {

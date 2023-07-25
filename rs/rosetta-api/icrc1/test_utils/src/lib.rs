@@ -1,7 +1,7 @@
 use candid::Principal;
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
-use ic_ledger_core::Tokens;
+use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use num_traits::cast::ToPrimitive;
@@ -12,11 +12,16 @@ use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const E8: u64 = 100_000_000;
-pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
+pub const DEFAULT_TRANSFER_FEE: u64 = 10_000;
 
 pub fn principal_strategy() -> impl Strategy<Value = Principal> {
     let bytes_strategy = prop::collection::vec(0..=255u8, 29);
     bytes_strategy.prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
+}
+
+fn small_token_amount<Tokens: TokensType>(n: u64) -> Tokens {
+    Tokens::try_from(candid::Nat::from(n))
+        .unwrap_or_else(|e| panic!("failed to convert {n} to tokens: {e}"))
 }
 
 pub fn account_strategy() -> impl Strategy<Value = Account> {
@@ -28,37 +33,40 @@ pub fn account_strategy() -> impl Strategy<Value = Account> {
     })
 }
 
-fn operation_strategy() -> impl Strategy<Value = Operation> {
+fn arb_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
+    any::<u16>().prop_map(|v| small_token_amount(v as u64))
+}
+
+fn arb_memo() -> impl Strategy<Value = Option<Memo>> {
+    prop::option::of(prop::collection::vec(0..=255u8, 32).prop_map(|x| Memo(ByteBuf::from(x))))
+}
+
+fn operation_strategy<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
     prop_oneof![
-        (any::<u16>(), account_strategy()).prop_map(|(amount, to)| Operation::Mint {
-            to,
-            amount: amount.into()
-        }),
-        (any::<u16>(), account_strategy()).prop_map(|(amount, from)| Operation::Burn {
+        (arb_amount(), account_strategy()).prop_map(|(amount, to)| Operation::Mint { to, amount }),
+        (arb_amount(), account_strategy()).prop_map(|(amount, from)| Operation::Burn {
             from,
             spender: None,
-            amount: amount.into()
+            amount,
         }),
         (
-            any::<u16>(),
+            arb_amount(),
             account_strategy(),
             account_strategy(),
-            prop::option::of(Just(DEFAULT_TRANSFER_FEE.get_e8s()))
+            prop::option::of(Just(small_token_amount(DEFAULT_TRANSFER_FEE)))
         )
             .prop_map(|(amount, to, from, fee)| Operation::Transfer {
                 from,
                 to,
                 spender: None,
-                amount: amount.into(),
+                amount,
                 fee
             }),
     ]
 }
 
-pub fn transaction_strategy() -> impl Strategy<Value = Transaction> {
+pub fn transaction_strategy<Tokens: TokensType>() -> impl Strategy<Value = Transaction<Tokens>> {
     let operation_strategy = operation_strategy();
-    let memo_strategy =
-        prop::option::of(prop::collection::vec(0..=255u8, 32).prop_map(|x| Memo(ByteBuf::from(x))));
     let created_at_time_strategy = prop::option::of(Just({
         let end = SystemTime::now();
         // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
@@ -69,7 +77,7 @@ pub fn transaction_strategy() -> impl Strategy<Value = Transaction> {
         let random_time = start + random_duration; // calculate the random time
         random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
     }));
-    (operation_strategy, memo_strategy, created_at_time_strategy).prop_map(
+    (operation_strategy, arb_memo(), created_at_time_strategy).prop_map(
         |(operation, memo, created_at_time)| Transaction {
             operation,
             created_at_time,
@@ -78,11 +86,11 @@ pub fn transaction_strategy() -> impl Strategy<Value = Transaction> {
     )
 }
 
-pub fn blocks_strategy() -> impl Strategy<Value = Block> {
+pub fn blocks_strategy<Tokens: TokensType>() -> impl Strategy<Value = Block<Tokens>> {
     let transaction_strategy = transaction_strategy();
     let fee_collector_strategy = prop::option::of(account_strategy());
     let fee_collector_block_index_strategy = prop::option::of(prop::num::u64::ANY);
-    let effective_fee_strategy = prop::option::of(prop::num::u64::ANY);
+    let effective_fee_strategy = prop::option::of(arb_amount());
     let timestamp_strategy = prop::num::u64::ANY;
     (
         transaction_strategy,
@@ -94,7 +102,7 @@ pub fn blocks_strategy() -> impl Strategy<Value = Block> {
         .prop_map(
             |(transaction, effective_fee, timestamp, fee_collector, fee_collector_block_index)| {
                 Block {
-                    parent_hash: Some(Block::block_hash(
+                    parent_hash: Some(Block::<Tokens>::block_hash(
                         &Block {
                             parent_hash: None,
                             transaction: transaction.clone(),
@@ -116,19 +124,23 @@ pub fn blocks_strategy() -> impl Strategy<Value = Block> {
 }
 
 // Construct a valid blockchain strategy
-pub fn valid_blockchain_strategy(size: usize) -> impl Strategy<Value = Vec<Block>> {
+pub fn valid_blockchain_strategy<Tokens: TokensType>(
+    size: usize,
+) -> impl Strategy<Value = Vec<Block<Tokens>>> {
     let blocks = prop::collection::vec(blocks_strategy(), 0..size);
     blocks.prop_map(|mut blocks| {
         let mut parent_hash = None;
         for block in blocks.iter_mut() {
             block.parent_hash = parent_hash;
-            parent_hash = Some(Block::block_hash(&(block.clone().encode())));
+            parent_hash = Some(Block::<Tokens>::block_hash(&(block.clone().encode())));
         }
         blocks
     })
 }
 
-pub fn valid_blockchain_with_gaps_strategy(size: usize) -> impl Strategy<Value = Vec<Block>> {
+pub fn valid_blockchain_with_gaps_strategy<Tokens: TokensType>(
+    size: usize,
+) -> impl Strategy<Value = Vec<Block<Tokens>>> {
     let blockchain_strategy = valid_blockchain_strategy(size);
     let random_indices = prop::collection::hash_set(any::<u8>().prop_map(|x| x as u64), 0..size);
     (blockchain_strategy, random_indices).prop_map(|(mut blockchain, indices)| {
@@ -142,51 +154,22 @@ pub fn valid_blockchain_with_gaps_strategy(size: usize) -> impl Strategy<Value =
     })
 }
 
+pub fn transfer_arg(sender: Account) -> impl Strategy<Value = TransferArg> {
+    (any::<u16>(), arb_memo(), account_strategy()).prop_map(move |(amount, memo, to)| TransferArg {
+        from_subaccount: sender.subaccount,
+        to,
+        amount: candid::Nat::from(amount),
+        created_at_time: None,
+        fee: None,
+        memo,
+    })
+}
+
 pub fn transfer_args_with_sender(
     num: usize,
     sender: Account,
 ) -> impl Strategy<Value = Vec<TransferArg>> {
-    let blocks_strategy = prop::collection::vec(blocks_strategy(), 0..num);
-    blocks_strategy.prop_map(move |blocks| {
-        blocks
-            .into_iter()
-            .map(|block| match block.transaction.operation {
-                Operation::Mint { to, amount } => TransferArg {
-                    from_subaccount: None,
-                    to,
-                    fee: None,
-                    created_at_time: block.transaction.created_at_time,
-                    memo: block.transaction.memo,
-                    amount: amount.into(),
-                },
-                Operation::Transfer {
-                    from: _,
-                    to,
-                    spender: _,
-                    amount,
-                    fee: _,
-                } => TransferArg {
-                    from_subaccount: sender.subaccount,
-                    to,
-                    fee: None,
-                    created_at_time: block.transaction.created_at_time,
-                    memo: block.transaction.memo,
-                    amount: amount.into(),
-                },
-                Operation::Burn {
-                    from: _, amount, ..
-                } => TransferArg {
-                    from_subaccount: sender.subaccount,
-                    to: Principal::anonymous().into(),
-                    fee: None,
-                    created_at_time: block.transaction.created_at_time,
-                    memo: block.transaction.memo,
-                    amount: amount.into(),
-                },
-                Operation::Approve { .. } => todo!(),
-            })
-            .collect()
-    })
+    prop::collection::vec(transfer_arg(sender), 0..num)
 }
 
 /// icrc1 TransferArg plus the caller

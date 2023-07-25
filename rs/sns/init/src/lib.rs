@@ -4,7 +4,7 @@ use crate::pb::v1::{
 };
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index::InitArgs as IndexInitArgs;
-use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{
@@ -346,29 +346,13 @@ impl SnsInitPayload {
             .expect("Expected token_name to be set")
             .clone();
 
-        let minting_account = Account {
-            owner: sns_canister_ids.governance.0,
-            subaccount: None,
-        };
-
-        let initial_balances = self
-            .get_all_ledger_accounts(sns_canister_ids)?
-            .into_iter()
-            .map(|(a, t)| (a, t.get_e8s()))
-            .chain(self.maybe_test_balances())
-            .collect();
-        let transfer_fee = self
-            .transaction_fee_e8s
-            .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s());
-
-        let payload = LedgerInitArgs {
-            minting_account,
-            initial_balances,
-            transfer_fee,
-            token_name,
-            token_symbol,
-            metadata: vec![],
-            archive_options: ArchiveOptions {
+        let mut payload = LedgerInitArgsBuilder::with_symbol_and_name(token_symbol, token_name)
+            .with_minting_account(sns_canister_ids.governance.0)
+            .with_transfer_fee(
+                self.transaction_fee_e8s
+                    .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s()),
+            )
+            .with_archive_options(ArchiveOptions {
                 trigger_threshold: 2000,
                 num_blocks_to_archive: 1000,
                 // 1 GB, which gives us 3 GB space when upgrading
@@ -380,13 +364,15 @@ impl SnsInitPayload {
                 // 10 Trillion cycles
                 cycles_for_archive_creation: Some(10_000_000_000_000),
                 max_transactions_per_response: None,
-            },
-            fee_collector_account: None,
-            max_memo_length: None,
-            feature_flags: None,
-        };
+            });
 
-        Ok(LedgerArgument::Init(payload))
+        for (account, amount) in self.get_all_ledger_accounts(sns_canister_ids)? {
+            payload = payload.with_initial_balance(account, amount);
+        }
+        for (account, amount) in self.maybe_test_balances() {
+            payload = payload.with_initial_balance(account, amount);
+        }
+        Ok(LedgerArgument::Init(payload.build()))
     }
 
     /// Construct the params used to initialize a SNS Index canister.
@@ -1960,6 +1946,8 @@ mod test {
     // account is present in the Ledger init payload's `initial_balances`.
     #[test]
     fn test_build_canister_payloads_creates_neurons_with_correct_ledger_accounts() {
+        use num_traits::ToPrimitive;
+
         let controller1 = PrincipalId::new_user_test_id(2209);
         let airdrop_neuron1 = NeuronDistribution {
             controller: Some(controller1),
@@ -2021,7 +2009,19 @@ mod test {
         let governance = canister_payloads.governance;
         let init_accounts: BTreeMap<Account, u64> =
             if let LedgerArgument::Init(ledger) = canister_payloads.ledger {
-                ledger.initial_balances.into_iter().collect()
+                ledger
+                    .initial_balances
+                    .into_iter()
+                    .map(|(account, amount)| {
+                        (
+                            account,
+                            amount
+                                .0
+                                .to_u64()
+                                .expect("bug: balance does not fit into u64"),
+                        )
+                    })
+                    .collect()
             } else {
                 panic!("bug: expected Init got Upgrade");
             };

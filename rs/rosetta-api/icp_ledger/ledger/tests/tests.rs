@@ -30,14 +30,14 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterI
     let initial_values = args
         .initial_balances
         .into_iter()
-        .map(|(account, amount)| (account.into(), Tokens::from_e8s(amount)))
+        .map(|(account, amount)| (account.into(), Tokens::try_from(amount).unwrap()))
         .collect();
     LedgerCanisterInitPayload::builder()
         .initial_values(initial_values)
         .minting_account(args.minting_account.into())
         .icrc1_minting_account(args.minting_account)
         .archive_options(args.archive_options)
-        .transfer_fee(Tokens::from_e8s(args.transfer_fee))
+        .transfer_fee(Tokens::try_from(args.transfer_fee).unwrap())
         .token_symbol_and_name(&args.token_symbol, &args.token_name)
         .build()
         .unwrap()

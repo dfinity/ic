@@ -6,16 +6,16 @@ use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactions, GetTransactionsResult, InitArgs as IndexInitArgs,
     ListSubaccountsArgs, TransactionWithId,
 };
-use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
+use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
-    tokens::Tokens,
+    tokens::Zero,
 };
 use ic_ledger_hash_of::HashOf;
 use ic_state_machine_tests::{CanisterId, StateMachine};
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::{
     icrc1::account::Account, icrc1::account::Subaccount, icrc3::archive::ArchiveInfo,
@@ -46,6 +46,8 @@ const NAT_META_VALUE: u128 = u128::MAX;
 const INT_META_KEY: &str = "test:int";
 const INT_META_VALUE: i128 = i128::MIN;
 
+type Tokens = U64;
+
 fn index_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
@@ -66,18 +68,18 @@ fn ledger_wasm() -> Vec<u8> {
 }
 
 fn mint_block() -> EncodedBlock {
-    Block::from_transaction(
+    Block::<Tokens>::from_transaction(
         Some(HashOf::new([0; 32])),
         Transaction {
             operation: Operation::Mint {
                 to: account(0),
-                amount: 1,
+                amount: Tokens::new(1),
             },
             created_at_time: Some(1),
             memo: Some(Memo::from([1; 32].to_vec())),
         },
         TimeStamp::new(3, 4),
-        Tokens::ZERO,
+        Tokens::zero(),
         None,
     )
     .encode()
@@ -100,25 +102,24 @@ fn install_ledger(
     initial_balances: Vec<(Account, u64)>,
     archive_options: ArchiveOptions,
 ) -> CanisterId {
-    let args = LedgerArgument::Init(LedgerInitArgs {
-        minting_account: MINTER,
-        initial_balances,
-        transfer_fee: FEE,
-        token_name: TOKEN_NAME.to_string(),
-        token_symbol: TOKEN_SYMBOL.to_string(),
-        metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
-        ],
-        archive_options,
-        fee_collector_account: None,
-        max_memo_length: None,
-        feature_flags: None,
-    });
-    env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap()
+    let mut builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
+        .with_minting_account(MINTER)
+        .with_transfer_fee(FEE)
+        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
+        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
+        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
+        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
+        .with_archive_options(archive_options);
+    for (account, amount) in initial_balances {
+        builder = builder.with_initial_balance(account, amount);
+    }
+
+    env.install_canister(
+        ledger_wasm(),
+        Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
+        None,
+    )
+    .unwrap()
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {

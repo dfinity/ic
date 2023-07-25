@@ -1,9 +1,12 @@
 use super::{storage_operations, types::RosettaBlock};
 use anyhow::Result;
 use ic_icrc1::Transaction;
+use ic_icrc1_tokens_u64::U64;
 use rusqlite::Connection;
 use serde_bytes::ByteBuf;
 use std::{path::Path, sync::Mutex};
+
+type Tokens = U64;
 
 #[derive(Debug)]
 pub struct StorageClient {
@@ -83,13 +86,19 @@ impl StorageClient {
 
     // Gets a transaction with a certain hash. Returns [] if no transaction exists in the database with that hash. Returns a vector with multiple entries if more than one transaction
     // with the given transaction hash exists
-    pub fn get_transaction_by_hash(&self, hash: ByteBuf) -> anyhow::Result<Vec<Transaction>> {
+    pub fn get_transaction_by_hash(
+        &self,
+        hash: ByteBuf,
+    ) -> anyhow::Result<Vec<Transaction<Tokens>>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_transactions_by_hash(&open_connection, hash)
     }
 
     // Gets a transaction with a certain index. Returns None if no transaction exists in the database with that index. Returns an error if multiple transactions with that index exist
-    pub fn get_transaction_at_idx(&self, block_idx: u64) -> anyhow::Result<Option<Transaction>> {
+    pub fn get_transaction_at_idx(
+        &self,
+        block_idx: u64,
+    ) -> anyhow::Result<Option<Transaction<Tokens>>> {
         let open_connection = self.storage_connection.lock().unwrap();
         storage_operations::get_transaction_at_idx(&open_connection, block_idx)
     }

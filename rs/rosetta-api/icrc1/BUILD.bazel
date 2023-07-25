@@ -62,6 +62,7 @@ rust_test(
     proc_macro_deps = MACRO_DEV_DEPENDENCIES,
     deps = [
         ":icrc1",
+        "//rs/rosetta-api/icrc1/tokens_u64",
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     ] + DEV_DEPENDENCIES,
 )

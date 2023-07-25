@@ -13,6 +13,7 @@ ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-icrc1 = { path = "../" }
+ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1"
 ic-stable-structures = { workspace = true }

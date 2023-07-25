@@ -20,6 +20,7 @@ rust_canister(
     deps = [
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1",
+        "//rs/rosetta-api/icrc1/tokens_u64",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/http_types",
         "//rs/types/base_types",

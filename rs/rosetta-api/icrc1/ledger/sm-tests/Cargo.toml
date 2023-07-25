@@ -11,6 +11,7 @@ ic-base-types = { path = "../../../../types/base_types" }
 ic-error-types = { path = "../../../../types/error_types" }
 ic-icrc1 = { path = "../.." }
 ic-icrc1-ledger = { path = ".." }
+ic-icrc1-tokens-u64 = { path = "../../tokens_u64" }
 ic-ledger-core = { path = "../../../ledger_core" }
 ic-ledger-canister-core = { path = "../../../ledger_canister_core" }
 ic-state-machine-tests = { path = "../../../../state_machine_tests" }

@@ -18,6 +18,7 @@ ic-cdk-timers = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-icrc1 = { path = ".." }
 ic-icrc1-ledger = { path = "../ledger" }
+ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-metrics-encoder = "1.1"
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.14"

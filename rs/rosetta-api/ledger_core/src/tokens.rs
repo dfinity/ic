@@ -1,6 +1,6 @@
 use candid::{CandidType, Nat};
 use num_traits::{Bounded, ToPrimitive};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Debug;
 
@@ -69,14 +69,19 @@ pub trait TokensType:
     Bounded
     + CheckedAdd
     + CheckedSub
+    + Zero
     + Clone
     + Copy
     + Debug
     + Into<Nat>
-    + Ord
+    + TryFrom<Nat, Error = String>
+    + PartialEq
+    + Eq
     + PartialOrd
-    + TryFrom<Nat>
-    + Zero
+    + Ord
+    + Serialize
+    + DeserializeOwned
+    + std::hash::Hash
 {
 }
 
@@ -84,14 +89,19 @@ impl<T> TokensType for T where
     T: Bounded
         + CheckedAdd
         + CheckedSub
+        + Zero
         + Clone
         + Copy
         + Debug
         + Into<Nat>
-        + Ord
+        + TryFrom<Nat, Error = String>
+        + PartialEq
+        + Eq
         + PartialOrd
-        + TryFrom<Nat>
-        + Zero
+        + Ord
+        + Serialize
+        + DeserializeOwned
+        + std::hash::Hash
 {
 }
 

@@ -53,11 +53,11 @@ type FeatureFlags = record {
 type InitArgs = record {
     minting_account : Account;
     fee_collector_account : opt Account;
-    transfer_fee : nat64;
+    transfer_fee : nat;
     token_symbol : text;
     token_name : text;
     metadata : vec record { text; MetadataValue };
-    initial_balances : vec record { Account; nat64 };
+    initial_balances : vec record { Account; nat };
     archive_options : record {
         num_blocks_to_archive : nat64;
         trigger_threshold : nat64;

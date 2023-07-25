@@ -19,6 +19,7 @@ ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-crypto-sha = { path = "../../../crypto/sha" }
 ic-icrc1 = { path = "../" }
+ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }

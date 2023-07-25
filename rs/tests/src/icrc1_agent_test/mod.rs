@@ -5,10 +5,9 @@ use assert_matches::assert_matches;
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
 use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
-use ic_icrc1_ledger::{FeatureFlags, InitArgs, LedgerArgument};
+use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder, LedgerArgument};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
-use icp_ledger::ArchiveOptions;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -93,26 +92,12 @@ pub fn test(env: TestEnv) {
             subaccount: None,
         };
 
-        let init_args = InitArgs {
-            minting_account,
-            initial_balances: vec![(account1, 1_000_000_000)],
-            transfer_fee: 1_000,
-            token_name: "Example Token".to_string(),
-            token_symbol: "XTK".to_string(),
-            metadata: vec![],
-            archive_options: ArchiveOptions {
-                trigger_threshold: 1000,
-                num_blocks_to_archive: 1000,
-                node_max_memory_size_bytes: None,
-                max_message_size_bytes: None,
-                controller_id: minting_user,
-                cycles_for_archive_creation: None,
-                max_transactions_per_response: None,
-            },
-            fee_collector_account: None,
-            max_memo_length: None,
-            feature_flags: Some(FeatureFlags { icrc2: true }),
-        };
+        let init_args = InitArgsBuilder::for_tests()
+            .with_minting_account(minting_account)
+            .with_initial_balance(account1, 1_000_000_000u64)
+            .with_transfer_fee(1_000)
+            .with_feature_flags(FeatureFlags { icrc2: true })
+            .build();
         install_icrc1_ledger(&env, &mut ledger, &LedgerArgument::Init(init_args.clone())).await;
 
         // name
@@ -157,11 +142,11 @@ pub fn test(env: TestEnv) {
 
         // fee
         assert_eq!(
-            Nat::from(init_args.transfer_fee),
+            init_args.transfer_fee,
             agent.fee(CallMode::Query).await.unwrap()
         );
         assert_eq!(
-            Nat::from(init_args.transfer_fee),
+            init_args.transfer_fee,
             agent.fee(CallMode::Update).await.unwrap()
         );
 
@@ -191,7 +176,7 @@ pub fn test(env: TestEnv) {
             ),
             Value::entry("icrc1:name", init_args.token_name),
             Value::entry("icrc1:symbol", init_args.token_symbol),
-            Value::entry("icrc1:fee", init_args.transfer_fee),
+            Value::entry("icrc1:fee", init_args.transfer_fee.clone()),
             Value::entry("icrc1:max_memo_length", 32u64),
         ];
         assert_eq!(
@@ -228,7 +213,7 @@ pub fn test(env: TestEnv) {
             .unwrap();
 
         assert_eq!(
-            Nat::from(1_000_000_000u64 - amount - init_args.transfer_fee),
+            Nat::from(1_000_000_000u64 - amount) - init_args.transfer_fee,
             agent.balance_of(account1, CallMode::Query).await.unwrap()
         );
         assert_eq!(

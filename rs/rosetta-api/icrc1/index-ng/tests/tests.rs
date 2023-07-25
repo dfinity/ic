@@ -6,13 +6,12 @@ use ic_icrc1_index_ng::{
     ListSubaccountsArgs, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{
-    ChangeFeeCollector, InitArgs as LedgerInitArgs, LedgerArgument,
+    ChangeFeeCollector, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
     UpgradeArgs as LedgerUpgradeArgs,
 };
 use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_state_machine_tests::StateMachine;
-use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
@@ -91,25 +90,26 @@ fn install_ledger(
     archive_options: ArchiveOptions,
     fee_collector_account: Option<Account>,
 ) -> CanisterId {
-    let args = LedgerArgument::Init(LedgerInitArgs {
-        minting_account: MINTER,
-        initial_balances,
-        transfer_fee: FEE,
-        token_name: TOKEN_NAME.to_string(),
-        token_symbol: TOKEN_SYMBOL.to_string(),
-        metadata: vec![
-            Value::entry(NAT_META_KEY, NAT_META_VALUE),
-            Value::entry(INT_META_KEY, INT_META_VALUE),
-            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
-            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
-        ],
-        archive_options,
-        fee_collector_account,
-        max_memo_length: None,
-        feature_flags: None,
-    });
-    env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
-        .unwrap()
+    let mut builder = LedgerInitArgsBuilder::with_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
+        .with_minting_account(MINTER)
+        .with_transfer_fee(FEE)
+        .with_metadata_entry(NAT_META_KEY, NAT_META_VALUE)
+        .with_metadata_entry(INT_META_KEY, INT_META_VALUE)
+        .with_metadata_entry(TEXT_META_KEY, TEXT_META_VALUE)
+        .with_metadata_entry(BLOB_META_KEY, BLOB_META_VALUE)
+        .with_archive_options(archive_options);
+    if let Some(fee_collector_account) = fee_collector_account {
+        builder = builder.with_fee_collector_account(fee_collector_account);
+    }
+    for (account, amount) in initial_balances {
+        builder = builder.with_initial_balance(account, amount);
+    }
+    env.install_canister(
+        ledger_wasm(),
+        Encode!(&LedgerArgument::Init(builder.build())).unwrap(),
+        None,
+    )
+    .unwrap()
 }
 
 fn upgrade_ledger(
