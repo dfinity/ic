@@ -233,6 +233,7 @@ fn upgrade_fails_on_not_enough_cycles() {
         canister_memory_usage,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        Cycles::zero(),
     );
     let canister_id = test
         .canister_from_cycles_and_binary(

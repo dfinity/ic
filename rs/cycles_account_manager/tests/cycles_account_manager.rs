@@ -105,7 +105,8 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 ComputeAllocation::default(),
                 &mut new_balance,
                 amount,
-                SMALL_APP_SUBNET_MAX_SIZE
+                SMALL_APP_SUBNET_MAX_SIZE,
+                system_state.reserved_balance(),
             ),
             Ok(())
         );
@@ -116,6 +117,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             SMALL_APP_SUBNET_MAX_SIZE,
+            system_state.reserved_balance(),
         );
         assert_eq!(system_state.balance(), initial_cycles - threshold - amount);
     }
@@ -138,7 +140,8 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 ComputeAllocation::default(),
                 &mut new_balance,
                 amount,
-                SMALL_APP_SUBNET_MAX_SIZE
+                SMALL_APP_SUBNET_MAX_SIZE,
+                system_state.reserved_balance(),
             ),
             Ok(())
         );
@@ -149,6 +152,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             NumBytes::from(0),
             ComputeAllocation::default(),
             SMALL_APP_SUBNET_MAX_SIZE,
+            system_state.reserved_balance(),
         );
         assert_eq!(system_state.balance(), initial_cycles - threshold - amount);
     }
@@ -173,7 +177,8 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                     ComputeAllocation::default(),
                     &mut new_balance,
                     amount,
-                    SMALL_APP_SUBNET_MAX_SIZE
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    system_state.reserved_balance(),
                 ),
             Ok(())
         );
@@ -184,6 +189,7 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
             memory_usage,
             ComputeAllocation::default(),
             SMALL_APP_SUBNET_MAX_SIZE,
+            system_state.reserved_balance(),
         );
         assert_eq!(system_state.balance(), initial_cycles - threshold - amount);
     }
@@ -206,7 +212,8 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                 ComputeAllocation::default(),
                 &mut balance,
                 amount,
-                SMALL_APP_SUBNET_MAX_SIZE
+                SMALL_APP_SUBNET_MAX_SIZE,
+                system_state.reserved_balance(),
             ),
             Err(CanisterOutOfCyclesError {
                 canister_id: canister_test_id(1),
@@ -217,7 +224,8 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
                     system_state.memory_allocation,
                     memory_usage,
                     ComputeAllocation::default(),
-                    SMALL_APP_SUBNET_MAX_SIZE
+                    SMALL_APP_SUBNET_MAX_SIZE,
+                    system_state.reserved_balance(),
                 )
             })
         );
@@ -573,6 +581,7 @@ fn cycles_withdraw_for_execution() {
         memory_usage,
         compute_allocation,
         SMALL_APP_SUBNET_MAX_SIZE,
+        system_state.reserved_balance(),
     );
 
     let amount = Cycles::from(initial_amount / 2);
@@ -725,6 +734,7 @@ fn withdraw_for_transfer_does_not_consume_cycles() {
             &mut balance,
             Cycles::new(1_000_000),
             SMALL_APP_SUBNET_MAX_SIZE,
+            system_state.reserved_balance(),
         )
         .unwrap();
     let consumed_cycles_after = system_state
@@ -762,5 +772,143 @@ fn consume_cycles_updates_consumed_cycles() {
     assert_eq!(
         consumed_cycles_after - consumed_cycles_before,
         NominalCycles::from(1_000_000)
+    );
+}
+
+#[test]
+fn consume_cycles_for_memory_drains_reserved_balance() {
+    let cam = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let mut system_state = SystemStateBuilder::new()
+        .initial_cycles(Cycles::zero())
+        .build();
+    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
+    cam.consume_with_threshold(
+        &mut system_state,
+        Cycles::new(2_000_000),
+        Cycles::new(0),
+        CyclesUseCase::Memory,
+    )
+    .unwrap();
+    assert_eq!(system_state.reserved_balance(), Cycles::new(0));
+    assert_eq!(system_state.balance(), Cycles::new(2_000_000));
+}
+
+#[test]
+fn consume_cycles_for_compute_drains_reserved_balance() {
+    let cam = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let mut system_state = SystemStateBuilder::new()
+        .initial_cycles(Cycles::zero())
+        .build();
+    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
+    cam.consume_with_threshold(
+        &mut system_state,
+        Cycles::new(2_000_000),
+        Cycles::new(0),
+        CyclesUseCase::ComputeAllocation,
+    )
+    .unwrap();
+    assert_eq!(system_state.reserved_balance(), Cycles::new(0));
+    assert_eq!(system_state.balance(), Cycles::new(2_000_000));
+}
+
+#[test]
+fn consume_cycles_for_uninstall_drains_reserved_balance() {
+    let cam = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let mut system_state = SystemStateBuilder::new()
+        .initial_cycles(Cycles::zero())
+        .build();
+    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
+    cam.consume_with_threshold(
+        &mut system_state,
+        Cycles::new(2_000_000),
+        Cycles::new(0),
+        CyclesUseCase::Uninstall,
+    )
+    .unwrap();
+    assert_eq!(system_state.reserved_balance(), Cycles::new(0));
+    assert_eq!(system_state.balance(), Cycles::new(2_000_000));
+}
+
+#[test]
+fn consume_cycles_for_execution_does_not_drain_reserved_balance() {
+    let cam = CyclesAccountManagerBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let mut system_state = SystemStateBuilder::new()
+        .initial_cycles(Cycles::zero())
+        .build();
+    system_state.add_cycles(Cycles::new(4_000_000), CyclesUseCase::NonConsumed);
+    system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
+    cam.consume_with_threshold(
+        &mut system_state,
+        Cycles::new(2_000_000),
+        Cycles::new(0),
+        CyclesUseCase::Instructions,
+    )
+    .unwrap();
+    assert_eq!(system_state.reserved_balance(), Cycles::new(1_000_000));
+    assert_eq!(system_state.balance(), Cycles::new(1_000_000));
+}
+
+#[test]
+fn withdraw_cycles_for_transfer_checks_reserved_balance() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let mut system_state = SystemState::new_running(
+        canister_test_id(1),
+        canister_test_id(2).get(),
+        Cycles::new(2_000_000),
+        NumSeconds::from(1_000),
+    );
+    system_state.reserve_cycles(Cycles::new(1_000_000)).unwrap();
+    let mut new_balance = system_state.balance();
+    cycles_account_manager
+        .withdraw_cycles_for_transfer(
+            system_state.canister_id,
+            system_state.freeze_threshold,
+            system_state.memory_allocation,
+            NumBytes::from(1_000_000),
+            ComputeAllocation::default(),
+            &mut new_balance,
+            Cycles::new(1_000_000),
+            SMALL_APP_SUBNET_MAX_SIZE,
+            system_state.reserved_balance(),
+        )
+        .unwrap();
+    assert_eq!(Cycles::zero(), new_balance);
+}
+
+#[test]
+fn freezing_threshold_uses_reserved_balance() {
+    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
+    let threshold_without_reserved = cycles_account_manager.freeze_threshold_cycles(
+        NumSeconds::from(1_000),
+        MemoryAllocation::BestEffort,
+        NumBytes::from(1_000_000),
+        ComputeAllocation::default(),
+        SMALL_APP_SUBNET_MAX_SIZE,
+        Cycles::new(0),
+    );
+
+    let threshold_with_reserved = cycles_account_manager.freeze_threshold_cycles(
+        NumSeconds::from(1_000),
+        MemoryAllocation::BestEffort,
+        NumBytes::from(1_000_000),
+        ComputeAllocation::default(),
+        SMALL_APP_SUBNET_MAX_SIZE,
+        Cycles::new(1_000),
+    );
+
+    assert_eq!(
+        threshold_without_reserved,
+        threshold_with_reserved + Cycles::new(1_000)
     );
 }

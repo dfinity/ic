@@ -1,13 +1,16 @@
+use candid::Encode;
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
-use ic_ic00_types::CanisterSettingsArgsBuilder;
+use ic_ic00_types::{
+    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, Method, Payload, IC_00,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, UserError};
 use ic_types::{ingress::WasmResult, Cycles, NumBytes};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use std::{convert::TryInto, time::Duration};
+use std::{convert::TryInto, sync::Arc, time::Duration};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -1048,4 +1051,141 @@ fn canister_with_memory_allocation_cannot_grow_stable_memory_above_allocation() 
 
     let err = env.execute_ingress(a_id, "update", a).unwrap_err();
     assert_eq!(err.code(), ErrorCode::CanisterTrapped);
+}
+
+#[test]
+fn canister_with_reserved_balance_is_not_uninstalled_too_early() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig::default(),
+    ));
+
+    let initial_cycles = Cycles::new(100_000_000_000);
+
+    let canister_a = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(100_000_000)
+                    .with_freezing_threshold(0)
+                    .build(),
+            ),
+            initial_cycles,
+        )
+        .unwrap();
+
+    let canister_b = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(100_000_000)
+                    .with_freezing_threshold(0)
+                    .build(),
+            ),
+            initial_cycles,
+        )
+        .unwrap();
+
+    // Reserve all cycles of canister B.
+    {
+        let mut state = env.get_latest_state().as_ref().clone();
+        let canister = state.canister_state_mut(&canister_b).unwrap();
+        canister
+            .system_state
+            .reserve_cycles(canister.system_state.balance())
+            .unwrap();
+        env.replace_canister_state(Arc::new(state), canister_b);
+    }
+
+    assert_eq!(env.cycle_balance(canister_b), 0);
+    loop {
+        env.advance_time(Duration::from_secs(2_000_000));
+        env.tick();
+        let canister_a_uninstalled = env.module_hash(canister_a).is_none();
+        let canister_b_uninstalled = env.module_hash(canister_b).is_none();
+        if canister_b_uninstalled {
+            // If canister B got uninstalled, then canister A must also be
+            // uninstalled because they started with the same cycle balance and
+            // have the same memory allocation. Besides that, canister A was
+            // created earlier.
+            assert!(canister_a_uninstalled);
+            break;
+        }
+    }
+}
+
+#[test]
+fn canister_with_reserved_balance_is_not_frozen_too_early() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig::default(),
+    ));
+
+    let initial_cycles = Cycles::new(200_000_000_000);
+
+    let canister_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(100_000_000)
+                    .with_freezing_threshold(10_000_000)
+                    .build(),
+            ),
+            initial_cycles,
+        )
+        .unwrap();
+
+    let result = env
+        .execute_ingress(
+            IC_00,
+            Method::CanisterStatus,
+            Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+        )
+        .unwrap();
+
+    let idle_cycles_burned_per_day = match result {
+        WasmResult::Reply(reply) => CanisterStatusResultV2::decode(&reply)
+            .unwrap()
+            .idle_cycles_burned_per_day(),
+        WasmResult::Reject(reject) => unreachable!("Unexpected reject {}", reject),
+    };
+    let seconds_per_day = 24 * 3500;
+    let freezing_threshold = 10_000_000 * idle_cycles_burned_per_day / seconds_per_day;
+
+    // Reserve most of the cycles of canister B.
+    // The amount of remaining cycles in the main balance should be large enough
+    // to start message execution but should be lower than the freezing
+    // threshold.
+    let reserved_cycles = Cycles::new(180_000_000_000);
+    {
+        let mut state = env.get_latest_state().as_ref().clone();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
+        canister
+            .system_state
+            .reserve_cycles(reserved_cycles)
+            .unwrap();
+        env.replace_canister_state(Arc::new(state), canister_id);
+    }
+
+    assert!(env.cycle_balance(canister_id) < freezing_threshold);
+
+    let result = env
+        .execute_ingress(
+            canister_id,
+            "update",
+            wasm().message_payload().append_and_reply().build(),
+        )
+        .unwrap();
+    match result {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(err) => unreachable!("Unexpected reject: {:?}", err),
+    }
 }

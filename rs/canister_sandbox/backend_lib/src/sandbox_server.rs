@@ -201,6 +201,7 @@ mod tests {
             MemoryAllocation::BestEffort,
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
+            Cycles::zero(),
             BTreeMap::new(),
             CyclesAccountManager::new(
                 NumInstructions::from(1_000_000_000),

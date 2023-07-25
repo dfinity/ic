@@ -770,6 +770,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         NumBytes::new(canister_history_memory_usage as u64),
         ComputeAllocation::zero(),
         test.subnet_size(),
+        Cycles::zero(),
     );
     let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
     let payload = InstallCodeArgs {
