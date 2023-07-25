@@ -211,6 +211,11 @@ impl ResponseHelper {
     /// DTS relies on the invariant that once this validation succeeds, it will
     /// also continue to succeed later on for the same canister while DTS
     /// execution is in progress.
+    //
+    // The concern about large `Err` variants is about propagation of large
+    // errors through the `?` operator, see https://rust-lang.github.io/rust-clippy/master/index.html#/result_large_err.
+    // In this case, the result is local to this module, so we allow the warning
+    // as keeping the `Result` is more readable than using a custom enum.
     #[allow(clippy::result_large_err)]
     fn validate(
         self,
