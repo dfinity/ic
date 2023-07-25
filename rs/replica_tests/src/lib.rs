@@ -38,7 +38,6 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
-    registry::connection_endpoint::ConnectionEndpoint,
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
     CanisterId, Height, NodeId, Time,
@@ -218,15 +217,9 @@ pub fn get_ic_config() -> IcConfig {
     subnet_nodes.insert(
         NODE_INDEX_DEFAULT,
         NodeConfiguration {
-            xnet_api: ConnectionEndpoint::from(
-                SocketAddr::from_str("0.0.0.1:0").expect("can't fail"),
-            ),
-            public_api: ConnectionEndpoint::from(
-                SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
-            ),
-            p2p_addr: ConnectionEndpoint::from(
-                SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
-            ),
+            xnet_api: SocketAddr::from_str("0.0.0.1:0").expect("can't fail"),
+            public_api: SocketAddr::from_str("128.0.0.1:1").expect("can't fail"),
+            p2p_addr: SocketAddr::from_str("128.0.0.1:100").expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
             chip_id: vec![],

@@ -27,9 +27,7 @@ use ic_prep_lib::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{
-    registry::connection_endpoint::ConnectionEndpoint, Height, PrincipalId, ReplicaVersion,
-};
+use ic_types::{Height, PrincipalId, ReplicaVersion};
 
 /// the filename of the update disk image, as published on the cdn
 const UPD_IMG_FILENAME: &str = "update-img.tar.gz";
@@ -363,9 +361,9 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
         node_index,
         subnet_index,
         config: NodeConfiguration {
-            xnet_api: ConnectionEndpoint::from(xnet_addr),
-            public_api: ConnectionEndpoint::from(http_addr),
-            p2p_addr: ConnectionEndpoint::from(p2p_addr),
+            xnet_api: xnet_addr,
+            public_api: http_addr,
+            p2p_addr,
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id,
@@ -378,10 +376,10 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
 struct NodeFlag {
     idx: Option<u64>,
     subnet_idx: Option<u64>,
-    pub xnet_api: Option<ConnectionEndpoint>,
-    pub public_api: Option<ConnectionEndpoint>,
+    pub xnet_api: Option<SocketAddr>,
+    pub public_api: Option<SocketAddr>,
     /// The initial endpoint that P2P uses.
-    pub p2p_addr: Option<ConnectionEndpoint>,
+    pub p2p_addr: Option<SocketAddr>,
     pub chip_id: Option<Vec<u8>>,
 }
 
@@ -665,9 +663,9 @@ mod test_flag_nodes_parser_deprecated {
             node_index: 1,
             subnet_index: Some(2),
             config: NodeConfiguration {
-                xnet_api: ConnectionEndpoint::from(SocketAddr::from_str("2.3.4.5:81").unwrap()),
-                public_api: ConnectionEndpoint::from(SocketAddr::from_str("3.4.5.6:82").unwrap()),
-                p2p_addr: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:80").unwrap()),
+                xnet_api: SocketAddr::from_str("2.3.4.5:81").unwrap(),
+                public_api: SocketAddr::from_str("3.4.5.6:82").unwrap(),
+                p2p_addr: SocketAddr::from_str("1.2.3.4:80").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: vec![],
@@ -686,9 +684,9 @@ mod test_flag_nodes_parser_deprecated {
             node_index: 1,
             subnet_index: Some(2),
             config: NodeConfiguration {
-                xnet_api: ConnectionEndpoint::from(SocketAddr::from_str("2.3.4.5:81").unwrap()),
-                public_api: ConnectionEndpoint::from(SocketAddr::from_str("3.4.5.6:82").unwrap()),
-                p2p_addr: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:80").unwrap()),
+                xnet_api: SocketAddr::from_str("2.3.4.5:81").unwrap(),
+                public_api: SocketAddr::from_str("3.4.5.6:82").unwrap(),
+                p2p_addr: SocketAddr::from_str("1.2.3.4:80").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: vec![],

@@ -2,7 +2,6 @@
 #![allow(clippy::result_large_err)]
 use std::{
     collections::BTreeMap,
-    convert::TryFrom,
     fs,
     future::Future,
     net::SocketAddr,
@@ -20,14 +19,10 @@ use tokio::time;
 
 use ecs::SetTo;
 use elastic_common_schema as ecs;
-use ic_protobuf::registry::node::v1::ConnectionEndpoint as pbConnectionEndpoint;
 use ic_registry_client::client::{RegistryClient, RegistryClientError, RegistryVersion};
 use ic_registry_client_helpers::{
     node::{NodeId, NodeRegistry, SubnetId},
     subnet::{SubnetListRegistry, SubnetRegistry},
-};
-use ic_types::registry::connection_endpoint::{
-    ConnectionEndpoint, ConnectionEndpointTryFromProtoError,
 };
 
 use crate::{config, metrics};
@@ -96,21 +91,6 @@ pub(crate) enum RegistryInvariantError {
     #[error("node {node_id} has no transport info at registry {registry_version}")]
     NodeHasNoTransportInfo {
         node_id: NodeId,
-        registry_version: RegistryVersion,
-    },
-
-    #[error("failed to get endpoint for subnet {subnet_id} node {node_id}")]
-    NoConnectionEndpoint {
-        subnet_id: SubnetId,
-        node_id: NodeId,
-        registry_version: RegistryVersion,
-    },
-
-    #[error("failed to parse {node_id} proto endpoint {connection_endpoint:?}: {source}")]
-    ConnectionEndpointParseFailed {
-        source: ConnectionEndpointTryFromProtoError,
-        node_id: NodeId,
-        connection_endpoint: pbConnectionEndpoint,
         registry_version: RegistryVersion,
     },
 
@@ -192,26 +172,7 @@ fn get_ic_topology(
                     registry_version,
                 })?;
 
-            // Derive the prometheus metrics endpoint from the http endpoint.
-            let connection_endpoint =
-                ConnectionEndpoint::try_from(node_record.http.clone().ok_or(
-                    RegistryInvariantError::NoConnectionEndpoint {
-                        subnet_id,
-                        node_id,
-                        registry_version,
-                    },
-                )?)
-                .map_err(|source| {
-                    RegistryInvariantError::ConnectionEndpointParseFailed {
-                        source,
-                        node_id,
-                        connection_endpoint: node_record.http.unwrap(),
-                        registry_version,
-                    }
-                })?;
-
-            let mut addr = SocketAddr::from(&connection_endpoint);
-            addr.set_port(9090);
+            let addr = SocketAddr::new(node_record.http.unwrap().ip_addr.parse().unwrap(), 9090);
 
             // Seen bogus registry entries where the connection endpoint exists
             // but is 0.0.0.0

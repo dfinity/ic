@@ -47,7 +47,7 @@ use ic_prep_lib::{
 use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SevFeatureStatus, SubnetFeatures};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{registry::connection_endpoint::ConnectionEndpoint, Height};
+use ic_types::Height;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -89,9 +89,9 @@ fn main() -> Result<()> {
         subnet_nodes.insert(
             NODE_INDEX,
             NodeConfiguration {
-                xnet_api: ConnectionEndpoint::from(SocketAddr::from_str("0.0.0.0:0").unwrap()),
-                public_api: ConnectionEndpoint::from(config.http_listen_addr),
-                p2p_addr: ConnectionEndpoint::from(SocketAddr::from_str("0.0.0.0:0").unwrap()),
+                xnet_api: SocketAddr::from_str("0.0.0.0:0").unwrap(),
+                public_api: config.http_listen_addr,
+                p2p_addr: SocketAddr::from_str("0.0.0.0:0").unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
                 chip_id: vec![],

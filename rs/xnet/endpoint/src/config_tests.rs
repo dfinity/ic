@@ -75,9 +75,7 @@ fn config_node_not_found() {
 }
 
 #[test]
-#[should_panic(
-    expected = "Node hr2go-2qeaa-aaaaa-aaaap-2ai XNet endpoint [ConnectionEndpoint { ip_addr: \"dfinity.org\", port: 2197 }]: IP address does not parse: dfinity.org"
-)]
+#[should_panic(expected = "called `Result::unwrap()` on an `Err` value: AddrParseError(Ip)")]
 fn config_invalid_xnet_ip_addr() {
     with_test_replica_logger(|log| {
         let invalid_node_record = NodeRecord {
