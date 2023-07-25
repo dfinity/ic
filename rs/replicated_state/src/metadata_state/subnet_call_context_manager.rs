@@ -1,5 +1,4 @@
 use ic_btc_types_internal::{GetSuccessorsRequestInitial, SendTransactionRequest};
-use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, ReplicaLogger};
 use ic_protobuf::{
@@ -67,76 +66,37 @@ pub struct SubnetCallContextManager {
 }
 
 impl SubnetCallContextManager {
-    pub fn push_setup_initial_dkg_request(&mut self, context: SetupInitialDkgContext) {
+    pub fn push_context(&mut self, context: SubnetCallContext) -> CallbackId {
         let callback_id = CallbackId::new(self.next_callback_id);
         self.next_callback_id += 1;
 
-        self.setup_initial_dkg_contexts.insert(callback_id, context);
-    }
-
-    pub fn push_sign_with_ecdsa_request(
-        &mut self,
-        context: SignWithEcdsaContext,
-        max_queue_size: u32,
-    ) -> Result<(), UserError> {
-        if self.sign_with_ecdsa_contexts.len() >= max_queue_size as usize {
-            Err(UserError::new(
-                ErrorCode::CanisterRejectedMessage,
-                "sign_with_ecdsa request could not be handled, the ECDSA signature queue is full."
-                    .to_string(),
-            ))
-        } else {
-            let callback_id = CallbackId::new(self.next_callback_id);
-            self.next_callback_id += 1;
-            self.sign_with_ecdsa_contexts.insert(callback_id, context);
-            Ok(())
-        }
-    }
-
-    pub fn push_http_request(&mut self, context: CanisterHttpRequestContext) {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.canister_http_request_contexts
-            .insert(callback_id, context);
-    }
-
-    pub fn push_ecdsa_dealings_request(&mut self, context: EcdsaDealingsContext) {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.ecdsa_dealings_contexts.insert(callback_id, context);
-    }
-
-    pub fn push_bitcoin_get_successors_request(
-        &mut self,
-        context: BitcoinGetSuccessorsContext,
-    ) -> u64 {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.bitcoin_get_successors_contexts
-            .insert(callback_id, context);
-        callback_id.get()
-    }
-
-    pub fn push_bitcoin_send_transaction_internal_request(
-        &mut self,
-        context: BitcoinSendTransactionInternalContext,
-    ) -> u64 {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.bitcoin_send_transaction_internal_contexts
-            .insert(callback_id, context);
-        callback_id.get()
-    }
-
-    pub fn push_install_code_request(&mut self, context: InstallCodeContext) {
-        let callback_id = CallbackId::new(self.next_callback_id);
-        self.next_callback_id += 1;
-
-        self.install_code_contexts.insert(callback_id, context);
+        match context {
+            SubnetCallContext::SetupInitialDKG(context) => {
+                self.setup_initial_dkg_contexts.insert(callback_id, context);
+            }
+            SubnetCallContext::SignWithEcsda(context) => {
+                self.sign_with_ecdsa_contexts.insert(callback_id, context);
+            }
+            SubnetCallContext::CanisterHttpRequest(context) => {
+                self.canister_http_request_contexts
+                    .insert(callback_id, context);
+            }
+            SubnetCallContext::EcdsaDealings(context) => {
+                self.ecdsa_dealings_contexts.insert(callback_id, context);
+            }
+            SubnetCallContext::BitcoinGetSuccessors(context) => {
+                self.bitcoin_get_successors_contexts
+                    .insert(callback_id, context);
+            }
+            SubnetCallContext::BitcoinSendTransactionInternal(context) => {
+                self.bitcoin_send_transaction_internal_contexts
+                    .insert(callback_id, context);
+            }
+            SubnetCallContext::InstallCode(context) => {
+                self.install_code_contexts.insert(callback_id, context);
+            }
+        };
+        callback_id
     }
 
     pub fn retrieve_context(
