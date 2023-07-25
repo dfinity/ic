@@ -19,10 +19,8 @@ use ic_protobuf::registry::{
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{
-    crypto::KeyPurpose, registry::connection_endpoint::ConnectionEndpoint, NodeId, PrincipalId,
-    RegistryVersion,
-};
+use ic_types::{crypto::KeyPurpose, NodeId, PrincipalId, RegistryVersion};
+use std::net::SocketAddr;
 use std::os::unix::fs::PermissionsExt;
 
 const CRYPTO_DIR: &str = "crypto";
@@ -187,13 +185,13 @@ impl InitializedNode {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
-    pub xnet_api: ConnectionEndpoint,
+    pub xnet_api: SocketAddr,
 
     /// Endpoints where the replica serves the public API interface
-    pub public_api: ConnectionEndpoint,
+    pub public_api: SocketAddr,
 
     /// The initial endpoint that P2P uses.
-    pub p2p_addr: ConnectionEndpoint,
+    pub p2p_addr: SocketAddr,
 
     /// The principal id of the node operator that operates this node.
     pub node_operator_principal_id: Option<PrincipalId>,
@@ -218,13 +216,21 @@ impl From<NodeConfiguration> for pbNodeRecord {
         let mut pb_node_record = pbNodeRecord::default();
 
         // p2p
-        let p2p_base_endpoint = pbConnectionEndpoint::from(&node_configuration.p2p_addr);
+        let p2p_base_endpoint = pbConnectionEndpoint {
+            ip_addr: node_configuration.p2p_addr.ip().to_string(),
+            port: node_configuration.p2p_addr.port() as u32,
+        };
         pb_node_record.p2p_flow_endpoints = vec![pbFlowEndpoint {
             endpoint: Some(p2p_base_endpoint),
         }];
-
-        pb_node_record.http = Some(pbConnectionEndpoint::from(&node_configuration.public_api));
-        pb_node_record.xnet = Some(pbConnectionEndpoint::from(&node_configuration.xnet_api));
+        pb_node_record.http = Some(pbConnectionEndpoint {
+            ip_addr: node_configuration.public_api.ip().to_string(),
+            port: node_configuration.public_api.port() as u32,
+        });
+        pb_node_record.xnet = Some(pbConnectionEndpoint {
+            ip_addr: node_configuration.xnet_api.ip().to_string(),
+            port: node_configuration.xnet_api.port() as u32,
+        });
 
         // node provider principal id
         pb_node_record.node_operator_id = node_configuration
@@ -343,9 +349,9 @@ mod node_configuration {
     #[test]
     fn into_proto_http() {
         let node_configuration = NodeConfiguration {
-            xnet_api: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:8080").unwrap()),
-            public_api: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:8081").unwrap()),
-            p2p_addr: ConnectionEndpoint::from(SocketAddr::from_str("1.2.3.4:1234").unwrap()),
+            xnet_api: SocketAddr::from_str("1.2.3.4:8080").unwrap(),
+            public_api: SocketAddr::from_str("1.2.3.4:8081").unwrap(),
+            p2p_addr: SocketAddr::from_str("1.2.3.4:1234").unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
             chip_id: vec![],
