@@ -26,47 +26,49 @@ impl Default for RequestBuilder {
 }
 
 impl RequestBuilder {
+    /// Creates a new `RequestBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Sets the receiver attribute.
+    /// Sets the `receiver` field.
     pub fn receiver(mut self, receiver: CanisterId) -> Self {
         self.request.receiver = receiver;
         self
     }
 
-    /// Sets the sender attribute.
+    /// Sets the `sender` field.
     pub fn sender(mut self, sender: CanisterId) -> Self {
         self.request.sender = sender;
 
         self
     }
 
-    /// Sets the sender_reply_callback attribute.
+    /// Sets the `sender_reply_callback` field.
     pub fn sender_reply_callback(mut self, sender_reply_callback: CallbackId) -> Self {
         self.request.sender_reply_callback = sender_reply_callback;
         self
     }
 
-    /// Sets the payment attribute.
+    /// Sets the `payment` field.
     pub fn payment(mut self, payment: Cycles) -> Self {
         self.request.payment = payment;
         self
     }
 
-    /// Sets the method_name attribute.
+    /// Sets the `method_name` field.
     pub fn method_name<S: ToString>(mut self, method_name: S) -> Self {
         self.request.method_name = method_name.to_string();
         self
     }
 
-    /// Sets the method_payload attribute.
+    /// Sets the `method_payload` field.
     pub fn method_payload(mut self, method_payload: Vec<u8>) -> Self {
         self.request.method_payload = method_payload;
         self
     }
 
+    /// Returns the built `Request`.
     pub fn build(self) -> Request {
         self.request
     }

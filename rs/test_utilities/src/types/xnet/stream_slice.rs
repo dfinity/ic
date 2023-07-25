@@ -22,17 +22,18 @@ impl Default for StreamSliceBuilder {
 }
 
 impl StreamSliceBuilder {
+    /// Creates a new `StreamSliceBuilder`.
     pub fn new() -> Self {
         Default::default()
     }
 
-    /// Sets the messages in the stream.
+    /// Sets the `messages` in the stream.
     pub fn messages(mut self, messages: StreamIndexedQueue<RequestOrResponse>) -> Self {
         self.messages = messages;
         self
     }
 
-    /// Sets the stream messages to the provided ones, starting at the given
+    /// Sets the stream `messages` to the provided ones, starting at the given
     /// index.
     pub fn with_messages(mut self, begin: StreamIndex, msgs: Vec<Request>) -> Self {
         self.messages = StreamIndexedQueue::with_begin(begin);
@@ -66,13 +67,13 @@ impl StreamSliceBuilder {
         self
     }
 
-    /// Sets the header for the stream.
+    /// Sets the `header` for the stream.
     pub fn header(mut self, header: StreamHeader) -> Self {
         self.header = header;
         self
     }
 
-    /// Returns the built StreamSlice.
+    /// Returns the built `StreamSlice`.
     pub fn build(self) -> StreamSlice {
         StreamSlice::new(self.header, self.messages)
     }
