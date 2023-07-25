@@ -1,16 +1,19 @@
 use std::convert::TryFrom;
 
+use crate::util::{agent_with_identity, random_ed25519_identity};
 use assert_matches::assert_matches;
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
 use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
-use ic_icrc1_ledger::{InitArgs, LedgerArgument};
+use ic_icrc1_ledger::{FeatureFlags, InitArgs, LedgerArgument};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::ArchiveOptions;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc2::approve::ApproveArgs;
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
 };
@@ -49,6 +52,30 @@ pub fn test(env: TestEnv) {
         let minting_user = PrincipalId::new_user_test_id(100);
         let user1 = PrincipalId::try_from(nns_agent.get_principal().unwrap().as_ref()).unwrap();
         let user2 = PrincipalId::new_user_test_id(102);
+        let user3 = PrincipalId::new_user_test_id(270);
+
+        let mut ledger = nns_runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Unable to create canister");
+
+        let agent = Icrc1Agent {
+            agent: assert_create_agent(nns_node.get_public_url().as_str()).await,
+            ledger_canister_id: Principal::try_from_slice(ledger.canister_id().as_ref()).unwrap(),
+        };
+
+        let other_agent = Icrc1Agent {
+            agent: agent_with_identity(
+                nns_node.get_public_url().as_str(),
+                random_ed25519_identity(),
+            )
+            .await
+            .unwrap(),
+            ledger_canister_id: Principal::try_from_slice(ledger.canister_id().as_ref()).unwrap(),
+        };
+
+        let other_agent_principal = other_agent.agent.get_principal().unwrap();
+
         let account1 = Account {
             owner: user1.0,
             subaccount: None,
@@ -57,14 +84,14 @@ pub fn test(env: TestEnv) {
             owner: user2.0,
             subaccount: None,
         };
+        let account3 = Account {
+            owner: user3.0,
+            subaccount: None,
+        };
         let minting_account = Account {
             owner: minting_user.0,
             subaccount: None,
         };
-        let mut ledger = nns_runtime
-            .create_canister_max_cycles_with_retries()
-            .await
-            .expect("Unable to create canister");
 
         let init_args = InitArgs {
             minting_account,
@@ -84,17 +111,9 @@ pub fn test(env: TestEnv) {
             },
             fee_collector_account: None,
             max_memo_length: None,
-            feature_flags: None,
+            feature_flags: Some(FeatureFlags { icrc2: true }),
         };
         install_icrc1_ledger(&env, &mut ledger, &LedgerArgument::Init(init_args.clone())).await;
-
-        /////////////
-        // test
-
-        let agent = Icrc1Agent {
-            agent: assert_create_agent(nns_node.get_public_url().as_str()).await,
-            ledger_canister_id: Principal::try_from_slice(ledger.canister_id().as_ref()).unwrap(),
-        };
 
         // name
         assert_eq!(
@@ -128,11 +147,11 @@ pub fn test(env: TestEnv) {
 
         // total_supply
         assert_eq!(
-            Nat::from(1_000_000_000u64),
+            Nat::from(1_000_000_000_u64),
             agent.total_supply(CallMode::Query).await.unwrap()
         );
         assert_eq!(
-            Nat::from(1_000_000_000u64),
+            Nat::from(1_000_000_000_u64),
             agent.total_supply(CallMode::Update).await.unwrap()
         );
 
@@ -183,7 +202,6 @@ pub fn test(env: TestEnv) {
             expected_metadata,
             agent.metadata(CallMode::Update).await.unwrap()
         );
-
         // balance_of
         assert_eq!(
             Nat::from(1_000_000_000u64),
@@ -199,10 +217,7 @@ pub fn test(env: TestEnv) {
         let _block = agent
             .transfer(TransferArg {
                 from_subaccount: None,
-                to: Account {
-                    owner: user2.0,
-                    subaccount: None,
-                },
+                to: account2,
                 fee: None,
                 created_at_time: None,
                 amount: Nat::from(amount),
@@ -249,6 +264,43 @@ pub fn test(env: TestEnv) {
         assert_matches!(
             agent.verify_root_hash(&cert, &hash_tree.digest().0).await,
             Ok(_)
+        );
+
+        let _block = agent
+            .approve(ApproveArgs {
+                from_subaccount: None,
+                spender: Account {
+                    owner: other_agent_principal,
+                    subaccount: None,
+                },
+                amount: Nat::from(u64::MAX),
+                expected_allowance: None,
+                expires_at: None,
+                fee: None,
+                memo: None,
+                created_at_time: None,
+            })
+            .await
+            .unwrap()
+            .unwrap();
+        const TRANSFER_FROM_AMOUNT: u64 = 10_000;
+        let _block = other_agent
+            .transfer_from(TransferFromArgs {
+                spender_subaccount: None,
+                from: account1,
+                to: account3,
+                amount: Nat::from(TRANSFER_FROM_AMOUNT),
+                fee: None,
+                memo: None,
+                created_at_time: None,
+            })
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            Nat::from(TRANSFER_FROM_AMOUNT),
+            agent.balance_of(account3, CallMode::Query).await.unwrap()
         );
     });
 }
