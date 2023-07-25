@@ -57,3 +57,10 @@ rust_bench(
     srcs = ["benches/tree_hash.rs"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
 )
+
+rust_bench(
+    name = "flat_map_bench",
+    testonly = True,
+    srcs = ["benches/flat_map.rs"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":tree_hash"],
+)
