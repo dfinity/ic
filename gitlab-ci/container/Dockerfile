@@ -5,19 +5,12 @@ ENV TZ=UTC
 
 COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
 
-RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
-    apt -yq update && apt -yqq install  \
-    curl build-essential git gnupg node-json5 uuid-dev zsh fish clang iproute2 shellcheck \
-    # Bitcoin core (for bitcoin adapter integration test) \
-    libtool libevent-dev libboost-dev \
-    # GitLab CI \
-    sudo gosu jq rclone time qemu-system-x86 \
-    # Test \
-    rsync \
-    # RUST \
-    gcc lld pkg-config libssl-dev libunwind-dev libusb-1.0-0-dev libsqlite3-dev zlib1g-dev libclang-10-dev protobuf-compiler llvm liblmdb-dev liblzma-dev\
-    # IC-OS \
-    python3 python-is-python3 python3-pip fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools lvm2
+ARG PACKAGE_FILE=gitlab-ci/container/files/packages.common
+COPY ${PACKAGE_FILE} /tmp/
+RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN apt -yq update && \
+    apt -yqq install $(sed -e "s/#.*//" "/tmp/$(basename $PACKAGE_FILE)") && \
+    rm "/tmp/$(basename $PACKAGE_FILE)"
 
 ARG motoko_version=0.9.1
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
