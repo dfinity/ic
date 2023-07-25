@@ -4,20 +4,15 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 /// The source of the unix domain socket to be used for inter-process
 /// communication.
 pub enum IncomingSource {
     /// We use systemd's created socket.
+    #[default]
     Systemd,
     /// We use the corresponing path as socket.
     Path(PathBuf),
-}
-
-impl Default for IncomingSource {
-    fn default() -> Self {
-        IncomingSource::Systemd
-    }
 }
 
 /// This struct contains configuration options for the BTC Adapter.

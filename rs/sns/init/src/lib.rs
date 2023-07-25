@@ -1298,7 +1298,6 @@ mod test {
 
     fn generate_unique_dapp_canisters(count: usize) -> DappCanisters {
         let canisters = (0..count)
-            .into_iter()
             .map(|i| Canister {
                 id: Some(CanisterId::from_u64(i as u64).get()),
             })

@@ -158,31 +158,30 @@ mod tests {
             }
         );
     }
-}
-
-#[test]
-fn test_sev_feature() {
-    let features: &[(SevFeatureStatus, &str)] = &[
-        (SevFeatureStatus::Disabled, "SEV_FEATURE_STATUS_UNSPECIFIED"),
-        (
-            SevFeatureStatus::InsecureEnabled,
-            "SEV_FEATURE_STATUS_INSECURE_ENABLED",
-        ),
-        (
-            SevFeatureStatus::InsecureIntegrityEnabled,
-            "SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED",
-        ),
-        (
-            SevFeatureStatus::SecureNoUpgradeEnabled,
-            "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED",
-        ),
-        (
-            SevFeatureStatus::SecureEnabled,
-            "SEV_FEATURE_STATUS_SECURE_ENABLED",
-        ),
-    ];
-    for feature in features {
-        let status: pb::SevFeatureStatus = unsafe { ::std::mem::transmute(feature.0 as i32) };
-        assert_eq!(pb::SevFeatureStatus::as_str_name(&status), feature.1);
+    #[test]
+    fn test_sev_feature() {
+        let features: &[(SevFeatureStatus, &str)] = &[
+            (SevFeatureStatus::Disabled, "SEV_FEATURE_STATUS_UNSPECIFIED"),
+            (
+                SevFeatureStatus::InsecureEnabled,
+                "SEV_FEATURE_STATUS_INSECURE_ENABLED",
+            ),
+            (
+                SevFeatureStatus::InsecureIntegrityEnabled,
+                "SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED",
+            ),
+            (
+                SevFeatureStatus::SecureNoUpgradeEnabled,
+                "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED",
+            ),
+            (
+                SevFeatureStatus::SecureEnabled,
+                "SEV_FEATURE_STATUS_SECURE_ENABLED",
+            ),
+        ];
+        for feature in features {
+            let status: pb::SevFeatureStatus = unsafe { ::std::mem::transmute(feature.0 as i32) };
+            assert_eq!(pb::SevFeatureStatus::as_str_name(&status), feature.1);
+        }
     }
 }

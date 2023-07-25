@@ -508,12 +508,10 @@ impl ConnectionManager {
         };
 
         let timeout_conn_fut = async move {
-            let connection_res = tokio::time::timeout(CONNECT_TIMEOUT, conn_fut)
+            tokio::time::timeout(CONNECT_TIMEOUT, conn_fut)
                 .await
                 .map_err(|_| ConnectionEstablishError::Timeout)
-                .and_then(|x| x);
-
-            connection_res
+                .and_then(|x| x)
         };
 
         self.outbound_connecting

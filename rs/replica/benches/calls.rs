@@ -36,7 +36,11 @@ fn main() {
 
             group.bench_function("query", |bench| {
                 bench.iter(|| async {
-                    let _ = canister.query("read").bytes(b"Hello".to_vec());
+                    let _ = canister
+                        .query("read")
+                        .bytes(b"Hello".to_vec())
+                        .await
+                        .unwrap();
                 });
             });
         }

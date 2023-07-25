@@ -319,7 +319,7 @@ pub struct FakeVerifier;
 
 impl FakeVerifier {
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 

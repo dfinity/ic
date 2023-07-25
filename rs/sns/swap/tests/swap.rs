@@ -3208,11 +3208,8 @@ async fn test_restore_dapp_controllers_rejects_unauthorized() {
     };
 
     // Step 2: Call restore_dapp_controllers with an unauthorized caller
-    swap.restore_dapp_controllers(
-        &mut ExplodingSnsRootClient::default(),
-        PrincipalId::new_anonymous(),
-    )
-    .await;
+    swap.restore_dapp_controllers(&mut ExplodingSnsRootClient, PrincipalId::new_anonymous())
+        .await;
 }
 
 /// Test that the restore_dapp_controllers API will gracefully handle invalid
@@ -3239,7 +3236,7 @@ async fn test_restore_dapp_controllers_cannot_parse_fallback_controllers() {
     // Step 2: Call restore_dapp_controllers
     let restore_dapp_controllers_response = swap
         .restore_dapp_controllers(
-            &mut ExplodingSnsRootClient::default(), // Should fail before using RootClient
+            &mut ExplodingSnsRootClient, // Should fail before using RootClient
             NNS_GOVERNANCE_CANISTER_ID.get(),
         )
         .await;

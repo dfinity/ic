@@ -351,7 +351,7 @@ pub fn spy_clients_exploding_root() -> CanisterClients<
     SpyLedger,
     SpyNnsGovernanceClient,
 > {
-    let sns_root = ExplodingSnsRootClient::default();
+    let sns_root = ExplodingSnsRootClient;
     let sns_governance = SpySnsGovernanceClient::default();
     let sns_ledger = SpyLedger::default();
     let icp_ledger = SpyLedger::default();

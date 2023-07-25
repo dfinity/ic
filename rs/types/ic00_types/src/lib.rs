@@ -344,10 +344,10 @@ impl CanisterChange {
     pub fn count_bytes(&self) -> NumBytes {
         let controllers_memory_size = match &self.details {
             CanisterChangeDetails::CanisterCreation(canister_creation) => {
-                canister_creation.controllers().len() * size_of::<PrincipalId>()
+                std::mem::size_of_val(canister_creation.controllers())
             }
             CanisterChangeDetails::CanisterControllersChange(canister_controllers_change) => {
-                canister_controllers_change.controllers().len() * size_of::<PrincipalId>()
+                std::mem::size_of_val(canister_controllers_change.controllers())
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
             | CanisterChangeDetails::CanisterCodeUninstall => 0,
@@ -841,12 +841,13 @@ impl fmt::Display for CanisterStatusType {
 
 /// The mode with which a canister is installed.
 #[derive(
-    Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Hash, CandidType, Copy,
+    Clone, Debug, Deserialize, PartialEq, Serialize, Eq, EnumString, Hash, CandidType, Copy, Default,
 )]
 pub enum CanisterInstallMode {
     /// A fresh install of a new canister.
     #[serde(rename = "install")]
     #[strum(serialize = "install")]
+    #[default]
     Install = 1,
     /// Reinstalling a canister that was already installed.
     #[serde(rename = "reinstall")]
@@ -856,12 +857,6 @@ pub enum CanisterInstallMode {
     #[serde(rename = "upgrade")]
     #[strum(serialize = "upgrade")]
     Upgrade = 3,
-}
-
-impl Default for CanisterInstallMode {
-    fn default() -> Self {
-        CanisterInstallMode::Install
-    }
 }
 
 impl CanisterInstallMode {

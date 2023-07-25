@@ -1,4 +1,4 @@
-///! Module dealing with the lifecycle methods of the ckBTC Minter.
+//! Module dealing with the lifecycle methods of the ckBTC Minter.
 pub mod init;
 pub use init::init;
 

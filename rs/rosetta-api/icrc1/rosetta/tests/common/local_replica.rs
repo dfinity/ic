@@ -49,7 +49,7 @@ pub async fn start_new_local_replica() -> ReplicaContext {
         std::fs::canonicalize(std::env::var_os("STARTER_BIN").expect("missing ic-starter binary"))
             .unwrap();
 
-    let context = ic_starter_tests::start_replica(
+    ic_starter_tests::start_replica(
         &ReplicaBins {
             canister_launcher,
             replica_bin,
@@ -59,9 +59,7 @@ pub async fn start_new_local_replica() -> ReplicaContext {
         &ReplicaStarterConfig::default(),
     )
     .await
-    .expect("Failed to start replica");
-
-    context
+    .expect("Failed to start replica")
 }
 
 pub async fn get_testing_agent(context: &ReplicaContext) -> Agent {

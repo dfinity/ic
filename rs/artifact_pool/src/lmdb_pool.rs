@@ -115,21 +115,21 @@ pub trait PoolArtifact: Sized {
     fn type_keys() -> &'static [TypeKey];
 
     /// Save an artifact to the database.
-    fn save<'a>(
+    fn save(
         key: &IdKey,
         value: Self::ObjectType,
         artifacts: Database,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         log: &ReplicaLogger,
     ) -> lmdb::Result<()>;
 
     /// Load an artifact from the database. This is parameterized
     /// by the individual message type T.
-    fn load_as<'a, T: TryFrom<Self>>(
+    fn load_as<T: TryFrom<Self>>(
         key: &IdKey,
         db_env: Arc<Environment>,
         artifacts: Database,
-        tx: &RoTransaction<'a>,
+        tx: &RoTransaction,
         log: &ReplicaLogger,
     ) -> lmdb::Result<T>
     where
@@ -381,9 +381,9 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     }
 
     /// Update the meta data of the given type_key.
-    fn update_meta<'a>(
+    fn update_meta(
         &self,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         type_key: &TypeKey,
         meta: &Meta,
     ) -> lmdb::Result<()> {
@@ -449,9 +449,9 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     }
 
     /// Insert a pool object under the given type/height/id key.
-    fn tx_insert<'a, PoolObject>(
+    fn tx_insert<PoolObject>(
         &self,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         key: &ArtifactKey,
         value: PoolObject,
     ) -> lmdb::Result<()>
@@ -464,9 +464,9 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
 
     /// Prepares pool for artifact insertion, by checking index DB for duplicates and
     /// updating the metadata.
-    fn tx_insert_prepare<'a, PoolObject>(
+    fn tx_insert_prepare<PoolObject>(
         &self,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         key: &ArtifactKey,
     ) -> lmdb::Result<()>
     where
@@ -496,7 +496,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     }
 
     /// Remove the pool object of the given type/height/id key.
-    fn tx_remove<'a>(&self, tx: &mut RwTransaction<'a>, key: &ArtifactKey) -> lmdb::Result<()> {
+    fn tx_remove(&self, tx: &mut RwTransaction, key: &ArtifactKey) -> lmdb::Result<()> {
         if let Err(err) = tx.del(self.artifacts, &key.id_key, None) {
             // skip the removal if it is not found in artifacts
             return if lmdb::Error::NotFound == err {
@@ -532,9 +532,9 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     /// Remove all index entries for the given [`TypeKey`] with heights
     /// less than the given [`HeightKey`]. Update the type's meta table
     /// if necessary. Return the [`ArtifactKey`]s of deleted entries.
-    fn tx_purge_index_below<'a>(
+    fn tx_purge_index_below(
         &self,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         type_key: TypeKey,
         height_key: HeightKey,
     ) -> lmdb::Result<Vec<ArtifactKey>> {
@@ -589,9 +589,9 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
 
     /// Remove all artifacts with heights less than the given [`HeightKey`].
     /// Return [`ArtifactKey`]s of the removed artifacts.
-    fn tx_purge_below<'a>(
+    fn tx_purge_below(
         &self,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         height_key: HeightKey,
     ) -> lmdb::Result<Vec<ArtifactKey>> {
         let mut purged = Vec::new();
@@ -619,9 +619,9 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
 
     /// Remove all artifacts of the given [`TypeKey`] with heights less than the
     /// given [`HeightKey`]. Return [`ArtifactKey`]s of the removed artifacts.
-    fn tx_purge_type_below<'a>(
+    fn tx_purge_type_below(
         &self,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         type_key: TypeKey,
         height_key: HeightKey,
     ) -> lmdb::Result<Vec<ArtifactKey>> {
@@ -900,11 +900,11 @@ impl PoolArtifact for ConsensusMessage {
         &CONSENSUS_KEYS
     }
 
-    fn save<'a>(
+    fn save(
         key: &IdKey,
         mut value: Self::ObjectType,
         artifacts: Database,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         log: &ReplicaLogger,
     ) -> lmdb::Result<()> {
         // special handling for block proposal & its payload
@@ -948,11 +948,11 @@ impl PoolArtifact for ConsensusMessage {
         tx.put(artifacts, &key, &bytes, WriteFlags::empty())
     }
 
-    fn load_as<'a, T: TryFrom<Self>>(
+    fn load_as<T: TryFrom<Self>>(
         key: &IdKey,
         db_env: Arc<Environment>,
         artifacts: Database,
-        tx: &RoTransaction<'a>,
+        tx: &RoTransaction,
         log: &ReplicaLogger,
     ) -> lmdb::Result<T>
     where
@@ -1309,11 +1309,11 @@ impl PoolArtifact for CertificationMessage {
         &CERTIFICATION_KEYS
     }
 
-    fn save<'a>(
+    fn save(
         key: &IdKey,
         value: Self::ObjectType,
         artifacts: Database,
-        tx: &mut RwTransaction<'a>,
+        tx: &mut RwTransaction,
         log: &ReplicaLogger,
     ) -> lmdb::Result<()> {
         let bytes = log_err!(
@@ -1325,11 +1325,11 @@ impl PoolArtifact for CertificationMessage {
         tx.put(artifacts, &key, &bytes, WriteFlags::empty())
     }
 
-    fn load_as<'a, T: TryFrom<Self>>(
+    fn load_as<T: TryFrom<Self>>(
         key: &IdKey,
         _db_env: Arc<Environment>,
         artifacts: Database,
-        tx: &RoTransaction<'a>,
+        tx: &RoTransaction,
         log: &ReplicaLogger,
     ) -> lmdb::Result<T> {
         let bytes = tx.get(artifacts, &key)?;

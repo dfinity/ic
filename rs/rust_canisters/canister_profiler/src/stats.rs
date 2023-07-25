@@ -104,7 +104,7 @@ impl SpanStats {
 
 impl ProfilerSink for &mut SpanStats {
     fn record(self, span: SpanName, instructions: u64) {
-        let mut span_info = self.0.entry(span).or_default();
+        let span_info = self.0.entry(span).or_default();
         update_histogram(&mut span_info.histogram, instructions);
         span_info.sum += instructions as u128;
         span_info.max = span_info.max.max(instructions);

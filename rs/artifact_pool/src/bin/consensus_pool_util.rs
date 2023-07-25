@@ -88,7 +88,7 @@ const ALL_ARTIFACT_NAMES: [&str; 13] = [
     "CertificationShare",
 ];
 
-fn parse_artifact_names<'a, 'b>(names: &'a [&'b str]) -> Vec<&'static str> {
+fn parse_artifact_names(names: &[&str]) -> Vec<&'static str> {
     for name in names {
         if !ALL_ARTIFACT_NAMES
             .iter()

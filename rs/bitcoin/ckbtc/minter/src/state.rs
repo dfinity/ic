@@ -1,8 +1,8 @@
-///! State management module.
-///!
-///! The state is stored in the global thread-level variable `__STATE`.
-///! This module provides utility functions to manage the state. Most
-///! code should use those functions instead of touching `__STATE` directly.
+//! State management module.
+//!
+//! The state is stored in the global thread-level variable `__STATE`.
+//! This module provides utility functions to manage the state. Most
+//! code should use those functions instead of touching `__STATE` directly.
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},

@@ -307,7 +307,7 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
-        Arc::new(Pprof::default()),
+        Arc::new(Pprof),
     );
 
     Ok((

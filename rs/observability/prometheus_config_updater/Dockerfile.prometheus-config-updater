@@ -1,5 +1,5 @@
 # Modified from https://hub.docker.com/_/rust
-FROM rust:1.66.1-buster as builder
+FROM rust:1.71.0-buster as builder
 RUN apt-get update && apt-get install -y protobuf-compiler
 WORKDIR /src
 COPY . .

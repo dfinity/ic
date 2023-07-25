@@ -515,10 +515,10 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 }
 
 /// Creates and installs the ledger canister.
-pub async fn set_up_ledger_canister<'runtime, 'a>(
-    runtime: &'runtime Runtime,
+pub async fn set_up_ledger_canister(
+    runtime: &Runtime,
     args: LedgerCanisterInitPayload,
-) -> Canister<'runtime> {
+) -> Canister {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_ledger_canister(&mut canister, args).await;
     canister

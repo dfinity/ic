@@ -160,7 +160,7 @@ pub fn initial_ni_dkg_transcript_from_registry_record(
         .iter()
         .map(|n| {
             PrincipalId::try_from(&n[..])
-                .map(|principal_id| NodeId::from(principal_id))
+                .map(NodeId::from)
                 .map_err(|err| DecodeError {
                     error: format!("invalid principal ID: {}", err),
                 })

@@ -971,7 +971,6 @@ fn remove_subnet_from_authorized_subnet_list(subnet_to_remove: SubnetId) {
         state
             .authorized_subnets
             .values_mut()
-            .into_iter()
             .for_each(|subnet_list| subnet_list.retain(|subnet| *subnet != subnet_to_remove))
     });
 }

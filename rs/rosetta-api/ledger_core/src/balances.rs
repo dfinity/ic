@@ -229,7 +229,7 @@ where
         self.store
             .get_balance(account)
             .cloned()
-            .unwrap_or_else(|| S::Tokens::zero())
+            .unwrap_or_else(S::Tokens::zero)
     }
 
     /// Returns the total quantity of Tokens that are "in existence" -- that

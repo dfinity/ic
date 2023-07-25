@@ -6,10 +6,11 @@ mod test;
 use std::{cmp::Ordering, sync::Arc};
 
 /// Big-endian patricia trees.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 enum Tree<T> {
     /// An empty tree.
     /// Allowing empty trees simplifies the code a bit.
+    #[default]
     Empty,
     /// A key-value pair.
     Leaf(u64, T),
@@ -41,12 +42,6 @@ enum Tree<T> {
         left: Arc<Tree<T>>,
         right: Arc<Tree<T>>,
     },
-}
-
-impl<T> Default for Tree<T> {
-    fn default() -> Self {
-        Tree::Empty
-    }
 }
 
 /// Creates a branch node having subtrees t0 and t1 as children.

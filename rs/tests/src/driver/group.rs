@@ -578,7 +578,7 @@ impl SystemTestGroup {
                                                     "Streaming Journald for newly discovered [uvm={key}] with ipv6={value}"
                                                 );
                                                 // The task starts, but the handle is never joined.
-                                                let _ = rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
+                                                rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
                                                 value
                                             });
                                     }

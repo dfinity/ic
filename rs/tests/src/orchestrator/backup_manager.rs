@@ -398,6 +398,7 @@ fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBu
 
 fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
     let mut perms = fs::metadata(&file_path)?.permissions();
+    #[allow(clippy::permissions_set_readonly_false)]
     perms.set_readonly(false);
     fs::set_permissions(&file_path, perms)?;
     let mut file = OpenOptions::new()

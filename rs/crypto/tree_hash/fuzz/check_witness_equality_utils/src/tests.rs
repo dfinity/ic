@@ -394,7 +394,7 @@ fn modify_leaf_modifies_correct_leaf() {
         modify_leaf(t, index, &modify_buffer);
     };
 
-    let mut leaf_values: Vec<Vec<u8>> = (0..=3).into_iter().map(|v| vec![v]).collect();
+    let mut leaf_values: Vec<Vec<u8>> = (0..=3).map(|v| vec![v]).collect();
 
     for i in 0..num_leaves {
         modify_leaf_at_index(&mut tree, i);
@@ -450,7 +450,7 @@ fn modify_label_modifies_correct_label() {
         modify_label(t, index, &modify_buffer);
     };
 
-    let mut labels: Vec<Vec<u8>> = (b'a'..=b'g').into_iter().map(|label| vec![label]).collect();
+    let mut labels: Vec<Vec<u8>> = (b'a'..=b'g').map(|label| vec![label]).collect();
 
     for i in 0..labels.len() {
         modify_label_at_index(&mut tree, i);

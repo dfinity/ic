@@ -153,7 +153,7 @@ fn extract_file_table(lines: &[String]) -> Vec<FileInfo> {
         .skip(3)
         .enumerate()
         .map(|(i, line)| {
-            let mut columns = line.split('|').into_iter().map(|column| column.trim());
+            let mut columns = line.split('|').map(|column| column.trim());
             assert_eq!(
                 i,
                 columns.next().unwrap().parse::<usize>().unwrap(),
@@ -179,7 +179,7 @@ fn extract_chunk_table(lines: &[String]) -> Vec<ChunkInfo> {
         // Skip the 3 header lines of the chunk table.
         .skip(3)
         .map(|line| {
-            let mut columns = line.split('|').into_iter().map(|column| column.trim());
+            let mut columns = line.split('|').map(|column| column.trim());
             // Ignore chunk index; we don't need it
             columns.next();
 
@@ -211,7 +211,6 @@ pub(crate) fn parse_manifest(
 ) -> (StateSyncVersion, Vec<FileInfo>, Vec<ChunkInfo>, [u8; 32]) {
     let manifest_lines: Vec<String> = BufReader::new(file)
         .lines()
-        .into_iter()
         .map(|line| line.unwrap())
         .filter(|line| !line.is_empty())
         .collect();

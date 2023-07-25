@@ -362,10 +362,10 @@ async fn kyt_check_address(
                 "The KYT provider is temporarily unavailable: {}",
                 reason
             );
-            return Err(RetrieveBtcError::TemporarilyUnavailable(format!(
+            Err(RetrieveBtcError::TemporarilyUnavailable(format!(
                 "The KYT provider is temporarily unavailable: {}",
                 reason
-            )));
+            )))
         }
     }
 }

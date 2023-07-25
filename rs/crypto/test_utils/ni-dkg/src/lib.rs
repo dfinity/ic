@@ -619,7 +619,6 @@ impl NiDkgTestEnvironment {
         fn node_ids_from_dir_names(toplevel_path: &Path) -> BTreeMap<NodeId, PathBuf> {
             std::fs::read_dir(toplevel_path)
                 .expect("crypto_root directory doesn't exist")
-                .into_iter()
                 .map(|e| e.unwrap().path())
                 .filter(|e| e.is_dir())
                 .map(|p| {

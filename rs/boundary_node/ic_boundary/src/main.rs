@@ -296,7 +296,7 @@ async fn main() -> Result<(), Error> {
         .route("/api/v2/canister/:id/read_state", post(routes::read_state))
         .layer(
             ServiceBuilder::new()
-                .set_x_request_id(MakeRequestUuid::default())
+                .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()
                 .layer(DefaultBodyLimit::max(128 * 1024)), // TODO enlarge?
         )

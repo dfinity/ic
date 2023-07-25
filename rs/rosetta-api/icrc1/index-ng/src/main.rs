@@ -339,7 +339,7 @@ pub async fn build_index() -> Result<(), String> {
     append_blocks(res.blocks);
     let wait_time = compute_wait_time(tx_indexed_count);
     ic_cdk::eprintln!("Indexed: {} waiting : {:?}", tx_indexed_count, wait_time);
-    mutate_state(|mut state| state.last_wait_time = wait_time);
+    mutate_state(|state| state.last_wait_time = wait_time);
     ScopeGuard::into_inner(failure_guard);
     set_build_index_timer(wait_time);
     Ok(())

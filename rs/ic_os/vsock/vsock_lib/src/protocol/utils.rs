@@ -175,7 +175,7 @@ pub mod tests {
                     }
                 }
             }),
-            serde_json::to_value(&Request {
+            serde_json::to_value(Request {
                 guest_cid: 1,
                 command: Command::Notify(NotifyData {
                     count: 1,
@@ -193,7 +193,7 @@ pub mod tests {
                     }
                 }
             }),
-            serde_json::to_value(&Request {
+            serde_json::to_value(Request {
                 guest_cid: 1,
                 command: Command::SetNodeId(NodeIdData {
                     node_id: "node-id-1".to_string()
@@ -211,7 +211,7 @@ pub mod tests {
                     }
                 }
             }),
-            serde_json::to_value(&Request {
+            serde_json::to_value(Request {
                 guest_cid: 1,
                 command: Command::Upgrade(UpgradeData {
                     url: "https://example.com".to_string(),
