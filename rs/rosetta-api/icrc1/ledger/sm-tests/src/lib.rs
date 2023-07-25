@@ -879,6 +879,22 @@ where
         )
     );
 
+    // from_subaccount set explicitly, don't decuplicate.
+    send_transfer(
+        &env,
+        canister_id,
+        p1.0,
+        &TransferArg {
+            from_subaccount: Some([0; 32]),
+            to: p2.0.into(),
+            fee: None,
+            amount: Nat::from(1_000_000),
+            created_at_time: Some(now),
+            memo: None,
+        },
+    )
+    .expect("transfer failed");
+
     // Same transaction, but with "default" `memo`.
     // The ledger should not deduplicate because we set a new field explicitly.
     let block_idx = send_transfer(
@@ -915,6 +931,35 @@ where
             }
         )
     );
+
+    let mut approve_args = default_approve_args(p2.0, 10_000_000);
+    approve_args.created_at_time = Some(now);
+    let block_idx = send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+    assert_eq!(
+        Err(ApproveError::Duplicate {
+            duplicate_of: Nat::from(block_idx)
+        }),
+        send_approval(&env, canister_id, p1.0, &approve_args)
+    );
+    // from_subaccount set explicitly, don't deduplicate.
+    approve_args.from_subaccount = Some([0; 32]);
+    send_approval(&env, canister_id, p1.0, &approve_args).expect("approval failed");
+
+    let mut transfer_from_args = default_transfer_from_args(p1.0, p2.0, 10_000);
+    transfer_from_args.created_at_time = Some(now);
+
+    let block_idx = send_transfer_from(&env, canister_id, p2.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(
+        Err(TransferFromError::Duplicate {
+            duplicate_of: Nat::from(block_idx)
+        }),
+        send_transfer_from(&env, canister_id, p2.0, &transfer_from_args)
+    );
+
+    // spender_subaccount set explicitly, don't deduplicate.
+    transfer_from_args.spender_subaccount = Some([0; 32]);
+    send_transfer_from(&env, canister_id, p2.0, &transfer_from_args).expect("transfer_from failed");
 }
 
 pub fn test_mint_burn<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
