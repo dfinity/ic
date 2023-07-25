@@ -104,7 +104,7 @@ impl BitcoinPayloadBuilder {
     fn get_self_validating_payload_impl(
         &self,
         validation_context: &ValidationContext,
-        past_payloads: &[&SelfValidatingPayload],
+        past_callback_ids: BTreeSet<u64>,
         byte_limit: NumBytes,
     ) -> Result<SelfValidatingPayload, GetPayloadError> {
         // Retrieve the `ReplicatedState` required by `validation_context`.
@@ -114,24 +114,8 @@ impl BitcoinPayloadBuilder {
             .map_err(|e| GetPayloadError::GetStateFailed(validation_context.certified_height, e))?
             .take();
 
-        Ok(self.build_payload(state, past_payloads, byte_limit))
-    }
-
-    // Builds a payload for requests from the Bitcoin Wasm canister.
-    fn build_payload(
-        &self,
-        state: Arc<ReplicatedState>,
-        past_payloads: &[&SelfValidatingPayload],
-        byte_limit: NumBytes,
-    ) -> SelfValidatingPayload {
         let mut responses = vec![];
         let mut current_payload_size: u64 = 0;
-
-        let past_callback_ids: BTreeSet<u64> = past_payloads
-            .iter()
-            .flat_map(|x| x.get())
-            .map(|x| x.callback_id)
-            .collect();
 
         for (callback_id, request) in bitcoin_requests_iter(&state) {
             // We have already created a payload with the response for
@@ -195,14 +179,13 @@ impl BitcoinPayloadBuilder {
             }
         }
 
-        SelfValidatingPayload::new(responses)
+        Ok(SelfValidatingPayload::new(responses))
     }
 
     fn validate_self_validating_payload_impl(
         &self,
         payload: &SelfValidatingPayload,
         validation_context: &ValidationContext,
-        _past_payloads: &[&SelfValidatingPayload],
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
         let timer = Timer::start();
 
@@ -245,9 +228,16 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         byte_limit: NumBytes,
     ) -> (SelfValidatingPayload, NumBytes) {
         let timer = Timer::start();
+
+        let past_callback_ids: BTreeSet<u64> = past_payloads
+            .iter()
+            .flat_map(|x| x.get())
+            .map(|x| x.callback_id)
+            .collect();
+
         let payload = match self.get_self_validating_payload_impl(
             validation_context,
-            past_payloads,
+            past_callback_ids,
             byte_limit,
         ) {
             Ok(payload) => {
@@ -272,9 +262,9 @@ impl SelfValidatingPayloadBuilder for BitcoinPayloadBuilder {
         &self,
         payload: &SelfValidatingPayload,
         validation_context: &ValidationContext,
-        past_payloads: &[&SelfValidatingPayload],
+        _past_payloads: &[&SelfValidatingPayload],
     ) -> Result<NumBytes, SelfValidatingPayloadValidationError> {
-        self.validate_self_validating_payload_impl(payload, validation_context, past_payloads)
+        self.validate_self_validating_payload_impl(payload, validation_context)
     }
 }
 
