@@ -6872,6 +6872,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-tree-hash-test-utils",
  "ic-protobuf",
  "ic-types-test-utils",
  "maplit",
@@ -6881,6 +6882,17 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
+]
+
+[[package]]
+name = "ic-crypto-tree-hash-test-utils"
+version = "0.8.0"
+dependencies = [
+ "assert_matches",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-tree-hash",
+ "proptest",
+ "rand 0.8.5",
 ]
 
 [[package]]

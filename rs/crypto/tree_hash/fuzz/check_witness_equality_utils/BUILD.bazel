@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/canonical_state",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
+    "//rs/crypto/tree_hash/test_utils",
     "@crate_index//:rand_0_8_4",
 ]
 

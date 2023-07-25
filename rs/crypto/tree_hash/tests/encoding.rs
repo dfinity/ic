@@ -1,8 +1,7 @@
 #![allow(clippy::unwrap_used)]
-use crate::arbitrary::arbitrary_mixed_hash_tree;
-use crate::MixedHashTree as T;
-use crate::{Label, MixedHashTree};
 use assert_matches::assert_matches;
+use ic_crypto_tree_hash::{Label, MixedHashTree};
+use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;
 use proptest::prelude::*;
 use serde_cbor::Value as Cbor;
 
@@ -63,13 +62,13 @@ proptest! {
     #[test]
     fn prop_tree_to_cbor_roundtrip(t in arbitrary_mixed_hash_tree()) {
         let cbor = serde_cbor::to_vec(&t).expect("failed to encode into CBOR");
-        let decoded: T = serde_cbor::from_slice(&cbor[..]).expect("failed to decode CBOR");
+        let decoded: MixedHashTree = serde_cbor::from_slice(&cbor[..]).expect("failed to decode CBOR");
         assert_eq!(t, decoded);
     }
 
     #[test]
     fn prop_cbor_to_tree_roundtrip(v in arbitrary_valid_cbor_encoding()) {
-        let t: T = serde_cbor::value::from_value(v.clone()).expect("failed to decode CBOR");
+        let t: MixedHashTree = serde_cbor::value::from_value(v.clone()).expect("failed to decode CBOR");
         let v_encoded = serde_cbor::value::to_value(&t).expect("failed to encode into CBOR");
         assert_eq!(v, v_encoded);
     }
@@ -77,7 +76,7 @@ proptest! {
 
     #[test]
     fn prop_encoding_fails_on_invalid_cbor(v in arbitrary_invalid_cbor_encoding()) {
-        let r: Result<T, _> = serde_cbor::value::from_value(v.clone());
+        let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
 
         assert!(r.is_err(), "Successfully parsed a MixedHashTree {:?} from invalid CBOR {:?}", r.unwrap(), v);
     }
@@ -90,7 +89,7 @@ proptest! {
             vec.push(Cbor::Array(vec![]));
 
             let v = Cbor::Array(vec);
-            let r: Result<T, _> = serde_cbor::value::from_value(v.clone());
+            let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
             match r {
                 Ok(_) => panic!("Successfully parsed a MixedHashTree from invalid CBOR {:?}", v),
                 Err(err) => assert!(err.to_string().contains("length"), "Expected invalid length error, got {:?}", err),
@@ -106,7 +105,7 @@ proptest! {
             vec.pop();
 
             let v = Cbor::Array(vec);
-            let r: Result<T, _> = serde_cbor::value::from_value(v.clone());
+            let r: Result<MixedHashTree, _> = serde_cbor::value::from_value(v.clone());
             match r {
                 Ok(_) => panic!("Successfully parsed a MixedHashTree from invalid CBOR {:?}", v),
                 Err(err) => assert!(err.to_string().contains("length"), "Expected invalid length error, got {:?}", err),
@@ -123,7 +122,9 @@ fn fail_to_decode_unknown_tag() {
         value::Value::{Array, Integer, Null},
     };
 
-    match serde_cbor::value::from_value(Array(vec![Integer(5), Null])) as Result<T, Error> {
+    match serde_cbor::value::from_value(Array(vec![Integer(5), Null]))
+        as Result<MixedHashTree, Error>
+    {
         Err(err) if err.to_string().contains("unknown tag: 5") => (),
         other => panic!(
             "Expected an error with message containing 'unknown tag', got {:?}",

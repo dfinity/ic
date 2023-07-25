@@ -1,4 +1,5 @@
-use crate::{arbitrary::arbitrary_mixed_hash_tree, MixedHashTree};
+use ic_crypto_tree_hash::MixedHashTree;
+use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_mixed_hash_tree;
 use proptest::prelude::*;
 use MixedHashTree::*;
 

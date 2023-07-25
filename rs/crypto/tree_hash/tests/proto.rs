@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::redundant_clone)]
-use crate::{flatmap, Digest, FlatMap, Label, LabeledTree, Witness};
+use ic_crypto_tree_hash::{flatmap, Digest, FlatMap, Label, LabeledTree, Witness};
 use ic_protobuf::messaging::xnet::v1;
 use ic_protobuf::proxy::{ProtoProxy, ProxyDecodeError};
 

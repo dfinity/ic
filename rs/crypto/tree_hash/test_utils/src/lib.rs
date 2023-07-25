@@ -1,9 +1,18 @@
-use crate::*;
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_tree_hash::hasher::Hasher;
+use ic_crypto_tree_hash::*;
+
+pub mod arbitrary;
+
+pub const MAX_HASH_TREE_DEPTH: usize = 128;
+
+const DOMAIN_HASHTREE_LEAF: &str = "ic-hashtree-leaf";
+const DOMAIN_HASHTREE_EMPTY_SUBTREE: &str = "ic-hashtree-empty";
+const DOMAIN_HASHTREE_NODE: &str = "ic-hashtree-labeled";
+const DOMAIN_HASHTREE_FORK: &str = "ic-hashtree-fork";
 
 /// Returns the number of leaves and empty subtrees in an arbitrary [`LabeledTree`].
-pub(crate) fn get_num_leaves_and_empty_subtrees<T>(labeled_tree: &LabeledTree<T>) -> usize {
+pub fn get_num_leaves_and_empty_subtrees<T>(labeled_tree: &LabeledTree<T>) -> usize {
     match labeled_tree {
         LabeledTree::SubTree(labeled_subtree) if labeled_subtree.is_empty() => 1,
         LabeledTree::SubTree(labeled_subtree) => labeled_subtree
@@ -20,13 +29,13 @@ pub(crate) fn get_num_leaves_and_empty_subtrees<T>(labeled_tree: &LabeledTree<T>
 ///
 /// Note that if `min_leaves` is set unrealistically high, call to this
 /// function will result in an infinite loop.
-pub(crate) fn new_random_labeled_tree<R: rand::Rng>(
+pub fn new_random_labeled_tree<R: rand::Rng>(
     rng: &mut R,
     max_depth: u32,
     desired_size: u32,
     min_leaves: u32,
 ) -> LabeledTree<Vec<u8>> {
-    use crate::arbitrary::arbitrary_well_formed_mixed_hash_tree_with_params;
+    use arbitrary::arbitrary_well_formed_mixed_hash_tree_with_params;
     use proptest::strategy::{Strategy, ValueTree};
     loop {
         let mut seed = [0u8; 32];
@@ -58,7 +67,7 @@ pub(crate) fn new_random_labeled_tree<R: rand::Rng>(
 /// to any leaf or empty subtree in `labeled_tree.
 ///
 /// Returns the number of traversed [`Witness::Known`] nodes.
-pub(crate) fn check_leaves_and_empty_subtrees_are_known(
+pub fn check_leaves_and_empty_subtrees_are_known(
     labeled_tree: &LabeledTree<Vec<u8>>,
     witness: &Witness,
 ) -> usize {
@@ -100,7 +109,7 @@ fn check_leaves_and_empty_subtrees_are_known_impl(
         }
         Witness::Pruned { digest: _ } => {
             // all pruned nodes should not correspond to a `Leaf` in `labeled_tree`
-            let lookup_result = crate::lookup_path(
+            let lookup_result = lookup_path(
                 labeled_tree,
                 &labels_on_path
                     .iter()
@@ -117,7 +126,7 @@ fn check_leaves_and_empty_subtrees_are_known_impl(
         Witness::Known() => {
             // all known nodes should be successfully looked up in
             // `labeled_tree`'s leaves or empty subtrees
-            let leaf_or_empty_subtree = crate::lookup_path(
+            let leaf_or_empty_subtree = lookup_path(
                 labeled_tree,
                 &labels_on_path
                     .iter()
@@ -140,7 +149,7 @@ fn check_leaves_and_empty_subtrees_are_known_impl(
 
 /// Replaces a random [`Witness::Known`] node with a [`Witness::Pruned`] and returns
 /// the path to the replaced node.
-pub(crate) fn replace_random_known_with_dummy_pruned<R: rand::Rng>(
+pub fn replace_random_known_with_dummy_pruned<R: rand::Rng>(
     witness: &mut Witness,
     rng: &mut R,
 ) -> Vec<Label> {
@@ -217,10 +226,7 @@ pub(crate) fn replace_random_known_with_dummy_pruned<R: rand::Rng>(
     target_path
 }
 
-pub(crate) fn labeled_tree_contains_prefix(
-    labeled_tree: &LabeledTree<Vec<u8>>,
-    prefix: &[Label],
-) -> bool {
+pub fn labeled_tree_contains_prefix(labeled_tree: &LabeledTree<Vec<u8>>, prefix: &[Label]) -> bool {
     if prefix.is_empty() {
         return true;
     }
@@ -236,7 +242,7 @@ pub(crate) fn labeled_tree_contains_prefix(
 
 /// Creates a copy of `labeled_tree` with `path` to leaf or empty subtree
 /// removed from it. Panics on inconsistent `labeled_tree`/`path`.
-pub(crate) fn labeled_tree_without_leaf_or_empty_subtree(
+pub fn labeled_tree_without_leaf_or_empty_subtree(
     labeled_tree: &LabeledTree<Vec<u8>>,
     path: &LabeledTree<Vec<u8>>,
 ) -> LabeledTree<Vec<u8>> {
@@ -285,156 +291,7 @@ fn labeled_tree_without_leaf_or_empty_subtree_impl(
     }
 }
 
-#[test]
-fn leaf_and_empty_subtree_traverser_works_correctly() {
-    let tree = LabeledTree::Leaf(vec![]);
-    assert_eq!(
-        test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree),
-        [tree]
-    );
-
-    let tree = LabeledTree::<Vec<u8>>::SubTree(FlatMap::new());
-    assert_eq!(
-        test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree),
-        [tree]
-    );
-
-    // Construct a more complex labeled tree of the form
-    //
-    // + -- 1 -- Leaf(())
-    // |
-    // | -- 2 -- Leaf(())
-    // |
-    // | -- 3 -- EMPTY_SUBTREE
-    // |
-    // | -- 4 -- + -- 5 -- Leaf(())
-    //           |
-    //           | -- 6 -- EMPTY_SUBTREE
-    //           |
-    //           | -- 7 -- + -- 8 -- Leaf(())
-    //           |
-    //           | -- 9 -- + -- 10 -- Leaf(())
-    //                     |
-    //                     | -- 11 -- Leaf(())
-    //
-    let tree = LabeledTree::SubTree(FlatMap::from_key_values(vec![
-        ("1".into(), LabeledTree::Leaf(vec![])),
-        ("2".into(), LabeledTree::Leaf(vec![])),
-        ("3".into(), LabeledTree::SubTree(FlatMap::new())),
-        (
-            "4".into(),
-            LabeledTree::SubTree(FlatMap::from_key_values(vec![
-                ("5".into(), LabeledTree::Leaf(vec![])),
-                ("6".into(), LabeledTree::SubTree(FlatMap::new())),
-                (
-                    "7".into(),
-                    LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                        "8".into(),
-                        LabeledTree::Leaf(vec![]),
-                    )])),
-                ),
-                (
-                    "9".into(),
-                    LabeledTree::SubTree(FlatMap::from_key_values(vec![
-                        ("10".into(), LabeledTree::Leaf(vec![])),
-                        ("11".into(), LabeledTree::Leaf(vec![])),
-                    ])),
-                ),
-            ])),
-        ),
-    ]));
-
-    let mut iter = test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree).into_iter();
-    assert_eq!(
-        iter.next().expect("available path"),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "1".into(),
-            LabeledTree::Leaf(vec![])
-        )]))
-    );
-    assert_eq!(
-        iter.next().expect("available path"),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "2".into(),
-            LabeledTree::Leaf(vec![])
-        )]))
-    );
-    assert_eq!(
-        iter.next().expect("available path"),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "3".into(),
-            LabeledTree::SubTree(FlatMap::new())
-        )]))
-    );
-
-    assert_eq!(
-        iter.next().expect("available path"),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "4".into(),
-            LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                "5".into(),
-                LabeledTree::Leaf(vec![]),
-            )])),
-        )]))
-    );
-
-    assert_eq!(
-        iter.next().expect("available path"),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "4".into(),
-            LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                "6".into(),
-                LabeledTree::SubTree(FlatMap::new()),
-            )])),
-        )]))
-    );
-
-    assert_eq!(
-        iter.next().expect("available path"),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "4".into(),
-            LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                "7".into(),
-                LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                    "8".into(),
-                    LabeledTree::Leaf(vec![]),
-                )])),
-            ),])),
-        )]))
-    );
-
-    assert_eq!(
-        iter.next().expect("available path"),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "4".into(),
-            LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                "9".into(),
-                LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                    "10".into(),
-                    LabeledTree::Leaf(vec![]),
-                )])),
-            ),])),
-        )]))
-    );
-
-    assert_eq!(
-        iter.next().expect("available path"),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "4".into(),
-            LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                "9".into(),
-                LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                    "11".into(),
-                    LabeledTree::Leaf(vec![]),
-                )])),
-            ),])),
-        )]))
-    );
-
-    assert_eq!(iter.next(), None);
-}
-
-pub(crate) fn witness_contains_only_nodes_and_known(witness: &Witness) -> bool {
+pub fn witness_contains_only_nodes_and_known(witness: &Witness) -> bool {
     match witness {
         Witness::Fork {
             left_tree: _,
@@ -449,79 +306,152 @@ pub(crate) fn witness_contains_only_nodes_and_known(witness: &Witness) -> bool {
     }
 }
 
-#[test]
-fn labeled_tree_without_leaf_or_empty_subtree_works_correctly() {
-    for tree in [
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "1".into(),
-            LabeledTree::Leaf(vec![]),
-        )])),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "1".into(),
-            LabeledTree::SubTree(FlatMap::new()),
-        )])),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "1".into(),
-            LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                "2".into(),
-                LabeledTree::Leaf(vec![]),
-            )])),
-        )])),
-        LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-            "1".into(),
-            LabeledTree::SubTree(FlatMap::from_key_values(vec![(
-                "2".into(),
-                LabeledTree::SubTree(FlatMap::new()),
-            )])),
-        )])),
-    ] {
-        assert_eq!(
-            labeled_tree_without_leaf_or_empty_subtree(&tree, &tree),
-            LabeledTree::SubTree(FlatMap::new())
-        );
-    }
+/// Returns complete partial trees for each leaf and empty subtree in `tree`.
+///
+/// For example, for `tree` of form
+///
+/// ```text
+/// + -- 1 -- Leaf(())
+/// |
+/// | -- 2 -- Leaf(())
+/// |
+/// | -- 3 -- EMPTY_SUBTREE
+/// |
+/// | -- 4 -- + -- 5 -- Leaf(())
+///           |
+///           | -- 6 -- EMPTY_SUBTREE
+/// ```
+///
+/// the result would contain
+///
+///  ```text
+/// + -- 1 -- Leaf(())
+///
+/// + -- 2 -- Leaf(())
+///
+/// + -- 3 -- EMPTY_SUBTREE
+///
+/// + -- 4 -- + -- 5 -- Leaf(())
+///
+/// + -- 4 -- + -- 6 -- EMPTY_SUBTREE
+/// ```
+pub fn partial_trees_to_leaves_and_empty_subtrees(
+    tree: &LabeledTree<Vec<u8>>,
+) -> Vec<LabeledTree<Vec<u8>>> {
+    let mut result = vec![];
+    partial_trees_to_leaves_and_empty_subtrees_impl(tree, &mut vec![], &mut result);
+    result
+}
 
-    use rand::Rng;
-    const RANDOM_TREE_MAX_DEPTH: u32 = 20;
-    const RANDOM_TREE_DESIRED_SIZE: u32 = 100;
-    const RANDOM_TREE_MIN_LEAVES: u32 = 70;
-
-    let mut rng = reproducible_rng();
-    let mut tree = new_random_labeled_tree(
-        &mut rng,
-        RANDOM_TREE_MAX_DEPTH,
-        RANDOM_TREE_DESIRED_SIZE,
-        RANDOM_TREE_MIN_LEAVES,
-    );
-
-    let mut leaves_and_empty_subtrees =
-        test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree);
-    let initial_num_leaves_and_empty_subtrees = leaves_and_empty_subtrees.len();
-    let mut counter: usize = 0;
-    while leaves_and_empty_subtrees != vec![LabeledTree::SubTree(FlatMap::new())] {
-        let index_to_remove = rng.gen_range(0..leaves_and_empty_subtrees.len());
-        let path_to_remove = &leaves_and_empty_subtrees[index_to_remove];
-        let tree_with_removed_path =
-            labeled_tree_without_leaf_or_empty_subtree(&tree, path_to_remove);
-        let leaves_and_empty_subtrees_with_removed_path =
-            test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree_with_removed_path);
-        for not_removed_path in leaves_and_empty_subtrees
-            .iter()
-            .filter(|&path| path != path_to_remove)
-        {
-            assert!(leaves_and_empty_subtrees_with_removed_path.contains(not_removed_path));
+fn partial_trees_to_leaves_and_empty_subtrees_impl<'a>(
+    tree: &'a LabeledTree<Vec<u8>>,
+    curr_path: &mut Vec<&'a Label>,
+    result: &mut Vec<LabeledTree<Vec<u8>>>,
+) {
+    match tree {
+        LabeledTree::SubTree(children) if !children.is_empty() => {
+            for (label, child) in children.iter() {
+                curr_path.push(label);
+                partial_trees_to_leaves_and_empty_subtrees_impl(child, curr_path, result);
+                curr_path.pop();
+            }
         }
-        assert!(!leaves_and_empty_subtrees_with_removed_path.contains(path_to_remove));
-        let only_empty_root_left = leaves_and_empty_subtrees_with_removed_path
-            == vec![LabeledTree::SubTree(FlatMap::new())];
-        // if truncated to empty root, the size of the vector does not decrease
-        assert_eq!(
-            leaves_and_empty_subtrees_with_removed_path.len() + (!only_empty_root_left as usize),
-            leaves_and_empty_subtrees.len()
-        );
-        leaves_and_empty_subtrees = leaves_and_empty_subtrees_with_removed_path;
-        tree = tree_with_removed_path;
-        counter += 1;
+        LabeledTree::SubTree(_) | LabeledTree::Leaf(_) => {
+            let path_tree = curr_path.iter().rev().fold(tree.clone(), |acc, &label| {
+                LabeledTree::SubTree(flatmap!(label.clone() => acc))
+            });
+            result.push(path_tree);
+        }
     }
-    assert_eq!(counter, initial_num_leaves_and_empty_subtrees);
+}
+
+/// Merges a path (i.e., a one node wide [`LabeledTree`]  containing exactly one
+/// [`LabeledTree::Leaf`]) into the `agg` by appending the missing node/subtree
+/// from `path`.
+///
+/// Panics if the appended label from `path` is not larger than the largest
+/// label in the respective subtree.
+pub fn merge_path_into_labeled_tree<T: core::fmt::Debug + std::cmp::PartialEq + Clone>(
+    agg: &mut LabeledTree<T>,
+    path: &LabeledTree<T>,
+) {
+    match (agg, path) {
+        (LabeledTree::SubTree(subtree_agg), LabeledTree::SubTree(subtree_path)) => {
+            assert_eq!(
+                subtree_path.len(),
+                1,
+                "`path` should always contain only exactly one label/tree pair in each subtree"
+            );
+            let (path_label, subpath) = subtree_path
+                .iter()
+                .next()
+                .expect("should containt exactly one child");
+            // if the left subtree contains the label from the right subtree, go one level deeper,
+            // otherwise append the right subtree to the left subtree
+            if let Some(subagg) = subtree_agg.get_mut(path_label) {
+                merge_path_into_labeled_tree(subagg, subpath);
+            } else {
+                subtree_agg
+                    .try_append(path_label.clone(), subpath.clone())
+                    .expect(
+                        "bug: the path label is unsorted w.r.t. to the tree and cannot be appended",
+                    );
+            }
+        }
+        _ => panic!("Trying to merge into existing tree path"),
+    }
+}
+
+/// Creates a HashTreeBuilderImpl for the passed `labeled_tree`.
+pub fn hash_tree_builder_from_labeled_tree(
+    labeled_tree: &LabeledTree<Vec<u8>>,
+) -> HashTreeBuilderImpl {
+    let mut builder = HashTreeBuilderImpl::new();
+    hash_tree_builder_from_labeled_tree_impl(labeled_tree, &mut builder);
+    builder
+}
+
+fn hash_tree_builder_from_labeled_tree_impl(
+    labeled_tree: &LabeledTree<Vec<u8>>,
+    builder: &mut HashTreeBuilderImpl,
+) {
+    match labeled_tree {
+        LabeledTree::<Vec<u8>>::SubTree(labeled_subtree) => {
+            builder.start_subtree();
+            for (label, subtree) in labeled_subtree.iter() {
+                builder.new_edge(label.clone());
+                hash_tree_builder_from_labeled_tree_impl(subtree, builder);
+            }
+            builder.finish_subtree();
+        }
+        LabeledTree::<Vec<u8>>::Leaf(content) => {
+            builder.start_leaf();
+            builder.write_leaf(content.clone());
+            builder.finish_leaf();
+        }
+    }
+}
+
+pub fn compute_leaf_digest(contents: &[u8]) -> Digest {
+    let mut hasher = Hasher::for_domain(DOMAIN_HASHTREE_LEAF);
+    hasher.update(contents);
+    hasher.finalize()
+}
+
+pub fn compute_node_digest(label: &Label, subtree_digest: &Digest) -> Digest {
+    let mut hasher = Hasher::for_domain(DOMAIN_HASHTREE_NODE);
+    hasher.update(label.as_bytes());
+    hasher.update(&subtree_digest.0);
+    hasher.finalize()
+}
+
+pub fn compute_fork_digest(left_digest: &Digest, right_digest: &Digest) -> Digest {
+    let mut hasher = Hasher::for_domain(DOMAIN_HASHTREE_FORK);
+    hasher.update(&left_digest.0);
+    hasher.update(&right_digest.0);
+    hasher.finalize()
+}
+
+pub fn empty_subtree_hash() -> Digest {
+    Hasher::for_domain(DOMAIN_HASHTREE_EMPTY_SUBTREE).finalize()
 }

@@ -1,11 +1,6 @@
 //! Protocol buffer equivalents to `LabeledTree<Vec<u8>>` and `Witness`, for
 //! backwards- and forwards-compatible XNet wire format.
 
-#[cfg(test)]
-mod mixed_hash_tree_tests;
-#[cfg(test)]
-mod tests;
-
 use crate::{Digest, FlatMap, Label, LabeledTree, MixedHashTree, Witness};
 use ic_protobuf::messaging::xnet::v1 as pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
