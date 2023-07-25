@@ -125,3 +125,6 @@ mod neuron_following;
 
 #[cfg(test)]
 mod neuron_voting;
+
+#[cfg(test)]
+mod canister_upgrade;
