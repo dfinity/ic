@@ -1511,7 +1511,9 @@ mod tests {
     use ic_protobuf::registry::subnet::v1::{
         CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetRecord,
     };
-    use ic_replicated_state::metadata_state::subnet_call_context_manager::SetupInitialDkgContext;
+    use ic_replicated_state::metadata_state::subnet_call_context_manager::{
+        SetupInitialDkgContext, SubnetCallContext,
+    };
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         consensus::fake::FakeContentSigner,
@@ -2158,16 +2160,15 @@ mod tests {
         let nodes_in_target_subnet = node_ids.into_iter().map(node_test_id).collect();
 
         if let Some(target_id) = target {
-            state
-                .metadata
-                .subnet_call_context_manager
-                .push_setup_initial_dkg_request(SetupInitialDkgContext {
+            state.metadata.subnet_call_context_manager.push_context(
+                SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
                     request: RequestBuilder::new().build(),
                     nodes_in_target_subnet,
                     target_id,
                     registry_version,
                     time: state.time(),
-                });
+                }),
+            );
         }
 
         let mut mock = state_manager.get_mut();

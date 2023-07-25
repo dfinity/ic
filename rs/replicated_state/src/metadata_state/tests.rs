@@ -1,5 +1,7 @@
 use super::*;
-use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
+use crate::metadata_state::subnet_call_context_manager::{
+    SubnetCallContext, SubnetCallContextManager,
+};
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_error_types::{ErrorCode, UserError};
@@ -619,7 +621,8 @@ fn subnet_call_contexts_deserialization() {
         method_name: "transform".to_string(),
         context: vec![0, 1, 2],
     };
-    let mut system_call_context_manager = SubnetCallContextManager::default();
+    let mut system_call_context_manager: SubnetCallContextManager =
+        SubnetCallContextManager::default();
 
     let canister_http_request = CanisterHttpRequestContext {
         request: RequestBuilder::default()
@@ -634,7 +637,9 @@ fn subnet_call_contexts_deserialization() {
         transform: Some(transform.clone()),
         time: mock_time(),
     };
-    system_call_context_manager.push_http_request(canister_http_request);
+    system_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
+        canister_http_request,
+    ));
 
     let system_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&system_call_context_manager).into();
     let deserialized_system_call_context_manager: SubnetCallContextManager =

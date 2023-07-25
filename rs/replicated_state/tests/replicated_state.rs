@@ -15,7 +15,7 @@ use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
-    metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext,
+    metadata_state::subnet_call_context_manager::{BitcoinGetSuccessorsContext, SubnetCallContext},
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
     CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
 };
@@ -543,10 +543,8 @@ fn insert_bitcoin_response_non_matching() {
 fn insert_bitcoin_response() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
-    state
-        .metadata
-        .subnet_call_context_manager
-        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+    state.metadata.subnet_call_context_manager.push_context(
+        SubnetCallContext::BitcoinGetSuccessors(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
             payload: GetSuccessorsRequestInitial {
                 network: Network::Regtest,
@@ -554,7 +552,8 @@ fn insert_bitcoin_response() {
                 processed_block_hashes: vec![],
             },
             time: mock_time(),
-        });
+        }),
+    );
 
     let response = GetSuccessorsResponseComplete {
         blocks: vec![],

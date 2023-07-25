@@ -772,10 +772,11 @@ impl ExecutionEnvironment {
                                                 CyclesUseCase::HTTPOutcalls,
                                                 http_fee,
                                             );
-                                        state
-                                            .metadata
-                                            .subnet_call_context_manager
-                                            .push_http_request(canister_http_request_context);
+                                        state.metadata.subnet_call_context_manager.push_context(
+                                            SubnetCallContext::CanisterHttpRequest(
+                                                canister_http_request_context,
+                                            ),
+                                        );
                                         self.metrics.observe_message_with_label(
                                             &request.method_name,
                                             timer.elapsed(),
@@ -1730,16 +1731,15 @@ impl ExecutionEnvironment {
                         target_id,
                         &nodes_in_target_subnet
                     );
-                    state
-                        .metadata
-                        .subnet_call_context_manager
-                        .push_setup_initial_dkg_request(SetupInitialDkgContext {
+                    state.metadata.subnet_call_context_manager.push_context(
+                        SubnetCallContext::SetupInitialDKG(SetupInitialDkgContext {
                             request: request.clone(),
                             nodes_in_target_subnet,
                             target_id: NiDkgTargetId::new(target_id),
                             registry_version: settings.get_registry_version(),
                             time: state.time(),
-                        });
+                        }),
+                    );
                     Ok(())
                 }
             },
@@ -1824,20 +1824,32 @@ impl ExecutionEnvironment {
             pseudo_random_id,
             request.sender()
         );
+
+        if state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts
+            .len()
+            >= max_queue_size as usize
+        {
+            return Err(UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                "sign_with_ecdsa request could not be handled, the ECDSA signature queue is full."
+                    .to_string(),
+            ));
+        }
+
         state
             .metadata
             .subnet_call_context_manager
-            .push_sign_with_ecdsa_request(
-                SignWithEcdsaContext {
-                    request,
-                    key_id,
-                    message_hash,
-                    derivation_path,
-                    pseudo_random_id,
-                    batch_time: state.metadata.batch_time,
-                },
-                max_queue_size,
-            )?;
+            .push_context(SubnetCallContext::SignWithEcsda(SignWithEcdsaContext {
+                request,
+                key_id,
+                message_hash,
+                derivation_path,
+                pseudo_random_id,
+                batch_time: state.metadata.batch_time,
+            }));
         Ok(())
     }
 
@@ -1852,13 +1864,13 @@ impl ExecutionEnvironment {
         state
             .metadata
             .subnet_call_context_manager
-            .push_ecdsa_dealings_request(EcdsaDealingsContext {
+            .push_context(SubnetCallContext::EcdsaDealings(EcdsaDealingsContext {
                 request: request.clone(),
                 key_id: args.key_id,
                 nodes,
                 registry_version,
                 time: state.time(),
-            });
+            }));
         Ok(())
     }
 
