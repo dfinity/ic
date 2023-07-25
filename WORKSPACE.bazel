@@ -593,28 +593,28 @@ http_file(
 # Internet Identity canister (test build)
 
 http_file(
-    name = "ii_test_canister",
-    downloaded_file_path = "internet_identity_test.wasm",
-    sha256 = "5f179b2e8bdd637043a223a8ee1be6563ffa699dec071f84c8f8487a9dc8d54c",
-    url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-01-16/internet_identity_test.wasm",
+    name = "ii_dev_canister",
+    downloaded_file_path = "internet_identity_dev.wasm.gz",
+    sha256 = "f8594235c4f715bce683ccef5f18484bedc97bbd27c4043c0f5276c2c3c67d53",
+    url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-07-21/internet_identity_dev.wasm.gz",
 )
 
 # NNS frontend dapp canister
 
 http_file(
     name = "nns_dapp_canister",
-    downloaded_file_path = "nns_dapp_canister.wasm",
+    downloaded_file_path = "nns_dapp_canister.wasm.gz",
     sha256 = "6af3470ef980b01eb427bdecde7d7c2c440a8c444f6c1fd6e7a39b251eceaf7a",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/nns-dapp.wasm",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/nns-dapp.wasm.gz",
 )
 
 # SNS aggregator canister
 
 http_file(
     name = "sns_aggregator",
-    downloaded_file_path = "sns_aggregator_dev.wasm",
+    downloaded_file_path = "sns_aggregator_dev.wasm.gz",
     sha256 = "fb50fbd91ca28373a1dd9207dee7cab22b5d73fde66fe1cc8a9dac63b9549da1",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm.gz",
 )
 
 # Import Python rules

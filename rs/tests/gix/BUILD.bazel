@@ -12,7 +12,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + [
-        "@ii_test_canister//file",
+        "@ii_dev_canister//file",
         "@nns_dapp_canister//file",
     ],
     deps = DEPENDENCIES + ["@crate_index//:libflate"] + ["//rs/tests"],
