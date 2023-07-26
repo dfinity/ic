@@ -1038,6 +1038,7 @@ bazel-build-fuzzers:
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
+    - zh
     - dfinity-ic
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
@@ -1107,6 +1108,7 @@ bazel-build-fuzzers-afl:
   script:
     - "./gitlab-ci/src/bazel-ci/main.sh"
   tags:
+    - zh
     - dfinity-ic
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
@@ -1175,6 +1177,7 @@ bazel-build-fuzzers-archives:
       cd "${CI_PROJECT_DIR}"/bin
       ./build-all-fuzzers.sh --zip
   tags:
+    - zh
     - dfinity-ic
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
@@ -1243,6 +1246,7 @@ bazel-build-fuzzers-weekly:
       gsutil -m cp libfuzzer_linux_*.zip gs://ic_fuzzer_builds
       gsutil -m cp afl_asan_linux_*.zip gs://ic_fuzzer_builds
   tags:
+    - zh
     - dfinity-ic
   variables:
     BAZEL_CI_CONFIG: "--config=ci"
