@@ -615,9 +615,9 @@ impl Params {
             .as_ref()
             .expect("Expected neuron_basket_construction_parameters to be set");
 
-        if neuron_basket.count == 0 {
+        if neuron_basket.count < 2 {
             return Err(format!(
-                "neuron_basket_construction_parameters.count ({}) must be > 0",
+                "neuron_basket_construction_parameters.count ({}) must be >= 2",
                 neuron_basket.count,
             ));
         }
@@ -1278,6 +1278,42 @@ mod tests {
         };
 
         assert_is_err!(request.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
+    }
+
+    #[test]
+    fn open_request_reject_one_neuron_in_basket() {
+        let request_fail = OpenRequest {
+            params: Some(Params {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 1, // 1 should be too little
+                    dissolve_delay_interval_seconds: 7890000,
+                }),
+                ..PARAMS.clone()
+            }),
+            ..OPEN_REQUEST.clone()
+        };
+
+        let request_success = OpenRequest {
+            params: Some(Params {
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 2, // 2 should be enough
+                    dissolve_delay_interval_seconds: 7890000,
+                }),
+                ..PARAMS.clone()
+            }),
+            ..OPEN_REQUEST.clone()
+        };
+
+        let error = request_fail
+            .validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT)
+            .unwrap_err();
+        assert_eq!(
+            error,
+            "neuron_basket_construction_parameters.count (1) must be >= 2".to_string()
+        );
+        request_success
+            .validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT)
+            .unwrap();
     }
 
     #[test]

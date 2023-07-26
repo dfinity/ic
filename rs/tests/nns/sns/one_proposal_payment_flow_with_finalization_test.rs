@@ -1,3 +1,6 @@
+//! This test has been temporarily disabled because the functionality required
+//! to test one-proposal milestone 3 has not yet been implemented
+
 use anyhow::Result;
 use ic_nervous_system_common::{i2d, E8};
 use ic_nervous_system_proto::pb::v1::Tokens;
@@ -101,17 +104,6 @@ fn sns_setup_with_one_proposal(env: TestEnv) {
     );
 }
 
-/// Initiate the token swap with the parameters returned by
-/// [`create_service_nervous_system_proposal`] (rather than the default
-/// parameters)
-fn initiate_token_swap_with_custom_parameters(env: TestEnv) {
-    initiate_token_swap(
-        env,
-        create_service_nervous_system_proposal(),
-        CF_CONTRIBUTION,
-    );
-}
-
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
 /// So if min_participants is 3 and max_participant_icp_e8s is 12 icp, we'll create 3 participants who contribute 4 icp each.
 fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEnv) {
@@ -175,6 +167,17 @@ fn finalize_swap(env: TestEnv) {
         expected_derived_swap_state,
         create_service_nervous_system_proposal,
     ));
+}
+
+/// Initiate the token swap with the parameters returned by
+/// [`create_service_nervous_system_proposal`] (rather than the default
+/// parameters)
+fn initiate_token_swap_with_custom_parameters(env: TestEnv) {
+    initiate_token_swap(
+        env,
+        create_service_nervous_system_proposal(),
+        CF_CONTRIBUTION,
+    );
 }
 
 /// This test is similar to //rs/tests/nns/sns:payment_flow_test, except it also finalizes the swap.

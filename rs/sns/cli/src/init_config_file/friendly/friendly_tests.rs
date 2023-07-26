@@ -69,7 +69,7 @@ fn test_parse() {
         },
 
         neurons: Neurons {
-            minimum_creation_stake: nervous_system_pb::Tokens { e8s: Some(10 * E8) },
+            minimum_creation_stake: nervous_system_pb::Tokens::from_e8s(61800),
         },
 
         voting: Voting {
@@ -149,13 +149,13 @@ fn test_parse() {
         },
 
         swap: Swap {
-            minimum_participants: 57,
+            minimum_participants: 50,
 
-            minimum_icp: parse_tokens("232_714 tokens").unwrap(),
-            maximum_icp: parse_tokens("557_054 tokens").unwrap(),
+            minimum_icp: nervous_system_pb::Tokens::from_e8s(12_300_000_000),
+            maximum_icp: nervous_system_pb::Tokens::from_tokens(65000),
 
-            minimum_participant_icp: parse_tokens("5 tokens").unwrap(),
-            maximum_participant_icp: parse_tokens("100 tokens").unwrap(),
+            minimum_participant_icp: nervous_system_pb::Tokens::from_tokens(650),
+            maximum_participant_icp: nervous_system_pb::Tokens::from_tokens(6500),
 
             confirmation_text: Some("Hello, world?".to_string()),
 
@@ -169,6 +169,9 @@ fn test_parse() {
             start_time: Some(nervous_system_pb::GlobalTimeOfDay::from_hh_mm(12, 0).unwrap()),
             duration: nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
+            },
+            neurons_fund_investment: nervous_system_pb::Tokens {
+                e8s: Some(1000 * E8),
             },
         },
     };
@@ -322,7 +325,7 @@ fn test_convert_to_create_service_nervous_system() {
 
             // Neuron Parameters
             // -----------------
-            neuron_minimum_stake: Some(parse_tokens("10 tokens").unwrap()),
+            neuron_minimum_stake: Some(nervous_system_pb::Tokens::from_e8s(61800)),
 
             neuron_minimum_dissolve_delay_to_vote: Some(parse_duration("26 weeks").unwrap()),
             neuron_maximum_dissolve_delay: Some(parse_duration("8 years").unwrap()),
@@ -346,13 +349,13 @@ fn test_convert_to_create_service_nervous_system() {
             .swap_parameters
             .unwrap(),
         nns_governance_pb::SwapParameters {
-            minimum_participants: Some(57),
+            minimum_participants: Some(50),
 
-            minimum_icp: Some(parse_tokens("232_714 tokens").unwrap()),
-            maximum_icp: Some(parse_tokens("557_054 tokens").unwrap()),
+            minimum_icp: Some(parse_tokens("123 tokens").unwrap()),
+            maximum_icp: Some(parse_tokens("65000 tokens").unwrap()),
 
-            minimum_participant_icp: Some(parse_tokens("5 tokens").unwrap()),
-            maximum_participant_icp: Some(parse_tokens("100 tokens").unwrap()),
+            minimum_participant_icp: Some(parse_tokens("650 tokens").unwrap()),
+            maximum_participant_icp: Some(parse_tokens("6500 tokens").unwrap()),
 
             confirmation_text: Some("Hello, world?".to_string()),
 
@@ -370,6 +373,9 @@ fn test_convert_to_create_service_nervous_system() {
             start_time: nervous_system_pb::GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
             duration: Some(nervous_system_pb::Duration {
                 seconds: Some(7 * 24 * 60 * 60),
+            }),
+            neurons_fund_investment: Some(nervous_system_pb::Tokens {
+                e8s: Some(1000 * E8)
             }),
         }
     );

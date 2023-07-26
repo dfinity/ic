@@ -2256,6 +2256,11 @@ pub mod create_service_nervous_system {
         pub start_time: ::core::option::Option<::ic_nervous_system_proto::pb::v1::GlobalTimeOfDay>,
         #[prost(message, optional, tag = "10")]
         pub duration: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        /// The amount that the Neuron's Fund will collectively spend in maturity on
+        /// the swap.
+        #[prost(message, optional, tag = "11")]
+        pub neurons_fund_investment:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
     }
     /// Nested message and enum types in `SwapParameters`.
     pub mod swap_parameters {

@@ -56,13 +56,13 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "--swap-minimum-participants",
             "42",
             "--swap-minimum-icp",
-            "250_tokens",
+            "123_tokens",
             "--swap-maximum-icp",
-            "1000_tokens",
+            "65000_tokens",
             "--swap-minimum-participant-icp",
-            "2_tokens",
+            "650_tokens",
             "--swap-maximum-participant-icp",
-            "100_tokens",
+            "6500_tokens",
             "--confirmation-text",
             "I confirm that I am a human",
             "--restrict-swap-in-country",
@@ -77,6 +77,8 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "10:01 UTC",
             "--swap-duration",
             "7 days",
+            "--neurons-fund-investment",
+            "2_tokens",
             "--transaction-fee",
             "10_000_e8s",
             "--token-name",
@@ -100,7 +102,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "--neuron-maximum-dissolve-delay-bonus",
             "50%",
             "--neuron-maximum-age-for-age-bonus",
-            "2922d", // 8 years (including lear days)
+            "2922d", // 8 years (including leap days)
             "--neuron-maximum-age-bonus",
             "10%",
             "--initial-voting-reward-rate",
@@ -142,16 +144,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
             ],
             swap_parameters: Some(SwapParameters {
                 minimum_participants: Some(42),
-                minimum_icp: Some(nervous_system_pb::Tokens {
-                    e8s: Some(250 * E8),
-                }),
-                maximum_icp: Some(nervous_system_pb::Tokens {
-                    e8s: Some(1_000 * E8),
-                }),
-                minimum_participant_icp: Some(nervous_system_pb::Tokens { e8s: Some(2 * E8) }),
-                maximum_participant_icp: Some(nervous_system_pb::Tokens {
-                    e8s: Some(100 * E8),
-                }),
+                minimum_icp: Some(nervous_system_pb::Tokens::from_tokens(123)),
+                maximum_icp: Some(nervous_system_pb::Tokens::from_tokens(65000)),
+                minimum_participant_icp: Some(nervous_system_pb::Tokens::from_tokens(650)),
+                maximum_participant_icp: Some(nervous_system_pb::Tokens::from_tokens(6500)),
                 neuron_basket_construction_parameters: Some(
                     swap_parameters::NeuronBasketConstructionParameters {
                         count: Some(3),
@@ -168,6 +164,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 duration: Some(nervous_system_pb::Duration {
                     seconds: Some(7 * SECONDS_PER_DAY),
                 }),
+                neurons_fund_investment: Some(nervous_system_pb::Tokens::from_tokens(2))
             }),
             ledger_parameters: Some(LedgerParameters {
                 transaction_fee: Some(nervous_system_pb::Tokens { e8s: Some(10_000) }),
