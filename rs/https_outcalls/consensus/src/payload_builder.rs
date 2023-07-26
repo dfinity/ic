@@ -158,23 +158,6 @@ impl CanisterHttpPayloadBuilderImpl {
         delivered_ids: HashSet<CallbackId>,
         max_payload_size: NumBytes,
     ) -> CanisterHttpPayload {
-        let _time = self
-            .metrics
-            .op_duration
-            .with_label_values(&["build"])
-            .start_timer();
-
-        // Check whether feature is enabled, return empty payload if not enabled
-        // or registry unavailable
-        match self.is_enabled(validation_context) {
-            Err(_) => {
-                warn!(self.log, "CanisterHttpPayloadBuilder: Registry unavailable");
-                return CanisterHttpPayload::default();
-            }
-            Ok(false) => return CanisterHttpPayload::default(),
-            Ok(true) => (),
-        }
-
         // Get the threshold value that is needed for consensus
         let threshold = match self
             .membership
@@ -392,12 +375,6 @@ impl CanisterHttpPayloadBuilderImpl {
         validation_context: &ValidationContext,
         delivered_ids: HashSet<CallbackId>,
     ) -> Result<(), CanisterHttpPayloadValidationError> {
-        let _time = self
-            .metrics
-            .op_duration
-            .with_label_values(&["validate"])
-            .start_timer();
-
         // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
@@ -609,6 +586,23 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Vec<u8> {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["build"])
+            .start_timer();
+
+        // Check whether feature is enabled, return empty payload if not enabled
+        // or registry unavailable
+        match self.is_enabled(context) {
+            Err(_) => {
+                warn!(self.log, "CanisterHttpPayloadBuilder: Registry unavailable");
+                return vec![];
+            }
+            Ok(false) => return vec![],
+            Ok(true) => (),
+        }
+
         let max_size = std::cmp::min(
             max_size,
             NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
@@ -625,6 +619,13 @@ impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         past_payloads: &[PastPayload],
         context: &ValidationContext,
     ) -> Result<(), PayloadValidationError> {
+        let _time = self
+            .metrics
+            .op_duration
+            .with_label_values(&["validate"])
+            .start_timer();
+
+        // Empty payloads are always valid
         if payload.is_empty() {
             return Ok(());
         }
