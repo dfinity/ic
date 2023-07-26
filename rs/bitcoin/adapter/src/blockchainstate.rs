@@ -310,6 +310,9 @@ impl BlockchainState {
         self.metrics
             .block_cache_size
             .set(self.get_block_cache_size() as i64);
+        self.metrics
+            .block_cache_elements
+            .set(self.block_cache.len() as i64);
         Ok(match result {
             AddHeaderResult::HeaderAdded(cached) => cached.height,
             AddHeaderResult::HeaderAlreadyExists(cached) => cached.height,

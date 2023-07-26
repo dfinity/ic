@@ -200,8 +200,12 @@ pub fn start_grpc_server_and_router(
     let (blockchain_manager_tx, blockchain_manager_rx) = channel(10);
 
     let blockchain_state = Arc::new(Mutex::new(BlockchainState::new(config, metrics_registry)));
-    let get_successors_handler =
-        GetSuccessorsHandler::new(config, blockchain_state.clone(), blockchain_manager_tx);
+    let get_successors_handler = GetSuccessorsHandler::new(
+        config,
+        blockchain_state.clone(),
+        blockchain_manager_tx,
+        metrics_registry,
+    );
 
     // TODO: we should NOT have an unbounded channel for buffering TransactionManagerRequests.
     let (transaction_manager_tx, transaction_manager_rx) = channel(10);
