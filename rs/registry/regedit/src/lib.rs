@@ -8,18 +8,60 @@ mod snapshot;
 mod source;
 mod tests;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use args::{universal_projection, Command, RegistrySpec, SourceSpec, VersionSpec};
 use ic_base_types::RegistryVersion;
-use ic_registry_local_store::{LocalStoreImpl, LocalStoreWriter};
+use ic_registry_local_store::{
+    changelog_to_compact_delta, KeyMutation, LocalStoreImpl, LocalStoreWriter,
+};
 use normalization::NormalizedSnapshot;
 use serde_json::Value;
 use snapshot::Snapshot;
-use std::path::PathBuf;
+use std::{fs::File, io::Write, path::PathBuf};
 
 fn registry_spec_to_snapshot(registry_spec: RegistrySpec) -> Result<Snapshot> {
     let cl = source::get_changelog(registry_spec.source)?;
     snapshot::changelog_to_snapshot(cl, registry_spec.version)
+}
+
+/// Returns registry entries in delta pb encoded format with the latest version that appears in the pb.
+fn registry_spec_to_delta_pb(
+    source_spec: SourceSpec,
+    start_version: RegistryVersion,
+    stop_version: Option<RegistryVersion>,
+) -> Result<(Vec<u8>, RegistryVersion)> {
+    let (mut registry_changelogs, latest_registry_version) = source::get_changelog(source_spec)?;
+    // Sort according to registry versions.
+    registry_changelogs.sort_by(|a, b| a.version.cmp(&b.version));
+    // Clip registry versions that are not within requested interval.
+    registry_changelogs.retain(|a| {
+        a.version >= start_version
+            && a.version <= stop_version.unwrap_or_else(|| RegistryVersion::from(u64::MAX))
+    });
+
+    // Convert from [(RegistryVersion, Key, Value)] format
+    // to (BaseRegistryVersion, [[(Key, Value)]]) where the vector indices
+    // represent the registry version offset to BaseRegistryVersion
+    let base_registry_version = registry_changelogs
+        .get(0)
+        .ok_or_else(|| anyhow!("registry changelog empty"))?
+        .version;
+    let local_store_changelog = registry_changelogs.into_iter().fold(vec![], |mut cl, r| {
+        let v_delta = (r.version - start_version).get() + 1;
+        if cl.len() < v_delta as usize {
+            cl.push(Vec::new())
+        }
+        cl.last_mut().unwrap().push(KeyMutation {
+            key: r.key.clone(),
+            value: r.value.clone(),
+        });
+        cl
+    });
+
+    // let local_store_changelog: Changelog = key_mutations_at_versions.values().cloned().collect();
+
+    let pb = changelog_to_compact_delta(base_registry_version, local_store_changelog)?;
+    Ok((pb, stop_version.unwrap_or(latest_registry_version)))
 }
 
 pub fn execute_command(cmd: Command) -> Result<Value> {
@@ -31,6 +73,29 @@ pub fn execute_command(cmd: Command) -> Result<Value> {
             let snapshot = registry_spec_to_snapshot(registry_spec)?;
             let (normalized_snapshot, _) = normalization::normalize(snapshot.0);
             projection::project(normalized_snapshot.0, projection)
+        }
+        Command::CanisterToProto {
+            start_version,
+            latest_version,
+            source_spec,
+            path,
+        } => {
+            let (pb, latest_registry_version_in_pb) =
+                registry_spec_to_delta_pb(source_spec, start_version, latest_version)?;
+
+            let pb_path = if path.is_absolute() {
+                path.display().to_string()
+            } else {
+                let current_dir = std::env::current_dir()?;
+                current_dir.join(path.clone()).display().to_string()
+            };
+
+            let mut f = File::create(path)?;
+            f.write_all(&pb)?;
+            Value::String(format!(
+                "Succesfully written registry delta protbobuf for version range {}-{} to: {}",
+                start_version, latest_registry_version_in_pb, pb_path
+            ))
         }
         Command::ShowDiff {
             registry_spec,

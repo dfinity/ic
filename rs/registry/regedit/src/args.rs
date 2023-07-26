@@ -39,6 +39,30 @@ pub enum CommandArg {
         #[clap(parse(from_os_str))]
         local_store_path: PathBuf,
     },
+    CanisterToProto {
+        /// Url to a node hosting the registry canister (may not be specified
+        /// together with --local-store).
+        #[clap(long, parse(try_from_str = url::Url::parse))]
+        url: Url,
+
+        /// Path to the local store (may not be specified together with --url).
+        #[clap(parse(from_os_str))]
+        path: PathBuf,
+
+        /// The registry version where the delta starts. (default: 0)
+        #[clap(short, long, allow_hyphen_values = true)]
+        start_version: Option<u64>,
+
+        /// The registry version where the delta ends. (default: latest registry version)
+        #[clap(short, long, allow_hyphen_values = true)]
+        latest_version: Option<u64>,
+
+        /// Optional path to the threshold public key of the root subnet
+        /// (a.k.a. NNS public key). One way to get this key is via
+        /// "ic-admin --nns-url https://nns.ic0.app  get-subnet-public-key"
+        #[clap(parse(from_os_str))]
+        nns_public_key: Option<PathBuf>,
+    },
     ShowDiff {
         /// The registry version of the snapshot. (default: latest available
         /// version.)
@@ -130,6 +154,23 @@ impl CliArgs {
                 Command::Snapshot {
                     registry_spec: RegistrySpec { version, source },
                     projection,
+                }
+            }
+            CommandArg::CanisterToProto {
+                start_version,
+                latest_version,
+                url,
+                nns_public_key,
+                path,
+            } => {
+                let nns_key_material = get_key_material(nns_public_key)?;
+                let source_spec = SourceSpec::Canister(url, nns_key_material);
+
+                Command::CanisterToProto {
+                    start_version: start_version.unwrap_or_default().into(),
+                    latest_version: latest_version.map(RegistryVersion::from),
+                    source_spec,
+                    path,
                 }
             }
             CommandArg::ShowDiff {
@@ -271,6 +312,12 @@ pub enum Command {
     Snapshot {
         registry_spec: RegistrySpec,
         projection: Projection,
+    },
+    CanisterToProto {
+        start_version: RegistryVersion,
+        latest_version: Option<RegistryVersion>,
+        source_spec: SourceSpec,
+        path: PathBuf,
     },
     ShowDiff {
         registry_spec: RegistrySpec,
