@@ -760,8 +760,8 @@ impl SnsInitPayload {
         self.join_validation_results(&validation_fns)
     }
 
-    /// Returns Ok(true) if the one-proposal parameters are all present,
-    /// Ok(false) if they are all absent, and Err(_) if some but not all are
+    /// Returns Ok(false) if the one-proposal parameters are all present,
+    /// Ok(true) if they are all absent, and Err(_) if some but not all are
     /// present (as in this case it cannot be determined whether we are in the legacy flow).
     pub fn is_legacy_flow(&self) -> Result<bool, String> {
         if self
