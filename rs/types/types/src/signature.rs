@@ -1,4 +1,11 @@
-use crate::{crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, CountBytes, NodeId};
+use crate::{
+    crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, node_id_into_protobuf,
+    node_id_try_from_option, CountBytes, NodeId,
+};
+use ic_protobuf::{
+    proxy::{try_from_option_field, ProxyDecodeError},
+    types::v1 as pb,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -56,4 +63,63 @@ pub struct MultiSignature<T> {
 pub struct MultiSignatureShare<T> {
     pub signature: IndividualMultiSigOf<T>,
     pub signer: NodeId,
+}
+
+impl<T> From<BasicSignature<T>> for pb::BasicSignature {
+    fn from(value: BasicSignature<T>) -> Self {
+        Self {
+            signature: value.signature.get().0,
+            signer: Some(node_id_into_protobuf(value.signer)),
+        }
+    }
+}
+
+impl<T> TryFrom<pb::BasicSignature> for BasicSignature<T> {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::BasicSignature) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signature: BasicSigOf::new(BasicSig(value.signature)),
+            signer: node_id_try_from_option(value.signer)?,
+        })
+    }
+}
+
+impl<T> From<ThresholdSignature<T>> for pb::ThresholdSignature {
+    fn from(value: ThresholdSignature<T>) -> Self {
+        Self {
+            signature: value.signature.get().0,
+            signer: Some(value.signer.into()),
+        }
+    }
+}
+
+impl<T> TryFrom<pb::ThresholdSignature> for ThresholdSignature<T> {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::ThresholdSignature) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signature: CombinedThresholdSigOf::new(CombinedThresholdSig(value.signature)),
+            signer: try_from_option_field(value.signer, "ThresholdSignature::signer")?,
+        })
+    }
+}
+
+impl<T> From<ThresholdSignatureShare<T>> for pb::ThresholdSignatureShare {
+    fn from(value: ThresholdSignatureShare<T>) -> Self {
+        Self {
+            signature: value.signature.get().0,
+            signer: Some(node_id_into_protobuf(value.signer)),
+        }
+    }
+}
+
+impl<T> TryFrom<pb::ThresholdSignatureShare> for ThresholdSignatureShare<T> {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::ThresholdSignatureShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signature: ThresholdSigShareOf::new(ThresholdSigShare(value.signature)),
+            signer: node_id_try_from_option(value.signer)?,
+        })
+    }
 }

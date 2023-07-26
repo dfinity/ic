@@ -365,6 +365,7 @@ fn build_types_proto(def: &Path, out: &Path) {
         def.join("types/v1/dkg.proto"),
         def.join("types/v1/consensus.proto"),
         def.join("types/v1/ecdsa.proto"),
+        def.join("types/v1/signature.proto"),
     ];
     compile_protos(config, def, &files);
 }
