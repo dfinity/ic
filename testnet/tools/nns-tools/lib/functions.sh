@@ -123,10 +123,15 @@ get_nns_canister_code_location() {
 
     IC_REPO=$(repo_root)
     RUST_DIR="$IC_REPO/rs"
+    LEDGER_COMMON="$RUST_DIR/rosetta-api/icp_ledger/src "
+    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_core "
+    LEDGER_COMMON+="$RUST_DIR/rosetta-api/ledger_canister_core "
+    LEDGER_COMMON+="$IC_REPO/packages/icrc-ledger_types"
     # Map of locations
     code_location__registry="$RUST_DIR/registry/canister"
     code_location__governance="$RUST_DIR/nns/governance"
-    code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister $RUST_DIR/rosetta-api/icp_ledger"
+    code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister/ledger $LEDGER_COMMON"
+    code_location__icp_ledger_archive="$RUST_DIR/rosetta-api/icp_ledger/archive $LEDGER_COMMON"
     code_location__root="$RUST_DIR/nns/handlers/root/impl"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"

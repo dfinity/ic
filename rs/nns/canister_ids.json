@@ -14,6 +14,11 @@
     "mainnet": "ryjl3-tyaaa-aaaaa-aaaba-cai",
     "small01": "ryjl3-tyaaa-aaaaa-aaaba-cai"
   },
+  "icp-ledger-archive": {
+    "local": "qjdve-lqaaa-aaaaa-aaaeq-cai",
+    "mainnet": "qjdve-lqaaa-aaaaa-aaaeq-cai",
+    "small01": "qjdve-lqaaa-aaaaa-aaaeq-cai"
+  },
   "root": {
     "local": "r7inp-6aaaa-aaaaa-aaabq-cai",
     "mainnet": "r7inp-6aaaa-aaaaa-aaabq-cai",
