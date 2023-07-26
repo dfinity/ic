@@ -1,16 +1,11 @@
 use crate::{AuthenticationError, HttpRequestVerifier, RequestValidationError};
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_interfaces::crypto::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_interfaces::time_source::TimeSource;
-use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
-use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
-use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, ROOT_SUBNET_ID_KEY};
-use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::threshold_sig::{IcRootOfTrust, RootOfTrustProvider};
+use ic_types::crypto::{BasicSigOf, CanisterSigOf, CryptoResult, Signable, UserPublicKey};
 use ic_types::messages::{HttpRequest, HttpRequestContent};
 use ic_types::time::UNIX_EPOCH;
-use ic_types::{PrincipalId, RegistryVersion, SubnetId, Time};
+use ic_types::Time;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -18,7 +13,6 @@ use std::time::SystemTime;
 #[cfg(test)]
 mod tests;
 
-const DUMMY_REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(1);
 // NNS root public key DER encoded in base 64
 const IC_NNS_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
 
@@ -91,16 +85,11 @@ impl IngressMessageVerifier {
         root_of_trust: T,
         time_source: Arc<dyn TimeSource>,
     ) -> Self {
-        let root_of_trust = root_of_trust.into();
-        let (registry_client, registry_data) = registry_with_root_of_trust(root_of_trust);
         IngressMessageVerifier {
             root_of_trust_provider: ConstantRootOfTrustProvider::new(root_of_trust),
             time_source,
             validator: ic_validator::HttpRequestVerifierImpl::new(Arc::new(
-                TempCryptoComponent::builder()
-                    .with_keys(NodeKeysToGenerate::none())
-                    .with_registry_client_and_data(registry_client, registry_data)
-                    .build(),
+                StandaloneIngressSigVerifier,
             )),
         }
     }
@@ -156,37 +145,6 @@ impl IngressMessageVerifier {
     pub fn builder() -> IngressMessageVerifierBuilder {
         IngressMessageVerifierBuilder::default()
     }
-}
-
-fn registry_with_root_of_trust(
-    root_of_trust: IcRootOfTrust,
-) -> (Arc<FakeRegistryClient>, Arc<ProtoRegistryDataProvider>) {
-    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
-    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-    let root_subnet_id_raw = dummy_root_subnet_id();
-    let root_subnet_id = SubnetIdProto {
-        principal_id: Some(PrincipalIdProto {
-            raw: root_subnet_id_raw.get_ref().to_vec(),
-        }),
-    };
-    registry_data
-        .add(
-            ROOT_SUBNET_ID_KEY,
-            DUMMY_REGISTRY_VERSION,
-            Some(root_subnet_id),
-        )
-        .expect("failed to add root subnet ID to registry");
-
-    let root_subnet_pubkey = PublicKey::from(root_of_trust);
-    registry_data
-        .add(
-            &make_crypto_threshold_signing_pubkey_key(root_subnet_id_raw),
-            DUMMY_REGISTRY_VERSION,
-            Some(root_subnet_pubkey),
-        )
-        .expect("failed to add root subnet ID to registry");
-    registry_client.reload();
-    (registry_client, registry_data)
 }
 
 fn nns_root_public_key() -> IcRootOfTrust {
@@ -276,16 +234,6 @@ fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> Auth
     }
 }
 
-fn dummy_root_subnet_id() -> SubnetId {
-    SubnetId::new(PrincipalId::new(
-        10,
-        [
-            0, 0, 0, 0, 0, 0, 0, 0, 0xfc, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0,
-        ],
-    ))
-}
-
 pub struct IngressMessageVerifierBuilder {
     root_of_trust: IcRootOfTrust,
     time_provider: TimeProvider,
@@ -355,5 +303,47 @@ impl RootOfTrustProvider for ConstantRootOfTrustProvider {
 
     fn root_of_trust(&self) -> Result<IcRootOfTrust, Self::Error> {
         Ok(self.root_of_trust)
+    }
+}
+
+struct StandaloneIngressSigVerifier;
+
+impl<S: Signable> BasicSigVerifierByPublicKey<S> for StandaloneIngressSigVerifier {
+    fn verify_basic_sig_by_public_key(
+        &self,
+        signature: &BasicSigOf<S>,
+        signed_bytes: &S,
+        public_key: &UserPublicKey,
+    ) -> CryptoResult<()> {
+        ic_crypto_standalone_sig_verifier::verify_basic_sig_by_public_key(
+            public_key.algorithm_id,
+            &signed_bytes.as_signed_bytes(),
+            &signature.get_ref().0,
+            &public_key.key,
+        )
+    }
+}
+
+impl<S: Signable> CanisterSigVerifier<S> for StandaloneIngressSigVerifier {
+    fn verify_canister_sig(
+        &self,
+        signature: &CanisterSigOf<S>,
+        signed_bytes: &S,
+        public_key: &UserPublicKey,
+        root_of_trust: &IcRootOfTrust,
+    ) -> CryptoResult<()> {
+        use ic_types::crypto::{AlgorithmId, CryptoError};
+        if public_key.algorithm_id != AlgorithmId::IcCanisterSignature {
+            return Err(CryptoError::AlgorithmNotSupported {
+                algorithm: public_key.algorithm_id,
+                reason: format!("Expected {:?}", AlgorithmId::IcCanisterSignature),
+            });
+        }
+        ic_crypto_standalone_sig_verifier::verify_canister_sig(
+            &signed_bytes.as_signed_bytes(),
+            &signature.get_ref().0,
+            &public_key.key,
+            root_of_trust,
+        )
     }
 }
