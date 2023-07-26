@@ -98,7 +98,7 @@ impl Drop for PanicHandler {
     }
 }
 
-fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
+pub fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
     let mut channel = vm.block_on_ssh_session()?.channel_session()?;
 
     channel.exec(command)?;
