@@ -97,6 +97,9 @@ bazel-build-fuzzers:
   extends:
     - .bazel-test-all
     - .ic-build-legacy-image
+  tags:
+    - zh
+    - dfinity-ic
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=fuzzing --build_tag_filters=libfuzzer"
     BAZEL_COMMAND: "build"
@@ -106,6 +109,9 @@ bazel-build-fuzzers-afl:
   extends:
     - .bazel-test-all
     - .ic-build-legacy-image
+  tags:
+    - zh
+    - dfinity-ic
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --config=afl"
     BAZEL_COMMAND: "build"
@@ -118,6 +124,9 @@ bazel-build-fuzzers-weekly:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-fuzzers-to-clusterfuzz"'
   needs: []  # don't wait on other jobs
+  tags:
+    - zh
+    - dfinity-ic
   script:
     - |
       set -euo pipefail
@@ -139,6 +148,9 @@ bazel-build-fuzzers-archives:
         - bin/build-all-fuzzers.sh
         - bazel/fuzz_testing.bzl
   needs: []  # don't wait on other jobs
+  tags:
+    - zh
+    - dfinity-ic
   script:
     - |
       set -euo pipefail
