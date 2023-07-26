@@ -24,6 +24,10 @@ const MAX_RESPONSE_SIZE: usize = 2_000_000;
 // Max number of next block headers that can be returned in the `GetSuccessorsResponse`.
 const MAX_NEXT_BLOCK_HEADERS_LENGTH: usize = 100;
 
+// Max number of blocks that can be returned in the `GetSuccessorsResponse`.
+// We limit the number of blocks because serializing many blocks to pb can take some time.
+const MAX_BLOCKS_LENGTH: usize = 100;
+
 const BLOCK_HEADER_SIZE: usize = 80;
 
 // The maximum number of bytes the `next` field in a response can take.
@@ -37,7 +41,7 @@ const MAX_BLOCKS_BYTES: usize = MAX_RESPONSE_SIZE - MAX_NEXT_BYTES;
 // Max height for sending multiple blocks when connecting the Bitcoin mainnet.
 const MAINNET_MAX_MULTI_BLOCK_ANCHOR_HEIGHT: BlockHeight = 750_000;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GetSuccessorsRequest {
     /// Hash of the most recent stable block in the Bitcoin canister.
     pub anchor: BlockHash,
@@ -45,7 +49,7 @@ pub struct GetSuccessorsRequest {
     pub processed_block_hashes: Vec<BlockHash>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GetSuccessorsResponse {
     /// Blocks found in the block cache.
     pub blocks: Vec<Block>,
@@ -57,6 +61,7 @@ pub struct GetSuccessorsResponse {
 pub struct GetSuccessorsHandler {
     state: Arc<Mutex<BlockchainState>>,
     command_sender: Sender<BlockchainManagerRequest>,
+    last_request: std::sync::Mutex<Option<(GetSuccessorsRequest, GetSuccessorsResponse)>>,
     network: Network,
 }
 
@@ -71,6 +76,7 @@ impl GetSuccessorsHandler {
         Self {
             state,
             command_sender,
+            last_request: std::sync::Mutex::new(None),
             network: config.network,
         }
     }
@@ -85,6 +91,18 @@ impl GetSuccessorsHandler {
         &self,
         request: GetSuccessorsRequest,
     ) -> Result<GetSuccessorsResponse, Status> {
+        if self.network == Network::Testnet || self.network == Network::Regtest {
+            // A cache entry has to be discarded after after a new request.
+            // Indexing the cache based on the request is not safe since the response
+            // depends on the internal state of the adapter.
+            if let Some((cached_request, cached_response)) =
+                self.last_request.lock().unwrap().take()
+            {
+                if cached_request == request {
+                    return Ok(cached_response);
+                }
+            }
+        }
         let response = {
             let state = self.state.lock().await;
             let anchor_height = state
@@ -115,6 +133,13 @@ impl GetSuccessorsHandler {
             );
             GetSuccessorsResponse { blocks, next }
         };
+        // Set cache value
+        if self.network == Network::Testnet || self.network == Network::Regtest {
+            self.last_request
+                .lock()
+                .unwrap()
+                .replace((request.clone(), response.clone()));
+        }
 
         if !response.next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
@@ -170,6 +195,7 @@ fn get_successor_blocks(
                     let block_size = block.size();
                     if response_block_size == 0
                         || (response_block_size + block_size <= MAX_BLOCKS_BYTES
+                            && successor_blocks.len() < MAX_BLOCKS_LENGTH
                             && allow_multiple_blocks)
                     {
                         successor_blocks.push(block.clone());
@@ -446,6 +472,67 @@ mod test {
         assert_eq!(response.next.len(), 3);
     }
 
+    #[tokio::test]
+    async fn test_get_successors_cache() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let genesis = blockchain_state.genesis().clone();
+        let genesis_hash = genesis.header.block_hash();
+        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let handler = GetSuccessorsHandler::new(
+            &config,
+            Arc::new(Mutex::new(blockchain_state)),
+            blockchain_manager_tx,
+        );
+
+        // Set up the following chain:
+        // 0 -> 1 -> 2 -> 3 -> 4 -> 5
+        let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
+        let main_block_1 = Block {
+            header: main_chain[0],
+            txdata: vec![],
+        };
+        let main_block_2 = Block {
+            header: main_chain[1],
+            txdata: vec![],
+        };
+        {
+            let mut blockchain = handler.state.lock().await;
+            blockchain.add_headers(&main_chain);
+            blockchain
+                .add_block(main_block_1.clone())
+                .expect("invalid block");
+            blockchain
+                .add_block(main_block_2.clone())
+                .expect("invalid block");
+        }
+        let request = GetSuccessorsRequest {
+            anchor: genesis_hash,
+            processed_block_hashes: vec![],
+        };
+
+        let cached_response = handler.get_successors(request.clone()).await.unwrap();
+        assert!(cached_response.blocks.len() == 2);
+        // Check that cached value is returned even though the state has changed
+        {
+            let mut blockchain = handler.state.lock().await;
+            let main_block_3 = Block {
+                header: main_chain[2],
+                txdata: vec![],
+            };
+            blockchain
+                .add_block(main_block_3.clone())
+                .expect("invalid block");
+        }
+        let response_from_cache = handler.get_successors(request.clone()).await.unwrap();
+        assert_eq!(cached_response, response_from_cache);
+        assert!(response_from_cache.blocks.len() == 2);
+
+        let non_cached_response = handler.get_successors(request).await.unwrap();
+        assert!(cached_response != non_cached_response);
+        assert!(non_cached_response.blocks.len() == 3);
+    }
+
     /// This tests ensures that `BlockchainManager::handle_client_request(...)` returns multiple
     /// blocks from the main chain and a fork. Order should be preserved.
     #[tokio::test]
@@ -515,6 +602,40 @@ mod test {
         assert!(
             matches!(response.blocks.get(2), Some(block) if block.block_hash() == main_block_2.block_hash())
         );
+    }
+
+    /// This tests ensures that `get_successor` returns no more than MAX_BLOCKS_LENGTH blocks.
+    #[tokio::test]
+    async fn test_get_successors_max_num_blocks() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let genesis = blockchain_state.genesis().clone();
+        let genesis_hash = genesis.header.block_hash();
+        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let handler = GetSuccessorsHandler::new(
+            &config,
+            Arc::new(Mutex::new(blockchain_state)),
+            blockchain_manager_tx,
+        );
+        let main_chain = generate_headers(genesis_hash, genesis.header.time, 120, &[]);
+        {
+            let mut blockchain = handler.state.lock().await;
+            blockchain.add_headers(&main_chain);
+            for header in main_chain {
+                let block = Block {
+                    header,
+                    txdata: vec![],
+                };
+                blockchain.add_block(block).expect("invalid block");
+            }
+        }
+
+        let request = GetSuccessorsRequest {
+            anchor: genesis_hash,
+            processed_block_hashes: vec![],
+        };
+        let response = handler.get_successors(request).await.unwrap();
+        assert_eq!(response.blocks.len(), MAX_BLOCKS_LENGTH);
     }
 
     /// This tests ensures that `BlockchainManager::get_successors(...)` returns multiple
