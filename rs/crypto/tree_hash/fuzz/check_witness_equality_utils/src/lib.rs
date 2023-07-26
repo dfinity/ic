@@ -51,7 +51,9 @@ pub fn test_tree<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut
 }
 
 fn assert_same_witness(ht: &HashTree, wg: &WitnessGeneratorImpl, data: &LabeledTree<Vec<u8>>) {
-    let ht_witness = ht.witness::<Witness>(data);
+    let ht_witness = ht
+        .witness::<Witness>(data)
+        .expect("failed to construct a witness");
     let wg_witness = wg.witness(data).expect("failed to construct a witness");
 
     assert_eq!(

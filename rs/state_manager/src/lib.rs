@@ -3109,7 +3109,7 @@ impl StateReader for StateManagerImpl {
             hash_tree.witness::<MixedHashTree>(&partial_tree)
         };
 
-        Some((state, mixed_hash_tree, certification))
+        mixed_hash_tree.ok().map(|t| (state, t, certification))
     }
 }
 
@@ -3172,7 +3172,9 @@ impl CertifiedStreamStore for StateManagerImpl {
 
         let witness_partial_tree =
             stream_encoding::stream_slice_partial_tree(remote_subnet, witness_from, to);
-        let witness = hash_tree.witness::<Witness>(&witness_partial_tree);
+        let witness = hash_tree
+            .witness::<Witness>(&witness_partial_tree)
+            .expect("Failed to generate witness.");
 
         Ok(CertifiedStreamSlice {
             payload: stream_encoding::encode_tree(slice_as_tree),

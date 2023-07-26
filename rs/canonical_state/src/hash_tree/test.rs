@@ -121,7 +121,9 @@ fn enumerate_leaves_and_empty_subtrees(
 }
 
 fn assert_same_witness(ht: &HashTree, wg: &WitnessGeneratorImpl, data: &LabeledTree<Vec<u8>>) {
-    let ht_witness = ht.witness::<Witness>(data);
+    let ht_witness = ht
+        .witness::<Witness>(data)
+        .expect("Failed to construct a witness.");
     let wg_witness = wg.witness(data).expect("failed to construct a witness");
 
     assert_eq!(
@@ -214,9 +216,11 @@ fn test_non_existence_proof() {
     });
 
     let hash_tree = hash_lazy_tree(&as_lazy(&t));
-    let ht_witness = hash_tree.witness::<MixedHashTree>(&LabeledTree::SubTree(
-        flatmap! { Label::from("Z") => LabeledTree::Leaf(b"12345".to_vec()) },
-    ));
+    let ht_witness = hash_tree
+        .witness::<MixedHashTree>(&LabeledTree::SubTree(
+            flatmap! { Label::from("Z") => LabeledTree::Leaf(b"12345".to_vec()) },
+        ))
+        .expect("Failed to generate witness.");
 
     assert_eq!(&ht_witness.digest(), hash_tree.root_hash());
 
@@ -236,9 +240,11 @@ fn test_non_existence_proof() {
         ht_witness
     );
 
-    let ht_witness = hash_tree.witness::<MixedHashTree>(&LabeledTree::SubTree(
-        flatmap! { Label::from("b") => LabeledTree::Leaf(b"12345".to_vec()) },
-    ));
+    let ht_witness = hash_tree
+        .witness::<MixedHashTree>(&LabeledTree::SubTree(
+            flatmap! { Label::from("b") => LabeledTree::Leaf(b"12345".to_vec()) },
+        ))
+        .expect("Failed to generate witness.");
 
     assert_eq!(&ht_witness.digest(), hash_tree.root_hash());
 
@@ -258,9 +264,11 @@ fn test_non_existence_proof() {
         ht_witness
     );
 
-    let ht_witness = hash_tree.witness::<MixedHashTree>(&LabeledTree::SubTree(
-        flatmap! { Label::from("d") => LabeledTree::Leaf(b"12345".to_vec()) },
-    ));
+    let ht_witness = hash_tree
+        .witness::<MixedHashTree>(&LabeledTree::SubTree(
+            flatmap! { Label::from("d") => LabeledTree::Leaf(b"12345".to_vec()) },
+        ))
+        .expect("Failed to generate witness.");
 
     assert_eq!(&ht_witness.digest(), hash_tree.root_hash());
 

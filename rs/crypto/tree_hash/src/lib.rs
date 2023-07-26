@@ -527,24 +527,46 @@ impl MixedHashTree {
     ///        ∧ Ok(v) = lookup(rhs, p) ⇒ lookup(merge(lhs, rhs), p) == Ok(v)
     /// ```
     ///
-    /// # Panics
+    /// This function errors if the structure of the passed [`MixedHashTree`]s
+    /// is inconsistent and produces an invalid [`MixedHashTree`] if the
+    /// precondition is otherwise not met.
     ///
-    /// This function panics if the precondition is not met.
-    pub fn merge(lhs: Self, rhs: Self) -> Self {
-        use MixedHashTree::*;
+    /// # Errors
+    ///
+    /// * If the recursion depth is too large.
+    /// * If `lhs` and `rhs` do not match.
+    pub fn merge(lhs: Self, rhs: Self) -> Result<Self, MergeError<MixedHashTree>> {
+        fn merge_impl(
+            lhs: MixedHashTree,
+            rhs: MixedHashTree,
+            depth: usize,
+        ) -> Result<MixedHashTree, MergeError<MixedHashTree>> {
+            use MixedHashTree::*;
 
-        match (lhs, rhs) {
-            (Pruned(l), Pruned(r)) if l == r => Pruned(l),
-            (Pruned(_), r) => r,
-            (l, Pruned(_)) => l,
-            (Empty, Empty) => Empty,
-            (Fork(l), Fork(r)) => Fork(Box::new((Self::merge(l.0, r.0), Self::merge(l.1, r.1)))),
-            (Labeled(label, l), Labeled(rlabel, r)) if label == rlabel => {
-                Labeled(label, Box::new(Self::merge(*l, *r)))
+            if depth > MAX_HASH_TREE_DEPTH {
+                return Err(MergeError::<MixedHashTree>::TooDeepRecursion(
+                    MAX_HASH_TREE_DEPTH as u32,
+                ));
             }
-            (Leaf(l), Leaf(r)) if l == r => Leaf(l),
-            (l, r) => panic!("inconsistent trees: {:#?}, {:#?}", l, r),
+
+            let result = match (lhs, rhs) {
+                (Pruned(_), r) => r,
+                (l, Pruned(_)) => l,
+                (Empty, Empty) => Empty,
+                (Fork(l), Fork(r)) => Fork(Box::new((
+                    merge_impl(l.0, r.0, depth + 1)?,
+                    merge_impl(l.1, r.1, depth + 1)?,
+                ))),
+                (Labeled(label, l), Labeled(rlabel, r)) if label == rlabel => {
+                    Labeled(label, Box::new(merge_impl(*l, *r, depth + 1)?))
+                }
+                (Leaf(l), Leaf(r)) if l == r => Leaf(l),
+                (l, r) => return Err(MergeError::<MixedHashTree>::InconsistentWitnesses(l, r)),
+            };
+
+            Ok(result)
         }
+        merge_impl(lhs, rhs, 1)
     }
 }
 
@@ -879,43 +901,63 @@ impl Witness {
     ///         ⇒ recompute_digest(merge(lhs, rhs)) == Ok(h)
     /// ```
     ///
-    /// # Panics
+    /// This function errors if the structure of the passed [`Witness`]s
+    /// is inconsistent and produces an invalid [`Witness`] if the
+    /// precondition is otherwise not met.
     ///
-    /// This function panics if the precondition is not met.
-    pub fn merge(lhs: Self, rhs: Self) -> Self {
-        use Witness::*;
+    /// # Errors
+    ///
+    /// * If the recursion depth is too large.
+    /// * If `lhs` and `rhs` do not match.
+    pub fn merge(lhs: Self, rhs: Self) -> Result<Self, MergeError<Witness>> {
+        fn merge_impl(
+            lhs: Witness,
+            rhs: Witness,
+            depth: usize,
+        ) -> Result<Witness, MergeError<Witness>> {
+            use Witness::*;
 
-        match (lhs, rhs) {
-            (Pruned { .. }, r) => r,
-            (l, Pruned { .. }) => l,
-            (Known(), Known()) => Known(),
-            (
-                Fork {
-                    left_tree: ll,
-                    right_tree: lr,
+            if depth > MAX_HASH_TREE_DEPTH {
+                return Err(MergeError::<Witness>::TooDeepRecursion(
+                    MAX_HASH_TREE_DEPTH as u32,
+                ));
+            }
+
+            let result = match (lhs, rhs) {
+                (Pruned { .. }, r) => r,
+                (l, Pruned { .. }) => l,
+                (Known(), Known()) => Known(),
+                (
+                    Fork {
+                        left_tree: ll,
+                        right_tree: lr,
+                    },
+                    Fork {
+                        left_tree: rl,
+                        right_tree: rr,
+                    },
+                ) => Fork {
+                    left_tree: Box::new(merge_impl(*ll, *rl, depth + 1)?),
+                    right_tree: Box::new(merge_impl(*lr, *rr, depth + 1)?),
                 },
-                Fork {
-                    left_tree: rl,
-                    right_tree: rr,
-                },
-            ) => Fork {
-                left_tree: Box::new(Self::merge(*ll, *rl)),
-                right_tree: Box::new(Self::merge(*lr, *rr)),
-            },
-            (
-                Node {
+                (
+                    Node {
+                        label,
+                        sub_witness: lw,
+                    },
+                    Node {
+                        sub_witness: rw, ..
+                    },
+                ) => Node {
                     label,
-                    sub_witness: lw,
+                    sub_witness: Box::new(merge_impl(*lw, *rw, depth + 1)?),
                 },
-                Node {
-                    sub_witness: rw, ..
-                },
-            ) => Node {
-                label,
-                sub_witness: Box::new(Self::merge(*lw, *rw)),
-            },
-            (l, r) => panic!("inconsistent witnesses: {:#?}, {:#?}", l, r),
+                (l, r) => return Err(MergeError::<Witness>::InconsistentWitnesses(l, r)),
+            };
+            Ok(result)
         }
+
+        merge_impl(lhs, rhs, 1)
     }
 }
 

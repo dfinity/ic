@@ -394,7 +394,10 @@ impl HashTree {
     ///
     /// Panics if the partial tree a structure that is different from the
     /// labeled tree that was used to construct this hash tree.
-    pub fn witness<B: WitnessBuilder>(&self, partial_tree: &LabeledTree<Vec<u8>>) -> B::Tree {
+    pub fn witness<B: WitnessBuilder>(
+        &self,
+        partial_tree: &LabeledTree<Vec<u8>>,
+    ) -> Result<B::Tree, B::MergeError> {
         fn add_forks<B: WitnessBuilder>(
             ht: &HashTree,
             pos: NodeId,
@@ -484,7 +487,7 @@ impl HashTree {
             pos: NodeId,
             l: &Label,
             subtree: &LabeledTree<Vec<u8>>,
-        ) -> B::Tree {
+        ) -> Result<B::Tree, B::MergeError> {
             let NodeIndexRange {
                 bucket,
                 index_range: label_range,
@@ -492,13 +495,13 @@ impl HashTree {
             let len = label_range.len();
             let labels = &ht.node_labels[bucket][label_range.clone()];
 
-            match labels.binary_search(l) {
+            let result = match labels.binary_search(l) {
                 Ok(offset) => {
                     let idx = label_range.start + offset;
                     let node_id = NodeId::node(bucket, idx);
                     let subwitness = B::make_node(
                         l.clone(),
-                        go::<B>(ht, node_id, ht.node_children[bucket][idx], subtree),
+                        go::<B>(ht, node_id, ht.node_children[bucket][idx], subtree)?,
                     );
                     if pos.kind() == NodeKind::Node {
                         subwitness
@@ -531,10 +534,11 @@ impl HashTree {
                         pruned_label_at(offset - 1)
                     } else {
                         // The missing child is between two present children.
-                        B::merge_trees(pruned_label_at(offset - 1), pruned_label_at(offset))
+                        B::merge_trees(pruned_label_at(offset - 1), pruned_label_at(offset))?
                     }
                 }
-            }
+            };
+            Ok(result)
         }
 
         fn go<B: WitnessBuilder>(
@@ -542,11 +546,11 @@ impl HashTree {
             parent: NodeId,
             pos: NodeId,
             t: &LabeledTree<Vec<u8>>,
-        ) -> B::Tree {
+        ) -> Result<B::Tree, B::MergeError> {
             match t {
                 LabeledTree::Leaf(data) => {
                     if pos.kind() == NodeKind::Leaf {
-                        B::make_leaf(&data[..])
+                        Ok(B::make_leaf(&data[..]))
                     } else {
                         panic!(
                             "inconsistent tree structure: not a leaf in the original tree, \
@@ -557,13 +561,14 @@ impl HashTree {
                 }
 
                 // Empty subtree.
-                LabeledTree::SubTree(children) if children.is_empty() => B::make_empty(),
+                LabeledTree::SubTree(children) if children.is_empty() => Ok(B::make_empty()),
 
                 // Non-empty subtree.
                 LabeledTree::SubTree(children) => children
                     .iter()
-                    .map(|(l, t)| child_witness::<B>(ht, parent, pos, l, t))
-                    .fold(B::make_pruned(ht.digest(pos).clone()), B::merge_trees),
+                    .try_fold(B::make_pruned(ht.digest(pos).clone()), |acc, (l, t)| {
+                        B::merge_trees(acc, child_witness::<B>(ht, parent, pos, l, t)?)
+                    }),
             }
         }
 

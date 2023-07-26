@@ -40,14 +40,14 @@ fn prune_labels(t: &MixedHashTree) -> MixedHashTree {
 proptest! {
     #[test]
     fn merge_is_idempotent(t in arbitrary_mixed_hash_tree()) {
-        assert_eq!(t, MixedHashTree::merge(t.clone(), t.clone()));
+        assert_eq!(Ok(t.clone()), MixedHashTree::merge(t.clone(), t));
     }
 
     #[test]
     fn merge_with_pruned_is_idempotent(t in arbitrary_mixed_hash_tree()) {
-        assert_eq!(t, MixedHashTree::merge(t.clone(), prune_leaves(&t)));
-        assert_eq!(t, MixedHashTree::merge(t.clone(), prune_left_forks(&t)));
-        assert_eq!(t, MixedHashTree::merge(t.clone(), prune_right_forks(&t)));
-        assert_eq!(t, MixedHashTree::merge(t.clone(), prune_labels(&t)));
+        assert_eq!(Ok(t.clone()), MixedHashTree::merge(t.clone(), prune_leaves(&t)));
+        assert_eq!(Ok(t.clone()), MixedHashTree::merge(t.clone(), prune_left_forks(&t)));
+        assert_eq!(Ok(t.clone()), MixedHashTree::merge(t.clone(), prune_right_forks(&t)));
+        assert_eq!(Ok(t.clone()), MixedHashTree::merge(t.clone(), prune_labels(&t)));
     }
 }

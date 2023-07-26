@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:thiserror",
 ]
 
 DEV_DEPENDENCIES = [
