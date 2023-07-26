@@ -1,3 +1,4 @@
+use core::sync::atomic::Ordering;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
@@ -292,9 +293,9 @@ pub struct StateMachine {
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     _runtime: Runtime,
     state_dir: TempDir,
-    checkpoints_enabled: std::cell::Cell<bool>,
-    nonce: std::cell::Cell<u64>,
-    time: std::cell::Cell<Time>,
+    checkpoints_enabled: std::sync::atomic::AtomicBool,
+    nonce: std::sync::atomic::AtomicU64,
+    time: std::sync::atomic::AtomicU64,
     ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
 }
 
@@ -308,7 +309,7 @@ impl fmt::Debug for StateMachine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("StateMachine")
             .field("state_dir", &self.state_dir.path().display())
-            .field("nonce", &self.nonce.get())
+            .field("nonce", &self.nonce.load(Ordering::Relaxed))
             .finish()
     }
 }
@@ -668,9 +669,9 @@ impl StateMachine {
             state_dir,
             // Note: state machine tests are commonly used for testing
             // canisters, such tests usually don't rely on any persistence.
-            checkpoints_enabled: std::cell::Cell::new(checkpoints_enabled),
-            nonce: std::cell::Cell::new(nonce),
-            time: std::cell::Cell::new(time),
+            checkpoints_enabled: std::sync::atomic::AtomicBool::new(checkpoints_enabled),
+            nonce: std::sync::atomic::AtomicU64::new(nonce),
+            time: std::sync::atomic::AtomicU64::new(time.as_nanos_since_unix_epoch()),
             ecdsa_subnet_public_keys,
         }
     }
@@ -678,9 +679,9 @@ impl StateMachine {
     fn into_components(self) -> (TempDir, u64, Time, bool) {
         (
             self.state_dir,
-            self.nonce.get(),
-            self.time.get(),
-            self.checkpoints_enabled.get(),
+            self.nonce.into_inner(),
+            Time::from_nanos_since_unix_epoch(self.time.into_inner()),
+            self.checkpoints_enabled.into_inner(),
         )
     }
 
@@ -721,7 +722,8 @@ impl StateMachine {
     /// to the state machine if you want to use [restart_node] and
     /// [await_state_hash] functions.
     pub fn set_checkpoints_enabled(&self, enabled: bool) {
-        self.checkpoints_enabled.set(enabled)
+        self.checkpoints_enabled
+            .store(enabled, core::sync::atomic::Ordering::Relaxed)
     }
 
     /// Returns the latest state.
@@ -832,7 +834,7 @@ impl StateMachine {
 
         let batch = Batch {
             batch_number,
-            requires_full_state_hash: self.checkpoints_enabled.get(),
+            requires_full_state_hash: self.checkpoints_enabled.load(Ordering::Relaxed),
             messages: BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
@@ -841,7 +843,7 @@ impl StateMachine {
             randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),
             registry_version: self.registry_client.get_latest_version(),
-            time: self.time.get(),
+            time: Time::from_nanos_since_unix_epoch(self.time.load(Ordering::Relaxed)),
             consensus_responses: payload.consensus_responses,
         };
         self.message_routing
@@ -916,16 +918,17 @@ impl StateMachine {
     /// Sets the time that the state machine will use for executing next
     /// messages.
     pub fn set_time(&self, time: SystemTime) {
-        self.time.set(Time::from_nanos_since_unix_epoch(
+        self.time.store(
             time.duration_since(SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos() as u64,
-        ));
+            core::sync::atomic::Ordering::Relaxed,
+        );
     }
 
     /// Returns the current state machine time.
     pub fn time(&self) -> SystemTime {
-        SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.get().as_nanos_since_unix_epoch())
+        SystemTime::UNIX_EPOCH + Duration::from_nanos(self.time.load(Ordering::Relaxed))
     }
 
     /// Advances the state machine time by the given amount.
@@ -1116,7 +1119,7 @@ impl StateMachine {
         canister_id: CanisterId,
     ) -> Result<(), String> {
         // Enable checkpoints and make a tick to write a checkpoint.
-        let cp_enabled = self.checkpoints_enabled.get();
+        let cp_enabled = self.checkpoints_enabled.load(Ordering::Relaxed);
         self.set_checkpoints_enabled(true);
         self.tick();
         self.set_checkpoints_enabled(cp_enabled);
@@ -1497,10 +1500,13 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> MessageId {
-        self.nonce.set(self.nonce.get() + 1);
+        self.nonce.store(
+            self.nonce.load(Ordering::Relaxed) + 1,
+            core::sync::atomic::Ordering::Relaxed,
+        );
         let builder = PayloadBuilder::new()
             .with_max_expiry_time_from_now(self.time())
-            .with_nonce(self.nonce.get())
+            .with_nonce(self.nonce.load(Ordering::Relaxed))
             .ingress(sender, canister_id, method, payload);
 
         let msg_id = builder.ingress_ids().pop().unwrap();
