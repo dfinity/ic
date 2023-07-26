@@ -10,6 +10,7 @@ ic-crypto-sha = { path = "../sha" }
 ic-protobuf = { path = "../../protobuf" }
 serde = { version = "1.0", features = ["derive"] }
 serde_bytes = "0.11"
+thiserror = "1.0"
 
 [dev-dependencies]
 criterion = "0.3"

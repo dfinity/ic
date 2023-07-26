@@ -570,6 +570,15 @@ fn first_missing_label(
     None
 }
 
+/// Error produced by merging two witnesses of type `W`.
+#[derive(thiserror::Error, Debug, PartialEq)]
+pub enum MergeError<W> {
+    #[error("Merging witnesses failed due to too deep recursion (depth={0})")]
+    TooDeepRecursion(u32),
+    #[error("Merging witnesses failed due to their inconsistency at:\nleft={0:?}\nright={1:?}")]
+    InconsistentWitnesses(W, W),
+}
+
 /// WitnessBuilder abstracts away a specific representation of the witness
 /// structure and allows us to use the same algorithm to construct both
 /// witnesses that don't contain the data (e.g., for XNet) and the ones that do
@@ -577,6 +586,9 @@ fn first_missing_label(
 pub trait WitnessBuilder {
     /// Type of the trees that this builder produces.
     type Tree;
+
+    /// The error describing why tree merge operation failed.
+    type MergeError;
 
     /// Creates a witness for an empty tree.
     fn make_empty() -> Self::Tree;
@@ -596,11 +608,12 @@ pub trait WitnessBuilder {
     fn make_pruned(digest: Digest) -> Self::Tree;
 
     /// Merges two witnesses for the same tree.
-    fn merge_trees(lhs: Self::Tree, lhs: Self::Tree) -> Self::Tree;
+    fn merge_trees(lhs: Self::Tree, rhs: Self::Tree) -> Result<Self::Tree, Self::MergeError>;
 }
 
 impl WitnessBuilder for Witness {
     type Tree = Self;
+    type MergeError = MergeError<Witness>;
 
     fn make_empty() -> Self {
         Self::Known()
@@ -628,13 +641,14 @@ impl WitnessBuilder for Witness {
         Self::Pruned { digest }
     }
 
-    fn merge_trees(lhs: Self, rhs: Self) -> Self {
+    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, Self::MergeError> {
         Self::merge(lhs, rhs)
     }
 }
 
 impl WitnessBuilder for MixedHashTree {
     type Tree = Self;
+    type MergeError = MergeError<MixedHashTree>;
 
     fn make_empty() -> Self {
         Self::Empty
@@ -656,7 +670,7 @@ impl WitnessBuilder for MixedHashTree {
         Self::Pruned(digest)
     }
 
-    fn merge_trees(lhs: Self, rhs: Self) -> Self {
+    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, Self::MergeError> {
         Self::merge(lhs, rhs)
     }
 }

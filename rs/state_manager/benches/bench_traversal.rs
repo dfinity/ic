@@ -221,7 +221,11 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     c.bench_function("traverse/certify_response/100/new", |b| {
         let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
         b.iter(|| {
-            black_box(hash_tree.witness::<MixedHashTree>(&data_tree_100_statuses));
+            black_box(
+                hash_tree
+                    .witness::<MixedHashTree>(&data_tree_100_statuses)
+                    .expect("Failed to generate witness."),
+            );
         });
     });
 
