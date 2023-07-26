@@ -1,2 +1,0 @@
-include:
-  - local: /gitlab-ci/config/00--child-pipeline-root-unprotected.yml
