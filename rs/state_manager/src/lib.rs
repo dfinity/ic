@@ -2065,15 +2065,19 @@ impl StateManagerImpl {
         self.latest_state_height
             .store(latest_height.get(), Ordering::Relaxed);
 
-        let min_resident_height = heights_to_keep
+        let min_resident_height: Option<Height> = states
+            .snapshots
             .iter()
-            .min()
-            .unwrap_or(&last_height_to_keep)
-            .min(&last_height_to_keep);
+            .map(|s| s.height)
+            .filter(|h| h.get() != 0)
+            .chain(states.states_metadata.keys().copied())
+            .min();
+        if let Some(min_resident_height) = min_resident_height {
+            self.metrics
+                .min_resident_height
+                .set(min_resident_height.get() as i64);
+        }
 
-        self.metrics
-            .min_resident_height
-            .set(min_resident_height.get() as i64);
         self.metrics
             .max_resident_height
             .set(latest_height.get() as i64);
