@@ -1,5 +1,8 @@
-use ic_metrics::{buckets::linear_buckets, MetricsRegistry};
-use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
+use ic_metrics::{
+    buckets::{decimal_buckets, exponential_buckets, linear_buckets},
+    MetricsRegistry,
+};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 pub(crate) const LABEL_GET_SUCCESSOR: &str = "get_successor";
 pub(crate) const LABEL_REQUEST_TYPE: &str = "type";
@@ -7,16 +10,43 @@ pub(crate) const LABEL_SEND_TRANSACTION: &str = "send_transaction";
 
 #[derive(Debug, Clone)]
 pub struct ServiceMetrics {
-    pub requests: IntCounterVec,
+    pub request_duration: HistogramVec,
 }
 
 impl ServiceMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            requests: metrics_registry.int_counter_vec(
-                "requests_total",
-                "Requests served by the adapter.",
+            request_duration: metrics_registry.histogram_vec(
+                "request_duration",
+                "Request duration to adapter",
+                // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, 100ms, 200ms, 500ms
+                decimal_buckets(-3, -1),
                 &[LABEL_REQUEST_TYPE],
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct GetSuccessorMetrics {
+    pub processed_block_hashes: Histogram,
+    pub response_blocks: Histogram,
+}
+
+impl GetSuccessorMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            processed_block_hashes: metrics_registry.histogram(
+                "processed_block_hashes",
+                "Number of processed block hashes sent in one request",
+                // 1, 10, 100, 1000, 10000
+                exponential_buckets(1.0, 10.0, 4),
+            ),
+            response_blocks: metrics_registry.histogram(
+                "response_blocks",
+                "Number of blocks returned in response",
+                // 1, 10, 100, 1000
+                exponential_buckets(1.0, 10.0, 3),
             ),
         }
     }
@@ -63,6 +93,7 @@ impl RouterMetrics {
 pub struct BlockchainStateMetrics {
     pub tip_height: IntGauge,
     pub block_cache_size: IntGauge,
+    pub block_cache_elements: IntGauge,
     pub header_cache_size: IntGauge,
     pub tips: IntGauge,
 }
@@ -73,6 +104,10 @@ impl BlockchainStateMetrics {
             tip_height: metrics_registry.int_gauge("tip_height", "Current tip height."),
             block_cache_size: metrics_registry
                 .int_gauge("block_cache_size_bytes", "Current size of block cache."),
+            block_cache_elements: metrics_registry.int_gauge(
+                "block_cache_elements",
+                "Number of blocks currently stored in the block cache.",
+            ),
             header_cache_size: metrics_registry.int_gauge(
                 "header_cache_size",
                 "Number of headers stored in the adapter.",

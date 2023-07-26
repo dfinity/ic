@@ -5,12 +5,13 @@ use std::{
 
 use bitcoin::{Block, BlockHash, BlockHeader, Network};
 use ic_btc_validation::is_beyond_last_checkpoint;
+use ic_metrics::MetricsRegistry;
 use tokio::sync::{mpsc::Sender, Mutex};
 use tonic::{Code, Status};
 
 use crate::{
-    blockchainstate::CachedHeader, common::BlockHeight, config::Config, BlockchainManagerRequest,
-    BlockchainState,
+    blockchainstate::CachedHeader, common::BlockHeight, config::Config,
+    metrics::GetSuccessorMetrics, BlockchainManagerRequest, BlockchainState,
 };
 
 // Max size of the `GetSuccessorsResponse` message.
@@ -63,6 +64,7 @@ pub struct GetSuccessorsHandler {
     command_sender: Sender<BlockchainManagerRequest>,
     last_request: std::sync::Mutex<Option<(GetSuccessorsRequest, GetSuccessorsResponse)>>,
     network: Network,
+    metrics: GetSuccessorMetrics,
 }
 
 impl GetSuccessorsHandler {
@@ -72,12 +74,14 @@ impl GetSuccessorsHandler {
         config: &Config,
         state: Arc<Mutex<BlockchainState>>,
         command_sender: Sender<BlockchainManagerRequest>,
+        metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
             state,
             command_sender,
             last_request: std::sync::Mutex::new(None),
             network: config.network,
+            metrics: GetSuccessorMetrics::new(metrics_registry),
         }
     }
 
@@ -91,6 +95,10 @@ impl GetSuccessorsHandler {
         &self,
         request: GetSuccessorsRequest,
     ) -> Result<GetSuccessorsResponse, Status> {
+        self.metrics
+            .processed_block_hashes
+            .observe(request.processed_block_hashes.len() as f64);
+
         if self.network == Network::Testnet || self.network == Network::Regtest {
             // A cache entry has to be discarded after after a new request.
             // Indexing the cache based on the request is not safe since the response
@@ -133,6 +141,9 @@ impl GetSuccessorsHandler {
             );
             GetSuccessorsResponse { blocks, next }
         };
+        self.metrics
+            .response_blocks
+            .observe(response.blocks.len() as f64);
         // Set cache value
         if self.network == Network::Testnet || self.network == Network::Regtest {
             self.last_request
@@ -289,6 +300,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Set up the following chain:
         // |--> 1'---> 2'
@@ -396,6 +408,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Set up the following chain:
         // 0 -> 1 ---> 2 ---> 3 -> 4
@@ -438,6 +451,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
 
         // Set up the following chain:
@@ -483,6 +497,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
 
         // Set up the following chain:
@@ -546,6 +561,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Set up the following chain:
         // |-> 1'
@@ -616,6 +632,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         let main_chain = generate_headers(genesis_hash, genesis.header.time, 120, &[]);
         {
@@ -651,6 +668,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Set up the following chain:
         // |-> 1'
@@ -742,6 +760,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
         // Generate a blockchain with one large block.
         let large_blocks = generate_large_block_blockchain(genesis_hash, genesis.header.time, 1);
@@ -803,6 +822,7 @@ mod test {
             &config,
             Arc::new(Mutex::new(blockchain_state)),
             blockchain_manager_tx,
+            &MetricsRegistry::default(),
         );
 
         let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
