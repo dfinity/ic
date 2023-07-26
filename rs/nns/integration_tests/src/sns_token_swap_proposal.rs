@@ -63,7 +63,7 @@ fn test_only_one_sns_token_swap_proposal_can_be_open() {
         &state_machine,
         wallet_canister,
         SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_values_for_testing(),
+        SnsInitPayload::with_valid_legacy_values_for_testing(),
         cycle_count,
     );
     let swap_canister_id = deploy_new_sns_response.canisters.unwrap().swap.unwrap();

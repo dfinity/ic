@@ -480,6 +480,7 @@ type SwapParameters = record {
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   confirmation_text : opt text;
   maximum_participant_icp : opt Tokens;
+  neurons_fund_investment : opt Tokens;
   minimum_icp : opt Tokens;
   minimum_participant_icp : opt Tokens;
   start_time : opt GlobalTimeOfDay;

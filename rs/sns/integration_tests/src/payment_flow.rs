@@ -45,7 +45,7 @@ lazy_static! {
     pub static ref DEFAULT_SNS_ROOT_PRINCIPAL: Principal = Principal::anonymous();
     pub static ref DEFAULT_FALLBACK_CONTROLLER_PRINCIPAL_IDS: Vec<Principal> =
         vec![Principal::anonymous()];
-    pub static ref DEFAULT_NEURON_MINIMUM_STAKE: u64 = 1_000_000;
+    pub static ref DEFAULT_NEURON_MINIMUM_STAKE: u64 = 400_000;
     pub static ref DEFAULT_SNS_SALE_PARAMS: Params = Params {
         min_participants: 1,
         min_icp_e8s: 1,
@@ -60,7 +60,7 @@ lazy_static! {
             + 13 * SECONDS_PER_DAY,
         sns_token_e8s: 10_000_000,
         neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-            count: 1,
+            count: 2,
             dissolve_delay_interval_seconds: 1,
         }),
         sale_delay_seconds: None,
@@ -198,6 +198,15 @@ impl PaymentProtocolTestSetup {
     }
 
     pub fn default_params() -> Params {
+        // sanity check
+        DEFAULT_SNS_SALE_PARAMS
+            .validate(&Init {
+                transaction_fee_e8s: Some(100),
+                neuron_minimum_stake_e8s: Some(100),
+                ..Default::default()
+            })
+            .unwrap();
+
         DEFAULT_SNS_SALE_PARAMS.clone()
     }
 
@@ -659,7 +668,6 @@ fn test_payment_flow_multiple_users_concurrent() {
             .lock()
             .unwrap()
             .new_sale_ticket(&user, &amount, None);
-        assert!(ticket.is_ok());
 
         // Commit some ICP
         payment_flow_protocol

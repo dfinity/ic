@@ -525,7 +525,7 @@ impl FractionalDeveloperVotingPower {
             .ok_or_else(|| "Expected treasury distribution to exist".to_string())
     }
 
-    fn swap_distribution(&self) -> Result<&SwapDistribution, String> {
+    pub(crate) fn swap_distribution(&self) -> Result<&SwapDistribution, String> {
         self.swap_distribution
             .as_ref()
             .ok_or_else(|| "Expected swap distribution to exist".to_string())
@@ -538,7 +538,7 @@ impl FractionalDeveloperVotingPower {
     }
 
     /// This gives us some values that work for testing but would not be useful
-    /// in a real world scenario.  They are only meant to validate, not be sensible.
+    /// in a real world scenario. They are only meant to validate, not be sensible.
     pub fn with_valid_values_for_testing() -> Self {
         FractionalDeveloperVotingPower {
             developer_distribution: Some(DeveloperDistribution {
@@ -566,7 +566,7 @@ impl NeuronDistribution {
     }
 
     /// This gives us some values that work for testing but would not be useful
-    /// in a real world scenario.  They are only meant to validate, not be sensible.
+    /// in a real world scenario. They are only meant to validate, not be sensible.
     pub fn with_valid_values_for_testing() -> Self {
         NeuronDistribution {
             controller: Some(PrincipalId::new_user_test_id(1)),

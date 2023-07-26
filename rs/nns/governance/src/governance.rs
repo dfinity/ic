@@ -46,11 +46,12 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::{
-    cmc::CMC, ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError,
+    cmc::CMC, ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError, SECONDS_PER_DAY,
 };
 use ic_nervous_system_governance::index::neuron_principal::{
     InMemoryNeuronPrincipalIndex, NeuronPrincipalIndex,
 };
+use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -4318,8 +4319,13 @@ impl Governance {
                 .await;
             }
             Action::CreateServiceNervousSystem(ref create_service_nervous_system) => {
-                self.create_service_nervous_system(pid, create_service_nervous_system)
-                    .await;
+                self.create_service_nervous_system(
+                    pid,
+                    create_service_nervous_system,
+                    original_total_community_fund_maturity_e8s_equivalent
+                        .expect("Missing original_total_community_fund_maturity_e8s_equivalent"),
+                )
+                .await;
             }
         }
     }
@@ -4476,12 +4482,46 @@ impl Governance {
         &mut self,
         proposal_id: u64,
         create_service_nervous_system: &CreateServiceNervousSystem,
-    ) {
+        original_total_community_fund_maturity_e8s_equivalent: u64,
+    ) -> Option<()> {
         // Get the current time of proposal execution.
         let current_timestamp_seconds = self.env.now();
 
-        // TODO NNS1-2296: Draw from the Neurons' Fund
-        let neurons_fund_participants = vec![];
+        let neurons_fund_participants = draw_funds_from_the_community_fund(
+            &mut self.proto.neurons,
+            original_total_community_fund_maturity_e8s_equivalent,
+            *create_service_nervous_system
+                .swap_parameters
+                .as_ref()?
+                .neurons_fund_investment
+                .as_ref()?
+                .e8s
+                .as_ref()?,
+            &sns_swap_pb::Params {
+                max_icp_e8s: *create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()?
+                    .maximum_icp
+                    .as_ref()?
+                    .e8s
+                    .as_ref()?,
+                min_participant_icp_e8s: *create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()?
+                    .minimum_participant_icp
+                    .as_ref()?
+                    .e8s
+                    .as_ref()?,
+                max_participant_icp_e8s: *create_service_nervous_system
+                    .swap_parameters
+                    .as_ref()?
+                    .maximum_participant_icp
+                    .as_ref()?
+                    .e8s
+                    .as_ref()?,
+                ..Default::default()
+            },
+        );
 
         let executed_create_service_nervous_system_proposal =
             ExecutedCreateServiceNervousSystemProposal {
@@ -4489,6 +4529,7 @@ impl Governance {
                 create_service_nervous_system: create_service_nervous_system.clone(),
                 proposal_id,
                 neurons_fund_participants,
+                random_swap_start_time: self.randomly_pick_swap_start(),
             };
 
         let execute_create_service_nervous_system_result = self
@@ -4500,6 +4541,8 @@ impl Governance {
             proposal_id,
             execute_create_service_nervous_system_result,
         );
+
+        Some(())
     }
 
     async fn execute_create_service_nervous_system_proposal(
@@ -5297,14 +5340,15 @@ impl Governance {
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
-        let original_total_community_fund_maturity_e8s_equivalent =
-            if let Some(Action::OpenSnsTokenSwap(_)) = proposal.action {
+        let original_total_community_fund_maturity_e8s_equivalent = match proposal.action {
+            Some(Action::OpenSnsTokenSwap(_)) | Some(Action::CreateServiceNervousSystem(_)) => {
                 Some(total_community_fund_maturity_e8s_equivalent(
                     &self.proto.neurons,
                 ))
-            } else {
-                None
-            };
+            }
+            _ => None,
+        };
+
         // Create the proposal.
         let derived_proposal_information = if swap_background_information.is_some() {
             Some(DerivedProposalInformation {
@@ -6988,6 +7032,20 @@ impl Governance {
             reset_count
         );
     }
+
+    /// Picks a value at random in [00:00, 23:45] that is a multiple of 15
+    /// minutes past midnight.
+    pub fn randomly_pick_swap_start(&mut self) -> GlobalTimeOfDay {
+        let time_of_day_seconds = self.env.random_u64() % SECONDS_PER_DAY;
+
+        // Round down to nearest multiple of 15 min.
+        let remainder_seconds = time_of_day_seconds % (15 * 60);
+        let seconds_after_utc_midnight = Some(time_of_day_seconds - remainder_seconds);
+
+        GlobalTimeOfDay {
+            seconds_after_utc_midnight,
+        }
+    }
 }
 
 // Returns whether the following requirements are met:
@@ -7043,12 +7101,12 @@ fn total_community_fund_maturity_e8s_equivalent(id_to_neuron: &HashMap<u64, Neur
         .sum()
 }
 
-/// Decrements maturity from Community Fund neurons (i.e. those with a nonzero
+/// Decrements maturity from Neuron's Fund neurons (i.e. those with a nonzero
 /// value in their joined_community_fund_timestamp_seconds field).
 ///
 /// Each neuron whose maturity is taken has a corresponding entry in the return
 /// value, which can be used as part of an OpenRequest sent to a SNS token
-/// swap/sale canister.
+/// swap canister.
 fn draw_funds_from_the_community_fund(
     id_to_neuron: &mut HashMap<u64, Neuron>,
     original_total_community_fund_maturity_e8s_equivalent: u64,

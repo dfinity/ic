@@ -1649,6 +1649,10 @@ message CreateServiceNervousSystem {
     // the proposal is adopted.
     ic_nervous_system.pb.v1.GlobalTimeOfDay start_time = 9;
     ic_nervous_system.pb.v1.Duration duration = 10;
+
+    // The amount that the Neuron's Fund will collectively spend in maturity on
+    // the swap.
+    optional ic_nervous_system.pb.v1.Tokens neurons_fund_investment = 11;
   }
 
   SwapParameters swap_parameters = 8;

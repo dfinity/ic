@@ -17,7 +17,7 @@ pub mod common;
 /// Add WASMs, perform a canister upgrade, then assert that the added WASMs and upgrade
 /// path are still available
 #[test]
-fn test_sns_wasm_upgrade() {
+fn test_sns_wasm_upgrade_legacy() {
     let sns_wasm_wasm = Project::cargo_bin_maybe_from_env("sns-wasm-canister", &[]);
 
     let wallet_canister_id = CanisterId::from_u64(11);
@@ -57,7 +57,7 @@ fn test_sns_wasm_upgrade() {
         &machine,
         wallet_canister,
         SNS_WASM_CANISTER_ID,
-        SnsInitPayload::with_valid_values_for_testing(),
+        SnsInitPayload::with_valid_legacy_values_for_testing(),
         EXPECTED_SNS_CREATION_FEE,
     );
     assert_eq!(sns_1_response.error, None);

@@ -461,7 +461,11 @@ impl Swap {
     ) -> Result<OpenResponse, String> {
         // Precondition 1
         if self.lifecycle() != Lifecycle::Pending {
-            return Err("Invalid lifecycle state to OPEN the swap: must be PENDING".to_string());
+            return Err(format!(
+                "Invalid lifecycle state to open the swap: must be {:?}, was {:?}",
+                Lifecycle::Pending,
+                self.lifecycle()
+            ));
         }
         // Precondition 2
         req.validate(now_seconds, self.init_or_panic())?;
@@ -810,8 +814,7 @@ impl Swap {
     ) -> Result<RefreshBuyerTokensResponse, String> {
         if self.lifecycle() != Lifecycle::Open {
             return Err(
-                "The token amount can only be refreshed when the canister is in the OPEN state"
-                    .to_string(),
+                format!("The token amount can only be refreshed when the canister is in the OPEN state. Current state is {:?}.", self.lifecycle()),
             );
         }
         if self.icp_target_reached() {
@@ -852,8 +855,7 @@ impl Swap {
         // call to get the account balance was outstanding.
         if self.lifecycle() != Lifecycle::Open {
             return Err(
-                "The token amount can only be refreshed when the canister is in the OPEN state"
-                    .to_string(),
+                format!("The token amount can only be refreshed when the canister is in the OPEN state. Current state is {:?}.", self.lifecycle()),
             );
         }
 

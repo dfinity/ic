@@ -626,7 +626,7 @@ pub fn open_sale(env: &StateMachine, swap_id: &CanisterId, params: Option<Params
                 min_participants: 1,
                 min_icp_e8s: 1,
                 max_icp_e8s: 10_000_000,
-                min_participant_icp_e8s: 1_010_000,
+                min_participant_icp_e8s: 2_020_000,
                 max_participant_icp_e8s: 10_000_000,
                 swap_due_timestamp_seconds: env
                     .time()
@@ -636,7 +636,7 @@ pub fn open_sale(env: &StateMachine, swap_id: &CanisterId, params: Option<Params
                     + 13 * SECONDS_PER_DAY,
                 sns_token_e8s: 10_000_000,
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 1,
+                    count: 2,
                     dissolve_delay_interval_seconds: 1,
                 }),
                 sale_delay_seconds: None,

@@ -198,7 +198,7 @@ impl SnsClient {
             wallet_canister_id,
             sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };
-        block_on(sns_client.assert_state(env, Lifecycle::Pending, Mode::PreInitializationSwap));
+        block_on(sns_client.assert_state(env, Lifecycle::Adopted, Mode::PreInitializationSwap));
         sns_client.write_attribute(env);
 
         info!(
@@ -253,9 +253,9 @@ impl SnsClient {
         block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
 
         info!(log, "Sending deploy_new_sns to SNS WASM canister");
-        let init = create_service_nervous_system_proposal
-            .to_legacy_sns_init_payload()
-            .expect("invalid init payload");
+        let init = SnsInitPayload::try_from(create_service_nervous_system_proposal)
+            .expect("invalid init payload")
+            .strip_non_legacy_swap_parameters();
         let res =
             block_on(deploy_new_sns_legacy(&wallet_canister, init)).expect("Deploy new SNS failed");
         info!(log, "Received {res:?}");
@@ -352,6 +352,7 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
             restricted_countries: None,
             start_time: GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
             duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
+            neurons_fund_investment: Some(Tokens::from_tokens(100)),
         }),
         ledger_parameters: Some(LedgerParameters {
             transaction_fee: Some(Tokens::from_e8s(100_000)),

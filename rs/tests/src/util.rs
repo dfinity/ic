@@ -1586,6 +1586,7 @@ pub(crate) fn create_service_nervous_system_into_params(
         restricted_countries: _,
         start_time,
         duration,
+        neurons_fund_investment: _,
     } = create_service_nervous_system
         .swap_parameters
         .clone()
@@ -1596,7 +1597,7 @@ pub(crate) fn create_service_nervous_system_into_params(
             .ok_or("`neuron_basket_construction_parameters` should not be None")?
             .try_into()?;
 
-    let start_time = start_time;
+    let start_time = start_time.ok_or("`start_time` should not be None")?;
     let duration = duration.ok_or("`duration` should not be None")?;
     let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
         CreateServiceNervousSystem::swap_start_and_due_timestamps(

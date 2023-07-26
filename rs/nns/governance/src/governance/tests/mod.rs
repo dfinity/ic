@@ -9,7 +9,7 @@ use candid::{Decode, Encode};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -1253,7 +1253,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             .as_ref()
             .unwrap();
         let swap_total_e8s = unwrap_tokens_e8s(swap_total).unwrap();
-        assert_eq!(swap_total_e8s, 184_088_000);
+        assert_eq!(swap_total_e8s, 1_840_880_000);
 
         assert_eq!(
             converted.initial_token_distribution.unwrap(),
@@ -1416,6 +1416,9 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 create_service_nervous_system: CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
                 proposal_id,
                 neurons_fund_participants: neurons_fund_participants.clone(),
+                random_swap_start_time: GlobalTimeOfDay {
+                    seconds_after_utc_midnight: Some(0),
+                },
             };
 
         // Step 2: Call the code under test.
@@ -1568,7 +1571,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
             .as_ref()
             .unwrap();
         let swap_total_e8s = unwrap_tokens_e8s(swap_total).unwrap();
-        assert_eq!(swap_total_e8s, 184_088_000);
+        assert_eq!(swap_total_e8s, 1_840_880_000);
 
         assert_eq!(
             converted.initial_token_distribution.unwrap(),
@@ -1638,7 +1641,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
 
         let (expected_swap_start_timestamp_seconds, expected_swap_due_timestamp_seconds) =
             CreateServiceNervousSystem::swap_start_and_due_timestamps(
-                original_swap_parameters.start_time,
+                original_swap_parameters.start_time.unwrap(),
                 original_swap_parameters.duration.unwrap(),
                 current_timestamp_seconds,
             )
@@ -1730,56 +1733,6 @@ mod metrics_tests {
         // We assert that it is '555' instead of '1', so that we know the correct
         // proposal action is filtered out.
         assert!(s.contains("governance_voting_power_total 555 1000"));
-    }
-}
-
-// TODO: NNS1-2296 - Re-enable when swap_start_and_due_timestamps uses environment randomness
-#[ignore]
-#[test]
-fn randomly_pick_swap_start() {
-    // Generate "zillions" of outputs, and count their occurrences.
-    let mut start_time_to_count = BTreeMap::new();
-    const ITERATION_COUNT: u64 = 50_000;
-    for _ in 0..ITERATION_COUNT {
-        let GlobalTimeOfDay {
-            seconds_after_utc_midnight,
-        } = CreateServiceNervousSystem::randomly_pick_swap_start();
-
-        *start_time_to_count
-            .entry(seconds_after_utc_midnight.unwrap())
-            .or_insert(0) += 1;
-    }
-
-    // Assert that we hit all possible values.
-    let possible_values_count = SECONDS_PER_DAY / 60 / 15;
-    assert_eq!(start_time_to_count.len(), possible_values_count as usize);
-
-    // Assert that values are multiples of of 15 minutes.
-    for seconds_after_utc_midnight in start_time_to_count.keys() {
-        assert_eq!(
-            seconds_after_utc_midnight % (15 * 60),
-            0,
-            "{}",
-            seconds_after_utc_midnight
-        );
-    }
-
-    // Assert that the distribution appears to be uniform.
-    let min_occurrence_count = (0.8 * (ITERATION_COUNT / possible_values_count) as f64) as u64;
-    let max_occurrence_count = (1.2 * (ITERATION_COUNT / possible_values_count) as f64) as u64;
-    for occurrence_count in start_time_to_count.values() {
-        assert!(
-            *occurrence_count >= min_occurrence_count,
-            "{} (vs. minimum = {})",
-            occurrence_count,
-            min_occurrence_count
-        );
-        assert!(
-            *occurrence_count <= max_occurrence_count,
-            "{} (vs. maximum = {})",
-            occurrence_count,
-            max_occurrence_count
-        );
     }
 }
 
