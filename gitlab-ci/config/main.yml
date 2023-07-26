@@ -751,7 +751,7 @@ build-determinism:
       set -eExuo pipefail
       ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
-.build-determinism-release:
+build-determinism-binaries-release:
   extends:
     - .ubuntu-k8s
     - .rules-scheduled-reproducibility
@@ -777,10 +777,6 @@ build-determinism:
       P1="/${NNS_RELEASE_VERSION}/${PATH1}"
 
       ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
-
-build-determinism-binaries-release:
-  extends:
-    - .build-determinism-release
   parallel:
     matrix:
       - PATH0: "build-ic-release/release"

@@ -311,51 +311,6 @@
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     SHELL_WRAPPER: "/usr/bin/time"
-".build-determinism-release":
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".ubuntu-k8s"
-    - ".rules-scheduled-reproducibility"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:6afc0fd75156264a8c18102e9ce8b0e91824a26cf4d3eaafb6a7b1696f446c4c
-  needs:
-    - job: build-ic-release
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
-  script:
-    - |
-      set -eExuo pipefail
-
-      # TODO IDX-2757
-      if [ "$CI_JOB_NAME" == "build-determinism-guest-update-img-release" ]; then
-          OLD_PATH="$(git rev-parse HEAD)/build-ic-release/guest-os/update-img"
-          if curl -sfSI --retry 2 "https://download.dfinity.systems/ic/$OLD_PATH/SHA256SUMS"; then
-              PATH0="build-ic-release/guest-os/update-img"
-          fi
-      fi
-
-      # what we've build in build-ic-release
-      P0=$PATH0
-      # what is live and available under $NNS_RELEASE_VERSION
-      # NNS_RELEASE_VERSION is set in build-ic-release
-      # shellcheck disable=SC2153
-      P1="/${NNS_RELEASE_VERSION}/${PATH1}"
-
-      ./gitlab-ci/tools/build-diff.sh "$P0" "$P1"
-  tags:
-    - dfinity-ic
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
 ".build-env-base":
   artifacts:
     paths:
@@ -2560,7 +2515,8 @@ build-determinism-binaries-release:
       - coredumps/*.gz
     when: always
   extends:
-    - ".build-determinism-release"
+    - ".ubuntu-k8s"
+    - ".rules-scheduled-reproducibility"
   image:
     name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:6afc0fd75156264a8c18102e9ce8b0e91824a26cf4d3eaafb6a7b1696f446c4c
   needs:
