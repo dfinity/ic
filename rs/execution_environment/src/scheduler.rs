@@ -1292,14 +1292,20 @@ impl Scheduler for SchedulerImpl {
         current_round_type: ExecutionRoundType,
         registry_settings: &RegistryExecutionSettings,
     ) -> ReplicatedState {
+        // IMPORTANT!
+        // When making changes to this method, please make sure each piece of code is covered by duration metrics.
+        // The goal is to ensure that we can track the performance of `execute_round` and its individual components.
         let measurement_scope = MeasurementScope::root(&self.metrics.round);
 
         let mut cycles_in_sum = Cycles::zero();
         let round_log;
         let mut csprng;
         let long_running_canister_ids: BTreeSet<_>;
-        {
+
+        // Round preparation.
+        let mut round_limits = {
             let _timer = self.metrics.round_preparation_duration.start_timer();
+
             round_log = new_logger!(self.log; messaging.round => current_round.get());
             debug!(
                 round_log,
@@ -1387,17 +1393,17 @@ impl Scheduler for SchedulerImpl {
                 cycles_in_sum += canister.system_state.balance();
                 cycles_in_sum += canister.system_state.queues().input_queue_cycles();
             }
-        }
 
-        let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(
-                self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
-            ),
-            execution_complexity: ExecutionComplexity::with_cpu(
-                self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
-            ),
-            subnet_available_memory: self.exec_env.subnet_available_memory(&state),
-            compute_allocation_used: state.total_compute_allocation(),
+            RoundLimits {
+                instructions: as_round_instructions(
+                    self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+                ),
+                execution_complexity: ExecutionComplexity::with_cpu(
+                    self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+                ),
+                subnet_available_memory: self.exec_env.subnet_available_memory(&state),
+                compute_allocation_used: state.total_compute_allocation(),
+            }
         };
 
         // Execute subnet messages.
@@ -1437,6 +1443,7 @@ impl Scheduler for SchedulerImpl {
             }
         }
 
+        // Subnet queues.
         {
             let measurement_scope =
                 MeasurementScope::nested(&self.metrics.round_subnet_queue, &measurement_scope);
@@ -1468,46 +1475,47 @@ impl Scheduler for SchedulerImpl {
                 registry_settings,
                 &ecdsa_subnet_public_keys,
             );
+
+            // Reset the round limit after executing all subnet messages.
+            //
+            // The round will stop as soon as the counter reaches zero.
+            // We can compute the initial value `X` of the counter based on:
+            // - `R = max_instructions_per_round`,
+            // - `S = max(max_instructions_per_slice, max_instructions_per_message_without_dts)`.
+            // In the worst case, we start a new Wasm execution when then counter
+            // reaches 1 and the execution uses the maximum `S` instructions. After
+            // the execution the counter will be set to `1 - S`.
+            //
+            // We want the total number executed instructions to not exceed `R`,
+            // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
+            let max_instructions_per_slice = std::cmp::max(
+                self.config.max_instructions_per_slice,
+                self.config.max_instructions_per_message_without_dts,
+            );
+            round_limits.instructions =
+                as_round_instructions(self.config.max_instructions_per_round)
+                    - as_round_instructions(max_instructions_per_slice)
+                    + RoundInstructions::from(1);
+            round_limits.execution_complexity.cpu = round_limits.instructions.get().into();
         }
 
-        // Reset the round limit after executing all subnet messages.
-        //
-        // The round will stop as soon as the counter reaches zero.
-        // We can compute the initial value `X` of the counter based on:
-        // - `R = max_instructions_per_round`,
-        // - `S = max(max_instructions_per_slice, max_instructions_per_message_without_dts)`.
-        // In the worst case, we start a new Wasm execution when then counter
-        // reaches 1 and the execution uses the maximum `S` instructions. After
-        // the execution the counter will be set to `1 - S`.
-        //
-        // We want the total number executed instructions to not exceed `R`,
-        // which gives us: `X - (1 - S) <= R` or `X <= R - S + 1`.
-        let max_instructions_per_slice = std::cmp::max(
-            self.config.max_instructions_per_slice,
-            self.config.max_instructions_per_message_without_dts,
-        );
-        round_limits.instructions = as_round_instructions(self.config.max_instructions_per_round)
-            - as_round_instructions(max_instructions_per_slice)
-            + RoundInstructions::from(1);
-        round_limits.execution_complexity.cpu = round_limits.instructions.get().into();
-
-        let round_schedule;
-        {
+        // Scheduling.
+        let round_schedule = {
             let _timer = self.metrics.round_scheduling_duration.start_timer();
-            round_schedule = {
-                let mut canisters = state.take_canister_states();
-                let round_schedule = self.apply_scheduling_strategy(
-                    &round_log,
-                    self.config.scheduler_cores,
-                    current_round,
-                    self.config.accumulated_priority_reset_interval,
-                    &mut canisters,
-                );
-                state.put_canister_states(canisters);
-                round_schedule
-            };
-        }
 
+            let mut canisters = state.take_canister_states();
+            let round_schedule_candidate = self.apply_scheduling_strategy(
+                &round_log,
+                self.config.scheduler_cores,
+                current_round,
+                self.config.accumulated_priority_reset_interval,
+                &mut canisters,
+            );
+            state.put_canister_states(canisters);
+            round_schedule_candidate
+        };
+
+        // Inner round.
         let (mut state, active_canister_ids) = self.inner_round(
             state,
             &round_schedule,
@@ -1517,72 +1525,77 @@ impl Scheduler for SchedulerImpl {
             registry_settings.subnet_size,
         );
 
-        let mut final_state;
+        // Finalization.
         {
-            let mut cycles_out_sum = Cycles::zero();
-            let mut total_canister_balance = Cycles::zero();
-            let mut total_canister_history_memory_usage = NumBytes::new(0);
-            let mut total_canister_memory_usage = NumBytes::new(0);
             let _timer = self.metrics.round_finalization_duration.start_timer();
-            for canister in state.canisters_iter_mut() {
-                let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
-                self.metrics
-                    .canister_heap_delta_debits
-                    .observe(heap_delta_debit as f64);
-                canister.scheduler_state.heap_delta_debit = match self.rate_limiting_of_heap_delta {
-                    FlagStatus::Enabled => NumBytes::from(
-                        heap_delta_debit.saturating_sub(self.config.heap_delta_rate_limit.get()),
-                    ),
-                    FlagStatus::Disabled => NumBytes::from(0),
-                };
 
-                let install_code_debit = canister.scheduler_state.install_code_debit.get();
-                self.metrics
-                    .canister_install_code_debits
-                    .observe(install_code_debit as f64);
-                canister.scheduler_state.install_code_debit =
-                    match self.rate_limiting_of_instructions {
-                        FlagStatus::Enabled => NumInstructions::from(
-                            install_code_debit
-                                .saturating_sub(self.config.install_code_rate_limit.get()),
-                        ),
-                        FlagStatus::Disabled => NumInstructions::from(0),
-                    };
-                total_canister_history_memory_usage += canister.canister_history_memory_usage();
-                total_canister_memory_usage += canister.memory_usage();
-                total_canister_balance += canister.system_state.balance();
-                cycles_out_sum += canister.system_state.queues().output_queue_cycles();
-            }
-            cycles_out_sum += total_canister_balance;
-
-            self.metrics
-                .total_canister_balance
-                .set(total_canister_balance.get() as f64);
-
-            // TODO(EXC-1124): Re-enable the check below once it's fixed.
-            //
-            // Check that amount of cycles at the beginning of the round (balances and cycles from input messages) is bigger or equal
-            // than the amount of cycles at the end of the round (balances and cycles from output messages).
-            // if cycles_in_sum < cycles_out_sum {
-            //     warn!(
-            //         round_log,
-            //         "At Round {} @ time {}, the resulted state after execution does not hold the in-out cycles invariant: cycles at beginning of round {} were fewer than cycles at end of round {}",
-            //         current_round,
-            //         state.time(),
-            //         cycles_in_sum,
-            //         cycles_out_sum,
-            //     );
-            // }
-
-            // Check replicated state invariants still hold after the round execution.
-            // We allow `total_canister_memory_usage` to exceed the subnet memory capacity
-            // by `total_canister_history_memory_usage` because the canister history
-            // memory usage is not tracked during a round in `SubnetAvailableMemory`.
-            if total_canister_memory_usage
-                > self.exec_env.subnet_memory_capacity() + total_canister_history_memory_usage
+            let mut final_state;
             {
-                self.metrics.subnet_memory_usage_invariant.inc();
-                warn!(
+                let mut cycles_out_sum = Cycles::zero();
+                let mut total_canister_balance = Cycles::zero();
+                let mut total_canister_history_memory_usage = NumBytes::new(0);
+                let mut total_canister_memory_usage = NumBytes::new(0);
+                for canister in state.canisters_iter_mut() {
+                    let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
+                    self.metrics
+                        .canister_heap_delta_debits
+                        .observe(heap_delta_debit as f64);
+                    canister.scheduler_state.heap_delta_debit =
+                        match self.rate_limiting_of_heap_delta {
+                            FlagStatus::Enabled => NumBytes::from(
+                                heap_delta_debit
+                                    .saturating_sub(self.config.heap_delta_rate_limit.get()),
+                            ),
+                            FlagStatus::Disabled => NumBytes::from(0),
+                        };
+
+                    let install_code_debit = canister.scheduler_state.install_code_debit.get();
+                    self.metrics
+                        .canister_install_code_debits
+                        .observe(install_code_debit as f64);
+                    canister.scheduler_state.install_code_debit =
+                        match self.rate_limiting_of_instructions {
+                            FlagStatus::Enabled => NumInstructions::from(
+                                install_code_debit
+                                    .saturating_sub(self.config.install_code_rate_limit.get()),
+                            ),
+                            FlagStatus::Disabled => NumInstructions::from(0),
+                        };
+                    total_canister_history_memory_usage += canister.canister_history_memory_usage();
+                    total_canister_memory_usage += canister.memory_usage();
+                    total_canister_balance += canister.system_state.balance();
+                    cycles_out_sum += canister.system_state.queues().output_queue_cycles();
+                }
+                cycles_out_sum += total_canister_balance;
+
+                self.metrics
+                    .total_canister_balance
+                    .set(total_canister_balance.get() as f64);
+
+                // TODO(EXC-1124): Re-enable the check below once it's fixed.
+                //
+                // Check that amount of cycles at the beginning of the round (balances and cycles from input messages) is bigger or equal
+                // than the amount of cycles at the end of the round (balances and cycles from output messages).
+                // if cycles_in_sum < cycles_out_sum {
+                //     warn!(
+                //         round_log,
+                //         "At Round {} @ time {}, the resulted state after execution does not hold the in-out cycles invariant: cycles at beginning of round {} were fewer than cycles at end of round {}",
+                //         current_round,
+                //         state.time(),
+                //         cycles_in_sum,
+                //         cycles_out_sum,
+                //     );
+                // }
+
+                // Check replicated state invariants still hold after the round execution.
+                // We allow `total_canister_memory_usage` to exceed the subnet memory capacity
+                // by `total_canister_history_memory_usage` because the canister history
+                // memory usage is not tracked during a round in `SubnetAvailableMemory`.
+                if total_canister_memory_usage
+                    > self.exec_env.subnet_memory_capacity() + total_canister_history_memory_usage
+                {
+                    self.metrics.subnet_memory_usage_invariant.inc();
+                    warn!(
                     round_log,
                     "{}: At Round {} @ time {}, the resulted state after execution does not hold the invariants. Exceeding capacity subnet memory allowed: used {} allowed {}",
                     SUBNET_MEMORY_USAGE_INVARIANT_BROKEN,
@@ -1591,38 +1604,39 @@ impl Scheduler for SchedulerImpl {
                     total_canister_memory_usage,
                     self.exec_env.subnet_memory_capacity()
                 );
-            }
+                }
 
-            // Check if the invariants are still valid after the execution for active canisters.
-            self.check_canister_invariants(
-                &round_log,
-                &current_round,
-                &state,
-                &active_canister_ids,
-            );
-
-            // NOTE: The logic for deleting canisters assumes that transitioning
-            // canisters from `Stopping` to `Stopped` happens at the end of the round
-            // as is currently the case. If this logic is moved elsewhere (e.g. at the
-            // beginning of the round), then canister deletion logic should be revised.
-            {
-                let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
-                final_state = self.process_stopping_canisters(state);
-            }
-            {
-                let _timer = self.metrics.round_finalization_ingress.start_timer();
-                final_state.prune_ingress_history();
-            }
-            {
-                let _timer = self.metrics.round_finalization_charge.start_timer();
-                self.charge_canisters_for_resource_allocation_and_usage(
-                    &mut final_state,
-                    registry_settings.subnet_size,
+                // Check if the invariants are still valid after the execution for active canisters.
+                self.check_canister_invariants(
+                    &round_log,
+                    &current_round,
+                    &state,
+                    &active_canister_ids,
                 );
+
+                // NOTE: The logic for deleting canisters assumes that transitioning
+                // canisters from `Stopping` to `Stopped` happens at the end of the round
+                // as is currently the case. If this logic is moved elsewhere (e.g. at the
+                // beginning of the round), then canister deletion logic should be revised.
+                {
+                    let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
+                    final_state = self.process_stopping_canisters(state);
+                }
+                {
+                    let _timer = self.metrics.round_finalization_ingress.start_timer();
+                    final_state.prune_ingress_history();
+                }
+                {
+                    let _timer = self.metrics.round_finalization_charge.start_timer();
+                    self.charge_canisters_for_resource_allocation_and_usage(
+                        &mut final_state,
+                        registry_settings.subnet_size,
+                    );
+                }
             }
+            self.finish_round(&mut final_state, current_round_type);
+            final_state
         }
-        self.finish_round(&mut final_state, current_round_type);
-        final_state
     }
 }
 
