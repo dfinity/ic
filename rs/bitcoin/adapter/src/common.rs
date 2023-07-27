@@ -1,6 +1,3 @@
-/// A type to represent the current protocol version supported.
-pub type ProtocolVersion = u32;
-
 /// This const represents the default version that the adapter will support.
 /// This value will be used to filter out Bitcoin nodes that the adapter deems
 /// to far behind to interact with.
@@ -10,7 +7,7 @@ pub type ProtocolVersion = u32;
 ///
 /// [Version Handshake](https://en.bitcoin.it/wiki/Version_Handshake)
 /// [Protocol Versions](https://developer.bitcoin.org/reference/p2p_networking.html#protocol-versions)
-pub const MINIMUM_VERSION_NUMBER: ProtocolVersion = 70001;
+pub const MINIMUM_VERSION_NUMBER: u32 = 70001;
 
 /// This const is used to provide a based buffer size for how many messages can be stashed into the
 /// channel. If there are more messages, the sender will end up waiting.

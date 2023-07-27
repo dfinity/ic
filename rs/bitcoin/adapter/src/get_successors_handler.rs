@@ -293,8 +293,8 @@ mod test {
     async fn test_get_successors() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -307,21 +307,21 @@ mod test {
         // 0 -> 1 ---> 2 ---> 3 -> 4
         // |--> 1'' -> 2'' -> 3''
         let mut previous_hashes = vec![];
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 4, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 4, &[]);
         previous_hashes.extend(
             main_chain
                 .iter()
                 .map(|h| h.block_hash())
                 .collect::<Vec<_>>(),
         );
-        let side_chain = generate_headers(genesis_hash, genesis.header.time, 2, &previous_hashes);
+        let side_chain = generate_headers(genesis_hash, genesis.time, 2, &previous_hashes);
         previous_hashes.extend(
             side_chain
                 .iter()
                 .map(|h| h.block_hash())
                 .collect::<Vec<_>>(),
         );
-        let side_chain_2 = generate_headers(genesis_hash, genesis.header.time, 3, &previous_hashes);
+        let side_chain_2 = generate_headers(genesis_hash, genesis.time, 3, &previous_hashes);
 
         let main_block_2 = Block {
             header: main_chain[1],
@@ -401,8 +401,8 @@ mod test {
     async fn test_get_successors_wait_header_sync_testnet() {
         let config = ConfigBuilder::new().with_network(Network::Testnet).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -413,7 +413,7 @@ mod test {
         // Set up the following chain:
         // 0 -> 1 ---> 2 ---> 3 -> 4
         let mut previous_hashes = vec![];
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 4, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 4, &[]);
         previous_hashes.extend(
             main_chain
                 .iter()
@@ -444,8 +444,8 @@ mod test {
     async fn test_get_successors_wait_header_sync_regtest() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -456,7 +456,7 @@ mod test {
 
         // Set up the following chain:
         // 0 -> 1 -> 2 -> 3 -> 4 -> 5
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 5, &[]);
         let main_block_1 = Block {
             header: main_chain[0],
             txdata: vec![],
@@ -490,8 +490,8 @@ mod test {
     async fn test_get_successors_cache() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -502,7 +502,7 @@ mod test {
 
         // Set up the following chain:
         // 0 -> 1 -> 2 -> 3 -> 4 -> 5
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 5, &[]);
         let main_block_1 = Block {
             header: main_chain[0],
             txdata: vec![],
@@ -554,8 +554,8 @@ mod test {
     async fn test_get_successors_multiple_blocks() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -566,7 +566,7 @@ mod test {
         // Set up the following chain:
         // |-> 1'
         // 0 -> 1 -> 2
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 2, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 2, &[]);
         let main_block_1 = Block {
             header: main_chain[0],
             txdata: vec![],
@@ -578,7 +578,7 @@ mod test {
 
         let side_chain = generate_headers(
             genesis_hash,
-            genesis.header.time,
+            genesis.time,
             1,
             &headers_to_hashes(&main_chain),
         );
@@ -625,8 +625,8 @@ mod test {
     async fn test_get_successors_max_num_blocks() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -634,7 +634,7 @@ mod test {
             blockchain_manager_tx,
             &MetricsRegistry::default(),
         );
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 120, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 120, &[]);
         {
             let mut blockchain = handler.state.lock().await;
             blockchain.add_headers(&main_chain);
@@ -661,8 +661,8 @@ mod test {
     async fn test_get_successors_multiple_blocks_out_of_order() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -673,7 +673,7 @@ mod test {
         // Set up the following chain:
         // |-> 1'
         // 0 -> 1 -> 2
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 2, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 2, &[]);
         let main_block_2 = Block {
             header: main_chain[1],
             txdata: vec![],
@@ -681,7 +681,7 @@ mod test {
 
         let side_chain = generate_headers(
             genesis_hash,
-            genesis.header.time,
+            genesis.time,
             1,
             &headers_to_hashes(&main_chain),
         );
@@ -753,8 +753,8 @@ mod test {
     async fn test_get_successors_large_block() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -763,7 +763,7 @@ mod test {
             &MetricsRegistry::default(),
         );
         // Generate a blockchain with one large block.
-        let large_blocks = generate_large_block_blockchain(genesis_hash, genesis.header.time, 1);
+        let large_blocks = generate_large_block_blockchain(genesis_hash, genesis.time, 1);
         let large_block = large_blocks.first().cloned().unwrap();
         let headers: Vec<BlockHeader> = large_blocks.iter().map(|b| b.header).collect();
 
@@ -815,8 +815,8 @@ mod test {
     async fn test_get_successors_many_blocks_until_size_cap_is_met() {
         let config = ConfigBuilder::new().with_network(Network::Regtest).build();
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
-        let genesis = blockchain_state.genesis().clone();
-        let genesis_hash = genesis.header.block_hash();
+        let genesis = *blockchain_state.genesis();
+        let genesis_hash = genesis.block_hash();
         let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
@@ -825,7 +825,7 @@ mod test {
             &MetricsRegistry::default(),
         );
 
-        let main_chain = generate_headers(genesis_hash, genesis.header.time, 5, &[]);
+        let main_chain = generate_headers(genesis_hash, genesis.time, 5, &[]);
         let large_blocks =
             generate_large_block_blockchain(main_chain[4].block_hash(), main_chain[4].time, 1);
 
