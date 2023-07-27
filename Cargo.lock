@@ -5725,6 +5725,7 @@ dependencies = [
  "ic-cdk-macros 0.6.10",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-sha3",
+ "num-bigint 0.4.3",
  "serde",
  "serde_json",
 ]

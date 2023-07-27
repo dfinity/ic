@@ -1,4 +1,4 @@
-use candid::{CandidType, Deserialize};
+use candid::{CandidType, Deserialize, Nat};
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct InitArg {
@@ -21,6 +21,20 @@ pub struct DisplayLogsRequest {
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct ReceivedEthEvent {
     pub from_address: String,
-    pub value: candid::Nat,
+    pub value: Nat,
     pub principal: candid::Principal,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct Eip1559TransactionPrice {
+    pub base_fee_from_last_finalized_block: Nat,
+    pub max_priority_fee_per_gas: Nat,
+    pub max_fee_per_gas: Nat,
+    pub gas_limit: Nat,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct Eip2930TransactionPrice {
+    pub gas_price: Nat,
+    pub gas_limit: Nat,
 }

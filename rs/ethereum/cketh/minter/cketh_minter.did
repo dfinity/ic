@@ -1,17 +1,29 @@
 type MinterArg = variant {
-    InitArg : record { ecdsa_key_name : text };
+    InitArg : record {
+        ecdsa_key_name : text
+    };
     UpgradeArg;
 };
 
 service : (MinterArg) -> {
     minter_address : () -> (text);
     display_logs: (record {
-      address : text;
-      from : text;
-      to : text;
+        address : text;
+        from : text;
+        to : text;
     }) -> (vec record {
-      to_address : text;
-      value : nat;
-      "principal" : principal;
+        to_address : text;
+        value : nat;
+        "principal" : principal;
+    });
+    eip_1559_transaction_price: () -> (record {
+        base_fee_from_last_finalized_block : nat;
+        max_priority_fee_per_gas : nat;
+        max_fee_per_gas : nat;
+        gas_limit : nat;
+    });
+    eip_2930_transaction_price: () -> (record {
+        gas_price : nat;
+        gas_limit : nat;
     });
 }

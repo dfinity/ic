@@ -14,6 +14,11 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub type Quantity = u256;
 
+pub fn into_nat(quantity: Quantity) -> candid::Nat {
+    use num_bigint::BigUint;
+    candid::Nat::from(BigUint::from_bytes_be(&quantity.to_be_bytes()))
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Data(#[serde(with = "crate::serde_data")] pub Vec<u8>);
@@ -198,6 +203,32 @@ pub struct LogEntry {
     #[serde(default)]
     pub removed: bool,
 }
+
+/// Parameters of the [`eth_getBlockByNumber`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getblockbynumber) call.
+#[derive(Debug, Serialize, Clone)]
+#[serde(into = "(BlockSpec, bool)")]
+pub struct GetBlockByNumberParams {
+    /// Integer block number, or "latest" for the last mined block or "pending", "earliest" for not yet mined transactions.
+    pub block: BlockSpec,
+    /// If true, returns the full transaction objects. If false, returns only the hashes of the transactions.
+    pub include_full_transactions: bool,
+}
+
+impl From<GetBlockByNumberParams> for (BlockSpec, bool) {
+    fn from(value: GetBlockByNumberParams) -> Self {
+        (value.block, value.include_full_transactions)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Block {
+    /// Base fee value of this block
+    pub base_fee_per_gas: Quantity,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct GasPrice(pub Quantity);
 
 /// An envelope for all JSON-RPC requests.
 #[derive(Serialize)]
