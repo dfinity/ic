@@ -3057,6 +3057,8 @@ fn test_last_man_less_than_min() {
         },
         max_memo_length: None,
         feature_flags: None,
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
     }))
     .unwrap();
     state_machine

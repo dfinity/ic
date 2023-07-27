@@ -53,6 +53,10 @@ pub trait Approvals {
         amount: Self::Tokens,
         now: TimeStamp,
     ) -> Result<Self::Tokens, InsufficientAllowance<Self::Tokens>>;
+
+    /// Returns a vector of pairs (account, spender) of size min(n, approvals_size)
+    /// that represent approvals selected for trimming.
+    fn select_approvals_to_trim(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)>;
 }
 
 #[allow(clippy::len_without_is_empty)]
@@ -111,6 +115,7 @@ where
 impl<K, AccountId, Tokens> Approvals for AllowanceTable<K, AccountId, Tokens>
 where
     K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
+    K: Into<(AccountId, AccountId)>,
     AccountId: std::cmp::PartialEq,
     Tokens: TokensType,
 {
@@ -153,6 +158,9 @@ where
 
         match self.allowances.entry(key.clone()) {
             Entry::Vacant(e) => {
+                if amount == Tokens::zero() {
+                    return Ok(amount);
+                }
                 if let Some(expected_allowance) = expected_allowance {
                     if !expected_allowance.is_zero() {
                         return Err(ApproveError::AllowanceChanged {
@@ -174,6 +182,10 @@ where
                             current_allowance: allowance.amount,
                         });
                     }
+                }
+                if amount == Tokens::zero() {
+                    e.remove();
+                    return Ok(amount);
                 }
                 allowance.amount = amount;
                 let old_expiration = std::mem::replace(&mut allowance.expires_at, expires_at);
@@ -219,6 +231,17 @@ where
                 }
             }
         }
+    }
+
+    fn select_approvals_to_trim(&self, n: usize) -> Vec<(Self::AccountId, Self::AccountId)> {
+        let mut result = vec![];
+        for key in self.allowances.keys() {
+            if result.len() >= n {
+                break;
+            }
+            result.push(key.clone().into());
+        }
+        result
     }
 }
 

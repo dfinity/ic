@@ -227,6 +227,16 @@ impl LedgerTransaction for Transaction {
         }
     }
 
+    fn approve(
+        _from: Self::AccountId,
+        _spender: Self::AccountId,
+        _amount: Self::Tokens,
+        _created_at_time: Option<TimeStamp>,
+        _memo: Option<u64>,
+    ) -> Self {
+        todo!()
+    }
+
     fn created_at_time(&self) -> Option<TimeStamp> {
         self.created_at_time
     }
@@ -280,6 +290,12 @@ pub struct ApprovalKey(AccountIdentifier, AccountIdentifier);
 impl From<(&AccountIdentifier, &AccountIdentifier)> for ApprovalKey {
     fn from((account, spender): (&AccountIdentifier, &AccountIdentifier)) -> Self {
         Self(*account, *spender)
+    }
+}
+
+impl From<ApprovalKey> for (AccountIdentifier, AccountIdentifier) {
+    fn from(key: ApprovalKey) -> Self {
+        (key.0, key.1)
     }
 }
 
