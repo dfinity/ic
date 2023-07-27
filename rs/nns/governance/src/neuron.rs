@@ -16,7 +16,7 @@ use crate::{
 use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 // Use the same logic as GTC canister for resetting the aging timestamp.
 const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
@@ -83,6 +83,31 @@ impl Neuron {
             .iter()
             .chain(self.controller.iter())
             .copied()
+            .collect()
+    }
+
+    pub fn topic_followee_pairs(&self) -> BTreeSet<(Topic, NeuronId)> {
+        self.followees
+            .iter()
+            .filter_map(|(topic, followees)| {
+                let topic = match Topic::from_i32(*topic) {
+                    Some(topic) => topic,
+                    None => {
+                        println!(
+                            "{} Invalid topic {:?} in neuron {:?}",
+                            LOG_PREFIX, topic, self.id
+                        );
+                        return None;
+                    }
+                };
+                Some((topic, followees))
+            })
+            .flat_map(|(topic, followees)| {
+                followees
+                    .followees
+                    .iter()
+                    .map(move |followee| (topic, *followee))
+            })
             .collect()
     }
 

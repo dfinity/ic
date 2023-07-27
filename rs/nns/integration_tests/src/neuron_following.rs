@@ -75,7 +75,7 @@ fn follow_on_invalid_topic() {
     assert_matches!(result,
         Command::Error(err)
         if err.error_type() == ErrorType::InvalidCommand
-        && err.error_message.contains("Invalid topic"));
+        && err.error_message.contains("Not a known topic number."));
 }
 
 #[test]
