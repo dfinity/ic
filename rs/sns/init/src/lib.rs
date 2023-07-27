@@ -664,7 +664,6 @@ impl SnsInitPayload {
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
             self.validate_swap_parameters_are_legacy(),
-            self.validate_neuron_basket_construction_params(true),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -700,7 +699,7 @@ impl SnsInitPayload {
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
             self.validate_all_non_legacy_pre_execution_swap_parameters_are_set(),
-            self.validate_neuron_basket_construction_params(false),
+            self.validate_neuron_basket_construction_params(),
             self.validate_min_participants(),
             self.validate_min_icp_e8s(),
             self.validate_max_icp_e8s(),
@@ -745,7 +744,7 @@ impl SnsInitPayload {
             self.validate_restricted_countries(),
             self.validate_all_non_legacy_pre_execution_swap_parameters_are_set(),
             self.validate_all_post_execution_swap_parameters_are_set(),
-            self.validate_neuron_basket_construction_params(false),
+            self.validate_neuron_basket_construction_params(),
             self.validate_min_participants(),
             self.validate_min_icp_e8s(),
             self.validate_max_icp_e8s(),
@@ -1314,25 +1313,20 @@ impl SnsInitPayload {
         Ok(())
     }
 
-    fn validate_neuron_basket_construction_params(&self, is_legacy: bool) -> Result<(), String> {
-        if self.neuron_basket_construction_parameters.is_none() {
-            return Ok(()); // Nothing to validate.
-        }
-        // Check that the filed is not set if we are in the legacy flow.
-        if is_legacy && self.neuron_basket_construction_parameters.is_some() {
-            return NeuronBasketConstructionParametersValidationError::UnexpectedInLegacyFlow
-                .into();
-        }
+    fn validate_neuron_basket_construction_params(&self) -> Result<(), String> {
+        let neuron_basket_construction_parameters = self
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .ok_or("Error: neuron_basket_construction_parameters must be specified")?;
+
         // Check that `NeuronBasket` dissolve delay does not exceed
         // the maximum dissolve delay.
-        let max_dissolve_delay_seconds = self.max_dissolve_delay_seconds.unwrap_or_default();
+        let max_dissolve_delay_seconds = self
+            .max_dissolve_delay_seconds
+            .ok_or("Error: max_dissolve_delay_seconds must be specified")?;
         // The maximal dissolve delay of a neuron from a basket created by
         // `NeuronBasketConstructionParameters::generate_vesting_schedule`
         // will equal `(count - 1) * dissolve_delay_interval_seconds`.
-        let neuron_basket_construction_parameters = self
-            .neuron_basket_construction_parameters
-            .clone()
-            .unwrap_or_default();
         let max_neuron_basket_dissolve_delay = neuron_basket_construction_parameters
             .count
             .saturating_sub(1_u64)
