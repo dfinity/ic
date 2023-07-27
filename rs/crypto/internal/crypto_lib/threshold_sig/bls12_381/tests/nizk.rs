@@ -284,7 +284,7 @@ fn chunking_nizk_is_stable() {
         serde_cbor::to_vec(&prove_chunking(&instance, &witness, &mut rng).serialize()).unwrap();
 
     assert_eq!(nizk_cbor.len(), 6942);
-    let sha256_nizk_cbor = ic_crypto_sha::Sha256::hash(&nizk_cbor);
+    let sha256_nizk_cbor = ic_crypto_sha2::Sha256::hash(&nizk_cbor);
     assert_eq!(
         hex::encode(sha256_nizk_cbor),
         "2fb19b0de6e16fcad55be72669d3d4a6ac26b0c024b059c450aa9ad06502200d",

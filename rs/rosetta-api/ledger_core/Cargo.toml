@@ -11,7 +11,7 @@ ciborium = { workspace = true }
 hex = "0.4.2"
 ic-base-types = { path = "../../types/base_types" }
 ic-constants = { path = "../../constants" }
-ic-crypto-sha = { path = "../../crypto/sha/" }
+ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-utils = { path = "../../utils" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }

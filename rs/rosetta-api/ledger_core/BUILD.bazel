@@ -11,7 +11,7 @@ rust_library(
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/constants",
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/types/base_types",
         "//rs/types/ic00_types",
         "//rs/utils",

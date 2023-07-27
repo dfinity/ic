@@ -62,7 +62,7 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
     assert_eq!(hex::encode(generated_sig), expected_sig);
 
     // Now check the prehash variant:
-    let message_hash = ic_crypto_sha::Sha256::hash(message);
+    let message_hash = ic_crypto_sha2::Sha256::hash(message);
     let generated_sig = sk.sign_digest(&message_hash).unwrap();
     assert_eq!(hex::encode(generated_sig), expected_sig);
 }
@@ -118,7 +118,7 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
     assert!(pk.verify_signature_with_malleability(msg, &sig));
 
     // Test again using the pre-hashed variants:
-    let msg_hash = ic_crypto_sha::Sha256::hash(msg);
+    let msg_hash = ic_crypto_sha2::Sha256::hash(msg);
 
     assert!(!pk.verify_signature_prehashed(&msg_hash, &sig));
     assert!(pk.verify_signature_prehashed_with_malleability(&msg_hash, &sig));

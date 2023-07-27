@@ -346,7 +346,7 @@ pub async fn upgrade_root_canister_by_proposal(
     wasm: Wasm,
 ) {
     let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(&wasm);
+    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
 
     let proposal_id = submit_external_update_proposal(
         governance,
@@ -404,7 +404,7 @@ async fn change_nns_canister_by_proposal(
     arg: Option<Vec<u8>>,
 ) {
     let wasm = wasm.bytes();
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(&wasm);
+    let new_module_hash = &ic_crypto_sha2::Sha256::hash(&wasm);
 
     let status: CanisterStatusResult = root
         .update_(

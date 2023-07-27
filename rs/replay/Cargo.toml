@@ -18,7 +18,7 @@ ic-crypto-for-verification-only = { path = "../crypto/for_verification_only" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
-ic-crypto-sha = {path = "../crypto/sha/"}
+ic-crypto-sha2 = {path = "../crypto/sha2/" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-interfaces = { path = "../interfaces" }

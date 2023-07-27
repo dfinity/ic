@@ -17,7 +17,7 @@ rust_library(
         "//rs/consensus",
         "//rs/constants",
         "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/crypto/temp_crypto",
         "//rs/crypto/test_utils",
         "//rs/crypto/test_utils/canister_threshold_sigs",

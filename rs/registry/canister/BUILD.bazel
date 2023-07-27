@@ -13,7 +13,7 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/crypto/node_key_validation",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/nervous_system/common",
     "//rs/nns/cmc",

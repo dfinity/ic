@@ -53,7 +53,7 @@ fn adding_deleting_values_shows_up_in_diff() {
     let arbitrary_value = serde_json::to_value(&arbitrary_obj).unwrap();
     obj.insert(new_key.clone(), arbitrary_value);
 
-    let digest = ic_crypto_sha::Sha256::hash(arbitrary_bytes.as_slice());
+    let digest = ic_crypto_sha2::Sha256::hash(arbitrary_bytes.as_slice());
     let digest_hex = digest
         .iter()
         .map(|x| format!("{:02X}", x))

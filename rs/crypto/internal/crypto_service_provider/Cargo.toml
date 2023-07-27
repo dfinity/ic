@@ -27,7 +27,7 @@ ic-crypto-internal-test-vectors = { path = "../test_vectors" }
 ic-crypto-internal-tls = { path = "../crypto_lib/tls" }
 ic-crypto-internal-types = { path = "../crypto_lib/types" }
 ic-crypto-node-key-validation = { path = "../../../crypto/node_key_validation" }
-ic-crypto-sha = { path = "../../sha" }
+ic-crypto-sha2 = { path = "../../sha2" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
 ic-crypto-utils-time = { path = "../../utils/time" }
 ic-interfaces = { path = "../../../interfaces" }

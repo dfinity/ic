@@ -51,7 +51,7 @@ hex = "0.4.2"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto = { path = "../../crypto" }
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-error-types = {path="../../types/error_types"}
 ic-ic00-types = {path="../../types/ic00_types"}
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }

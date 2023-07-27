@@ -44,7 +44,7 @@ use dfn_candid::candid_one;
 use dfn_core::api::spawn;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError, SECONDS_PER_DAY,
 };

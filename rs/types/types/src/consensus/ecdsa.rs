@@ -31,7 +31,7 @@ use crate::crypto::{
 };
 use crate::{node_id_into_protobuf, node_id_try_from_option};
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;

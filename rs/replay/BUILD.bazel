@@ -13,7 +13,7 @@ DEPENDENCIES = [
     "//rs/crypto",
     "//rs/crypto/for_verification_only",
     "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/utils/threshold_sig",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cycles_account_manager",

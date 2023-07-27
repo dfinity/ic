@@ -27,7 +27,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/node_key_validation",
     "//rs/crypto/secrets_containers",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/time",
     "//rs/interfaces",

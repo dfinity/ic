@@ -15,7 +15,7 @@ rust_library(
     deps = [
         "//rs/canonical_state",
         "//rs/config",
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/crypto/tree_hash",
         "//rs/interfaces",
         "//rs/interfaces/certified_stream_store",

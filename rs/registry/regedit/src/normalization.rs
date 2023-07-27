@@ -1,6 +1,6 @@
 use crate::{json, snapshot::Snapshot};
 use ic_base_types::PrincipalId;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use serde_json::Value;
 use std::{collections::BTreeMap, convert::TryFrom, ops::Range, str::FromStr};
 

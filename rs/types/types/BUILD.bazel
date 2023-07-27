@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/bitcoin/types/internal",
     "//rs/constants",
     "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/phantom_newtype",
     "//rs/protobuf",

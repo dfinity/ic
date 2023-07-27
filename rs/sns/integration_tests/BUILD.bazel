@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nns/constants",

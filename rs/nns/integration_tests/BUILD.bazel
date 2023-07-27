@@ -32,7 +32,7 @@ BASE_DEPENDENCIES = [
         "//rs/canister_client/sender",
         "//rs/config",
         "//rs/crypto",
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/nervous_system/common/test_keys",
         "//rs/nervous_system/root",
         "//rs/nns/constants",

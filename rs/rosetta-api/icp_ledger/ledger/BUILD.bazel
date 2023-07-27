@@ -25,7 +25,7 @@ rust_library(
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/constants",
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",

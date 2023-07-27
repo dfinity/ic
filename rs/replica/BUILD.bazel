@@ -11,7 +11,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/consensus",
     "//rs/crypto",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/threshold_sig",
     "//rs/cycles_account_manager",

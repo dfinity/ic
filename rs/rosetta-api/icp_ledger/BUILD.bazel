@@ -31,7 +31,7 @@ rust_library(
     deps = [
         "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",

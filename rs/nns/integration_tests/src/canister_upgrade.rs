@@ -34,7 +34,7 @@ fn upgrade_canister() {
     .unwrap();
     let old_module_hash = root_status_before.module_hash().unwrap();
     let wasm = lifeline::LIFELINE_CANISTER_WASM;
-    let new_module_hash = &ic_crypto_sha::Sha256::hash(wasm);
+    let new_module_hash = &ic_crypto_sha2::Sha256::hash(wasm);
 
     assert_ne!(old_module_hash.as_slice(), new_module_hash);
 

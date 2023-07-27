@@ -10,7 +10,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nns/constants",
     "//rs/protobuf",

@@ -30,7 +30,7 @@ hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"

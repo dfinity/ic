@@ -580,7 +580,7 @@ where
     }
 
     /// If the caller is NNS Governance, always allow, as this would indicate a proposal was passed
-    /// to create a new SNS.  
+    /// to create a new SNS.
     /// If the given caller exists in the `allowed_principals` whitelist return `true`,
     /// otherwise return `false`.
     ///
@@ -1868,7 +1868,7 @@ mod test {
     use async_trait::async_trait;
     use candid::{Decode, Encode};
     use ic_base_types::PrincipalId;
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use ic_icrc1_ledger::LedgerArgument;
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
     use ic_nns_handler_root_interface::client::{

@@ -85,7 +85,7 @@ DEPENDENCIES_TEST = [
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/root",

@@ -15,7 +15,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381/der_utils",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/types/types",
     "@crate_index//:base64",
     "@crate_index//:cached",

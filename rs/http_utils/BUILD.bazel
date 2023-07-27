@@ -8,7 +8,7 @@ rust_library(
     crate_name = "ic_http_utils",
     version = "0.8.0",
     deps = [
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/monitoring/logger",
         "@crate_index//:flate2",
         "@crate_index//:hex",

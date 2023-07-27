@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_used)]
 
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
 use serde_bytes::Bytes;
 use std::convert::{TryFrom, TryInto};

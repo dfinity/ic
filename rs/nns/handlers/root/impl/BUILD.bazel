@@ -14,7 +14,7 @@ filegroup(
 
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proxied_canister_calls_tracker",

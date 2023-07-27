@@ -292,7 +292,7 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
     bytes_to_sign: &[u8],
 ) -> (Vec<u8>, Vec<u8>) {
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use rsa::{Hash, PaddingScheme, PublicKeyParts, RsaPrivateKey};
 
     let bitlength = 2048; // minimum allowed

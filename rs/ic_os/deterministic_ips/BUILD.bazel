@@ -22,7 +22,7 @@ rust_library(
     crate_name = "deterministic_ips",
     version = "0.1.0",
     deps = [
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "@crate_index//:thiserror",
     ],
 )

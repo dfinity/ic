@@ -68,7 +68,7 @@ async fn vote_on_root_proposal_from_multiple_voters(
 fn governance_canister_sha() -> [u8; 32] {
     let governance_canister_wasm_bytes =
         Project::cargo_bin_maybe_from_env("governance-canister", &["test"]).bytes();
-    ic_crypto_sha::Sha256::hash(&governance_canister_wasm_bytes)
+    ic_crypto_sha2::Sha256::hash(&governance_canister_wasm_bytes)
 }
 
 #[test]
@@ -99,7 +99,7 @@ fn test_upgrade_governance_through_root_proposal() {
                 .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
-            &ic_crypto_sha::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
+            &ic_crypto_sha2::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
 
         let response: Result<(), String> = nns_canisters
             .root
@@ -238,7 +238,7 @@ fn test_cant_submit_root_proposal_with_wrong_sha() {
                 .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
-            &ic_crypto_sha::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
+            &ic_crypto_sha2::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
 
         let response: Result<(), String> = nns_canisters
             .root
@@ -287,7 +287,7 @@ fn test_enough_no_votes_rejects_the_proposal() {
                 .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
-            &ic_crypto_sha::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
+            &ic_crypto_sha2::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
 
         let response: Result<(), String> = nns_canisters
             .root
@@ -366,7 +366,7 @@ fn test_changing_the_sha_invalidates_the_proposal() {
                 .with_wasm(ic_test_utilities::empty_wasm::EMPTY_WASM.to_vec());
 
         let empty_wasm_sha =
-            &ic_crypto_sha::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
+            &ic_crypto_sha2::Sha256::hash(ic_test_utilities::empty_wasm::EMPTY_WASM);
 
         let response: Result<(), String> = nns_canisters
             .root

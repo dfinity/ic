@@ -8,7 +8,7 @@ use crate::manifest::{
     MAX_FILE_SIZE_TO_GROUP,
 };
 
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::{CheckpointLayout, CANISTER_FILE};

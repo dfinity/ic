@@ -9,7 +9,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/types/types",
 ]
 

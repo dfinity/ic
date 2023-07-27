@@ -87,7 +87,7 @@ members = [
   "rs/crypto/node_key_validation",
   "rs/crypto/getrandom_for_wasm",
   "rs/crypto/prng",
-  "rs/crypto/sha",
+  "rs/crypto/sha2",
   "rs/crypto/tecdsa",
   "rs/crypto/temp_crypto",
   "rs/crypto/test_utils",

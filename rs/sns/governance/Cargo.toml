@@ -37,7 +37,7 @@ ic-base-types = { path = "../../types/base_types" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-canister-profiler = { path = "../../rust_canisters/canister_profiler" }
-ic-crypto-sha = { path = "../../crypto/sha/" }
+ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-icrc1-client = { path = "../../rosetta-api/icrc1/client" }
@@ -85,7 +85,7 @@ criterion = "0.3"
 futures = "0.3.13"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
-ic-crypto-sha = { path = "../../crypto/sha/" }
+ic-crypto-sha2 = { path = "../../crypto/sha2/" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-sns-governance = { path = ".", features = ["test"] }

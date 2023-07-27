@@ -23,7 +23,7 @@ use crate::{
 use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::Account;
 use std::{
@@ -1198,7 +1198,7 @@ mod tests {
     use candid::Encode;
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
     use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;

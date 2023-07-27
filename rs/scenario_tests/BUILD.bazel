@@ -7,7 +7,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",
     "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/utils/basic_sig",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",

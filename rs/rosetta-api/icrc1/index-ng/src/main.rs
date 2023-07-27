@@ -4,7 +4,7 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::trap;
 use ic_cdk_macros::{init, post_upgrade, query};
 use ic_cdk_timers::TimerId;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{

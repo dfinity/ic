@@ -3,7 +3,7 @@ use hex::FromHex;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey, PolynomialCommitment};
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
-use ic_crypto_sha::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::fmt;
@@ -79,7 +79,7 @@ impl From<KeyIdInstantiationError> for CryptoError {
 /// `domain_separator | algorithm_id | size(bytes) | bytes`
 /// where  domain_separator is DomainSeparationContext(KEY_ID_DOMAIN),
 /// algorithm_id is a 1-byte value, and size(pk_bytes) is the size of
-/// pk_bytes as u32 in BigEndian format.                              
+/// pk_bytes as u32 in BigEndian format.
 ///
 /// # Errors
 /// * `KeyIdInstantiationError::InvalidArgument`: if the slice of bytes is too large and its size does not fit in a `u32`.

@@ -1,5 +1,5 @@
 [package]
-name = "ic-crypto-sha"
+name = "ic-crypto-sha2"
 version = "0.8.0"
 edition = "2021"
 

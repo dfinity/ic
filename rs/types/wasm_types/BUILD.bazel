@@ -8,7 +8,7 @@ rust_library(
     crate_name = "ic_wasm_types",
     version = "0.8.0",
     deps = [
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/protobuf",
         "//rs/sys",
         "//rs/types/types",

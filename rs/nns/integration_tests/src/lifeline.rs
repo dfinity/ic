@@ -68,7 +68,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             .expect("root canister has no hash");
         assert_ne!(
             root_checksum,
-            ic_crypto_sha::Sha256::hash(wasm_module.clone().as_slice())
+            ic_crypto_sha2::Sha256::hash(wasm_module.clone().as_slice())
         );
 
         let funny: u32 = 422557101; // just a funny number I came up with
@@ -159,7 +159,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             .expect("root canister has no hash");
         assert_eq!(
             root_checksum,
-            ic_crypto_sha::Sha256::hash(wasm_module.as_slice())
+            ic_crypto_sha2::Sha256::hash(wasm_module.as_slice())
         );
 
         let received_magic = nns_canisters
@@ -196,7 +196,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
         let root_checksum = root_status
             .module_hash()
             .expect("root canister has no hash");
-        assert_ne!(root_checksum, ic_crypto_sha::Sha256::hash(empty_wasm));
+        assert_ne!(root_checksum, ic_crypto_sha2::Sha256::hash(empty_wasm));
 
         let init_arg: &[u8] = &[];
 
@@ -283,7 +283,7 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
         let root_checksum = root_status
             .module_hash()
             .expect("root canister has no hash");
-        assert_eq!(root_checksum, ic_crypto_sha::Sha256::hash(empty_wasm));
+        assert_eq!(root_checksum, ic_crypto_sha2::Sha256::hash(empty_wasm));
 
         Ok(())
     });

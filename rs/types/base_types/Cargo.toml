@@ -11,7 +11,7 @@ byte-unit = "4.0.14"
 candid = { workspace = true }
 comparable = { version = "0.5.1", features = ["derive"] }
 crc32fast = "1.2.0"
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-protobuf = { path = "../../protobuf" }
 ic-stable-structures = { workspace = true }
 phantom_newtype = { path = "../../phantom_newtype" }

@@ -8,7 +8,7 @@ use dfn_candid::candid_one;
 use ic_agent::{Agent, AgentError};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_client::Sender;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
