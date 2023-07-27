@@ -4492,47 +4492,87 @@ impl Governance {
         }
     }
 
-    async fn create_service_nervous_system(
+    async fn do_create_service_nervous_system(
         &mut self,
         proposal_id: u64,
         create_service_nervous_system: &CreateServiceNervousSystem,
         original_total_community_fund_maturity_e8s_equivalent: u64,
-    ) -> Option<()> {
+    ) -> Result<(), GovernanceError> {
         // Get the current time of proposal execution.
         let current_timestamp_seconds = self.env.now();
+
+        let swap_parameters = create_service_nervous_system
+            .swap_parameters
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters",
+            ))?;
+
+        let withdrawal_amount_e8s = *swap_parameters
+            .neurons_fund_investment
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.neurons_fund_investment",
+            ))?
+            .e8s
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.neurons_fund_investment.e8s",
+            ))?;
+
+        let max_icp_e8s = *swap_parameters
+            .maximum_icp
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.maximum_icp",
+            ))?
+            .e8s
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.maximum_icp.e8s",
+            ))?;
+
+        let min_participant_icp_e8s = *swap_parameters
+            .minimum_participant_icp
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.minimum_participant_icp",
+            ))?
+            .e8s
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.minimum_participant_icp.e8s",
+            ))?;
+
+        let max_participant_icp_e8s = *swap_parameters
+            .maximum_participant_icp
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.maximum_participant_icp",
+            ))?
+            .e8s
+            .as_ref()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "missing field swap_parameters.maximum_participant_icp.e8s",
+            ))?;
 
         let neurons_fund_participants = draw_funds_from_the_community_fund(
             &mut self.proto.neurons,
             original_total_community_fund_maturity_e8s_equivalent,
-            *create_service_nervous_system
-                .swap_parameters
-                .as_ref()?
-                .neurons_fund_investment
-                .as_ref()?
-                .e8s
-                .as_ref()?,
+            withdrawal_amount_e8s,
             &sns_swap_pb::Params {
-                max_icp_e8s: *create_service_nervous_system
-                    .swap_parameters
-                    .as_ref()?
-                    .maximum_icp
-                    .as_ref()?
-                    .e8s
-                    .as_ref()?,
-                min_participant_icp_e8s: *create_service_nervous_system
-                    .swap_parameters
-                    .as_ref()?
-                    .minimum_participant_icp
-                    .as_ref()?
-                    .e8s
-                    .as_ref()?,
-                max_participant_icp_e8s: *create_service_nervous_system
-                    .swap_parameters
-                    .as_ref()?
-                    .maximum_participant_icp
-                    .as_ref()?
-                    .e8s
-                    .as_ref()?,
+                max_icp_e8s,
+                min_participant_icp_e8s,
+                max_participant_icp_e8s,
                 ..Default::default()
             },
         );
@@ -4546,17 +4586,26 @@ impl Governance {
                 random_swap_start_time: self.randomly_pick_swap_start(),
             };
 
-        let execute_create_service_nervous_system_result = self
-            .execute_create_service_nervous_system_proposal(
-                executed_create_service_nervous_system_proposal,
+        self.execute_create_service_nervous_system_proposal(
+            executed_create_service_nervous_system_proposal,
+        )
+        .await
+    }
+
+    async fn create_service_nervous_system(
+        &mut self,
+        proposal_id: u64,
+        create_service_nervous_system: &CreateServiceNervousSystem,
+        original_total_community_fund_maturity_e8s_equivalent: u64,
+    ) {
+        let result = self
+            .do_create_service_nervous_system(
+                proposal_id,
+                create_service_nervous_system,
+                original_total_community_fund_maturity_e8s_equivalent,
             )
             .await;
-        self.set_proposal_execution_status(
-            proposal_id,
-            execute_create_service_nervous_system_result,
-        );
-
-        Some(())
+        self.set_proposal_execution_status(proposal_id, result);
     }
 
     async fn execute_create_service_nervous_system_proposal(
