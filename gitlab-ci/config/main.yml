@@ -17,7 +17,7 @@ cargo-audit:
 
 boundary-node-service-worker:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   needs: []
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
@@ -37,11 +37,19 @@ boundary-node-service-worker:
       (
         cd typescript/service-worker
         npm ci
+
+        # perform linting
         npm run lint
         npm run format:check
+
+        # run unit tests
         npm test
+
+        # build service worker
         npm run build
         npm run build-dev
+
+        # prepase release artifact
         npm pack
         mkdir artifacts
         mv dfinity-service-worker-*.tgz artifacts
@@ -826,7 +834,7 @@ cut-release-candidate:
 
 release-boundary-node-service-worker:
   extends:
-    - .ubuntu-cargo-k8s
+    - .build-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG =~ /^service-worker_v([0-9\.]+)$/'
   needs: [boundary-node-service-worker]
