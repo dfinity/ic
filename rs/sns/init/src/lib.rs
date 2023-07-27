@@ -1020,7 +1020,7 @@ impl SnsInitPayload {
             ));
         }
 
-        let invalid_principals: Vec<_> = self
+        let (valid_principals, invalid_principals): (Vec<_>, Vec<_>) = self
             .fallback_controller_principal_ids
             .iter()
             .map(|principal_id_string| {
@@ -1029,15 +1029,30 @@ impl SnsInitPayload {
                     PrincipalId::from_str(principal_id_string),
                 )
             })
-            .filter(|pair| pair.1.is_err())
-            .map(|pair| pair.0)
-            .collect();
+            .partition(|item| item.1.is_ok());
 
         if !invalid_principals.is_empty() {
             return Err(format!(
                 "Error: One or more fallback_controller_principal_ids is not a valid principal id. \
-                The follow principals are invalid: {:?}", invalid_principals
+                The follow principals are invalid: {:?}", 
+                invalid_principals
+                    .into_iter()
+                    .map(|pair| pair.0)
+                    .collect::<Vec<_>>()
             ));
+        }
+
+        // At this point, all principals are valid. Dedupe the values
+        let unique_principals: BTreeSet<_> = valid_principals
+            .iter()
+            .filter_map(|pair| pair.1.clone().ok())
+            .collect();
+
+        if unique_principals.len() != valid_principals.len() {
+            return Err(
+                "Error: Duplicate PrincipalIds found in fallback_controller_principal_ids"
+                    .to_string(),
+            );
         }
 
         Ok(())
@@ -2799,6 +2814,15 @@ mod test {
         sns_init_payload.validate_pre_execution().unwrap_err();
 
         let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = vec![
+            PrincipalId::new_user_test_id(1).to_string(),
+            PrincipalId::new_user_test_id(1).to_string(),
+        ];
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.fallback_controller_principal_ids =
             vec![PrincipalId::new_user_test_id(1).to_string()];
         sns_init_payload.validate_legacy_init().unwrap();
@@ -2842,6 +2866,15 @@ mod test {
         sns_init_payload.validate_post_execution().unwrap_err();
         sns_init_payload.validate_pre_execution().unwrap_err();
         sns_init_payload.validate_legacy_init().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.fallback_controller_principal_ids = vec![
+            PrincipalId::new_user_test_id(1).to_string(),
+            PrincipalId::new_user_test_id(1).to_string(),
+        ];
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
 
         let mut sns_init_payload = get_sns_init_payload();
         sns_init_payload.fallback_controller_principal_ids =
