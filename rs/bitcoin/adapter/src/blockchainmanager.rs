@@ -277,7 +277,7 @@ impl BlockchainManager {
             for inv in inventory {
                 if let Inventory::Block(hash) = inv {
                     peer.tip = *hash;
-                    if !blockchain_state.is_block_hash_known(hash) {
+                    if blockchain_state.get_cached_header(hash).is_none() {
                         last_block = Some(hash);
                     }
                 }
@@ -468,7 +468,7 @@ impl BlockchainManager {
         let (initial_hash, locator_hashes) = {
             let blockchain = self.blockchain.lock().await;
             (
-                blockchain.genesis().header.block_hash(),
+                blockchain.genesis().block_hash(),
                 blockchain.locator_hashes(),
             )
         };
@@ -802,7 +802,7 @@ pub mod test {
     fn create_blockchain_manager(config: &Config) -> (BlockHeader, BlockchainManager) {
         let blockchain_state = BlockchainState::new(config, &MetricsRegistry::default());
         (
-            blockchain_state.genesis().clone().header,
+            *blockchain_state.genesis(),
             BlockchainManager::new(
                 Arc::new(Mutex::new(blockchain_state)),
                 no_op_logger(),
