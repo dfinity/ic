@@ -38,6 +38,15 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
+ARG nvm_version=v0.39.1
+ENV NVM_DIR=/opt/nvm
+RUN mkdir $NVM_DIR && \
+    curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
+
+ARG sw_node_version=18
+RUN . /opt/nvm/nvm.sh && \
+    nvm install ${sw_node_version}
+
 RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 
 # CI before script requires sudo
