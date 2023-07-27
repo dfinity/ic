@@ -883,6 +883,9 @@ pub trait EcdsaBlockReader: Send + Sync {
     /// Returns the transcripts requested by the tip.
     fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
+    /// Returns the IDs of quadruples in creation by the tip.
+    fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_>;
+
     /// Returns the signatures requested by the tip.
     fn requested_signatures(
         &self,

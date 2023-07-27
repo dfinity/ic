@@ -1365,6 +1365,9 @@ pub trait EcdsaStats: Send + Sync {
     /// Updates the set of transcripts being tracked currently.
     fn update_active_transcripts(&self, block_reader: &dyn EcdsaBlockReader);
 
+    /// Updates the set of quadruples being tracked currently.
+    fn update_active_quadruples(&self, block_reader: &dyn EcdsaBlockReader);
+
     /// Records the time taken to verify the support share received for a dealing.
     fn record_support_validation(&self, support: &IDkgDealingSupport, duration: Duration);
 
@@ -1397,6 +1400,7 @@ pub trait EcdsaStats: Send + Sync {
 pub struct EcdsaStatsNoOp {}
 impl EcdsaStats for EcdsaStatsNoOp {
     fn update_active_transcripts(&self, _block_reader: &dyn EcdsaBlockReader) {}
+    fn update_active_quadruples(&self, _block_reader: &dyn EcdsaBlockReader) {}
     fn record_support_validation(&self, _support: &IDkgDealingSupport, _duration: Duration) {}
     fn record_support_aggregation(
         &self,
