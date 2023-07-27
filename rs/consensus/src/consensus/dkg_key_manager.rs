@@ -6,7 +6,7 @@
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
 use ic_logger::{error, info, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
 use ic_types::{
     consensus::{dkg::Summary, BlockPayload, HasHeight},
     crypto::threshold_sig::ni_dkg::{
@@ -154,7 +154,7 @@ impl DkgKeyManager {
             info!(
                 every_n_seconds => 5,
                 self.logger,
-                "Transcript can't be loaded yet, last height too low: {:?} {:?}", last_height, id
+                "Transcript {} can't be loaded yet, last height too low: {:?}", dkg_id_log_msg(id), last_height
             );
             return false;
         }
@@ -182,8 +182,9 @@ impl DkgKeyManager {
                 panic!("The dkg key manager thread panicked")
             }
             Ok(Err(err)) => panic!(
-                "The DKG transcript with id={:?} couldn't be loaded: {:?}",
-                id, err
+                "The DKG transcript {} couldn't be loaded: {:?}",
+                dkg_id_log_msg(id),
+                err
             ),
         }
     }
@@ -272,12 +273,14 @@ impl DkgKeyManager {
         for (id, (_, handle)) in expired {
             match handle.recv() {
                 Err(err) => panic!(
-                    "Couldn't finish transcript loading with id={:?}: {:?}",
-                    id, err
+                    "Couldn't finish loading transcript {}: {:?}",
+                    dkg_id_log_msg(&id),
+                    err
                 ),
                 Ok(Err(err)) => panic!(
-                    "The DKG transcript with id={:?} couldn't be loaded: {:?}",
-                    id, err
+                    "Couldn't finish loading transcript {}: {:?}",
+                    dkg_id_log_msg(&id),
+                    err
                 ),
                 _ => (),
             }
@@ -323,10 +326,8 @@ impl DkgKeyManager {
         };
 
         for (deadline, dkg_id) in transcripts_to_load.into_iter() {
-            info!(
-                self.logger,
-                "Start asynchronously loading the DKG transcript with id={:?}", dkg_id,
-            );
+            let timer = Timer::start();
+
             let crypto = self.crypto.clone();
             let logger = self.logger.clone();
             let summary = summary.clone();
@@ -344,19 +345,27 @@ impl DkgKeyManager {
 
                 let result = loop {
                     let result = NiDkgAlgorithm::load_transcript(&*crypto, transcript);
+                    let elapsed = timer.elapsed();
+
                     match &result {
                         // Key loaded successfully
                         Ok(LoadTranscriptResult::SigningKeyAvailable) => {
-                            info!(logger, "Finished loading transcript with id {:?}", dkg_id);
+                            info!(
+                                logger,
+                                "Finished loading transcript {} after {}s",
+                                dkg_id_log_msg(&dkg_id),
+                                elapsed
+                            );
                             break result;
                         }
 
                         Ok(LoadTranscriptResult::NodeNotInCommittee) => {
                             info!(
                                 logger,
-                                "Finished loading public parts of transcript with id {:?} \
+                                "Finished loading public parts of transcript {} after {}s\
                                 (signing key unavailable since this node is not part of the committee)", 
-                                dkg_id
+                                dkg_id_log_msg(&dkg_id),
+                                elapsed
                             );
                             break result;
                         }
@@ -365,9 +374,9 @@ impl DkgKeyManager {
                         Ok(val) => {
                             error!(
                                 logger,
-                                "Could only load public parts of transcript with id {:?} \
+                                "Could only load public parts of transcript {} \
                                 (signing key unavailable: {:?})",
-                                dkg_id,
+                                dkg_id_log_msg(&dkg_id),
                                 val
                             );
                             break result;
@@ -378,8 +387,8 @@ impl DkgKeyManager {
                             warn!(
                                 every_n_seconds => 5,
                                 logger,
-                                "The DKG transcript with id {:?} couldn't be loaded: {:?} Retrying...",
-                                dkg_id,
+                                "Transcript {} couldn't be loaded: {:?} Retrying...",
+                                dkg_id_log_msg(&dkg_id),
                                 err
                             );
                         }
@@ -388,8 +397,8 @@ impl DkgKeyManager {
                         Err(err) => {
                             error!(
                                 logger,
-                                "The DKG transcript with id {:?} couldn't be loaded: {:?}",
-                                dkg_id,
+                                "Transcript {} couldn't be loaded: {:?}",
+                                dkg_id_log_msg(&dkg_id),
                                 err
                             );
                             break result;
@@ -397,7 +406,7 @@ impl DkgKeyManager {
                     }
                 };
 
-                tx.send(result).expect("DKG key manager paniced");
+                tx.send(result).expect("DKG key manager panicked");
             });
         }
     }
@@ -520,6 +529,25 @@ impl Drop for DkgKeyManager {
     fn drop(&mut self) {
         self.sync()
     }
+}
+
+/// Print the information about a [`NiDkgId`] in a concise way for logging
+fn dkg_id_log_msg(id: &NiDkgId) -> String {
+    let tag = match id.dkg_tag {
+        NiDkgTag::LowThreshold => "low",
+        NiDkgTag::HighThreshold => "high",
+    };
+
+    // If the target is local (which it is ususally), we don't log the target
+    let remote = match id.target_subnet {
+        NiDkgTargetSubnet::Local => String::from(""),
+        NiDkgTargetSubnet::Remote(remote_id) => format!(", remote_target: {:?}", remote_id),
+    };
+
+    format!(
+        "NiDkgId{{ start_height: {}, threshold: {}{} }}",
+        id.start_block_height, tag, remote
+    )
 }
 
 #[cfg(test)]
