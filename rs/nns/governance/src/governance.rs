@@ -318,7 +318,7 @@ impl NnsFunction {
             self,
             NnsFunction::NnsRootUpgrade
                 | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::BlessReplicaVersion
+                | NnsFunction::UpdateElectedReplicaVersions
                 | NnsFunction::UpdateSubnetReplicaVersion
         )
     }
@@ -486,8 +486,6 @@ impl NnsFunction {
                 (LIFELINE_CANISTER_ID, "hard_reset_root_to_version")
             }
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
-            NnsFunction::BlessReplicaVersion => (REGISTRY_CANISTER_ID, "bless_replica_version"),
-            NnsFunction::RetireReplicaVersion => (REGISTRY_CANISTER_ID, "retire_replica_version"),
             NnsFunction::UpdateElectedReplicaVersions => {
                 (REGISTRY_CANISTER_ID, "update_elected_replica_versions")
             }
@@ -550,6 +548,14 @@ impl NnsFunction {
                 (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
             }
             NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
+            NnsFunction::BlessReplicaVersion | NnsFunction::RetireReplicaVersion => {
+                // Bless and retire replica version proposals are deprecated and
+                // can no longer be used.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("{:?} is a deprecated NnsFunction. Use UpdateElectedReplicaVersions instead", self),
+                ));
+            }
         };
         Ok((canister_id, method))
     }
@@ -633,9 +639,9 @@ impl Proposal {
                             | NnsFunction::RemoveNodesFromSubnet
                             | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
-                            NnsFunction::BlessReplicaVersion
-                            | NnsFunction::UpdateElectedReplicaVersions
-                            | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
+                            NnsFunction::UpdateElectedReplicaVersions => {
+                                Topic::ReplicaVersionManagement
+                            }
                             NnsFunction::UpdateSubnetReplicaVersion => {
                                 Topic::SubnetReplicaVersionManagement
                             }
@@ -666,6 +672,14 @@ impl Proposal {
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
                             NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
+                            NnsFunction::BlessReplicaVersion
+                            | NnsFunction::RetireReplicaVersion => {
+                                println!(
+                                    "{}ERROR: Obsolete proposal type used: {:?}",
+                                    LOG_PREFIX, action
+                                );
+                                Topic::ReplicaVersionManagement
+                            }
                         }
                     } else {
                         println!(
