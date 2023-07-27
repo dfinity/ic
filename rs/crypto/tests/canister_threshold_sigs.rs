@@ -2913,9 +2913,10 @@ mod verify_dealing_private {
 
 mod verify_dealing_public {
     use super::*;
+    use ic_registry_client_helpers::crypto::CryptoRegistry;
 
     #[test]
-    fn should_run_verify_dealing_public() {
+    fn should_successfully_verify_random_sharing_dealing_with_valid_input() {
         let mut rng = reproducible_rng();
         let subnet_size = rng.gen_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
@@ -3059,6 +3060,53 @@ mod verify_dealing_public {
     }
 
     #[test]
+    fn should_fail_verify_dealing_public_with_wrong_dealer_index() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
+        let (dealers, receivers) =
+            env.choose_dealers_and_receivers(&IDkgParticipants::Random, &mut rng);
+        let params = env.params_for_random_sharing(
+            &dealers,
+            &receivers,
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &mut rng,
+        );
+        let dealer = env.nodes.random_dealer(&params, &mut rng);
+        // We need the signature verification to succeed, so the public key of the valid dealer in
+        // the registry needs to be copied to a non-dealer. The subsequent dealer index check will
+        // fail (which is what we are testing), since the `NodeId` of the non-dealer is not
+        // included in the list of dealers in params.
+        let not_a_dealer_node_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+        copy_node_signing_key_in_registry_from_one_node_to_another(
+            &env,
+            dealer.id(),
+            not_a_dealer_node_id,
+        );
+        let signed_dealing = dealer
+            .create_dealing_or_panic(&params)
+            .into_builder()
+            .build_with_signature(&params, dealer, dealer.id())
+            .into_builder()
+            .with_dealer_id(not_a_dealer_node_id)
+            .build();
+
+        let verifier_id = random_node_id_excluding(&env.nodes.ids(), &mut rng);
+        let verifier = TempCryptoComponent::builder()
+            .with_registry(Arc::clone(&env.registry) as Arc<_>)
+            .with_node_id(verifier_id)
+            .with_rng(rng)
+            .build();
+
+        let result = verifier.verify_dealing_public(&params, &signed_dealing);
+
+        assert_matches!(
+            result,
+            Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason == "No such dealer"
+        );
+    }
+
+    #[test]
     fn should_fail_verify_dealing_public_with_wrong_internal_dealing_raw() {
         let mut rng = reproducible_rng();
         let subnet_size = rng.gen_range(1..10);
@@ -3091,6 +3139,32 @@ mod verify_dealing_public {
             result,
             Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason.starts_with("ThresholdEcdsaSerializationError")
         );
+    }
+
+    fn copy_node_signing_key_in_registry_from_one_node_to_another(
+        env: &CanisterThresholdSigTestEnvironment,
+        source_node_id: NodeId,
+        destination_node_id: NodeId,
+    ) {
+        let node_signing_public_key = env
+            .registry
+            .get_crypto_key_for_node(
+                source_node_id,
+                ic_types::crypto::KeyPurpose::NodeSigning,
+                env.newest_registry_version,
+            )
+            .expect("registry call should succeed");
+        env.registry_data
+            .add(
+                &ic_registry_keys::make_crypto_node_key(
+                    destination_node_id,
+                    ic_types::crypto::KeyPurpose::NodeSigning,
+                ),
+                env.newest_registry_version,
+                node_signing_public_key,
+            )
+            .expect("should be able to add node signing public key to registry");
+        env.registry.reload();
     }
 }
 

@@ -21,6 +21,9 @@ use ic_types::signature::BasicSignature;
 use ic_types::NodeId;
 use std::convert::TryFrom;
 
+#[cfg(test)]
+mod tests;
+
 pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
     self_node_id: &NodeId,
