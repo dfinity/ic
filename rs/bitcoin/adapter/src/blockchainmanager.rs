@@ -440,14 +440,7 @@ impl BlockchainManager {
         );
 
         match self.blockchain.lock().await.add_block(block.clone()) {
-            Ok(block_height) => {
-                trace!(
-                    self.logger,
-                    "Block added to the cache successfully at height = {}",
-                    block_height
-                );
-                Ok(())
-            }
+            Ok(()) => Ok(()),
             Err(err) => {
                 warn!(
                     self.logger,
