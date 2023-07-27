@@ -20,7 +20,7 @@ gflags.DEFINE_integer("increment_kb", 250, "Increment of response payload size i
 gflags.DEFINE_integer("max_kb", 2 * 1024, "Maximum response payload size to test.")
 gflags.DEFINE_integer("num_canisters", 1, "Number of canisters to run against.")
 
-CANISTER = "response-payload-test-canister.wasm"
+CANISTER = "response-payload-test-canister"
 
 
 class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
@@ -30,9 +30,7 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
         """Init with single workload generator."""
         super().__init__()
         for _ in range(FLAGS.num_canisters):
-            self.install_canister(
-                self.target_nodes[0], canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}")
-            )
+            self.install_canister(self.target_nodes[0], canister=CANISTER)
 
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""

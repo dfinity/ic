@@ -522,11 +522,17 @@ class BaseExperiment:
         cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "0"]
         if this_canister_name != "counter":
             canister_in_artifacts = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm")
+            canister_in_artifacts_gz = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm.gz")
             canister_in_repo = os.path.join("canisters", f"{this_canister_name}.wasm")
             canister_in_repo_gzip = os.path.join("canisters", f"{this_canister_name}.wasm.gz")
-            print(f"Looking for canister at locations: {canister_in_artifacts} and {canister_in_repo}")
-            if os.path.exists(canister_in_artifacts):
+            print(
+                f"Looking for canister at locations: {canister_in_artifacts}, {canister_in_artifacts_gz} and {canister_in_repo}")
+            if os.path.exists(this_canister):
+                cmd += this_canister
+            elif os.path.exists(canister_in_artifacts):
                 cmd += ["--canister", canister_in_artifacts]
+            elif os.path.exists(canister_in_artifacts_gz):
+                cmd += ["--canister", canister_in_artifacts_gz]
             elif os.path.exists(canister_in_repo):
                 cmd += ["--canister", canister_in_repo]
             elif os.path.exists(canister_in_repo_gzip):

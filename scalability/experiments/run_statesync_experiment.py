@@ -40,7 +40,7 @@ import common.misc as misc  # noqa
 import common.prometheus as prometheus  # noqa
 from common.machine_failure import MachineFailure  # noqa
 
-CANISTER = "statesync-test-canister.wasm"
+CANISTER = "statesync-test-canister"
 
 # Number of canisters to install in each iteration
 FLAGS = gflags.FLAGS
@@ -70,7 +70,7 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
         super().init_experiment()
         hostname = self.get_node_ip_address(self.get_subnet_members(FLAGS.subnet_index)[0])
         for i in range(FLAGS.num_canisters):
-            self.install_canister(hostname, canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}"))
+            self.install_canister(hostname, canister=CANISTER)
         print("Successfully installed", FLAGS.num_canisters, "canisters.")
 
     def __change_state(hostname, canister_id, seed):
