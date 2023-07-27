@@ -1,10 +1,16 @@
 use candid::candid_method;
 use ic_cdk_macros::{init, update};
 use ic_cketh_minter::address::Address;
-use ic_cketh_minter::endpoints::{DisplayLogsRequest, InitArg, MinterArg, ReceivedEthEvent};
+use ic_cketh_minter::endpoints::{
+    DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice, InitArg, MinterArg,
+    ReceivedEthEvent,
+};
 use ic_cketh_minter::eth_rpc;
+use ic_cketh_minter::eth_rpc::GasPrice;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use std::cell::RefCell;
+
+const TRANSACTION_GAS_LIMIT: u32 = 21_000;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = RefCell::default();
@@ -101,6 +107,62 @@ async fn display_logs(req: DisplayLogsRequest) -> Vec<ReceivedEthEvent> {
             }
         })
         .collect()
+}
+
+/// Estimate price of EIP-1559 transaction based on the
+/// `base_fee_per_gas` included in the last finalized block.
+/// See https://www.blocknative.com/blog/eip-1559-fees
+#[update]
+async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
+    use eth_rpc::{Block, BlockSpec, BlockTag};
+    use ic_cketh_minter::eth_rpc::{into_nat, GetBlockByNumberParams};
+
+    const MAX_PRIORITY_FEE_PER_GAS: u64 = 100_000_000; //0.1 gwei
+
+    let finalized_block: Block = eth_rpc::call(
+        "https://rpc.sepolia.org",
+        "eth_getBlockByNumber",
+        GetBlockByNumberParams {
+            block: BlockSpec::Tag(BlockTag::Finalized),
+            include_full_transactions: false,
+        },
+    )
+    .await
+    .expect("HTTP call failed")
+    .unwrap();
+
+    let base_fee_from_last_finalized_block = into_nat(finalized_block.base_fee_per_gas);
+    let max_priority_fee_per_gas = candid::Nat::from(MAX_PRIORITY_FEE_PER_GAS);
+    let max_fee_per_gas =
+        (2_u32 * base_fee_from_last_finalized_block.clone()) + max_priority_fee_per_gas.clone();
+    let gas_limit = candid::Nat::from(TRANSACTION_GAS_LIMIT);
+
+    Eip1559TransactionPrice {
+        base_fee_from_last_finalized_block,
+        max_priority_fee_per_gas,
+        max_fee_per_gas,
+        gas_limit,
+    }
+}
+
+/// Estimate price of EIP-2930 or legacy transactions based on the value returned by
+/// `eth_gasPrice` JSON-RPC call.
+#[update]
+async fn eip_2930_transaction_price() -> Eip2930TransactionPrice {
+    use ic_cketh_minter::eth_rpc::into_nat;
+
+    let gas_price: GasPrice = eth_rpc::call("https://rpc.sepolia.org", "eth_gasPrice", ())
+        .await
+        .expect("HTTP call failed")
+        .unwrap();
+
+    let gas_price = into_nat(gas_price.0);
+    let gas_limit = candid::Nat::from(TRANSACTION_GAS_LIMIT);
+
+    Eip2930TransactionPrice {
+        gas_price,
+        gas_limit,
+    }
 }
 
 fn main() {}
