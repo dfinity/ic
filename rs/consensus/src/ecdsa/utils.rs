@@ -5,6 +5,7 @@ use ic_ic00_types::EcdsaKeyId;
 use ic_interfaces::consensus_pool::ConsensusBlockChain;
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};
 use ic_protobuf::registry::subnet::v1 as pb;
+use ic_types::consensus::ecdsa::QuadrupleId;
 use ic_types::consensus::{
     ecdsa::{
         EcdsaBlockReader, EcdsaMessage, IDkgTranscriptParamsRef, RequestId,
@@ -43,6 +44,17 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
             .as_ecdsa()
             .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
                 ecdsa_payload.iter_transcript_configs_in_creation()
+            })
+    }
+
+    fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
+        self.chain
+            .tip()
+            .payload
+            .as_ref()
+            .as_ecdsa()
+            .map_or(Box::new(std::iter::empty()), |ecdsa_payload| {
+                Box::new(ecdsa_payload.quadruples_in_creation.keys())
             })
     }
 
@@ -243,8 +255,8 @@ pub(crate) mod test_utils {
         EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
         EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
         IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef,
-        RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
-        TranscriptRef, UnmaskedTranscript,
+        QuadrupleId, RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef,
+        TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -486,6 +498,10 @@ pub(crate) mod test_utils {
 
         fn requested_transcripts(&self) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
             Box::new(self.requested_transcripts.iter())
+        }
+
+        fn quadruples_in_creation(&self) -> Box<dyn Iterator<Item = &QuadrupleId> + '_> {
+            Box::new(std::iter::empty())
         }
 
         fn requested_signatures(
