@@ -12,7 +12,7 @@ use crate::{
 };
 use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,

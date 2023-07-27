@@ -6,7 +6,7 @@ pub fn verify_basic_sig_by_public_key(
     signature: &[u8],
     public_key: &[u8],
 ) -> CryptoResult<()> {
-    use ic_crypto_sha::Sha256;
+    use ic_crypto_sha2::Sha256;
 
     let (public_key_bytes, signature_bytes) = (public_key.to_vec(), signature.to_vec());
     match algorithm_id {

@@ -45,7 +45,7 @@ fn should_use_rfc6979_nonces_for_ecdsa_signature_generation() {
     assert_eq!(hex::encode(generated_sig), expected_sig);
 
     // Now check the prehash variant:
-    let message_hash = ic_crypto_sha::Sha256::hash(message);
+    let message_hash = ic_crypto_sha2::Sha256::hash(message);
     let generated_sig = sk.sign_digest(&message_hash).unwrap();
     assert_eq!(hex::encode(generated_sig), expected_sig);
 }

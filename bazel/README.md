@@ -35,7 +35,7 @@ develop inside the build and development container with
 `./gitlab-ci/container/container-run.sh`.
 
 ```bash
-bazel test //rs/crypto/sha:all
+bazel test //rs/crypto/sha2:all
 ```
 
 Most targets should build on the host machine. However, the IC-OS image only

@@ -1,5 +1,5 @@
 use ic_base_types::PrincipalId;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount, DEFAULT_SUBACCOUNT};
 
 use super::get_btc_address::init_ecdsa_public_key;

@@ -16,7 +16,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "//rs/crypto/internal/test_vectors",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "@crate_index//:hex",
 ]
 

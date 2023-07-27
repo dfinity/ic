@@ -21,7 +21,7 @@ ic-base-types = { path = "../../types/base_types/" }
 ic-certified-map = "0.3.1"
 ic-cdk = { workspace = true }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
-ic-crypto-sha = {path = "../../crypto/sha/"}
+ic-crypto-sha2 = {path = "../../crypto/sha2/" }
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-metrics-encoder = "1"

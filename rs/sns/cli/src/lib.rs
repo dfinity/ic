@@ -7,7 +7,7 @@ use crate::{
 use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::pb::v1::{

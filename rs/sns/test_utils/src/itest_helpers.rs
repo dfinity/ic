@@ -4,7 +4,7 @@ use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Projec
 use dfn_candid::{candid_one, CandidOne};
 use ic_canister_client_sender::Sender;
 use ic_config::Config;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
 use ic_icrc1_ledger::{
     InitArgs as LedgerInitArgs, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,

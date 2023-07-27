@@ -13,7 +13,7 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     "//rs/crypto/getrandom_for_wasm",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/gtc_accounts",

@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/protobuf",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",

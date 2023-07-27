@@ -22,7 +22,7 @@ rust_library(
         "//rs/consensus",
         "//rs/crypto",
         "//rs/crypto/node_key_generation",
-        "//rs/crypto/sha",
+        "//rs/crypto/sha2",
         "//rs/crypto/tls_interfaces",
         "//rs/crypto/utils/basic_sig",
         "//rs/http_endpoints/metrics",

@@ -4,7 +4,7 @@ use crate::ECDSAPublicKey;
 use bech32::Variant;
 use ic_btc_interface::Network;
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath, ExtendedBip32DerivationOutput};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 use std::fmt;

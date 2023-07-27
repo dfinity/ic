@@ -22,7 +22,7 @@ use fixtures::{
 };
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError, E8, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::{

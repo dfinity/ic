@@ -1,5 +1,5 @@
 use ciborium::value::Value;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 
 pub type Hash = [u8; 32];
 

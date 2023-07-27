@@ -10,7 +10,7 @@ use candid::Encode;
 use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,

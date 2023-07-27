@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/canonical_state/certification_version",
     "//rs/config",
     "//rs/constants",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/phantom_newtype",

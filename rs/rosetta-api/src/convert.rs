@@ -347,7 +347,7 @@ pub fn neuron_subaccount_bytes_from_principal(
 }
 
 fn neuron_subaccount_hash(principal: &PrincipalId, nonce: u64) -> [u8; 32] {
-    let mut state = ic_crypto_sha::Sha256::new();
+    let mut state = ic_crypto_sha2::Sha256::new();
     state.write(&[0x0c]);
     state.write(b"neuron-stake");
     state.write(principal.as_slice());

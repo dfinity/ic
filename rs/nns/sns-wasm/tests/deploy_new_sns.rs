@@ -4,7 +4,7 @@ use canister_test::{Canister, Project, Runtime, Wasm};
 use common::set_up_state_machine_with_nns;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_interfaces_registry::RegistryClient;
 use ic_nervous_system_clients::canister_status::CanisterStatusResultV2;
 use ic_nervous_system_clients::canister_status::CanisterStatusType::Running;

@@ -58,7 +58,7 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/interfaces/state_manager/mocks",
     "//rs/state_machine_tests",
     "//rs/test_utilities",

@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nns/constants",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",

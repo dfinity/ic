@@ -16,7 +16,7 @@ ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-utils-threshold-sig = { path = "../crypto/utils/threshold_sig" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }

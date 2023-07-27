@@ -24,7 +24,7 @@ ic-cdk-macros = { workspace = true }
 ic-ckbtc-kyt = { path = "../kyt" }
 ic-crypto-extended-bip32 = { path = "../../../crypto/extended_bip32" }
 ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }
-ic-crypto-sha = { path = "../../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-ic00-types = { path = "../../../types/ic00_types" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
 ic-icrc1-client-cdk = { path = "../../../rosetta-api/icrc1/client/cdk" }

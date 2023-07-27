@@ -1,7 +1,7 @@
 use http::{Method, Response, Uri};
 use hyper::{body::HttpBody as _, client::Client, client::HttpConnector, Body};
 use hyper_tls::HttpsConnector;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_logger::{info, warn, ReplicaLogger};
 use std::error::Error;
 use std::fmt;

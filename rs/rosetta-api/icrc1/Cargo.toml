@@ -10,7 +10,7 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 hex = "0.4.2"
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }

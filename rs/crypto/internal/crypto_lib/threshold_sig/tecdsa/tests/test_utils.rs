@@ -765,7 +765,7 @@ impl SignatureProtocolExecution {
         random_beacon: Randomness,
         derivation_path: DerivationPath,
     ) -> Self {
-        let hashed_message = ic_crypto_sha::Sha256::hash(&signed_message).to_vec();
+        let hashed_message = ic_crypto_sha2::Sha256::hash(&signed_message).to_vec();
 
         Self {
             setup,

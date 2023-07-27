@@ -7,7 +7,7 @@ LIB_DEPS = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/extended_bip32",
     "//rs/crypto/getrandom_for_wasm",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/rosetta-api/icrc1/client/cdk",
     "//rs/rust_canisters/canister_log",
     "//rs/rosetta-api/icrc1/ledger",

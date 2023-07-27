@@ -1,4 +1,4 @@
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use ic_state_manager::manifest::validate_manifest;
 use ic_types::crypto::CryptoHash;
 use ic_types::state_sync::{

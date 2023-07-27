@@ -7,7 +7,7 @@ mod test_utils;
 use crate::test_utils::*;
 
 fn verify_data(tag: String, expected: &str, serialized: &[u8]) {
-    let hash = ic_crypto_sha::Sha256::hash(serialized);
+    let hash = ic_crypto_sha2::Sha256::hash(serialized);
     let hex_encoding = hex::encode(&hash[0..8]);
 
     if hex_encoding != expected {

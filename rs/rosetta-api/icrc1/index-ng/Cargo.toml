@@ -17,7 +17,7 @@ ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
-ic-crypto-sha = { path = "../../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-icrc1 = { path = "../" }
 ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
 ic-ledger-core = { path = "../../ledger_core" }

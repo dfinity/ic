@@ -12,7 +12,7 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nns/constants",

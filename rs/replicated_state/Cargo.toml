@@ -11,7 +11,7 @@ ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
-ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }

@@ -511,7 +511,7 @@ fn compressed_canisters_support() {
         std::io::copy(&mut &test_canister_wasm[..], &mut encoder).unwrap();
         encoder.finish().into_result().unwrap()
     };
-    let compressed_hash = ic_crypto_sha::Sha256::hash(&compressed_wasm);
+    let compressed_hash = ic_crypto_sha2::Sha256::hash(&compressed_wasm);
 
     let canister_id = env.install_canister(compressed_wasm, vec![], None).unwrap();
 

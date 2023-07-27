@@ -4,7 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/crypto",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",

@@ -15,7 +15,7 @@ ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-constants = { path = "../constants" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
-ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils = { path = "../crypto/test_utils" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }

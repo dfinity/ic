@@ -3,23 +3,23 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 rust_library(
-    name = "sha",
+    name = "sha2",
     srcs = glob(["src/**"]),
-    crate_name = "ic_crypto_sha",
+    crate_name = "ic_crypto_sha2",
     version = "0.8.0",
     deps = ["//rs/crypto/internal/crypto_lib/sha2"],
 )
 
 rust_doc_test(
-    name = "sha_doc_test",
-    crate = ":sha",
+    name = "sha2_doc_test",
+    crate = ":sha2",
 )
 
 rust_test(
     name = "sha224_test",
     srcs = ["tests/sha224.rs"],
     deps = [
-        ":sha",
+        ":sha2",
         "@crate_index//:openssl",
     ],
 )
@@ -28,7 +28,7 @@ rust_test(
     name = "sha256_test",
     srcs = ["tests/sha256.rs"],
     deps = [
-        ":sha",
+        ":sha2",
         "@crate_index//:openssl",
     ],
 )

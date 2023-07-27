@@ -751,7 +751,7 @@ fn can_get_canister_information() {
             Ok(WasmResult::Reply(res)) => assert_canister_status_result_equals(
                 CanisterStatusResultV2::new(
                     CanisterStatusType::Running,
-                    Some(ic_crypto_sha::Sha256::hash(UNIVERSAL_CANISTER_WASM).to_vec()),
+                    Some(ic_crypto_sha2::Sha256::hash(UNIVERSAL_CANISTER_WASM).to_vec()),
                     canister_a.get(),
                     vec![canister_a.get()],
                     // We don't assert a specific memory size since the universal canister's

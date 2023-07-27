@@ -1,6 +1,6 @@
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::types::*;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1::*;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 
 /// ECDSA P-256 verification test vectors from the FIPS 186-4 ECDSA test
 /// vectors (P-256, SHA-256, from `SigVer.rsp` in

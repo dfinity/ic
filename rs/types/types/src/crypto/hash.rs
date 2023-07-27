@@ -25,7 +25,7 @@ use crate::signature::{
     BasicSignature, MultiSignature, MultiSignatureShare, ThresholdSignature,
     ThresholdSignatureShare,
 };
-use ic_crypto_sha::{DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use std::hash::Hash;
 
 #[cfg(test)]

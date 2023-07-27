@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
-ic-crypto-sha = { path = "../../crypto/sha" }
+ic-crypto-sha2 = { path = "../../crypto/sha2" }
 ic-crypto-ecdsa-secp256k1 = { path = "../../crypto/ecdsa_secp256k1" }
 ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
 ic-crypto-secrets-containers = { path = "../../crypto/secrets_containers" }

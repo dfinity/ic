@@ -9,7 +9,7 @@ filegroup(
 )
 
 COMMON_DEPS = [
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/phantom_newtype",
     "//rs/protobuf",
     "@crate_index//:base32",

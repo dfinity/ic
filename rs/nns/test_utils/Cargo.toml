@@ -19,7 +19,7 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }
 ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
-ic-crypto-sha = {path = "../../crypto/sha"}
+ic-crypto-sha2 = {path = "../../crypto/sha2" }
 ic-ic00-types = { path = "../../types/ic00_types"}
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }

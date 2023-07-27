@@ -7,7 +7,7 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/certification/test-utils",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/types/types",
     "@crate_index//:rand_0_8_4",

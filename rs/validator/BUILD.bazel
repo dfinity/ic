@@ -6,7 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/constants",
     "//rs/crypto",
-    "//rs/crypto/sha",
+    "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/interfaces",
     "//rs/types/types",

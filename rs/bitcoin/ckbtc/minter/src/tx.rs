@@ -3,7 +3,7 @@
 
 use crate::address::BitcoinAddress;
 use crate::signature::EncodedSignature;
-use ic_crypto_sha::Sha256;
+use ic_crypto_sha2::Sha256;
 use serde_bytes::{ByteBuf, Bytes};
 use std::fmt;
 
