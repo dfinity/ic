@@ -48,8 +48,12 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
     cmc::CMC, ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError, SECONDS_PER_DAY,
 };
-use ic_nervous_system_governance::index::neuron_principal::{
-    InMemoryNeuronPrincipalIndex, NeuronPrincipalIndex,
+use ic_nervous_system_governance::index::{
+    neuron_following::{
+        add_neuron_followees, remove_neuron_followees, update_neuron_category_followees,
+        InMemoryNeuronFollowingIndex, NeuronFollowingIndex,
+    },
+    neuron_principal::{InMemoryNeuronPrincipalIndex, NeuronPrincipalIndex},
 };
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::{
@@ -1205,66 +1209,6 @@ impl Tally {
 }
 
 impl GovernanceProto {
-    /// From the `neurons` part of this `Governance` struct, build the
-    /// index (per topic) from followee to set of followers. The
-    /// neurons themselves map followers (the neuron ID) to a set of
-    /// followees (per topic).
-    pub fn build_topic_followee_index(
-        &self,
-    ) -> BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>> {
-        let mut topic_followee_index = BTreeMap::new();
-        for neuron in self.neurons.values() {
-            GovernanceProto::add_neuron_to_topic_followee_index(&mut topic_followee_index, neuron);
-        }
-        topic_followee_index
-    }
-
-    pub fn add_neuron_to_topic_followee_index(
-        index: &mut BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
-        neuron: &Neuron,
-    ) {
-        let neuron_id = neuron.id.expect("Neuron must have an id");
-        for (itopic, followees) in neuron.followees.iter() {
-            // Note: if there are topics in the data (e.g.,
-            // file) that the Governance struct was
-            // (re-)constructed from that are no longer
-            // defined in the `enum Topic`, the entries are
-            // not put into the topic_followee_index.
-            //
-            // This is okay, as the topics are only changed on
-            // upgrades, and the index is rebuilt on upgrade.
-            if let Some(topic) = Topic::from_i32(*itopic) {
-                let followee_index = index.entry(topic).or_insert_with(BTreeMap::new);
-                for followee in followees.followees.iter() {
-                    followee_index
-                        .entry(*followee)
-                        .or_insert_with(BTreeSet::new)
-                        .insert(neuron_id);
-                }
-            }
-        }
-    }
-
-    pub fn remove_neuron_from_topic_followee_index(
-        index: &mut BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
-        neuron: &Neuron,
-    ) {
-        for (itopic, followees) in neuron.followees.iter() {
-            if let Some(topic) = Topic::from_i32(*itopic) {
-                if let Some(followee_index) = index.get_mut(&topic) {
-                    for followee in followees.followees.iter() {
-                        if let Some(followee_set) = followee_index.get_mut(followee) {
-                            followee_set.remove(&neuron.id.expect("Neuron must have an id"));
-                            if followee_set.is_empty() {
-                                followee_index.remove(followee);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     pub fn build_known_neuron_name_index(&self) -> HashSet<String> {
         self.neurons
             .iter()
@@ -1487,6 +1431,30 @@ impl LedgerUpdateLock {
     }
 }
 
+fn log_already_present_topic_followee_pairs(
+    neuron_id: NeuronId,
+    already_present_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+) {
+    for (topic, followee) in already_present_topic_followee_pairs {
+        println!(
+            "{} Topic {:?} and followee {:?} already present in the index for neuron {:?}",
+            LOG_PREFIX, topic, followee, neuron_id
+        );
+    }
+}
+
+fn log_already_absent_topic_followee_pairs(
+    neuron_id: NeuronId,
+    already_absent_topic_followee_pairs: Vec<(Topic, NeuronId)>,
+) {
+    for (topic, followee) in already_absent_topic_followee_pairs {
+        println!(
+            "{} Topic {:?} and followee {:?} already absent in the index for neuron {:?}",
+            LOG_PREFIX, topic, followee, neuron_id
+        );
+    }
+}
+
 /// The `Governance` canister implements the full public interface of the
 /// IC's governance system.
 pub struct Governance {
@@ -1510,8 +1478,8 @@ pub struct Governance {
     /// cached index and will be removed and recreated when the state
     /// is saved and restored.
     ///
-    /// Topic -> (neuron ID of followee) -> set of followers.
-    pub topic_followee_index: BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
+    /// (Topic, Followee) -> set of followers.
+    pub topic_followee_index: InMemoryNeuronFollowingIndex<NeuronId, Topic>,
 
     /// Maps Principals to the Neuron IDs of all Neurons that have this
     /// Principal as their controller or as one of their hot keys
@@ -1575,7 +1543,7 @@ impl Governance {
             env,
             ledger,
             cmc,
-            topic_followee_index: BTreeMap::new(),
+            topic_followee_index: InMemoryNeuronFollowingIndex::new(),
             principal_to_neuron_ids_index: InMemoryNeuronPrincipalIndex::new(),
             known_neuron_name_set: HashSet::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
@@ -1630,7 +1598,7 @@ impl Governance {
     /// setting a new proto).
     fn initialize_indices(&mut self) {
         self.build_principal_to_neuron_ids_index();
-        self.topic_followee_index = self.proto.build_topic_followee_index();
+        self.build_topic_followee_index();
         self.known_neuron_name_set = self.proto.build_known_neuron_name_index();
     }
 
@@ -1644,6 +1612,25 @@ impl Governance {
         }
     }
 
+    /// From the `neurons` part of this `Governance` struct, build the
+    /// index (per topic) from followee to set of followers. The
+    /// neurons themselves map followers (the neuron ID) to a set of
+    /// followees (per topic).
+    pub fn build_topic_followee_index(&mut self) {
+        for neuron in self.proto.neurons.values() {
+            let neuron_id = neuron.id.expect("Neuron must have an id");
+            let already_present_topic_followee_pairs = add_neuron_followees(
+                &mut self.topic_followee_index,
+                &neuron_id,
+                neuron.topic_followee_pairs(),
+            );
+            log_already_present_topic_followee_pairs(
+                neuron_id,
+                already_present_topic_followee_pairs,
+            );
+        }
+    }
+
     /// Update `index` to map all the given Neuron's hot keys and controller to
     /// `neuron_id`
     pub fn add_neuron_to_principal_to_neuron_ids_index(
@@ -1651,6 +1638,7 @@ impl Governance {
         neuron_id: NeuronId,
         principal_ids: Vec<PrincipalId>,
     ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
         self.principal_to_neuron_ids_index
             .add_neuron_id_principal_ids(&neuron_id, principal_ids);
     }
@@ -1660,6 +1648,7 @@ impl Governance {
         neuron_id: NeuronId,
         principal_id: PrincipalId,
     ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
         self.principal_to_neuron_ids_index
             .add_neuron_id_principal_id(&neuron_id, principal_id);
     }
@@ -1671,6 +1660,7 @@ impl Governance {
         neuron_id: NeuronId,
         principal_ids: Vec<PrincipalId>,
     ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
         self.principal_to_neuron_ids_index
             .remove_neuron_id_principal_ids(&neuron_id, principal_ids);
     }
@@ -1680,8 +1670,37 @@ impl Governance {
         neuron_id: NeuronId,
         principal_id: PrincipalId,
     ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
         self.principal_to_neuron_ids_index
             .remove_neuron_id_principal_id(&neuron_id, principal_id);
+    }
+
+    pub fn add_neuron_to_topic_followee_index(
+        &mut self,
+        neuron_id: NeuronId,
+        topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
+    ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        let already_present_topic_followee_pairs = add_neuron_followees(
+            &mut self.topic_followee_index,
+            &neuron_id,
+            topic_followee_pairs,
+        );
+        log_already_present_topic_followee_pairs(neuron_id, already_present_topic_followee_pairs);
+    }
+
+    pub fn remove_neuron_from_topic_followee_index(
+        &mut self,
+        neuron_id: NeuronId,
+        topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
+    ) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        let already_absent_topic_followee_pairs = remove_neuron_followees(
+            &mut self.topic_followee_index,
+            &neuron_id,
+            topic_followee_pairs,
+        );
+        log_already_absent_topic_followee_pairs(neuron_id, already_absent_topic_followee_pairs);
     }
 
     fn transaction_fee(&self) -> u64 {
@@ -1987,10 +2006,9 @@ impl Governance {
             NeuronId { id: neuron_id },
             neuron.principal_ids_with_special_permissions(),
         );
-
-        GovernanceProto::add_neuron_to_topic_followee_index(
-            &mut self.topic_followee_index,
-            &neuron,
+        self.add_neuron_to_topic_followee_index(
+            NeuronId { id: neuron_id },
+            neuron.topic_followee_pairs(),
         );
 
         self.proto.neurons.insert(neuron_id, neuron);
@@ -2019,11 +2037,7 @@ impl Governance {
             neuron_id,
             neuron.principal_ids_with_special_permissions(),
         );
-
-        GovernanceProto::remove_neuron_from_topic_followee_index(
-            &mut self.topic_followee_index,
-            &neuron,
-        );
+        self.remove_neuron_from_topic_followee_index(neuron_id, neuron.topic_followee_pairs());
 
         self.proto
             .neurons
@@ -2048,13 +2062,10 @@ impl Governance {
         // Tap into the `topic_followee_index` for followers of level zero neurons.
         let mut managed: HashSet<NeuronId> = followees.iter().copied().collect();
         for followee in followees {
-            if let Some(followers) = self
-                .topic_followee_index
-                .get(&Topic::NeuronManagement)
-                .and_then(|m| m.get(&followee))
-            {
-                managed.extend(followers)
-            }
+            managed.extend(
+                self.topic_followee_index
+                    .get_followers_by_followee_and_category(&followee, Topic::NeuronManagement),
+            )
         }
 
         managed.iter().map(|neuron_id| neuron_id.id).collect()
@@ -5475,7 +5486,7 @@ impl Governance {
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         topic: Topic,
-        topic_followee_index: &BTreeMap<Topic, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
+        topic_followee_index: &impl NeuronFollowingIndex<NeuronId, Topic>,
         neurons: &mut HashMap<u64, Neuron>,
     ) {
         assert!(topic != Topic::NeuronManagement && topic != Topic::Unspecified);
@@ -5484,8 +5495,6 @@ impl Governance {
         // values not allowed).
         let mut induction_votes = BTreeMap::new();
         induction_votes.insert(*voting_neuron_id, vote_of_neuron);
-        let topic_cache = topic_followee_index.get(&topic);
-        let unspecified_cache = topic_followee_index.get(&Topic::Unspecified);
         loop {
             // First, we cast the specified votes (in the first round,
             // this will be a single vote) and collect all neurons
@@ -5511,9 +5520,10 @@ impl Governance {
                             // followed by other neurons.
                             //
                             // Insert followers from 'topic'
-                            if let Some(more_followers) = topic_cache.and_then(|x| x.get(k)) {
-                                all_followers.append(&mut more_followers.clone());
-                            }
+                            all_followers.extend(
+                                topic_followee_index
+                                    .get_followers_by_followee_and_category(k, topic),
+                            );
                             // Default following doesn't apply to governance or SNS decentralization sale proposals.
                             if ![
                                 Topic::Governance,
@@ -5523,11 +5533,12 @@ impl Governance {
                             .contains(&topic)
                             {
                                 // Insert followers from 'Unspecified' (default followers)
-                                if let Some(more_followers) =
-                                    unspecified_cache.and_then(|x| x.get(k))
-                                {
-                                    all_followers.append(&mut more_followers.clone());
-                                }
+                                all_followers.extend(
+                                    topic_followee_index.get_followers_by_followee_and_category(
+                                        k,
+                                        Topic::Unspecified,
+                                    ),
+                                );
                             }
                         } else {
                             // The voting neuron not found in the
@@ -5696,7 +5707,7 @@ impl Governance {
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
-        f: &manage_neuron::Follow,
+        follow_request: &manage_neuron::Follow,
     ) -> Result<(), GovernanceError> {
         // The implementation of this method is complicated by the
         // fact that we have to maintain a reverse index of all follow
@@ -5709,7 +5720,7 @@ impl Governance {
 
         // Only the controller, or a proposal (which passes the controller as the
         // caller), can change the followees for the ManageNeuron topic.
-        if f.topic() == Topic::NeuronManagement && !neuron.is_controlled_by(caller) {
+        if follow_request.topic() == Topic::NeuronManagement && !neuron.is_controlled_by(caller) {
             return Err(GovernanceError::new_with_message(
                     ErrorType::NotAuthorized,
                     "Caller is not authorized to manage following of neuron for the ManageNeuron topic.",
@@ -5729,71 +5740,59 @@ impl Governance {
         // long. Allowing neurons to follow too many neurons
         // allows a memory exhaustion attack on the neurons
         // canister.
-        if f.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
+        if follow_request.followees.len() > MAX_FOLLOWEES_PER_TOPIC {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 "Too many followees.",
             ));
         }
-        // First, remove the current followees for this neuron and
-        // this topic from the follower cache.
-        if let Some(neuron_followees) = neuron.followees.get(&f.topic) {
-            if let Some(topic) = Topic::from_i32(f.topic) {
-                // If this topic is not represented in the
-                // follower cache, there cannot be anything to remove.
-                if let Some(followee_index) = self.topic_followee_index.get_mut(&topic) {
-                    // We need to remove this neuron as a follower
-                    // for all followees.
-                    for followee in &neuron_followees.followees {
-                        if let Some(all_followers) = followee_index.get_mut(followee) {
-                            all_followers.remove(id);
-                        }
-                        // Note: we don't check that the
-                        // topic_followee_index actually contains this
-                        // neuron's ID as a follower for all the
-                        // followees. This could be a warning, but
-                        // it is not actionable.
-                    }
-                }
-            }
-        }
-        if !f.followees.is_empty() {
-            // If this topic is valid, perform the operation.
-            if let Some(topic) = Topic::from_i32(f.topic) {
-                // Insert the new list of followees for this topic in
-                // the neuron, removing the old list, which has
-                // already been removed from the follower cache above.
-                neuron.followees.insert(
-                    f.topic,
-                    Followees {
-                        followees: f.followees.clone(),
-                    },
-                );
-                let cache = self
-                    .topic_followee_index
-                    .entry(topic)
-                    .or_insert_with(BTreeMap::new);
-                // We need to to add this neuron as a follower for
-                // all followees.
-                for followee in &f.followees {
-                    let all_followers = cache.entry(*followee).or_insert_with(BTreeSet::new);
-                    all_followers.insert(*id);
-                }
-                Ok(())
-            } else {
-                // Attempt to follow for an invalid topic: the set
-                // of followees for an invalid topic can be
-                // removed, but not modified.
-                Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidCommand,
-                    "Invalid topic.",
-                ))
-            }
+
+        let topic = Topic::from_i32(follow_request.topic).ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidCommand,
+                format!("Not a known topic number. Follow:\n{:#?}", follow_request),
+            )
+        })?;
+
+        let old_followee_neuron_ids = neuron
+            .followees
+            .get(&follow_request.topic)
+            .map(|followees| followees.followees.iter().cloned().collect())
+            .unwrap_or_default();
+        let (already_absent_old_followees, already_present_new_followees) =
+            update_neuron_category_followees(
+                &mut self.topic_followee_index,
+                id,
+                topic,
+                old_followee_neuron_ids,
+                follow_request.followees.iter().cloned().collect(),
+            );
+        log_already_present_topic_followee_pairs(
+            *id,
+            already_present_new_followees
+                .iter()
+                .map(|followee| (topic, *followee))
+                .collect(),
+        );
+        log_already_absent_topic_followee_pairs(
+            *id,
+            already_absent_old_followees
+                .iter()
+                .map(|followee| (topic, *followee))
+                .collect(),
+        );
+
+        if follow_request.followees.is_empty() {
+            neuron.followees.remove(&follow_request.topic);
         } else {
-            // This operation clears the followees for the given topic.
-            neuron.followees.remove(&f.topic);
-            Ok(())
+            neuron.followees.insert(
+                follow_request.topic,
+                Followees {
+                    followees: follow_request.followees.clone(),
+                },
+            );
         }
+        Ok(())
     }
 
     fn configure_neuron(
