@@ -13,6 +13,14 @@ print_usage() {
 USAGE
 }
 
+print_hash_inexistant() {
+    cat >&2 <<EOF
+    please either create *DRAFT* merge request pipeline for this commit sha:$1 or make sure that GitLab is running a pipeline against this commit SHA
+    echo "Note that this script does not work on older branches which use build id instead of the git commit sha
+    echo "e.g. any commits before eab9be79c53a88627881258b399ac9967aae7a60
+EOF
+}
+
 build_dev=1
 proposal_id=""
 while getopts 'nhc:p:' flag; do
@@ -61,12 +69,12 @@ PROPOSAL_OUT="$OUT/proposal-img"
 mkdir -p "$CI_OUT"
 mkdir -p "$DEV_OUT"
 
-if ! which rclone; then
-    echo "Please install rclone: sudo apt install rclone"
+if ! which curl; then
+    echo "Please install curl: sudo apt install curl"
     read -p "Should I do this for you [yn]?" yn
     case $yn in
         [Yy]*)
-            sudo apt install rclone
+            sudo apt install curl
             break
             ;;
         [Nn]*) exit 1 ;;
@@ -88,17 +96,10 @@ if ! which diffoscope; then
 fi
 
 pushd "$(git rev-parse --show-toplevel)"
-if ! ./gitlab-ci/src/artifacts/rclone_download.py --git-rev=$git_hash --out="$CI_OUT" --remote-path guest-os/update-img; then
-    echo "please either create *DRAFT* merge request pipeline for this commit sha:$git_hash or make sure that GitLab is running a pipeline against this commit SHA"
-    echo "Note that this script does not work on older branches which use build id instead of the git commit sha"
-    echo "e.g. any commits before eab9be79c53a88627881258b399ac9967aae7a60"
-    read -p "Confirm OK to continue [yn]" yn
-    case $yn in
-        [Yy]*) break ;;
-        [Nn]*) exit 1 ;;
-        *) echo "Please answer yes or no." ;;
-    esac
-fi
+
+# downloads the image version built and pushed by CI system
+curl -fsSLO --output-dir "$CI_OUT" "https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.gz" || print_hash_inexistant "$git_hash"
+curl -fsSLO --output-dir "$CI_OUT" "https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/SHA256SUMS" || print_hash_inexistant "$git_hash"
 
 if [ -n "${UPDATE_IMG_FILE:-}" ]; then
     case "${UPDATE_IMG_FILE}" in
@@ -139,10 +140,6 @@ git checkout --quiet "$git_hash"
 if [ "$build_dev" -eq "1" ]; then
     ./gitlab-ci/container/build-ic.sh -i
     mv artifacts/icos/update-img.tar.gz "$DEV_OUT"
-fi
-
-if [ ! -f "$CI_OUT/update-img.tar.gz" ]; then
-    ./gitlab-ci/src/artifacts/rclone_download.py --git-rev="$git_hash" --out="$CI_OUT" --remote-path guest-os/update-img
 fi
 
 tar -xzf "$CI_OUT/update-img.tar.gz" -C "$CI_OUT"
