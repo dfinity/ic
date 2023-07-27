@@ -619,3 +619,346 @@ fn test_transient_failing_tls() {
         sim.run().unwrap();
     })
 }
+
+/// Test network where nodes get partitioned.
+
+#[test]
+
+fn test_bad_network() {
+    with_test_replica_logger(|log| {
+        info!(log, "Starting test");
+
+        let mut sim = Builder::new()
+            .simulation_duration(Duration::from_secs(30))
+            .tick_duration(Duration::from_millis(100))
+            .build();
+
+        let exit_notify = Arc::new(Notify::new());
+
+        let node_1_port = 5555;
+        let node_2_port = 6666;
+        let node_3_port = 7777;
+        let node_4_port = 8888;
+        let node_5_port = 9999;
+
+        let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
+            add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
+
+        let conn_checker = ConnectivityChecker::new(&[NODE_1, NODE_2, NODE_3, NODE_4, NODE_5]);
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            node_1_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_2,
+            node_2_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_3,
+            node_3_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_4,
+            node_4_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_5,
+            node_5_port,
+            registry_handle.clone(),
+            topology_watcher,
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        // Add all nodes
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_1,
+                node_1_port,
+                RegistryVersion::from(2),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_2,
+                node_2_port,
+                RegistryVersion::from(3),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_3,
+                node_3_port,
+                RegistryVersion::from(4),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_4,
+                node_4_port,
+                RegistryVersion::from(5),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_5,
+                node_5_port,
+                RegistryVersion::from(6),
+            )))
+            .unwrap();
+        registry_handle.registry_client.reload();
+        registry_handle.registry_client.update_to_latest_version();
+
+        wait_for(&mut sim, || conn_checker.fully_connected()).unwrap();
+
+        // Cause some turmoil
+        sim.partition(NODE_1.to_string(), NODE_2.to_string());
+        sim.partition(NODE_1.to_string(), NODE_3.to_string());
+        sim.partition(NODE_4.to_string(), NODE_3.to_string());
+        sim.partition(NODE_3.to_string(), NODE_5.to_string());
+        conn_checker.reset(&NODE_1);
+        conn_checker.reset(&NODE_2);
+        conn_checker.reset(&NODE_3);
+        conn_checker.reset(&NODE_4);
+        conn_checker.reset(&NODE_5);
+        info!(log, "Partitioned nodes");
+
+        wait_for_timeout(
+            &mut sim,
+            || conn_checker.fully_connected(),
+            Duration::from_secs(7),
+        )
+        .expect("Nodes are connected but they should be partitioned.");
+
+        wait_for(&mut sim, || {
+            conn_checker.disconnected_from(&NODE_1, &NODE_2)
+                && conn_checker.disconnected_from(&NODE_1, &NODE_3)
+                && conn_checker.disconnected_from(&NODE_4, &NODE_3)
+                && conn_checker.disconnected_from(&NODE_3, &NODE_5)
+        })
+        .expect("Node should be disconnected due to partitioning.");
+
+        info!(log, "Releasing nodes");
+        sim.release(NODE_1.to_string(), NODE_2.to_string());
+        sim.release(NODE_1.to_string(), NODE_3.to_string());
+        sim.release(NODE_4.to_string(), NODE_3.to_string());
+        sim.release(NODE_3.to_string(), NODE_5.to_string());
+
+        wait_for(&mut sim, || conn_checker.fully_connected())
+            .expect("Nodes should be fully connected again.");
+
+        exit_notify.notify_waiters();
+
+        sim.run().unwrap();
+    })
+}
+
+/// Test network where nodes get partitioned and removed.
+#[test]
+fn test_bad_network_and_membership_change() {
+    with_test_replica_logger(|log| {
+        info!(log, "Starting test");
+
+        let mut sim = Builder::new()
+            .simulation_duration(Duration::from_secs(30))
+            .tick_duration(Duration::from_millis(100))
+            .build();
+
+        let exit_notify = Arc::new(Notify::new());
+
+        let node_1_port = 5555;
+        let node_2_port = 6666;
+        let node_3_port = 7777;
+        let node_4_port = 8888;
+        let node_5_port = 9999;
+
+        let (peer_manager_cmd_sender, topology_watcher, mut registry_handle) =
+            add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
+
+        let conn_checker = ConnectivityChecker::new(&[NODE_1, NODE_2, NODE_3, NODE_4, NODE_5]);
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            node_1_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_2,
+            node_2_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_3,
+            node_3_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_4,
+            node_4_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_5,
+            node_5_port,
+            registry_handle.clone(),
+            topology_watcher,
+            conn_checker.clone(),
+            None,
+            None,
+        );
+
+        // Add all 5 nodes.
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_1,
+                node_1_port,
+                RegistryVersion::from(2),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_2,
+                node_2_port,
+                RegistryVersion::from(3),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_3,
+                node_3_port,
+                RegistryVersion::from(4),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_4,
+                node_4_port,
+                RegistryVersion::from(5),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_5,
+                node_5_port,
+                RegistryVersion::from(6),
+            )))
+            .unwrap();
+        registry_handle.registry_client.reload();
+        registry_handle.registry_client.update_to_latest_version();
+
+        wait_for(&mut sim, || conn_checker.fully_connected()).unwrap();
+
+        // Cause some turmoil for node 1.
+        sim.partition(NODE_1.to_string(), NODE_2.to_string());
+        sim.partition(NODE_1.to_string(), NODE_3.to_string());
+        conn_checker.reset(&NODE_1);
+        conn_checker.reset(&NODE_2);
+        conn_checker.reset(&NODE_3);
+        info!(log, "Partitioned nodes");
+
+        wait_for_timeout(
+            &mut sim,
+            || conn_checker.fully_connected(),
+            Duration::from_secs(7),
+        )
+        .expect("Nodes are connected but they should be partitioned.");
+
+        wait_for(&mut sim, || {
+            conn_checker.disconnected_from(&NODE_1, &NODE_2)
+                && conn_checker.disconnected_from(&NODE_1, &NODE_3)
+        })
+        .expect("Node1 <-> Node2 and Node1 <-> Node3 should be disconnected.");
+
+        info!(log, "Removing node 1");
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Remove((
+                NODE_1,
+                RegistryVersion::from(7),
+            )))
+            .unwrap();
+
+        registry_handle.set_oldest_consensus_registry_version(RegistryVersion::from(7));
+
+        wait_for(&mut sim, || conn_checker.unreachable(&NODE_1))
+            .expect("Node1 is reachable after removing it from the topology.");
+
+        info!(log, "Releasing nodes {}", NODE_1);
+        sim.release(NODE_1.to_string(), NODE_2.to_string());
+        sim.release(NODE_1.to_string(), NODE_3.to_string());
+
+        wait_for(&mut sim, || {
+            conn_checker.fully_connected_except(vec![NODE_1])
+        })
+        .expect("Nodes are fully connected except node1 which was removed.");
+
+        exit_notify.notify_waiters();
+
+        sim.run().unwrap();
+    })
+}
