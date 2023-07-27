@@ -115,6 +115,27 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
         }
     }
 
+    fn approve(
+        from: Self::AccountId,
+        spender: Self::AccountId,
+        amount: Self::Tokens,
+        created_at_time: Option<TimeStamp>,
+        memo: Option<u64>,
+    ) -> Self {
+        Self {
+            operation: Operation::Approve {
+                from,
+                spender,
+                amount,
+                expected_allowance: None,
+                expires_at: None,
+                fee: None,
+            },
+            created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+            memo: memo.map(Memo::from),
+        }
+    }
+
     fn created_at_time(&self) -> Option<TimeStamp> {
         self.created_at_time
             .map(TimeStamp::from_nanos_since_unix_epoch)

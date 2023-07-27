@@ -88,6 +88,8 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
         },
         max_memo_length: None,
         feature_flags: args.feature_flags,
+        maximum_number_of_accounts: args.maximum_number_of_accounts,
+        accounts_overflow_trim_quantity: args.accounts_overflow_trim_quantity,
     })
 }
 
@@ -247,6 +249,16 @@ fn test_transfer_from_minter() {
 #[test]
 fn test_transfer_from_burn() {
     ic_icrc1_ledger_sm_tests::test_transfer_from_burn(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_balances_overflow() {
+    ic_icrc1_ledger_sm_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approval_trimming() {
+    ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
 }
 
 #[test]

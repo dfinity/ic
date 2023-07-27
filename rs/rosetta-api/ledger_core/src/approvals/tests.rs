@@ -1,7 +1,10 @@
+use std::collections::HashSet;
+
 use super::*;
 use crate::timestamp::TimeStamp;
 use crate::tokens::Tokens;
 use serde::{Deserialize, Serialize};
+use std::cmp;
 
 fn ts(n: u64) -> TimeStamp {
     TimeStamp::from_nanos_since_unix_epoch(n)
@@ -11,7 +14,7 @@ fn tokens(n: u64) -> Tokens {
     Tokens::from_e8s(n)
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq, Hash)]
 struct Account(u64);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -20,6 +23,12 @@ struct Key(u64, u64);
 impl From<(&Account, &Account)> for Key {
     fn from((a, s): (&Account, &Account)) -> Self {
         Self(a.0, s.0)
+    }
+}
+
+impl From<Key> for (Account, Account) {
+    fn from(key: Key) -> Self {
+        (Account(key.0), Account(key.1))
     }
 }
 
@@ -315,4 +324,53 @@ fn disallow_self_approval() {
             .unwrap_err(),
         ApproveError::SelfApproval
     );
+}
+
+#[test]
+fn allowance_table_remove_zero_allowance() {
+    let mut table = TestAllowanceTable::default();
+
+    table
+        .approve(&Account(1), &Account(2), tokens(100), None, ts(1), None)
+        .unwrap();
+
+    assert_eq!(table.len(), 1);
+
+    table
+        .approve(&Account(1), &Account(2), tokens(0), None, ts(1), None)
+        .unwrap();
+
+    assert_eq!(table.len(), 0);
+
+    table
+        .approve(&Account(1), &Account(3), tokens(0), None, ts(1), None)
+        .unwrap();
+
+    assert_eq!(table.len(), 0);
+}
+
+#[test]
+fn allowance_table_select_approvals_for_trimming() {
+    let mut table = TestAllowanceTable::default();
+
+    let approvals_len = 10;
+    for i in 1..approvals_len + 1 {
+        let expiration = if i > 5 { None } else { Some(ts(i)) };
+        table
+            .approve(
+                &Account(0),
+                &Account(i),
+                tokens(100),
+                expiration,
+                ts(0),
+                None,
+            )
+            .unwrap();
+    }
+
+    for i in 0..approvals_len + 2 {
+        let remove = table.select_approvals_to_trim(i as usize);
+        let remove_set: HashSet<(Account, Account)> = remove.into_iter().collect();
+        assert_eq!(remove_set.len(), cmp::min(i, approvals_len) as usize);
+    }
 }

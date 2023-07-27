@@ -139,6 +139,8 @@ impl InitArgsBuilder {
             },
             max_memo_length: None,
             feature_flags: None,
+            maximum_number_of_accounts: None,
+            accounts_overflow_trim_quantity: None,
         })
     }
 
@@ -221,6 +223,8 @@ pub struct InitArgs {
     pub archive_options: ArchiveOptions,
     pub max_memo_length: Option<u16>,
     pub feature_flags: Option<FeatureFlags>,
+    pub maximum_number_of_accounts: Option<u64>,
+    pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -254,6 +258,10 @@ pub struct UpgradeArgs {
     pub max_memo_length: Option<u16>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub feature_flags: Option<FeatureFlags>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximum_number_of_accounts: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accounts_overflow_trim_quantity: Option<u64>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -288,6 +296,19 @@ pub struct Ledger<Tokens: TokensType> {
 
     #[serde(default)]
     feature_flags: FeatureFlags,
+
+    #[serde(default = "default_maximum_number_of_accounts")]
+    maximum_number_of_accounts: usize,
+    #[serde(default = "default_accounts_overflow_trim_quantity")]
+    accounts_overflow_trim_quantity: usize,
+}
+
+fn default_maximum_number_of_accounts() -> usize {
+    MAX_ACCOUNTS
+}
+
+fn default_accounts_overflow_trim_quantity() -> usize {
+    ACCOUNTS_OVERFLOW_TRIM_QUANTITY
 }
 
 #[derive(CandidType, Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
@@ -329,6 +350,8 @@ impl<Tokens: TokensType> Ledger<Tokens> {
             fee_collector_account,
             max_memo_length,
             feature_flags,
+            maximum_number_of_accounts,
+            accounts_overflow_trim_quantity,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -355,6 +378,14 @@ impl<Tokens: TokensType> Ledger<Tokens> {
                 .collect(),
             max_memo_length: max_memo_length.unwrap_or(DEFAULT_MAX_MEMO_LENGTH),
             feature_flags: feature_flags.unwrap_or_default(),
+            maximum_number_of_accounts: maximum_number_of_accounts
+                .unwrap_or_else(|| MAX_ACCOUNTS.try_into().unwrap())
+                .try_into()
+                .unwrap(),
+            accounts_overflow_trim_quantity: accounts_overflow_trim_quantity
+                .unwrap_or_else(|| ACCOUNTS_OVERFLOW_TRIM_QUANTITY.try_into().unwrap())
+                .try_into()
+                .unwrap(),
         };
 
         for (account, balance) in initial_balances.into_iter() {
@@ -383,6 +414,12 @@ pub struct ApprovalKey(Account, Account);
 impl From<(&Account, &Account)> for ApprovalKey {
     fn from((account, spender): (&Account, &Account)) -> Self {
         Self(*account, *spender)
+    }
+}
+
+impl From<ApprovalKey> for (Account, Account) {
+    fn from(key: ApprovalKey) -> Self {
+        (key.0, key.1)
     }
 }
 
@@ -432,11 +469,11 @@ impl<Tokens: TokensType> LedgerData for Ledger<Tokens> {
     }
 
     fn max_number_of_accounts(&self) -> usize {
-        MAX_ACCOUNTS
+        self.maximum_number_of_accounts
     }
 
     fn accounts_overflow_trim_quantity(&self) -> usize {
-        ACCOUNTS_OVERFLOW_TRIM_QUANTITY
+        self.accounts_overflow_trim_quantity
     }
 
     fn token_name(&self) -> &str {
@@ -555,6 +592,13 @@ impl<Tokens: TokensType> Ledger<Tokens> {
         }
         if let Some(feature_flags) = args.feature_flags {
             self.feature_flags = feature_flags;
+        }
+        if let Some(maximum_number_of_accounts) = args.maximum_number_of_accounts {
+            self.maximum_number_of_accounts = maximum_number_of_accounts.try_into().unwrap();
+        }
+        if let Some(accounts_overflow_trim_quantity) = args.accounts_overflow_trim_quantity {
+            self.accounts_overflow_trim_quantity =
+                accounts_overflow_trim_quantity.try_into().unwrap();
         }
     }
 
