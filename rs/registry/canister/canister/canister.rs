@@ -386,9 +386,11 @@ fn bless_replica_version() {
 }
 
 #[candid_method(update, rename = "bless_replica_version")]
-fn bless_replica_version_(payload: BlessReplicaVersionPayload) {
-    registry_mut().do_bless_replica_version(payload);
-    recertify_registry();
+fn bless_replica_version_(_payload: BlessReplicaVersionPayload) {
+    panic!(
+        "{}bless_replica_version is deprecated and should no longer be used!",
+        LOG_PREFIX
+    );
 }
 
 #[export_name = "canister_update retire_replica_version"]
@@ -400,9 +402,11 @@ fn retire_replica_version() {
 }
 
 #[candid_method(update, rename = "retire_replica_version")]
-fn retire_replica_version_(payload: RetireReplicaVersionPayload) {
-    registry_mut().do_retire_replica_version(payload);
-    recertify_registry();
+fn retire_replica_version_(_payload: RetireReplicaVersionPayload) {
+    panic!(
+        "{}retire_replica_version is deprecated and should no longer be used!",
+        LOG_PREFIX
+    );
 }
 
 #[export_name = "canister_update update_elected_replica_versions"]
