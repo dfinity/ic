@@ -663,19 +663,16 @@ where
         // The dapps will be returned to these controllers because it is not necessarily true
         // that fallback_controller_ids == dapp_canisters_original_controllers.
         let dapp_canisters_original_controllers: BTreeMap<Canister, Vec<PrincipalId>> =
-            Self::get_controllers_of_nns_root_owned_canisters(
-                nns_root_canister_client,
-                dapp_canisters,
-            )
-            .await
-            .map_err(|err| {
-                DeployError::Reversible(ReversibleDeployError {
-                    message: err,
-                    canisters_to_delete: None,
-                    subnet: None,
-                    dapp_canisters_to_restore: btreemap! {}, // None to restore as no work was done
-                })
-            })?;
+            Self::get_original_dapp_controllers(nns_root_canister_client, dapp_canisters)
+                .await
+                .map_err(|err| {
+                    DeployError::Reversible(ReversibleDeployError {
+                        message: err,
+                        canisters_to_delete: None,
+                        subnet: None,
+                        dapp_canisters_to_restore: btreemap! {}, // None to restore as no work was done
+                    })
+                })?;
 
         // Request that NNS Root claim sole control of all dapp_canisters. If there are any failures
         // the SNS creation process cannot continue. This may be due to dapp co-controllers backing
@@ -1283,6 +1280,38 @@ where
         }
     }
 
+    /// Get the original controllers of the target canisters. If any of the sets of controllers
+    /// is empty, return an error.
+    async fn get_original_dapp_controllers(
+        nns_root_canister_client: &impl NnsRootCanisterClient,
+        target_canisters: &[Canister],
+    ) -> Result<BTreeMap<Canister, Vec<PrincipalId>>, String> {
+        let dapp_canisters_original_controllers: BTreeMap<Canister, Vec<PrincipalId>> =
+            Self::get_controllers_of_nns_root_owned_canisters(
+                nns_root_canister_client,
+                target_canisters,
+            )
+            .await?;
+
+        // Make sure that none of the dapp canisters will be black holed if a deployment error occurs.
+        let canister_ids_with_empty_controller_sets = dapp_canisters_original_controllers
+            .iter()
+            .filter(|(_, controllers)| controllers.is_empty())
+            .map(|(canister, _)| canister.id.unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+
+        if !canister_ids_with_empty_controller_sets.is_empty() {
+            return Err(
+                format!(
+                    "The following dapp canister(s) did not have any controllers, cannot transfer to an SNS. {:?}",
+                    canister_ids_with_empty_controller_sets.join("\n")
+                )
+            );
+        }
+
+        Ok(dapp_canisters_original_controllers)
+    }
+
     /// Request NNS Root to change the controllers of the targeted canisters to the desired
     /// new controllers. This method attempts to transfer all target_canisters, and does not
     /// stop if one fails.
@@ -1294,6 +1323,17 @@ where
 
         // TODO: parallelize
         for (canister, new_controllers) in dapp_canisters_to_new_controllers {
+            // This condition should never be reached due to prior validation, but in case the
+            // new controllers is empty, do not change the controllers of the dapp canister.
+            if new_controllers.is_empty() {
+                result.failed.push(FailedChangeCanisterControllersRequest {
+                    canister: *canister,
+                    reason: "Tried to request NNS Root to set controllers to an empty set"
+                        .to_string(),
+                });
+                continue;
+            }
+
             match Self::change_controllers_of_nns_root_owned_canister(
                 nns_root_canister_client,
                 *canister,
@@ -1378,9 +1418,13 @@ where
             )
             .await
             {
-                Ok(mut controllers) => {
-                    // We want to remove the NNS Root canister from the original controllers
-                    controllers.retain(|controller| *controller != ROOT_CANISTER_ID.get());
+                Ok(controllers) => {
+                    // It is deliberate that NNS Root is kept in this list of original controllers
+                    // for two reasons:
+                    // 1. If developers remove themselves and leave NNS Root as the sole controller
+                    //    we want to avoid black-holing the canister.
+                    // 2. Other co-controllers can decide to remove NNS Root after a failed SNS
+                    //    creation.
                     result.insert(*canister, controllers);
                 }
                 Err(failure_reason) => defects.push(failure_reason),
@@ -3291,7 +3335,10 @@ mod test {
             vec![],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (dapp_id, vec![original_dapp_controller]),
+                (
+                    dapp_id,
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_id],
             DeployNewSnsResponse {
@@ -3447,7 +3494,10 @@ mod test {
             vec![],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (dapp_id, vec![original_dapp_controller]),
+                (
+                    dapp_id,
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_id],
             DeployNewSnsResponse {
@@ -3596,7 +3646,10 @@ mod test {
             ],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (dapp_id, vec![original_dapp_controller]),
+                (
+                    dapp_id,
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_id],
             DeployNewSnsResponse {
@@ -3802,7 +3855,10 @@ mod test {
             ],
             vec![
                 (dapp_id, vec![ROOT_CANISTER_ID.get()]),
-                (dapp_id, vec![original_dapp_controller]),
+                (
+                    dapp_id,
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_id],
             DeployNewSnsResponse {
@@ -4744,7 +4800,10 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![original_dapp_controller]),
+                (
+                    dapp_ids[0],
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
             DeployNewSnsResponse {
@@ -4868,8 +4927,14 @@ mod test {
                 (dapp_ids[0], vec![root_id.get()]),
                 (dapp_ids[1], vec![root_id.get()]),
                 (dapp_ids[2], vec![root_id.get()]),
-                (dapp_ids[1], vec![original_dapp_controller]),
-                (dapp_ids[2], vec![original_dapp_controller]),
+                (
+                    dapp_ids[1],
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
+                (
+                    dapp_ids[2],
+                    vec![original_dapp_controller, ROOT_CANISTER_ID.get()],
+                ),
             ],
             vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
             DeployNewSnsResponse {
@@ -4962,6 +5027,65 @@ mod test {
     }
 
     #[tokio::test]
+    async fn get_controllers_of_dapp_canisters_returns_empty_set() {
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
+
+        let original_dapp_controller = PrincipalId::new_user_test_id(10);
+
+        let dapp_ids = vec![
+            canister_test_id(1000).get(),
+            canister_test_id(1001).get(),
+            canister_test_id(1002).get(),
+        ];
+
+        let mut sns_init_payload = SnsInitPayload::with_valid_values_for_testing();
+        add_dapp_canisters(&mut sns_init_payload, &dapp_ids);
+
+        let spy_nns_root_client = SpyNnsRootCanisterClient::new(vec![
+            SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![
+                original_dapp_controller,
+                ROOT_CANISTER_ID.get(),
+            ]),
+            SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![]),
+            SpyNnsRootCanisterClientReply::ok_canister_status_from_root(vec![
+                original_dapp_controller,
+                ROOT_CANISTER_ID.get(),
+            ]),
+        ]);
+
+        test_deploy_new_sns_request_one_proposal(
+            Some(sns_init_payload),
+            canister_api,
+            &spy_nns_root_client,
+            Some(subnet_test_id(1)),
+            true,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
+            DeployNewSnsResponse {
+                subnet_id: None,
+                canisters: None,
+                error: Some(SnsWasmError {
+                    message: "The following dapp canister(s) did not have any controllers, cannot \
+                        transfer to an SNS. \"heic2-yaaaa-aaaaa-aapuq-cai\""
+                        .to_string(),
+                }),
+                dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
+                    restored_dapp_canisters: vec![],
+                    nns_controlled_dapp_canisters: vec![],
+                    sns_controlled_dapp_canisters: vec![],
+                }),
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
     async fn fail_restore_dapp_canisters_reversible_deployment() {
         let mut canister_api = new_canister_api();
         canister_api
@@ -5034,9 +5158,9 @@ mod test {
                 (dapp_ids[0], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[1], vec![ROOT_CANISTER_ID.get()]),
                 (dapp_ids[2], vec![ROOT_CANISTER_ID.get()]),
-                (dapp_ids[0], vec![original_dapp_controller]),
-                (dapp_ids[1], vec![original_dapp_controller]),
-                (dapp_ids[2], vec![original_dapp_controller]),
+                (dapp_ids[0], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
+                (dapp_ids[1], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
             ],
             vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
             DeployNewSnsResponse {
@@ -5184,8 +5308,8 @@ mod test {
                 (dapp_ids[0], vec![root_id.get()]),
                 (dapp_ids[1], vec![root_id.get()]),
                 (dapp_ids[2], vec![root_id.get()]),
-                (dapp_ids[1], vec![original_dapp_controller]),
-                (dapp_ids[2], vec![original_dapp_controller]),
+                (dapp_ids[1], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
+                (dapp_ids[2], vec![original_dapp_controller, ROOT_CANISTER_ID.get()]),
             ],
             vec![dapp_ids[0], dapp_ids[1], dapp_ids[2]],
             DeployNewSnsResponse {
