@@ -14,13 +14,9 @@ use std::process::Command;
 use std::time::{Duration, Instant, SystemTime};
 
 const LOCALHOST: &str = "127.0.0.1";
+const POCKET_IC_BIN_PATH: &str = "../../target/debug/pocket-ic-backend";
 
 type InstanceId = String;
-
-pub struct PocketICService {
-    // The base url for the PocketIC service.
-    url: Url,
-}
 
 fn get_service_port(lock_file: PathBuf, bin_path: PathBuf) -> u16 {
     let start = Instant::now();
@@ -56,38 +52,57 @@ fn get_service_port(lock_file: PathBuf, bin_path: PathBuf) -> u16 {
     }
 }
 
-impl PocketICService {
-    pub fn new(bin_path: PathBuf) -> Self {
-        // use the parent process ID, so that we have one PocketIC per cargo test invocation
-        let pid = std::os::unix::process::parent_id();
-        let lock_file = std::env::temp_dir().join(format!("pocket_ic.{}.port", pid));
-        let port = get_service_port(lock_file, bin_path);
-        let url =
-            Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).expect("Failed to parse url.");
-        println!("Found PocketIC server running on {}", &url);
-        Self { url }
-    }
+// ======================================================================================================
+// Code borrowed from https://github.com/dfinity/test-state-machine-client/blob/main/src/lib.rs
+// The StateMachine struct is renamed to `PocketIc` and given new interface.
+pub struct PocketIc {
+    pub instance_id: InstanceId,
+    // The PocketIC server's base address.
+    daemon_url: Url,
+    // The PocketIC server's base address plus "/instance/<instance_id>".
+    // All communication with this IC instance goes through this endpoint.
+    instance_url: Url,
+    reqwest_client: reqwest::blocking::Client,
+}
 
-    pub fn create_ic(&self) -> IC {
-        let instance_id = self.create_instance();
-        IC::new(instance_id, self.url.clone())
-    }
-
-    fn create_instance(&self) -> InstanceId {
-        let url = self.url.join("instance").unwrap();
-        let client = reqwest::blocking::Client::new();
-        let response = client
-            .post(url)
+impl PocketIc {
+    pub fn new() -> Self {
+        let reqwest_client = reqwest::blocking::Client::new();
+        let daemon_url = Self::start_or_reuse_daemon();
+        let instance_id = reqwest_client
+            .post(daemon_url.join("instance").unwrap())
             .send()
             .expect("Failed to get result")
             .text()
             .expect("Failed to get text");
-        println!("Created new instance with id {}", response);
-        response
+        println!("Created new instance with id {}", instance_id);
+        let instance_url = daemon_url
+            .join("instance/")
+            .unwrap()
+            .join(&instance_id)
+            .unwrap();
+
+        Self {
+            instance_id,
+            daemon_url,
+            instance_url,
+            reqwest_client,
+        }
+    }
+
+    fn start_or_reuse_daemon() -> Url {
+        // use the parent process ID, so that we have one PocketIC per `cargo test` invocation
+        let ppid = std::os::unix::process::parent_id();
+        let lock_file = std::env::temp_dir().join(format!("pocket_ic.{}.port", ppid));
+        let port = get_service_port(lock_file, PathBuf::from(POCKET_IC_BIN_PATH));
+        let url =
+            Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).expect("Failed to parse url.");
+        println!("Found PocketIC server running on {}", &url);
+        url
     }
 
     pub fn list_instances(&self) -> Vec<InstanceId> {
-        let url = self.url.join("instance").unwrap();
+        let url = self.daemon_url.join("instance").unwrap();
         let response = reqwest::blocking::Client::new()
             .get(url)
             .send()
@@ -96,112 +111,10 @@ impl PocketICService {
             .expect("Failed to get text");
         response.split(", ").map(String::from).collect()
     }
-}
-
-// ======================================================================================================
-// Code borrowed from https://github.com/dfinity/test-state-machine-client/blob/main/src/lib.rs
-// The StateMachine struct is renamed to IC and given new interface.
-
-#[derive(Serialize, Deserialize)]
-pub enum Request {
-    RootKey,
-    Time,
-    SetTime(SystemTime),
-    AdvanceTime(Duration),
-    CanisterUpdateCall(CanisterCall),
-    CanisterQueryCall(CanisterCall),
-    CanisterExists(RawCanisterId),
-    CyclesBalance(RawCanisterId),
-    AddCycles(AddCyclesArg),
-    SetStableMemory(SetStableMemoryArg),
-    ReadStableMemory(RawCanisterId),
-    Tick,
-    RunUntilCompletion(RunUntilCompletionArg),
-    VerifyCanisterSig(VerifyCanisterSigArg),
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct VerifyCanisterSigArg {
-    #[serde(with = "base64")]
-    pub msg: Vec<u8>,
-    #[serde(with = "base64")]
-    pub sig: Vec<u8>,
-    #[serde(with = "base64")]
-    pub pubkey: Vec<u8>,
-    #[serde(with = "base64")]
-    pub root_pubkey: Vec<u8>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct RunUntilCompletionArg {
-    // max_ticks until completion must be reached
-    pub max_ticks: u64,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct AddCyclesArg {
-    // raw bytes of the principal
-    #[serde(with = "base64")]
-    pub canister_id: Vec<u8>,
-    pub amount: u128,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct SetStableMemoryArg {
-    // raw bytes of the principal
-    #[serde(with = "base64")]
-    pub canister_id: Vec<u8>,
-    pub data: ByteBuf,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct RawCanisterId {
-    // raw bytes of the principal
-    #[serde(with = "base64")]
-    pub canister_id: Vec<u8>,
-}
-
-impl From<Principal> for RawCanisterId {
-    fn from(principal: Principal) -> Self {
-        Self {
-            canister_id: principal.as_slice().to_vec(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct CanisterCall {
-    #[serde(with = "base64")]
-    pub sender: Vec<u8>,
-    #[serde(with = "base64")]
-    pub canister_id: Vec<u8>,
-    pub method: String,
-    #[serde(with = "base64")]
-    pub arg: Vec<u8>,
-}
-
-// ----------------------------------------------------------------------
-// StateMachine struct is renamed IC and given new fields and constructor
-pub struct IC {
-    pub id: InstanceId,
-    // The pocketIC server's base address plus "/instance/<instance_id>".
-    // All communication with this IC instance goes through this endpoint.
-    url: Url,
-    client: reqwest::blocking::Client,
-}
-
-impl IC {
-    pub fn new(id: InstanceId, server_url: Url) -> Self {
-        Self {
-            id: id.clone(),
-            url: server_url.join("instance/").unwrap().join(&id).unwrap(),
-            client: reqwest::blocking::Client::new(),
-        }
-    }
 
     pub fn send_request(&self, request: Request) -> String {
-        self.client
-            .post(self.url.clone())
+        self.reqwest_client
+            .post(self.instance_url.clone())
             .json(&request)
             .send()
             .expect("Failed to get result")
@@ -451,9 +364,93 @@ impl IC {
     }
 }
 
+impl Default for PocketIc {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum Request {
+    RootKey,
+    Time,
+    SetTime(SystemTime),
+    AdvanceTime(Duration),
+    CanisterUpdateCall(CanisterCall),
+    CanisterQueryCall(CanisterCall),
+    CanisterExists(RawCanisterId),
+    CyclesBalance(RawCanisterId),
+    AddCycles(AddCyclesArg),
+    SetStableMemory(SetStableMemoryArg),
+    ReadStableMemory(RawCanisterId),
+    Tick,
+    RunUntilCompletion(RunUntilCompletionArg),
+    VerifyCanisterSig(VerifyCanisterSigArg),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct VerifyCanisterSigArg {
+    #[serde(with = "base64")]
+    pub msg: Vec<u8>,
+    #[serde(with = "base64")]
+    pub sig: Vec<u8>,
+    #[serde(with = "base64")]
+    pub pubkey: Vec<u8>,
+    #[serde(with = "base64")]
+    pub root_pubkey: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RunUntilCompletionArg {
+    // max_ticks until completion must be reached
+    pub max_ticks: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct AddCyclesArg {
+    // raw bytes of the principal
+    #[serde(with = "base64")]
+    pub canister_id: Vec<u8>,
+    pub amount: u128,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SetStableMemoryArg {
+    // raw bytes of the principal
+    #[serde(with = "base64")]
+    pub canister_id: Vec<u8>,
+    pub data: ByteBuf,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RawCanisterId {
+    // raw bytes of the principal
+    #[serde(with = "base64")]
+    pub canister_id: Vec<u8>,
+}
+
+impl From<Principal> for RawCanisterId {
+    fn from(principal: Principal) -> Self {
+        Self {
+            canister_id: principal.as_slice().to_vec(),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CanisterCall {
+    #[serde(with = "base64")]
+    pub sender: Vec<u8>,
+    #[serde(with = "base64")]
+    pub canister_id: Vec<u8>,
+    pub method: String,
+    #[serde(with = "base64")]
+    pub arg: Vec<u8>,
+}
+
 /// Call a canister candid query method, anonymous.
 pub fn query_candid<Input, Output>(
-    env: &IC,
+    env: &PocketIc,
     canister_id: Principal,
     method: &str,
     input: Input,
@@ -467,7 +464,7 @@ where
 
 /// Call a canister candid query method, authenticated.
 pub fn query_candid_as<Input, Output>(
-    env: &IC,
+    env: &PocketIc,
     canister_id: Principal,
     sender: Principal,
     method: &str,
@@ -485,7 +482,7 @@ where
 /// Call a canister candid method, authenticated.
 /// The state machine executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid_as<Input, Output>(
-    env: &IC,
+    env: &PocketIc,
     canister_id: Principal,
     sender: Principal,
     method: &str,
@@ -503,7 +500,7 @@ where
 /// Call a canister candid method, anonymous.
 /// The state machine executes update calls synchronously, so there is no need to poll for the result.
 pub fn call_candid<Input, Output>(
-    env: &IC,
+    env: &PocketIc,
     canister_id: Principal,
     method: &str,
     input: Input,
