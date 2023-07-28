@@ -7802,6 +7802,7 @@ dependencies = [
  "candid 0.8.4",
  "ciborium",
  "ic-base-types",
+ "ic-canister-log",
  "ic-canister-profiler",
  "ic-canisters-http-types",
  "ic-cdk 0.7.4",
@@ -7824,6 +7825,8 @@ dependencies = [
  "proptest",
  "scopeguard",
  "serde",
+ "serde_bytes",
+ "serde_json",
 ]
 
 [[package]]

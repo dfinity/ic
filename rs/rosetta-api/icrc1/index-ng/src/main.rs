@@ -1,5 +1,6 @@
-use candid::{candid_method, Nat, Principal};
-use ic_canister_profiler::{measure_span, SpanStats};
+use candid::{candid_method, CandidType, Decode, Encode, Nat, Principal};
+use ic_canister_log::{export as export_logs, log};
+use ic_canister_profiler::{measure_span, SpanName, SpanStats};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::trap;
 use ic_cdk_macros::{init, post_upgrade, query};
@@ -9,8 +10,8 @@ use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
-    GetAccountTransactionsResult, IndexArg, ListSubaccountsArgs, Status, TransactionWithId,
-    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    GetAccountTransactionsResult, IndexArg, ListSubaccountsArgs, Log, LogEntry, Status,
+    TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
@@ -34,10 +35,15 @@ use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Bound::{Excluded, Included};
 use std::ops::Range;
 use std::time::Duration;
+
+pub mod logs;
+
+use crate::logs::{P0, P1};
 
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -279,38 +285,81 @@ fn post_upgrade() {
     set_build_index_timer(Duration::from_secs(0));
 }
 
-async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, String> {
+async fn measured_call<I, O>(
+    encode_span_name: SpanName,
+    decode_span_name: SpanName,
+    id: Principal,
+    method: &str,
+    i: &I,
+) -> Result<O, String>
+where
+    I: CandidType + Debug,
+    O: CandidType + Debug + for<'a> Deserialize<'a>,
+{
+    let req = measure_span(&PROFILING_DATA, encode_span_name, || Encode!(i))
+        .map_err(|err| format!("failed to candid encode the input {:?}: {}", i, err))?;
+    let res = ic_cdk::api::call::call_raw(id, method, &req, 0)
+        .await
+        .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
+    measure_span(&PROFILING_DATA, decode_span_name, || Decode!(&res, O))
+        .map_err(|err| format!("failed to candid decode the output: {}", err))
+}
+
+async fn get_blocks_from_ledger(start: u64) -> Option<GetBlocksResponse> {
     let (ledger_id, length) = with_state(|state| (state.ledger_id, state.max_blocks_per_response));
     let req = GetBlocksRequest {
         start: Nat::from(start),
         length: Nat::from(length),
     };
-    let (res,): (GetBlocksResponse,) = ic_cdk::call(ledger_id, "get_blocks", (req,))
-        .await
-        .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
-    Ok(res)
+    log!(P1, "[get_blocks_from_ledger]: making the call...");
+    let res = measured_call(
+        "build_index.get_blocks_from_ledger.encode",
+        "build_index.get_blocks_from_ledger.decode",
+        ledger_id,
+        "get_blocks",
+        &req,
+    )
+    .await;
+    match res {
+        Ok(res) => Some(res),
+        Err(err) => {
+            log!(P0, "[get_blocks_from_ledger] failed to get blocks: {}", err);
+            None
+        }
+    }
 }
 
 async fn get_blocks_from_archive(
     archived: &ArchivedRange<QueryBlockArchiveFn>,
-) -> Result<BlockRange, String> {
+) -> Option<BlockRange> {
     let req = GetBlocksRequest {
         start: archived.start.clone(),
         length: archived.length.clone(),
     };
-    let (res,): (BlockRange,) = ic_cdk::call(
+    let res = measured_call(
+        "build_index.get_blocks_from_archive.encode",
+        "build_index.get_blocks_from_archive.decode",
         archived.callback.canister_id,
         &archived.callback.method,
-        (req,),
+        &req,
     )
-    .await
-    .map_err(|(code, str)| format!("code: {:#?} message: {}", code, str))?;
-    Ok(res)
+    .await;
+    match res {
+        Ok(res) => Some(res),
+        Err(err) => {
+            log!(
+                P0,
+                "[get_blocks_from_archive] failed to get blocks: {}",
+                err
+            );
+            None
+        }
+    }
 }
 
-pub async fn build_index() -> Result<(), String> {
+pub async fn build_index() -> Option<()> {
     if with_state(|state| state.is_build_index_running) {
-        return Err("build_index already running".to_string());
+        return None;
     }
     mutate_state(|state| {
         state.is_build_index_running = true;
@@ -345,11 +394,16 @@ pub async fn build_index() -> Result<(), String> {
     tx_indexed_count += res.blocks.len();
     append_blocks(res.blocks);
     let wait_time = compute_wait_time(tx_indexed_count);
-    ic_cdk::eprintln!("Indexed: {} waiting : {:?}", tx_indexed_count, wait_time);
+    log!(
+        P1,
+        "Indexed: {} waiting : {:?}",
+        tx_indexed_count,
+        wait_time
+    );
     mutate_state(|state| state.last_wait_time = wait_time);
     ScopeGuard::into_inner(failure_guard);
     set_build_index_timer(wait_time);
-    Ok(())
+    Some(())
 }
 
 fn set_build_index_timer(after: Duration) -> TimerId {
@@ -797,6 +851,21 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     .build()
             }
         }
+    } else if req.path() == "/logs" {
+        use serde_json;
+        let mut entries: Log = Default::default();
+        for entry in export_logs(&P0) {
+            entries.entries.push(LogEntry {
+                timestamp: entry.timestamp,
+                file: entry.file.to_string(),
+                line: entry.line,
+                message: entry.message,
+            });
+        }
+        HttpResponseBuilder::ok()
+            .header("Content-Type", "application/json; charset=utf-8")
+            .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
+            .build()
     } else {
         HttpResponseBuilder::not_found().build()
     }
