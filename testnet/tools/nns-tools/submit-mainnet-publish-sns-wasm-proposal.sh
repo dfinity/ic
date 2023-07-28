@@ -64,7 +64,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
 
     cmd=($IC_ADMIN --use-hsm --slot=0
         --key-id=01 --pin="$DFX_HSM_PIN"
-        --nns-url "https://nns.ic0.app"
+        --nns-url "https://icp-api.io"
         propose-to-add-wasm-to-sns-wasm
         --canister-type=$CANISTER_TYPE
         --wasm-module-path=$WASM_GZ

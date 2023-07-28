@@ -56,7 +56,7 @@ submit_insert_upgrade_path_proposal_mainnet() {
 
     cmd=($IC_ADMIN --use-hsm --slot=0
         --key-id=01 --pin="$DFX_HSM_PIN"
-        --nns-url "https://nns.ic0.app"
+        --nns-url "https://icp-api.io"
         propose-to-insert-sns-wasm-upgrade-path-entries
         --sns-governance-canister-id=$TARGET_SNS_GOVERNANCE_CANISTER
         --summary-file=$PROPOSAL_FILE

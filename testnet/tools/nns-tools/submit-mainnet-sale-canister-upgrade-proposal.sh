@@ -55,7 +55,7 @@ submit_sale_upgrade_proposal_mainnet() {
 
     cmd=($IC_ADMIN --use-hsm --slot=0
         --key-id=01 --pin="$DFX_HSM_PIN"
-        --nns-url "https://nns.ic0.app"
+        --nns-url "https://icp-api.io"
         propose-to-change-nns-canister --mode=upgrade
         --canister-id=$CANISTER_ID
         --wasm-module-path=$WASM_GZ
