@@ -127,4 +127,7 @@ mod neuron_following;
 mod neuron_voting;
 
 #[cfg(test)]
+mod uninstall_canister_by_proposal;
+
+#[cfg(test)]
 mod canister_upgrade;
