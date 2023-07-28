@@ -1,5 +1,5 @@
 use ic_metrics::{
-    buckets::{decimal_buckets, exponential_buckets, linear_buckets},
+    buckets::{decimal_buckets, exponential_buckets},
     MetricsRegistry,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
@@ -119,21 +119,16 @@ impl BlockchainStateMetrics {
 
 #[derive(Debug, Clone)]
 pub struct TransactionMetrics {
-    pub tx_peer_requests: Histogram,
-    pub tx_store_size: IntGauge,
+    pub txn_ops: IntCounterVec,
 }
 
 impl TransactionMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            tx_peer_requests: metrics_registry.histogram(
-                "tx_peer_requests",
-                "Number of times a transaction is requested.",
-                linear_buckets(0.0, 1.0, 10),
-            ),
-            tx_store_size: metrics_registry.int_gauge(
-                "tx_store_size",
-                "Number of transactions that are stored in the adapter and are made available to peers.",
+            txn_ops: metrics_registry.int_counter_vec(
+                "txn_ops_total",
+                "Number transaction operations. A transaction can either be added or removed.",
+                &["op", "reason"],
             ),
         }
     }

@@ -37,9 +37,14 @@ struct TransactionInfo {
     /// The actual transaction to be sent to the BTC network.
     transaction: Transaction,
     /// Set of peer to which we advertised this transaction.
+    /// Having a peer in this set doesn't guarantee that the peer actually saw the transaction.
+    /// If the connection is healthy during sending most likely the peer will see the transaction.
+    /// The adapter maintains a pool of connected peers, so it is unlikely that
+    /// the transaction won't be seen by at least a few peers.
     advertised: HashSet<SocketAddr>,
     /// How long the transaction should be held on to.
-    timeout_at: SystemTime,
+    /// This is needed in order to be able to reply to GetData requests.
+    ttl: SystemTime,
 }
 
 impl TransactionInfo {
@@ -48,7 +53,7 @@ impl TransactionInfo {
         Self {
             transaction: transaction.clone(),
             advertised: HashSet::new(),
-            timeout_at: SystemTime::now() + Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS),
+            ttl: SystemTime::now() + Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS),
         }
     }
 }
@@ -77,19 +82,25 @@ impl TransactionManager {
     pub fn tick(&mut self, channel: &mut impl Channel) {
         self.advertise_txids(channel);
         self.reap();
-        self.metrics
-            .tx_store_size
-            .set(self.transactions.len() as i64);
     }
 
-    /// This method is used to send a single transaction.
+    /// This method is used to enqueue a single transaction.
     /// If the transaction is not known, the transaction is added the the transactions map.
-    pub fn send_transaction(&mut self, raw_tx: &[u8]) {
+    /// In case the transaction queue is full, we drop the oldest transaction a.k.a. FIFO.
+    pub fn enqueue_transaction(&mut self, raw_tx: &[u8]) {
         if let Ok(transaction) = deserialize::<Transaction>(raw_tx) {
+            self.metrics
+                .txn_ops
+                .with_label_values(&["insert", "enqueued"])
+                .inc();
             let txid = transaction.txid();
             trace!(self.logger, "Received {} from the system component", txid);
             // If hashmap has `TX_CACHE_SIZE` values we remove the oldest transaction in the cache.
             if self.transactions.len() == TX_CACHE_SIZE {
+                self.metrics
+                    .txn_ops
+                    .with_label_values(&["remove", "pushed_out"])
+                    .inc();
                 self.transactions.pop_front();
             }
             self.transactions
@@ -98,18 +109,13 @@ impl TransactionManager {
         }
     }
 
-    /// This method is used when the adapter is no longer receiving RPC calls from the replica.
-    /// Clears all transactions the adapter is currently caching.
-    pub fn make_idle(&mut self) {
-        self.transactions.clear();
-    }
-
     /// Clear out transactions that have been held on to for more than the transaction timeout period.
     fn reap(&mut self) {
         let now = SystemTime::now();
         self.transactions
             .retain(|tx, info| {
-                if info.timeout_at < now {
+                if info.ttl < now {
+                    self.metrics.txn_ops.with_label_values(&["remove","ttled"]).inc();
                     warn!(self.logger, "Advertising bitcoin transaction {} timed out, meaning it was not picked up by any bitcoin peer.", tx);
                     false
                 }
@@ -133,34 +139,32 @@ impl TransactionManager {
                 // If the inventory contains the maximum allowed number of transactions, we will send it
                 // and start building a new one.
                 if inventory.len() == MAXIMUM_TRANSACTION_PER_INV {
-                    debug!(self.logger, "Broadcasting Txids ({:?}) to peers", inventory);
+                    debug!(
+                        self.logger,
+                        "Broadcasting Txids ({:?}) to peer {:?}", inventory, address
+                    );
                     for address in channel.available_connections() {
                         channel
                             .send(Command {
                                 address: Some(address),
-                                message: NetworkMessage::Inv(inventory.clone()),
+                                message: NetworkMessage::Inv(std::mem::take(&mut inventory)),
                             })
                             .ok();
                     }
-                    inventory = vec![];
                 }
             }
-
-            if inventory.is_empty() {
-                continue;
+            if !inventory.is_empty() {
+                debug!(
+                    self.logger,
+                    "Broadcasting Txids ({:?}) to peer {:?}", inventory, address
+                );
+                channel
+                    .send(Command {
+                        address: Some(address),
+                        message: NetworkMessage::Inv(inventory),
+                    })
+                    .ok();
             }
-
-            debug!(
-                self.logger,
-                "Broadcasting Txids ({:?}) to peer {:?}", inventory, address
-            );
-
-            channel
-                .send(Command {
-                    address: Some(address),
-                    message: NetworkMessage::Inv(inventory.clone()),
-                })
-                .ok();
         }
     }
 
@@ -169,7 +173,7 @@ impl TransactionManager {
     /// If there are messages for transactions, the transaction is sent to the
     /// requesting node. Transactions sent are then removed from the cache.
     pub fn process_bitcoin_network_message(
-        &mut self,
+        &self,
         channel: &mut impl Channel,
         addr: SocketAddr,
         message: &NetworkMessage,
@@ -181,9 +185,7 @@ impl TransactionManager {
 
             for inv in inventory {
                 if let Inventory::Transaction(txid) = inv {
-                    if let Some(TransactionInfo { transaction, .. }) =
-                        self.transactions.get_mut(txid)
-                    {
+                    if let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
                         channel
                             .send(Command {
                                 address: Some(addr),
@@ -235,7 +237,7 @@ mod test {
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
         assert_eq!(manager.transactions.len(), 1);
         manager.reap();
         assert_eq!(manager.transactions.len(), 1);
@@ -244,7 +246,7 @@ mod test {
             .transactions
             .get_mut(&transaction.txid())
             .expect("transaction should be map");
-        info.timeout_at = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
+        info.ttl = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
         manager.reap();
         assert_eq!(manager.transactions.len(), 0);
     }
@@ -262,7 +264,7 @@ mod test {
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
         let txid = transaction.txid();
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
         assert_eq!(manager.transactions.len(), 1);
         let info = manager
             .transactions
@@ -303,7 +305,7 @@ mod test {
         let mut first_tx = get_transaction();
         first_tx.lock_time = u32::MAX;
         let raw_tx = serialize(&first_tx);
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
 
         for i in 0..TX_CACHE_SIZE {
             // First regtest genesis transaction.
@@ -311,7 +313,7 @@ mod test {
             // Alter transaction such that we get a different `txid`
             transaction.lock_time = i.try_into().unwrap();
             let raw_tx = serialize(&transaction);
-            manager.send_transaction(&raw_tx);
+            manager.enqueue_transaction(&raw_tx);
         }
         assert_eq!(manager.transactions.len(), TX_CACHE_SIZE);
         assert!(manager.transactions.get(&first_tx.txid()).is_none());
@@ -332,7 +334,7 @@ mod test {
         let mut transaction = get_transaction();
         transaction.lock_time = 0;
         let raw_tx = serialize(&transaction);
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
         manager.tick(&mut channel);
         channel.pop_front().unwrap();
 
@@ -387,7 +389,7 @@ mod test {
         let mut transaction = get_transaction();
         transaction.lock_time = 0;
         let raw_tx = serialize(&transaction);
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
         manager.tick(&mut channel);
         // Transaction advertisment to both peers.
         assert_eq!(channel.command_count(), 2);
@@ -428,7 +430,7 @@ mod test {
         let mut transaction = get_transaction();
         transaction.lock_time = 0;
         let raw_tx = serialize(&transaction);
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
         manager.tick(&mut channel);
         assert_eq!(channel.command_count(), 1);
         channel.pop_front().unwrap();
@@ -477,7 +479,7 @@ mod test {
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
         let txid = transaction.txid();
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
         assert_eq!(manager.transactions.len(), 1);
         manager
             .process_bitcoin_network_message(
@@ -500,7 +502,7 @@ mod test {
         let num_transaction = MAXIMUM_TRANSACTION_PER_INV + 1;
         let address = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
         let mut channel = TestChannel::new(vec![address]);
-        let mut manager = make_transaction_manager();
+        let manager = make_transaction_manager();
 
         let mut inventory = vec![];
         for i in 0..num_transaction {
@@ -534,7 +536,7 @@ mod test {
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
         let txid = transaction.txid();
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
         manager.tick(&mut channel);
         manager
             .process_bitcoin_network_message(
@@ -560,32 +562,13 @@ mod test {
         let command = channel.pop_front().unwrap();
         assert!(matches!(command.message, NetworkMessage::Tx(t) if t.txid() == txid));
 
-        manager.send_transaction(&raw_tx);
+        manager.enqueue_transaction(&raw_tx);
         let info = manager
             .transactions
             .get_mut(&transaction.txid())
             .expect("transaction should be in the map");
-        info.timeout_at = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
+        info.ttl = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
         manager.tick(&mut channel);
         assert_eq!(manager.transactions.len(), 0);
-    }
-
-    /// Test to ensure that when `TransactionManager.idle(...)` is called that the `transactions`
-    /// field is cleared.
-    #[test]
-    fn test_make_idle() {
-        let mut manager = make_transaction_manager();
-        let transaction = get_transaction();
-        let raw_tx = serialize(&transaction);
-        let txid = transaction.txid();
-
-        manager.send_transaction(&raw_tx);
-
-        assert_eq!(manager.transactions.len(), 1);
-        assert!(manager.transactions.contains_key(&txid));
-
-        manager.make_idle();
-        assert_eq!(manager.transactions.len(), 0);
-        assert!(!manager.transactions.contains_key(&txid));
     }
 }
