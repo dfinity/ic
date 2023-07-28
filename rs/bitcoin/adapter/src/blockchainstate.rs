@@ -109,9 +109,9 @@ pub struct HeaderNode {
 #[derive(Debug)]
 enum AddHeaderResult {
     /// This variant is used when the input header is added to the header_cache.
-    HeaderAdded(CachedHeader),
+    HeaderAdded(BlockHash),
     /// This variant is used when the input header already exists in the header_cache.
-    HeaderAlreadyExists(CachedHeader),
+    HeaderAlreadyExists(BlockHash),
 }
 
 #[derive(Debug, Error)]
@@ -198,14 +198,14 @@ impl BlockchainState {
     pub fn add_headers(
         &mut self,
         headers: &[BlockHeader],
-    ) -> (Vec<CachedHeader>, Option<AddHeaderError>) {
-        let mut added_headers = vec![];
+    ) -> (Vec<BlockHash>, Option<AddHeaderError>) {
+        let mut block_hashes_of_added_headers = vec![];
 
         let err = headers
             .iter()
             .try_for_each(|header| match self.add_header(*header) {
-                Ok(AddHeaderResult::HeaderAdded(cached_header)) => {
-                    added_headers.push(cached_header);
+                Ok(AddHeaderResult::HeaderAdded(block_hash)) => {
+                    block_hashes_of_added_headers.push(block_hash);
                     Ok(())
                 }
                 Ok(AddHeaderResult::HeaderAlreadyExists(_)) => Ok(()),
@@ -220,7 +220,7 @@ impl BlockchainState {
             .tip_height
             .set(self.get_active_chain_tip().height.into());
 
-        (added_headers, err)
+        (block_hashes_of_added_headers, err)
     }
 
     /// This method adds the input header to the `header_cache`.
@@ -230,8 +230,8 @@ impl BlockchainState {
 
         // If the header already exists in the cache,
         // then don't insert the header again, and return HeaderAlreadyExistsError
-        if let Some(cached_header) = self.get_cached_header(&block_hash) {
-            return Ok(AddHeaderResult::HeaderAlreadyExists(cached_header.clone()));
+        if self.get_cached_header(&block_hash).is_some() {
+            return Ok(AddHeaderResult::HeaderAlreadyExists(block_hash));
         }
 
         if let Err(err) = validate_header(&self.network, self, &header) {
@@ -249,12 +249,7 @@ impl BlockchainState {
                     return Err(AddHeaderError::PrevHeaderNotCached(prev_hash));
                 }
                 HeaderCacheError::AlreadyExists => {
-                    let cached_header = self
-                        .header_cache
-                        .get(&block_hash)
-                        .expect("Header should exist in the cache at this point.")
-                        .clone();
-                    return Ok(AddHeaderResult::HeaderAlreadyExists(cached_header));
+                    return Ok(AddHeaderResult::HeaderAlreadyExists(block_hash));
                 }
             },
         };
@@ -282,7 +277,9 @@ impl BlockchainState {
         };
 
         self.metrics.header_cache_size.inc();
-        Ok(AddHeaderResult::HeaderAdded(cached_header.clone()))
+        Ok(AddHeaderResult::HeaderAdded(
+            cached_header.header.block_hash(),
+        ))
     }
 
     /// This method adds a new block to the `block_cache`
@@ -458,9 +455,8 @@ mod test {
         let (added_headers, maybe_err) = state.add_headers(&chain);
         assert!(maybe_err.is_none());
 
-        let last_cached = added_headers.last().unwrap();
-        assert_eq!(last_cached.header.block_hash(), last_hash);
-        assert_eq!(last_cached.height, 16);
+        let last_block_hashes = added_headers.last().unwrap();
+        assert_eq!(*last_block_hashes, last_hash);
         let tip = state.get_active_chain_tip();
         assert_eq!(tip.height, 16);
         assert_eq!(tip.header.block_hash(), last_hash);
@@ -531,13 +527,12 @@ mod test {
         let chain_hashes: Vec<BlockHash> = chain.iter().map(|header| header.block_hash()).collect();
         let last_hash = *chain_hashes.last().unwrap();
 
-        let (added_headers, maybe_err) = state.add_headers(&chain);
+        let (last_block_hashes, maybe_err) = state.add_headers(&chain);
         assert!(maybe_err.is_none());
-        assert_eq!(added_headers.len(), 16);
+        assert_eq!(last_block_hashes.len(), 16);
 
-        let last_cached = added_headers.last().unwrap();
-        assert_eq!(last_cached.header.block_hash(), last_hash);
-        assert_eq!(last_cached.height, 16);
+        let last_block_hash = last_block_hashes.last().unwrap();
+        assert_eq!(*last_block_hash, last_hash);
 
         let (added_headers, maybe_err) = state.add_headers(&chain);
         assert!(maybe_err.is_none());
