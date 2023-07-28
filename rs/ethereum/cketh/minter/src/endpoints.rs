@@ -31,6 +31,7 @@ pub struct ReceivedEthEvent {
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Eip1559TransactionPrice {
     pub base_fee_from_last_finalized_block: Nat,
+    pub base_fee_of_next_finalized_block: Nat,
     pub max_priority_fee_per_gas: Nat,
     pub max_fee_per_gas: Nat,
     pub gas_limit: Nat,
