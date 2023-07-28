@@ -230,35 +230,59 @@ async fn display_logs(req: DisplayLogsRequest) -> Vec<ReceivedEthEvent> {
 #[update]
 #[candid_method(update)]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
-    use eth_rpc::{Block, BlockSpec, BlockTag};
-    use ic_cketh_minter::eth_rpc::{into_nat, GetBlockByNumberParams};
+    use eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity};
+    use ic_cketh_minter::eth_rpc::into_nat;
 
-    const MAX_PRIORITY_FEE_PER_GAS: u64 = 100_000_000; //0.1 gwei
+    // average value between the `minSuggestedMaxPriorityFeePerGas`
+    // used by Metamask, see
+    // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
+    const MIN_MAX_PRIORITY_FEE_PER_GAS: u64 = 1_500_000_000; //1.5 gwei
 
-    let finalized_block: Block = eth_rpc::call(
+    let fee_history: FeeHistory = eth_rpc::call(
         "https://rpc.sepolia.org",
-        "eth_getBlockByNumber",
-        GetBlockByNumberParams {
-            block: BlockSpec::Tag(BlockTag::Finalized),
-            include_full_transactions: false,
+        "eth_feeHistory",
+        FeeHistoryParams {
+            block_count: Quantity::from(5_u8),
+            highest_block: BlockSpec::Tag(BlockTag::Finalized),
+            reward_percentiles: vec![20],
         },
     )
     .await
     .expect("HTTP call failed")
     .unwrap();
 
-    let base_fee_from_last_finalized_block = into_nat(finalized_block.base_fee_per_gas);
-    let max_priority_fee_per_gas = candid::Nat::from(MAX_PRIORITY_FEE_PER_GAS);
+    debug_assert_eq!(fee_history.base_fee_per_gas.len(), 6);
+    let base_fee_from_last_finalized_block = into_nat(fee_history.base_fee_per_gas[4]);
+    let base_fee_of_next_finalized_block = into_nat(fee_history.base_fee_per_gas[5]);
+    let max_priority_fee_per_gas = {
+        let mut rewards: Vec<Quantity> = fee_history.reward.into_iter().flatten().collect();
+        let historic_max_priority_fee_per_gas = into_nat(
+            *median(&mut rewards).expect("should be non-empty with rewards of the last 5 blocks"),
+        );
+        std::cmp::max(
+            historic_max_priority_fee_per_gas,
+            candid::Nat::from(MIN_MAX_PRIORITY_FEE_PER_GAS),
+        )
+    };
     let max_fee_per_gas =
-        (2_u32 * base_fee_from_last_finalized_block.clone()) + max_priority_fee_per_gas.clone();
+        (2_u32 * base_fee_of_next_finalized_block.clone()) + max_priority_fee_per_gas.clone();
     let gas_limit = candid::Nat::from(TRANSACTION_GAS_LIMIT);
 
     Eip1559TransactionPrice {
         base_fee_from_last_finalized_block,
+        base_fee_of_next_finalized_block,
         max_priority_fee_per_gas,
         max_fee_per_gas,
         gas_limit,
     }
+}
+
+fn median<T: Ord>(values: &mut [T]) -> Option<&T> {
+    if values.is_empty() {
+        return None;
+    }
+    let (_, item, _) = values.select_nth_unstable(values.len() / 2);
+    Some(item)
 }
 
 /// Estimate price of EIP-2930 or legacy transactions based on the value returned by

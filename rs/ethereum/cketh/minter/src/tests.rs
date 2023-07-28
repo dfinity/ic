@@ -578,3 +578,113 @@ mod eth_get_block_by_number {
         assert_eq!(nat.to_string(), "20_272_779_213")
     }
 }
+
+mod eth_fee_history {
+    use crate::eth_rpc::{
+        BlockNumber, BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity,
+    };
+
+    #[test]
+    fn should_serialize_fee_history_params_as_tuple() {
+        let params = FeeHistoryParams {
+            block_count: Quantity::from(5_u8),
+            highest_block: BlockSpec::Tag(BlockTag::Finalized),
+            reward_percentiles: vec![10, 20, 30],
+        };
+        let serialized_params = serde_json::to_string(&params).unwrap();
+        assert_eq!(serialized_params, r#"["0x5","finalized",[10,20,30]]"#);
+    }
+
+    #[test]
+    fn should_deserialize_eth_fee_history_response() {
+        const ETH_FEE_HISTORY: &str = r#"{
+        "baseFeePerGas": [
+            "0x729d3f3b3",
+            "0x766e503ea",
+            "0x75b51b620",
+            "0x74094f2b4",
+            "0x716724f03",
+            "0x73b467f76"
+        ],
+        "gasUsedRatio": [
+            0.6332004,
+            0.47556506666666665,
+            0.4432122666666667,
+            0.4092196,
+            0.5811903
+        ],
+        "oldestBlock": "0x10f73fc",
+        "reward": [
+            [
+                "0x5f5e100",
+                "0x5f5e100",
+                "0x68e7780"
+            ],
+            [
+                "0x55d4a80",
+                "0x5f5e100",
+                "0x5f5e100"
+            ],
+            [
+                "0x5f5e100",
+                "0x5f5e100",
+                "0x5f5e100"
+            ],
+            [
+                "0x5f5e100",
+                "0x5f5e100",
+                "0x5f5e100"
+            ],
+            [
+                "0x5f5e100",
+                "0x5f5e100",
+                "0x180789e0"
+            ]
+        ]
+    }"#;
+
+        let fee_history: FeeHistory = serde_json::from_str(ETH_FEE_HISTORY).unwrap();
+
+        assert_eq!(
+            fee_history,
+            FeeHistory {
+                oldest_block: BlockNumber::new(0x10f73fc),
+                base_fee_per_gas: vec![
+                    Quantity::new(0x729d3f3b3),
+                    Quantity::new(0x766e503ea),
+                    Quantity::new(0x75b51b620),
+                    Quantity::new(0x74094f2b4),
+                    Quantity::new(0x716724f03),
+                    Quantity::new(0x73b467f76)
+                ],
+                reward: vec![
+                    vec![
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x68e7780)
+                    ],
+                    vec![
+                        Quantity::new(0x55d4a80),
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x5f5e100)
+                    ],
+                    vec![
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x5f5e100)
+                    ],
+                    vec![
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x5f5e100)
+                    ],
+                    vec![
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x5f5e100),
+                        Quantity::new(0x180789e0)
+                    ]
+                ],
+            }
+        )
+    }
+}

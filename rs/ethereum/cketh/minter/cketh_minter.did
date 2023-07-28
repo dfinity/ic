@@ -21,6 +21,7 @@ service : (MinterArg) -> {
     });
     eip_1559_transaction_price: () -> (record {
         base_fee_from_last_finalized_block : nat;
+        base_fee_of_next_finalized_block : nat;
         max_priority_fee_per_gas : nat;
         max_fee_per_gas : nat;
         gas_limit : nat;
