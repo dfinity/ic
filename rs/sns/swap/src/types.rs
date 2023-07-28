@@ -406,7 +406,7 @@ impl Init {
     /// - `self.is_swap_init_for_single_proposal()`
     pub fn mk_open_sns_request(&self) -> OpenRequest {
         assert!(
-            self.is_swap_init_for_single_proposal(),
+            self.is_swap_init_for_one_proposal_flow(),
             "cannot make an `OpenRequest` instance from a legacy `SnsInitPayload`"
         );
         let params = Params {
@@ -446,7 +446,7 @@ impl Init {
     /// Indicates whether this swap `Init` payload matches the new structure,
     /// i.e., all of its swap-opening fields (see `swap_opening_field_states`)
     /// are **set**.
-    pub fn is_swap_init_for_single_proposal(&self) -> bool {
+    pub fn is_swap_init_for_one_proposal_flow(&self) -> bool {
         self.swap_opening_field_states(None)
             .values()
             .all(|x| x.is_some())
@@ -494,7 +494,7 @@ impl Init {
         // TODO[NNS1-2362] Re-validate also the fields that were filled out by
         // TODO[NNS1-2362] trusted code.
 
-        if !self.is_swap_init_for_legacy() && !self.is_swap_init_for_single_proposal() {
+        if !self.is_swap_init_for_legacy() && !self.is_swap_init_for_one_proposal_flow() {
             return Err(
                 "fields listed in `swap_opening_field_states` must either all be set (for 1-proposal) or all be unset (legacy).".to_string()
             );
@@ -1569,7 +1569,7 @@ mod tests {
                 ..Default::default()
             };
             assert!(
-                !incorrect_init.is_swap_init_for_single_proposal()
+                !incorrect_init.is_swap_init_for_one_proposal_flow()
                     && !incorrect_init.is_swap_init_for_legacy()
             );
         }
@@ -1594,7 +1594,7 @@ mod tests {
         };
         // There exists some `SnsInitPayload` that is suitable for the new
         // single-proposal flow.
-        assert!(init.is_swap_init_for_single_proposal());
+        assert!(init.is_swap_init_for_one_proposal_flow());
 
         let neurons_fund_participant_a = CfParticipant {
             hotkey_principal: "HotKeyA".to_string(),

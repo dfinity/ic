@@ -4623,6 +4623,21 @@ impl Governance {
         &mut self,
         executed_create_service_nervous_system_proposal: ExecutedCreateServiceNervousSystemProposal,
     ) -> Result<(), GovernanceError> {
+        let is_start_time_unspecified = executed_create_service_nervous_system_proposal
+            .create_service_nervous_system
+            .swap_parameters
+            .as_ref()
+            .map(|swap_parameters| swap_parameters.start_time.is_none())
+            .unwrap_or(false);
+        if is_start_time_unspecified {
+            println!(
+                "{}The swap's start time for proposal {:?} is unspecified, so a random time of {:?} will be used.",
+                LOG_PREFIX,
+                executed_create_service_nervous_system_proposal.proposal_id,
+                executed_create_service_nervous_system_proposal.random_swap_start_time
+            );
+        }
+
         // Step 1: Convert proposal into main request object.
         let sns_init_payload =
             match SnsInitPayload::try_from(executed_create_service_nervous_system_proposal) {
@@ -4634,6 +4649,20 @@ impl Governance {
                     ))
                 }
             };
+
+        // If the test configuration is active (implying we are not running in
+        // production), and the start time has not been specified,
+        // we want the swap to start immediately. Otherwise, each test would take
+        // at least 24h.
+        #[cfg(feature = "test")]
+        let sns_init_payload = if is_start_time_unspecified {
+            SnsInitPayload {
+                swap_start_timestamp_seconds: Some(self.env.now()),
+                ..sns_init_payload
+            }
+        } else {
+            sns_init_payload
+        };
 
         // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
         let request = DeployNewSnsRequest {
