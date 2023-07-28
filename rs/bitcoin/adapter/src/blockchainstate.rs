@@ -440,6 +440,7 @@ mod test {
         let block = cached_blocks.get(0).expect("there should be 1");
         assert_eq!(block.block_hash(), block_1_hash);
     }
+
     /// Tests whether or not the `BlockchainState::add_headers(...)` function can add headers to the cache
     /// successfully.
     #[test]
@@ -460,6 +461,53 @@ mod test {
         let tip = state.get_active_chain_tip();
         assert_eq!(tip.height, 16);
         assert_eq!(tip.header.block_hash(), last_hash);
+    }
+
+    /// Tests whether or not the `BlockchainState::add_headers(...)` function can add 2500 mainnet headers to the cache
+    /// successfully. After ~2000 headers there is difficulty adjustment so 2500 headers make sure that we test
+    /// at least one header validation with difficulty adjustment.
+    /// This is a regression test for incident at btc height 799_498.
+    #[test]
+    fn test_adding_mainnet_headers_successfully() {
+        let config = ConfigBuilder::new().with_network(Network::Bitcoin).build();
+        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+
+        let headers_json = include_str!("../test_data/first_2500_mainnet_headers.json");
+        let headers: Vec<BlockHeader> = serde_json::from_str(headers_json).unwrap();
+
+        let (added_headers, maybe_err) = state.add_headers(&headers);
+        assert!(
+            maybe_err.is_none(),
+            "Error when adding valid mainnet headers."
+        );
+
+        // The last block header has height 2499 because the genesis block header has height 0.
+        assert_eq!(added_headers.len(), 2499);
+        let tip = state.get_active_chain_tip();
+        assert_eq!(tip.height, 2499);
+    }
+
+    /// Tests whether or not the `BlockchainState::add_headers(...)` function can add 2500 testnet headers to the cache
+    /// successfully. After ~2000 headers there is difficulty adjustment so 2500 headers make sure that we test
+    /// at least one header validation with difficulty adjustment.
+    #[test]
+    fn test_adding_testnet_headers_successfully() {
+        let config = ConfigBuilder::new().with_network(Network::Testnet).build();
+        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+
+        let headers_json = include_str!("../test_data/first_2500_testnet_headers.json");
+        let headers: Vec<BlockHeader> = serde_json::from_str(headers_json).unwrap();
+
+        let (added_headers, maybe_err) = state.add_headers(&headers);
+        assert!(
+            maybe_err.is_none(),
+            "Error when adding valid testnet headers."
+        );
+
+        // The last block header has height 2499 because the genesis block header has height 0.
+        assert_eq!(added_headers.len(), 2499);
+        let tip = state.get_active_chain_tip();
+        assert_eq!(tip.height, 2499);
     }
 
     #[test]
@@ -692,5 +740,30 @@ mod test {
             })
             .unwrap();
         assert_eq!(state.get_active_chain_tip().header, h4);
+    }
+
+    /// Test header store `get_header` function.
+    #[test]
+    fn test_headerstore_get_header() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+
+        let initial_header = state.genesis();
+        let chain = generate_headers(initial_header.block_hash(), initial_header.time, 2500, &[]);
+
+        let (added_headers, maybe_err) = state.add_headers(&chain);
+        assert_eq!(added_headers.len(), 2500);
+        assert!(maybe_err.is_none());
+
+        for (h, header) in chain.iter().enumerate() {
+            if h == 0 {
+                assert_eq!(state.get_initial_hash(), state.genesis().block_hash(),);
+            } else {
+                assert_eq!(
+                    state.get_header(&header.block_hash()).unwrap(),
+                    (chain[h], (h + 1) as u32),
+                );
+            }
+        }
     }
 }
