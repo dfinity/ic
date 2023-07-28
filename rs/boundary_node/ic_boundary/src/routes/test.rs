@@ -11,13 +11,12 @@ struct ProxyRouter {
 impl Proxier for ProxyRouter {
     async fn proxy(
         &self,
+        request_type: RequestType,
+        request: Request<Body>,
         node: Node,
         canister_id: Principal,
-        parts: Parts,
-        body: Vec<u8>,
-    ) -> Result<ReqwestResponse, Error> {
-        let mut resp = ReqwestResponse::from(http::Response::new("foobar".to_string()));
-        Ok(resp)
+    ) -> Result<Response, ErrorCause> {
+        Ok("foobar".into_response())
     }
 
     fn lookup_node(&self, canister_id: Principal) -> Result<Node, ErrorCause> {
@@ -52,7 +51,7 @@ async fn test_status() -> Result<(), Error> {
 #[tokio::test]
 async fn test_query() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
-    let state = ProxyRouter { node };
+    let state = ProxyRouter { node: node.clone() };
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
     let canister_id = Principal::from_text("sxiki-5ygae-aq").unwrap();
@@ -77,11 +76,15 @@ async fn test_query() -> Result<(), Error> {
 
     let body = serde_cbor::to_vec(&envelope).unwrap();
 
-    let request = Request::builder()
-        .body(hyper::body::Body::from(body))
-        .unwrap();
+    let mut ctx = RequestContext::default();
+    parse_body(&mut ctx, &body)?;
+    ctx.canister_id = Some(canister_id);
+    ctx.node = Some(node);
 
-    let resp = query(State(Arc::new(state)), request).await;
+    let mut request = Request::builder().body(Body::from(body)).unwrap();
+
+    let resp = query(State(Arc::new(state)), Extension(ctx), request).await;
+
     assert!(resp.is_ok());
     let resp = resp.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);

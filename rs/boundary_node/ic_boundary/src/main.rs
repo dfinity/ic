@@ -287,21 +287,31 @@ async fn main() -> Result<(), Error> {
     let mut configuration_runner = configuration_runner;
 
     // Server / API
-    let proxy_router = ProxyRouter::new(Arc::clone(&http_client), Arc::clone(&lookup_table));
+    let proxy_router = Arc::new(ProxyRouter::new(
+        Arc::clone(&http_client),
+        Arc::clone(&lookup_table),
+    ));
 
     let routers_https: Router<_> = Router::new()
         .route("/api/v2/status", get(routes::status))
-        .route("/api/v2/canister/:id/query", post(routes::query))
-        .route("/api/v2/canister/:id/call", post(routes::query))
-        .route("/api/v2/canister/:id/read_state", post(routes::read_state))
+        .route("/api/v2/canister/:canister_id/query", post(routes::query))
+        .route("/api/v2/canister/:canister_id/call", post(routes::call))
+        .route(
+            "/api/v2/canister/:canister_id/read_state",
+            post(routes::read_state),
+        )
         .layer(
             ServiceBuilder::new()
+                .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
                 .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()
-                .layer(DefaultBodyLimit::max(128 * 1024)), // TODO enlarge?
+                .layer(middleware::from_fn(routes::log_request))
+                .layer(middleware::from_fn_with_state(
+                    Arc::clone(&proxy_router),
+                    routes::preprocess_request,
+                )),
         )
-        .layer(middleware::from_fn(routes::log_request))
-        .with_state(Arc::new(proxy_router));
+        .with_state(Arc::clone(&proxy_router));
 
     #[cfg(feature = "tls")]
     let routers_http = Router::new()

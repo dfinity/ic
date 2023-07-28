@@ -16,7 +16,6 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use opentelemetry::{baggage::BaggageExt, trace::FutureExt, Context as TlmContext, KeyValue};
 use simple_moving_average::{SingleSumSMA, SMA};
-use tracing::{error, info, warn};
 
 use crate::{
     persist::Persist,
