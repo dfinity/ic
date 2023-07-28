@@ -53,7 +53,12 @@ pub struct RegistryConsensusHandle {
 }
 
 impl RegistryConsensusHandle {
-    pub fn add_node(&mut self, version: RegistryVersion, node_id: NodeId, ip: &str, port: u16) {
+    pub fn add_node(
+        &mut self,
+        version: RegistryVersion,
+        node_id: NodeId,
+        endpoints: Vec<Option<(&str, u16)>>,
+    ) {
         let mut subnet_record = SubnetRecord::default();
 
         let mut membership = self.membership.lock().unwrap();
@@ -65,14 +70,16 @@ impl RegistryConsensusHandle {
             subnet_test_id(0),
             subnet_record,
         );
-        let connection_endpoint = Some(ConnectionEndpoint {
-            ip_addr: ip.to_string(),
-            port: port as u32,
-        });
-        let flow_end_point = FlowEndpoint {
-            endpoint: connection_endpoint,
-        };
-        let flow_end_points = vec![flow_end_point];
+
+        let flow_end_points = endpoints
+            .into_iter()
+            .map(|endpoint| FlowEndpoint {
+                endpoint: endpoint.map(|(ip, port)| ConnectionEndpoint {
+                    ip_addr: ip.to_string(),
+                    port: port as u32,
+                }),
+            })
+            .collect();
 
         let node_record = NodeRecord {
             p2p_flow_endpoints: flow_end_points,
