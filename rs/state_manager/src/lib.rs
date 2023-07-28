@@ -13,7 +13,7 @@ pub mod tree_hash;
 use crate::{
     manifest::compute_bundled_manifest,
     state_sync::chunkable::cache::StateSyncCache,
-    tip::{spawn_tip_thread, TipRequest},
+    tip::{spawn_tip_thread, PageMapToFlush, TipRequest},
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
@@ -1823,6 +1823,7 @@ impl StateManagerImpl {
     /// during execution from the last flush.
     fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
         self.metrics.checkpoint_metrics.page_map_flushes.inc();
+        let mut pagemaps = Vec::new();
         for entry in PageMapType::list_all(tip_state) {
             if let Some(page_map) = entry.get_mut(tip_state) {
                 // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
@@ -1834,28 +1835,31 @@ impl StateManagerImpl {
                 // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
                 // we have not persisted unflushed deltas before, then there are no relevant pages beyond the ones in the
                 // unlushed delta, and we truncate the file on disk to size 0.
-                if page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas() {
-                    self.tip_channel
-                        .send(TipRequest::TruncatePageMapsPath {
-                            height,
-                            page_map_type: entry,
-                        })
-                        .unwrap();
-                }
-                if !page_map.unflushed_delta_is_empty() {
-                    // Clone and send page map for asynchronous flushing to disc. The unflushed deltas are
-                    // emptied in the original to ensure we don't flush twice.
-                    self.tip_channel
-                        .send(TipRequest::FlushPageMapDelta {
-                            height,
-                            page_map: page_map.clone(),
-                            page_map_type: entry,
-                        })
-                        .unwrap();
+                let truncate =
+                    page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas();
+                let page_map_clone = if !page_map.unflushed_delta_is_empty() {
+                    Some(page_map.clone())
+                } else {
+                    None
+                };
+                if truncate || page_map_clone.is_some() {
+                    pagemaps.push(PageMapToFlush {
+                        page_map_type: entry,
+                        truncate,
+                        page_map: page_map_clone,
+                    });
                 }
                 // We strip empty unflushed deltas to keep has_stripped_unflushed_deltas() correct
                 page_map.strip_unflushed_delta();
             }
+        }
+        if !pagemaps.is_empty() {
+            self.tip_channel
+                .send(TipRequest::FlushPageMapDelta { height, pagemaps })
+                .unwrap();
+            // We flush further when the tip_channel queue is not empty. Meaning we're blind
+            // to a request being processed, so we send Noop to signal for the busy Tip Thread.
+            self.tip_channel.send(TipRequest::Noop).unwrap();
         }
     }
 
