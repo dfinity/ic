@@ -7651,18 +7651,21 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha2",
  "ic-icrc1-test-utils",
+ "ic-icrc1-tokens-u256",
  "ic-icrc1-tokens-u64",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-ledger-hash-of",
  "icrc-ledger-types",
  "leb128",
+ "num-bigint 0.4.3",
  "num-traits",
  "proptest",
  "rand 0.8.5",
  "serde",
  "serde_bytes",
  "tempfile",
+ "thiserror",
 ]
 
 [[package]]
@@ -7903,6 +7906,22 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "serde_bytes",
+]
+
+[[package]]
+name = "ic-icrc1-tokens-u256"
+version = "0.1.0"
+dependencies = [
+ "candid 0.8.4",
+ "ciborium",
+ "ethnum",
+ "hex",
+ "ic-ledger-core",
+ "ic-stable-structures",
+ "num-bigint 0.4.3",
+ "num-traits",
+ "proptest",
+ "serde",
 ]
 
 [[package]]

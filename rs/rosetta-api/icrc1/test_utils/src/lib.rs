@@ -33,7 +33,7 @@ pub fn account_strategy() -> impl Strategy<Value = Account> {
     })
 }
 
-fn arb_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
+pub fn arb_small_amount<Tokens: TokensType>() -> impl Strategy<Value = Tokens> {
     any::<u16>().prop_map(|v| small_token_amount(v as u64))
 }
 
@@ -41,32 +41,39 @@ fn arb_memo() -> impl Strategy<Value = Option<Memo>> {
     prop::option::of(prop::collection::vec(0..=255u8, 32).prop_map(|x| Memo(ByteBuf::from(x))))
 }
 
-fn operation_strategy<Tokens: TokensType>() -> impl Strategy<Value = Operation<Tokens>> {
-    prop_oneof![
-        (arb_amount(), account_strategy()).prop_map(|(amount, to)| Operation::Mint { to, amount }),
-        (arb_amount(), account_strategy()).prop_map(|(amount, from)| Operation::Burn {
-            from,
-            spender: None,
-            amount,
-        }),
-        (
-            arb_amount(),
-            account_strategy(),
-            account_strategy(),
-            prop::option::of(Just(small_token_amount(DEFAULT_TRANSFER_FEE)))
-        )
-            .prop_map(|(amount, to, from, fee)| Operation::Transfer {
-                from,
-                to,
-                spender: None,
-                amount,
-                fee
+fn operation_strategy<Tokens: TokensType>(
+    amount_strategy: impl Strategy<Value = Tokens>,
+) -> impl Strategy<Value = Operation<Tokens>> {
+    amount_strategy.prop_flat_map(|amount| {
+        prop_oneof![
+            account_strategy().prop_map(move |to| Operation::Mint { to, amount }),
+            account_strategy().prop_map(move |from| {
+                Operation::Burn {
+                    from,
+                    spender: None,
+                    amount,
+                }
             }),
-    ]
+            (
+                account_strategy(),
+                account_strategy(),
+                prop::option::of(Just(small_token_amount(DEFAULT_TRANSFER_FEE)))
+            )
+                .prop_map(move |(to, from, fee)| Operation::Transfer {
+                    from,
+                    to,
+                    spender: None,
+                    amount,
+                    fee
+                }),
+        ]
+    })
 }
 
-pub fn transaction_strategy<Tokens: TokensType>() -> impl Strategy<Value = Transaction<Tokens>> {
-    let operation_strategy = operation_strategy();
+pub fn transaction_strategy<Tokens: TokensType>(
+    amount_strategy: impl Strategy<Value = Tokens>,
+) -> impl Strategy<Value = Transaction<Tokens>> {
+    let operation_strategy = operation_strategy(amount_strategy);
     let created_at_time_strategy = prop::option::of(Just({
         let end = SystemTime::now();
         // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
@@ -86,11 +93,13 @@ pub fn transaction_strategy<Tokens: TokensType>() -> impl Strategy<Value = Trans
     )
 }
 
-pub fn blocks_strategy<Tokens: TokensType>() -> impl Strategy<Value = Block<Tokens>> {
-    let transaction_strategy = transaction_strategy();
+pub fn blocks_strategy<Tokens: TokensType>(
+    amount_strategy: impl Strategy<Value = Tokens>,
+) -> impl Strategy<Value = Block<Tokens>> {
+    let transaction_strategy = transaction_strategy(amount_strategy);
     let fee_collector_strategy = prop::option::of(account_strategy());
     let fee_collector_block_index_strategy = prop::option::of(prop::num::u64::ANY);
-    let effective_fee_strategy = prop::option::of(arb_amount());
+    let effective_fee_strategy = prop::option::of(arb_small_amount());
     let timestamp_strategy = prop::num::u64::ANY;
     (
         transaction_strategy,
@@ -127,7 +136,7 @@ pub fn blocks_strategy<Tokens: TokensType>() -> impl Strategy<Value = Block<Toke
 pub fn valid_blockchain_strategy<Tokens: TokensType>(
     size: usize,
 ) -> impl Strategy<Value = Vec<Block<Tokens>>> {
-    let blocks = prop::collection::vec(blocks_strategy(), 0..size);
+    let blocks = prop::collection::vec(blocks_strategy(arb_small_amount()), 0..size);
     blocks.prop_map(|mut blocks| {
         let mut parent_hash = None;
         for block in blocks.iter_mut() {

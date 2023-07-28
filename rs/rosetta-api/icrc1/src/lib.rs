@@ -2,6 +2,7 @@ pub mod blocks;
 mod compact_account;
 pub mod endpoints;
 pub mod hash;
+pub(crate) mod known_tags;
 
 use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
