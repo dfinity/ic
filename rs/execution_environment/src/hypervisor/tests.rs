@@ -1411,7 +1411,54 @@ fn ic0_msg_reject_works() {
 }
 
 #[test]
-fn ic0_msg_caller_size_is_not_available_in_reject_callback() {
+fn ic0_msg_caller_size_works_in_reply_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reply().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reply(wasm().msg_caller_size().int_to_blob().append_and_reply()),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(
+        WasmResult::Reply(
+            (test.user_id().get().to_vec().len() as u32)
+                .to_le_bytes()
+                .to_vec()
+        ),
+        result
+    );
+}
+
+#[test]
+fn ic0_msg_caller_copy_works_in_reply_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reply().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args().other_side(callee).on_reply(
+                wasm()
+                    .msg_caller_copy(0, test.user_id().get().to_vec().len() as u32)
+                    .append_and_reply(),
+            ),
+        )
+        .build();
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(WasmResult::Reply(test.user_id().get().to_vec()), result);
+}
+
+#[test]
+fn ic0_msg_caller_size_works_in_reject_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
     let callee_id = test.universal_canister().unwrap();
@@ -1425,19 +1472,19 @@ fn ic0_msg_caller_size_is_not_available_in_reject_callback() {
                 .on_reject(wasm().msg_caller_size().int_to_blob().append_and_reply()),
         )
         .build();
-    let err = test.ingress(caller_id, "update", caller).unwrap_err();
-    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert!(
-        err.description().contains(
-            "\"ic0_msg_caller_size\" cannot be executed in replicated reject callback mode"
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(
+        WasmResult::Reply(
+            (test.user_id().get().to_vec().len() as u32)
+                .to_le_bytes()
+                .to_vec()
         ),
-        "Unexpected error message: {}",
-        err.description()
+        result
     );
 }
 
 #[test]
-fn ic0_msg_caller_copy_is_not_available_in_reject_callback() {
+fn ic0_msg_caller_copy_works_in_reject_callback() {
     let mut test = ExecutionTestBuilder::new().build();
     let caller_id = test.universal_canister().unwrap();
     let callee_id = test.universal_canister().unwrap();
@@ -1446,19 +1493,218 @@ fn ic0_msg_caller_copy_is_not_available_in_reject_callback() {
         .call_simple(
             callee_id.get(),
             "update",
-            call_args()
-                .other_side(callee)
-                .on_reject(wasm().msg_caller_copy(0, 1).append_and_reply()),
+            call_args().other_side(callee).on_reject(
+                wasm()
+                    .msg_caller_copy(0, test.user_id().get().to_vec().len() as u32)
+                    .append_and_reply(),
+            ),
         )
         .build();
-    let err = test.ingress(caller_id, "update", caller).unwrap_err();
-    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert!(
-        err.description().contains(
-            "\"ic0_msg_caller_copy\" cannot be executed in replicated reject callback mode"
+    let result = test.ingress(caller_id, "update", caller).unwrap();
+    assert_eq!(WasmResult::Reply(test.user_id().get().to_vec()), result);
+}
+
+#[test]
+fn ic0_msg_caller_size_works_in_cleanup_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reply().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reply(wasm().trap())
+                .on_cleanup(
+                    wasm()
+                        .msg_caller_size()
+                        .int_to_blob()
+                        .set_global_data_from_stack(),
+                ),
+        )
+        .build();
+
+    // Trigger the cleanup so the data is stored on the heap.
+    let _ = test.ingress(caller_id, "update", caller).unwrap_err();
+
+    // Check the data on the heap matches what we expect.
+    let result = test
+        .ingress(
+            caller_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        WasmResult::Reply(
+            (test.user_id().get().to_vec().len() as u32)
+                .to_le_bytes()
+                .to_vec()
         ),
-        "Unexpected error message: {}",
-        err.description()
+        result
+    );
+}
+
+#[test]
+fn ic0_msg_caller_copy_works_in_cleanup_callback() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let caller_id = test.universal_canister().unwrap();
+    let callee_id = test.universal_canister().unwrap();
+    let callee = wasm().message_payload().reply().build();
+    let caller = wasm()
+        .call_simple(
+            callee_id.get(),
+            "update",
+            call_args()
+                .other_side(callee)
+                .on_reply(wasm().trap())
+                .on_cleanup(
+                    wasm()
+                        .msg_caller_copy(0, test.user_id().get().to_vec().len() as u32)
+                        .set_global_data_from_stack(),
+                ),
+        )
+        .build();
+
+    // Trigger the cleanup so the data is stored on the heap.
+    let _ = test.ingress(caller_id, "update", caller).unwrap_err();
+
+    // Check the data on the heap matches what we expect.
+    let result = test
+        .ingress(
+            caller_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(WasmResult::Reply(test.user_id().get().to_vec()), result);
+}
+
+#[test]
+fn ic0_msg_caller_size_works_in_heartbeat() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let set_heartbeat = wasm()
+        .set_heartbeat(
+            wasm()
+                .msg_caller_size()
+                .int_to_blob()
+                .set_global_data_from_stack()
+                .build(),
+        )
+        .reply()
+        .build();
+
+    let _ = test.ingress(canister_id, "update", set_heartbeat).unwrap();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        WasmResult::Reply(
+            (ic_ic00_types::IC_00.get().to_vec().len() as u32)
+                .to_le_bytes()
+                .to_vec()
+        ),
+        result
+    );
+}
+
+#[test]
+fn ic0_msg_caller_copy_works_in_heartbeat() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let set_heartbeat = wasm()
+        .set_heartbeat(
+            wasm()
+                .msg_caller_copy(0, ic_ic00_types::IC_00.get().to_vec().len() as u32)
+                .set_global_data_from_stack()
+                .build(),
+        )
+        .reply()
+        .build();
+
+    let _ = test.ingress(canister_id, "update", set_heartbeat).unwrap();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        WasmResult::Reply(ic_ic00_types::IC_00.get().to_vec()),
+        result
+    );
+}
+
+#[test]
+fn ic0_msg_caller_size_works_in_global_timer() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let set_timer = wasm()
+        .set_global_timer_method(
+            wasm()
+                .msg_caller_size()
+                .int_to_blob()
+                .set_global_data_from_stack()
+                .build(),
+        )
+        .reply()
+        .build();
+
+    let _ = test.ingress(canister_id, "update", set_timer).unwrap();
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        WasmResult::Reply(
+            (ic_ic00_types::IC_00.get().to_vec().len() as u32)
+                .to_le_bytes()
+                .to_vec()
+        ),
+        result
+    );
+}
+
+#[test]
+fn ic0_msg_caller_copy_works_in_global_timer() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let set_timer = wasm()
+        .set_global_timer_method(
+            wasm()
+                .msg_caller_copy(0, ic_ic00_types::IC_00.get().to_vec().len() as u32)
+                .set_global_data_from_stack()
+                .build(),
+        )
+        .reply()
+        .build();
+
+    let _ = test.ingress(canister_id, "update", set_timer).unwrap();
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
+    let result = test
+        .ingress(
+            canister_id,
+            "update",
+            wasm().get_global_data().append_and_reply().build(),
+        )
+        .unwrap();
+    assert_eq!(
+        WasmResult::Reply(ic_ic00_types::IC_00.get().to_vec()),
+        result
     );
 }
 

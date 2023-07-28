@@ -5,6 +5,7 @@ use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -23,7 +24,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext},
     methods::SystemMethod,
-    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, PrincipalId, Time,
 };
 use maplit::btreemap;
 
@@ -88,6 +89,7 @@ impl ApiTypeBuilder {
 
     pub fn build_system_task_api() -> ApiType {
         ApiType::system_task(
+            IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             mock_time(),
             CallContextId::from(1),
@@ -97,6 +99,7 @@ impl ApiTypeBuilder {
     pub fn build_reply_api(incoming_cycles: Cycles) -> ApiType {
         ApiType::reply_callback(
             mock_time(),
+            PrincipalId::new_anonymous(),
             vec![],
             incoming_cycles,
             CallContextId::new(1),
@@ -108,6 +111,7 @@ impl ApiTypeBuilder {
     pub fn build_reject_api(reject_context: RejectContext) -> ApiType {
         ApiType::reject_callback(
             mock_time(),
+            PrincipalId::new_anonymous(),
             reject_context,
             Cycles::zero(),
             call_context_test_id(1),

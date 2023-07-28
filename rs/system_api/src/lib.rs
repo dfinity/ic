@@ -268,6 +268,7 @@ pub enum ApiType {
     // For executing closures when a `Reply` is received
     ReplyCallback {
         time: Time,
+        caller: PrincipalId,
         #[serde(with = "serde_bytes")]
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
@@ -286,6 +287,7 @@ pub enum ApiType {
     // For executing closures when a `Reject` is received
     RejectCallback {
         time: Time,
+        caller: PrincipalId,
         reject_context: RejectContext,
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
@@ -319,6 +321,7 @@ pub enum ApiType {
 
     // For executing the `canister_heartbeat` or `canister_global_timer` methods
     SystemTask {
+        caller: PrincipalId,
         /// System task to execute.
         /// Only `canister_heartbeat` and `canister_global_timer` are allowed.
         system_task: SystemMethod,
@@ -336,6 +339,7 @@ pub enum ApiType {
     ///
     /// See https://sdk.dfinity.org/docs/interface-spec/index.html#system-api-call
     Cleanup {
+        caller: PrincipalId,
         time: Time,
     },
 }
@@ -354,11 +358,13 @@ impl ApiType {
     }
 
     pub fn system_task(
+        caller: PrincipalId,
         system_task: SystemMethod,
         time: Time,
         call_context_id: CallContextId,
     ) -> Self {
         Self::SystemTask {
+            caller,
             time,
             call_context_id,
             outgoing_request: None,
@@ -429,6 +435,7 @@ impl ApiType {
     #[allow(clippy::too_many_arguments)]
     pub fn reply_callback(
         time: Time,
+        caller: PrincipalId,
         incoming_payload: Vec<u8>,
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
@@ -437,6 +444,7 @@ impl ApiType {
     ) -> Self {
         Self::ReplyCallback {
             time,
+            caller,
             incoming_payload,
             incoming_cycles,
             call_context_id,
@@ -455,6 +463,7 @@ impl ApiType {
     #[allow(clippy::too_many_arguments)]
     pub fn reject_callback(
         time: Time,
+        caller: PrincipalId,
         reject_context: RejectContext,
         incoming_cycles: Cycles,
         call_context_id: CallContextId,
@@ -463,6 +472,7 @@ impl ApiType {
     ) -> Self {
         Self::RejectCallback {
             time,
+            caller,
             reject_context,
             incoming_cycles,
             call_context_id,
@@ -942,12 +952,12 @@ impl SystemApiImpl {
 
     fn get_msg_caller_id(&self, method_name: &str) -> Result<PrincipalId, HypervisorError> {
         match &self.api_type {
-            ApiType::Start { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. } => Err(self.error_for(method_name)),
-            ApiType::Init { caller, .. }
+            ApiType::Start { .. } => Err(self.error_for(method_name)),
+            ApiType::SystemTask { caller, .. }
+            | ApiType::Cleanup { caller, .. }
+            | ApiType::ReplyCallback { caller, .. }
+            | ApiType::RejectCallback { caller, .. }
+            | ApiType::Init { caller, .. }
             | ApiType::Update { caller, .. }
             | ApiType::ReplicatedQuery { caller, .. }
             | ApiType::PreUpgrade { caller, .. }

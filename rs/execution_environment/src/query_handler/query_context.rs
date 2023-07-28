@@ -472,6 +472,7 @@ impl<'a> QueryContext<'a> {
         let api_type = match response.response_payload {
             Payload::Data(payload) => ApiType::reply_callback(
                 time,
+                call_origin.get_principal(),
                 payload.to_vec(),
                 incoming_cycles,
                 call_context_id,
@@ -480,6 +481,7 @@ impl<'a> QueryContext<'a> {
             ),
             Payload::Reject(context) => ApiType::reject_callback(
                 time,
+                call_origin.get_principal(),
                 context,
                 incoming_cycles,
                 call_context_id,
@@ -576,7 +578,10 @@ impl<'a> QueryContext<'a> {
         };
         let (cleanup_output, output_execution_state, output_system_state) =
             self.hypervisor.execute(
-                ApiType::Cleanup { time },
+                ApiType::Cleanup {
+                    caller: call_origin.get_principal(),
+                    time,
+                },
                 time,
                 canister.system_state.clone(),
                 canister_current_memory_usage,

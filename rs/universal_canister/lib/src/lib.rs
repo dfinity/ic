@@ -333,6 +333,13 @@ impl PayloadBuilder {
         self
     }
 
+    /// Store the curent stack data (in a global variable) on the heap.
+    /// NOTE: This does _not_ correspond to a Wasm global.
+    pub fn set_global_data_from_stack(mut self) -> Self {
+        self.0.push(Ops::SetGlobal as u8);
+        self
+    }
+
     /// Get data (stored in a global variable) from the heap.
     /// NOTE: This does _not_ correspond to a Wasm global.
     pub fn get_global_data(mut self) -> Self {
