@@ -29,7 +29,7 @@ use ic_test_utilities::{
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
-    time, CanisterTimer, CountBytes, Cycles, NumInstructions, Time,
+    time, CanisterTimer, CountBytes, Cycles, NumInstructions, PrincipalId, Time,
 };
 use std::{
     collections::BTreeSet,
@@ -426,8 +426,8 @@ fn test_reply_api_support_on_nns() {
     let api_type = ApiTypeBuilder::build_reply_api(Cycles::zero());
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_msg_arg_data_size());
     assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -482,8 +482,8 @@ fn test_reply_api_support_non_nns() {
     let api_type = ApiTypeBuilder::build_reply_api(Cycles::zero());
     let mut api = get_system_api(api_type, &get_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_supported(api.ic0_msg_arg_data_size());
     assert_api_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -541,8 +541,8 @@ fn test_reject_api_support_on_nns() {
     });
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -600,8 +600,8 @@ fn test_reject_api_support_non_nns() {
     });
     let mut api = get_system_api(api_type, &get_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -763,13 +763,16 @@ fn test_start_support() {
 fn test_cleanup_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiType::Cleanup { time: mock_time() },
+        ApiType::Cleanup {
+            caller: PrincipalId::new_anonymous(),
+            time: mock_time(),
+        },
         &get_system_state(),
         cycles_account_manager,
     );
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -877,7 +880,7 @@ fn test_inspect_message_support() {
 }
 
 #[test]
-fn test_canister_heartbeat_support() {
+fn test_canister_system_task_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
 
     let mut api = get_system_api(
@@ -886,8 +889,8 @@ fn test_canister_heartbeat_support() {
         cycles_account_manager,
     );
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());
@@ -934,7 +937,7 @@ fn test_canister_heartbeat_support() {
 }
 
 #[test]
-fn test_canister_heartbeat_support_nns() {
+fn test_canister_system_task_support_nns() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new()
         .with_subnet_type(SubnetType::System)
         .build();
@@ -942,8 +945,8 @@ fn test_canister_heartbeat_support_nns() {
     let api_type = ApiTypeBuilder::build_system_task_api();
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
-    assert_api_not_supported(api.ic0_msg_caller_size());
-    assert_api_not_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
+    assert_api_supported(api.ic0_msg_caller_size());
+    assert_api_supported(api.ic0_msg_caller_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_arg_data_size());
     assert_api_not_supported(api.ic0_msg_arg_data_copy(0, 0, 0, &mut []));
     assert_api_not_supported(api.ic0_msg_method_name_size());

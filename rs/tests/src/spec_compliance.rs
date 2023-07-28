@@ -41,6 +41,9 @@ const EXCLUDED: &[&str] = &[
     // TODO(EXC-350): enable these two tests
     "$0 ~ /invalid_canister_export.wat/",
     "$0 ~ /invalid_empty_query_name.wat/",
+    // Temporarily exclude "msg_caller traps" until the spec compliance test
+    // suite is migrated to the IC repo.
+    "$0 ~ /msg_caller traps/",
 ];
 
 pub fn config_impl(env: TestEnv) {

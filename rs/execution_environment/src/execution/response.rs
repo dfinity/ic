@@ -883,6 +883,7 @@ pub fn execute_response(
     let api_type = match &response.response_payload {
         Payload::Data(payload) => ApiType::reply_callback(
             time,
+            original.call_origin.get_principal(),
             payload.to_vec(),
             helper.refund_for_sent_cycles(),
             call_context_id,
@@ -891,6 +892,7 @@ pub fn execute_response(
         ),
         Payload::Reject(context) => ApiType::reject_callback(
             time,
+            original.call_origin.get_principal(),
             context.clone(),
             helper.refund_for_sent_cycles(),
             call_context_id,
@@ -965,6 +967,7 @@ fn execute_response_cleanup(
     };
     let result = round.hypervisor.execute_dts(
         ApiType::Cleanup {
+            caller: original.call_origin.get_principal(),
             time: original.time,
         },
         helper.canister().execution_state.as_ref().unwrap(),
