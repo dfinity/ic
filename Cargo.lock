@@ -979,7 +979,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6e1e6fb1c9e3d6fcdec57216a74eaa03e41f52a22f13a16438251d8e88b89da"
 dependencies = [
- "bit-vec 0.6.3",
+ "bit-vec 0.5.1",
 ]
 
 [[package]]
