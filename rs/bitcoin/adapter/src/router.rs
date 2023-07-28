@@ -57,7 +57,6 @@ pub fn start_router(
             if adapter_state.is_idle() {
                 connection_manager.make_idle();
                 blockchain_manager.make_idle().await;
-                transaction_manager.make_idle();
                 // TODO: instead of sleeping here add some async synchonization.
                 sleep(sleep_idle_interval).await;
                 continue;
@@ -104,7 +103,7 @@ pub fn start_router(
                 }
                 transaction_manager_request = transaction_manager_rx.recv() => {
                     match transaction_manager_request.unwrap() {
-                        TransactionManagerRequest::SendTransaction(transaction) => transaction_manager.send_transaction(&transaction),
+                        TransactionManagerRequest::SendTransaction(transaction) => transaction_manager.enqueue_transaction(&transaction),
                     }
                 },
                 _ = tick_interval.tick() => {
