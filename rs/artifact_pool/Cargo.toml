@@ -16,7 +16,6 @@ ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-lazy_static = "1.4.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 lmdb-rkv = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "1cf86b5cc09947e94a787065cadd163a42ef7f18" }
 prost = "0.11.0"

@@ -40,12 +40,12 @@ use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
 use ic_registry_nns_data_provider::registry::registry_deltas_to_registry_transport_records;
+use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
     deserialize_get_changes_since_response, deserialize_get_latest_version_response,
     deserialize_get_value_response, serialize_get_changes_since_request,
     serialize_get_value_request,
 };
-use ic_replica::setup::get_subnet_type;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
 use ic_types::batch::BatchMessages;
@@ -248,12 +248,17 @@ impl Player {
             println!("Failed to set default replica version");
         }
 
-        let subnet_type = get_subnet_type(
-            &log,
-            subnet_id,
-            registry.get_latest_version(),
-            registry.as_ref(),
-        );
+        let subnet_type = match registry.get_subnet_record(subnet_id, registry.get_latest_version())
+        {
+            Ok(Some(record)) => {
+                SubnetType::try_from(record.subnet_type).expect("Failed to decode subnet type")
+            }
+            err => panic!(
+                "Failed to extract subnet type of {:?} from registry: {:?}",
+                subnet_id, err
+            ),
+        };
+
         let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfig::new(subnet_type);
 

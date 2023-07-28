@@ -4,7 +4,6 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-ic-crypto = { path = "../crypto" }
 ic-constants = { path = "../constants" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-interfaces = { path = "../interfaces" }
@@ -12,14 +11,12 @@ ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
-ic-protobuf = { path = "../protobuf" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-types = { path = "../types/types" }
 ic-validator = { path = "../validator" }
-bincode = "1.2.1"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 
