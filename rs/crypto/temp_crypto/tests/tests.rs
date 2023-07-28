@@ -1,10 +1,11 @@
 use ic_config::crypto::CryptoConfig;
+use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils::empty_fake_registry;
-use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::CurrentNodePublicKeysError;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types_test_utils::ids::node_test_id;
+use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
 
 const NODE_ID: u64 = 42;
@@ -74,11 +75,11 @@ mod vault_rng {
         for set_remote_vault in [true, false] {
             println!("Running tests for remote vault: {set_remote_vault}");
             let crypto_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-                ReproducibleRng::from_seed(SEED_0),
+                ChaCha20Rng::from_seed(SEED_0),
                 set_remote_vault,
             );
             let crypto_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-                ReproducibleRng::from_seed(SEED_0),
+                ChaCha20Rng::from_seed(SEED_0),
                 set_remote_vault,
             );
 
@@ -94,11 +95,11 @@ mod vault_rng {
         for set_remote_vault in [true, false] {
             println!("Running tests for remote vault: {set_remote_vault}");
             let crypto_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-                ReproducibleRng::from_seed(SEED_0),
+                ChaCha20Rng::from_seed(SEED_0),
                 set_remote_vault,
             );
             let crypto_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-                ReproducibleRng::from_seed(SEED_1),
+                ChaCha20Rng::from_seed(SEED_1),
                 set_remote_vault,
             );
 
@@ -114,11 +115,11 @@ mod vault_rng {
         for set_remote_vault in [true, false] {
             println!("Running tests for remote vault: {set_remote_vault}");
             let crypto_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-                ReproducibleRng::from_seed(SEED_0),
+                ChaCha20Rng::from_seed(SEED_0),
                 set_remote_vault,
             );
             let crypto_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-                ReproducibleRng::from_seed(SEED_0),
+                ChaCha20Rng::from_seed(SEED_0),
                 set_remote_vault,
             );
 
@@ -137,11 +138,11 @@ mod vault_rng {
         for set_remote_vault in [true, false] {
             println!("Running tests for remote vault: {set_remote_vault}");
             let crypto_0 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-                ReproducibleRng::from_seed(SEED_0),
+                ChaCha20Rng::from_seed(SEED_0),
                 set_remote_vault,
             );
             let crypto_1 = new_idkg_crypto_with_rng_and_opt_remote_vault(
-                ReproducibleRng::from_seed(SEED_1),
+                ChaCha20Rng::from_seed(SEED_1),
                 set_remote_vault,
             );
 
@@ -156,10 +157,10 @@ mod vault_rng {
         }
     }
 
-    fn new_idkg_crypto_with_rng_and_opt_remote_vault(
-        rng: ReproducibleRng,
+    fn new_idkg_crypto_with_rng_and_opt_remote_vault<R: CryptoComponentRng>(
+        rng: R,
         with_remote_vault: bool,
-    ) -> TempCryptoComponentGeneric<Csp, ReproducibleRng> {
+    ) -> TempCryptoComponentGeneric<Csp, R> {
         let node_id = NodeId::from(PrincipalId::new_node_test_id(0));
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client =

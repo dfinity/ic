@@ -1486,6 +1486,7 @@ mod sign_share {
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use proptest::array::uniform5;
     use proptest::prelude::{any, Strategy};
+    use rand_chacha::ChaCha20Rng;
     use slog::Level;
     use std::collections::HashSet;
 
@@ -1901,7 +1902,7 @@ mod sign_share {
                 vec(0..=255u8, CHACHA_SEED_LEN),
             ),
             |(signer_state, rng_seed)| {
-                let mut inner_rng = ReproducibleRng::from_seed(
+                let mut inner_rng = ChaCha20Rng::from_seed(
                     rng_seed[..]
                         .try_into()
                         .expect("Failed to convert seed to array"),

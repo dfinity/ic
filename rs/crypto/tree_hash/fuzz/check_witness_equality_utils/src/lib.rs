@@ -1,6 +1,5 @@
 use ic_canonical_state::hash_tree::{crypto_hash_lazy_tree, hash_lazy_tree, HashTree};
 use ic_canonical_state::lazy_tree::{LazyFork, LazyTree};
-use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, SEED_LEN};
 use ic_crypto_tree_hash::{
     flatmap, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, Witness,
     WitnessGenerator, WitnessGeneratorImpl,
@@ -9,6 +8,7 @@ use ic_crypto_tree_hash_test_utils::{
     merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
 };
 use rand::{CryptoRng, Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -112,20 +112,21 @@ fn build_witness_gen(t: &LabeledTree<Vec<u8>>) -> WitnessGeneratorImpl {
     builder.witness_generator().unwrap()
 }
 
-pub fn rng_from_u32(seed: u32) -> ReproducibleRng {
+pub fn rng_from_u32(seed: u32) -> ChaCha20Rng {
+    const CHACHA_SEED_LEN: usize = 32;
     let seed_bytes: Vec<u8> = seed
         .to_le_bytes()
         .into_iter()
-        .chain([0u8; SEED_LEN - 4])
+        .chain([0u8; CHACHA_SEED_LEN - std::mem::size_of::<u32>()])
         .collect();
-    ReproducibleRng::from_seed(
+    ChaCha20Rng::from_seed(
         seed_bytes
             .try_into()
             .expect("Failed to convert fuzzer's seed bytes"),
     )
 }
 
-pub fn try_remove_leaf(tree: &mut LabeledTree<Vec<u8>>, rng: &mut ReproducibleRng) -> bool {
+pub fn try_remove_leaf<R: Rng + CryptoRng>(tree: &mut LabeledTree<Vec<u8>>, rng: &mut R) -> bool {
     let num_leaves = get_num_leaves(tree);
     if num_leaves != 0 {
         remove_leaf(tree, rng.gen_range(0..num_leaves));
@@ -179,9 +180,9 @@ fn remove_leaf_impl(
     }
 }
 
-pub fn try_remove_empty_subtree(
+pub fn try_remove_empty_subtree<R: Rng + CryptoRng>(
     tree: &mut LabeledTree<Vec<u8>>,
-    rng: &mut ReproducibleRng,
+    rng: &mut R,
 ) -> bool {
     let path: Vec<Label> = {
         let paths_to_empty_subtrees = paths_to_empty_subtrees(tree);
@@ -256,21 +257,21 @@ fn paths_to_empty_subtrees_impl<'a>(
     }
 }
 
-pub fn add_leaf(tree: &mut LabeledTree<Vec<u8>>, rng: &mut ReproducibleRng) -> bool {
+pub fn add_leaf<R: Rng + CryptoRng>(tree: &mut LabeledTree<Vec<u8>>, rng: &mut R) -> bool {
     let leaf = LabeledTree::<Vec<u8>>::Leaf(random_bytes(0..5, rng));
     add_subtree(tree, rng, leaf);
     true
 }
 
-pub fn add_empty_subtree(tree: &mut LabeledTree<Vec<u8>>, rng: &mut ReproducibleRng) -> bool {
+pub fn add_empty_subtree<R: Rng + CryptoRng>(tree: &mut LabeledTree<Vec<u8>>, rng: &mut R) -> bool {
     add_subtree(tree, rng, LabeledTree::<Vec<u8>>::SubTree(flatmap!()));
     true
 }
 
 /// randomly adds the provided `subtree` with a randomly generated `Label`
-fn add_subtree(
+fn add_subtree<R: Rng + CryptoRng>(
     tree: &mut LabeledTree<Vec<u8>>,
-    rng: &mut ReproducibleRng,
+    rng: &mut R,
     subtree: LabeledTree<Vec<u8>>,
 ) {
     let path: Vec<Label> = {
@@ -323,12 +324,11 @@ fn add_subtree_in_path(
     }
 }
 
-fn random_label(range: std::ops::Range<usize>, rng: &mut ReproducibleRng) -> Label {
+fn random_label<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) -> Label {
     Label::from(random_bytes(range, rng))
 }
 
-fn random_bytes(range: std::ops::Range<usize>, rng: &mut ReproducibleRng) -> Vec<u8> {
-    use rand::RngCore;
+fn random_bytes<R: Rng + CryptoRng>(range: std::ops::Range<usize>, rng: &mut R) -> Vec<u8> {
     let len = rng.gen_range(range);
     let mut result = vec![0u8; len];
     rng.fill_bytes(&mut result[..]);
@@ -365,9 +365,9 @@ fn all_subtrees_impl<'a>(
     }
 }
 
-pub fn try_randomly_change_bytes_leaf_value<F: Fn(&mut Vec<u8>)>(
+pub fn try_randomly_change_bytes_leaf_value<F: Fn(&mut Vec<u8>), R: Rng + CryptoRng>(
     tree: &mut LabeledTree<Vec<u8>>,
-    rng: &mut ReproducibleRng,
+    rng: &mut R,
     modify_bytes_fn: &F,
 ) -> bool {
     let num_leaves = get_num_leaves(tree);
@@ -449,9 +449,9 @@ fn modify_leaf_impl<F: Fn(&mut Vec<u8>)>(
     }
 }
 
-pub fn try_randomly_change_bytes_label<F: Fn(&mut Vec<u8>)>(
+pub fn try_randomly_change_bytes_label<F: Fn(&mut Vec<u8>), R: Rng + CryptoRng>(
     tree: &mut LabeledTree<Vec<u8>>,
-    rng: &mut ReproducibleRng,
+    rng: &mut R,
     modify_bytes_fn: &F,
 ) -> bool {
     let num_labels = get_num_labels(tree);

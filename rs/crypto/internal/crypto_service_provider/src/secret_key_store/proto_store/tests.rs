@@ -871,7 +871,6 @@ fn should_fail_to_read_from_secret_key_store_with_no_read_permissions() {
 
 mod insert_or_replace {
     use super::*;
-    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
     use proptest::option;
@@ -880,7 +879,7 @@ mod insert_or_replace {
     proptest! {
         #[test]
         fn should_insert_secret_key(seed: [u8; 32], scope in option::of(arb_scope())) {
-            let mut rng = ReproducibleRng::from_seed(seed);
+            let mut rng = ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
             let secret_key = secret_key(&mut rng);
@@ -897,7 +896,7 @@ mod insert_or_replace {
             scope_first_key in option::of(arb_scope()),
             scope_second_key in option::of(arb_scope())
         ) {
-            let mut rng = ReproducibleRng::from_seed(seed);
+            let mut rng = ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
             let first_secret_key = secret_key(&mut rng);
@@ -917,7 +916,7 @@ mod insert_or_replace {
             scope1 in option::of(arb_scope()),
             scope2 in option::of(arb_scope())
         ) {
-            let mut rng = ReproducibleRng::from_seed(seed);
+            let mut rng = ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
             let secret_key = secret_key(&mut rng);
@@ -935,7 +934,7 @@ mod insert_or_replace {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let replica_logger = ReplicaLogger::from(&in_memory_logger);
             let mut key_store = ProtoSecretKeyStore::open(temp_dir.path(), "sks_data.pb", Some(replica_logger));
-            let mut rng = ReproducibleRng::from_seed(seed);
+            let mut rng = ChaCha20Rng::from_seed(seed);
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
             let secret_key = secret_key(&mut rng);
 

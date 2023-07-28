@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/crypto/tree_hash/test_utils",
     "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
 ]
 
 MACRO_DEPENDENCIES = []

@@ -18,5 +18,6 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 assert_matches = "1.5.0"
 ic-crypto-test-utils = { path = "../../../test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }
+rand_chacha = "0.3"
 serde_cbor = "0.11.1"
 hex = "0.4"

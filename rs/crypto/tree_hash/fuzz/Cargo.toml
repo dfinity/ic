@@ -10,11 +10,11 @@ cargo-fuzz = true
 [dependencies]
 arbitrary = "1.3.0"
 libfuzzer-sys = "0.4"
-rand = "0.8"
-ic-crypto-test-utils-reproducible-rng = { path = "../../test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = ".." }
 ic-crypto-tree-hash-fuzz-check-witness-equality-utils = { path = "check_witness_equality_utils" }
 ic-protobuf = { path = "../../../protobuf" }
+rand = "0.8"
+rand_chacha = "0.3"
 
 # Prevent this from interfering with workspaces
 [workspace]

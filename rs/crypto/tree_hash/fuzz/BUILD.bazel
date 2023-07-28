@@ -4,12 +4,12 @@ package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
     "//rs/canonical_state",
-    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/crypto/tree_hash/fuzz/check_witness_equality_utils",
     "//rs/protobuf",
     "@crate_index//:libfuzzer-sys",
     "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
 ]
 
 MACRO_DEPENDENCIES = []
