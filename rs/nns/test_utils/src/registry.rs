@@ -695,8 +695,8 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
         xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
         http_endpoint: format!("128.0.{mutation_id}.1:4321"),
-        p2p_flow_endpoints: vec![format!("123,128.0.{mutation_id}.1:10000")],
-        prometheus_metrics_endpoint: format!("128.0.{mutation_id}.1:5555"),
+        p2p_flow_endpoints: vec![],
+        prometheus_metrics_endpoint: "".to_string(),
     };
 
     (payload, node_public_keys)

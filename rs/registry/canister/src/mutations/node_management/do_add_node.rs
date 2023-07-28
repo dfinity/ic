@@ -47,15 +47,15 @@ impl Registry {
 
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
+        let mut p2p_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
+        p2p_endpoint.port = 4100;
         // 4. create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
-            p2p_flow_endpoints: payload
-                .p2p_flow_endpoints
-                .iter()
-                .map(|x| flow_endpoint_from_string(x))
-                .collect(),
+            p2p_flow_endpoints: vec![FlowEndpoint {
+                endpoint: Some(p2p_endpoint),
+            }],
             node_operator_id: caller.into_vec(),
             chip_id: vec![],
             hostos_version_id: None,
@@ -96,6 +96,8 @@ pub struct AddNodePayload {
 
     pub xnet_endpoint: String,
     pub http_endpoint: String,
+
+    // TODO(NNS1-2444): The fields below are deprecated and they are not read anywhere.
     pub p2p_flow_endpoints: Vec<String>,
     pub prometheus_metrics_endpoint: String,
 }
@@ -253,8 +255,8 @@ mod tests {
             idkg_dealing_encryption_pk: Some(vec![]),
             xnet_endpoint: "127.0.0.1:1234".to_string(),
             http_endpoint: "127.0.0.1:8123".to_string(),
-            p2p_flow_endpoints: vec!["123,127.0.0.1:10000".to_string()],
-            prometheus_metrics_endpoint: "127.0.0.1:5555".to_string(),
+            p2p_flow_endpoints: vec![],
+            prometheus_metrics_endpoint: "".to_string(),
         };
     }
 
