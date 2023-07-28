@@ -1,6 +1,7 @@
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::fmt::{Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
 
 /// An Ethereum account address.
@@ -20,6 +21,35 @@ impl Address {
         let mut addr = [0u8; 20];
         addr[..].copy_from_slice(&hash[12..32]);
         Self(addr)
+    }
+}
+
+impl LowerHex for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
+impl UpperHex for Address {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{}", hex::encode_upper(self.0))
+    }
+}
+
+impl TryFrom<&[u8; 32]> for Address {
+    type Error = String;
+
+    fn try_from(value: &[u8; 32]) -> Result<Self, Self::Error> {
+        let (leading_zeroes, address_bytes) = value.split_at(12);
+        if !leading_zeroes.iter().all(|leading_zero| *leading_zero == 0) {
+            return Err(format!(
+                "address has leading non-zero bytes: {:?}",
+                leading_zeroes
+            ));
+        }
+        Ok(Address::new(
+            <[u8; 20]>::try_from(address_bytes).expect("vector has correct length"),
+        ))
     }
 }
 

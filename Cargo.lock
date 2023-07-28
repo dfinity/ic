@@ -4333,6 +4333,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ebdb29d2ea9ed0083cd8cece49bbd968021bd99b0849edb4a9a7ee0fdf6a4e0"
 
 [[package]]
+name = "hex-literal"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
+
+[[package]]
 name = "hex-literal-impl"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5717,12 +5723,15 @@ dependencies = [
 name = "ic-cketh-minter"
 version = "0.1.0"
 dependencies = [
+ "assert_matches",
  "candid 0.8.4",
  "ethabi",
  "ethnum",
  "hex",
+ "hex-literal 0.4.1",
  "ic-cdk 0.7.4",
  "ic-cdk-macros 0.6.10",
+ "ic-cdk-timers",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-sha3",
  "num-bigint 0.4.3",

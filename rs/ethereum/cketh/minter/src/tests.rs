@@ -46,15 +46,24 @@ fn deserialize_json_reply() {
     );
 }
 
-#[test]
-fn deserialize_get_logs() {
-    use crate::eth_rpc::*;
+mod eth_get_logs {
+    use crate::address::Address;
+    use crate::endpoints::ReceivedEthEvent;
+    use crate::eth_rpc::{FixedSizeData, LogEntry};
+    use assert_matches::assert_matches;
+    use candid::{Nat, Principal};
+    use ic_crypto_sha3::Keccak256;
+    use std::str::FromStr;
 
-    fn hash_from_hex(s: &str) -> Hash {
-        Hash(hex::decode(s).unwrap().try_into().unwrap())
-    }
+    #[test]
+    fn deserialize_get_logs() {
+        use crate::eth_rpc::*;
 
-    let logs: Vec<LogEntry> = serde_json::from_str(r#"[
+        fn hash_from_hex(s: &str) -> Hash {
+            Hash(hex::decode(s).unwrap().try_into().unwrap())
+        }
+
+        let logs: Vec<LogEntry> = serde_json::from_str(r#"[
  {
     "address": "0x7e41257f7b5c3dd3313ef02b1f4c864fe95bec2b",
     "topics": [
@@ -68,22 +77,106 @@ fn deserialize_get_logs() {
     "logIndex": "0x8",
     "removed": false
   }]"#).unwrap();
-    assert_eq!(
-        logs,
-        vec![LogEntry {
-            address: Address::from_str("0x7e41257f7b5c3dd3313ef02b1f4c864fe95bec2b").unwrap(),
-            topics: vec![
-                Data(hex::decode("2a2607d40f4a6feb97c36e0efd57e0aa3e42e0332af4fceb78f21b7dffcbd657").unwrap()),
+        assert_eq!(
+            logs,
+            vec![LogEntry {
+                address: Address::from_str("0x7e41257f7b5c3dd3313ef02b1f4c864fe95bec2b").unwrap(),
+                topics: vec![
+                   FixedSizeData::from_str("0x2a2607d40f4a6feb97c36e0efd57e0aa3e42e0332af4fceb78f21b7dffcbd657").unwrap(),
+                ],
+                data: Data(hex::decode("00000000000000000000000055654e7405fcb336386ea8f36954a211b2cda764000000000000000000000000000000000000000000000000002386f26fc100000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000003f62327071372d71677a7a692d74623564622d72357363692d637736736c2d6e646f756c2d666f7435742d347a7732702d657a6677692d74616a32792d76716500").unwrap()),
+                block_number: Some(BlockNumber::new(0x3aa4f4)),
+                transaction_hash: Some(hash_from_hex("5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154")),
+                transaction_index: Some(Quantity::new(0x06)),
+                block_hash: Some(hash_from_hex("908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2")),
+                log_index: Some(Quantity::new(0x08)),
+                removed: false,
+            }]
+        );
+    }
+
+    #[test]
+    fn should_have_correct_topic() {
+        use crate::eth_logs::RECEIVED_ETH_EVENT_TOPIC;
+
+        //must match event signature in minter.sol
+        let event_signature = "ReceivedEth(address,uint256,bytes32)";
+        let topic = Keccak256::hash(event_signature);
+        assert_eq!(topic, RECEIVED_ETH_EVENT_TOPIC)
+    }
+
+    #[test]
+    fn should_parse_received_eth_event() {
+        let event = r#"{
+            "address": "0xb44b5e756a894775fc32eddf3314bb1b1944dc34",
+            "topics": [
+                "0x257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435",
+                "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+                "0x09efcdab00000000000100000000000000000000000000000000000000000000"
             ],
-            data: Data(hex::decode("00000000000000000000000055654e7405fcb336386ea8f36954a211b2cda764000000000000000000000000000000000000000000000000002386f26fc100000000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000003f62327071372d71677a7a692d74623564622d72357363692d637736736c2d6e646f756c2d666f7435742d347a7732702d657a6677692d74616a32792d76716500").unwrap()),
-            block_number: Some(Quantity::new(0x3aa4f4)),
-            transaction_hash: Some(hash_from_hex("5618f72c485bd98a3df58d900eabe9e24bfaa972a6fe5227e02233fad2db1154")),
-            transaction_index: Some(Quantity::new(0x06)),
-            block_hash: Some(hash_from_hex("908e6b84d26d71421bfaa08e7966e0afcef3883a28a53a0a7a31104caf1e94c2")),
-            log_index: Some(Quantity::new(0x08)),
-            removed: false,
-        }]
-    );
+            "data": "0x000000000000000000000000000000000000000000000000002386f26fc10000",
+            "blockNumber": "0x3ca487",
+            "transactionHash": "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3",
+            "transactionIndex": "0x22",
+            "blockHash": "0x8436209a391f7bc076123616ecb229602124eb6c1007f5eae84df8e098885d3c",
+            "logIndex": "0x27",
+            "removed": false
+        }"#;
+        let parsed_event =
+            ReceivedEthEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
+        let expected_event = ReceivedEthEvent {
+            transaction_hash: "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
+                .to_string(),
+            block_number: Nat::from(3974279),
+            log_index: Nat::from(39),
+            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string(),
+            value: Nat::from(10_000_000_000_000_000_u128),
+            principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
+        };
+
+        assert_eq!(parsed_event, expected_event);
+    }
+
+    #[test]
+    fn should_deserialize_address_from_32_bytes_hex_string() {
+        let address_hex = FixedSizeData::from_str(
+            "0x000000000000000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+        )
+        .unwrap();
+
+        let address = Address::try_from(&address_hex.0).unwrap();
+
+        assert_eq!(
+            format!("{:x}", address),
+            "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string()
+        );
+    }
+
+    #[test]
+    fn should_fail_deserializing_address_when_non_leading_zero() {
+        let address_hex = FixedSizeData::from_str(
+            "0x000000000100000000000000dd2851cdd40ae6536831558dd46db62fac7a844d",
+        )
+        .unwrap();
+
+        assert_matches!(
+            Address::try_from(&address_hex.0),
+            Err(err) if err.starts_with("address has leading non-zero bytes")
+        );
+    }
+
+    #[test]
+    fn should_fail_deserializing_when_address_larger_than_20_bytes() {
+        let address_hex = FixedSizeData::from_str(
+            "0x000000000100000000000001dd2851cdd40ae6536831558dd46db62fac7a844d",
+        )
+        .unwrap();
+
+        assert_matches!(
+            Address::try_from(&address_hex.0),
+            Err(err) if err.starts_with("address has leading non-zero bytes")
+        );
+    }
 }
 
 #[test]
@@ -133,7 +226,9 @@ fn address_display() {
 }
 
 mod eth_get_block_by_number {
-    use crate::eth_rpc::{into_nat, Block, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity};
+    use crate::eth_rpc::{
+        into_nat, Block, BlockNumber, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity,
+    };
 
     #[test]
     fn should_serialize_get_block_by_number_params_as_tuple() {
@@ -470,6 +565,7 @@ mod eth_get_block_by_number {
         assert_eq!(
             block,
             Block {
+                number: BlockNumber::new(0x10eb3c6),
                 base_fee_per_gas: Quantity::new(0x4b85a0fcd),
             }
         )
