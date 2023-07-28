@@ -347,8 +347,7 @@ pub fn add_peer_manager_to_sim(
                             registry_handler.add_node(
                                 rv,
                                 peer,
-                                &turmoil::lookup(peer.to_string()).to_string(),
-                                port
+                                vec![Some((&turmoil::lookup(peer.to_string()).to_string(),port))]
                             );
                         }
                         PeerManagerAction::Remove((peer, rv)) => {
