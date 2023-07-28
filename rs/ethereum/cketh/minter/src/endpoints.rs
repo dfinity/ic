@@ -18,8 +18,11 @@ pub struct DisplayLogsRequest {
     pub to: String,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
+#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct ReceivedEthEvent {
+    pub transaction_hash: String,
+    pub block_number: Nat,
+    pub log_index: Nat,
     pub from_address: String,
     pub value: Nat,
     pub principal: candid::Principal,
@@ -37,4 +40,15 @@ pub struct Eip1559TransactionPrice {
 pub struct Eip2930TransactionPrice {
     pub gas_price: Nat,
     pub gas_limit: Nat,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct ProcessedTransactions {
+    pub minted: Vec<EthTransaction>,
+    pub invalid: Vec<EthTransaction>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct EthTransaction {
+    pub transaction_hash: String,
 }

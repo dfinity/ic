@@ -12,7 +12,10 @@ service : (MinterArg) -> {
         from : text;
         to : text;
     }) -> (vec record {
-        to_address : text;
+        transaction_hash : text;
+        block_number : nat;
+        log_index : nat;
+        from_address : text;
         value : nat;
         "principal" : principal;
     });
@@ -26,4 +29,8 @@ service : (MinterArg) -> {
         gas_price : nat;
         gas_limit : nat;
     });
+    retrieve_processed_transactions: () -> ( record {
+        minted : vec record {transaction_hash : text};
+        invalid : vec record {transaction_hash : text};
+    }) query;
 }

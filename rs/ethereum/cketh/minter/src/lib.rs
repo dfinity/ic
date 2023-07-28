@@ -1,5 +1,6 @@
 pub mod address;
 pub mod endpoints;
+pub mod eth_logs;
 pub mod eth_rpc;
 mod serde_data;
 

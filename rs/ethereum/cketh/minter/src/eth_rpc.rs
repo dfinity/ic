@@ -11,6 +11,8 @@ use ic_cdk::api::management_canister::http_request::{
 };
 use ic_cdk_macros::query;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
+use std::ops::Add;
 
 pub type Quantity = u256;
 
@@ -29,9 +31,95 @@ impl AsRef<[u8]> for Data {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct FixedSizeData(#[serde(with = "crate::serde_data")] pub [u8; 32]);
+
+impl AsRef<[u8]> for FixedSizeData {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl std::str::FromStr for FixedSizeData {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if !s.starts_with("0x") {
+            return Err("Ethereum hex string doesn't start with 0x".to_string());
+        }
+        let mut bytes = [0u8; 32];
+        hex::decode_to_slice(&s[2..], &mut bytes)
+            .map_err(|e| format!("failed to decode hash from hex: {}", e))?;
+        Ok(Self(bytes))
+    }
+}
+
+impl Debug for FixedSizeData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x}", self)
+    }
+}
+
+impl Display for FixedSizeData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x}", self)
+    }
+}
+
+impl LowerHex for FixedSizeData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
+impl UpperHex for FixedSizeData {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode_upper(self.0))
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[serde(transparent)]
 pub struct Hash(#[serde(with = "crate::serde_data")] pub [u8; 32]);
+
+impl Debug for Hash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x}", self)
+    }
+}
+
+impl Display for Hash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x}", self)
+    }
+}
+
+impl LowerHex for Hash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode(self.0))
+    }
+}
+
+impl UpperHex for Hash {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{}", hex::encode_upper(self.0))
+    }
+}
+
+impl std::str::FromStr for Hash {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if !s.starts_with("0x") {
+            return Err("Ethereum hash doesn't start with 0x".to_string());
+        }
+        let mut bytes = [0u8; 32];
+        hex::decode_to_slice(&s[2..], &mut bytes)
+            .map_err(|e| format!("failed to decode hash from hex: {}", e))?;
+        Ok(Self(bytes))
+    }
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct BlockResponse {
@@ -152,7 +240,7 @@ pub struct GetLogsParam {
     /// Topics are order-dependent.
     /// Each topic can also be an array of DATA with "or" options.
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub topics: Vec<Data>,
+    pub topics: Vec<FixedSizeData>,
 }
 
 /// An entry of the [`eth_getLogs`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getlogs) call reply.
@@ -180,12 +268,12 @@ pub struct LogEntry {
     /// Array of 0 to 4 32 Bytes DATA of indexed log arguments.
     /// In solidity: The first topic is the event signature hash (e.g. Deposit(address,bytes32,uint256)),
     /// unless you declared the event with the anonymous specifier.
-    pub topics: Vec<Data>,
+    pub topics: Vec<FixedSizeData>,
     /// Contains one or more 32-byte non-indexed log arguments.
     pub data: Data,
     /// The block number in which this log appeared.
     /// None if the block is pending.
-    pub block_number: Option<Quantity>,
+    pub block_number: Option<BlockNumber>,
     // 32 Bytes - hash of the transactions from which this log was created.
     // None when its pending log.
     pub transaction_hash: Option<Hash>,
@@ -220,9 +308,41 @@ impl From<GetBlockByNumberParams> for (BlockSpec, bool) {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd)]
+#[serde(transparent)]
+pub struct BlockNumber(pub Quantity);
+
+impl From<BlockNumber> for BlockSpec {
+    fn from(value: BlockNumber) -> Self {
+        BlockSpec::Number(value.0)
+    }
+}
+
+impl BlockNumber {
+    pub fn new(value: u128) -> Self {
+        Self(Quantity::from(value))
+    }
+}
+
+impl Add<u128> for BlockNumber {
+    type Output = BlockNumber;
+
+    fn add(self, rhs: u128) -> Self::Output {
+        BlockNumber(self.0 + rhs)
+    }
+}
+
+impl From<BlockNumber> for candid::Nat {
+    fn from(value: BlockNumber) -> Self {
+        into_nat(value.0)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Block {
+    ///The block number. `None` when its pending block.
+    pub number: BlockNumber,
     /// Base fee value of this block
     pub base_fee_per_gas: Quantity,
 }
@@ -273,6 +393,8 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     args.response
 }
 
+pub const BLOCK_PI_RPC_PROVIDER_URL: &str =
+    "https://ethereum-sepolia.blockpi.network/v1/rpc/public";
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
 pub async fn call<I: Serialize, O: DeserializeOwned>(
     url: &'static str,
