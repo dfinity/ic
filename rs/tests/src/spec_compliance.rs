@@ -140,8 +140,11 @@ pub fn config_impl(env: TestEnv) {
     retry(env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
         boundary_node.status_is_healthy().and_then(|s| {
             if !s {
-                exec_ssh_command(&boundary_node, "systemctl restart control-plane.service")
-                    .expect("Could not restart control-plane.service");
+                exec_ssh_command(
+                    &boundary_node,
+                    "sudo systemctl restart control-plane.service",
+                )
+                .expect("Could not restart control-plane.service");
                 bail!("BN didn't report healthy, control-plane.service restarted")
             } else {
                 Ok(())
