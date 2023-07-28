@@ -2248,8 +2248,10 @@ pub enum Lifecycle {
     /// the swap.
     Pending = 1,
     /// In ADOPTED state, the proposal to start the decentralization swap
-    /// has been adopted, and the swap can be opened after a delay
-    /// specified by params.sale_delay_seconds.
+    /// has been adopted, and the swap will be automatically opened after a delay.
+    /// In the legacy (non-one-proposal) flow, the swap delay is specified by
+    /// params.sale_delay_seconds. In the one-proposal flow, the swap delay is
+    /// specified by `init.swap_start_timestamp_seconds`.
     Adopted = 5,
     /// In OPEN state, prospective buyers can register for the token
     /// swap. The swap will be committed when the target (max) ICP has
