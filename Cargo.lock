@@ -6518,6 +6518,7 @@ dependencies = [
  "ic-types",
  "openssl",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -6696,6 +6697,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "tempfile",
  "tokio",
  "tokio-rustls 0.24.0",
@@ -6776,6 +6778,7 @@ dependencies = [
  "ic-test-utilities-in-memory-logger",
  "ic-types",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]

@@ -5,7 +5,6 @@ use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, NodeIndex, Seed};
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
-use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::crypto::{
     BasicSigner, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
@@ -28,6 +27,7 @@ use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
 use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -258,7 +258,6 @@ pub mod node {
     use crate::{IDkgParticipants, IDkgParticipantsRandom};
     use ic_crypto_internal_csp::Csp;
     use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
-    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CurrentNodePublicKeysError, IDkgProtocol, KeyManager,
         ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -288,7 +287,8 @@ pub mod node {
     use ic_types::signature::BasicSignatureBatch;
     use ic_types::{NodeId, RegistryVersion};
     use rand::seq::IteratorRandom;
-    use rand::{CryptoRng, Rng, RngCore};
+    use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+    use rand_chacha::ChaCha20Rng;
     use std::cmp::Ordering;
     use std::collections::btree_set::{IntoIter, Iter};
     use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -299,7 +299,7 @@ pub mod node {
     /// A node is uniquely identified by its `id`.
     pub struct Node {
         id: NodeId,
-        crypto_component: Arc<TempCryptoComponentGeneric<Csp, ReproducibleRng>>,
+        crypto_component: Arc<TempCryptoComponentGeneric<Csp, ChaCha20Rng>>,
         logger: InMemoryReplicaLogger,
     }
 
@@ -328,7 +328,7 @@ pub mod node {
             self.id
         }
 
-        pub fn crypto(&self) -> Arc<TempCryptoComponentGeneric<Csp, ReproducibleRng>> {
+        pub fn crypto(&self) -> Arc<TempCryptoComponentGeneric<Csp, ChaCha20Rng>> {
             Arc::clone(&self.crypto_component)
         }
 
@@ -569,7 +569,7 @@ pub mod node {
         registry: Arc<FakeRegistryClient>,
         logger: ReplicaLogger,
         rng: &mut R,
-    ) -> TempCryptoComponentGeneric<Csp, ReproducibleRng> {
+    ) -> TempCryptoComponentGeneric<Csp, ChaCha20Rng> {
         TempCryptoComponent::builder()
             .with_registry(Arc::clone(&registry) as Arc<_>)
             .with_node_id(node_id)
@@ -581,7 +581,7 @@ pub mod node {
                 generate_tls_keys_and_certificate: false,
             })
             .with_logger(logger)
-            .with_rng(ReproducibleRng::from_rng(rng))
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
             .build()
     }
 
@@ -1300,12 +1300,12 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     receivers: &IDkgReceivers,
     rng: &mut R,
-) -> TempCryptoComponentGeneric<Csp, ReproducibleRng> {
+) -> TempCryptoComponentGeneric<Csp, ChaCha20Rng> {
     let node_id = random_node_id_excluding(receivers.get(), rng);
     TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(node_id)
-        .with_rng(ReproducibleRng::from_rng(rng))
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build()
 }
 
@@ -1375,7 +1375,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let verifier_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ReproducibleRng::from_rng(rng))
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
     for (signer_id, sig_share) in sig_shares.iter() {
         assert!(verifier_crypto_component
@@ -1386,7 +1386,7 @@ pub fn run_tecdsa_protocol<R: RngCore + CryptoRng + Sync + Send>(
     let combiner_crypto_component = TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)
         .with_node_id(verifier_id)
-        .with_rng(ReproducibleRng::from_rng(rng))
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
     combiner_crypto_component
         .combine_sig_shares(sig_inputs, &sig_shares)

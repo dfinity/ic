@@ -79,7 +79,7 @@ pub fn test(env: TestEnv) {
     let ii_canister_id = install_ii_canister(&env, &ii_node);
     let ctr_canister_id = install_counter_canister(&env, &app_node);
 
-    let mut rng = ReproducibleRng::silent_new();
+    let mut rng = ReproducibleRng::new();
     info!(env.logger(), "Generated a ReproducibleRng\n{rng:?}");
 
     let num_users = rng.gen_range(NUM_USERS_RANGE);

@@ -5,13 +5,15 @@
 // let $data: &mut [u8] = unsafe { std::slice::from_raw_parts_mut($data, len) };"
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
-use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, SEED_LEN};
 use ic_crypto_tree_hash::{flatmap, LabeledTree};
 use ic_crypto_tree_hash_fuzz_check_witness_equality_utils::*;
 use ic_protobuf::messaging::xnet::v1::LabeledTree as ProtobufLabeledTree;
 use ic_protobuf::proxy::ProtoProxy;
 use libfuzzer_sys::fuzz_target;
 use rand::{Rng, RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
+
+const SEED_LEN: usize = 32;
 
 fuzz_target!(|data: &[u8]| {
     if data.len() < SEED_LEN {
@@ -21,7 +23,7 @@ fuzz_target!(|data: &[u8]| {
         let seed: [u8; SEED_LEN] = data[..SEED_LEN]
             .try_into()
             .expect("failed to copy seed bytes");
-        test_tree(&tree, &mut ReproducibleRng::from_seed(seed));
+        test_tree(&tree, &mut ChaCha20Rng::from_seed(seed));
     };
 });
 

@@ -34,3 +34,4 @@ ic-crypto-test-utils = { path = "../test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
+rand_chacha = "0.3"
