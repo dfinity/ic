@@ -36,6 +36,9 @@ var SUFFIX_LOG_FILE = "log.txt"
 // Filenames are prefixed with this datetime format up to milliseconds.
 var DATE_TIME_FORMAT = "2006-01-02_15-04-05.000"
 
+// Maximum size used to buffer a token from stdout pipe (max characters in line).
+const MAX_TOKEN_CAPACITY = 1024 * 1024
+
 // These events are collected from test-driver logs during the testnet deployment.
 const FARM_GROUP_NAME_CREATED_EVENT = "farm_group_name_created_event"
 const KIBANA_URL_CREATED_EVENT = "kibana_url_created_event"
@@ -170,6 +173,7 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		if err != nil {
 			return err
 		}
+		defer stdoutPipe.Close()
 		// Redirect stdout to the same pipe as stderr.
 		testnetCmd.Stdout = testnetCmd.Stderr
 		if err := testnetCmd.Start(); err != nil {
@@ -237,6 +241,9 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 	}
 	defer fullLogFile.Close()
 	scanner := bufio.NewScanner(reader)
+	// Adjust the buffer capacity to read long log lines.
+	buf := make([]byte, MAX_TOKEN_CAPACITY)
+	scanner.Buffer(buf, MAX_TOKEN_CAPACITY)
 	var summary Summary
 	var group string
 	for scanner.Scan() {
@@ -250,11 +257,11 @@ func ProcessLogs(reader io.ReadCloser, cmd *cobra.Command, outputFiles *OutputFi
 			return "", fmt.Errorf("couldn't extract an event from test-driver log, err: %v", err)
 		}
 		if event.EventName == JSON_REPORT_CREATED_EVENT {
+			// This event signifies the end of the testnet deployment.
 			err = HasDeploymentSucceeded(event.Body)
 			if err != nil {
 				return "", fmt.Errorf("testnet deployment failed: %v", err)
 			}
-			// This event signifies the end of deployment.
 			prettyJson, err := json.MarshalIndent(summary, "", "  ")
 			if err != nil {
 				return "", fmt.Errorf("marshalling summary failed with err: %v", err)
