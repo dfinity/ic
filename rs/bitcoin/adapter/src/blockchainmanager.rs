@@ -341,7 +341,7 @@ impl BlockchainManager {
             let mut blockchain_state = self.blockchain.lock().await;
             let prev_tip_height = blockchain_state.get_active_chain_tip().height;
 
-            let (added_headers, maybe_err) = blockchain_state.add_headers(headers);
+            let (block_hashes_of_added_headers, maybe_err) = blockchain_state.add_headers(headers);
             let active_tip = blockchain_state.get_active_chain_tip();
             if prev_tip_height < active_tip.height {
                 info!(
@@ -353,15 +353,9 @@ impl BlockchainManager {
             }
 
             // Update the peer's tip and height to the last
-            let maybe_last_header = if added_headers.last().is_some() {
-                added_headers.last()
-            } else if blockchain_state
-                .get_cached_header(&last_block_hash)
-                .is_some()
-            {
-                blockchain_state.get_cached_header(&last_block_hash)
-            } else {
-                None
+            let maybe_last_header = match block_hashes_of_added_headers.last() {
+                Some(last) => blockchain_state.get_cached_header(last),
+                None => blockchain_state.get_cached_header(&last_block_hash),
             };
 
             if let Some(last) = maybe_last_header {
