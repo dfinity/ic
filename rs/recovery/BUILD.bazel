@@ -27,7 +27,6 @@ DEPENDENCIES = [
     "//rs/types/ic00_types",
     "//rs/types/types",
     "@crate_index//:base64",
-    "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hex",
