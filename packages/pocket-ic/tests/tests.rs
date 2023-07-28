@@ -1,12 +1,5 @@
 use candid::{encode_one, Principal};
-use once_cell::sync::Lazy;
-use pocket_ic::{PocketICService, WasmResult, IC};
-use std::path::PathBuf;
-
-// temporary way to tie the lifetime of the backend server process
-// to the process which runs these tests.
-static PIC: Lazy<PocketICService> =
-    Lazy::new(|| PocketICService::new(PathBuf::from("../../target/debug/pocket-ic-backend")));
+use pocket_ic::{PocketIc, WasmResult};
 
 // tests in one file may run concurrently
 // test sets from different files run in sequence
@@ -26,8 +19,8 @@ fn test_2() {
 
 fn test_counter_canister() {
     let counter_wasm = std::fs::read("./tests/counter.wasm").expect("Failed to load counter.wasm.");
-    let ic: IC = PIC.create_ic();
-    println!("all instances: {:?}", PIC.list_instances());
+    let ic = PocketIc::new();
+    println!("all instances: {:?}", ic.list_instances());
 
     let controller = Principal::anonymous();
     let can_id = ic.create_canister(Some(controller));
@@ -52,7 +45,12 @@ fn test_counter_canister() {
     assert!(reply == WasmResult::Reply(vec![2, 0, 0, 0]));
 }
 
-fn call_counter_can(ic: &IC, can_id: Principal, sender: Principal, method: &str) -> WasmResult {
+fn call_counter_can(
+    ic: &PocketIc,
+    can_id: Principal,
+    sender: Principal,
+    method: &str,
+) -> WasmResult {
     ic.update_call(can_id, sender, method, encode_one(()).unwrap())
         .expect("Failed to call counter canister")
 }
