@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/canister_profiler",
     "//rs/rust_canisters/http_types",
+    "//rs/rust_canisters/canister_log",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:ic-cdk",
@@ -20,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:scopeguard",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
+    "@crate_index//:serde_json",
     "@crate_index//:ic-stable-structures",
 ]
 
@@ -38,7 +40,10 @@ rust_library(
 
 rust_canister(
     name = "index_ng_canister",
-    srcs = ["src/main.rs"],
+    srcs = [
+        "src/logs.rs",
+        "src/main.rs",
+    ],
     compile_data = [":index-ng.did"],
     crate_name = "ic_icrc1_index_ng_canister",
     edition = "2018",
@@ -86,6 +91,7 @@ rust_test(
         "//rs/rosetta-api/icrc1/test_utils",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
@@ -94,5 +100,7 @@ rust_test(
         "@crate_index//:num-traits",
         "@crate_index//:proptest",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
     ],
 )

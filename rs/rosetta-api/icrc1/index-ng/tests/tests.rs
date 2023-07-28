@@ -1,9 +1,10 @@
 use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_index_ng::{
     FeeCollectorRanges, GetAccountTransactionsArgs, GetAccountTransactionsResponse,
     GetAccountTransactionsResult, GetBlocksResponse, IndexArg, InitArg as IndexInitArg,
-    ListSubaccountsArgs, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    ListSubaccountsArgs, Log, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{
     ChangeFeeCollector, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument,
@@ -11,7 +12,7 @@ use ic_icrc1_ledger::{
 };
 use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, WasmResult};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
@@ -165,6 +166,33 @@ fn status(env: &StateMachine, index_id: CanisterId) -> Status {
     Decode!(&res, Status).expect("Failed to decode status response")
 }
 
+fn assert_reply(result: WasmResult) -> Vec<u8> {
+    match result {
+        WasmResult::Reply(bytes) => bytes,
+        WasmResult::Reject(reject) => {
+            panic!("Expected a successful reply, got a reject: {}", reject)
+        }
+    }
+}
+
+fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
+    let request = HttpRequest {
+        method: "".to_string(),
+        url: "/logs".to_string(),
+        headers: vec![],
+        body: serde_bytes::ByteBuf::new(),
+    };
+    let response = Decode!(
+        &assert_reply(
+            env.execute_ingress(index_id, "http_request", Encode!(&request).unwrap(),)
+                .expect("failed to get index-ng info")
+        ),
+        HttpResponse
+    )
+    .unwrap();
+    serde_json::from_slice(&response.body).expect("failed to parse index-ng log")
+}
+
 // Helper function that calls tick on env until either
 // the index canister has synced all the blocks up to the
 // last one in the ledger or enough attempts passed and therefore
@@ -182,7 +210,15 @@ fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger
             return;
         }
     }
-    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+    let log = get_logs(env, index_id);
+    let mut log_lines = String::new();
+    for entry in log.entries {
+        log_lines.push_str(&format!(
+            "{} {}:{} {}\n",
+            entry.timestamp, entry.file, entry.line, entry.message
+        ));
+    }
+    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}.\nLogs:\n{}", num_blocks_synced, chain_length, log_lines);
 }
 
 fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
