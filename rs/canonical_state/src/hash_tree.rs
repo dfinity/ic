@@ -510,16 +510,42 @@ impl HashTree {
                     }
                 }
                 Err(offset) => {
-                    let pruned_label_at = |o| {
+                    if len == 0 {
+                        return Ok(match ht.view(pos) {
+                            HashTreeView::Empty => B::make_empty(),
+                            HashTreeView::Leaf(digest) => B::make_pruned(digest.clone()),
+                            // NB. Technically, the following cases are impossible because they would imply
+                            // existence of labels under `pos`. We match on that case here for completeness.
+                            HashTreeView::Fork(digest, _, _) => {
+                                debug_assert!(
+                                    false,
+                                    "a tree node without children must not be a fork"
+                                );
+                                B::make_pruned(digest.clone())
+                            }
+                            HashTreeView::Node(digest, _, _) => {
+                                debug_assert!(
+                                    false,
+                                    "a tree node without children must not be a labeled node"
+                                );
+                                B::make_pruned(digest.clone())
+                            }
+                        });
+                    }
+
+                    debug_assert!(offset <= len);
+                    debug_assert!(len > 0);
+
+                    let pruned_label_at = |i| {
                         add_forks::<B>(
                             ht,
                             pos,
-                            o,
+                            i,
                             len,
                             B::make_node(
-                                ht.node_labels[bucket][label_range.start + o].clone(),
+                                ht.node_labels[bucket][label_range.start + i].clone(),
                                 B::make_pruned(
-                                    ht.digest(ht.node_children[bucket][label_range.start + o])
+                                    ht.digest(ht.node_children[bucket][label_range.start + i])
                                         .clone(),
                                 ),
                             ),
@@ -548,22 +574,20 @@ impl HashTree {
             t: &LabeledTree<Vec<u8>>,
         ) -> Result<B::Tree, B::MergeError> {
             match t {
-                LabeledTree::Leaf(data) => {
-                    if pos.kind() == NodeKind::Leaf {
-                        Ok(B::make_leaf(&data[..]))
-                    } else {
-                        panic!(
-                            "inconsistent tree structure: not a leaf in the original tree, \
-                             parent = {:?}, pos = {:?}, hash_tree = {:?}, labeled_tree = {:?}",
-                            parent, pos, ht, t
-                        );
+                LabeledTree::Leaf(data) => Ok(match ht.view(pos) {
+                    HashTreeView::Leaf(_) => B::make_leaf(&data[..]),
+                    HashTreeView::Empty => B::make_empty(),
+                    HashTreeView::Node(_, label, child) => {
+                        B::make_node(label.clone(), B::make_pruned(ht.digest(child).clone()))
                     }
-                }
-
-                // Empty subtree.
-                LabeledTree::SubTree(children) if children.is_empty() => Ok(B::make_empty()),
-
-                // Non-empty subtree.
+                    HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
+                }),
+                LabeledTree::SubTree(children) if children.is_empty() => Ok(match ht.view(pos) {
+                    HashTreeView::Empty => B::make_empty(),
+                    HashTreeView::Leaf(digest) => B::make_pruned(digest.clone()),
+                    HashTreeView::Fork(digest, _left, _right) => B::make_pruned(digest.clone()),
+                    HashTreeView::Node(digest, _label, _child) => B::make_pruned(digest.clone()),
+                }),
                 LabeledTree::SubTree(children) => children
                     .iter()
                     .try_fold(B::make_pruned(ht.digest(pos).clone()), |acc, (l, t)| {

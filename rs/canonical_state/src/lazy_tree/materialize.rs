@@ -8,21 +8,18 @@ use LazyTree::*;
 /// materialized. A [`LabeledTree`] with no values.
 pub type TreePattern = LabeledTree<()>;
 
-fn materialize(lazy_tree: &LazyTree<'_>) -> Option<LabeledTree<Vec<u8>>> {
+fn materialize(lazy_tree: &LazyTree<'_>) -> LabeledTree<Vec<u8>> {
     match lazy_tree {
-        Blob(blob, _) => Some(LabeledTree::Leaf(blob.to_vec())),
-        LazyBlob(f) => Some(LabeledTree::Leaf(f().to_vec())),
+        Blob(blob, _) => LabeledTree::Leaf(blob.to_vec()),
+        LazyBlob(f) => LabeledTree::Leaf(f().to_vec()),
         LazyFork(f) => {
-            let children: Vec<_> = f
-                .children()
-                .filter_map(|(l, t)| Some((l, materialize(&t)?)))
-                .collect();
-
-            if children.is_empty() {
-                None
-            } else {
-                Some(LabeledTree::SubTree(FlatMap::from_key_values(children)))
+            let mut children = FlatMap::new();
+            for (l, t) in f.children() {
+                children
+                    .try_append(l, materialize(&t))
+                    .expect("bug: lazy tree labels aren't sorted");
             }
+            LabeledTree::SubTree(children)
         }
     }
 }
@@ -33,37 +30,38 @@ fn materialize(lazy_tree: &LazyTree<'_>) -> Option<LabeledTree<Vec<u8>>> {
 ///
 /// This is used in the implementation of the `read_state` request, so a
 /// specification can be found in the Interface Spec, section on Lookup in
-/// certification (https://sdk.dfinity.org/docs/interface-spec/index.html#_lookup)
-///
-/// The spec requires that the resulting certificate also proves the absence of
-/// a prefix; this is not yet implemented. Once it is implemented, remove the
-/// corresponding `exclude` directives from `tests/ic-ref-test/run`.
+/// certification
+/// (https://internetcomputer.org/docs/current/references/ic-interface-spec/#lookup).
 pub fn materialize_partial(
     lazy_tree: &LazyTree<'_>,
     pattern: &TreePattern,
-) -> Option<LabeledTree<Vec<u8>>> {
-    match pattern {
-        LabeledTree::Leaf(()) => materialize(lazy_tree),
-        LabeledTree::SubTree(children) => {
-            if let LazyFork(f) = lazy_tree {
-                let subtrees: Vec<_> = children
-                    .iter()
-                    .filter_map(|(label, pattern)| {
-                        let lazy_tree = f.edge(label)?;
-                        let t = materialize_partial(&lazy_tree, pattern)?;
-                        Some((label.clone(), t))
-                    })
-                    .collect();
-
-                if subtrees.is_empty() {
-                    // Prune empty subtrees
-                    None
-                } else {
-                    Some(LabeledTree::SubTree(FlatMap::from_key_values(subtrees)))
+) -> LabeledTree<Vec<u8>> {
+    match (pattern, lazy_tree) {
+        (LabeledTree::Leaf(()), lazy_tree) => materialize(lazy_tree),
+        (LabeledTree::SubTree(children), LazyFork(f)) => {
+            let subtrees = children.iter().map(|(label, pattern)| {
+                match f.edge(label) {
+                    Some(lazy_tree) => (label.clone(), materialize_partial(&lazy_tree, pattern)),
+                    None => {
+                        // The label is not in the tree, but we
+                        // construct a dummy node anyway to get a proof
+                        // of absence.
+                        (label.clone(), LabeledTree::Leaf(vec![]))
+                    }
                 }
-            } else {
-                None
+            });
+
+            let mut children = FlatMap::new();
+            for (l, t) in subtrees {
+                children
+                    .try_append(l, t)
+                    .expect("bug: lazy tree labels are not sorted");
             }
+
+            LabeledTree::SubTree(children)
         }
+        // The pattern expected the child to be a subtree, we have to reveal
+        // the data to prove otherwise.
+        (LabeledTree::SubTree(_), blob) => materialize(blob),
     }
 }

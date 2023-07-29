@@ -3338,7 +3338,29 @@ fn certified_read_can_certify_canister_data() {
 }
 
 #[test]
-fn certified_read_returns_none_for_non_existing_entries() {
+fn certified_read_succeeds_for_empty_tree() {
+    use ic_crypto_tree_hash::MixedHashTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {});
+
+        certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+
+        assert!(
+            matches!(&mixed_tree, Pruned(_)),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+    })
+}
+
+#[test]
+fn certified_read_returns_absence_proof_for_non_existing_entries() {
     state_manager_test(|_metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
 
@@ -3362,8 +3384,56 @@ fn certified_read_returns_none_for_non_existing_entries() {
         });
 
         certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
 
-        assert_eq!(None, state_manager.read_certified_state(&path));
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(0).as_bytes()) => LabeledTree::Leaf(())
+                })
+        });
+
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(0).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+    })
+}
+
+#[test]
+fn certified_read_returns_absence_proof_for_non_existing_entries_in_empty_state() {
+    state_manager_test(|_metrics, state_manager| {
+        let (_, state) = state_manager.take_tip();
+
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(2).as_bytes()) => LabeledTree::Leaf(())
+                })
+        });
+
+        certify_height(&state_manager, height(1));
+        let (_, mixed_tree, _) = state_manager.read_certified_state(&path).unwrap();
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
     })
 }
 
@@ -3426,6 +3496,72 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
                                 label("status") => Leaf(b"processing".to_vec()),
                             })
 
+                    })
+            })
+        );
+    })
+}
+
+#[test]
+fn certified_read_can_produce_proof_of_absence() {
+    use LabeledTree::*;
+
+    state_manager_test(|_metrics, state_manager| {
+        let (_, mut state) = state_manager.take_tip();
+        state.set_ingress_status(
+            message_test_id(1),
+            IngressStatus::Known {
+                receiver: canister_test_id(1).get(),
+                user_id: user_test_id(1),
+                time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
+            },
+            NumBytes::from(u64::MAX),
+        );
+        state.set_ingress_status(
+            message_test_id(3),
+            IngressStatus::Known {
+                receiver: canister_test_id(1).get(),
+                user_id: user_test_id(1),
+                time: mock_time(),
+                state: IngressState::Processing,
+            },
+            NumBytes::from(u64::MAX),
+        );
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+
+        let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
+            label("request_status") => LabeledTree::SubTree(
+                flatmap! {
+                    label(message_test_id(1)) => LabeledTree::Leaf(()),
+                    label(message_test_id(2)) => LabeledTree::Leaf(()),
+                })
+        });
+
+        certify_height(&state_manager, height(1));
+
+        let (_state, mixed_tree, _cert) = state_manager
+            .read_certified_state(&path)
+            .expect("failed to read certified state");
+
+        assert!(
+            mixed_tree
+                .lookup(&[&b"request_status"[..], &message_test_id(2).as_bytes()[..]])
+                .is_absent(),
+            "mixed_tree: {:#?}",
+            mixed_tree
+        );
+
+        assert_eq!(
+            tree_payload(mixed_tree),
+            SubTree(flatmap! {
+                label("request_status") =>
+                    SubTree(flatmap! {
+                        label(message_test_id(1)) =>
+                            SubTree(flatmap! {
+                                label("status") => Leaf(b"replied".to_vec()),
+                                label("reply") => Leaf(b"done".to_vec()),
+                            }),
                     })
             })
         );
