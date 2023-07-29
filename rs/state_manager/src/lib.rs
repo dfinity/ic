@@ -605,6 +605,10 @@ struct CertificationMetadata {
     certification: Option<Certification>,
 }
 
+fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
+    CryptoHashOfPartialState::from(CryptoHash(d.0.to_vec()))
+}
+
 #[derive(Clone)]
 pub struct Snapshot {
     pub height: Height,
@@ -3107,13 +3111,24 @@ impl StateReader for StateManagerImpl {
             .start_timer();
 
         let (state, certification, hash_tree) = self.latest_certified_state()?;
+
         let mixed_hash_tree = {
             let lazy_tree = LazyTree::from(&*state);
-            let partial_tree = materialize_partial(&lazy_tree, paths)?;
+            let partial_tree = materialize_partial(&lazy_tree, paths);
             hash_tree.witness::<MixedHashTree>(&partial_tree)
-        };
+        }
+        .ok()?;
 
-        mixed_hash_tree.ok().map(|t| (state, t, certification))
+        debug_assert_eq!(
+            crypto_hash_of_partial_state(&mixed_hash_tree.digest()),
+            certification.signed.content.hash,
+            "produced invalid hash tree {:?} for paths {:?}, full hash tree: {:?}",
+            mixed_hash_tree,
+            paths,
+            hash_tree
+        );
+
+        Some((state, mixed_hash_tree, certification))
     }
 }
 
