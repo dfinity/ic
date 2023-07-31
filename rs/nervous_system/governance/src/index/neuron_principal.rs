@@ -31,11 +31,11 @@ pub trait NeuronPrincipalIndex<ID> {
 }
 
 /// An in-memory implementation of the neuron principal index.
-pub struct InMemoryNeuronPrincipalIndex<ID> {
+pub struct HeapNeuronPrincipalIndex<ID> {
     index_map: BTreeMap<PrincipalId, HashSet<ID>>,
 }
 
-impl<ID> InMemoryNeuronPrincipalIndex<ID> {
+impl<ID> HeapNeuronPrincipalIndex<ID> {
     pub fn new() -> Self {
         Self {
             index_map: BTreeMap::new(),
@@ -43,13 +43,13 @@ impl<ID> InMemoryNeuronPrincipalIndex<ID> {
     }
 }
 
-impl<ID> Default for InMemoryNeuronPrincipalIndex<ID> {
+impl<ID> Default for HeapNeuronPrincipalIndex<ID> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<ID: Eq + Hash + Clone> NeuronPrincipalIndex<ID> for InMemoryNeuronPrincipalIndex<ID> {
+impl<ID: Eq + Hash + Clone> NeuronPrincipalIndex<ID> for HeapNeuronPrincipalIndex<ID> {
     fn add_neuron_id_principal_id(&mut self, neuron_id: &ID, principal: PrincipalId) {
         self.index_map
             .entry(principal)
@@ -116,7 +116,7 @@ impl<ID: BoundedStorable + Default + Clone + Ord + LowerBounded + Hash> NeuronPr
 #[cfg(test)]
 mod tests {
     use crate::index::neuron_principal::{
-        InMemoryNeuronPrincipalIndex, NeuronPrincipalIndex, StableNeuronPrincipalIndex,
+        HeapNeuronPrincipalIndex, NeuronPrincipalIndex, StableNeuronPrincipalIndex,
     };
 
     use ic_base_types::PrincipalId;
@@ -166,8 +166,8 @@ mod tests {
         StableNeuronPrincipalIndex::<TestNeuronId>::new(get_memory())
     }
 
-    fn get_in_memory_index() -> InMemoryNeuronPrincipalIndex<TestNeuronId> {
-        InMemoryNeuronPrincipalIndex::<TestNeuronId>::new()
+    fn get_heap_index() -> HeapNeuronPrincipalIndex<TestNeuronId> {
+        HeapNeuronPrincipalIndex::<TestNeuronId>::new()
     }
 
     // The following test helpers will be run by both implementations.
@@ -235,8 +235,8 @@ mod tests {
     }
 
     #[test]
-    fn test_single_neuron_in_memory() {
-        test_add_single_neuron_helper(get_in_memory_index());
+    fn test_single_neuron_heap() {
+        test_add_single_neuron_helper(get_heap_index());
     }
 
     #[test]
@@ -245,8 +245,8 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_neuron_in_memory() {
-        test_remove_neuron_helper(get_in_memory_index());
+    fn test_remove_neuron_heap() {
+        test_remove_neuron_helper(get_heap_index());
     }
 
     #[test]
@@ -255,8 +255,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_multiple_neurons_in_memory() {
-        test_add_multiple_neurons_helper(get_in_memory_index());
+    fn test_add_multiple_neurons_heap() {
+        test_add_multiple_neurons_helper(get_heap_index());
     }
 
     #[test]

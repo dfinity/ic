@@ -154,11 +154,11 @@ where
 
 /// An in-memory implementation of the neuron following index.
 #[derive(Default)]
-pub struct InMemoryNeuronFollowingIndex<NeuronId, Category> {
+pub struct HeapNeuronFollowingIndex<NeuronId, Category> {
     category_to_followee_to_followers: BTreeMap<Category, BTreeMap<NeuronId, BTreeSet<NeuronId>>>,
 }
 
-impl<NeuronId, Category> InMemoryNeuronFollowingIndex<NeuronId, Category> {
+impl<NeuronId, Category> HeapNeuronFollowingIndex<NeuronId, Category> {
     pub fn new() -> Self {
         Self {
             category_to_followee_to_followers: BTreeMap::new(),
@@ -167,7 +167,7 @@ impl<NeuronId, Category> InMemoryNeuronFollowingIndex<NeuronId, Category> {
 }
 
 impl<NeuronId, Category> NeuronFollowingIndex<NeuronId, Category>
-    for InMemoryNeuronFollowingIndex<NeuronId, Category>
+    for HeapNeuronFollowingIndex<NeuronId, Category>
 where
     NeuronId: Eq + Ord + Clone,
     Category: Eq + Ord + Copy,
@@ -360,8 +360,8 @@ mod tests {
         StableNeuronFollowingIndex::<TestNeuronId, Topic, VectorMemory>::new(VectorMemory::default())
     }
 
-    fn get_in_memory_index() -> InMemoryNeuronFollowingIndex<TestNeuronId, Topic> {
-        InMemoryNeuronFollowingIndex::<TestNeuronId, Topic>::new()
+    fn get_heap_index() -> HeapNeuronFollowingIndex<TestNeuronId, Topic> {
+        HeapNeuronFollowingIndex::<TestNeuronId, Topic>::new()
     }
 
     // The following test helpers will be run by both implementations.
@@ -644,8 +644,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_single_followee_in_memory() {
-        test_add_single_followee_helper(get_in_memory_index());
+    fn test_add_single_followee_heap() {
+        test_add_single_followee_helper(get_heap_index());
     }
 
     #[test]
@@ -654,8 +654,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_multiple_followees_in_memory() {
-        test_add_multiple_followees_helper(get_in_memory_index());
+    fn test_add_multiple_followees_heap() {
+        test_add_multiple_followees_helper(get_heap_index());
     }
 
     #[test]
@@ -664,8 +664,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_remove_followees_in_memory() {
-        test_add_remove_followees_helper(get_in_memory_index());
+    fn test_add_remove_followees_heap() {
+        test_add_remove_followees_helper(get_heap_index());
     }
 
     #[test]
@@ -674,8 +674,8 @@ mod tests {
     }
 
     #[test]
-    fn test_update_single_topic_followees_in_memory() {
-        test_update_single_topic_followees_helper(get_in_memory_index());
+    fn test_update_single_topic_followees_heap() {
+        test_update_single_topic_followees_helper(get_heap_index());
     }
 
     #[test]
@@ -684,8 +684,8 @@ mod tests {
     }
 
     #[test]
-    fn test_add_existing_followee_in_memory() {
-        test_add_existing_followee_helper(get_in_memory_index());
+    fn test_add_existing_followee_heap() {
+        test_add_existing_followee_helper(get_heap_index());
     }
 
     #[test]
@@ -694,8 +694,8 @@ mod tests {
     }
 
     #[test]
-    fn test_remove_absent_followee_in_memory() {
-        test_remove_absent_followee_helper(get_in_memory_index());
+    fn test_remove_absent_followee_heap() {
+        test_remove_absent_followee_helper(get_heap_index());
     }
 
     #[test]
@@ -704,8 +704,8 @@ mod tests {
     }
     #[test]
 
-    fn test_update_followee_invalid_in_memory() {
-        test_update_followee_invalid_helper(get_in_memory_index());
+    fn test_update_followee_invalid_heap() {
+        test_update_followee_invalid_helper(get_heap_index());
     }
 
     #[test]

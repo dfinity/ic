@@ -51,9 +51,9 @@ use ic_nervous_system_common::{
 use ic_nervous_system_governance::index::{
     neuron_following::{
         add_neuron_followees, remove_neuron_followees, update_neuron_category_followees,
-        InMemoryNeuronFollowingIndex, NeuronFollowingIndex,
+        HeapNeuronFollowingIndex, NeuronFollowingIndex,
     },
-    neuron_principal::{InMemoryNeuronPrincipalIndex, NeuronPrincipalIndex},
+    neuron_principal::{HeapNeuronPrincipalIndex, NeuronPrincipalIndex},
 };
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::{
@@ -1479,14 +1479,14 @@ pub struct Governance {
     /// is saved and restored.
     ///
     /// (Topic, Followee) -> set of followers.
-    pub topic_followee_index: InMemoryNeuronFollowingIndex<NeuronId, Topic>,
+    pub topic_followee_index: HeapNeuronFollowingIndex<NeuronId, Topic>,
 
     /// Maps Principals to the Neuron IDs of all Neurons that have this
     /// Principal as their controller or as one of their hot keys
     ///
     /// This is a cached index and will be removed and recreated when the state
     /// is saved and restored.
-    pub principal_to_neuron_ids_index: InMemoryNeuronPrincipalIndex<NeuronId>,
+    pub principal_to_neuron_ids_index: HeapNeuronPrincipalIndex<NeuronId>,
 
     /// Set of all names given to Known Neurons, to prevent duplication.
     ///
@@ -1543,8 +1543,8 @@ impl Governance {
             env,
             ledger,
             cmc,
-            topic_followee_index: InMemoryNeuronFollowingIndex::new(),
-            principal_to_neuron_ids_index: InMemoryNeuronPrincipalIndex::new(),
+            topic_followee_index: HeapNeuronFollowingIndex::new(),
+            principal_to_neuron_ids_index: HeapNeuronPrincipalIndex::new(),
             known_neuron_name_set: HashSet::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
             latest_gc_timestamp_seconds: 0,
