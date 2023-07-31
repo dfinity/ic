@@ -9,21 +9,24 @@ use std::iter::repeat_with;
 use std::ops::Range;
 
 /// The number of threads we use for building HashTree
-pub const NUMBER_OF_CERTIFICATION_THREADS: u32 = 16;
+const NUMBER_OF_CERTIFICATION_THREADS: u32 = 16;
 
+/// SHA256 of the domain separator "ic-hashtree-empty"
 const EMPTY_HASH: Digest = Digest([
     0x4e, 0x3e, 0xd3, 0x5c, 0x4e, 0x2d, 0x1e, 0xe8, 0x99, 0x96, 0x48, 0x3f, 0xb6, 0x26, 0x0a, 0x64,
     0xcf, 0xfb, 0x6c, 0x47, 0xdb, 0xab, 0x21, 0x6e, 0x79, 0x30, 0xe8, 0x2f, 0x81, 0x90, 0xd1, 0x20,
 ]);
 
+/// 30 LSBs are used to store the index
 const INDEX_MASK: u32 = 0x3fff_ffff;
+/// 2 MSBs are used to store the node kind
 const KIND_MASK: u32 = 0xc000_0000;
 const LEAF_KIND: u32 = 0x4000_0000;
 const NODE_KIND: u32 = 0x8000_0000;
 const FORK_KIND: u32 = 0xc000_0000;
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
-pub enum NodeKind {
+enum NodeKind {
     Empty,
     Fork,
     Leaf,
@@ -59,36 +62,36 @@ impl fmt::Debug for NodeId {
 }
 
 impl NodeId {
-    /// Constructs an empty tree.
+    /// Constructs a node id for an empty tree.
     #[inline]
-    pub fn empty() -> Self {
+    fn empty() -> Self {
         Self {
             bucket: 0,
             index_and_kind: 0,
         }
     }
 
-    /// Constructs a new Fork with the specified index.
+    /// Constructss a node id for a new Fork with the specified index.
     #[inline]
-    pub fn fork(bucket: usize, idx: usize) -> Self {
+    fn fork(bucket: usize, idx: usize) -> Self {
         Self {
             bucket: bucket as u32,
             index_and_kind: FORK_KIND | idx as u32,
         }
     }
 
-    /// Constructs a new Leaf with the specified index.
+    /// Constructss a node id for a new Leaf with the specified index.
     #[inline]
-    pub fn leaf(bucket: usize, idx: usize) -> Self {
+    fn leaf(bucket: usize, idx: usize) -> Self {
         Self {
             bucket: bucket as u32,
             index_and_kind: LEAF_KIND | idx as u32,
         }
     }
 
-    /// Constructs a new Node with the specified index.
+    /// Constructss a node id for a new Node with the specified index.
     #[inline]
-    pub fn node(bucket: usize, idx: usize) -> Self {
+    fn node(bucket: usize, idx: usize) -> Self {
         Self {
             bucket: bucket as u32,
             index_and_kind: NODE_KIND | idx as u32,
@@ -97,9 +100,9 @@ impl NodeId {
 
     /// Returns the component kind of this node.
     #[inline]
-    pub fn kind(self) -> NodeKind {
-        let node_id = self.index_and_kind;
-        match node_id & KIND_MASK {
+    fn kind(self) -> NodeKind {
+        let node_index = self.index_and_kind;
+        match node_index & KIND_MASK {
             FORK_KIND => NodeKind::Fork,
             NODE_KIND => NodeKind::Node,
             LEAF_KIND => NodeKind::Leaf,
@@ -109,18 +112,19 @@ impl NodeId {
 
     /// Returns the index component of this node.
     #[inline]
-    pub fn index(self) -> usize {
+    fn index(self) -> usize {
         (self.index_and_kind & INDEX_MASK) as usize
     }
 
+    /// Returns the bucket of this node.
     #[inline]
-    pub fn bucket(self) -> usize {
+    fn bucket(self) -> usize {
         self.bucket as usize
     }
 }
 
 /// A range of NodeIds that share the same bucket and have consecutive indices
-/// index_range is to be understood as a half-open range
+/// index_range is to be understood as a half-open range, i.e., `start <= x < end`.
 #[derive(Clone, Debug, Default)]
 struct NodeIndexRange {
     bucket: usize,
@@ -128,6 +132,7 @@ struct NodeIndexRange {
 }
 
 impl NodeIndexRange {
+    #[cfg(debug_assertions)]
     fn indexes_into(&self, hash_tree: &HashTree) -> bool {
         self.bucket < hash_tree.node_digests.len()
             && self.index_range.end <= hash_tree.node_digests[self.bucket].len()
@@ -190,6 +195,11 @@ impl NodeIndexRange {
 /// [1]: https://en.wikipedia.org/wiki/AoS_and_SoA
 #[derive(Clone, Debug)]
 pub struct HashTree {
+    /// Used for parallel construction of the [`HashTree`]. Namely, when we
+    /// build a hash tree for a subtree with many children, we assign different
+    /// buckets to threads that build subtrees for different children. The
+    /// `bucket_offset` allows to set the offset in advance to independently
+    /// build subtrees without synchronization by appending buckets afterwards.
     bucket_offset: usize,
     /// Id of the root of the tree.
     root: NodeId,
@@ -248,10 +258,12 @@ pub struct HashTree {
 }
 
 impl HashTree {
+    /// Constructs an empty tree.
     fn new() -> Self {
         Self::new_with_bucket_offset(0)
     }
 
+    /// Constructs an empty tree with `bucket_offset`.
     fn new_with_bucket_offset(bucket_offset: usize) -> Self {
         Self {
             bucket_offset,
@@ -268,8 +280,8 @@ impl HashTree {
         }
     }
 
-    // Note that new forks are always added to fork_digests[0], but in order
-    // to access it, you use a NodeId with bucket set to self.bucket_offset.
+    /// Note that new forks are always added to fork_digests[0], but in order
+    /// to access it, you use a NodeId with bucket set to self.bucket_offset.
     fn new_fork(&mut self, d: Digest, l: NodeId, r: NodeId) -> NodeId {
         let id = self.fork_digests[0].len();
 
@@ -280,18 +292,22 @@ impl HashTree {
         NodeId::fork(self.bucket_offset, id)
     }
 
+    /// Reserves space for `additional` forks.
     fn reserve_forks(&mut self, additional: usize) {
         self.fork_digests[0].reserve(additional);
         self.fork_left_children[0].reserve(additional);
         self.fork_right_children[0].reserve(additional);
     }
 
+    /// Constructs a new leaf without a parent.
     fn new_leaf(&mut self, d: Digest) -> NodeId {
         let id = self.leaf_digests[0].len();
         self.leaf_digests[0].push(d);
         NodeId::leaf(self.bucket_offset, id)
     }
 
+    /// Preallocates `len` nodes. Makes the new nodes root if the `parent` is
+    /// `Empty`. Returns the [`NodeIndexRange`] to the allocated nodes.
     fn preallocate_nodes(&mut self, len: usize, parent: NodeId) -> NodeIndexRange {
         if parent != NodeId::empty() {
             debug_assert_eq!(parent.bucket(), self.bucket_offset);
@@ -318,6 +334,8 @@ impl HashTree {
         range
     }
 
+    /// Returns [`NodeIndexRange`] to the children of `parent` or to the root children if
+    /// `parent` is empty.
     fn node_labels_range(&self, parent: NodeId) -> NodeIndexRange {
         if parent == NodeId::empty() {
             self.root_labels_range.clone()
@@ -327,6 +345,7 @@ impl HashTree {
         }
     }
 
+    /// Returns the digest at `node_id`.
     fn digest(&self, node_id: NodeId) -> &Digest {
         match node_id.kind() {
             NodeKind::Fork => {
@@ -342,24 +361,29 @@ impl HashTree {
         }
     }
 
+    /// Checks the consistency of dimensions of [`Fork`]s and [`Node`]s as a
+    /// debug assertion. This is a no-op if debug assertions are not enabled.
     fn check_invariants(&self) {
-        fn check_same_dimensions<S, T>(l: &Vec<Vec<S>>, r: &Vec<Vec<T>>) {
-            debug_assert_eq!(l.len(), r.len());
-            debug_assert!(l.iter().zip(r.iter()).all(|(l, r)| l.len() == r.len()));
+        #[cfg(debug_assertions)]
+        {
+            fn check_same_dimensions<S, T>(l: &Vec<Vec<S>>, r: &Vec<Vec<T>>) {
+                debug_assert_eq!(l.len(), r.len());
+                debug_assert!(l.iter().zip(r.iter()).all(|(l, r)| l.len() == r.len()));
+            }
+
+            debug_assert!(self.root_labels_range.indexes_into(self));
+
+            check_same_dimensions(&self.fork_digests, &self.fork_left_children);
+            check_same_dimensions(&self.fork_digests, &self.fork_right_children);
+
+            check_same_dimensions(&self.node_digests, &self.node_labels);
+            check_same_dimensions(&self.node_digests, &self.node_children);
+            check_same_dimensions(&self.node_digests, &self.node_children_labels_ranges);
+            debug_assert!(self
+                .node_children_labels_ranges
+                .iter()
+                .all(|vec| vec.iter().all(|range| range.indexes_into(self))));
         }
-
-        debug_assert!(self.root_labels_range.indexes_into(self));
-
-        check_same_dimensions(&self.fork_digests, &self.fork_left_children);
-        check_same_dimensions(&self.fork_digests, &self.fork_right_children);
-
-        check_same_dimensions(&self.node_digests, &self.node_labels);
-        check_same_dimensions(&self.node_digests, &self.node_children);
-        check_same_dimensions(&self.node_digests, &self.node_children_labels_ranges);
-        debug_assert!(self
-            .node_children_labels_ranges
-            .iter()
-            .all(|vec| vec.iter().all(|range| range.indexes_into(self))));
     }
 
     /// Returns a structured representation-independent view of the node with
@@ -599,6 +623,9 @@ impl HashTree {
         go::<B>(self, NodeId::empty(), self.root, partial_tree)
     }
 
+    /// Extends the current tree with the provided `subtree`. Produces an invalid
+    /// tree if the bucket offset in `subtree` has `bucket_offset` not equal to
+    /// the actual number of buckets in the current tree.
     fn splice_subtree(&mut self, subtree: HashTree) {
         // Leafs
         self.leaf_digests.extend(subtree.leaf_digests.into_iter());
@@ -865,10 +892,13 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
     }
     let mut ht = HashTree::new();
     ht.root = go(t, &mut ht, NodeId::empty(), &mut ParStrategy::Concurrent);
+
     ht.check_invariants();
+
     ht
 }
 
+/// TODO(CRP-2151) don't compile `crypto_hash_lazy_tree()` in prod.
 /// Constructs a hash tree corresponding to the specified lazy tree.
 /// This function is only used for benchmarks.
 pub fn crypto_hash_lazy_tree(t: &LazyTree<'_>) -> crypto::HashTree {
