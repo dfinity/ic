@@ -9,6 +9,12 @@ use std::str::FromStr;
 #[serde(transparent)]
 pub struct Address(#[serde(with = "crate::serde_data")] [u8; 20]);
 
+impl AsRef<[u8]> for Address {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl Address {
     pub fn new(bytes: [u8; 20]) -> Self {
         Self(bytes)
