@@ -2203,7 +2203,7 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
              },
          2 =>
                 Neuron {
-                    id: Some(NeuronId {id: 1}),
+                    id: Some(NeuronId {id: 2}),
                  controller: Some(principal(2)),
                     cached_neuron_stake_e8s: 951,
                     account: driver.random_byte_array().to_vec(),
