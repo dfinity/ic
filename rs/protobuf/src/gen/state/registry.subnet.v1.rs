@@ -269,6 +269,26 @@ pub struct InitialIDkgDealings {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgComplaint {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub raw_complaint: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgOpening {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_id: ::core::option::Option<IDkgTranscriptId>,
+    #[prost(message, optional, tag = "2")]
+    pub dealer: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub raw_opening: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExtendedDerivationPath {
     #[prost(message, optional, tag = "1")]
     pub caller: ::core::option::Option<super::super::super::types::v1::PrincipalId>,

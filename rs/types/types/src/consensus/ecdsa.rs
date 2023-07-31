@@ -906,6 +906,32 @@ pub struct EcdsaSigShare {
     pub share: ThresholdEcdsaSigShare,
 }
 
+impl From<&EcdsaSigShare> for pb::EcdsaSigShare {
+    fn from(value: &EcdsaSigShare) -> Self {
+        Self {
+            signer_id: Some(node_id_into_protobuf(value.signer_id)),
+            request_id: Some(pb::RequestId::from(value.request_id)),
+            sig_share_raw: value.share.sig_share_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaSigShare> for EcdsaSigShare {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaSigShare) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signer_id: node_id_try_from_option(value.signer_id.clone())?,
+            request_id: try_from_option_field(
+                value.request_id.as_ref(),
+                "EcdsaSigShare::request_id",
+            )?,
+            share: ThresholdEcdsaSigShare {
+                sig_share_raw: value.sig_share_raw.clone(),
+            },
+        })
+    }
+}
+
 impl Display for EcdsaSigShare {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
@@ -927,6 +953,26 @@ pub type EcdsaComplaint = Signed<EcdsaComplaintContent, BasicSignature<EcdsaComp
 impl EcdsaComplaint {
     pub fn get(&self) -> &EcdsaComplaintContent {
         &self.content
+    }
+}
+
+impl From<&EcdsaComplaintContent> for pb::EcdsaComplaintContent {
+    fn from(value: &EcdsaComplaintContent) -> Self {
+        Self {
+            idkg_complaint: Some((&value.idkg_complaint).into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaComplaintContent> for EcdsaComplaintContent {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaComplaintContent) -> Result<Self, Self::Error> {
+        Ok(Self {
+            idkg_complaint: try_from_option_field(
+                value.idkg_complaint.as_ref(),
+                "EcdsaComplaintContent::idkg_complaint",
+            )?,
+        })
     }
 }
 
@@ -965,6 +1011,26 @@ pub type EcdsaOpening = Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningC
 impl EcdsaOpening {
     pub fn get(&self) -> &EcdsaOpeningContent {
         &self.content
+    }
+}
+
+impl From<&EcdsaOpeningContent> for pb::EcdsaOpeningContent {
+    fn from(value: &EcdsaOpeningContent) -> Self {
+        Self {
+            idkg_opening: Some((&value.idkg_opening).into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaOpeningContent> for EcdsaOpeningContent {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaOpeningContent) -> Result<Self, Self::Error> {
+        Ok(Self {
+            idkg_opening: try_from_option_field(
+                value.idkg_opening.as_ref(),
+                "EcdsaOpeningContent::idkg_opening",
+            )?,
+        })
     }
 }
 

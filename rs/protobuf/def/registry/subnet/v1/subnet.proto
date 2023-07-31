@@ -238,6 +238,18 @@ message InitialIDkgDealings {
   repeated IDkgSignedDealingTuple signed_dealings = 4;
 }
 
+message IDkgComplaint {
+  IDkgTranscriptId transcript_id = 1;
+  types.v1.NodeId dealer = 2;
+  bytes raw_complaint = 3;
+}
+
+message IDkgOpening {
+  IDkgTranscriptId transcript_id = 1;
+  types.v1.NodeId dealer = 2;
+  bytes raw_opening = 3;
+}
+
 message ExtendedDerivationPath {
   types.v1.PrincipalId caller = 1;
   repeated bytes derivation_path = 2;

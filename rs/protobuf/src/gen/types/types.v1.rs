@@ -538,6 +538,31 @@ pub struct KeyTranscriptCreation {
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaSigShare {
+    #[prost(message, optional, tag = "1")]
+    pub signer_id: ::core::option::Option<NodeId>,
+    #[prost(message, optional, tag = "2")]
+    pub request_id: ::core::option::Option<RequestId>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub sig_share_raw: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaComplaintContent {
+    #[prost(message, optional, tag = "1")]
+    pub idkg_complaint: ::core::option::Option<super::super::registry::subnet::v1::IDkgComplaint>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EcdsaOpeningContent {
+    #[prost(message, optional, tag = "1")]
+    pub idkg_opening: ::core::option::Option<super::super::registry::subnet::v1::IDkgOpening>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum KeyTranscriptCreationState {

@@ -175,3 +175,16 @@ message KeyTranscriptCreation {
   UnmaskedTranscript created = 9;
 }
 
+message EcdsaSigShare {
+  NodeId signer_id = 1;
+  RequestId request_id = 2;
+  bytes sig_share_raw = 3;
+}
+
+message EcdsaComplaintContent {
+  registry.subnet.v1.IDkgComplaint idkg_complaint = 1;
+}
+
+message EcdsaOpeningContent {
+  registry.subnet.v1.IDkgOpening idkg_opening = 1;
+}
