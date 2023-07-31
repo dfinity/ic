@@ -12,13 +12,11 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use common::increase_dissolve_delay_raw;
-#[cfg(feature = "test")]
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use dfn_protobuf::ToProto;
-use fixtures::{new_motion_proposal, principal};
-#[cfg(feature = "test")]
 use fixtures::{
-    LedgerBuilder, NNSBuilder, NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
+    new_motion_proposal, principal, LedgerBuilder, NNSBuilder, NNSStateChange, NeuronBuilder,
+    ProposalNeuronBehavior, NNS,
 };
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
@@ -38,7 +36,6 @@ use ic_nns_common::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-#[cfg(feature = "test")]
 use ic_nns_governance::pb::v1::{
     governance::GovernanceCachedMetricsChange, proposal::ActionDesc, BallotChange,
     BallotInfoChange, GovernanceChange, NeuronChange, ProposalChange, ProposalDataChange,
@@ -125,7 +122,6 @@ const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
 const USUAL_REWARD_POT_E8S: u64 = 100;
 
-#[cfg(feature = "test")]
 fn check_proposal_status_after_voting_and_after_expiration_new(
     neurons: impl IntoIterator<Item = Neuron>,
     behavior: impl Into<ProposalNeuronBehavior>,
@@ -195,7 +191,6 @@ fn tests_must_be_run_with_test_feature_enabled() {
     assert!(false);
 }
 
-#[cfg(feature = "test")]
 #[test]
 fn test_single_neuron_proposal_new() {
     let mut nns = check_proposal_status_after_voting_and_after_expiration_new(
@@ -671,7 +666,6 @@ fn test_two_neuron_disagree_identical_stake_older_wins() {
 ///   on topic Unknown = all topics without specific override
 ///
 /// - Neurons 1, 5, 6 have a controller set and can vote.
-#[cfg(feature = "test")]
 fn fixture_for_following_new() -> NNS {
     NNSBuilder::new()
         .set_economics(NetworkEconomics::with_default_values())
@@ -731,7 +725,6 @@ fn fixture_for_following_new() -> NNS {
 ///
 /// - As neuron 2 follows neurons 1 and 3 on the NetworkEconomics topic, 2 should vote
 ///   yes as 1 votes implicitly by proposing and 3 votes by following 5 and 6.
-#[cfg(feature = "test")]
 #[tokio::test]
 async fn test_cascade_following_new() {
     let mut nns = fixture_for_following_new();
@@ -3207,7 +3200,6 @@ proptest! {
 /// 1. a governance proposal yields 20 times the voting power
 /// 2. an exchange rate proposal yields 0.01 times the voting power
 /// 3. other proposals yield 1 time the voting power
-#[cfg(feature = "test")]
 #[test]
 fn test_topic_weights(stake in 1u64..1_000_000_000) {
     // Test alloacting 100 maturity to two neurons with equal stake where
@@ -8325,7 +8317,6 @@ fn test_can_follow_by_subaccount_and_neuron_id() {
     test_can_follow_by(|n| NeuronIdOrSubaccount::Subaccount(n.account.to_vec()));
 }
 
-#[cfg(feature = "test")]
 fn assert_merge_maturity_executes_as_expected_new(
     nns: &mut NNS,
     id: &NeuronId,
@@ -8376,7 +8367,6 @@ fn assert_merge_maturity_executes_as_expected_new(
 
 proptest! {
 
-#[cfg(feature = "test")]
 #[test]
 fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
                                      supply in 100_000_000u64..400_000_000,
