@@ -109,11 +109,6 @@ impl Storable for State {
     fn to_bytes(&self) -> Cow<[u8]> {
         let mut buf = vec![];
         ciborium::ser::into_writer(self, &mut buf).unwrap_or_else(|err| {
-            log!(
-                P1,
-                "[to_bytes]: failed to encode index config:{}",
-                err.to_string()
-            );
             ic_cdk::api::trap(&format!("{:?}", err));
         });
         Cow::Owned(buf)
@@ -121,11 +116,6 @@ impl Storable for State {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).unwrap_or_else(|err| {
-            log!(
-                P1,
-                "[from_bytes]: failed to decode index options:{}",
-                err.to_string()
-            );
             ic_cdk::api::trap(&format!("{:?}", err));
         })
     }
@@ -146,11 +136,6 @@ impl Storable for AccountIdentifierDataType {
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         if bytes.len() != 1 {
-            log!(
-                P1,
-                "[from_bytes] Expected a single byte for AccountDataType but found {}",
-                bytes.len()
-            );
             ic_cdk::api::trap(&format!(
                 "Expected a single byte for AccountDataType but found {}",
                 bytes.len()
@@ -159,7 +144,6 @@ impl Storable for AccountIdentifierDataType {
         if bytes[0] == 0x00 {
             Self::Balance
         } else {
-            log!(P1, "[from_bytes] Unknown AccountDataType {}", bytes[0]);
             ic_cdk::api::trap(&format!("Unknown AccountDataType {}", bytes[0]));
         }
     }
@@ -185,7 +169,6 @@ fn mutate_state(f: impl FnOnce(&mut State)) {
             borrowed.set(state)
         })
         .unwrap_or_else(|err| {
-            log!(P0, "[mutate_state]: could not mutate state:{:?}", err);
             ic_cdk::api::trap(&format!("{:?}", err));
         });
 }
@@ -442,11 +425,6 @@ fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(),
 fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if balance < amount {
-            log!(
-                P1,
-                "[debit]: Block {} caused an underflow for account_identifier {} when calculating balance {} - amount {}",
-                block_index, account_identifier, balance, amount
-            );
             ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
                 block_index, account_identifier, balance, amount))
         }
@@ -457,11 +435,6 @@ fn debit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount:
 fn credit(block_index: BlockIndex, account_identifier: AccountIdentifier, amount: u64) {
     change_balance(account_identifier, |balance| {
         if u64::MAX - balance < amount {
-            log!(
-                P1,
-                "[credit]: Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
-                block_index, account_identifier, balance, amount
-            );
             ic_cdk::trap(&format!("Block {} caused an overflow for account_identifier {} when calculating balance {} + amount {}",
                 block_index, account_identifier, balance, amount))
         }
@@ -585,19 +558,12 @@ fn get_blocks(
     req: icrc_ledger_types::icrc3::blocks::GetBlocksRequest,
 ) -> ic_icp_index::GetBlocksResponse {
     let chain_length = with_blocks(|blocks| blocks.len());
-    let (start, length) = req.as_start_and_length().unwrap_or_else(|msg| {
-        log!(P1, "[get_blocks]: cannot get start and length: {:?}", msg);
-        ic_cdk::api::trap(&msg)
-    });
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
 
-    let blocks = get_block_range_from_stable_memory(start, length).unwrap_or_else(|msg| {
-        log!(
-            P1,
-            "[get_blocks]: cannot get block range from stable memory: {:?}",
-            msg
-        );
-        ic_cdk::api::trap(&msg)
-    });
+    let blocks = get_block_range_from_stable_memory(start, length)
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
     ic_icp_index::GetBlocksResponse {
         chain_length,
         blocks,
@@ -629,11 +595,6 @@ fn get_account_identifier_transactions(
     for id in indices {
         let block = with_blocks(|blocks| {
             blocks.get(id).unwrap_or_else(|| {
-                log!(
-                    P1,
-                    "[get_account_identifier_transactions]: could not find block with id: {}",
-                    id,
-                );
                 ic_cdk::api::trap(&format!(
                     "Block {} not found in the block log, account_identifier blocks map is corrupted!",
                     id
@@ -642,11 +603,6 @@ fn get_account_identifier_transactions(
         });
         let transaction = decode_encoded_block(id, block.into())
             .unwrap_or_else(|_| {
-                log!(
-                    P1,
-                    "[get_account_identifier_transactions]: could not find block with id: {}",
-                    id,
-                );
                 ic_cdk::api::trap(&format!(
                 "Block {} not found in the block log, account_identifier blocks map is corrupted!",id
             ));
