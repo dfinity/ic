@@ -3,14 +3,18 @@ use crate::{
     messages::{MessageId, SignedRequestBytes, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, Time,
 };
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::{
     convert::TryFrom,
     io::{Cursor, Write},
 };
+
 /// Payload that contains Ingress messages
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressPayload {
     /// Pairs of MessageId and its serialized byte position in the buffer.
     id_and_pos: Vec<(IngressMessageId, u64)>,

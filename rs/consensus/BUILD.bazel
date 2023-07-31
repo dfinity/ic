@@ -65,6 +65,10 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
+
 DATA = [
     "//rs/canister_sandbox",
     "//rs/canister_sandbox/sandbox_launcher",
@@ -85,9 +89,7 @@ rust_library(
         "//conditions:default": [],
     }),
     crate_name = "ic_consensus",
-    proc_macro_deps = [
-        "@crate_index//:strum_macros",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
 )

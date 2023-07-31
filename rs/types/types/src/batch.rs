@@ -18,6 +18,8 @@ use super::{
 };
 use crate::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_btc_types_internal::BitcoinAdapterResponse;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::EcdsaKeyId;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto};
@@ -47,6 +49,7 @@ pub struct Batch {
 /// The context built by Consensus for deterministic processing. Captures all
 /// fields that have semantic meaning within the Chain Consensus protocol.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ValidationContext {
     /// The registry version to be associated with the payload.
     pub registry_version: RegistryVersion,
@@ -72,6 +75,7 @@ impl ValidationContext {
 ///
 /// Contains ingress messages, XNet messages and self-validating messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct BatchPayload {
     pub ingress: IngressPayload,
     pub xnet: XNetPayload,

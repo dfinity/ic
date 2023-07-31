@@ -50,6 +50,7 @@ DEV_DEPENDENCIES = [
 ]
 
 MACRO_DEV_DEPENDENCIES = [
+    "//rs/types/exhaustive_derive",
     "@crate_index//:proptest-derive",
 ]
 
@@ -58,6 +59,7 @@ rust_library(
     srcs = glob(["src/**"]),
     crate_name = "ic_types",
     proc_macro_deps = [
+        "//rs/types/exhaustive_derive",
         "@crate_index//:derive_more",
         "@crate_index//:strum_macros",
     ],

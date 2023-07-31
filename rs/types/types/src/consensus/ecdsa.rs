@@ -32,6 +32,8 @@ use crate::crypto::{
 use crate::{node_id_into_protobuf, node_id_try_from_option};
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use ic_crypto_sha2::Sha256;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::EcdsaKeyId;
 use ic_protobuf::registry::subnet::v1 as subnet_pb;
 use ic_protobuf::types::v1 as pb;
@@ -41,6 +43,7 @@ use phantom_newtype::Id;
 /// that have already been reported and those that have not. This is
 /// to prevent signatures from being reported more than once.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedSignature {
     ReportedToExecution,
     Unreported(crate::messages::Response),
@@ -50,6 +53,7 @@ pub enum CompletedSignature {
 /// published on every consensus round. It represents the current state of the
 /// protocol since the summary block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EcdsaPayload {
     /// Collection of completed signatures.
     pub signature_agreements: BTreeMap<PseudoRandomId, CompletedSignature>,
@@ -261,6 +265,7 @@ impl EcdsaPayload {
 /// The unmasked transcript is paired with its attributes, which will be used
 /// in creating reshare params.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct UnmaskedTranscriptWithAttributes(IDkgTranscriptAttributes, UnmaskedTranscript);
 
 impl From<&UnmaskedTranscriptWithAttributes> for pb::UnmaskedTranscriptWithAttributes {
@@ -328,6 +333,7 @@ impl AsMut<TranscriptRef> for UnmaskedTranscriptWithAttributes {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EcdsaKeyTranscript {
     /// The ECDSA key transcript used for the current interval.
     pub current: Option<UnmaskedTranscriptWithAttributes>,
@@ -439,6 +445,7 @@ impl Display for EcdsaKeyTranscript {
 /// by going through the second path above. Then the switch-over will happen at
 /// the next 'EcdsaSummaryPayload'.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum KeyTranscriptCreation {
     Begin,
     // Configuration to create initial random transcript.
@@ -548,6 +555,7 @@ impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
 
 /// Internal format of the resharing request from execution.
 #[derive(Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EcdsaReshareRequest {
     pub key_id: EcdsaKeyId,
     pub receiving_node_ids: Vec<NodeId>,
@@ -587,6 +595,7 @@ impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CompletedReshareRequest {
     ReportedToExecution,
     Unreported(crate::messages::Response),
@@ -595,6 +604,7 @@ pub enum CompletedReshareRequest {
 /// To make sure all ids used in ECDSA payload are uniquely generated,
 /// we use a generator to keep track of this state.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct EcdsaUIDGenerator {
     next_unused_transcript_id: IDkgTranscriptId,
     next_unused_quadruple_id: QuadrupleId,

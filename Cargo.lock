@@ -7288,6 +7288,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-exhaustive-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2 1.0.66",
+ "quote 1.0.31",
+ "syn 2.0.11",
+]
+
+[[package]]
 name = "ic-http-endpoints-metrics"
 version = "0.8.0"
 dependencies = [
@@ -11195,6 +11204,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-tree-hash",
  "ic-error-types",
+ "ic-exhaustive-derive",
  "ic-ic00-types",
  "ic-protobuf",
  "ic-utils 0.8.0",

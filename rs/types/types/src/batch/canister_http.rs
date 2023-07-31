@@ -11,6 +11,8 @@ use crate::{
 };
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion};
 use ic_error_types::{RejectCode, TryFromError};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
     canister_http::v1 as canister_http_pb,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -23,6 +25,7 @@ pub const MAX_CANISTER_HTTP_PAYLOAD_SIZE: usize = 2 * 1024 * 1024; // 2 MiB
 
 /// Payload that contains CanisterHttpPayload messages.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpPayload {
     pub responses: Vec<CanisterHttpResponseWithConsensus>,
     pub timeouts: Vec<CallbackId>,

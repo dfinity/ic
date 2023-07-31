@@ -24,6 +24,8 @@ use crate::{
     CryptoHashOfState, Height, Time,
 };
 use derive_more::{AsMut, AsRef, From, TryInto};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::p2p::v1 as pb;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use serde::{Deserialize, Serialize};
@@ -309,6 +311,7 @@ pub struct ConsensusMessageFilter {
 
 /// [`IngressMessageId`] includes expiry time in addition to [`MessageId`].
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct IngressMessageId {
     expiry: Time,
     pub message_id: MessageId,

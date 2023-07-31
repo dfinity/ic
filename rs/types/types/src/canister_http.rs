@@ -49,6 +49,8 @@ use crate::{
 };
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -450,6 +452,7 @@ pub struct CanisterHttpRequest {
 
 /// The content of a response after the transformation
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponse {
     pub id: CanisterHttpRequestId,
     pub timeout: Time,
@@ -465,6 +468,7 @@ impl CountBytes for CanisterHttpResponse {
 
 /// Content of a [`CanisterHttpResponse`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum CanisterHttpResponseContent {
     /// In the case of a success, this will be the data returned by the server.
     Success(Vec<u8>),
@@ -485,6 +489,7 @@ impl CountBytes for CanisterHttpResponseContent {
 /// If a [`CanisterHttpRequest`] is rejected, the [`CanisterHttpReject`] provides additional
 /// information about the rejection.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpReject {
     /// The [`RejectCode`] of the request
     pub reject_code: RejectCode,
@@ -547,6 +552,7 @@ impl TryFrom<pb_metadata::HttpMethod> for CanisterHttpMethod {
 
 /// A proof that the replicas have reached consensus on some [`CanisterHttpResponseContent`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseWithConsensus {
     pub content: CanisterHttpResponse,
     pub proof: CanisterHttpResponseProof,
@@ -563,6 +569,7 @@ impl CountBytes for CanisterHttpResponseWithConsensus {
 /// This can be used as a proof that consensus can not be reached for this call
 /// as sufficiently many nodes have seen divergent content.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseDivergence {
     pub shares: Vec<CanisterHttpResponseShare>,
 }
@@ -575,6 +582,7 @@ impl CountBytes for CanisterHttpResponseDivergence {
 
 /// Metadata about some [`CanisterHttpResponseContent`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CanisterHttpResponseMetadata {
     pub id: CallbackId,
     pub timeout: Time,

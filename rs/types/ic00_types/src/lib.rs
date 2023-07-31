@@ -1381,7 +1381,18 @@ impl SetupInitialDKGResponse {
 /// (variant { secp256k1; })
 /// ```
 #[derive(
-    CandidType, Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize, Hash,
+    CandidType,
+    Copy,
+    Clone,
+    Debug,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Hash,
+    EnumIter,
 )]
 pub enum EcdsaCurve {
     #[serde(rename = "secp256k1")]

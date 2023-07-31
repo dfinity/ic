@@ -1,5 +1,7 @@
 use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes};
 use ic_error_types::{RejectCode, TryFromError, UserError};
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInfoRequest, InstallCodeArgs, Method, Payload as _,
     ProvisionalTopUpCanisterArgs, SetControllerArgs, UpdateSettingsArgs,
@@ -155,6 +157,7 @@ impl std::fmt::Debug for Request {
 
 /// The context attached when an inter-canister message is rejected.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RejectContext {
     pub code: RejectCode,
     pub message: String,
@@ -199,6 +202,7 @@ impl From<UserError> for RejectContext {
 
 /// A union of all possible message payloads.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub enum Payload {
     /// Opaque payload data of the current message.
     Data(Vec<u8>),
@@ -268,6 +272,7 @@ impl From<Result<Option<WasmResult>, UserError>> for Payload {
 
 /// Canister-to-canister response message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Response {
     pub originator: CanisterId,
     pub respondent: CanisterId,

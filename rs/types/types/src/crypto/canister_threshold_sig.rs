@@ -7,6 +7,8 @@ use crate::crypto::AlgorithmId;
 use crate::{NumberOfNodes, Randomness};
 use core::fmt;
 use ic_base_types::PrincipalId;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
@@ -278,6 +280,7 @@ impl PreSignatureQuadruple {
 
 /// Metadata used to derive a specific ECDSA keypair.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct ExtendedDerivationPath {
     pub caller: PrincipalId,
     pub derivation_path: Vec<Vec<u8>>,

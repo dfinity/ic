@@ -15,7 +15,7 @@ pub enum TryFromError {
 /// of user-facing errors.
 ///
 /// See <https://sdk.dfinity.org/docs/interface-spec/index.html#reject-codes>
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter)]
 pub enum RejectCode {
     SysFatal = 1,
     SysTransient = 2,
