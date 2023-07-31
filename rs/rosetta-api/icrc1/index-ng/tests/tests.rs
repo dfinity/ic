@@ -1147,3 +1147,54 @@ fn test_get_account_transactions_vs_old_index() {
         )
         .unwrap();
 }
+
+#[test]
+fn test_upgrade_index_to_index_ng() {
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    runner
+        .run(
+            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            |(transactions,)| {
+                let env = &StateMachine::new();
+                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
+                let index_ng_id = install_index_ng(env, ledger_id);
+                let index_id = install_index(env, ledger_id);
+
+                for CallerTransferArg {
+                    caller,
+                    transfer_arg,
+                } in &transactions
+                {
+                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                }
+
+                env.tick();
+                wait_until_sync_is_completed(env, index_ng_id, ledger_id);
+
+                // upgrade the index canister to the index-ng
+                let arg = IndexArg::Init(IndexInitArg {
+                    ledger_id: ledger_id.into(),
+                });
+                let arg = Encode!(&arg).unwrap();
+                env.upgrade_canister(index_id, index_ng_wasm(), arg)
+                    .unwrap();
+
+                wait_until_sync_is_completed(env, index_id, ledger_id);
+
+                // check that the old get_account_transactions still works and return
+                // the right data
+                for account in transactions
+                    .iter()
+                    .flat_map(|tx| tx.accounts())
+                    .collect::<HashSet<Account>>()
+                {
+                    assert_eq!(
+                        old_get_account_transactions(env, index_id, account, None, u64::MAX),
+                        old_get_account_transactions(env, index_ng_id, account, None, u64::MAX),
+                    );
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+}
