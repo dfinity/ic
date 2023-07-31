@@ -549,6 +549,9 @@ impl PageMap {
         let mut last_applied_index: Option<PageIndex> = None;
         let num_host_pages = self.num_host_pages() as u64;
         for (index, _) in page_delta.iter() {
+            debug_assert!(self.page_delta.0.get(index.get()).is_some());
+            assert!(index < num_host_pages.into());
+
             if last_applied_index.is_some() && last_applied_index.unwrap() >= index {
                 continue;
             }
