@@ -2,72 +2,26 @@ use candid::candid_method;
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::{
-    DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice, EthTransaction, InitArg,
+    DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice, EthTransaction,
     MinterArg, ProcessedTransactions, ReceivedEthEvent,
 };
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
-use ic_cketh_minter::eth_rpc::{into_nat, BlockNumber, GasPrice, Hash, BLOCK_PI_RPC_PROVIDER_URL};
+use ic_cketh_minter::eth_rpc::JsonRpcResult;
+use ic_cketh_minter::eth_rpc::{into_nat, GasPrice, Hash, BLOCK_PI_RPC_PROVIDER_URL};
+use ic_cketh_minter::state::mutate_state;
+use ic_cketh_minter::state::read_state;
+use ic_cketh_minter::state::State;
+use ic_cketh_minter::state::STATE;
+use ic_cketh_minter::tx::TransactionRequest;
 use ic_cketh_minter::{eth_logs, eth_rpc};
 use ic_crypto_ecdsa_secp256k1::PublicKey;
-use std::cell::RefCell;
 use std::cmp::{min, Ordering};
-use std::collections::BTreeSet;
+use std::str::FromStr;
 
 const TRANSACTION_GAS_LIMIT: u32 = 21_000;
 const SCRAPPING_ETH_LOGS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15);
 
-thread_local! {
-    static STATE: RefCell<Option<State>> = RefCell::default();
-}
-
-pub struct State {
-    ecdsa_key_name: String,
-    last_seen_block_number: BlockNumber,
-    minted_transactions: BTreeSet<Hash>,
-    invalid_transactions: BTreeSet<Hash>,
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self {
-            ecdsa_key_name: "test_key_1".to_string(),
-            // Note that the default block to start from for logs scrapping
-            // depends on the chain we are using:
-            // Ethereum and Sepolia have for example different block heights at a given time.
-            // https://sepolia.etherscan.io/block/3938798
-            last_seen_block_number: BlockNumber::new(3_956_206),
-            minted_transactions: BTreeSet::new(),
-            invalid_transactions: BTreeSet::new(),
-        }
-    }
-}
-
-impl From<InitArg> for State {
-    fn from(InitArg { ecdsa_key_name }: InitArg) -> Self {
-        Self {
-            ecdsa_key_name,
-            ..Self::default()
-        }
-    }
-}
-
-fn read_state<R>(f: impl FnOnce(&State) -> R) -> R {
-    STATE.with(|s| f(s.borrow().as_ref().expect("BUG: state is not initialized")))
-}
-
-/// Mutates (part of) the current state using `f`.
-///
-/// Panics if there is no state.
-pub fn mutate_state<F, R>(f: F) -> R
-where
-    F: FnOnce(&mut State) -> R,
-{
-    STATE.with(|s| {
-        f(s.borrow_mut()
-            .as_mut()
-            .expect("BUG: state is not initialized"))
-    })
-}
+pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 
 #[init]
 #[candid_method(init)]
@@ -163,7 +117,7 @@ async fn minter_address() -> String {
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     let (response,) = ecdsa_public_key(EcdsaPublicKeyArgument {
         canister_id: None,
-        derivation_path: vec![],
+        derivation_path: ic_cketh_minter::MAIN_DERIVATION_PATH,
         key_id: EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: key_name,
@@ -222,6 +176,36 @@ async fn display_logs(req: DisplayLogsRequest) -> Vec<ReceivedEthEvent> {
             }
         })
         .collect()
+}
+
+type TransferResult = ic_cketh_minter::eth_rpc::JsonRpcResult<String>;
+#[update]
+#[candid_method(update)]
+async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferResult {
+    let tx_bytes = TransactionRequest {
+        chain_id: SEPOLIA_TEST_CHAIN_ID,
+        to: Address::from_str(&to_string).unwrap(),
+        nonce: nonce.into(),
+        gas_limit: 100000_u32.into(),
+        max_fee_per_gas: 1946965145_u32.into(),
+        value: value.into(),
+        data: vec![],
+        transaction_type: 2,
+        access_list: vec![],
+        max_priority_fee_per_gas: 1946965145_u32.into(),
+    }
+    .sign()
+    .await
+    .expect("signing failed");
+    let hex_string = format!("0x{}", hex::encode(&tx_bytes));
+    let result: JsonRpcResult<String> = eth_rpc::call(
+        "https://rpc.sepolia.org",
+        "eth_sendRawTransaction",
+        vec![hex_string],
+    )
+    .await
+    .expect("HTTP call failed");
+    result
 }
 
 /// Estimate price of EIP-1559 transaction based on the

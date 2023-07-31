@@ -32,12 +32,15 @@ rust_library(
     deps = [
         "//rs/crypto/ecdsa_secp256k1",
         "//rs/crypto/sha3",
+        "//rs/types/ic00_types",
         "@crate_index//:candid",
+        "@crate_index//:ethabi",
         "@crate_index//:ethnum",
         "@crate_index//:hex",
         "@crate_index//:hex-literal",
         "@crate_index//:ic-cdk",
         "@crate_index//:num-bigint",
+        "@crate_index//:rlp",
         "@crate_index//:serde",
         "@crate_index//:serde_json",
     ],
@@ -49,6 +52,7 @@ rust_test(
     deps = [
         ":minter",
         "@crate_index//:assert_matches",
+        "@crate_index//:ethers-core",
     ],
 )
 
@@ -65,6 +69,7 @@ rust_canister(
         "//rs/crypto/ecdsa_secp256k1",
         "@crate_index//:candid",
         "@crate_index//:ethabi",
+        "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
     ],

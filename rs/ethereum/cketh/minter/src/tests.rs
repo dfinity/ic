@@ -225,6 +225,44 @@ fn address_display() {
     }
 }
 
+#[test]
+fn test_encoding() {
+    use crate::tx::TransactionRequest;
+    use ethers_core::abi::ethereum_types::H160;
+    use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest;
+    use ethers_core::types::transaction::eip2930::AccessList;
+    use ethers_core::types::Bytes;
+
+    let other_raw_tx = Eip1559TransactionRequest {
+        from: None,
+        to: Some(ethers_core::types::NameOrAddress::Address(H160::zero())),
+        gas: Some(1.into()),
+        value: Some(2.into()),
+        data: Some(Bytes::new()),
+        nonce: Some(0.into()),
+        access_list: AccessList::from(vec![]),
+        max_priority_fee_per_gas: Some(3.into()),
+        max_fee_per_gas: Some(4.into()),
+        chain_id: Some(1.into()),
+    };
+    let raw_tx = TransactionRequest {
+        chain_id: 1,
+        to: crate::address::Address::new([0; 20]),
+        nonce: 0_u32.into(),
+        gas_limit: 1_u32.into(),
+        max_fee_per_gas: 4_u32.into(),
+        value: 2_u32.into(),
+        data: vec![],
+        transaction_type: 0,
+        access_list: vec![],
+        max_priority_fee_per_gas: 3_u32.into(),
+    };
+    assert_eq!(
+        raw_tx.encode_eip1559_payload(None)[1..],
+        other_raw_tx.rlp().to_vec()
+    );
+}
+
 mod eth_get_block_by_number {
     use crate::eth_rpc::{
         into_nat, Block, BlockNumber, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity,

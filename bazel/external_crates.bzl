@@ -336,6 +336,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ethabi": crate.spec(
                 version = "18.0.0",
             ),
+            "ethers-core": crate.spec(
+                version = "2.0.7",
+            ),
             "ethnum": crate.spec(
                 version = "^1.3.2",
                 features = ["serde"],
@@ -874,6 +877,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "ripemd": crate.spec(
                 version = "^0.1.1",
+            ),
+            "rlp": crate.spec(
+                version = "^0.5.2",
             ),
             "rocksdb": crate.spec(
                 version = "^0.15.0",

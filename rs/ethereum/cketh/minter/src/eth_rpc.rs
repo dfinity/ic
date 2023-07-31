@@ -2,7 +2,7 @@
 //! interface.
 
 use crate::address::Address;
-use candid::candid_method;
+use candid::{candid_method, CandidType, Principal};
 use ethnum::u256;
 use ic_cdk::api::call::{call_with_payment128, CallResult};
 use ic_cdk::api::management_canister::http_request::{
@@ -363,12 +363,13 @@ struct JsonRpcRequest<T> {
 #[serde(rename_all = "camelCase")]
 pub struct JsonRpcReply<T> {
     pub id: u32,
+    pub jsonrpc: String,
     #[serde(flatten)]
     pub result: JsonRpcResult<T>,
 }
 
 /// An envelope for all JSON-RPC replies.
-#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Deserialize, CandidType)]
 #[serde(rename_all = "camelCase")]
 pub enum JsonRpcResult<T> {
     Result(T),
@@ -430,9 +431,8 @@ pub async fn call<I: Serialize, O: DeserializeOwned>(
     const BASE_SUBNET_SIZE: u128 = 13;
     const SUBNET_SIZE: u128 = 34;
     let cycles = base_cycles * SUBNET_SIZE / BASE_SUBNET_SIZE;
-
     let (response,): (HttpResponse,) = call_with_payment128(
-        candid::Principal::management_canister(),
+        Principal::management_canister(),
         "http_request",
         (request,),
         cycles,

@@ -1,24 +1,20 @@
-type MinterArg = variant {
-    InitArg : record {
-        ecdsa_key_name : text
-    };
-    UpgradeArg;
+type DisplayLogsRequest = record { to : text; from : text; address : text };
+type InitArg = record { ecdsa_key_name : text };
+type JsonRpcRawTxResult = record { id : nat32; result : text; jsonrpc : text };
+type JsonRpcResult = variant {
+  Error : record { code : int64; message : text };
+  Result : JsonRpcRawTxResult;
 };
-
+type MinterArg = variant { UpgradeArg; InitArg : InitArg };
+type ReceivedEthEvent = record {
+  "principal" : principal;
+  value : nat;
+  from_address : text;
+};
 service : (MinterArg) -> {
+    display_logs : (DisplayLogsRequest) -> (vec ReceivedEthEvent);
     minter_address : () -> (text);
-    display_logs: (record {
-        address : text;
-        from : text;
-        to : text;
-    }) -> (vec record {
-        transaction_hash : text;
-        block_number : nat;
-        log_index : nat;
-        from_address : text;
-        value : nat;
-        "principal" : principal;
-    });
+    test_transfer : (nat64, nat64, text) -> (JsonRpcResult);
     eip_1559_transaction_price: () -> (record {
         base_fee_from_last_finalized_block : nat;
         max_priority_fee_per_gas : nat;

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "dfx": "0.14.3",
+  "dfx": "0.14.0",
   "canisters": {
     "minter": {
       "type": "custom",
