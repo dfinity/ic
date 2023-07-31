@@ -185,7 +185,7 @@
   loop: "{{ api_nodes | union(aux_nodes)  | union(boundary_nodes) }}"
   loop_control:
     label:
-  tags: [ "boundary_node_vm" ]
+  tags: [ "ic_guest" ]
 
 - name: Define (create) a guest
   shell: |
