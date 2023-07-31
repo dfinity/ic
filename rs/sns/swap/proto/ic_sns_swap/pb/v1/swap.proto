@@ -260,6 +260,10 @@ message Swap {
   // Set to true when auto-finalization is attempted. Prevents auto-finalization
   // from being attempted more than once.
   optional bool already_tried_to_auto_finalize = 17;
+
+  // Set when auto-finalization finishes. Calling finalize manually has no effect
+  // on this parameter.
+  optional FinalizeSwapResponse auto_finalize_swap_response = 18;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -975,6 +979,22 @@ message GetLifecycleRequest {}
 message GetLifecycleResponse {
   optional Lifecycle lifecycle = 1;
   optional uint64 decentralization_sale_open_timestamp_seconds = 2;
+}
+
+message GetAutoFinalizationStatusRequest {
+}
+
+message GetAutoFinalizationStatusResponse {
+  // Reflects whether auto-finalization has been enabled via in the init 
+  // parameters (`should_auto_finalize`).
+  optional bool is_auto_finalize_enabled = 1;
+  
+  // True if and only if auto-finalization has been started. 
+  optional bool has_auto_finalize_been_attempted = 2;
+
+  // Will be populated with the FinalizeSwapResponse once auto-finalization has
+  // completed.  
+  optional FinalizeSwapResponse auto_finalize_swap_response = 3;
 }
 
 // Request struct for the method `get_init`

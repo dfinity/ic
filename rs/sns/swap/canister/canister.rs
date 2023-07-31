@@ -23,7 +23,8 @@ use ic_sns_swap::{
     memory::UPGRADES_MEMORY,
     pb::v1::{
         ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
-        GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
+        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
+        GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
         GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
         GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
         GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
@@ -284,6 +285,20 @@ fn get_lifecycle() {
 fn get_lifecycle_(request: GetLifecycleRequest) -> GetLifecycleResponse {
     log!(INFO, "get_lifecycle");
     swap().get_lifecycle(&request)
+}
+
+/// Return the status of auto-finalization
+#[export_name = "canister_query get_auto_finalization_status"]
+fn get_auto_finalization_status() {
+    over(candid_one, get_auto_finalization_status_)
+}
+
+#[candid_method(query, rename = "get_auto_finalization_status")]
+fn get_auto_finalization_status_(
+    request: GetAutoFinalizationStatusRequest,
+) -> GetAutoFinalizationStatusResponse {
+    log!(INFO, "get_auto_finalization_status");
+    swap().get_auto_finalization_status(&request)
 }
 
 /// Returns the initialization data of the canister

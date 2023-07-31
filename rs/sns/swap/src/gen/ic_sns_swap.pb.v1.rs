@@ -217,6 +217,10 @@ pub struct Swap {
     /// from being attempted more than once.
     #[prost(bool, optional, tag = "17")]
     pub already_tried_to_auto_finalize: ::core::option::Option<bool>,
+    /// Set when auto-finalization finishes. Calling finalize manually has no effect
+    /// on this parameter.
+    #[prost(message, optional, tag = "18")]
+    pub auto_finalize_swap_response: ::core::option::Option<FinalizeSwapResponse>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
@@ -1646,6 +1650,38 @@ pub struct GetLifecycleResponse {
     pub lifecycle: ::core::option::Option<i32>,
     #[prost(uint64, optional, tag = "2")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetAutoFinalizationStatusRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetAutoFinalizationStatusResponse {
+    /// Reflects whether auto-finalization has been enabled via in the init
+    /// parameters (`should_auto_finalize`).
+    #[prost(bool, optional, tag = "1")]
+    pub is_auto_finalize_enabled: ::core::option::Option<bool>,
+    /// True if and only if auto-finalization has been started.
+    #[prost(bool, optional, tag = "2")]
+    pub has_auto_finalize_been_attempted: ::core::option::Option<bool>,
+    /// Will be populated with the FinalizeSwapResponse once auto-finalization has
+    /// completed.  
+    #[prost(message, optional, tag = "3")]
+    pub auto_finalize_swap_response: ::core::option::Option<FinalizeSwapResponse>,
 }
 /// Request struct for the method `get_init`
 #[derive(

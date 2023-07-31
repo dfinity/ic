@@ -10,7 +10,8 @@ use crate::{
         settle_community_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
         BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
-        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
+        ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
+        GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse, GetBuyerStateRequest,
         GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
         GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse,
         GetSaleParametersRequest, GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
@@ -304,6 +305,7 @@ impl Swap {
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
+            auto_finalize_swap_response: None,
         };
         if init.is_swap_init_for_one_proposal_flow() {
             // Automatically fill out the fields that the (legacy) open request
@@ -433,8 +435,21 @@ impl Swap {
         );
         self.already_tried_to_auto_finalize = Some(true);
 
-        let finalize_response = self.finalize(now_fn, environment).await;
-        Ok(finalize_response)
+        // Attempt finalization
+        let auto_finalize_swap_response = self.finalize(now_fn, environment).await;
+
+        // Record the result
+        if self.auto_finalize_swap_response.is_some() {
+            log!(
+                ERROR,
+                "Somehow, auto-finalization happend twice (second time at {}). Overriding self.auto_finalize_swap_response, old value was: {:?}",
+                now_fn(true),
+                auto_finalize_swap_response,
+            );
+        }
+        self.auto_finalize_swap_response = Some(auto_finalize_swap_response.clone());
+
+        Ok(auto_finalize_swap_response)
     }
 
     /// Opens the SNS decentralization swap (only for the legacy flow).
@@ -2567,6 +2582,21 @@ impl Swap {
         }
     }
 
+    /// Returns the current lifecycle stage (e.g. Open, Committed, etc)
+    pub fn get_auto_finalization_status(
+        &self,
+        _request: &GetAutoFinalizationStatusRequest,
+    ) -> GetAutoFinalizationStatusResponse {
+        GetAutoFinalizationStatusResponse {
+            is_auto_finalize_enabled: self
+                .init
+                .as_ref()
+                .and_then(|init| init.should_auto_finalize),
+            has_auto_finalize_been_attempted: self.already_tried_to_auto_finalize,
+            auto_finalize_swap_response: self.auto_finalize_swap_response.clone(),
+        }
+    }
+
     /// If there is an open swap ticket for the caller then it returns it;
     /// otherwise returns none.
     ///
@@ -3100,6 +3130,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
             purge_old_tickets_last_completion_timestamp_nanoseconds,
             purge_old_tickets_next_principal,
             already_tried_to_auto_finalize,
+            auto_finalize_swap_response,
 
             // These are (potentially large) collections. To avoid an
             // overwhelmingly large log message, we need summarize and/or
@@ -3136,6 +3167,7 @@ impl<'a> fmt::Debug for SwapDigest<'a> {
                 "already_tried_to_auto_finalize",
                 already_tried_to_auto_finalize,
             )
+            .field("auto_finalize_swap_response", auto_finalize_swap_response)
             // Summarize and/or decimate (potentially large) collection fields.
             //
             // TODO: Include some samples? E.g. the first, and last element, and
@@ -3820,6 +3852,7 @@ mod tests {
                 purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
                 purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
                 already_tried_to_auto_finalize: Some(false),
+                auto_finalize_swap_response: None,
             };
             let mut ticket_ids = HashSet::new();
             for pid in pids {
@@ -4124,6 +4157,7 @@ mod tests {
             purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
             purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
             already_tried_to_auto_finalize: Some(false),
+            auto_finalize_swap_response: None,
         };
 
         let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {
