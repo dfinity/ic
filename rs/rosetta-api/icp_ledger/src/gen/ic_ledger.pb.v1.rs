@@ -365,6 +365,8 @@ pub struct Approve {
     pub allowance: ::core::option::Option<Tokens>,
     #[prost(message, optional, tag = "2")]
     pub expires_at: ::core::option::Option<TimeStamp>,
+    #[prost(message, optional, tag = "3")]
+    pub expected_allowance: ::core::option::Option<Tokens>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Mint {

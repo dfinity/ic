@@ -387,7 +387,7 @@ pub fn metadata(env: &StateMachine, ledger: CanisterId) -> BTreeMap<String, Valu
     .collect()
 }
 
-fn send_approval(
+pub fn send_approval(
     env: &StateMachine,
     ledger: CanisterId,
     from: Principal,
@@ -431,7 +431,7 @@ fn send_transfer_from(
     .map(|n| n.0.to_u64().unwrap())
 }
 
-fn get_allowance(
+pub fn get_allowance(
     env: &StateMachine,
     ledger: CanisterId,
     account: impl Into<Account>,
@@ -673,14 +673,12 @@ where
         &Value::from(DECIMAL_PLACES as u64)
     );
 
-    let standards = supported_standards(&env, canister_id);
-    assert_eq!(
-        standards,
-        vec![StandardRecord {
-            name: "ICRC-1".to_string(),
-            url: "https://github.com/dfinity/ICRC-1".to_string(),
-        }]
-    );
+    let mut standards = vec![];
+    for standard in supported_standards(&env, canister_id) {
+        standards.push(standard.name);
+    }
+    standards.sort();
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2"]);
 }
 pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
@@ -1947,7 +1945,7 @@ pub fn icrc1_test_block_transformation<T>(
     }
 }
 
-fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
+pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> ApproveArgs {
     ApproveArgs {
         from_subaccount: None,
         spender: spender.into(),
@@ -2364,6 +2362,66 @@ where
         .ends_with("the minting account cannot delegate mints"));
 }
 
+pub fn expect_icrc2_disabled(
+    env: &StateMachine,
+    from: PrincipalId,
+    canister_id: CanisterId,
+    approve_args: &ApproveArgs,
+    allowance_args: &AllowanceArgs,
+    transfer_from_args: Option<&TransferFromArgs>,
+) {
+    let err = env
+        .execute_ingress_as(
+            from,
+            canister_id,
+            "icrc2_approve",
+            Encode!(&approve_args).unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(
+        err.description()
+            .ends_with("ICRC-2 features are not enabled on the ledger."),
+        "Expected ICRC-2 disabled error, got: {}",
+        err.description()
+    );
+    let err = env
+        .execute_ingress_as(
+            from,
+            canister_id,
+            "icrc2_allowance",
+            Encode!(&allowance_args).unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(
+        err.description()
+            .ends_with("ICRC-2 features are not enabled on the ledger."),
+        "Expected ICRC-2 disabled error, got: {}",
+        err.description()
+    );
+    if let Some(transfer_from_args) = transfer_from_args {
+        let err = env
+            .execute_ingress_as(
+                from,
+                canister_id,
+                "icrc2_transfer_from",
+                Encode!(&transfer_from_args).unwrap(),
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+        assert!(
+            err.description()
+                .ends_with("ICRC-2 features are not enabled on the ledger."),
+            "Expected ICRC-2 disabled error, got: {}",
+            err.description()
+        );
+    }
+    let standards = supported_standards(env, canister_id);
+    assert_eq!(standards.len(), 1);
+    assert_eq!(standards[0].name, "ICRC-1");
+}
+
 pub fn test_feature_flags<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where
     T: CandidType,
@@ -2390,71 +2448,13 @@ where
     };
     let transfer_from_args = default_transfer_from_args(from.0, to.0, 10_000);
 
-    fn expect_icrc2_disabled(
-        env: &StateMachine,
-        from: PrincipalId,
-        canister_id: CanisterId,
-        approve_args: &ApproveArgs,
-        allowance_args: &AllowanceArgs,
-        transfer_from_args: &TransferFromArgs,
-    ) {
-        let err = env
-            .execute_ingress_as(
-                from,
-                canister_id,
-                "icrc2_approve",
-                Encode!(&approve_args).unwrap(),
-            )
-            .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-        assert!(
-            err.description()
-                .ends_with("ICRC-2 features are not enabled on the ledger."),
-            "Expected ICRC-2 disabled error, got: {}",
-            err.description()
-        );
-        let err = env
-            .execute_ingress_as(
-                from,
-                canister_id,
-                "icrc2_allowance",
-                Encode!(&allowance_args).unwrap(),
-            )
-            .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-        assert!(
-            err.description()
-                .ends_with("ICRC-2 features are not enabled on the ledger."),
-            "Expected ICRC-2 disabled error, got: {}",
-            err.description()
-        );
-        let err = env
-            .execute_ingress_as(
-                from,
-                canister_id,
-                "icrc2_transfer_from",
-                Encode!(&transfer_from_args).unwrap(),
-            )
-            .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-        assert!(
-            err.description()
-                .ends_with("ICRC-2 features are not enabled on the ledger."),
-            "Expected ICRC-2 disabled error, got: {}",
-            err.description()
-        );
-        let standards = supported_standards(env, canister_id);
-        assert_eq!(standards.len(), 1);
-        assert_eq!(standards[0].name, "ICRC-1");
-    }
-
     expect_icrc2_disabled(
         &env,
         from,
         canister_id,
         &approve_args,
         &allowance_args,
-        &transfer_from_args,
+        Some(&transfer_from_args),
     );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
@@ -2475,7 +2475,7 @@ where
         canister_id,
         &approve_args,
         &allowance_args,
-        &transfer_from_args,
+        Some(&transfer_from_args),
     );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {

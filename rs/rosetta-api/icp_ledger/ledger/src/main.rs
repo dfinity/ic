@@ -19,6 +19,7 @@ use ic_ledger_canister_core::{
     range_utils,
 };
 use ic_ledger_core::{
+    approvals::Approvals,
     block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::{Tokens, DECIMAL_PLACES},
@@ -26,14 +27,16 @@ use ic_ledger_core::{
 use icp_ledger::{
     protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
     ArchivedBlocksRange, ArchivedEncodedBlocksRange, Archives, BinaryAccountBalanceArgs, Block,
-    BlockArg, BlockRes, CandidBlock, Decimals, GetBlocksArgs, InitArgs, IterBlocksArgs,
-    LedgerCanisterPayload, Memo, Name, Operation, PaymentError, QueryBlocksResponse,
-    QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs,
-    Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
-    MEMO_SIZE_BYTES,
+    BlockArg, BlockRes, CandidBlock, Decimals, FeatureFlags, GetBlocksArgs, InitArgs,
+    IterBlocksArgs, LedgerCanisterPayload, Memo, Name, Operation, PaymentError,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes,
+    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
+    MAX_BLOCKS_PER_REQUEST, MEMO_SIZE_BYTES,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::icrc2::allowance::{Allowance, AllowanceArgs};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value, icrc3::archive::QueryArchiveFn,
 };
@@ -75,6 +78,7 @@ impl Sink for DebugOutSink {
 /// * `transfer_fee` - The fee to pay to perform a transaction.
 /// * `token_symbol` - Token symbol.
 /// * `token_name` - Token name.
+/// * `feature_flags` - Features that are enabled on the ledger.
 #[allow(clippy::too_many_arguments)]
 fn init(
     minting_account: AccountIdentifier,
@@ -87,6 +91,7 @@ fn init(
     transfer_fee: Option<Tokens>,
     token_symbol: Option<String>,
     token_name: Option<String>,
+    feature_flags: Option<FeatureFlags>,
 ) {
     print(format!(
         "[ledger] init(): minting account is {}",
@@ -102,6 +107,7 @@ fn init(
         transfer_fee,
         token_symbol,
         token_name,
+        feature_flags,
     );
     match max_message_size_bytes {
         None => {
@@ -547,10 +553,17 @@ fn icrc1_balance_of(acc: Account) -> Nat {
 
 #[candid_method(query, rename = "icrc1_supported_standards")]
 fn icrc1_supported_standards() -> Vec<StandardRecord> {
-    vec![StandardRecord {
+    let mut standards = vec![StandardRecord {
         name: "ICRC-1".to_string(),
-        url: "https://github.com/dfinity/ICRC-1".to_string(),
-    }]
+        url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1".to_string(),
+    }];
+    if LEDGER.read().unwrap().feature_flags.icrc2 {
+        standards.push(StandardRecord {
+            name: "ICRC-2".to_string(),
+            url: "https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-2".to_string(),
+        });
+    }
+    standards
 }
 
 #[candid_method(query, rename = "icrc1_minting_account")]
@@ -642,6 +655,7 @@ fn canister_init(arg: LedgerCanisterPayload) {
             arg.transfer_fee,
             arg.token_symbol,
             arg.token_name,
+            arg.feature_flags,
         ),
         LedgerCanisterPayload::Upgrade(_) => {
             trap_with("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
@@ -672,6 +686,7 @@ fn main() {
                         arg.transfer_fee,
                         arg.token_symbol,
                         arg.token_name,
+                        arg.feature_flags,
                     ),
                     Err(old_err) =>
                     trap_with(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
@@ -1257,6 +1272,142 @@ fn query_encoded_blocks(
 #[export_name = "canister_query query_encoded_blocks"]
 fn query_encoded_blocks_() {
     over(candid_one, query_encoded_blocks)
+}
+
+#[candid_method(update, rename = "icrc2_approve")]
+async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
+
+    let from_account = Account {
+        owner: caller().into(),
+        subaccount: arg.from_subaccount,
+    };
+    let from = AccountIdentifier::from(from_account);
+    if from_account.owner == arg.spender.owner {
+        trap_with("self approval is not allowed");
+    }
+    let spender = AccountIdentifier::from(arg.spender);
+    let minting_acc = LEDGER
+        .read()
+        .unwrap()
+        .minting_account_id
+        .expect("Minting canister id not initialized");
+
+    if from == minting_acc {
+        trap_with("the minting account cannot delegate mints")
+    }
+    match arg.memo.as_ref() {
+        Some(memo) if memo.0.len() > MEMO_SIZE_BYTES => trap_with("the memo field is too large"),
+        _ => {}
+    };
+
+    let allowance = Tokens::from_e8s(arg.amount.0.to_u64().unwrap_or(u64::MAX));
+    let expected_allowance = match arg.expected_allowance {
+        Some(n) => match n.0.to_u64() {
+            Some(n) => Some(Tokens::from_e8s(n)),
+            None => {
+                let current_allowance = LEDGER
+                    .read()
+                    .unwrap()
+                    .approvals
+                    .allowance(&from, &spender, now)
+                    .amount;
+                return Err(ApproveError::AllowanceChanged {
+                    current_allowance: Nat::from(current_allowance.get_e8s()),
+                });
+            }
+        },
+        None => None,
+    };
+
+    const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_nanos() as u64;
+    let default_expiration =
+        TimeStamp::from_nanos_since_unix_epoch(time_nanos() + DEFAULT_APPROVAL_EXPIRATION);
+
+    let expected_fee = LEDGER.read().unwrap().transfer_fee;
+    if arg.fee.is_some() && arg.fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
+        return Err(ApproveError::BadFee {
+            expected_fee: Nat::from(expected_fee.get_e8s()),
+        });
+    }
+
+    let block_index = {
+        let mut ledger = LEDGER.write().unwrap();
+        let tx = Transaction {
+            operation: Operation::Approve {
+                from,
+                spender,
+                allowance,
+                expected_allowance,
+                expires_at: Some(
+                    arg.expires_at
+                        .map(TimeStamp::from_nanos_since_unix_epoch)
+                        .map(|expires_at| expires_at.min(default_expiration))
+                        .unwrap_or(default_expiration),
+                ),
+                fee: expected_fee,
+            },
+            created_at_time: arg
+                .created_at_time
+                .map(TimeStamp::from_nanos_since_unix_epoch),
+            memo: Memo(0),
+            icrc1_memo: arg.memo.map(|x| x.0),
+        };
+        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, expected_fee)
+            .map_err(convert_transfer_error)
+            .map_err(|err| {
+                let err: ApproveError = match err.try_into() {
+                    Ok(err) => err,
+                    Err(err) => trap_with(&err),
+                };
+                err
+            })?;
+
+        set_certified_data(&hash.into_bytes());
+
+        block_index
+    };
+
+    let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
+    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
+    Ok(Nat::from(block_index))
+}
+
+#[export_name = "canister_update icrc2_approve"]
+fn icrc2_approve_candid() {
+    over_async_may_reject(candid_one, |arg: ApproveArgs| async {
+        if !LEDGER.read().unwrap().can_send(&caller()) {
+            return Err(
+                "Anonymous principal cannot approve token transfers on the ledger.".to_string(),
+            );
+        }
+
+        Ok(icrc2_approve(arg).await)
+    })
+}
+
+#[candid_method(query, rename = "icrc2_allowance")]
+fn icrc2_allowance(arg: AllowanceArgs) -> Allowance {
+    if !LEDGER.read().unwrap().feature_flags.icrc2 {
+        trap_with("ICRC-2 features are not enabled on the ledger.");
+    }
+    let now = TimeStamp::from_nanos_since_unix_epoch(time_nanos());
+    let ledger = LEDGER.read().unwrap();
+    let account = AccountIdentifier::from(arg.account);
+    let spender = AccountIdentifier::from(arg.spender);
+    let allowance = ledger.approvals.allowance(&account, &spender, now);
+    Allowance {
+        allowance: Nat::from(allowance.amount.get_e8s()),
+        expires_at: allowance.expires_at.map(|t| t.as_nanos_since_unix_epoch()),
+    }
+}
+
+#[export_name = "canister_query icrc2_allowance"]
+fn icrc2_allowance_candid() {
+    over(candid_one, icrc2_allowance)
 }
 
 candid::export_service!();

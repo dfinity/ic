@@ -2,18 +2,22 @@ use candid::Principal;
 use candid::{Decode, Encode, Nat};
 use dfn_protobuf::ProtoBuf;
 use ic_base_types::CanisterId;
-use ic_icrc1_ledger_sm_tests::{transfer, MINTER};
+use ic_icrc1_ledger_sm_tests::{
+    default_approve_args, expect_icrc2_disabled, get_allowance, send_approval, supported_standards,
+    transfer, MINTER,
+};
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
 use icp_ledger::{
-    AccountIdentifier, ArchiveOptions, Block, CandidBlock, GetBlocksArgs, GetBlocksRes, InitArgs,
-    LedgerCanisterInitPayload, LedgerCanisterPayload, Operation, QueryBlocksResponse,
-    QueryEncodedBlocksResponse,
+    AccountIdentifier, ArchiveOptions, Block, CandidBlock, FeatureFlags, GetBlocksArgs,
+    GetBlocksRes, InitArgs, LedgerCanisterInitPayload, LedgerCanisterPayload, Operation,
+    QueryBlocksResponse, QueryEncodedBlocksResponse, UpgradeArgs,
 };
 use icrc_ledger_types::icrc1::{
     account::Account,
     transfer::{Memo, TransferArg, TransferError},
 };
+use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
@@ -39,6 +43,7 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterI
         .archive_options(args.archive_options)
         .transfer_fee(Tokens::try_from(args.transfer_fee).unwrap())
         .token_symbol_and_name(&args.token_symbol, &args.token_name)
+        .feature_flags(FeatureFlags { icrc2: true })
         .build()
         .unwrap()
 }
@@ -197,6 +202,7 @@ fn check_old_init() {
         transfer_fee: None,
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
+        feature_flags: None,
     })
     .unwrap();
     env.install_canister(ledger_wasm(), old_init, None)
@@ -217,6 +223,7 @@ fn check_new_init() {
         transfer_fee: None,
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
+        feature_flags: None,
     }))
     .unwrap();
     env.install_canister(ledger_wasm(), new_init, None)
@@ -237,6 +244,7 @@ fn check_memo() {
         transfer_fee: None,
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
+        feature_flags: None,
     }))
     .unwrap();
     let ledger_id = env
@@ -325,6 +333,7 @@ fn check_query_blocks_coherence() {
         transfer_fee: Some(Tokens::from_e8s(10_000)),
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
+        feature_flags: None,
     }))
     .unwrap();
     let canister_id = env
@@ -416,6 +425,7 @@ fn test_block_transformation() {
         transfer_fee: Some(Tokens::from_e8s(10_000)),
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
+        feature_flags: None,
     }))
     .unwrap();
     let canister_id = env
@@ -477,4 +487,140 @@ fn test_block_transformation() {
             Block::block_hash(&block_post_upgrade)
         );
     }
+}
+
+#[test]
+fn test_approve_smoke() {
+    ic_icrc1_ledger_sm_tests::test_approve_smoke(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_expiration() {
+    ic_icrc1_ledger_sm_tests::test_approve_expiration(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_self() {
+    ic_icrc1_ledger_sm_tests::test_approve_self(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_expected_allowance() {
+    ic_icrc1_ledger_sm_tests::test_approve_expected_allowance(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_cant_pay_fee() {
+    ic_icrc1_ledger_sm_tests::test_approve_cant_pay_fee(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_cap() {
+    ic_icrc1_ledger_sm_tests::test_approve_cap(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_pruning() {
+    ic_icrc1_ledger_sm_tests::test_approve_pruning(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_max_expiration() {
+    ic_icrc1_ledger_sm_tests::test_approve_max_expiration(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approve_from_minter() {
+    ic_icrc1_ledger_sm_tests::test_approve_from_minter(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_feature_flags() {
+    let ledger_wasm = ledger_wasm();
+
+    let from = PrincipalId::new_user_test_id(1);
+    let spender = PrincipalId::new_user_test_id(2);
+
+    let env = StateMachine::new();
+    let mut initial_balances = HashMap::new();
+    initial_balances.insert(Account::from(from.0).into(), Tokens::from_e8s(100_000));
+    let init_args = Encode!(&LedgerCanisterPayload::Init(InitArgs {
+        archive_options: None,
+        minting_account: MINTER.into(),
+        icrc1_minting_account: Some(MINTER),
+        initial_values: initial_balances,
+        max_message_size_bytes: None,
+        transaction_window: None,
+        send_whitelist: HashSet::new(),
+        transfer_fee: Some(Tokens::from_e8s(10_000)),
+        token_symbol: Some("ICP".into()),
+        token_name: Some("Internet Computer".into()),
+        feature_flags: None,
+    }))
+    .unwrap();
+    let canister_id = env
+        .install_canister(ledger_wasm.clone(), init_args, None)
+        .expect("Unable to install the Ledger canister with the new init");
+
+    let approve_args = default_approve_args(spender.0, 150_000);
+    let allowance_args = AllowanceArgs {
+        account: from.0.into(),
+        spender: spender.0.into(),
+    };
+
+    expect_icrc2_disabled(
+        &env,
+        from,
+        canister_id,
+        &approve_args,
+        &allowance_args,
+        None,
+    );
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm.clone(),
+        Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+            maximum_number_of_accounts: None,
+            icrc1_minting_account: None,
+            feature_flags: None,
+        })))
+        .unwrap(),
+    )
+    .unwrap();
+
+    expect_icrc2_disabled(
+        &env,
+        from,
+        canister_id,
+        &approve_args,
+        &allowance_args,
+        None,
+    );
+
+    env.upgrade_canister(
+        canister_id,
+        ledger_wasm,
+        Encode!(&LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+            maximum_number_of_accounts: None,
+            icrc1_minting_account: None,
+            feature_flags: Some(FeatureFlags { icrc2: true }),
+        })))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let mut standards = vec![];
+    for standard in supported_standards(&env, canister_id) {
+        standards.push(standard.name);
+    }
+    standards.sort();
+    assert_eq!(standards, vec!["ICRC-1", "ICRC-2"]);
+
+    let block_index =
+        send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
+    assert_eq!(block_index, 1);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    use num_traits::cast::ToPrimitive;
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
 }

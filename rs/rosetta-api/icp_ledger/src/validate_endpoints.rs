@@ -623,6 +623,7 @@ impl ToProto for Transaction {
                 Some(PExt::Approve(protobuf::Approve {
                     allowance,
                     expires_at,
+                    expected_allowance,
                 })) => {
                     let allowance = allowance.ok_or_else(|| {
                         "Approve transaction: missing field `allowance`".to_string()
@@ -632,6 +633,7 @@ impl ToProto for Transaction {
                         from: AccountIdentifier::from_proto(from)?,
                         spender: AccountIdentifier::from_proto(to)?,
                         allowance: tokens_from_proto(allowance),
+                        expected_allowance: expected_allowance.map(tokens_from_proto),
                         expires_at: expires_at.map(timestamp_from_proto),
                         fee: match max_fee {
                             Some(fee) => tokens_from_proto(fee),
@@ -702,6 +704,7 @@ impl ToProto for Transaction {
                 allowance,
                 fee,
                 expires_at,
+                expected_allowance,
             } => PTransfer::Send(protobuf::Send {
                 from: Some(from.into_proto()),
                 to: Some(spender.into_proto()),
@@ -710,6 +713,7 @@ impl ToProto for Transaction {
                 extension: Some(PExt::Approve(protobuf::Approve {
                     allowance: Some(tokens_into_proto(allowance)),
                     expires_at: expires_at.map(timestamp_into_proto),
+                    expected_allowance: expected_allowance.map(tokens_into_proto),
                 })),
             }),
         };

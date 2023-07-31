@@ -64,11 +64,13 @@ prop_compose! {
         allowance in arb_tokens(),
         expires_at in proptest::option::of(arb_ts()),
         fee in 0..100_000u64,
+        expected_allowance in arb_tokens(),
     ) -> Operation {
         Operation::Approve {
             from,
             spender,
             allowance,
+            expected_allowance: Some(expected_allowance),
             expires_at,
             fee: Tokens::from_e8s(fee)
         }
