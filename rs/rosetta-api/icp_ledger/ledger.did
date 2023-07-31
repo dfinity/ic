@@ -354,6 +354,44 @@ type LedgerCanisterPayload = variant {
     Upgrade: opt UpgradeArgs;
 };
 
+type ApproveArgs = record {
+    from_subaccount : opt SubAccount;
+    spender : Account;
+    amount : Icrc1Tokens;
+    expected_allowance : opt Icrc1Tokens;
+    expires_at : opt TimeStamp;
+    fee : opt Icrc1Tokens;
+    memo : opt blob;
+    created_at_time: opt TimeStamp;
+};
+
+type ApproveError = variant {
+    BadFee : record { expected_fee : Icrc1Tokens };
+    InsufficientFunds : record { balance : Icrc1Tokens };
+    AllowanceChanged : record { current_allowance : Icrc1Tokens };
+    Expired : record { ledger_time : nat64 };
+    TooOld;
+    CreatedInFuture : record { ledger_time : nat64 };
+    Duplicate : record { duplicate_of : Icrc1BlockIndex };
+    TemporarilyUnavailable;
+    GenericError : record { error_code : nat; message : text };
+};
+
+type ApproveResult = variant {
+    Ok : Icrc1BlockIndex;
+    Err : ApproveError;
+};
+
+type AllowanceArgs = record {
+    account : Account;
+    spender : Account;
+};
+
+type Allowance = record {
+    allowance : Icrc1Tokens;
+    expires_at : opt TimeStamp;
+};
+
 service: (LedgerCanisterPayload) -> {
     // Transfers tokens from a subaccount of the caller to the destination address.
     // The source address is computed from the principal of the caller and the specified subaccount.
@@ -398,5 +436,7 @@ service: (LedgerCanisterPayload) -> {
     icrc1_minting_account : () -> (opt Account) query;
     icrc1_balance_of : (Account) -> (Icrc1Tokens) query;
     icrc1_transfer : (TransferArg) -> (Icrc1TransferResult);
-    icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;  
+    icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;
+    icrc2_approve : (ApproveArgs) -> (ApproveResult);
+    icrc2_allowance : (AllowanceArgs) -> (Allowance) query;
 }

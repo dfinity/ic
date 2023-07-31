@@ -279,6 +279,7 @@ message TransferFrom {
 message Approve {
   Tokens allowance = 1;
   TimeStamp expires_at = 2;
+  Tokens expected_allowance = 3;
 }
 
 message Mint {

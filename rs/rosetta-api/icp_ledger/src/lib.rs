@@ -99,6 +99,7 @@ pub enum Operation {
         from: AccountIdentifier,
         spender: AccountIdentifier,
         allowance: Tokens,
+        expected_allowance: Option<Tokens>,
         expires_at: Option<TimeStamp>,
         fee: Tokens,
     },
@@ -134,6 +135,7 @@ where
             from,
             spender,
             allowance,
+            expected_allowance,
             expires_at,
             fee,
         } => {
@@ -145,7 +147,14 @@ where
 
             let result = context
                 .approvals_mut()
-                .approve(from, spender, *allowance, *expires_at, now, None)
+                .approve(
+                    from,
+                    spender,
+                    *allowance,
+                    *expires_at,
+                    now,
+                    *expected_allowance,
+                )
                 .map_err(TxApplyError::from);
             if let Err(e) = result {
                 context
@@ -427,6 +436,9 @@ pub struct UpgradeArgs {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icrc1_minting_account: Option<Account>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feature_flags: Option<FeatureFlags>,
 }
 
 // This is how we pass arguments to 'init' in main.rs
@@ -442,6 +454,7 @@ pub struct InitArgs {
     pub transfer_fee: Option<Tokens>,
     pub token_symbol: Option<String>,
     pub token_name: Option<String>,
+    pub feature_flags: Option<FeatureFlags>,
 }
 
 impl LedgerCanisterInitPayload {
@@ -473,6 +486,7 @@ pub struct LedgerCanisterInitPayloadBuilder {
     transfer_fee: Option<Tokens>,
     token_symbol: Option<String>,
     token_name: Option<String>,
+    feature_flags: Option<FeatureFlags>,
 }
 
 impl LedgerCanisterInitPayloadBuilder {
@@ -488,6 +502,7 @@ impl LedgerCanisterInitPayloadBuilder {
             transfer_fee: None,
             token_symbol: None,
             token_name: None,
+            feature_flags: None,
         }
     }
 
@@ -537,6 +552,11 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn feature_flags(mut self, feature_flags: FeatureFlags) -> Self {
+        self.feature_flags = Some(feature_flags);
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
         let minting_account = self
             .minting_account
@@ -569,6 +589,7 @@ impl LedgerCanisterInitPayloadBuilder {
                 transfer_fee: self.transfer_fee,
                 token_symbol: self.token_symbol,
                 token_name: self.token_name,
+                feature_flags: self.feature_flags,
             },
         )))
     }
@@ -577,6 +598,7 @@ impl LedgerCanisterInitPayloadBuilder {
 pub struct LedgerCanisterUpgradePayloadBuilder {
     maximum_number_of_accounts: Option<usize>,
     icrc1_minting_account: Option<Account>,
+    feature_flags: Option<FeatureFlags>,
 }
 
 impl LedgerCanisterUpgradePayloadBuilder {
@@ -584,6 +606,7 @@ impl LedgerCanisterUpgradePayloadBuilder {
         Self {
             maximum_number_of_accounts: None,
             icrc1_minting_account: None,
+            feature_flags: None,
         }
     }
 
@@ -602,6 +625,7 @@ impl LedgerCanisterUpgradePayloadBuilder {
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
                 maximum_number_of_accounts: self.maximum_number_of_accounts,
                 icrc1_minting_account: self.icrc1_minting_account,
+                feature_flags: self.feature_flags,
             })),
         ))
     }
@@ -788,6 +812,7 @@ pub enum CandidOperation {
         // This field is deprecated and should not be used.
         allowance_e8s: i128,
         allowance: Tokens,
+        expected_allowance: Option<Tokens>,
         fee: Tokens,
         expires_at: Option<TimeStamp>,
     },
@@ -826,12 +851,14 @@ impl From<Operation> for CandidOperation {
                 from,
                 spender,
                 allowance,
+                expected_allowance,
                 fee,
                 expires_at,
             } => Self::Approve {
                 from: from.to_address(),
                 spender: spender.to_address(),
                 allowance_e8s: allowance.get_e8s() as i128,
+                expected_allowance,
                 fee,
                 expires_at,
                 allowance,
@@ -886,11 +913,13 @@ impl TryFrom<CandidOperation> for Operation {
                 fee,
                 expires_at,
                 allowance,
+                expected_allowance,
                 ..
             } => Operation::Approve {
                 spender: address_to_accountidentifier(spender)?,
                 from: address_to_accountidentifier(from)?,
                 allowance,
+                expected_allowance,
                 fee,
                 expires_at,
             },
@@ -1148,3 +1177,20 @@ pub type QueryArchiveBlocksFn =
     icrc_ledger_types::icrc3::archive::QueryArchiveFn<GetBlocksArgs, GetBlocksResult>;
 pub type QueryArchiveEncodedBlocksFn =
     icrc_ledger_types::icrc3::archive::QueryArchiveFn<GetBlocksArgs, GetEncodedBlocksResult>;
+
+#[derive(CandidType, Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
+pub struct FeatureFlags {
+    pub icrc2: bool,
+}
+
+impl FeatureFlags {
+    const fn const_default() -> Self {
+        Self { icrc2: false }
+    }
+}
+
+impl Default for FeatureFlags {
+    fn default() -> Self {
+        Self::const_default()
+    }
+}

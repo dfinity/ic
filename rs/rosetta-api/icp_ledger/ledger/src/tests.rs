@@ -256,6 +256,7 @@ fn serialize() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
+        None,
     );
 
     let txn = Transaction::new(
@@ -590,6 +591,7 @@ fn get_blocks_returns_correct_blocks() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
+        None,
     );
 
     for i in 0..10 {
@@ -651,6 +653,7 @@ fn test_purge() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
+        None,
     );
     let little_later = genesis + Duration::from_millis(1);
 
@@ -853,6 +856,7 @@ fn test_approvals_are_not_cumulative() {
             from,
             spender,
             allowance: approved_amount,
+            expected_allowance: None,
             expires_at: None,
             fee,
         },
@@ -880,6 +884,7 @@ fn test_approvals_are_not_cumulative() {
             from,
             spender,
             allowance: new_allowance,
+            expected_allowance: None,
             expires_at: Some(expiration),
             fee,
         },
@@ -934,6 +939,7 @@ fn test_approval_transfer_from() {
             from,
             spender,
             allowance: tokens(150_000),
+            expected_allowance: None,
             expires_at: None,
             fee,
         },
@@ -1011,6 +1017,7 @@ fn test_approval_expiration_override() {
         from,
         spender,
         allowance: amount,
+        expected_allowance: None,
         expires_at: expires_at.map(ts),
         fee: tokens(10_000),
     };
@@ -1077,6 +1084,7 @@ fn test_approval_no_fee_on_reject() {
                 from,
                 spender,
                 allowance: tokens(1_000),
+                expected_allowance: None,
                 expires_at: Some(ts(1)),
                 fee: tokens(10_000),
             },
