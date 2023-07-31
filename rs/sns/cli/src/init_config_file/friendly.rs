@@ -169,6 +169,7 @@ pub(crate) struct Swap {
     #[serde(rename = "VestingSchedule")]
     vesting_schedule: VestingSchedule,
 
+    #[serde(default)]
     #[serde(with = "ic_nervous_system_humanize::serde::optional_time_of_day")]
     start_time: Option<nervous_system_pb::GlobalTimeOfDay>,
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]

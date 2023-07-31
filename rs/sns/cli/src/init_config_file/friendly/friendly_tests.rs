@@ -183,6 +183,28 @@ fn test_parse() {
 }
 
 #[test]
+fn test_parse_no_start_time() {
+    let input_path = {
+        let mut result = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        result.push("example_sns_init_v2.yaml");
+        result
+    };
+
+    let contents = std::fs::read_to_string(input_path).unwrap();
+    // Remove lines containing "start_time"
+    let contents = contents
+        .lines()
+        .filter(|line| !line.contains("start_time"))
+        .collect::<Vec<&str>>()
+        .join("\n");
+
+    let observed_sns_configuration_file =
+        serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
+
+    assert_eq!(observed_sns_configuration_file.swap.start_time, None);
+}
+
+#[test]
 fn test_convert_to_create_service_nervous_system() {
     // Step 1: Prepare the world.
     let test_root_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
