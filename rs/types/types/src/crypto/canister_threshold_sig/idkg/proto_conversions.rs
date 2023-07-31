@@ -13,7 +13,9 @@ use ic_base_types::{
 };
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::registry::subnet::v1::ExtendedDerivationPath as ExtendedDerivationPathProto;
+use ic_protobuf::registry::subnet::v1::IDkgComplaint as IDkgComplaintProto;
 use ic_protobuf::registry::subnet::v1::IDkgDealing as IDkgDealingProto;
+use ic_protobuf::registry::subnet::v1::IDkgOpening as IDkgOpeningProto;
 use ic_protobuf::registry::subnet::v1::IDkgSignedDealingTuple as IDkgSignedDealingTupleProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscript as IDkgTranscriptProto;
 use ic_protobuf::registry::subnet::v1::IDkgTranscriptId as IDkgTranscriptIdProto;
@@ -27,6 +29,8 @@ use ic_protobuf::types::v1::PrincipalId as PrincipalIdProto;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::iter::FromIterator;
+
+use super::{IDkgComplaint, IDkgOpening};
 
 const CURRENT_INITIAL_IDKG_DEALINGS_VERSION: u32 = 0;
 
@@ -85,6 +89,50 @@ impl TryFrom<&InitialIDkgDealingsProto> for InitialIDkgDealings {
         let params = idkg_transcript_params_struct(params_proto)?;
         let dealings = initial_dealings_vec(&proto.signed_dealings)?;
         InitialIDkgDealings::new(params, dealings)
+    }
+}
+
+impl From<&IDkgOpening> for IDkgOpeningProto {
+    fn from(value: &IDkgOpening) -> Self {
+        Self {
+            transcript_id: Some(idkg_transcript_id_proto(&value.transcript_id)),
+            dealer: Some(node_id_into_protobuf(value.dealer_id)),
+            raw_opening: value.internal_opening_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&IDkgOpeningProto> for IDkgOpening {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &IDkgOpeningProto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            transcript_id: idkg_transcript_id_struct(&proto.transcript_id)?,
+            dealer_id: node_id_struct(&proto.dealer)?,
+            internal_opening_raw: proto.raw_opening.clone(),
+        })
+    }
+}
+
+impl From<&IDkgComplaint> for IDkgComplaintProto {
+    fn from(value: &IDkgComplaint) -> Self {
+        Self {
+            transcript_id: Some(idkg_transcript_id_proto(&value.transcript_id)),
+            dealer: Some(node_id_into_protobuf(value.dealer_id)),
+            raw_complaint: value.internal_complaint_raw.clone(),
+        }
+    }
+}
+
+impl TryFrom<&IDkgComplaintProto> for IDkgComplaint {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &IDkgComplaintProto) -> Result<Self, Self::Error> {
+        Ok(Self {
+            transcript_id: idkg_transcript_id_struct(&proto.transcript_id)?,
+            dealer_id: node_id_struct(&proto.dealer)?,
+            internal_complaint_raw: proto.raw_complaint.clone(),
+        })
     }
 }
 
