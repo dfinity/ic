@@ -9,6 +9,8 @@ use crate::{
     *,
 };
 use ic_base_types::PrincipalIdError;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
@@ -222,11 +224,13 @@ impl HasCommittee for RandomTapeContent {
 /// Rank is used to indicate the priority of a block maker, where 0 indicates
 /// the highest priority.
 #[derive(Copy, Clone, Debug, PartialOrd, Ord, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Rank(pub u64);
 
 /// Block is the type that is used to create blocks out of which we build a
 /// block chain
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Block {
     pub version: ReplicaVersion,
     /// the parent block that this block extends, forming a block chain

@@ -7,6 +7,8 @@ mod tests;
 
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
 #[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
+#[cfg(test)]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -18,7 +20,7 @@ use thiserror::Error;
 /// 'std::time::SystemTime', [Time] does not implement the [Default] trait.
 /// Please use `ic_test_utilities::mock_time` if you ever need such a value.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, Serialize, Deserialize)]
-#[cfg_attr(test, derive(Arbitrary))]
+#[cfg_attr(test, derive(Arbitrary, ExhaustiveSet))]
 pub struct Time(u64);
 
 /// The unix epoch.

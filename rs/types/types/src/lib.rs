@@ -89,6 +89,9 @@ pub mod state_sync;
 pub mod time;
 pub mod xnet;
 
+#[cfg(test)]
+pub mod exhaustive;
+
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;

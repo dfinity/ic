@@ -23,6 +23,8 @@ use core::fmt::Formatter;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use phantom_newtype::Id;
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -122,6 +124,7 @@ impl FromStr for KeyPurpose {
     Serialize,
 )]
 #[cfg_attr(all(test, not(target_arch = "wasm32")), derive(Arbitrary))]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 #[allow(non_camel_case_types)]
 #[strum(serialize_all = "snake_case")]
 pub enum AlgorithmId {

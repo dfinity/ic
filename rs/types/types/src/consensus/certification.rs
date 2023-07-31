@@ -8,6 +8,8 @@ use crate::{
     crypto::{CryptoHashOf, Signed, SignedBytesWithoutDomainSeparator},
     CryptoHashOfPartialState, Height,
 };
+#[cfg(test)]
+use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::{
     proxy::ProxyDecodeError,
     types::v1::{self as pb, certification_message::Msg},
@@ -115,6 +117,7 @@ pub enum CertificationMessageHash {
 
 /// CertificationContent holds the data signed by certification
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct CertificationContent {
     /// The hash of the relevant parts of the replicated state
     pub hash: CryptoHashOfPartialState,
@@ -153,6 +156,7 @@ impl AsRef<CertificationContent> for CertificationMessage {
 /// A Certification is a CertificationContent that is cryptographically signed
 /// by a subnet using a threshold signature
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Certification {
     /// the height that the CertificationContent belongs to
     pub height: Height,
