@@ -172,6 +172,7 @@ fn create_generic_committed_swap() -> Swap {
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
         already_tried_to_auto_finalize: Some(false),
+        auto_finalize_swap_response: None,
     }
 }
 
@@ -1177,6 +1178,7 @@ async fn test_finalize_swap_ok() {
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
         already_tried_to_auto_finalize: Some(false),
+        auto_finalize_swap_response: None,
     };
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
@@ -1190,6 +1192,7 @@ async fn test_finalize_swap_ok() {
     let allowed_to_finalize_error = swap.can_finalize().unwrap_err();
     assert_eq!(auto_finalization_error, allowed_to_finalize_error);
     assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+    assert_eq!(swap.auto_finalize_swap_response, None);
 
     // Step 2: Commit the swap
     assert!(swap.try_commit(END_TIMESTAMP_SECONDS));
@@ -1256,6 +1259,7 @@ async fn test_finalize_swap_ok() {
             try_auto_finalize_swap.already_tried_to_auto_finalize,
             Some(true)
         );
+        assert_eq!(swap.auto_finalize_swap_response, None);
 
         // Try auto-finalizing again. It won't work since an attempt has already
         // been made to auto-finalize the swap
@@ -1533,12 +1537,14 @@ async fn test_finalize_swap_abort() {
         purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
         purge_old_tickets_next_principal: Some(vec![0; 32]),
         already_tried_to_auto_finalize: Some(false),
+        auto_finalize_swap_response: None,
     };
 
     // Step 1.5: Attempt to auto-finalize the swap. It should not work, since
     // the swap is open. Not only should it not work, it should do nothing.
     assert_eq!(swap.lifecycle(), Open);
     assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+    assert_eq!(swap.auto_finalize_swap_response, None);
     let auto_finalization_error = swap
         .try_auto_finalize(now_fn, &mut spy_clients_exploding_root())
         .await
@@ -1549,6 +1555,7 @@ async fn test_finalize_swap_abort() {
     // already_tried_to_auto_finalize should still be set to false, since it
     // couldn't try to auto-finalize due to the swap not being committed.
     assert_eq!(swap.already_tried_to_auto_finalize, Some(false));
+    assert_eq!(swap.auto_finalize_swap_response, None);
 
     // Step 2: Abort the swap
     assert!(swap.try_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
@@ -1606,6 +1613,10 @@ async fn test_finalize_swap_abort() {
         assert_eq!(
             try_auto_finalize_swap.already_tried_to_auto_finalize,
             Some(true)
+        );
+        assert_eq!(
+            try_auto_finalize_swap.auto_finalize_swap_response,
+            Some(finalize_result.clone())
         );
 
         // Try auto-finalizing again. It won't work since an attempt has already
