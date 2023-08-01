@@ -684,6 +684,7 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
 impl Serialize for MixedHashTree {
     // Serialize a `MixedHashTree` per the CDDL of the public spec.
     // See https://sdk.dfinity.org/docs/interface-spec/index.html#_encoding_of_certificates
+    #[inline]
     fn serialize<S>(&self, serializer: S) -> Result<<S as Serializer>::Ok, <S as Serializer>::Error>
     where
         S: Serializer,
@@ -725,6 +726,7 @@ impl Serialize for MixedHashTree {
 }
 
 impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
+    #[inline]
     fn deserialize<D>(deserializer: D) -> Result<MixedHashTree, D::Error>
     where
         D: serde::de::Deserializer<'de>,
@@ -736,6 +738,7 @@ impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
         impl<'de> Visitor<'de> for SeqVisitor {
             type Value = MixedHashTree;
 
+            #[inline]
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str(
                     "MixedHashTree encoded as a sequence of the form \
@@ -743,6 +746,7 @@ impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
                 )
             }
 
+            #[inline]
             fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
             where
                 V: SeqAccess<'de>,
