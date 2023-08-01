@@ -21,6 +21,7 @@ pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
     false
 }
 
+#[derive(Clone, Debug)]
 pub struct ExecutedCreateServiceNervousSystemProposal {
     pub current_timestamp_seconds: u64,
     pub create_service_nervous_system: CreateServiceNervousSystem,

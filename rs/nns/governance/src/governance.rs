@@ -1040,18 +1040,66 @@ impl ProposalData {
             return self.open_sns_token_swap_can_be_purged();
         }
 
+        if let Some(Action::CreateServiceNervousSystem(_)) =
+            self.proposal.as_ref().and_then(|p| p.action.as_ref())
+        {
+            return self.create_service_nervous_system_can_be_purged();
+        }
+
         true
     }
 
     // Precondition: action must be OpenSnsTokenSwap (behavior is undefined otherwise).
     //
-    // The idea here is that we must wait until Community Fund participation has
+    // The idea here is that we must wait until Neurons' Fund participation has
     // been settled (part of swap finalization), because in that case, we are
-    // holding CF participation in escrow.
+    // holding NF participation in escrow.
     //
-    // We can tell whether CF participation settlement has been taken care of by
+    // We can tell whether NF participation settlement has been taken care of by
     // looking at the sns_token_swap_lifecycle field.
     fn open_sns_token_swap_can_be_purged(&self) -> bool {
+        match self.status() {
+            ProposalStatus::Rejected => {
+                // Because nothing has been taken from the neurons' fund yet (and never
+                // will). We handle this specially, because in this case,
+                // sns_token_swap_lifecycle will be None, which is later treated as not
+                // terminal.
+                true
+            }
+
+            ProposalStatus::Failed => {
+                // Because because maturity is refunded to the Neurons' Fund before setting
+                // execution status to failed.
+                true
+            }
+
+            ProposalStatus::Executed => {
+                // Need to wait for settle_community_fund_participation.
+                self.sns_token_swap_lifecycle
+                    .and_then(Lifecycle::from_i32)
+                    .unwrap_or(Lifecycle::Unspecified)
+                    .is_terminal()
+            }
+
+            status => {
+                println!(
+                    "{}WARNING: Proposal status unexpectedly {:?}. self={:#?}",
+                    LOG_PREFIX, status, self,
+                );
+                false
+            }
+        }
+    }
+
+    // Precondition: action must be CreateServiceNervousSystem (behavior is undefined otherwise).
+    //
+    // The idea here is that we must wait until Neurons' Fund participation has
+    // been settled (part of swap finalization), because in that case, we are
+    // holding NF participation in escrow.
+    //
+    // We can tell whether NF participation settlement has been taken care of by
+    // looking at the sns_token_swap_lifecycle field.
+    fn create_service_nervous_system_can_be_purged(&self) -> bool {
         match self.status() {
             ProposalStatus::Rejected => {
                 // Because nothing has been taken from the community fund yet (and never
@@ -1070,8 +1118,8 @@ impl ProposalData {
             ProposalStatus::Executed => {
                 // Need to wait for settle_community_fund_participation.
                 self.sns_token_swap_lifecycle
-                    .and_then(sns_swap_pb::Lifecycle::from_i32)
-                    .unwrap_or(sns_swap_pb::Lifecycle::Unspecified)
+                    .and_then(Lifecycle::from_i32)
+                    .unwrap_or(Lifecycle::Unspecified)
                     .is_terminal()
             }
 
@@ -4628,6 +4676,27 @@ impl Governance {
             },
         );
 
+        // Record the maturity deductions that we just made.
+        match self.proto.proposals.get_mut(&proposal_id) {
+            Some(proposal_data) => {
+                proposal_data.cf_participants = neurons_fund_participants.clone();
+            }
+            None => {
+                let failed_refunds = refund_community_fund_maturity(
+                    &mut self.proto.neurons,
+                    &neurons_fund_participants,
+                );
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!(
+                        "CreateServiceNervousSystem proposal {} not found while trying to execute it. \
+                        CreateServiceNervousSystem = {:#?}. failed_refunds = {:#?}",
+                        proposal_id, create_service_nervous_system, failed_refunds,
+                    ),
+                ));
+            }
+        }
+
         let executed_create_service_nervous_system_proposal =
             ExecutedCreateServiceNervousSystemProposal {
                 current_timestamp_seconds,
@@ -4680,7 +4749,8 @@ impl Governance {
 
         // Step 1: Convert proposal into main request object.
         let sns_init_payload =
-            match SnsInitPayload::try_from(executed_create_service_nervous_system_proposal) {
+            match SnsInitPayload::try_from(executed_create_service_nervous_system_proposal.clone())
+            {
                 Ok(ok) => ok,
                 Err(err) => {
                     return Err(GovernanceError::new_with_message(
@@ -4756,13 +4826,26 @@ impl Governance {
         };
 
         if deploy_new_sns_response.error.is_some() {
+            let failed_refunds = refund_community_fund_maturity(
+                &mut self.proto.neurons,
+                &executed_create_service_nervous_system_proposal.neurons_fund_participants,
+            );
+
             return Err(GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "deploy_new_sns response contained an error: {:#?}",
-                    deploy_new_sns_response,
+                    "deploy_new_sns response contained an error: {:#?}. failed_refunds = {:#?}",
+                    deploy_new_sns_response, failed_refunds,
                 ),
             ));
+        }
+        //Creation of an SNS was a success. Record this fact for latter settlement.
+        if let Some(proposal_data) = self
+            .proto
+            .proposals
+            .get_mut(&executed_create_service_nervous_system_proposal.proposal_id)
+        {
+            Self::set_sns_token_swap_lifecycle_to_open(proposal_data);
         }
 
         // subnet_id and canisters fields in deploy_new_sns_response are not
@@ -6947,9 +7030,9 @@ impl Governance {
 
     /// If the request is Committed, mint ICP and deposit it in the SNS
     /// governance canister's account. If the request is Aborted, refund
-    /// Community Fund neurons that participated.
+    /// Neurons' Fund neurons that participated.
     ///
-    /// Caller must be the swap canister, as recorded in the proposal.
+    /// Caller must be a Swap Canister Id.
     ///
     /// On success, sets the proposal's sns_token_swap_lifecycle accord to
     /// Committed or Aborted
@@ -6960,11 +7043,12 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         validate_settle_community_fund_participation(request)?;
 
+        // TODO NNS1-2454: Migrate open_sns_token_swap_proposal_id to generic field name
         // Look up proposal.
         let proposal_id = request
             .open_sns_token_swap_proposal_id
             .expect("The open_sns_token_swap_proposal_id field is not populated.");
-        let proposal_data = match self.proto.proposals.get_mut(&proposal_id) {
+        let proposal_data = match self.proto.proposals.get(&proposal_id) {
             Some(pd) => pd,
             None => {
                 return Err(GovernanceError::new_with_message(
@@ -6977,35 +7061,27 @@ impl Governance {
             }
         };
 
-        // Unpack proposal.
-        let open_sns_token_swap = match proposal_data
-            .proposal
-            .as_ref()
-            .and_then(|p| p.action.as_ref())
-        {
-            Some(Action::OpenSnsTokenSwap(open_sns_token_swap)) => open_sns_token_swap,
-            _ => {
+        // Check authorization
+        is_caller_authorized_to_settle_neurons_fund_participation(
+            &mut *self.env,
+            caller,
+            proposal_data,
+        )
+        .await?;
+
+        // Re-acquire the proposal_data mutably after the await
+        let proposal_data = match self.proto.proposals.get_mut(&proposal_id) {
+            Some(pd) => pd,
+            None => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::NotFound,
                     format!(
-                        "Proposal {} is not of type OpenSnsTokenSwap. request = {:#?}",
-                        proposal_id, request,
+                        "Proposal {} not found. request = {:#?}",
+                        proposal_id, request
                     ),
                 ))
             }
         };
-
-        // Check authorization.
-        if Some(caller) != open_sns_token_swap.target_swap_canister_id {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                format!(
-                    "Caller was {}, but needs to be {:?}, the \
-                     target_swap_canister_id in the original proposal.",
-                    caller, open_sns_token_swap.target_swap_canister_id,
-                ),
-            ));
-        }
 
         // It's possible that settle_community_fund_participation is called twice for a single Sale,
         // as such NNS Governance must treat this method as idempotent. If the proposal's
@@ -7545,47 +7621,14 @@ async fn validate_open_sns_token_swap(
 
     // Is target_swap_canister_id known to sns_wasm ?
     if let Some(some_target_swap_canister_id) = target_swap_canister_id {
-        let result = env
-            .call_canister_method(
-                SNS_WASM_CANISTER_ID,
-                "list_deployed_snses",
-                Encode!(&ListDeployedSnsesRequest {}).expect(""),
-            )
-            .await;
-
-        let target_swap_canister_id_is_ok = match &result {
-            Err(err) => {
-                defects.push(format!(
-                    "Failed to call the list_deployed_snses method on sns_wasm ({}): {:?}",
-                    SNS_WASM_CANISTER_ID, err,
-                ));
-                false
-            }
-
-            Ok(reply_bytes) => match Decode!(reply_bytes, ListDeployedSnsesResponse) {
-                Err(err) => {
-                    defects.push(format!(
-                        "Unable to decode response as ListDeployedSnsesResponse: {}. reply_bytes = {:#?}",
-                        err, reply_bytes,
-                    ));
+        let target_swap_canister_id_is_ok =
+            match is_canister_id_valid_swap_canister_id(some_target_swap_canister_id, env).await {
+                Ok(_) => true,
+                Err(error_msg) => {
+                    defects.push(error_msg);
                     false
                 }
-
-                Ok(response) => {
-                    let is_swap = response.instances.iter().any(|sns| {
-                        sns.swap_canister_id == Some(some_target_swap_canister_id.into())
-                    });
-                    if !is_swap {
-                        defects.push(format!(
-                            "target_swap_canister_id is not the ID of any swap canister \
-                             known to sns_wasm: {}",
-                            some_target_swap_canister_id
-                        ));
-                    }
-                    is_swap
-                }
-            },
-        };
+            };
 
         if !target_swap_canister_id_is_ok {
             target_swap_canister_id = None;
@@ -7628,6 +7671,48 @@ async fn validate_open_sns_token_swap(
             defects.join("\n"),
         ));
     }
+    Ok(())
+}
+
+/// Given a target_canister_id, is it a CanisterId of a deployed SNS recorded by
+/// the SNS-W canister.
+async fn is_canister_id_valid_swap_canister_id(
+    target_canister_id: CanisterId,
+    env: &mut dyn Environment,
+) -> Result<(), String> {
+    let list_deployed_snses_response = env
+        .call_canister_method(
+            SNS_WASM_CANISTER_ID,
+            "list_deployed_snses",
+            Encode!(&ListDeployedSnsesRequest {}).expect(""),
+        )
+        .await
+        .map_err(|err| {
+            format!(
+                "Failed to call the list_deployed_snses method on sns_wasm ({}): {:?}",
+                SNS_WASM_CANISTER_ID, err,
+            )
+        })?;
+
+    let list_deployed_snses_response =
+        Decode!(&list_deployed_snses_response, ListDeployedSnsesResponse).map_err(|err| {
+            format!(
+                "Unable to decode response as ListDeployedSnsesResponse: {}. reply_bytes = {:#?}",
+                err, list_deployed_snses_response,
+            )
+        })?;
+
+    let is_swap = list_deployed_snses_response
+        .instances
+        .iter()
+        .any(|sns| sns.swap_canister_id == Some(target_canister_id.into()));
+    if !is_swap {
+        return Err(format!(
+            "target_swap_canister_id is not the ID of any swap canister known to sns_wasm: {}",
+            target_canister_id
+        ));
+    }
+
     Ok(())
 }
 
@@ -7683,6 +7768,82 @@ async fn validate_swap_params(
     // Now that we have all the ingredients, finally do the real work of
     // validating params.
     params.validate(&init)
+}
+
+pub async fn is_caller_authorized_to_settle_neurons_fund_participation(
+    env: &mut dyn Environment,
+    caller: PrincipalId,
+    proposal_data: &ProposalData,
+) -> Result<(), GovernanceError> {
+    let action = proposal_data
+        .proposal
+        .as_ref()
+        .and_then(|p| p.action.as_ref())
+        .ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Proposal {:?} is missing its action and cannot authorize {} to \
+                    settle Neurons' Fund participation.",
+                    proposal_data.id, caller
+                ),
+            )
+        })?;
+
+    match action {
+        Action::OpenSnsTokenSwap(open_sns_token_swap) => {
+            if Some(caller) != open_sns_token_swap.target_swap_canister_id {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::NotAuthorized,
+                    format!(
+                        "Caller was {}, but needs to be {:?}, the \
+                        target_swap_canister_id in the original proposal.",
+                        caller, open_sns_token_swap.target_swap_canister_id,
+                    ),
+                ));
+            }
+        }
+        Action::CreateServiceNervousSystem(_) => {
+            let target_canister_id = match CanisterId::try_from(caller) {
+                Ok(canister_id) => canister_id,
+                Err(err) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::NotAuthorized,
+                        format!(
+                            "Caller {} is not a valid canisterId and is not authorized to \
+                             settle Neuron's Fund participation in a decentralization swap. Err: {:?}",
+                            caller, err,
+                        ),
+                    ));
+                }
+            };
+            match is_canister_id_valid_swap_canister_id(target_canister_id, env).await {
+                Ok(_) => {}
+                Err(err_msg) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::NotAuthorized,
+                        format!(
+                            "Caller {} is not authorized to settle Neuron's Fund \
+                            participation in a decentralization swap. Err: {:?}",
+                            caller, err_msg,
+                        ),
+                    ));
+                }
+            }
+        }
+
+        _ => {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "Proposal {:?} is not of type OpenSnsTokenSwap or CreateServiceNervousSystem.",
+                    proposal_data.id
+                ),
+            ))
+        }
+    };
+
+    Ok(())
 }
 
 /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method

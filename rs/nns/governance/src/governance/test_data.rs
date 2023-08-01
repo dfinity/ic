@@ -80,7 +80,7 @@ lazy_static! {
 
             // Neuron Parameters
             // -----------------
-            neuron_minimum_stake: Some(pb::Tokens { e8s: Some(61800) }),
+            neuron_minimum_stake: Some(pb::Tokens { e8s: Some(250_000) }),
 
             neuron_minimum_dissolve_delay_to_vote: Some(pb::Duration {
                 seconds: Some(482538),
@@ -126,16 +126,16 @@ lazy_static! {
                 e8s: Some(12_300_000_000),
             }),
             maximum_icp: Some(pb::Tokens {
-                e8s: Some(6500000000000),
+                e8s: Some(25_000_000_000),
             }),
             minimum_participant_icp: Some(pb::Tokens {
-                e8s:  Some(6500000000)
+                e8s:  Some(100_000_000)
             }),
             maximum_participant_icp: Some(pb::Tokens {
-                e8s:  Some(65_000_000_000)
+                e8s:  Some(10_000_000_000)
             }),
             neuron_basket_construction_parameters: Some(src::NeuronBasketConstructionParameters {
-                count: Some(5),
+                count: Some(2),
                 dissolve_delay_interval: Some(pb::Duration {
                     seconds: Some(10_001),
                 })
@@ -148,7 +148,7 @@ lazy_static! {
             }),
 
             neurons_fund_investment: Some(pb::Tokens {
-                e8s: Some(1_000_000),
+                e8s: Some(6_100_000_000),
             }),
         })
     };
