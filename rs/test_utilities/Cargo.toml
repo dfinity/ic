@@ -69,7 +69,7 @@ serde_cbor = "0.11.1"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 slog-scope = "4.1.2"
 slog-term = "2.6.0"
-socket2 = { version = "0.3.19", features = ["reuseport"] }
+socket2 = { version = "0.5", features = ["all"] }
 strum = "0.23.0"
 tempfile = "3.1.0"
 tokio = { version = "1.15.0" }

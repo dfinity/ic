@@ -1040,9 +1040,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.0",
             ),
             "socket2": crate.spec(
-                version = "^0.3.19",
+                version = "^0.5.2",
                 features = [
-                    "reuseport",
+                    "all",
                 ],
             ),
             "ssh2": crate.spec(

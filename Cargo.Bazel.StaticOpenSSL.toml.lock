@@ -2877,7 +2877,7 @@ dependencies = [
  "slog-scope",
  "slog-term",
  "slog_derive",
- "socket2 0.3.19",
+ "socket2 0.5.3",
  "ssh2",
  "static_assertions 0.3.4",
  "strum 0.24.1",
@@ -9034,17 +9034,6 @@ name = "smallvec"
 version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62bb4feee49fdd9f707ef802e22365a35de4b7b299de4763d44bfea899442ff9"
-
-[[package]]
-name = "socket2"
-version = "0.3.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "122e570113d28d773067fab24266b66753f6ea915758651696b6e35e49f88d6e"
-dependencies = [
- "cfg-if 1.0.0",
- "libc",
- "winapi 0.3.9",
-]
 
 [[package]]
 name = "socket2"

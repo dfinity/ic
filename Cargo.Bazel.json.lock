@@ -1,5 +1,5 @@
 {
-  "checksum": "b24ea76ca93842a3d6d54d0b6ab25a7117fe10c59be5e14140e36c3883f017bb",
+  "checksum": "db395d241bc86012e7a1a01d44011c241ceae750fc86550b064b7396d23861f8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14296,7 +14296,7 @@
               "target": "slog_term"
             },
             {
-              "id": "socket2 0.3.19",
+              "id": "socket2 0.5.3",
               "target": "socket2"
             },
             {
@@ -26317,71 +26317,7 @@
             "extra_traits",
             "std"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "align"
-            ],
-            "aarch64-apple-ios": [
-              "align"
-            ],
-            "aarch64-apple-ios-sim": [
-              "align"
-            ],
-            "aarch64-fuchsia": [
-              "align"
-            ],
-            "aarch64-linux-android": [
-              "align"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "align"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "align"
-            ],
-            "armv7-linux-androideabi": [
-              "align"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "align"
-            ],
-            "i686-apple-darwin": [
-              "align"
-            ],
-            "i686-linux-android": [
-              "align"
-            ],
-            "i686-unknown-freebsd": [
-              "align"
-            ],
-            "i686-unknown-linux-gnu": [
-              "align"
-            ],
-            "powerpc-unknown-linux-gnu": [
-              "align"
-            ],
-            "s390x-unknown-linux-gnu": [
-              "align"
-            ],
-            "x86_64-apple-darwin": [
-              "align"
-            ],
-            "x86_64-apple-ios": [
-              "align"
-            ],
-            "x86_64-fuchsia": [
-              "align"
-            ],
-            "x86_64-linux-android": [
-              "align"
-            ],
-            "x86_64-unknown-freebsd": [
-              "align"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "align"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -27486,27 +27422,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -27540,27 +27461,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.4.3"
@@ -46801,63 +46707,6 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "socket2 0.3.19": {
-      "name": "socket2",
-      "version": "0.3.19",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/socket2/0.3.19/download",
-          "sha256": "122e570113d28d773067fab24266b66753f6ea915758651696b6e35e49f88d6e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "socket2",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "socket2",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "reuseport"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [],
-          "selects": {
-            "cfg(unix)": [
-              {
-                "id": "cfg-if 1.0.0",
-                "target": "cfg_if"
-              },
-              {
-                "id": "libc 0.2.147",
-                "target": "libc"
-              }
-            ],
-            "cfg(windows)": [
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.3.19"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "socket2 0.4.9": {
       "name": "socket2",
       "version": "0.4.9",
@@ -46936,6 +46785,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": {
+          "common": [
+            "all"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [],
           "selects": {
