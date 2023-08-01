@@ -1340,16 +1340,19 @@ impl MetricsFetcher {
     }
 
     /// Fetch the metrics
-    pub async fn fetch(&self) -> reqwest::Result<BTreeMap<String, Vec<u64>>> {
+    pub async fn fetch<T>(&self) -> reqwest::Result<BTreeMap<String, Vec<T>>>
+    where
+        T: Copy + Debug + std::str::FromStr,
+    {
         // Fetch the metrics from the nodes in parallel and collect into a result
         let metrics = join_all(
             self.nodes
                 .iter()
-                .map(|node| Box::pin(self.fetch_from_node(node.get_ip_addr()))),
+                .map(|node| Box::pin(self.fetch_from_node::<T>(node.get_ip_addr()))),
         )
         .await
         .into_iter()
-        .collect::<Result<Vec<BTreeMap<String, u64>>, reqwest::Error>>()?;
+        .collect::<Result<Vec<BTreeMap<String, T>>, reqwest::Error>>()?;
 
         // Accumulate results into a single BTreeMap
         let mut results = BTreeMap::new();
@@ -1357,7 +1360,7 @@ impl MetricsFetcher {
             for (metric_name, val) in metric.into_iter() {
                 results
                     .entry(metric_name)
-                    .and_modify(|entry: &mut Vec<u64>| entry.push(val))
+                    .and_modify(|entry: &mut Vec<T>| entry.push(val))
                     .or_insert_with(|| vec![val]);
             }
         }
@@ -1366,7 +1369,10 @@ impl MetricsFetcher {
     }
 
     /// Fetch metrics from a single node
-    async fn fetch_from_node(&self, ip_addr: IpAddr) -> reqwest::Result<BTreeMap<String, u64>> {
+    async fn fetch_from_node<T>(&self, ip_addr: IpAddr) -> reqwest::Result<BTreeMap<String, T>>
+    where
+        T: Copy + Debug + std::str::FromStr,
+    {
         let ip_addr = match ip_addr {
             IpAddr::V4(_) => panic!("Ipv4 addresses not supported"),
             IpAddr::V6(ipv6_addr) => ipv6_addr,
@@ -1392,7 +1398,10 @@ impl MetricsFetcher {
                 let metric = line.split(' ').collect::<Vec<_>>();
                 assert_eq!(metric.len(), 2);
 
-                let val: u64 = metric[1].parse().expect("Failed to parse metric");
+                let val = match metric[1].parse::<T>() {
+                    Ok(val) => val,
+                    Err(_) => panic!("Failed to parse metric"),
+                };
                 result.insert(metric[0].to_string(), val);
             }
         }

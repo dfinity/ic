@@ -284,7 +284,7 @@ async fn scrape_metrics_and_check_cache_stats(env: &TestEnv, user_i: usize, call
     let mut count_fetching_metrics: usize = 0;
     let mut count_waiting_for_expected_values: usize = 0;
     loop {
-        match metrics.fetch().await {
+        match metrics.fetch::<u64>().await {
             Ok(val) => {
                 let num_cache_hits = val[HITS_STR][0];
                 let num_cache_misses = val[MISSES_STR][0];

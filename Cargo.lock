@@ -17316,6 +17316,7 @@ dependencies = [
  "cycles-minting-canister",
  "dfn_candid",
  "dfn_core",
+ "dfn_json",
  "dfn_protobuf",
  "flate2",
  "futures",
