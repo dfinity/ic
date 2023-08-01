@@ -1,10 +1,12 @@
 pub mod global_reboot_test;
 pub mod malicious_slices;
 pub mod rejoin_test;
+pub mod rejoin_test_large_state;
 pub mod xnet_slo_test;
 
 mod common {
     use canister_test::{Canister, Runtime, Wasm};
+    use chrono::Utc;
     use dfn_candid::candid;
     use futures::{future::join_all, Future};
     use slog::info;
@@ -86,6 +88,90 @@ mod common {
             }
         }
         join_all(futures.into_iter().map(|x| async { join_all(x).await })).await
+    }
+
+    pub async fn install_statesync_test_canisters(
+        env: TestEnv,
+        endpoint_runtime: &Runtime,
+        num_canisters: usize,
+    ) -> Vec<Canister> {
+        let logger = env.logger();
+        let wasm =
+            Wasm::from_file(env.get_dependency_path(
+                "rs/rust_canisters/statesync_test/statesync_test_canister.wasm",
+            ));
+        let mut futures: Vec<_> = Vec::new();
+        for canister_idx in 0..num_canisters {
+            let new_wasm = wasm.clone();
+            let new_logger = logger.clone();
+            futures.push(async move {
+                // Each canister is allocated with slightly more than 1GB of memory
+                // and the memory will later grow by the `expand_state` calls.
+                let canister = new_wasm
+                    .clone()
+                    .install(endpoint_runtime)
+                    .with_memory_allocation(1056 * 1024 * 1024)
+                    .bytes(Vec::new())
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!("Installation of the canister_idx={} failed.", canister_idx)
+                    });
+                info!(
+                    new_logger,
+                    "Installed canister (#{:?}) {}",
+                    canister_idx,
+                    canister.canister_id(),
+                );
+                canister
+            });
+        }
+        join_all(futures).await
+    }
+
+    pub async fn modify_canister_heap(
+        logger: slog::Logger,
+        canisters: Vec<Canister<'_>>,
+        size_level: usize,
+        num_canisters: usize,
+        skip_odd_indexed_canister: bool,
+        seed: usize,
+    ) {
+        for x in 1..=size_level {
+            info!(
+                logger,
+                "Start modifying canisters {} times, it is now {}",
+                x,
+                Utc::now()
+            );
+            for (i, canister) in canisters.iter().enumerate() {
+                if skip_odd_indexed_canister && i % 2 == 1 {
+                    continue;
+                }
+                let seed_for_canister = i + (x - 1) * num_canisters + seed;
+                // Each call will expand the memory by writing a chunk of 128 MiB.
+                // There are 8 chunks in the canister, so the memory will grow by 1 GiB after 8 calls.
+                let _res: Result<u8, String> = canister
+                    .update_(
+                        "expand_state",
+                        dfn_json::json,
+                        (x as u32, seed_for_canister as u32),
+                    )
+                    .await
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Calling expand_state() on canister {} failed: {}",
+                            canister.canister_id_vec8()[0],
+                            e
+                        )
+                    });
+            }
+            info!(
+                logger,
+                "Expanded canisters {} times, it is now {}",
+                x,
+                Utc::now()
+            );
+        }
     }
 
     /// Concurrently executes the `call` async closure for every item in `targets`,

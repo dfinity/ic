@@ -171,7 +171,7 @@ async fn fetch_metrics_and_assert(env: &TestEnv, subnet: SubnetSnapshot) {
         ],
     );
     for _ in 0..NUM_RETRIES {
-        match metrics.fetch().await {
+        match metrics.fetch::<u64>().await {
             Ok(result) => {
                 if !(result.contains_key(SIG_SUCC)
                     && result.contains_key(SIG_FAIL)

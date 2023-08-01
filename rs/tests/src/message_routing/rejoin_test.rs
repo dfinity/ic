@@ -17,29 +17,64 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer};
-use crate::util::{block_on, UniversalCanister};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
+};
+use crate::util::{block_on, MetricsFetcher, UniversalCanister};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
+use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::str::FromStr;
 use std::time::Duration;
 
-const ALLOWED_FAILURES: usize = 1;
-const NODES_COUNT: usize = 3 * ALLOWED_FAILURES + 1;
 const DKG_INTERVAL: u64 = 14;
 const NOTARY_DELAY: Duration = Duration::from_millis(100);
 
-pub fn config(env: TestEnv) {
+pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
+    "state_sync_duration_seconds_sum{status=\"ok\"}";
+pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
+    "state_sync_duration_seconds_count{status=\"ok\"}";
+#[derive(Debug, Clone)]
+pub struct Config {
+    nodes_count: usize,
+}
+
+impl Config {
+    pub fn new(nodes_count: usize) -> Config {
+        Config { nodes_count }
+    }
+
+    /// Builds the IC instance.
+    pub fn build(self) -> impl PotSetupFn {
+        move |env: TestEnv| setup(env, self)
+    }
+
+    /// Returns a test function based on this configuration.
+    pub fn test(self) -> impl SysTestFn {
+        move |env: TestEnv| test(env, self)
+    }
+}
+
+// Generic setup
+fn setup(env: TestEnv, config: Config) {
+    assert!(
+        config.nodes_count >= 4,
+        "at least 4 nodes are required for state sync"
+    );
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
-                .add_nodes(NODES_COUNT)
+                .add_nodes(config.nodes_count)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .with_initial_notary_delay(NOTARY_DELAY),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
             .nodes()
@@ -47,7 +82,11 @@ pub fn config(env: TestEnv) {
     });
 }
 
-pub fn test(env: TestEnv) {
+fn test(env: TestEnv, config: Config) {
+    block_on(test_async(env, config));
+}
+
+async fn test_async(env: TestEnv, config: Config) {
     let logger = env.logger();
     let mut nodes = env.topology_snapshot().root_subnet().nodes();
     let node = nodes.next().unwrap();
@@ -57,12 +96,18 @@ pub fn test(env: TestEnv) {
         "Installing universal canister on a node {} ...",
         node.get_public_url()
     );
-    let agent = node.with_default_agent(|agent| async move { agent });
-    let universal_canister = block_on(UniversalCanister::new_with_retries(
-        &agent,
-        node.effective_canister_id(),
+
+    let agent = node.build_default_agent_async().await;
+    let universal_canister =
+        UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger).await;
+
+    let res = fetch_metrics::<u64>(
         &logger,
-    ));
+        rejoin_node.clone(),
+        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
+    )
+    .await;
+    let base_count = res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0];
 
     info!(
         logger,
@@ -70,35 +115,101 @@ pub fn test(env: TestEnv) {
         rejoin_node.get_public_url()
     );
     rejoin_node.vm().kill();
+    rejoin_node
+        .await_status_is_unavailable()
+        .expect("Node still healthy");
 
     info!(logger, "Making some canister update calls ...");
     for i in 0..3 * DKG_INTERVAL {
-        store_and_read_stable(i.to_string().as_bytes(), &universal_canister);
+        store_and_read_stable(i.to_le_bytes().as_slice(), &universal_canister).await;
     }
 
-    info!(logger, "Killing {} nodes ...", ALLOWED_FAILURES);
-    for _ in 0..ALLOWED_FAILURES {
+    let allowed_failures = (config.nodes_count - 1) / 3;
+    info!(logger, "Killing {} nodes ...", allowed_failures);
+    for _ in 0..allowed_failures {
         let node = nodes.next().unwrap();
         info!(logger, "Killing node {} ...", node.get_public_url());
         node.vm().kill();
+        node.await_status_is_unavailable()
+            .expect("Node still healthy");
     }
 
-    info!(logger, "Starting the first killed node again...");
+    info!(logger, "Start the first killed node again...");
     rejoin_node.vm().start();
-
-    let delay: Duration = NOTARY_DELAY.mul_f64(5.0 * DKG_INTERVAL as f64);
-    info!(logger, "Sleeping for {:?} ...", delay);
-    std::thread::sleep(delay);
+    rejoin_node
+        .await_status_is_healthy()
+        .expect("Started node did not report healthy status");
 
     info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
-    store_and_read_stable(message, &universal_canister);
+    store_and_read_stable(message, &universal_canister).await;
+
+    info!(
+        logger,
+        "Checking for the state sync count metrics indicating that a successful state sync has happened"
+    );
+    let res = fetch_metrics::<u64>(
+        &logger,
+        rejoin_node.clone(),
+        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
+    )
+    .await;
+    assert!(res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count);
+
+    let res = fetch_metrics::<f64>(
+        &logger,
+        rejoin_node.clone(),
+        vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM],
+    )
+    .await;
+    info!(
+        logger,
+        "State sync finishes successfully in {} seconds",
+        res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
+    );
 }
 
-pub fn store_and_read_stable(message: &[u8], universal_canister: &UniversalCanister) {
-    block_on(universal_canister.store_to_stable(0, message));
+pub async fn store_and_read_stable(message: &[u8], universal_canister: &UniversalCanister<'_>) {
+    universal_canister.store_to_stable(0, message).await;
     assert_eq!(
-        block_on(universal_canister.try_read_stable(0, message.len() as u32)),
+        universal_canister
+            .try_read_stable(0, message.len() as u32)
+            .await,
         message.to_vec()
     );
+}
+
+pub async fn fetch_metrics<T>(
+    log: &slog::Logger,
+    node: IcNodeSnapshot,
+    labels: Vec<&str>,
+) -> BTreeMap<String, Vec<T>>
+where
+    T: Copy + Debug + FromStr,
+{
+    const NUM_RETRIES: u32 = 200;
+    const BACKOFF_TIME_MILLIS: u64 = 500;
+
+    let metrics = MetricsFetcher::new(
+        std::iter::once(node),
+        labels.iter().map(|&label| label.to_string()).collect(),
+    );
+    for _ in 0..NUM_RETRIES {
+        let metrics_result = metrics.fetch::<T>().await;
+        match metrics_result {
+            Ok(result) => {
+                if labels.iter().all(|&label| result.contains_key(label)) {
+                    info!(log, "Metrics successfully scraped {:?}.", result);
+                    return result;
+                } else {
+                    info!(log, "Metrics not available yet.");
+                }
+            }
+            Err(e) => {
+                info!(log, "Could not scrape metrics: {}.", e);
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
+    }
+    panic!("Couldn't obtain metrics after 200 attempts.");
 }

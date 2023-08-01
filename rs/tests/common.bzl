@@ -69,6 +69,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/test_utils",
     "//rs/rust_canisters/canister_test",
     "//rs/rust_canisters/dfn_candid",
+    "//rs/rust_canisters/dfn_json",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
@@ -353,6 +354,8 @@ CANISTER_HTTP_RUNTIME_DEPS = [
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
+
+STATESYNC_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/statesync_test:statesync_test_canister"]
 
 def _symlink_dir(ctx):
     dirname = ctx.attr.name

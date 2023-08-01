@@ -23,6 +23,7 @@ crossbeam-channel = "0.5.5"
 crossbeam-utils = "0.8.11"
 cycles-minting-canister = { path = "../nns/cmc" }
 dfn_candid = { path = "../rust_canisters/dfn_candid" }
+dfn_json = { path = "../rust_canisters/dfn_json" }
 dfn_protobuf = { path = "../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../rust_canisters/dfn_core" }
 flate2 = "1.0.22"
@@ -346,6 +347,10 @@ path = "consensus/orchestrator/node_registration_test.rs"
 [[bin]]
 name = "ic-systest-rejoin-test"
 path = "message_routing/rejoin_test.rs"
+
+[[bin]]
+name = "ic-systest-rejoin-test-large-state"
+path = "message_routing/rejoin_test_large_state.rs"
 
 [[bin]]
 name = "ic-systest-liveness-with-equivocation-test"
