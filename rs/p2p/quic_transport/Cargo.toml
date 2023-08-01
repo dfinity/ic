@@ -32,6 +32,7 @@ slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
+socket2 = { version = "0.5", features = ["all"] }
 tokio = { version = "1.15.0", features = ["full"] }
 tokio-metrics = "0.2.2"
 tokio-rustls = "0.24.0"

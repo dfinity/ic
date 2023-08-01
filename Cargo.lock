@@ -9334,6 +9334,7 @@ dependencies = [
  "quinn",
  "serde",
  "slog",
+ "socket2 0.5.3",
  "tokio",
  "tokio-metrics",
  "tokio-rustls 0.24.0",
@@ -11020,7 +11021,7 @@ dependencies = [
  "slog",
  "slog-scope",
  "slog-term",
- "socket2 0.3.19",
+ "socket2 0.5.3",
  "strum 0.23.0",
  "tempfile",
  "tokio",
@@ -11538,7 +11539,6 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "socket2 0.3.19",
  "threadpool",
  "tokio",
  "url",
@@ -11552,7 +11552,7 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-interfaces-registry",
  "ic-xnet-uri",
- "socket2 0.3.19",
+ "socket2 0.5.3",
  "tokio",
 ]
 
@@ -16759,17 +16759,6 @@ dependencies = [
  "walkdir",
  "wat",
  "xnet-test",
-]
-
-[[package]]
-name = "socket2"
-version = "0.3.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "122e570113d28d773067fab24266b66753f6ea915758651696b6e35e49f88d6e"
-dependencies = [
- "cfg-if 1.0.0",
- "libc",
- "winapi",
 ]
 
 [[package]]

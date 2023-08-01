@@ -288,10 +288,10 @@ fn tls_bind_with_connection_type(
 fn bind_tcp_socket_with_reuse(addr: &SocketAddr) -> Result<socket2::Socket, BoxError> {
     use socket2::{Domain, Protocol, SockAddr, Socket, Type};
     let domain = match addr {
-        SocketAddr::V4(_) => Domain::ipv4(),
-        SocketAddr::V6(_) => Domain::ipv6(),
+        SocketAddr::V4(_) => Domain::IPV4,
+        SocketAddr::V6(_) => Domain::IPV6,
     };
-    let socket = Socket::new(domain, Type::stream(), Some(Protocol::tcp()))?;
+    let socket = Socket::new(domain, Type::STREAM, Some(Protocol::TCP))?;
 
     #[cfg(all(unix, not(any(target_os = "solaris", target_os = "illumos"))))]
     {

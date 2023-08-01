@@ -57,6 +57,7 @@ use quinn::{
     AsyncUdpSocket, ConnectError, Connecting, Connection, ConnectionError, Endpoint,
     EndpointConfig, RecvStream, SendStream, VarInt,
 };
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     runtime::Handle,
@@ -225,7 +226,7 @@ pub fn start_connection_manager(
     // send_window: (8 * STREAM_RWND).into()
     transport_config.send_window(100_000_000);
     // Upper bound on receive memory consumption.
-    transport_config.receive_window(VarInt::from_u32(1_000_000_000));
+    transport_config.receive_window(VarInt::from_u32(200_000_000));
     transport_config.stream_receive_window(VarInt::from_u32(4_000_000));
     transport_config.max_concurrent_bidi_streams(VarInt::from_u32(10_000));
     let transport_config = Arc::new(transport_config);
@@ -235,12 +236,30 @@ pub fn start_connection_manager(
     // Start endpoint
     let endpoint = match socket {
         Either::Left(addr) => {
-            let socket = std::net::UdpSocket::bind(addr).expect("Failed to bind to UDP socket");
+            let socket2 = Socket::new(Domain::for_address(addr), Type::DGRAM, Some(Protocol::UDP))
+                .expect("Failed to create udp socket");
+
+            // Set socket send/recv buffer size. Setting these explicitly makes sure that a
+            // sufficently large value is used. Increasing these buffers can help with high packetloss.
+            // The value of 25MB isch chosen from experiments and the BDP product shown below to support
+            // around 2Gb/s.
+            // Bandwidth-Delay Product
+            // 2Gb/s * 100ms ~ 200M bits = 25MB
+            socket2
+                .set_recv_buffer_size(25_000_000)
+                .expect("Failed to set receive buffer size");
+            socket2
+                .set_send_buffer_size(25_000_000)
+                .expect("Failed to set send buffer size");
+            socket2
+                .bind(&SockAddr::from(addr))
+                .expect("Failed to bind to UDP socket");
+
             rt.block_on(async {
                 Endpoint::new(
                     endpoint_config,
                     Some(server_config),
-                    socket,
+                    socket2.into(),
                     Arc::new(quinn::TokioRuntime),
                 )
                 .expect("Failed to create endpoint")
