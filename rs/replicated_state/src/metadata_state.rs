@@ -800,7 +800,7 @@ impl SystemMetadata {
             return Ok(self);
         }
 
-        // This is subnet B: use `new_subnet_id` as its subnet ID.
+        // This is subnet B: use `subnet_id` as its subnet ID.
         let mut res = SystemMetadata::new(subnet_id, self.own_subnet_type);
 
         // Set the split marker to the original subnet ID (that of subnet A).
