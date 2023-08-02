@@ -599,6 +599,7 @@ impl ToProto for Transaction {
                 None => Operation::Transfer {
                     to: AccountIdentifier::from_proto(to)?,
                     from: AccountIdentifier::from_proto(from)?,
+                    spender: None,
                     amount: tokens_from_proto(amount),
                     fee: match max_fee {
                         Some(fee) => tokens_from_proto(fee),
@@ -609,10 +610,10 @@ impl ToProto for Transaction {
                     let spender = spender.ok_or_else(|| {
                         "Transfer from transaction: missing field `spender`".to_string()
                     })?;
-                    Operation::TransferFrom {
+                    Operation::Transfer {
                         from: AccountIdentifier::from_proto(from)?,
                         to: AccountIdentifier::from_proto(to)?,
-                        spender: AccountIdentifier::from_proto(spender)?,
+                        spender: Some(AccountIdentifier::from_proto(spender)?),
                         amount: tokens_from_proto(amount),
                         fee: match max_fee {
                             Some(fee) => tokens_from_proto(fee),
@@ -676,27 +677,17 @@ impl ToProto for Transaction {
                 amount,
                 from,
                 fee,
-            } => PTransfer::Send(protobuf::Send {
-                to: Some(to.into_proto()),
-                amount: Some(tokens_into_proto(amount)),
-                from: Some(from.into_proto()),
-                max_fee: Some(tokens_into_proto(fee)),
-                extension: None,
-            }),
-            Operation::TransferFrom {
-                from,
-                to,
-                amount,
-                fee,
                 spender,
             } => PTransfer::Send(protobuf::Send {
-                from: Some(from.into_proto()),
                 to: Some(to.into_proto()),
                 amount: Some(tokens_into_proto(amount)),
+                from: Some(from.into_proto()),
                 max_fee: Some(tokens_into_proto(fee)),
-                extension: Some(PExt::TransferFrom(protobuf::TransferFrom {
-                    spender: Some(spender.into_proto()),
-                })),
+                extension: spender.map(|spender| {
+                    PExt::TransferFrom(protobuf::TransferFrom {
+                        spender: Some(spender.into_proto()),
+                    })
+                }),
             }),
             Operation::Approve {
                 from,

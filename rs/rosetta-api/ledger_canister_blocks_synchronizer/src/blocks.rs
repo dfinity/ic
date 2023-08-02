@@ -120,12 +120,12 @@ mod database_access {
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
             Operation::Approve { .. } => todo!(),
-            Operation::TransferFrom { .. } => todo!(),
             Operation::Transfer {
                 from,
                 to,
                 amount,
                 fee,
+                ..
             } => {
                 let op_string: &str = operation_type.into();
                 let from_account = from.to_hex();
@@ -466,12 +466,6 @@ mod database_access {
                 }
             }
             Operation::Transfer {
-                from,
-                to,
-                amount,
-                fee,
-            }
-            | Operation::TransferFrom {
                 from,
                 to,
                 amount,

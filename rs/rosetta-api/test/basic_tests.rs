@@ -507,27 +507,21 @@ async fn verify_account_search(
             icp_ledger::Operation::Mint { to, .. } => {
                 index(to, hb.index);
             }
-            icp_ledger::Operation::Transfer { from, to, .. } => {
-                index(from, hb.index);
-                if from != to {
-                    index(to, hb.index);
-                }
-            }
-            icp_ledger::Operation::Approve { from, spender, .. } => {
-                assert_ne!(from, spender);
-                index(from, hb.index);
-                index(spender, hb.index);
-            }
-            icp_ledger::Operation::TransferFrom {
+            icp_ledger::Operation::Transfer {
                 from, to, spender, ..
             } => {
                 index(from, hb.index);
                 if from != to {
                     index(to, hb.index);
                 }
-                if spender != from && spender != to {
-                    index(spender, hb.index);
+                if spender.is_some() && spender.unwrap() != from && spender.unwrap() != to {
+                    index(spender.unwrap(), hb.index);
                 }
+            }
+            icp_ledger::Operation::Approve { from, spender, .. } => {
+                assert_ne!(from, spender);
+                index(from, hb.index);
+                index(spender, hb.index);
             }
         }
     }

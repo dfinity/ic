@@ -213,6 +213,7 @@ async fn send(
         Operation::Transfer {
             from,
             to,
+            spender: None,
             amount,
             fee,
         }
@@ -289,6 +290,7 @@ async fn icrc1_send(
             Operation::Transfer {
                 from,
                 to,
+                spender: None,
                 amount,
                 fee: expected_fee,
             },
@@ -433,6 +435,7 @@ pub async fn notify(
     let transfer = Operation::Transfer {
         from: expected_from,
         to: expected_to,
+        spender: None,
         amount: Tokens::ZERO,
         fee: max_fee,
     };

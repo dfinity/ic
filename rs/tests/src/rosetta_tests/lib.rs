@@ -340,12 +340,18 @@ where
         }
 
         match request.request.clone() {
-            Request::Transfer(Operation::Transfer { from, fee, .. }) => {
+            Request::Transfer(Operation::Transfer {
+                from, fee, spender, ..
+            }) => {
                 trans_fee_amount = Some(tokens_to_amount(fee, token_name).unwrap());
                 all_sender_account_ids.push(to_model_account_identifier(&from));
 
                 // just a sanity check
                 assert!(fee_found, "There should be a fee op in operations");
+
+                if spender.is_some() {
+                    panic!("TransferFrom operations are not supported here")
+                }
             }
             Request::Stake(Stake { account, .. })
             | Request::StartDissolve(StartDissolve { account, .. })
@@ -371,9 +377,6 @@ where
             }
             Request::Transfer(Operation::Approve { .. }) => {
                 panic!("Approve operations are not supported here")
-            }
-            Request::Transfer(Operation::TransferFrom { .. }) => {
-                panic!("TransferFrom operations are not supported here")
             }
         };
 
@@ -836,6 +839,7 @@ where
     let t = Operation::Transfer {
         from,
         to: dst,
+        spender: None,
         amount,
         fee: Tokens::ZERO,
     };

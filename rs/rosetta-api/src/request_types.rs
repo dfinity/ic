@@ -895,12 +895,6 @@ impl TransactionBuilder {
                 to,
                 amount,
                 fee,
-            }
-            | LedgerOperation::TransferFrom {
-                from,
-                to,
-                amount,
-                fee,
                 ..
             } => {
                 let amount = i128::from(amount.get_e8s());

@@ -84,6 +84,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc,
+                    spender: None,
                     amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -93,6 +94,7 @@ async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKe
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc,
                     to: neuron_account,
+                    spender: None,
                     amount: staked_amount,
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -185,6 +187,7 @@ async fn test_staking_failure(client: &RosettaApiClient) {
                 request: Request::Transfer(Operation::Transfer {
                     from: acc,
                     to: dst_acc,
+                    spender: None,
                     amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -194,6 +197,7 @@ async fn test_staking_failure(client: &RosettaApiClient) {
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc,
                     to: neuron_account,
+                    spender: None,
                     amount: staked_amount,
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -582,6 +586,7 @@ async fn test_staking_flow(
                 request: Request::Transfer(Operation::Transfer {
                     from: test_account,
                     to: dst_acc,
+                    spender: None,
                     amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -591,6 +596,7 @@ async fn test_staking_flow(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc,
                     to: neuron_account,
+                    spender: None,
                     amount: staked_amount,
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -684,6 +690,7 @@ async fn test_staking_flow_two_txns(
                 request: Request::Transfer(Operation::Transfer {
                     from: test_account,
                     to: dst_acc,
+                    spender: None,
                     amount: staked_amount.checked_add(&DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
                 }),
@@ -693,6 +700,7 @@ async fn test_staking_flow_two_txns(
                 request: Request::Transfer(Operation::Transfer {
                     from: dst_acc,
                     to: neuron_account,
+                    spender: None,
                     amount: staked_amount,
                     fee: DEFAULT_TRANSFER_FEE,
                 }),

@@ -98,7 +98,14 @@ impl Request {
                     neuron_index: *neuron_index,
                 })
             }
-            Request::Transfer(icp_ledger::Operation::Transfer { .. }) => Ok(RequestType::Send),
+            Request::Transfer(icp_ledger::Operation::Transfer { spender, .. }) => {
+                if spender.is_some() {
+                    return Err(ApiError::invalid_request(
+                        "TransferFrom operations are not supported through Rosetta",
+                    ));
+                }
+                Ok(RequestType::Send)
+            }
             Request::Transfer(icp_ledger::Operation::Burn { .. }) => Err(
                 ApiError::invalid_request("Burn operations are not supported through Rosetta"),
             ),
@@ -108,11 +115,6 @@ impl Request {
             Request::Transfer(icp_ledger::Operation::Approve { .. }) => Err(
                 ApiError::invalid_request("Approve operations are not supported through Rosetta"),
             ),
-            Request::Transfer(icp_ledger::Operation::TransferFrom { .. }) => {
-                Err(ApiError::invalid_request(
-                    "TransferFrom operations are not supported through Rosetta",
-                ))
-            }
             Request::Spawn(Spawn { neuron_index, .. }) => Ok(RequestType::Spawn {
                 neuron_index: *neuron_index,
             }),
@@ -246,6 +248,7 @@ impl TryFrom<&models::Request> for Request {
                 Ok(Request::Transfer(icp_ledger::Operation::Transfer {
                     from: account,
                     to,
+                    spender: None,
                     amount,
                     fee,
                 }))
