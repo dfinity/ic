@@ -144,7 +144,7 @@ def assert_commit_has_block_exception_comments_called(jira_lib_mock, commit_type
     )
 
 
-def test_get_open_finding_return_none_or_empty_dict_if_no_issue_found(jira_ds, jira_lib_mock):
+def test_get_finding_return_none_or_empty_dict_if_no_issue_found(jira_ds, jira_lib_mock):
     jira_lib_mock.search_issues.return_value = []
 
     res1 = jira_ds.get_open_finding("repo", "scanner", "dep_id", "dep_ver")
@@ -154,8 +154,12 @@ def test_get_open_finding_return_none_or_empty_dict_if_no_issue_found(jira_ds, j
     assert res2 == {}
     jira_lib_mock.search_issues.assert_called_once()
 
+    res3 = jira_ds.get_deleted_findings("repo", "scanner", "dep_id")
 
-def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
+    assert res3 == []
+
+
+def test_get_finding_return_issue(jira_ds, jira_lib_mock):
     user1 = Mock(["accountId"])
     user1.accountId = "user1"
     user2 = Mock(["accountId", "displayName", "emailAddress"])
@@ -247,6 +251,11 @@ def test_get_open_finding_return_issue(jira_ds, jira_lib_mock):
 
     jira_lib_mock.search_issues.assert_called_once()
 
+    res3 = jira_ds.get_deleted_findings("repo", "scanner", "https://crates.io/crates/chrono")
+
+    assert len(res3) == 1
+    assert res3[0] == res1
+
 
 def test_get_open_finding_raise_error_if_two_issues_with_same_id_returned(jira_ds, jira_lib_mock):
     user1 = Mock(["accountId"])
@@ -284,7 +293,7 @@ def test_get_open_finding_raise_error_if_two_issues_with_same_id_returned(jira_d
     jira_lib_mock.search_issues.assert_called()
 
 
-def test_get_open_finding_return_none_if_primary_key_of_finding_not_matching(jira_ds, jira_lib_mock):
+def test_get_finding_return_none_if_primary_key_of_finding_not_matching(jira_ds, jira_lib_mock):
     issue_data = {
         JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
@@ -318,8 +327,12 @@ def test_get_open_finding_return_none_if_primary_key_of_finding_not_matching(jir
     assert len(res2) == 1
     jira_lib_mock.search_issues.assert_called_once()
 
+    res3 = jira_ds.get_deleted_findings("repo", "scanner", "https://crates.io/crates/chrono2")
 
-def test_get_open_finding_raise_error_if_no_dependency_data_available(jira_ds, jira_lib_mock):
+    assert res3 == []
+
+
+def test_get_finding_raise_error_if_no_dependency_data_available(jira_ds, jira_lib_mock):
     issue_data = {
         JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0]: "repo",
         JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0]: "scanner",
@@ -334,6 +347,9 @@ def test_get_open_finding_raise_error_if_no_dependency_data_available(jira_ds, j
 
     with pytest.raises(RuntimeError, match=r"dependencies"):
         jira_ds.get_open_findings_for_repo_and_scanner("repo", "scanner")
+
+    with pytest.raises(RuntimeError, match=r"dependencies"):
+        jira_ds.get_deleted_findings("repo", "scanner", "https://crates.io/crates/chrono")
 
     jira_lib_mock.search_issues.assert_called()
 

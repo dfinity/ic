@@ -15,6 +15,8 @@ class FindingDataSource(metaclass=abc.ABCMeta):
             and callable(subclass.get_open_finding)
             and hasattr(subclass, "get_open_findings_for_repo_and_scanner")
             and callable(subclass.get_open_findings_for_repo_and_scanner)
+            and hasattr(subclass, "get_deleted_findings")
+            and callable(subclass.get_deleted_findings)
             and hasattr(subclass, "commit_has_block_exception")
             and callable(subclass.commit_has_block_exception)
             and hasattr(subclass, "create_or_update_open_finding")
@@ -38,7 +40,14 @@ class FindingDataSource(metaclass=abc.ABCMeta):
     def get_open_findings_for_repo_and_scanner(
         self, repository: str, scanner: str
     ) -> Dict[Tuple[str, str, str, str], Finding]:
-        """Get all open findings for the given (repository, scanner) combination, returned in a dict by finding id"""
+        """Get all open findings for the given (repository, scanner) combination, returned in a dict by finding id."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_deleted_findings(
+        self, repository: str, scanner: str, dependency_id: str
+    ) -> List[Finding]:
+        """Retrieve deleted findings with the given properties from data source, returns an empty list if no deleted findings exist or the data source doesn't support retrieval of deleted findings."""
         raise NotImplementedError
 
     @abc.abstractmethod
@@ -53,7 +62,7 @@ class FindingDataSource(metaclass=abc.ABCMeta):
 
     @abc.abstractmethod
     def delete_finding(self, finding: Finding):
-        """Deletes the given finding from the data source."""
+        """Deletes the given finding from the data source. The data source may choose to perform a soft-delete, so that deleted findings are still retrievable via get_deleted_findings()."""
         raise NotImplementedError
 
     @abc.abstractmethod

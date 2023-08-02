@@ -121,6 +121,7 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     # one finding, not present in JIRA
     jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {}
     jira_lib_mock.get_risk_assessor.return_value = [User("mickey", "Mickey Mouse")]
+    jira_lib_mock.get_deleted_findings.return_value = []
 
     sub1 = Mock()
     sub2 = Mock()
@@ -137,6 +138,7 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
     jira_lib_mock.get_open_finding.assert_not_called()
     jira_lib_mock.get_risk_assessor.assert_called_once()
+    jira_lib_mock.get_deleted_findings.assert_called_once()
 
     jira_lib_mock.create_or_update_open_finding.assert_called_once()
     jira_lib_mock.create_or_update_open_finding.assert_called_once_with(finding)
@@ -243,11 +245,18 @@ def test_on_periodic_job_set_risk_for_related_finding(jira_lib_mock):
     jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     # different version means the finding is related
     original_version = jira_finding.vulnerable_dependency.version
-    jira_finding.vulnerable_dependency.version = "another version"
+    jira_finding.vulnerable_dependency.version = "another version for open finding"
     assert original_version != jira_finding.vulnerable_dependency.version
     for vulnerability in jira_finding.vulnerabilities:
         vulnerability.risk_note = "medium"
     jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {jira_finding.id(): jira_finding}
+    # add another related finding that was already deleted
+    jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
+    jira_finding.vulnerable_dependency.version = "another version for deleted finding"
+    assert original_version != jira_finding.vulnerable_dependency.version
+    for vulnerability in jira_finding.vulnerabilities:
+        vulnerability.risk_note = "medium"
+    jira_lib_mock.get_deleted_findings.return_value = [jira_finding]
 
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [])
 
