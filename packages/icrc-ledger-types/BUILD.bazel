@@ -7,6 +7,7 @@ rust_library(
     srcs = glob(
         ["src/**"],
     ),
+    crate_features = ["experimental-api"],
     deps = [
         "@crate_index//:candid",
         "@crate_index//:ciborium",
