@@ -235,6 +235,7 @@ async fn test_wrong_key(ros: &RosettaApiClient, _logger: &Logger) {
     let t = Operation::Transfer {
         from: acc_a,
         to: acc_id(1051),
+        spender: None,
         amount: Tokens::from_e8s(100),
         fee: Tokens::from_e8s(TRANSFER_FEE),
     };

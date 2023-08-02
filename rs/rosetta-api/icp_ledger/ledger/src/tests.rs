@@ -123,6 +123,7 @@ fn balances_remove_accounts_with_zero_balance() {
             &Operation::Transfer {
                 from: canister,
                 to: target_canister,
+                spender: None,
                 amount: Tokens::from_e8s(400),
                 fee: Tokens::from_e8s(100),
             },
@@ -147,6 +148,7 @@ fn balances_remove_accounts_with_zero_balance() {
         &Operation::Transfer {
             from: target_canister,
             to: canister,
+            spender: None,
             amount: Tokens::from_e8s(0),
             fee: Tokens::from_e8s(100),
         },
@@ -219,6 +221,7 @@ fn balances_fee() {
         &Operation::Transfer {
             from: uid0,
             to: uid1,
+            spender: None,
             amount: Tokens::from_e8s(send_amount),
             fee: Tokens::from_e8s(send_fee),
         },
@@ -262,6 +265,7 @@ fn serialize() {
     let txn = Transaction::new(
         PrincipalId::new_user_test_id(0).into(),
         PrincipalId::new_user_test_id(1).into(),
+        None,
         Tokens::new(10000, 50).unwrap(),
         state.transfer_fee,
         Memo(456),
@@ -287,6 +291,7 @@ fn serialize() {
     let txn2 = Transaction::new(
         PrincipalId::new_user_test_id(0).into(),
         PrincipalId::new_user_test_id(200).into(),
+        None,
         Tokens::new(30000, 10000).unwrap(),
         state.transfer_fee,
         Memo(0),
@@ -598,6 +603,7 @@ fn get_blocks_returns_correct_blocks() {
         let txn = Transaction::new(
             PrincipalId::new_user_test_id(0).into(),
             PrincipalId::new_user_test_id(1).into(),
+            None,
             Tokens::new(1, 0).unwrap(),
             state.transfer_fee,
             Memo(i),
@@ -813,6 +819,7 @@ fn test_transaction_hash_consistency() {
     let mut transaction = Transaction::new(
         PrincipalId::new_user_test_id(0).into(),
         PrincipalId::new_user_test_id(1).into(),
+        None,
         Tokens::new(1, 0).unwrap(),
         DEFAULT_TRANSFER_FEE,
         Memo(123456),
@@ -821,18 +828,18 @@ fn test_transaction_hash_consistency() {
     let transaction_hash = transaction.hash();
     let hash_string = transaction_hash.to_string();
     assert_eq!(
-        hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
+        hash_string, "72f776f73db4e22797a8169b2180ac07adf7f38730f0d185bc8609dd551dd816",
         "Transaction hash must be stable."
     );
     transaction.icrc1_memo = Some(icrc_ledger_types::icrc1::transfer::Memo::default().0);
     let transaction_hash = transaction.hash();
     let hash_string = transaction_hash.to_string();
     assert_ne!(
-        hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
+        hash_string, "72f776f73db4e22797a8169b2180ac07adf7f38730f0d185bc8609dd551dd816",
         "ICRC1 Memo field is set, which should change the transaction hash."
     );
     assert_eq!(
-        hash_string, "646bf98eac33a37c4f018f13eeef7cf1826156ab69523ecbb51c25345340bbdb",
+        hash_string, "12cad19dc3b2c4fb84d70c0fe46644f60b7870e1536e5db25b84922814c74ae0",
         "Transaction hash must be stable."
     )
 }
@@ -918,10 +925,10 @@ fn test_approval_transfer_from() {
     assert_eq!(
         apply_operation(
             &mut ctx,
-            &Operation::TransferFrom {
+            &Operation::Transfer {
                 from,
                 to,
-                spender,
+                spender: Some(spender),
                 amount: tokens(100_000),
                 fee,
             },
@@ -951,10 +958,10 @@ fn test_approval_transfer_from() {
 
     apply_operation(
         &mut ctx,
-        &Operation::TransferFrom {
+        &Operation::Transfer {
             from,
             to,
-            spender,
+            spender: Some(spender),
             amount: tokens(100_000),
             fee,
         },
@@ -969,7 +976,7 @@ fn test_approval_transfer_from() {
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: tokens(50_000),
+            amount: tokens(40_000),
             expires_at: None
         },
     );
@@ -977,10 +984,10 @@ fn test_approval_transfer_from() {
     assert_eq!(
         apply_operation(
             &mut ctx,
-            &Operation::TransferFrom {
+            &Operation::Transfer {
                 from,
                 to,
-                spender,
+                spender: Some(spender),
                 amount: tokens(100_000),
                 fee,
             },
@@ -988,14 +995,14 @@ fn test_approval_transfer_from() {
         )
         .unwrap_err(),
         TxApplyError::InsufficientAllowance {
-            allowance: tokens(50_000)
+            allowance: tokens(40_000)
         }
     );
 
     assert_eq!(
         ctx.approvals().allowance(&from, &spender, now),
         Allowance {
-            amount: tokens(50_000),
+            amount: tokens(40_000),
             expires_at: None
         },
     );
@@ -1119,9 +1126,9 @@ fn test_self_transfer_from() {
 
     apply_operation(
         &mut ctx,
-        &Operation::TransferFrom {
+        &Operation::Transfer {
             from,
-            spender: from,
+            spender: Some(from),
             to,
             amount: tokens(20_000),
             fee: tokens(10_000),
@@ -1132,4 +1139,90 @@ fn test_self_transfer_from() {
 
     assert_eq!(ctx.balances().account_balance(&from), tokens(70_000));
     assert_eq!(ctx.balances().account_balance(&to), tokens(20_000));
+}
+
+#[test]
+fn test_approval_allowance_covers_fee() {
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+    let to = test_account_id(3);
+
+    let now = ts(1);
+
+    ctx.balances_mut().mint(&from, tokens(30_000)).unwrap();
+
+    let fee = tokens(10_000);
+
+    apply_operation(
+        &mut ctx,
+        &Operation::Approve {
+            from,
+            spender,
+            allowance: tokens(10_000),
+            expected_allowance: None,
+            expires_at: None,
+            fee,
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(
+        apply_operation(
+            &mut ctx,
+            &Operation::Transfer {
+                from,
+                to,
+                spender: Some(spender),
+                amount: tokens(10_000),
+                fee,
+            },
+            now,
+        )
+        .unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: tokens(10_000)
+        }
+    );
+
+    apply_operation(
+        &mut ctx,
+        &Operation::Approve {
+            from,
+            spender,
+            allowance: tokens(20_000),
+            expected_allowance: None,
+            expires_at: None,
+            fee: Tokens::ZERO,
+        },
+        now,
+    )
+    .unwrap();
+
+    apply_operation(
+        &mut ctx,
+        &Operation::Transfer {
+            from,
+            to,
+            spender: Some(spender),
+            amount: tokens(10_000),
+            fee,
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(0),
+            expires_at: None
+        },
+    );
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(0));
+    assert_eq!(ctx.balances().account_balance(&to), tokens(10_000));
+    assert_eq!(ctx.balances().account_balance(&spender), tokens(0));
 }

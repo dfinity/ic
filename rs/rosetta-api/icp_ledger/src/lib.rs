@@ -92,6 +92,7 @@ pub enum Operation {
     Transfer {
         from: AccountIdentifier,
         to: AccountIdentifier,
+        spender: Option<AccountIdentifier>,
         amount: Tokens,
         fee: Tokens,
     },
@@ -101,13 +102,6 @@ pub enum Operation {
         allowance: Tokens,
         expected_allowance: Option<Tokens>,
         expires_at: Option<TimeStamp>,
-        fee: Tokens,
-    },
-    TransferFrom {
-        from: AccountIdentifier,
-        to: AccountIdentifier,
-        spender: AccountIdentifier,
-        amount: Tokens,
         fee: Tokens,
     },
 }
@@ -121,14 +115,6 @@ where
     C: LedgerContext<AccountId = AccountIdentifier, Tokens = Tokens>,
 {
     match operation {
-        Operation::Transfer {
-            from,
-            to,
-            amount,
-            fee,
-        } => context
-            .balances_mut()
-            .transfer(from, to, *amount, *fee, None)?,
         Operation::Burn { from, amount, .. } => context.balances_mut().burn(from, *amount)?,
         Operation::Mint { to, amount, .. } => context.balances_mut().mint(to, *amount)?,
         Operation::Approve {
@@ -165,18 +151,20 @@ where
             }
         }
 
-        Operation::TransferFrom {
+        Operation::Transfer {
             from,
             to,
             spender,
             amount,
             fee,
         } => {
-            if from == spender {
+            if spender.is_none() || *from == spender.unwrap() {
+                // It is either a regular transfer or a self-transfer_from.
+
                 // NB. We bypass the allowance check if the account owner calls
                 // transfer_from.
 
-                // NB. We cannot reliably detect self-transfers at this level.
+                // NB. We cannot reliably detect self-transfer_from at this level.
                 // We need help from the transfer_from endpoint to populate
                 // [from] and [spender] with equal values if the spender is the
                 // account owner.
@@ -186,8 +174,14 @@ where
                 return Ok(());
             }
 
-            let allowance = context.approvals().allowance(from, spender, now);
-            if allowance.amount < *amount {
+            let allowance = context.approvals().allowance(from, &spender.unwrap(), now);
+            let used_allowance =
+                amount
+                    .checked_add(fee)
+                    .ok_or(TxApplyError::InsufficientAllowance {
+                        allowance: allowance.amount,
+                    })?;
+            if allowance.amount < used_allowance {
                 return Err(TxApplyError::InsufficientAllowance {
                     allowance: allowance.amount,
                 });
@@ -197,7 +191,7 @@ where
                 .transfer(from, to, *amount, *fee, None)?;
             context
                 .approvals_mut()
-                .use_allowance(from, spender, *amount, now)
+                .use_allowance(from, &spender.unwrap(), used_allowance, now)
                 .expect("bug: cannot use allowance");
         }
     };
@@ -273,6 +267,7 @@ impl Transaction {
     pub fn new(
         from: AccountIdentifier,
         to: AccountIdentifier,
+        spender: Option<AccountIdentifier>,
         amount: Tokens,
         fee: Tokens,
         memo: Memo,
@@ -281,6 +276,7 @@ impl Transaction {
         let operation = Operation::Transfer {
             from,
             to,
+            spender,
             amount,
             fee,
         };
@@ -803,6 +799,7 @@ pub enum CandidOperation {
     Transfer {
         from: AccountIdBlob,
         to: AccountIdBlob,
+        spender: Option<AccountIdBlob>,
         amount: Tokens,
         fee: Tokens,
     },
@@ -815,13 +812,6 @@ pub enum CandidOperation {
         expected_allowance: Option<Tokens>,
         fee: Tokens,
         expires_at: Option<TimeStamp>,
-    },
-    TransferFrom {
-        from: AccountIdBlob,
-        to: AccountIdBlob,
-        spender: AccountIdBlob,
-        amount: Tokens,
-        fee: Tokens,
     },
 }
 
@@ -839,11 +829,13 @@ impl From<Operation> for CandidOperation {
             Operation::Transfer {
                 from,
                 to,
+                spender,
                 amount,
                 fee,
             } => Self::Transfer {
                 from: from.to_address(),
                 to: to.to_address(),
+                spender: spender.map(|s| s.to_address()),
                 amount,
                 fee,
             },
@@ -862,19 +854,6 @@ impl From<Operation> for CandidOperation {
                 fee,
                 expires_at,
                 allowance,
-            },
-            Operation::TransferFrom {
-                from,
-                to,
-                spender,
-                amount,
-                fee,
-            } => Self::TransferFrom {
-                from: from.to_address(),
-                to: to.to_address(),
-                spender: spender.to_address(),
-                amount,
-                fee,
             },
         }
     }
@@ -899,14 +878,23 @@ impl TryFrom<CandidOperation> for Operation {
             CandidOperation::Transfer {
                 from,
                 to,
+                spender,
                 amount,
                 fee,
-            } => Operation::Transfer {
-                to: address_to_accountidentifier(to)?,
-                from: address_to_accountidentifier(from)?,
-                amount,
-                fee,
-            },
+            } => {
+                let spender = if spender.is_some() {
+                    Some(address_to_accountidentifier(spender.unwrap())?)
+                } else {
+                    None
+                };
+                Operation::Transfer {
+                    to: address_to_accountidentifier(to)?,
+                    from: address_to_accountidentifier(from)?,
+                    spender,
+                    amount,
+                    fee,
+                }
+            }
             CandidOperation::Approve {
                 from,
                 spender,
@@ -922,19 +910,6 @@ impl TryFrom<CandidOperation> for Operation {
                 expected_allowance,
                 fee,
                 expires_at,
-            },
-            CandidOperation::TransferFrom {
-                from,
-                to,
-                spender,
-                amount,
-                fee,
-            } => Operation::TransferFrom {
-                spender: address_to_accountidentifier(spender)?,
-                from: address_to_accountidentifier(from)?,
-                to: address_to_accountidentifier(to)?,
-                amount,
-                fee,
             },
         })
     }

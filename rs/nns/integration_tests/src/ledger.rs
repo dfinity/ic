@@ -41,6 +41,7 @@ fn example_block() -> Block {
     let transaction = Transaction::new(
         AccountIdentifier::new(CanisterId::from_u64(1).get(), None),
         AccountIdentifier::new(CanisterId::from_u64(2).get(), None),
+        None,
         Tokens::new(10000, 50).unwrap(),
         DEFAULT_TRANSFER_FEE,
         Memo(456),

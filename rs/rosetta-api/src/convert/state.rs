@@ -90,6 +90,7 @@ impl State {
         self.actions.push(Request::Transfer(Operation::Transfer {
             from,
             to,
+            spender: None,
             amount: cr_amount,
             fee: fee_amount,
         }));

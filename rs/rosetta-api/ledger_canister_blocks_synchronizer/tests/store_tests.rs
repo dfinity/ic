@@ -159,10 +159,6 @@ async fn store_account_balances_test() {
                 from_account = Some(from.to_hex());
                 to_account = Some(spender.to_hex());
             }
-            Operation::TransferFrom { from, to, .. } => {
-                from_account = Some(from.to_hex());
-                to_account = Some(to.to_hex());
-            }
         }
         if let Some(acc_str) = from_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();

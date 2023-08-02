@@ -169,6 +169,7 @@ impl Scribe {
             operation: Operation::Transfer {
                 from: src,
                 to: dst,
+                spender: None,
                 amount,
                 fee: DEFAULT_TRANSFER_FEE,
             },

@@ -391,6 +391,7 @@ fn test_get_account_identifier_transactions() {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
+                spender: None,
                 amount: Tokens::from_e8s(1_000_000u64),
                 fee: Tokens::from_e8s(10_000),
             },
@@ -405,6 +406,7 @@ fn test_get_account_identifier_transactions() {
             operation: Operation::Transfer {
                 to: account(2, 0).into(),
                 from: account(1, 0).into(),
+                spender: None,
                 amount: Tokens::from_e8s(2_000_000u64),
                 fee: Tokens::from_e8s(10_000),
             },
@@ -419,6 +421,7 @@ fn test_get_account_identifier_transactions() {
             operation: Operation::Transfer {
                 to: account(1, 1).into(),
                 from: account(2, 0).into(),
+                spender: None,
                 amount: Tokens::from_e8s(1_000_000u64),
                 fee: Tokens::from_e8s(10_000),
             },

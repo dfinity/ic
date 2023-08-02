@@ -52,7 +52,7 @@ prop_compose! {
         fee in 0..100_000u64,
     ) -> Operation {
         Operation::Transfer {
-            from, to, amount, fee: Tokens::from_e8s(fee)
+            from, to, amount, spender: None, fee: Tokens::from_e8s(fee)
         }
     }
 }
@@ -85,8 +85,8 @@ prop_compose! {
         amount in arb_tokens(),
         fee in 0..100_000u64,
     ) -> Operation {
-        Operation::TransferFrom {
-            from, to, spender, amount, fee: Tokens::from_e8s(fee)
+        Operation::Transfer {
+            from, to, spender: Some(spender), amount, fee: Tokens::from_e8s(fee)
         }
     }
 }

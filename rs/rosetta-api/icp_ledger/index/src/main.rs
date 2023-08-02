@@ -411,6 +411,7 @@ fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(),
             to,
             amount,
             fee,
+            ..
         } => {
             debit(block_index, from, amount.get_e8s() + fee.get_e8s());
             credit(block_index, to, amount.get_e8s())
