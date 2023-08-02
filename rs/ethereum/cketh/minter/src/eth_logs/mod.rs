@@ -166,8 +166,15 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
 /// - the remaining bytes are zero
 ///
 /// Any other encoding will return an error.
+/// Some specific valid [`Principal`]s are also not allowed
+/// since the decoded principal will be used to receive ckETH:
+/// * the management canister principal
+/// * the anonymous principal
+///
 /// This method MUST never panic (decode bytes from untrusted sources).
 fn parse_principal_from_slice(slice: &[u8]) -> Result<Principal, String> {
+    const ANONYMOUS_PRINCIPAL_BYTES: [u8; 1] = [4];
+
     if slice.is_empty() {
         return Err("slice too short".to_string());
     }
@@ -175,7 +182,10 @@ fn parse_principal_from_slice(slice: &[u8]) -> Result<Principal, String> {
         return Err(format!("Expected at most 32 bytes, got {}", slice.len()));
     }
     let num_bytes = slice[0] as usize;
-    if num_bytes == 0 || num_bytes > 29 {
+    if num_bytes == 0 {
+        return Err("management canister principal is not allowed".to_string());
+    }
+    if num_bytes > 29 {
         return Err(format!(
             "invalid number of bytes: expected a number in the range [1,29], got {num_bytes}",
         ));
@@ -189,6 +199,9 @@ fn parse_principal_from_slice(slice: &[u8]) -> Result<Principal, String> {
         .all(|trailing_zero| *trailing_zero == 0)
     {
         return Err("trailing non-zero bytes".to_string());
+    }
+    if principal_bytes == ANONYMOUS_PRINCIPAL_BYTES {
+        return Err("anonymous principal is not allowed".to_string());
     }
     Principal::try_from_slice(principal_bytes).map_err(|err| err.to_string())
 }
