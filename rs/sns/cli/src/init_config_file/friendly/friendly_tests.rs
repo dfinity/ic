@@ -159,7 +159,7 @@ fn test_parse() {
 
             confirmation_text: Some("Hello, world?".to_string()),
 
-            restricted_countries: vec!["US".to_string(), "CH".to_string()],
+            restricted_countries: Some(vec!["US".to_string(), "CH".to_string()]),
 
             vesting_schedule: VestingSchedule {
                 events: 83,
@@ -202,6 +202,31 @@ fn test_parse_no_start_time() {
         serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
 
     assert_eq!(observed_sns_configuration_file.swap.start_time, None);
+}
+
+#[test]
+fn test_parse_no_restricted_countries() {
+    let input_path = {
+        let mut result = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        result.push("example_sns_init_v2.yaml");
+        result
+    };
+
+    let contents = std::fs::read_to_string(input_path).unwrap();
+    // Remove lines containing "restricted_countries"
+    let contents = contents
+        .lines()
+        .filter(|line| !line.contains("restricted_countries"))
+        .collect::<Vec<&str>>()
+        .join("\n");
+
+    let observed_sns_configuration_file =
+        serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
+
+    assert_eq!(
+        observed_sns_configuration_file.swap.restricted_countries,
+        None
+    );
 }
 
 #[test]
