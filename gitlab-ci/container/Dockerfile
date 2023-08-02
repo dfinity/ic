@@ -33,6 +33,12 @@ RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/down
     tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
     chmod +x /usr/local/bin/dfx
 
+ARG mkcert_version=1.4.4
+ARG mkcert_sha=6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
+RUN curl -fsSL https://github.com/FiloSottile/mkcert/releases/download/v${mkcert_version}/mkcert-v${mkcert_version}-linux-amd64 -o /usr/local/bin/mkcert && \
+    echo "$mkcert_sha /usr/local/bin/mkcert" | sha256sum --check && \
+    chmod +x /usr/local/bin/mkcert
+
 ARG bazelisk_sha=8b739ac23a189b70d51a98041e90ba16f6559d5f991d83bbc031c740f8796310
 RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/bazelisk-linux-amd64 -o /usr/bin/bazel && \
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
