@@ -164,7 +164,7 @@ pub(crate) struct Swap {
     maximum_participant_icp: nervous_system_pb::Tokens,
 
     confirmation_text: Option<String>,
-    restricted_countries: Vec<String>,
+    restricted_countries: Option<Vec<String>>,
 
     #[serde(rename = "VestingSchedule")]
     vesting_schedule: VestingSchedule,
@@ -680,8 +680,10 @@ impl Swap {
         let minimum_participant_icp = Some(*minimum_participant_icp);
 
         let confirmation_text = confirmation_text.clone();
-        let restricted_countries = Some(nervous_system_pb::Countries {
-            iso_codes: restricted_countries.clone(),
+        let restricted_countries = restricted_countries.as_ref().map(|restricted_countries| {
+            nervous_system_pb::Countries {
+                iso_codes: restricted_countries.clone(),
+            }
         });
 
         let neuron_basket_construction_parameters =
