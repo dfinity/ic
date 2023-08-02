@@ -10,12 +10,14 @@ DEPENDENCIES = [
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
+    "//rs/protobuf",
     "//rs/registry/helpers",
     "//rs/registry/subnet_features",
     "//rs/replicated_state",
     "//rs/types/types",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:prometheus",
+    "@crate_index//:prost",
     "@crate_index//:slog",
     "@crate_index//:thiserror",
 ]
@@ -24,7 +26,6 @@ MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "//rs/interfaces/state_manager/mocks",
-    "//rs/protobuf",
     "//rs/interfaces/registry/mocks",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",

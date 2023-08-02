@@ -3,6 +3,7 @@ use ic_base_types::NumBytes;
 use ic_types::{
     batch::ValidationContext, consensus::BlockPayload, crypto::CryptoHashOf, Height, Time,
 };
+use prost::{bytes::BufMut, DecodeError, Message};
 
 /// A list of [`PastPayload`] will be passed to invocation of
 ///  [`BatchPayloadBuilder::build_payload`].
@@ -89,4 +90,42 @@ pub trait IntoMessages<M> {
     /// This function must be infallible if the corresponding [`BatchPayloadBuilder::validate_payload`]
     /// returns `Ok(())` on the same payload.
     fn into_messages(payload: &[u8]) -> M;
+}
+
+/// Given an iterator of [`Message`]s, this function will deserialize the messages
+/// into a byte vector.
+///
+/// The function is given a `max_size` limit, and guarantees that the buffer will be
+/// smaller or equal than the byte limit.
+/// It may drop messages from the iterator, if they don't fit.
+pub fn iterator_to_bytes<I, M>(iter: I, max_size: NumBytes) -> Vec<u8>
+where
+    M: Message,
+    I: Iterator<Item = M>,
+{
+    let mut buffer = vec![].limit(max_size.get() as usize);
+
+    for val in iter {
+        // NOTE: This call may fail due to the encoding hitting the
+        // byte limit. We continue trying the rest of the messages
+        // nonetheless, to give smaller messages a chance as well
+        let _ = val.encode_length_delimited(&mut buffer);
+    }
+
+    buffer.into_inner()
+}
+
+/// Parse a slice filled with protobuf encoded [`Message`]s into a vector
+pub fn slice_to_messages<M>(mut data: &[u8]) -> Result<Vec<M>, DecodeError>
+where
+    M: Message + Default,
+{
+    let mut msgs = vec![];
+
+    while !data.is_empty() {
+        let msg = M::decode_length_delimited(&mut data)?;
+        msgs.push(msg)
+    }
+
+    Ok(msgs)
 }

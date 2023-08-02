@@ -1,5 +1,6 @@
 use crate::validation::ValidationError;
 use ic_interfaces_state_manager::StateManagerError;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
     consensus::Payload,
@@ -12,6 +13,7 @@ use ic_types::{
 pub enum InvalidSelfValidatingPayload {
     Disabled,
     PayloadTooBig,
+    DecodeError(ProxyDecodeError),
 }
 
 /// A SelfValidatingPayload error from which it may be possible to recover.
