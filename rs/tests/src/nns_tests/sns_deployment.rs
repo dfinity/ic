@@ -32,6 +32,7 @@ use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
 
 use ic_sns_governance::pb::v1::governance::Mode;
+use ic_sns_swap::pb::v1::GetLifecycleResponse;
 use ic_sns_swap::pb::v1::{new_sale_ticket_response, DerivedState, GetStateResponse, Lifecycle};
 use ic_sns_swap::swap::principal_to_subaccount;
 use ic_types::Height;
@@ -662,6 +663,57 @@ pub fn initiate_token_swap(
     info!(
         log,
         "==== The SNS token swap has been initialized successfully in {:?} ====",
+        start_time.elapsed()
+    );
+}
+
+pub async fn wait_for_swap_to_start(env: TestEnv) {
+    let log: slog::Logger = env.logger();
+    let start_time = std::time::SystemTime::now();
+    let time_since_unix_epoch = start_time
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let sns_client = SnsClient::read_attribute(&env);
+    let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let canister_agent = app_node.build_canister_agent().await;
+
+    let get_lifecycle_request = sns_request_provider.get_lifecycle(CallMode::Update);
+    let lifecycle = canister_agent
+        .call_and_parse(&get_lifecycle_request)
+        .await
+        .result()
+        .unwrap();
+
+    let seconds_to_wait = lifecycle
+        .decentralization_sale_open_timestamp_seconds
+        .unwrap()
+        .saturating_sub(time_since_unix_epoch);
+
+    if seconds_to_wait > 60 {
+        panic!(
+            "The SNS token swap will not start for over a minute ({seconds_to_wait} seconds). \
+            Make sure that governance was compiled with the test feature enabled,
+            and that no start time was specified in the CreateServiceNervousSystem proposal.",
+        );
+    }
+
+    info!(
+        log,
+        "Waiting {} seconds for the swap to open", seconds_to_wait
+    );
+
+    sleep(Duration::from_secs(seconds_to_wait)).await;
+
+    sns_client
+        .assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap)
+        .await;
+
+    info!(
+        log,
+        "==== The SNS token swap has opened successfully in {:?} ====",
         start_time.elapsed()
     );
 }
@@ -1354,21 +1406,53 @@ pub async fn finalize_swap_and_check_success(
 
     info!(log, "Waiting for the swap to be finalized");
 
-    for _ in 0..120 {
-        let request = sns_request_provider.get_sns_governance_mode();
-        let get_mode_response = canister_agent
-            .call_and_parse(&request)
-            .await
-            .result()
-            .unwrap();
-        if get_mode_response.mode.and_then(Mode::from_i32).unwrap() == Mode::Normal {
+    for _ in 0..12 {
+        let GetLifecycleResponse {
+            lifecycle,
+            decentralization_sale_open_timestamp_seconds: _,
+        } = {
+            let request = sns_request_provider.get_lifecycle(CallMode::Update);
+            canister_agent
+                .call_and_parse(&request)
+                .await
+                .result()
+                .unwrap()
+        };
+        let lifecycle = lifecycle.and_then(Lifecycle::from_i32).unwrap();
+        assert_eq!(
+            lifecycle,
+            Lifecycle::Committed,
+            "The swap must be committed to finalize"
+        );
+
+        let auto_finalization_status = {
+            let request = sns_request_provider.get_auto_finalization_status(CallMode::Update);
+            canister_agent
+                .call_and_parse(&request)
+                .await
+                .result()
+                .unwrap()
+        };
+
+        if let Some(auto_finalize_swap_response) =
+            auto_finalization_status.auto_finalize_swap_response
+        {
             info!(
                 log,
-                "Governance mode is `Normal`, indicating that the swap is finalized."
+                "The swap has been finalized automatically. auto_finalize_swap_response: {:?}",
+                auto_finalize_swap_response
             );
+            assert_eq!(auto_finalize_swap_response.error_message, None);
             break;
+        } else if auto_finalization_status.has_auto_finalize_been_attempted() {
+            info!(log, "Automatic finalization in progress");
+        } else {
+            info!(
+                log,
+                "Automatic finalization has not been automatically attempted yet"
+            );
         }
-        sleep(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(10)).await;
     }
 
     // TODO(NNS1-2359): Verify the FinalizeSwapResponse from automatic finalization is correct.

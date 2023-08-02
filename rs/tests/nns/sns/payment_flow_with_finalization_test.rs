@@ -97,6 +97,7 @@ fn sns_setup_legacy(env: TestEnv) {
         true,
     );
 }
+
 /// Initiate the token swap with the parameters returned by
 /// [`create_service_nervous_system_proposal`] (rather than the default
 /// parameters)

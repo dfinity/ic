@@ -22,6 +22,7 @@ use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
+use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     create_service_nervous_system::SwapParameters, CreateServiceNervousSystem,
@@ -1606,7 +1607,7 @@ pub(crate) fn create_service_nervous_system_into_params(
             .ok_or("`neuron_basket_construction_parameters` should not be None")?
             .try_into()?;
 
-    let start_time = start_time.ok_or("`start_time` should not be None")?;
+    let start_time = start_time.unwrap_or_else(|| GlobalTimeOfDay::from_hh_mm(12, 0).unwrap()); // Just use a random start time if it's not
     let duration = duration.ok_or("`duration` should not be None")?;
     let (swap_start_timestamp_seconds, swap_due_timestamp_seconds) =
         CreateServiceNervousSystem::swap_start_and_due_timestamps(
