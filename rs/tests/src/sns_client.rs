@@ -13,7 +13,7 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
-use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image, Percentage, Tokens};
+use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_governance::pb::v1::create_service_nervous_system::governance_parameters::VotingRewardParameters;
@@ -198,7 +198,6 @@ impl SnsClient {
             wallet_canister_id,
             sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };
-        block_on(sns_client.assert_state(env, Lifecycle::Adopted, Mode::PreInitializationSwap));
         sns_client.write_attribute(env);
 
         info!(
@@ -350,7 +349,8 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
             }),
             confirmation_text: None,
             restricted_countries: None,
-            start_time: GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
+            // With a start time of None, NNS Governance in the test configuration should start the swap immediately.
+            start_time: None,
             duration: Some(Duration::from_secs(60 * 60 * 24 * 7)),
             neurons_fund_investment: Some(Tokens::from_tokens(100)),
         }),

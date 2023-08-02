@@ -15,7 +15,10 @@ use ic_sns_root::{
 };
 use ic_sns_swap::pb::v1::{
     FinalizeSwapRequest as FinalizeSwapReq, FinalizeSwapResponse,
+    GetAutoFinalizationStatusRequest as GetAutoFinalizationStatusReq,
+    GetAutoFinalizationStatusResponse as GetAutoFinalizationStatusRes,
     GetBuyerStateRequest as GetBuyerStateReq, GetBuyerStateResponse as GetBuyerStateRes,
+    GetLifecycleRequest as GetLifecycleReq, GetLifecycleResponse as GetLifecycleRes,
     GetOpenTicketRequest as GetOpenTicketReq, GetOpenTicketResponse as GetOpenTicketRes,
     GetStateRequest as GetStateReq, GetStateResponse as GetStateRes,
     NewSaleTicketRequest as NewSaleTicketReq, NewSaleTicketResponse as NewSaleTicketRes,
@@ -726,6 +729,66 @@ impl GetStateRequest {
 }
 
 #[derive(Clone, Debug)]
+pub struct GetLifecycleRequest {
+    mode: CallMode,
+    sale_canister: Principal,
+}
+
+impl Request<GetLifecycleRes> for GetLifecycleRequest {
+    fn mode(&self) -> CallMode {
+        self.mode.clone()
+    }
+    fn canister_id(&self) -> Principal {
+        self.sale_canister
+    }
+    fn method_name(&self) -> String {
+        "get_lifecycle".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&GetLifecycleReq {}).unwrap()
+    }
+}
+
+impl GetLifecycleRequest {
+    pub fn new(sale_canister: Principal, mode: CallMode) -> Self {
+        Self {
+            mode,
+            sale_canister,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GetAutoFinalizationStatusRequest {
+    mode: CallMode,
+    sale_canister: Principal,
+}
+
+impl Request<GetAutoFinalizationStatusRes> for GetAutoFinalizationStatusRequest {
+    fn mode(&self) -> CallMode {
+        self.mode.clone()
+    }
+    fn canister_id(&self) -> Principal {
+        self.sale_canister
+    }
+    fn method_name(&self) -> String {
+        "get_auto_finalization_status".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&GetAutoFinalizationStatusReq {}).unwrap()
+    }
+}
+
+impl GetAutoFinalizationStatusRequest {
+    pub fn new(sale_canister: Principal, mode: CallMode) -> Self {
+        Self {
+            mode,
+            sale_canister,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct GetSnsCanistersSummaryRequest {
     sns_root_canister: Principal,
 }
@@ -894,8 +957,24 @@ impl SnsRequestProvider {
         &self,
         mode: CallMode,
     ) -> impl Request<GetStateRes> + std::fmt::Debug + Clone + Sync + Send {
-        let sale_canister = self.sns_canisters.swap().get().into();
-        GetStateRequest::new(sale_canister, mode)
+        let swap_canister = self.sns_canisters.swap().get().into();
+        GetStateRequest::new(swap_canister, mode)
+    }
+
+    pub fn get_lifecycle(
+        &self,
+        mode: CallMode,
+    ) -> impl Request<GetLifecycleRes> + std::fmt::Debug + Clone + Sync + Send {
+        let swap_canister = self.sns_canisters.swap().get().into();
+        GetLifecycleRequest::new(swap_canister, mode)
+    }
+
+    pub fn get_auto_finalization_status(
+        &self,
+        mode: CallMode,
+    ) -> impl Request<GetAutoFinalizationStatusRes> + std::fmt::Debug + Clone + Sync + Send {
+        let swap_canister = self.sns_canisters.swap().get().into();
+        GetAutoFinalizationStatusRequest::new(swap_canister, mode)
     }
 
     pub fn list_neurons(
