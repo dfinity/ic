@@ -21,3 +21,6 @@ ciborium = "0.2.1"
 
 [dev-dependencies]
 hex = "0.4"
+
+[features]
+experimental-api = []
