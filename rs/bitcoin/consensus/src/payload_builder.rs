@@ -1,11 +1,22 @@
+#![allow(dead_code, unused_variables)]
+
+mod parse;
+#[cfg(test)]
+mod tests;
+
 use crate::metrics::BitcoinPayloadBuilderMetrics;
 use ic_btc_interface::Network;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
 };
-use ic_interfaces::self_validating_payload::{
-    InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
-    SelfValidatingPayloadValidationError, SelfValidatingTransientValidationError,
+use ic_interfaces::{
+    batch_payload::{BatchPayloadBuilder, PastPayload},
+    consensus::{PayloadPermanentError, PayloadValidationError},
+    self_validating_payload::{
+        InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
+        SelfValidatingPayloadValidationError, SelfValidatingTransientValidationError,
+    },
+    validation::ValidationError,
 };
 use ic_interfaces_adapter_client::{Options, RpcAdapterClient};
 use ic_interfaces_registry::RegistryClient;
@@ -295,5 +306,53 @@ fn bitcoin_requests_iter(
         )
 }
 
-#[cfg(test)]
-mod tests;
+impl BatchPayloadBuilder for BitcoinPayloadBuilder {
+    fn build_payload(
+        &self,
+        height: Height,
+        max_size: NumBytes,
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Vec<u8> {
+        let timer = Timer::start();
+
+        let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
+        let payload = match self.get_self_validating_payload_impl(context, delivered_ids, max_size)
+        {
+            Ok(payload) => payload,
+            Err(e) => {
+                log!(self.log, e.log_level(), "{}", e);
+                self.metrics
+                    .observe_build_duration(e.to_label_value(), timer);
+
+                return vec![];
+            }
+        };
+
+        parse::payload_to_bytes(&payload, max_size)
+    }
+
+    fn validate_payload(
+        &self,
+        height: Height,
+        payload: &[u8],
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Result<(), PayloadValidationError> {
+        if payload.is_empty() {
+            return Ok(());
+        }
+
+        let delivered_ids = parse::parse_past_payload_ids(past_payloads, &self.log);
+        let payload = parse::bytes_to_payload(payload).map_err(|e| {
+            ValidationError::Permanent(PayloadPermanentError::SelfValidatingPayloadValidationError(
+                InvalidSelfValidatingPayload::DecodeError(e),
+            ))
+        })?;
+
+        let _ = self.validate_self_validating_payload_impl(&payload, context)?;
+        Ok(())
+    }
+}
+
+// TODO: Into Messages

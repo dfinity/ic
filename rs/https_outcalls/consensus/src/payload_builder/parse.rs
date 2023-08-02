@@ -1,4 +1,4 @@
-use ic_interfaces::batch_payload::PastPayload;
+use ic_interfaces::batch_payload::{iterator_to_bytes, slice_to_messages, PastPayload};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     canister_http::v1 as canister_http_pb,
@@ -6,7 +6,6 @@ use ic_protobuf::{
     proxy::ProxyDecodeError,
 };
 use ic_types::{batch::CanisterHttpPayload, messages::CallbackId, NumBytes};
-use prost::{bytes::BufMut, DecodeError, Message};
 use std::collections::HashSet;
 
 pub(crate) fn bytes_to_payload(data: &[u8]) -> Result<CanisterHttpPayload, ProxyDecodeError> {
@@ -54,7 +53,7 @@ pub(crate) fn payload_to_bytes(payload: &CanisterHttpPayload, max_size: NumBytes
                     }),
             );
 
-    iterator_to_vec(message_iterator, max_size)
+    iterator_to_bytes(message_iterator, max_size)
 }
 
 pub(crate) fn parse_past_payload_ids(
@@ -94,35 +93,4 @@ fn get_id_from_message(message: CanisterHttpResponseMessage) -> Option<u64> {
         Some(MessageType::Timeout(id)) => Some(id),
         None => None,
     }
-}
-
-fn iterator_to_vec<I, M>(iter: I, max_size: NumBytes) -> Vec<u8>
-where
-    M: Message,
-    I: Iterator<Item = M>,
-{
-    let mut buffer = vec![].limit(max_size.get() as usize);
-
-    for val in iter {
-        // NOTE: This call may fail due to the encoding hitting the
-        // byte limit. We continue trying the rest of the messages
-        // nonetheless, to give smaller messages a chance as well
-        let _ = val.encode_length_delimited(&mut buffer);
-    }
-
-    buffer.into_inner()
-}
-
-fn slice_to_messages<M>(mut data: &[u8]) -> Result<Vec<M>, DecodeError>
-where
-    M: Message + Default,
-{
-    let mut msgs = vec![];
-
-    while !data.is_empty() {
-        let msg = M::decode_length_delimited(&mut data)?;
-        msgs.push(msg)
-    }
-
-    Ok(msgs)
 }
