@@ -53,3 +53,10 @@ pub struct ProcessedTransactions {
 pub struct EthTransaction {
     pub transaction_hash: String,
 }
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub enum TransactionStatus {
+    NotFound,
+    Pending,
+    Finalized,
+}

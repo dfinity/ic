@@ -3,11 +3,11 @@ use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::{
     DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice, EthTransaction,
-    MinterArg, ProcessedTransactions, ReceivedEthEvent,
+    MinterArg, ProcessedTransactions, ReceivedEthEvent, TransactionStatus,
 };
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
-use ic_cketh_minter::eth_rpc::JsonRpcResult;
 use ic_cketh_minter::eth_rpc::{into_nat, GasPrice, Hash, BLOCK_PI_RPC_PROVIDER_URL};
+use ic_cketh_minter::eth_rpc::{JsonRpcResult, Transaction};
 use ic_cketh_minter::state::mutate_state;
 use ic_cketh_minter::state::read_state;
 use ic_cketh_minter::state::State;
@@ -206,6 +206,31 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
     .await
     .expect("HTTP call failed");
     result
+}
+
+#[update]
+#[candid_method(update)]
+async fn test_get_transaction_by_hash(transaction_hash: String) -> TransactionStatus {
+    let transaction_hash = Hash::from_str(&transaction_hash)
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to parse transaction hash: {:?}", e)));
+    let transaction: Option<Transaction> = eth_rpc::call(
+        BLOCK_PI_RPC_PROVIDER_URL,
+        "eth_getTransactionByHash",
+        vec![transaction_hash],
+    )
+    .await
+    .expect("HTTP call failed")
+    .unwrap();
+    match transaction {
+        None => TransactionStatus::NotFound,
+        Some(transaction) => {
+            if transaction.is_confirmed() {
+                TransactionStatus::Finalized
+            } else {
+                TransactionStatus::Pending
+            }
+        }
+    }
 }
 
 /// Estimate price of EIP-1559 transaction based on the

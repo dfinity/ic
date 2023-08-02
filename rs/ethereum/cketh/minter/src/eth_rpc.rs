@@ -127,7 +127,7 @@ pub struct BlockResponse {
     pub hash: Data,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     /// The hash of the block containing the transaction.
@@ -136,7 +136,7 @@ pub struct Transaction {
 
     /// The number of the block containing the transaction.
     /// None if the transaction is pending.
-    pub block_number: Option<Quantity>,
+    pub block_number: Option<BlockNumber>,
 
     /// Gas provided by the sender.
     pub gas: Quantity,
@@ -166,6 +166,12 @@ pub struct Transaction {
 
     /// Value transferred in Wei.
     pub value: Quantity,
+}
+
+impl Transaction {
+    pub fn is_confirmed(&self) -> bool {
+        self.block_hash.is_some() && self.block_number.is_some() && self.transaction_index.is_some()
+    }
 }
 
 /// Block tags.

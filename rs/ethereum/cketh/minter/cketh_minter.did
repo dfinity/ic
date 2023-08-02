@@ -15,6 +15,7 @@ service : (MinterArg) -> {
     display_logs : (DisplayLogsRequest) -> (vec ReceivedEthEvent);
     minter_address : () -> (text);
     test_transfer : (nat64, nat64, text) -> (JsonRpcResult);
+    test_get_transaction_by_hash : (text) -> (variant { NotFound; Pending; Finalized });
     eip_1559_transaction_price: () -> (record {
         base_fee_from_last_finalized_block : nat;
         base_fee_of_next_finalized_block : nat;
