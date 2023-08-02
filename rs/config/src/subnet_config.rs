@@ -296,6 +296,9 @@ impl SchedulerConfig {
     }
 
     pub fn verified_application_subnet() -> Self {
+        // When the `install_code` instruction limit on application subnets is
+        // also increased to 300B, then this line can be removed.
+        let max_instructions_per_install_code = NumInstructions::from(300 * B);
         Self {
             scheduler_cores: NUMBER_OF_EXECUTION_THREADS,
             max_paused_executions: MAX_PAUSED_EXECUTIONS,
@@ -308,7 +311,7 @@ impl SchedulerConfig {
             instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
-            max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
+            max_instructions_per_install_code,
             max_instructions_per_install_code_slice: MAX_INSTRUCTIONS_PER_INSTALL_CODE_SLICE,
             max_heap_delta_per_iteration: MAX_HEAP_DELTA_PER_ITERATION,
             max_message_duration_before_warn_in_seconds:
