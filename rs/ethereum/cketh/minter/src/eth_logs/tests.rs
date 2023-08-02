@@ -142,6 +142,24 @@ mod parse_principal_from_slice {
     }
 
     #[test]
+    fn should_not_accept_management_canister_principal() {
+        let principal = Principal::management_canister();
+        let encoded_principal = to_bytes_with_size_prefix(&principal);
+        let parsed_principal = parse_principal_from_slice(&encoded_principal);
+
+        assert_matches!(parsed_principal, Err(err) if err.contains("management canister"));
+    }
+
+    #[test]
+    fn should_not_accept_anonymous_principal() {
+        let principal = Principal::anonymous();
+        let encoded_principal = to_bytes_with_size_prefix(&principal);
+        let parsed_principal = parse_principal_from_slice(&encoded_principal);
+
+        assert_matches!(parsed_principal, Err(err) if err.contains("anonymous principal"));
+    }
+
+    #[test]
     fn should_encode_to_and_decode_from_eth_hex_string() {
         let principal = Principal::from_str(PRINCIPAL).unwrap();
         let encoded_principal = format!(
