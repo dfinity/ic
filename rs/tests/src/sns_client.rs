@@ -254,7 +254,7 @@ impl SnsClient {
         info!(log, "Sending deploy_new_sns to SNS WASM canister");
         let init = SnsInitPayload::try_from(create_service_nervous_system_proposal)
             .expect("invalid init payload")
-            .strip_non_legacy_swap_parameters();
+            .strip_non_legacy_parameters();
         let res =
             block_on(deploy_new_sns_legacy(&wallet_canister, init)).expect("Deploy new SNS failed");
         info!(log, "Received {res:?}");
@@ -359,7 +359,7 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
             token_name: Some("MySnsToken".to_string()),
             token_symbol: Some("MST".to_string()),
             token_logo: Some(Image {
-                base64_encoding: Some("Base64-encoded PNG".to_string()),
+                base64_encoding: init.token_logo,
             }),
         }),
         governance_parameters: Some(GovernanceParameters {

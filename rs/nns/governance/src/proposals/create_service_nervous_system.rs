@@ -265,10 +265,12 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             transaction_fee,
             token_name,
             token_symbol,
-            token_logo: _, // Not used.
+            token_logo,
         } = ledger_parameters;
 
         let transaction_fee_e8s = transaction_fee.and_then(|tokens| tokens.e8s);
+
+        let token_logo = token_logo.and_then(|image| image.base64_encoding);
 
         let proposal_reject_cost_e8s = governance_parameters
             .proposal_rejection_fee
@@ -434,6 +436,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             neuron_basket_construction_parameters,
             confirmation_text,
             restricted_countries,
+            token_logo,
 
             // These are not known from only the CreateServiceNervousSystem
             // proposal. See TryFrom<ExecutedCreateServiceNervousSystemProposal>

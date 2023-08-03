@@ -185,6 +185,9 @@ pub struct SnsInitPayload {
     /// The Neurons' Fund participants of this SNS decentralization swap.
     #[prost(message, optional, tag = "35")]
     pub neurons_fund_participants: ::core::option::Option<NeuronsFundParticipants>,
+    /// The token_logo for the SNS project represented as a base64 encoded string.
+    #[prost(string, optional, tag = "36")]
+    pub token_logo: ::core::option::Option<::prost::alloc::string::String>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.

@@ -56,6 +56,7 @@ fn test_parse() {
             name: "Batman".to_string(),
             symbol: "BTM".to_string(),
             transaction_fee: nervous_system_pb::Tokens { e8s: Some(10_000) },
+            logo: PathBuf::from("test.png"),
         },
 
         proposals: Proposals {
@@ -233,7 +234,7 @@ fn test_parse_no_restricted_countries() {
 fn test_convert_to_create_service_nervous_system() {
     // Step 1: Prepare the world.
     let test_root_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let test_root_dir = std::path::Path::new(&test_root_dir);
+    let test_root_dir = Path::new(&test_root_dir);
 
     let contents = std::fs::read_to_string(test_root_dir.join("example_sns_init_v2.yaml")).unwrap();
     let sns_configuration_file = serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
@@ -348,15 +349,43 @@ fn test_convert_to_create_service_nervous_system() {
     );
 
     assert_eq!(
-        observed_create_service_nervous_system
-            .ledger_parameters
-            .unwrap(),
+        nns_governance_pb::LedgerParameters {
+            // We'll observe this field next
+            token_logo: None,
+            ..observed_create_service_nervous_system
+                .ledger_parameters
+                .clone()
+                .unwrap()
+        },
         nns_governance_pb::LedgerParameters {
             transaction_fee: Some(parse_tokens("10_000 e8s").unwrap()),
             token_name: Some("Batman".to_string()),
             token_symbol: Some("BTM".to_string()),
             token_logo: None,
         },
+    );
+
+    let observed_token_logo = observed_create_service_nervous_system
+        .ledger_parameters
+        .unwrap()
+        .token_logo
+        .unwrap()
+        .base64_encoding
+        .unwrap();
+    let decoded_observed_token_logo = base64::decode(
+        observed_token_logo
+            .strip_prefix("data:image/png;base64,")
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        // == is used instead of the usual assert_eq!, because when the observed
+        // value is not as expected, assert_eq! would produce a ton of spam, due
+        // to this being a large blob.
+        decoded_observed_token_logo == expected_logo_content,
+        "len(observed) == {} vs. len(expected) == {}",
+        decoded_observed_token_logo.len(),
+        expected_logo_content.len(),
     );
 
     assert_eq!(

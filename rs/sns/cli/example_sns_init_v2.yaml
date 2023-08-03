@@ -30,6 +30,7 @@ Token:
     name: Batman
     symbol: BTM
     transaction_fee: 10_000 e8s
+    logo: test.png
 
 Proposals:
     rejection_fee: 1 token

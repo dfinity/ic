@@ -36,11 +36,6 @@ use ic_nns_common::{
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::{
-    governance::GovernanceCachedMetricsChange, proposal::ActionDesc, BallotChange,
-    BallotInfoChange, GovernanceChange, NeuronChange, ProposalChange, ProposalDataChange,
-    TallyChange, WaitForQuietStateDesc,
-};
 use ic_nns_governance::{
     governance::{
         subaccount_from_slice, test_data::CREATE_SERVICE_NERVOUS_SYSTEM, validate_proposal_title,
@@ -54,7 +49,7 @@ use ic_nns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        governance::GovernanceCachedMetrics,
+        governance::{GovernanceCachedMetrics, GovernanceCachedMetricsChange},
         governance_error::ErrorType::{
             self, InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
         },
@@ -70,21 +65,23 @@ use ic_nns_governance::{
         },
         manage_neuron_response::{self, Command as CommandResponse, MergeMaturityResponse},
         neuron::{self, DissolveState, Followees},
-        proposal::{self, Action},
+        proposal::{self, Action, ActionDesc},
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         settle_community_fund_participation,
         settle_community_fund_participation::Committed,
         swap_background_information, AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot,
-        BallotInfo, CreateServiceNervousSystem, DerivedProposalInformation, Empty,
-        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, KnownNeuron,
-        KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics,
-        Neuron, NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
+        BallotChange, BallotInfo, BallotInfoChange, CreateServiceNervousSystem,
+        DerivedProposalInformation, Empty, ExecuteNnsFunction, Governance as GovernanceProto,
+        GovernanceChange, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
+        ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronChange, NeuronState,
+        NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalChange, ProposalData,
+        ProposalDataChange,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
-        SettleCommunityFundParticipation, SwapBackgroundInformation, Tally, Topic,
-        UpdateNodeProvider, Vote, WaitForQuietState,
+        SettleCommunityFundParticipation, SwapBackgroundInformation, Tally, TallyChange, Topic,
+        UpdateNodeProvider, Vote, WaitForQuietState, WaitForQuietStateDesc,
     },
     proposals::create_service_nervous_system::ExecutedCreateServiceNervousSystemProposal,
 };

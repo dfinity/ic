@@ -1076,7 +1076,7 @@ mod settle_community_fund_participation_tests {
 mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::sns_init_payload;
-    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1};
+    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1, IMAGE_2};
 
     use super::*;
 
@@ -1143,6 +1143,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 transaction_fee_e8s: unwrap_tokens_e8s(&original_ledger_parameters.transaction_fee),
                 token_name: Some(original_ledger_parameters.clone().token_name.unwrap()),
                 token_symbol: Some(original_ledger_parameters.clone().token_symbol.unwrap()),
+                token_logo: Some(IMAGE_2.to_string()),
 
                 proposal_reject_cost_e8s: unwrap_tokens_e8s(
                     &original_governance_parameters.proposal_rejection_fee
@@ -1358,7 +1359,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
     use ic_nervous_system_proto::pb::v1 as pb;
     use ic_sns_init::pb::v1::{sns_init_payload, NeuronsFundParticipants};
     use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
-    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1};
+    use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1, IMAGE_2};
 
     use super::*;
 
@@ -1459,6 +1460,7 @@ mod convert_from_executed_create_service_nervous_system_proposal_to_sns_init_pay
                 transaction_fee_e8s: unwrap_tokens_e8s(&original_ledger_parameters.transaction_fee),
                 token_name: Some(original_ledger_parameters.clone().token_name.unwrap()),
                 token_symbol: Some(original_ledger_parameters.clone().token_symbol.unwrap()),
+                token_logo: Some(IMAGE_2.to_string()),
 
                 proposal_reject_cost_e8s: unwrap_tokens_e8s(
                     &original_governance_parameters.proposal_rejection_fee
