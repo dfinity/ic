@@ -1,7 +1,8 @@
 use candid::Decode;
 use dfn_core::{api, CanisterId};
 use dfn_macro::update;
-use ic_ic00_types::{CanisterIdRecord, Payload};
+use futures::future::join_all;
+use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, Payload};
 
 /// The amount of cycles that each created canister gets.
 const INITIAL_CYCLES_BALANCE: u64 = 1_000_000_000_000;
@@ -17,24 +18,24 @@ async fn create_canisters_in_batch(
 ) -> Result<Vec<CanisterId>, (Option<i32>, String)> {
     let mut futures = vec![];
     for _ in 0..number_of_canisters {
-        let result = dfn_core::api::call_bytes(
+        let result = api::call_bytes(
             CanisterId::ic_00(),
             "create_canister",
             &ic_ic00_types::CreateCanisterArgs {
                 settings: Some(
                     ic_ic00_types::CanisterSettingsArgsBuilder::new()
-                        .with_controllers(vec![dfn_core::api::id().get()])
+                        .with_controllers(vec![api::id().get()])
                         .build(),
                 ),
-                sender_canister_version: Some(dfn_core::api::canister_version()),
+                sender_canister_version: Some(api::canister_version()),
             }
             .encode(),
-            dfn_core::api::Funds::new(INITIAL_CYCLES_BALANCE),
+            api::Funds::new(INITIAL_CYCLES_BALANCE),
         );
         futures.push(result);
     }
 
-    let canisters = futures::future::join_all(futures).await;
+    let canisters = join_all(futures).await;
     canisters
         .into_iter()
         .map(|result| {
@@ -51,6 +52,44 @@ async fn create_canisters(number_of_canisters: usize) {
         let batch = CANISTERS_PER_BATCH.min(remaining_canisters);
         if let Err((_, err)) = create_canisters_in_batch(batch).await {
             api::print(format!("Failed to create a canister: {}", err));
+        }
+        remaining_canisters -= batch;
+    }
+}
+
+/// Installs the given number of canisters with provided wasm module and arg.
+/// This is useful for testing many management canister calls within one round,
+/// while regular universal_canister does only one management canister call per round.
+#[update]
+async fn install_canisters(number_of_canisters: usize, wasm_module: Vec<u8>, arg: Vec<u8>) {
+    let mut remaining_canisters = number_of_canisters;
+    while remaining_canisters > 0 {
+        let batch = CANISTERS_PER_BATCH.min(remaining_canisters);
+        let result = create_canisters_in_batch(batch).await;
+        match result {
+            Err((_, err)) => api::print(format!("Failed to create a canister: {}", err)),
+            Ok(canister_ids) => {
+                let mut futures = vec![];
+                for canister_id in canister_ids {
+                    let result = api::call_bytes(
+                        CanisterId::ic_00(),
+                        "install_code",
+                        &ic_ic00_types::InstallCodeArgs::new(
+                            CanisterInstallMode::Install,
+                            canister_id,
+                            wasm_module.clone(),
+                            arg.clone(),
+                            None,
+                            None,
+                            None,
+                        )
+                        .encode(),
+                        api::Funds::new(INITIAL_CYCLES_BALANCE),
+                    );
+                    futures.push(result);
+                }
+                let _canisters = join_all(futures).await;
+            }
         }
         remaining_canisters -= batch;
     }

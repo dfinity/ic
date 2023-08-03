@@ -1614,6 +1614,7 @@ dependencies = [
  "ic-types",
  "serde",
  "serde_json",
+ "wat",
 ]
 
 [[package]]
