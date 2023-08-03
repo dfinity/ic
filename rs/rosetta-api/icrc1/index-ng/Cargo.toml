@@ -21,6 +21,7 @@ ic-cdk-timers = { workspace = true }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-icrc1 = { path = "../" }
 ic-icrc1-tokens-u64 = { path = "../tokens_u64" }
+ic-icrc1-tokens-u256 = { path = "../tokens_u256", optional = true }
 ic-ledger-core = { path = "../../ledger_core" }
 ic-metrics-encoder = "1.1"
 ic-stable-structures = { workspace = true }
@@ -41,3 +42,7 @@ ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 proptest = "1.0"
 serde_bytes = "0.11"
 serde_json = "1.0.40"
+
+[features]
+default = []
+u256-tokens = ["dep:ic-icrc1-tokens-u256"]

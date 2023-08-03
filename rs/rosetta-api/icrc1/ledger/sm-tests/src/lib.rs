@@ -3,7 +3,6 @@ use ic_base_types::PrincipalId;
 use ic_error_types::UserError;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_icrc1_ledger::FeatureFlags;
-use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType};
 use ic_ledger_hash_of::HashOf;
@@ -23,7 +22,6 @@ use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::transactions::TransactionRange;
 use icrc_ledger_types::icrc3::transactions::Transfer;
-
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
@@ -57,6 +55,12 @@ pub const INT_META_KEY: &str = "test:int";
 pub const INT_META_VALUE: i128 = i128::MIN;
 
 const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_nanos() as u64;
+
+#[cfg(not(feature = "u256-tokens"))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct InitArgs {
@@ -450,8 +454,8 @@ pub fn get_allowance(
     .expect("failed to decode allowance response")
 }
 
-fn arb_amount() -> impl Strategy<Value = U64> {
-    any::<u64>().prop_map(U64::new)
+fn arb_amount() -> impl Strategy<Value = Tokens> {
+    any::<u64>().prop_map(|n| Tokens::try_from(Nat::from(n)).unwrap())
 }
 
 fn arb_account() -> impl Strategy<Value = Account> {
@@ -468,7 +472,7 @@ fn arb_account() -> impl Strategy<Value = Account> {
         })
 }
 
-fn arb_transfer() -> impl Strategy<Value = Operation<U64>> {
+fn arb_transfer() -> impl Strategy<Value = Operation<Tokens>> {
     (
         arb_account(),
         arb_account(),
@@ -484,11 +488,11 @@ fn arb_transfer() -> impl Strategy<Value = Operation<U64>> {
         })
 }
 
-fn arb_mint() -> impl Strategy<Value = Operation<U64>> {
+fn arb_mint() -> impl Strategy<Value = Operation<Tokens>> {
     (arb_account(), arb_amount()).prop_map(|(to, amount)| Operation::Mint { to, amount })
 }
 
-fn arb_burn() -> impl Strategy<Value = Operation<U64>> {
+fn arb_burn() -> impl Strategy<Value = Operation<Tokens>> {
     (arb_account(), arb_amount()).prop_map(|(from, amount)| Operation::Burn {
         from,
         spender: None,
@@ -496,11 +500,11 @@ fn arb_burn() -> impl Strategy<Value = Operation<U64>> {
     })
 }
 
-fn arb_operation() -> impl Strategy<Value = Operation<U64>> {
+fn arb_operation() -> impl Strategy<Value = Operation<Tokens>> {
     prop_oneof![arb_transfer(), arb_mint(), arb_burn()]
 }
 
-fn arb_transaction() -> impl Strategy<Value = Transaction<U64>> {
+fn arb_transaction() -> impl Strategy<Value = Transaction<Tokens>> {
     (
         arb_operation(),
         any::<Option<u64>>(),
@@ -513,7 +517,7 @@ fn arb_transaction() -> impl Strategy<Value = Transaction<U64>> {
         })
 }
 
-fn arb_block() -> impl Strategy<Value = Block<U64>> {
+fn arb_block() -> impl Strategy<Value = Block<Tokens>> {
     (
         any::<Option<[u8; 32]>>(),
         arb_transaction(),
@@ -1385,8 +1389,8 @@ pub fn block_hashes_are_unique() {
         .run(&(arb_block(), arb_block()), |(lhs, rhs)| {
             prop_assume!(lhs != rhs);
 
-            let lhs_hash = Block::<U64>::block_hash(&lhs.encode());
-            let rhs_hash = Block::<U64>::block_hash(&rhs.encode());
+            let lhs_hash = Block::<Tokens>::block_hash(&lhs.encode());
+            let rhs_hash = Block::<Tokens>::block_hash(&rhs.encode());
 
             prop_assert_ne!(lhs_hash, rhs_hash);
             Ok(())
@@ -1400,9 +1404,9 @@ pub fn block_hashes_are_stable() {
     runner
         .run(&arb_block(), |block| {
             let encoded_block = block.encode();
-            let hash1 = Block::<U64>::block_hash(&encoded_block);
-            let decoded = Block::<U64>::decode(encoded_block).unwrap();
-            let hash2 = Block::<U64>::block_hash(&decoded.encode());
+            let hash1 = Block::<Tokens>::block_hash(&encoded_block);
+            let decoded = Block::<Tokens>::decode(encoded_block).unwrap();
+            let hash2 = Block::<Tokens>::block_hash(&decoded.encode());
             prop_assert_eq!(hash1, hash2);
             Ok(())
         })
@@ -1915,32 +1919,32 @@ pub fn icrc1_test_block_transformation<T>(
     {
         assert_eq!(block_pre_upgrade, block_post_upgrade);
         assert_eq!(
-            Block::<U64>::try_from(block_pre_upgrade.clone()).unwrap(),
-            Block::<U64>::try_from(block_post_upgrade.clone()).unwrap()
+            Block::<Tokens>::try_from(block_pre_upgrade.clone()).unwrap(),
+            Block::<Tokens>::try_from(block_post_upgrade.clone()).unwrap()
         );
         assert_eq!(
-            Block::<U64>::try_from(block_pre_upgrade.clone())
+            Block::<Tokens>::try_from(block_pre_upgrade.clone())
                 .unwrap()
                 .encode(),
-            Block::<U64>::try_from(block_post_upgrade.clone())
+            Block::<Tokens>::try_from(block_post_upgrade.clone())
                 .unwrap()
                 .encode()
         );
         assert_eq!(
-            Block::<U64>::block_hash(
-                &Block::<U64>::try_from(block_pre_upgrade.clone())
+            Block::<Tokens>::block_hash(
+                &Block::<Tokens>::try_from(block_pre_upgrade.clone())
                     .unwrap()
                     .encode()
             ),
-            Block::<U64>::block_hash(
-                &Block::<U64>::try_from(block_post_upgrade.clone())
+            Block::<Tokens>::block_hash(
+                &Block::<Tokens>::try_from(block_post_upgrade.clone())
                     .unwrap()
                     .encode()
             )
         );
         assert_eq!(
-            Transaction::<U64>::try_from(block_pre_upgrade.clone()).unwrap(),
-            Transaction::<U64>::try_from(block_post_upgrade.clone()).unwrap()
+            Transaction::<Tokens>::try_from(block_pre_upgrade.clone()).unwrap(),
+            Transaction::<Tokens>::try_from(block_post_upgrade.clone()).unwrap()
         );
     }
 }
@@ -2238,13 +2242,12 @@ where
 
     let default_expiration = Some(system_time_to_nanos(env.time()) + DEFAULT_APPROVAL_EXPIRATION);
 
-    // Approve more than u64::MAX tokens - approval capped at u64::MAX.
-    approve_args.amount = Nat::from(u128::MAX);
+    approve_args.amount = Nat::from(Tokens::MAX) * 2;
     let block_index =
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
-    assert_eq!(allowance.allowance.0.to_u64().unwrap(), u64::MAX);
+    assert_eq!(allowance.allowance, Nat::from(Tokens::MAX));
     assert_eq!(allowance.expires_at, default_expiration);
     assert_eq!(balance_of(&env, canister_id, from.0), 90_000);
     assert_eq!(balance_of(&env, canister_id, spender.0), 0);
