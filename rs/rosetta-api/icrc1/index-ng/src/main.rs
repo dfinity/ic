@@ -54,7 +54,11 @@ const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
 const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
 
+#[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;

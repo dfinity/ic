@@ -261,6 +261,7 @@ fn test_approval_trimming() {
     ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
 }
 
+#[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_block_transformation() {
     fn encode_legacy_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LegacyLedgerArgument {
@@ -345,6 +346,7 @@ fn balance_of(env: &StateMachine, ledger_id: CanisterId, account: Account) -> u6
     Decode!(&res, Nat).unwrap().0.to_u64().unwrap()
 }
 
+#[cfg_attr(feature = "u256-tokens", ignore)]
 #[test]
 fn test_upgrade_from_first_version() {
     let env = StateMachine::new();

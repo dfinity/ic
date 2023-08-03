@@ -16,7 +16,9 @@ CANISTERS = {
     "ic-ckbtc-kyt.wasm": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-icrc1-index.wasm": "//rs/rosetta-api/icrc1/index:index_canister",
     "ic-icrc1-index-ng.wasm": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister",
+    "ic-icrc1-index-ng-u256.wasm": "//rs/rosetta-api/icrc1/index-ng:index_ng_canister_u256",
     "ic-icrc1-ledger.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "ic-icrc1-ledger-u256.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256",
     "ic-nervous-system-common-test-canister.wasm": "//rs/nervous_system/common/test_canister",
     "identity-canister.wasm": "//rs/nns/identity:identity-canister",
     "inter_canister_error_handling.wasm": "//rs/rust_canisters/tests:inter_canister_error_handling",
@@ -101,6 +103,7 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
 COMPRESSED_CANISTERS = {
     "ic-btc-canister.wasm.gz": "@btc_canister//file",
     "ic-icrc1-archive.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
+    "ic-icrc1-archive-u256.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister_u256.wasm.gz",
     "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
 }
 

@@ -9,7 +9,6 @@ use ic_icrc1::{
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{Ledger, LedgerArgument};
-use ic_icrc1_tokens_u64::U64;
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
     TransferError as CoreTransferError,
@@ -43,7 +42,11 @@ use std::time::Duration;
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
 const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_nanos() as u64;
 
-type Tokens = U64;
+#[cfg(not(feature = "u256-tokens"))]
+type Tokens = ic_icrc1_tokens_u64::U64;
+
+#[cfg(feature = "u256-tokens")]
+type Tokens = ic_icrc1_tokens_u256::U256;
 
 thread_local! {
     static LEDGER: RefCell<Option<Ledger<Tokens>>> = RefCell::new(None);
