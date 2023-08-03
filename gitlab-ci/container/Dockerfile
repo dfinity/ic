@@ -26,8 +26,8 @@ RUN curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /
     apt -yq update && \
     apt -yqq install --no-install-recommends docker-ce-cli podman buildah
 
-ARG sdk_version=0.14.1
-ARG sdk_sha=52b7b07605a015cda8b01f87574cdcdcb4e79466953484445128b3ecc44015e5
+ARG sdk_version=0.12.0
+ARG sdk_sha=40da56ad27774d5e1b2cbc35f94c17368be8c8da557aca19878940264bd82a0a
 RUN mkdir -p /tmp/sdk && curl -fsSL https://github.com/dfinity/sdk/releases/download/${sdk_version}/dfx-${sdk_version}-x86_64-linux.tar.gz -o /tmp/sdk/dfx.tar.gz && \
     echo "$sdk_sha /tmp/sdk/dfx.tar.gz" | sha256sum --check && \
     tar -zxf /tmp/sdk/dfx.tar.gz -C /usr/local/bin && \
