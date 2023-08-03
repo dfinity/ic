@@ -166,7 +166,6 @@ impl Hypervisor {
             canister_root,
             canister_id,
             Arc::clone(&self.compilation_cache),
-            &self.log,
         );
         match creation_result {
             Ok((execution_state, compilation_cost, compilation_result)) => {

@@ -43,10 +43,6 @@ pub struct Complexity(u64);
 /// additional information about the validation.
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct WasmValidationDetails {
-    // The number of exported functions that are not in the list of
-    // allowed exports and whose name starts with the reserved
-    // "canister_" prefix.
-    pub reserved_exports: usize,
     pub imports_details: WasmImportsDetails,
     pub wasm_metadata: WasmMetadata,
     pub largest_function_instruction_count: NumInstructions,

@@ -805,7 +805,6 @@ impl WasmExecutor for SandboxedExecutionController {
         canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-        logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         let _create_exe_state_timer = self
             .metrics
@@ -916,14 +915,6 @@ impl WasmExecutor for SandboxedExecutionController {
             .sandboxed_execution_replica_create_exe_state_finish_duration
             .start_timer();
         observe_metrics(&self.metrics, &serialized_module.imports_details);
-        if serialized_module.reserved_exports > 0 {
-            info!(
-                logger,
-                "Canister {} has {} reserved exports.",
-                canister_id,
-                serialized_module.reserved_exports
-            );
-        }
 
         cache_opened_wasm(
             &mut wasm_binary.embedder_cache.lock().unwrap(),
@@ -1781,7 +1772,7 @@ mod tests {
 
         use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
         let controller = SandboxedExecutionController::new(
-            logger.clone(),
+            logger,
             &MetricsRegistry::new(),
             &EmbeddersConfig::default(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
@@ -1797,7 +1788,6 @@ mod tests {
                 PathBuf::new(),
                 canister_id,
                 Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
-                &logger,
             )
             .unwrap();
         let sandbox_pid = match controller
