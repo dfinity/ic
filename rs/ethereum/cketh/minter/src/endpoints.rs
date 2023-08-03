@@ -44,9 +44,11 @@ pub struct Eip2930TransactionPrice {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
-pub struct ProcessedTransactions {
-    pub minted: Vec<EthTransaction>,
-    pub invalid: Vec<EthTransaction>,
+pub struct DebugState {
+    pub ecdsa_key_name: String,
+    pub last_seen_block_number: Nat,
+    pub minted_transactions: Vec<EthTransaction>,
+    pub invalid_transactions: Vec<EthTransaction>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]

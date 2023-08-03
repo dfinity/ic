@@ -2,8 +2,8 @@ use candid::candid_method;
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::{
-    DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice, EthTransaction,
-    MinterArg, ProcessedTransactions, ReceivedEthEvent, TransactionStatus,
+    DebugState, DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice,
+    EthTransaction, MinterArg, ReceivedEthEvent, TransactionStatus,
 };
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
 use ic_cketh_minter::eth_rpc::{into_nat, GasPrice, Hash, BLOCK_PI_RPC_PROVIDER_URL};
@@ -19,7 +19,7 @@ use std::cmp::{min, Ordering};
 use std::str::FromStr;
 
 const TRANSACTION_GAS_LIMIT: u32 = 21_000;
-const SCRAPPING_ETH_LOGS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(15);
+const SCRAPPING_ETH_LOGS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3 * 60);
 
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 
@@ -333,15 +333,17 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
 
 #[query]
 #[candid_method(query)]
-fn retrieve_processed_transactions() -> ProcessedTransactions {
+fn dump_state_for_debugging() -> DebugState {
     fn to_tx(hash: &Hash) -> EthTransaction {
         EthTransaction {
             transaction_hash: hash.to_string(),
         }
     }
-    read_state(|s| ProcessedTransactions {
-        minted: s.minted_transactions.iter().map(to_tx).collect(),
-        invalid: s.invalid_transactions.iter().map(to_tx).collect(),
+    read_state(|s| DebugState {
+        ecdsa_key_name: s.ecdsa_key_name.clone(),
+        last_seen_block_number: candid::Nat::from(s.last_seen_block_number.clone()),
+        minted_transactions: s.minted_transactions.iter().map(to_tx).collect(),
+        invalid_transactions: s.invalid_transactions.iter().map(to_tx).collect(),
     })
 }
 
