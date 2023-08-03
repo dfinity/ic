@@ -132,6 +132,7 @@ mod audit_event;
 /// subnetworks that participate in the Internet Computer (IC).
 pub mod governance;
 pub mod init;
+mod known_neuron_index;
 mod neuron;
 pub mod pb;
 pub mod proposals;
