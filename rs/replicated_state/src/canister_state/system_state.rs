@@ -816,7 +816,6 @@ impl SystemState {
             // Continue the execution by dropping the remaining debit, which makes
             // some of the postponed charges free.
         }
-        self.observe_consumed_cycles(self.ingress_induction_cycles_debit);
         self.remove_cycles(
             self.ingress_induction_cycles_debit,
             CyclesUseCase::IngressInduction,
@@ -1215,10 +1214,6 @@ impl SystemState {
     pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
         self.cycles_balance += amount;
         self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::No);
-        if use_case != CyclesUseCase::NonConsumed {
-            self.canister_metrics.consumed_cycles_since_replica_started -=
-                NominalCycles::from_cycles(amount);
-        }
     }
 
     /// Decreases 'cycles_balance' for 'requested_amount'.
@@ -1267,15 +1262,7 @@ impl SystemState {
     /// of canister uninstallation due to it running out of cycles.
     pub fn burn_remaining_balance_for_uninstall(&mut self) {
         let balance = self.cycles_balance + self.reserved_balance;
-        self.observe_consumed_cycles(balance);
         self.remove_cycles(balance, CyclesUseCase::Uninstall);
-    }
-
-    /// Increments the metric `consumed_cycles_since_replica_started` with the
-    /// number of cycles consumed.
-    pub fn observe_consumed_cycles(&mut self, cycles: Cycles) {
-        self.canister_metrics.consumed_cycles_since_replica_started +=
-            NominalCycles::from_cycles(cycles);
     }
 
     fn observe_consumed_cycles_with_use_case(
@@ -1298,13 +1285,21 @@ impl SystemState {
             .canister_metrics
             .consumed_cycles_since_replica_started_by_use_cases;
 
-        let use_case_cocnsumption = metric
+        let use_case_consumption = metric
             .entry(use_case)
             .or_insert_with(|| NominalCycles::from(0));
 
+        let nominal_amount = amount.into();
+
         match consuming_cycles {
-            ConsumingCycles::Yes => *use_case_cocnsumption += amount.into(),
-            ConsumingCycles::No => *use_case_cocnsumption -= amount.into(),
+            ConsumingCycles::Yes => {
+                *use_case_consumption += nominal_amount;
+                self.canister_metrics.consumed_cycles_since_replica_started += nominal_amount;
+            }
+            ConsumingCycles::No => {
+                *use_case_consumption -= nominal_amount;
+                self.canister_metrics.consumed_cycles_since_replica_started -= nominal_amount;
+            }
         }
     }
 

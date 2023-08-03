@@ -500,7 +500,7 @@ fn test_consume_with_threshold() {
             &mut system_state,
             Cycles::zero(),
             threshold,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Memory,
         )
         .is_ok());
     // unchanged cycles
@@ -510,12 +510,7 @@ fn test_consume_with_threshold() {
     // withdraw i128::MAX and verify correctness
     let amount = Cycles::from(i128::MAX as u128);
     assert!(cycles_account_manager
-        .consume_with_threshold(
-            &mut system_state,
-            amount,
-            threshold,
-            CyclesUseCase::NonConsumed,
-        )
+        .consume_with_threshold(&mut system_state, amount, threshold, CyclesUseCase::Memory,)
         .is_ok());
     cycles_balance_expected -= amount;
     assert_eq!(
@@ -524,35 +519,20 @@ fn test_consume_with_threshold() {
     );
 
     assert!(cycles_account_manager
-        .consume_with_threshold(
-            &mut system_state,
-            amount,
-            threshold,
-            CyclesUseCase::NonConsumed,
-        )
+        .consume_with_threshold(&mut system_state, amount, threshold, CyclesUseCase::Memory,)
         .is_ok());
     cycles_balance_expected -= amount;
     assert_eq!(system_state.balance(), Cycles::new(1));
 
     let amount = Cycles::new(1);
     assert!(cycles_account_manager
-        .consume_with_threshold(
-            &mut system_state,
-            amount,
-            threshold,
-            CyclesUseCase::NonConsumed
-        )
+        .consume_with_threshold(&mut system_state, amount, threshold, CyclesUseCase::Memory)
         .is_ok());
     cycles_balance_expected -= amount;
     assert_eq!(system_state.balance(), Cycles::zero());
 
     assert!(cycles_account_manager
-        .consume_with_threshold(
-            &mut system_state,
-            amount,
-            threshold,
-            CyclesUseCase::NonConsumed
-        )
+        .consume_with_threshold(&mut system_state, amount, threshold, CyclesUseCase::Memory)
         .is_err());
     cycles_balance_expected -= amount;
     assert_eq!(system_state.balance(), Cycles::zero());
@@ -592,7 +572,7 @@ fn cycles_withdraw_for_execution() {
             compute_allocation,
             amount,
             SMALL_APP_SUBNET_MAX_SIZE,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Instructions,
         )
         .is_ok());
     assert_eq!(system_state.balance(), initial_cycles - amount);
@@ -603,7 +583,7 @@ fn cycles_withdraw_for_execution() {
             compute_allocation,
             amount,
             SMALL_APP_SUBNET_MAX_SIZE,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Instructions,
         )
         .is_err());
 
@@ -625,7 +605,7 @@ fn cycles_withdraw_for_execution() {
             compute_allocation,
             exec_cycles_max,
             SMALL_APP_SUBNET_MAX_SIZE,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Instructions,
         )
         .is_ok());
     assert_eq!(system_state.balance(), freeze_threshold_cycles);
@@ -653,7 +633,7 @@ fn cycles_withdraw_for_execution() {
             compute_allocation,
             exec_cycles_max,
             SMALL_APP_SUBNET_MAX_SIZE,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Instructions,
         )
         .is_err());
     assert!(cycles_account_manager
@@ -663,7 +643,7 @@ fn cycles_withdraw_for_execution() {
             compute_allocation,
             Cycles::new(10),
             SMALL_APP_SUBNET_MAX_SIZE,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Instructions,
         )
         .is_err());
     assert!(cycles_account_manager
@@ -673,7 +653,7 @@ fn cycles_withdraw_for_execution() {
             compute_allocation,
             Cycles::new(1),
             SMALL_APP_SUBNET_MAX_SIZE,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Instructions,
         )
         .is_err());
     assert!(cycles_account_manager
@@ -683,7 +663,7 @@ fn cycles_withdraw_for_execution() {
             compute_allocation,
             Cycles::zero(),
             SMALL_APP_SUBNET_MAX_SIZE,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Instructions,
         )
         .is_ok());
     assert_eq!(system_state.balance(), freeze_threshold_cycles);
@@ -762,7 +742,7 @@ fn consume_cycles_updates_consumed_cycles() {
             ComputeAllocation::default(),
             Cycles::new(1_000_000),
             SMALL_APP_SUBNET_MAX_SIZE,
-            CyclesUseCase::NonConsumed,
+            CyclesUseCase::Memory,
         )
         .unwrap();
     let consumed_cycles_after = system_state

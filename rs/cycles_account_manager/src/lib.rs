@@ -745,8 +745,8 @@ impl CyclesAccountManager {
             threshold,
         )?;
 
+        debug_assert_ne!(use_case, CyclesUseCase::NonConsumed);
         system_state.remove_cycles(cycles, use_case);
-        system_state.observe_consumed_cycles(cycles);
         Ok(())
     }
 
