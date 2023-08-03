@@ -368,7 +368,7 @@ mod tests {
         pub StateSync {}
 
         impl StateSyncClient for StateSync {
-            fn latest_state(&self) -> Option<StateSyncArtifactId>;
+            fn available_states(&self) -> Vec<StateSyncArtifactId>;
 
             fn start_state_sync(
                 &self,

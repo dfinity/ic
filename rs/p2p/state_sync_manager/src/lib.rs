@@ -170,10 +170,23 @@ impl StateSyncManager {
     }
 
     fn handle_advert_tick(&mut self) {
-        if let Some(state_id) = self.state_sync.latest_state() {
-            self.metrics
-                .latest_state_height_broadcasted
-                .set(state_id.height.get() as i64);
+        let available_states = self.state_sync.available_states();
+        self.metrics.lowest_state_broadcasted.set(
+            available_states
+                .iter()
+                .map(|h| h.height.get())
+                .min()
+                .unwrap_or_default() as i64,
+        );
+        self.metrics.highest_state_broadcasted.set(
+            available_states
+                .iter()
+                .map(|h| h.height.get())
+                .max()
+                .unwrap_or_default() as i64,
+        );
+
+        for state_id in available_states {
             // Unreliable broadcast of adverts to all current peers.
             for peer_id in self.transport.peers() {
                 let request = build_advert_handler_request(state_id.clone());
