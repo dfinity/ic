@@ -794,6 +794,7 @@ fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
 #[test]
 fn subnet_memory_reservation_works() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -828,7 +829,75 @@ fn subnet_memory_reservation_works() {
         .build();
 
     // The update call grow and the response callback both grow memory by
-    // roughly 50MB.
+    // roughly `50MB / num_cores`.
+    let a = wasm()
+        .stable_grow(800)
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .stable_grow(800 / num_cores as u32)
+                        .stable64_fill(0, 0, 1000 / num_cores)
+                        .instruction_counter_is_at_least(1_000_000)
+                        .message_payload()
+                        .append_and_reply(),
+                ),
+            Cycles::from(2000u128),
+        )
+        .build();
+
+    let res = env.execute_ingress(a_id, "update", a).unwrap();
+    match res {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(err) => unreachable!("Unexpected reject: {}", err),
+    }
+}
+
+#[test]
+fn subnet_memory_reservation_scales_with_number_of_cores() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let num_cores = subnet_config.scheduler_config.scheduler_cores as u64;
+    assert!(num_cores > 1);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(120 * 1024 * 1024),
+            subnet_memory_reservation: NumBytes::from(50 * 1024 * 1024),
+            ..Default::default()
+        },
+    ));
+
+    let a_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgsBuilder::new().build()),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let b_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgsBuilder::new().build()),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // The update call grow and the response callback both grow memory by
+    // roughly 50MB. It should fail because there are at least two threads
+    // and each threads gets `50MB / num_cores` reservation.
     let a = wasm()
         .stable_grow(800)
         .call_with_cycles(
@@ -849,11 +918,12 @@ fn subnet_memory_reservation_works() {
         )
         .build();
 
-    let res = env.execute_ingress(a_id, "update", a).unwrap();
-    match res {
-        WasmResult::Reply(_) => {}
-        WasmResult::Reject(err) => unreachable!("Unexpected reject: {}", err),
-    }
+    let err = env.execute_ingress(a_id, "update", a).unwrap_err();
+    assert_eq!(
+        err.description(),
+        format!("Canister {} trapped: stable memory out of bounds", a_id)
+    );
+    assert_eq!(err.code(), ErrorCode::CanisterTrapped);
 }
 
 #[test]
