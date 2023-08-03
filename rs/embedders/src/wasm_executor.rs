@@ -22,7 +22,7 @@ use ic_interfaces::execution_environment::{
     ExecutionComplexity, HypervisorError, HypervisorResult, InstanceStats,
     OutOfInstructionsHandler, SubnetAvailableMemory, SystemApi, WasmExecutionOutput,
 };
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
 use ic_sys::{page_bytes_from_ptr, PageBytes, PageIndex, PAGE_SIZE};
@@ -56,7 +56,6 @@ pub trait WasmExecutor: Send + Sync {
         canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-        logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)>;
 }
 
@@ -271,7 +270,6 @@ impl WasmExecutor for WasmExecutorImpl {
         canister_root: PathBuf,
         canister_id: CanisterId,
         compilation_cache: Arc<CompilationCache>,
-        logger: &ReplicaLogger,
     ) -> HypervisorResult<(ExecutionState, NumInstructions, Option<CompilationResult>)> {
         // Compile Wasm binary and cache it.
         let wasm_binary = WasmBinary::new(canister_module);
@@ -285,14 +283,6 @@ impl WasmExecutor for WasmExecutorImpl {
                 _ => panic!("Newly created WasmBinary must be compiled or deserialized."),
             };
         self.observe_metrics(&serialized_module.imports_details);
-        if serialized_module.reserved_exports > 0 {
-            info!(
-                logger,
-                "Canister {} has {} reserved exports.",
-                canister_id,
-                serialized_module.reserved_exports
-            );
-        }
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();
 

@@ -794,15 +794,13 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
 // * Validates the signatures of other allowed exported functions (like
 //   `canister_init` or `canister_pre_upgrade`) if present.
 // * Validates that the canister doesn't export any reserved symbols
-//
-// Returns the number of exported functions that are not in the list of
-// allowed exports and whose name starts with the reserved "canister_" prefix.
+// * Validates that all exported functions whose names start
+//   with the reserved "canister_" prefix are in the list of allowed exports.
 fn validate_export_section(
     module: &Module,
     max_number_exported_functions: usize,
     max_sum_exported_function_name_lengths: usize,
-) -> Result<usize, WasmValidationError> {
-    let mut reserved_exports: usize = 0;
+) -> Result<(), WasmValidationError> {
     if !module.exports.is_empty() {
         let num_imported_functions = module
             .imports
@@ -856,10 +854,11 @@ fn validate_export_section(
                 } else if func_name.starts_with("canister_") {
                     // The "canister_" prefix is reserved and only functions allowed by the spec
                     // can be exported.
-                    // TODO(EXC-350): Turn this into an actual error once we confirm that no
-                    // reserved functions are exported.
                     if !valid_system_functions.contains(&func_name) {
-                        reserved_exports += 1;
+                        return Err(WasmValidationError::InvalidExportSection(format!(
+                            "Exporting reserved function '{}' with \"canister_\" prefix",
+                            func_name
+                        )));
                     }
                 }
                 if let Some(valid_signature) = valid_exported_functions.get(func_name) {
@@ -893,7 +892,7 @@ fn validate_export_section(
             return Err(WasmValidationError::InvalidExportSection(err));
         }
     }
-    Ok(reserved_exports)
+    Ok(())
 }
 
 // Checks that offset-expressions in data sections consist of only one constant
@@ -1210,7 +1209,7 @@ pub(super) fn validate_wasm_binary<'a>(
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;
-    let reserved_exports = validate_export_section(
+    validate_export_section(
         &module,
         config.max_number_exported_functions,
         config.max_sum_exported_function_name_lengths,
@@ -1222,7 +1221,6 @@ pub(super) fn validate_wasm_binary<'a>(
     let wasm_metadata = validate_custom_section(&module, config)?;
     Ok((
         WasmValidationDetails {
-            reserved_exports,
             imports_details,
             wasm_metadata,
             largest_function_instruction_count,

@@ -34,9 +34,6 @@ const EXCLUDED: &[&str] = &[
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
     "$0 ~ /Call from query method traps (in query call)/",
-    // TODO(EXC-350): enable these two tests
-    "$0 ~ /invalid_canister_export.wat/",
-    "$0 ~ /invalid_empty_query_name.wat/",
     // Temporarily exclude "msg_caller traps" until the spec compliance test
     // suite is migrated to the IC repo.
     "$0 ~ /msg_caller traps/",

@@ -85,6 +85,7 @@ fn can_validate_valid_export_section() {
     let wasm = wat2wasm(
         r#"(module
                   (func $x)
+                  (export "some_function_is_ok" (func $x))
                   (export "canister_init" (func $x))
                   (export "canister_heartbeat" (func $x))
                   (export "canister_global_timer" (func $x))
@@ -105,6 +106,29 @@ fn can_validate_valid_export_section() {
 }
 
 #[test]
+fn can_validate_valid_export_section_with_no_space_after_canister_query() {
+    let wasm = wat2wasm(
+        r#"(module
+                  (func $x)
+                  (export "canister_init" (func $x))
+                  (export "canister_heartbeat" (func $x))
+                  (export "canister_global_timer" (func $x))
+                  (export "canister_pre_upgrade" (func $x))
+                  (export "canister_post_upgrade" (func $x))
+                  (export "canister_query read" (func $x))
+                  (export "some_function_is_ok" (func $x))
+                  (export "canister_query" (func $x)))"#,
+    )
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "Exporting reserved function 'canister_query' with \"canister_\" prefix".to_string()
+        ))
+    );
+}
+
+#[test]
 fn can_validate_valid_export_section_with_reserved_functions() {
     let wasm = wat2wasm(
         r#"(module
@@ -116,18 +140,15 @@ fn can_validate_valid_export_section_with_reserved_functions() {
                   (export "canister_post_upgrade" (func $x))
                   (export "canister_query read" (func $x))
                   (export "some_function_is_ok" (func $x))
-                  (export "canister_query" (func $x))
-                  (export "canister_bar_is_reserved" (func $x))
-                  (export "canister_foo_is_reserved" (func $x)))"#,
+                  (export "canister_bar_is_reserved" (func $x)))"#,
     )
     .unwrap();
     assert_eq!(
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            reserved_exports: 3,
-            largest_function_instruction_count: NumInstructions::new(1),
-            ..Default::default()
-        })
+        Err(WasmValidationError::InvalidExportSection(
+            "Exporting reserved function 'canister_bar_is_reserved' with \"canister_\" prefix"
+                .to_string()
+        ))
     );
 }
 
