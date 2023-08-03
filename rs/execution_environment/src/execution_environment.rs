@@ -1435,6 +1435,13 @@ impl ExecutionEnvironment {
             log: &self.log,
             time,
         };
+        // This function is called on an execution thread with a scaled
+        // available memory. We also need to scale the subnet reservation in
+        // order to be consistent with the scaling of the available memory.
+        let scaled_subnet_memory_reservation = NumBytes::new(
+            self.config.subnet_memory_reservation.get()
+                / round_limits.subnet_available_memory.get_scaling_factor() as u64,
+        );
         execute_response(
             canister,
             response,
@@ -1444,7 +1451,7 @@ impl ExecutionEnvironment {
             round,
             round_limits,
             subnet_size,
-            self.config.subnet_memory_reservation,
+            scaled_subnet_memory_reservation,
         )
     }
 
