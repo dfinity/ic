@@ -4,7 +4,7 @@
 use crate::HttpError;
 use hyper::StatusCode;
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_interfaces_state_manager::{Labeled, StateReader};
+use ic_interfaces_state_manager::{CertifiedStateReader, Labeled, StateReader};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{consensus::certification::Certification, Height};
 use std::sync::{Arc, Mutex};
@@ -33,12 +33,16 @@ impl StateReaderExecutor {
         self.state_reader.latest_certified_height()
     }
 
-    pub async fn get_latest_state(&self) -> Result<Labeled<Arc<ReplicatedState>>, HttpError> {
+    async fn serve_with_state_reader<F, R>(&self, f: F) -> Result<R, HttpError>
+    where
+        F: FnOnce(&dyn StateReader<State = ReplicatedState>) -> R + Send + 'static,
+        R: Send + 'static,
+    {
         let (tx, rx) = oneshot::channel();
-        let state = self.state_reader.clone();
+        let state_reader = self.state_reader.clone();
         self.threadpool.lock().unwrap().execute(move || {
             if !tx.is_closed() {
-                let _ = tx.send(state.get_latest_state());
+                let _ = tx.send(f(&*state_reader));
             }
         });
 
@@ -48,23 +52,25 @@ impl StateReaderExecutor {
         })
     }
 
+    pub async fn get_latest_state(&self) -> Result<Labeled<Arc<ReplicatedState>>, HttpError> {
+        self.serve_with_state_reader(|reader| reader.get_latest_state())
+            .await
+    }
+
+    pub async fn get_certified_state_reader(
+        &self,
+    ) -> Result<Option<Box<dyn CertifiedStateReader<State = ReplicatedState> + 'static>>, HttpError>
+    {
+        self.serve_with_state_reader(|reader| reader.get_certified_state_reader())
+            .await
+    }
+
     pub async fn read_certified_state(
         &self,
-        labeled_tree: &LabeledTree<()>,
+        labeled_tree: LabeledTree<()>,
     ) -> Result<Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>, HttpError> {
-        let (tx, rx) = oneshot::channel();
-        let sr = self.state_reader.clone();
-        let lt = labeled_tree.clone();
-        self.threadpool.lock().unwrap().execute(move || {
-            if !tx.is_closed() {
-                let _ = tx.send(sr.read_certified_state(&lt));
-            }
-        });
-
-        rx.await.map_err(|e| HttpError {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            message: format!("Internal Error: {}.", e),
-        })
+        self.serve_with_state_reader(move |reader| reader.read_certified_state(&labeled_tree))
+            .await
     }
 }
 
@@ -128,7 +134,7 @@ mod tests {
         });
 
         assert_eq!(
-            sre.read_certified_state(&path).await.unwrap(),
+            sre.read_certified_state(path.clone()).await.unwrap(),
             state_manger.read_certified_state(&path)
         );
     }
@@ -167,7 +173,7 @@ mod tests {
         let state_manger = Arc::new(mock_state_manager);
         let sre = StateReaderExecutor::new(state_manger.clone());
         assert_eq!(
-            sre.read_certified_state(&path).await.unwrap(),
+            sre.read_certified_state(path.clone()).await.unwrap(),
             state_manger.read_certified_state(&path)
         );
     }

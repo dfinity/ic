@@ -204,7 +204,7 @@ pub(crate) async fn get_latest_certified_state(
         Err(TooLongPathError {}) => panic!("bug: failed to convert path to LabeledTree"),
     };
     state_reader_executor
-        .read_certified_state(&labeled_tree)
+        .read_certified_state(labeled_tree)
         .await
         .ok()?
         .map(|r| r.0)

@@ -29,9 +29,9 @@ use ic_interfaces_certified_stream_store::{
     CertifiedStreamStore, DecodeStreamError, EncodeStreamError,
 };
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, Labeled, PermanentStateHashError::*, StateHashError,
-    StateManager, StateManagerError, StateManagerResult, StateReader, TransientStateHashError::*,
-    CERT_CERTIFIED, CERT_UNCERTIFIED,
+    CertificationMask, CertificationScope, CertifiedStateReader, Labeled,
+    PermanentStateHashError::*, StateHashError, StateManager, StateManagerError,
+    StateManagerResult, StateReader, TransientStateHashError::*, CERT_CERTIFIED, CERT_UNCERTIFIED,
 };
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -2356,6 +2356,21 @@ impl StateManagerImpl {
     pub fn test_only_send_wait_to_tip_channel(&self, sender: Sender<()>) {
         self.tip_channel.send(TipRequest::Wait { sender }).unwrap();
     }
+
+    fn certified_state_reader(&self) -> Option<CertifiedStateReaderImpl> {
+        let read_certified_state_duration_histogram = self
+            .metrics
+            .api_call_duration
+            .with_label_values(&["read_certified_state"]);
+
+        let (state, certification, hash_tree) = self.latest_certified_state()?;
+        Some(CertifiedStateReaderImpl {
+            read_certified_state_duration_histogram,
+            state,
+            certification,
+            hash_tree,
+        })
+    }
 }
 
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
@@ -3033,6 +3048,46 @@ impl StateManager for StateManagerImpl {
     }
 }
 
+struct CertifiedStateReaderImpl {
+    certification: Certification,
+    state: Arc<ReplicatedState>,
+    hash_tree: Arc<HashTree>,
+    read_certified_state_duration_histogram: Histogram,
+}
+
+impl CertifiedStateReader for CertifiedStateReaderImpl {
+    type State = ReplicatedState;
+
+    fn get_state(&self) -> &Self::State {
+        &self.state
+    }
+
+    fn read_certified_state(
+        &self,
+        paths: &LabeledTree<()>,
+    ) -> Option<(MixedHashTree, Certification)> {
+        let _timer = self.read_certified_state_duration_histogram.start_timer();
+
+        let mixed_hash_tree = {
+            let lazy_tree = LazyTree::from(self.get_state());
+            let partial_tree = materialize_partial(&lazy_tree, paths);
+            self.hash_tree.witness::<MixedHashTree>(&partial_tree)
+        }
+        .ok()?;
+
+        debug_assert_eq!(
+            crypto_hash_of_partial_state(&mixed_hash_tree.digest()),
+            self.certification.signed.content.hash,
+            "produced invalid hash tree {:?} for paths {:?}, full hash tree: {:?}",
+            mixed_hash_tree,
+            paths,
+            self.hash_tree
+        );
+
+        Some((mixed_hash_tree, self.certification.clone()))
+    }
+}
+
 impl StateReader for StateManagerImpl {
     type State = ReplicatedState;
 
@@ -3104,31 +3159,17 @@ impl StateReader for StateManagerImpl {
         &self,
         paths: &LabeledTree<()>,
     ) -> Option<(Arc<Self::State>, MixedHashTree, Certification)> {
-        let _timer = self
-            .metrics
-            .api_call_duration
-            .with_label_values(&["read_certified_state"])
-            .start_timer();
+        let reader = self.certified_state_reader()?;
+        let (mixed_hash_tree, certification) = reader.read_certified_state(paths)?;
 
-        let (state, certification, hash_tree) = self.latest_certified_state()?;
+        Some((reader.state, mixed_hash_tree, certification))
+    }
 
-        let mixed_hash_tree = {
-            let lazy_tree = LazyTree::from(&*state);
-            let partial_tree = materialize_partial(&lazy_tree, paths);
-            hash_tree.witness::<MixedHashTree>(&partial_tree)
-        }
-        .ok()?;
-
-        debug_assert_eq!(
-            crypto_hash_of_partial_state(&mixed_hash_tree.digest()),
-            certification.signed.content.hash,
-            "produced invalid hash tree {:?} for paths {:?}, full hash tree: {:?}",
-            mixed_hash_tree,
-            paths,
-            hash_tree
-        );
-
-        Some((state, mixed_hash_tree, certification))
+    fn get_certified_state_reader(
+        &self,
+    ) -> Option<Box<dyn CertifiedStateReader<State = Self::State> + 'static>> {
+        self.certified_state_reader()
+            .map(|reader| Box::new(reader) as Box<_>)
     }
 }
 
