@@ -357,16 +357,16 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
 
 impl StateSyncClient for StateSync {
     /// Non-blocking.
-    fn latest_state(&self) -> Option<StateSyncArtifactId> {
+    fn available_states(&self) -> Vec<StateSyncArtifactId> {
         // Using height 0 here is sane because for state sync `get_all_validated_by_filter`
         // return at most the number of states present on the node. Currently this is usually 1-2.
         let filter = StateSyncFilter {
             height: Height::from(0),
         };
         self.get_all_validated_by_filter(&filter)
-            .last()
-            .cloned()
+            .into_iter()
             .map(|a| a.id)
+            .collect()
     }
 
     /// Non-blocking.

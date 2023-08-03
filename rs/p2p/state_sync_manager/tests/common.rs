@@ -182,14 +182,14 @@ impl FakeStateSync {
 }
 
 impl StateSyncClient for FakeStateSync {
-    fn latest_state(&self) -> Option<StateSyncArtifactId> {
+    fn available_states(&self) -> Vec<StateSyncArtifactId> {
         if self.disconnected.load(Ordering::SeqCst) {
-            return None;
+            return vec![];
         }
         if self.uses_global() {
-            Some(self.global_state.artifact_id())
+            vec![self.global_state.artifact_id()]
         } else {
-            Some(self.local_state.artifact_id())
+            vec![self.local_state.artifact_id()]
         }
     }
 
