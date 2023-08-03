@@ -413,11 +413,6 @@ impl HashTree {
     }
 
     /// Constructs a witness for the specified partial tree.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the partial tree a structure that is different from the
-    /// labeled tree that was used to construct this hash tree.
     pub fn witness<B: WitnessBuilder>(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
