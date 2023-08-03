@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 # This script verifies a specific commit hash or a proposal for reproducibility.
-
 # if it's a proposal we need to make sure that proposal_hash == CDN_hash == build_hash
 # otherwise we only need to make sure that CDN_hash == build_hash.
 
@@ -74,7 +73,7 @@ extract_field_json() {
     out=$(cat "$input" | jq --raw-output "$jq_field")
     status="$?"
 
-    if [[ "$status" != 0 ]]; then
+    if [[ "$status" != 0 ]] || [[ "$out" == "null" ]]; then
         error "Field $jq_field does not exist in $input"
     fi
 
@@ -102,7 +101,6 @@ check_ic_repo() {
 }
 
 #################### Set-up
-
 if [ "${DEBUG:-}" == "2" ]; then
     set -x
 fi
@@ -124,6 +122,41 @@ while getopts ':i:h:c:p:d:' flag; do
             ;;
     esac
 done
+
+log "Check the environment"
+# either of those files should exist
+source /usr/lib/os-release 2>/dev/null
+source /etc/os-release 2>/dev/null
+
+if [ "$(uname -m)" == "x86_64" ]; then
+    log_success "x86_64 architecture detected"
+else
+    error "Please run this script on x86_64 architecture"
+fi
+
+if [ "${NAME:-}" == "Ubuntu" ]; then
+    log_success "Ubuntu OS detected"
+else
+    error "Please run this script on Ubuntu OS"
+fi
+
+if [[ $(echo "${VERSION_ID:-} > 22.03" | bc) == 1 ]]; then
+    log_success "Version >22.04 detected"
+else
+    error "Please run this script on Ubuntu version 22.04 or higher"
+fi
+
+if [[ "$(cat /proc/meminfo | grep MemTotal | awk '{ print int($2/1024**2) }')" -ge 15 ]]; then
+    log_success "More than 16GB of RAM detected"
+else
+    error "You need at least 16GB of RAM on this machine"
+fi
+
+if [[ $(("$(df . --output=avail | tail -n 1)" / 1000000)) -ge 100 ]]; then
+    log_success "More than 100GB of free disk space detected"
+else
+    error "You need at least 100GB of free disk space on this machine"
+fi
 
 log "Update package registry"
 sudo apt-get update -y
@@ -170,7 +203,7 @@ if [ -n "$proposal_id" ]; then
     proposal_package_sha256_hex=$(extract_field_json ".payload.release_package_sha256_hex" "$proposal_body")
 
     log_debug "Extract git_hash out of the proposal"
-    git_hash=$(extract_field_json ".payload.replica_version_id" "$proposal_body")
+    git_hash=$(extract_field_json ".payload.replica_version_to_elect" "$proposal_body")
 
 else
 
@@ -205,8 +238,9 @@ mkdir -p "$proposal_out"
 if [ -n "$proposal_id" ]; then
 
     log "Check the proposal url is correctly formatted"
-    if [ "$proposal_package_url" != "https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.gz" ]; then
-        error "The artifact's URL is wrongly formatted - $proposal_package_url - , please report this to DFINITY"
+    expected_url="https://download.dfinity.systems/ic/$git_hash/guest-os/update-img/update-img.tar.gz"
+    if [ "$proposal_package_url" != "$expected_url" ]; then
+        error "The artifact's URL is wrongly formatted, please report this to DFINITY\n\t\tcurrent  = $proposal_package_url\n\t\texpected = $expected_url"
     fi
 
     log "Download the proposal artifacts"
