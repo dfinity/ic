@@ -165,6 +165,23 @@ mod verify {
              && key_bytes == Some(invalid_pk.0)
         );
     }
+
+    #[test]
+    fn should_have_correct_error_for_invalid_sig() {
+        let (sk, pk) = test_utils::new_keypair(&mut reproducible_rng()).unwrap();
+
+        let msg = vec![0x42; 32];
+        let signature = sign(&msg, &sk).unwrap();
+
+        let mut invalid_signature = signature;
+        invalid_signature.0[2] ^= 1;
+
+        let result = verify(&invalid_signature, &msg, &pk);
+        assert_matches!(result, Err(CryptoError::SignatureVerification{algorithm, public_key_bytes, sig_bytes, internal_error: _})
+                        if algorithm == AlgorithmId::EcdsaP256 &&
+                        public_key_bytes == pk.0 &&
+                        sig_bytes == invalid_signature.0);
+    }
 }
 
 #[cfg(test)]
