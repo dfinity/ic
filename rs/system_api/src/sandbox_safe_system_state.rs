@@ -268,10 +268,7 @@ impl SystemStateChanges {
     ) -> HypervisorResult<()> {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
-        let consumed_cycles = self.apply_balance_changes(system_state);
-
-        // Observe consumed cycles.
-        system_state.observe_consumed_cycles(consumed_cycles);
+        self.apply_balance_changes(system_state);
 
         // Verify we don't accept more cycles than are available from each call
         // context and update each call context balance
@@ -426,7 +423,7 @@ impl SystemStateChanges {
     }
 
     /// Applies the balance change to the given state.
-    pub fn apply_balance_changes(&self, state: &mut SystemState) -> Cycles {
+    pub fn apply_balance_changes(&self, state: &mut SystemState) {
         let balance_before = state.balance();
         let mut removed_consumed_cycles = Cycles::new(0);
         for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
@@ -461,7 +458,6 @@ impl SystemStateChanges {
                 debug_assert_eq!(balance_before - removed, state.balance());
             }
         }
-        removed_consumed_cycles
     }
 
     fn add_consumed_cycles(&mut self, consumed_cycles: &[(CyclesUseCase, Cycles)]) {
