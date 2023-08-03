@@ -62,7 +62,9 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, RwPolicy};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter};
+use ic_test_utilities_metrics::{
+    fetch_histogram_stats, fetch_int_counter, fetch_int_gauge, fetch_int_gauge_vec, Labels,
+};
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
@@ -913,6 +915,21 @@ impl StateMachine {
             "scheduler_num_canisters_uninstalled_out_of_cycles",
         )
         .unwrap_or(0)
+    }
+
+    /// Total number of running canisters.
+    pub fn num_running_canisters(&self) -> u64 {
+        *fetch_int_gauge_vec(
+            &self.metrics_registry,
+            "replicated_state_registered_canisters",
+        )
+        .get(&Labels::from([("status".into(), "running".into())]))
+        .unwrap_or(&0)
+    }
+
+    /// Total memory footprint of all canisters on this subnet.
+    pub fn canister_memory_usage_bytes(&self) -> u64 {
+        fetch_int_gauge(&self.metrics_registry, "canister_memory_usage_bytes").unwrap_or(0)
     }
 
     /// Sets the time that the state machine will use for executing next
