@@ -98,9 +98,14 @@ All built artifacts will be located in the top-level artifacts/ directory.
 
 Each https://dashboard.internetcomputer.org/releases[release proposal] includes instructions on how to verify the build reproducibility of IC-OS update images.
 
-To verify the build reproducibility of a specific git revision, run:
+To verify the build reproducibility of a specific git revision, open a terminal on Ubuntu and run:
 
-  $ ./gitlab-ci/tools/repro-check.sh -c <git revision>
+    $ sudo apt-get install -y curl && curl --proto '=https' --tlsv1.2 -sSL https://raw.githubusercontent.com/dfinity/ic/master/gitlab-ci/tools/repro-check.sh | bash -s -- -c <git revision>
+
+If you have the repository already cloned you can just run:
+
+    $ ./gitlab-ci/tools/repro-check.sh -c <git revision>
+
 
 == Contributing
 
