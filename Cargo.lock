@@ -11702,7 +11702,6 @@ name = "icrc-ledger-types"
 version = "0.1.0"
 dependencies = [
  "candid 0.8.4",
- "ciborium",
  "hex",
  "num-traits",
  "serde",
