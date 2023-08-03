@@ -125,6 +125,7 @@ type SnsInitPayload = record {
   max_age_bonus_percentage : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
   reward_rate_transition_duration_seconds : opt nat64;
+  token_logo : opt text;
   token_name : opt text;
   max_participant_icp_e8s : opt nat64;
   proposal_reject_cost_e8s : opt nat64;

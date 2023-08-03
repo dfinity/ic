@@ -25,7 +25,7 @@ use ic_sns_governance::{
 };
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
 use isocountry::CountryCode;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
@@ -34,6 +34,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     str::FromStr,
+    string::ToString,
 };
 
 pub mod distributions;
@@ -69,6 +70,8 @@ pub const MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT: usize = 15;
 /// The maximum amount of ICP that can be contributed to a decentralization swap.
 /// Aka, the ceiling for the value `max_icp`.
 pub const MAX_TOTAL_ICP_CONTRIBUTION_TO_SWAP: u64 = 1_000_000_000 * E8;
+
+pub const ICRC1_TOKEN_LOGO_KEY: &str = "icrc1:logo";
 
 pub enum RestrictedCountriesValidationError {
     EmptyList,
@@ -230,6 +233,7 @@ impl SnsInitPayload {
                 .final_reward_rate_basis_points,
             token_name: None,
             token_symbol: None,
+            token_logo: None,
             proposal_reject_cost_e8s: nervous_system_parameters_default.reject_cost_e8s,
             neuron_minimum_stake_e8s: nervous_system_parameters_default.neuron_minimum_stake_e8s,
             neuron_minimum_dissolve_delay_to_vote_seconds: nervous_system_parameters_default
@@ -270,7 +274,7 @@ impl SnsInitPayload {
     /// This gives us some values that work for testing but would not be useful
     /// in a real world scenario. They are only meant to validate, not be sensible.
     pub fn with_valid_legacy_values_for_testing() -> Self {
-        Self::with_valid_values_for_testing().strip_non_legacy_swap_parameters()
+        Self::with_valid_values_for_testing().strip_non_legacy_parameters()
     }
 
     /// This gives us some values that work for testing but would not be useful
@@ -281,6 +285,7 @@ impl SnsInitPayload {
         Self {
             token_symbol: Some("TEST".to_string()),
             token_name: Some("PlaceHolder".to_string()),
+            token_logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
             initial_token_distribution: Some(FractionalDeveloperVotingPower(
                 FractionalDVP::with_valid_values_for_testing(),
             )),
@@ -403,33 +408,41 @@ impl SnsInitPayload {
             .expect("Expected token_name to be set")
             .clone();
 
-        let mut payload = LedgerInitArgsBuilder::with_symbol_and_name(token_symbol, token_name)
-            .with_minting_account(sns_canister_ids.governance.0)
-            .with_transfer_fee(
-                self.transaction_fee_e8s
-                    .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s()),
-            )
-            .with_archive_options(ArchiveOptions {
-                trigger_threshold: 2000,
-                num_blocks_to_archive: 1000,
-                // 1 GB, which gives us 3 GB space when upgrading
-                node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
-                // 128kb
-                max_message_size_bytes: Some(128 * 1024),
-                controller_id: root_canister_id.get(),
-                // TODO: allow users to set this value
-                // 10 Trillion cycles
-                cycles_for_archive_creation: Some(10_000_000_000_000),
-                max_transactions_per_response: None,
-            });
+        let mut payload_builder =
+            LedgerInitArgsBuilder::with_symbol_and_name(token_symbol, token_name)
+                .with_minting_account(sns_canister_ids.governance.0)
+                .with_transfer_fee(
+                    self.transaction_fee_e8s
+                        .unwrap_or(DEFAULT_TRANSFER_FEE.get_e8s()),
+                )
+                .with_archive_options(ArchiveOptions {
+                    trigger_threshold: 2000,
+                    num_blocks_to_archive: 1000,
+                    // 1 GB, which gives us 3 GB space when upgrading
+                    node_max_memory_size_bytes: Some(1024 * 1024 * 1024),
+                    // 128kb
+                    max_message_size_bytes: Some(128 * 1024),
+                    controller_id: root_canister_id.get(),
+                    // TODO: allow users to set this value
+                    // 10 Trillion cycles
+                    cycles_for_archive_creation: Some(10_000_000_000_000),
+                    max_transactions_per_response: None,
+                });
+
+        if let Some(token_logo) = &self.token_logo {
+            payload_builder = payload_builder.with_metadata_entry(
+                ICRC1_TOKEN_LOGO_KEY.to_string(),
+                MetadataValue::Text(token_logo.clone()),
+            );
+        }
 
         for (account, amount) in self.get_all_ledger_accounts(sns_canister_ids)? {
-            payload = payload.with_initial_balance(account, amount);
+            payload_builder = payload_builder.with_initial_balance(account, amount);
         }
         for (account, amount) in self.maybe_test_balances() {
-            payload = payload.with_initial_balance(account, amount);
+            payload_builder = payload_builder.with_initial_balance(account, amount);
         }
-        Ok(LedgerArgument::Init(payload.build()))
+        Ok(LedgerArgument::Init(payload_builder.build()))
     }
 
     /// Construct the params used to initialize a SNS Index canister.
@@ -599,6 +612,7 @@ impl SnsInitPayload {
             neuron_basket_construction_parameters: _,
             nns_proposal_id: _,
             neurons_fund_participants: _,
+            token_logo: _,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
@@ -663,7 +677,7 @@ impl SnsInitPayload {
             self.validate_wait_for_quiet_deadline_increase_seconds(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
-            self.validate_swap_parameters_are_legacy(),
+            self.validate_parameters_are_legacy(),
         ];
 
         self.join_validation_results(&validation_fns)
@@ -676,6 +690,7 @@ impl SnsInitPayload {
         let validation_fns = [
             self.validate_token_symbol(),
             self.validate_token_name(),
+            self.validate_token_logo(),
             self.validate_token_distribution(),
             self.validate_neuron_minimum_stake_e8s(),
             self.validate_neuron_minimum_dissolve_delay_to_vote_seconds(),
@@ -720,6 +735,7 @@ impl SnsInitPayload {
         let validation_fns = [
             self.validate_token_symbol(),
             self.validate_token_name(),
+            self.validate_token_logo(),
             self.validate_token_distribution(),
             self.validate_neuron_minimum_stake_e8s(),
             self.validate_neuron_minimum_dissolve_delay_to_vote_seconds(),
@@ -768,7 +784,7 @@ impl SnsInitPayload {
             .is_ok()
         {
             Ok(false)
-        } else if self.validate_swap_parameters_are_legacy().is_ok() {
+        } else if self.validate_parameters_are_legacy().is_ok() {
             Ok(true)
         } else {
             Err(
@@ -864,6 +880,35 @@ impl SnsInitPayload {
                 .collect::<String>(),
         ) {
             return Err("Banned token name, please chose another one.".to_string());
+        }
+
+        Ok(())
+    }
+
+    fn validate_token_logo(&self) -> Result<(), String> {
+        let token_logo = self
+            .token_logo
+            .as_ref()
+            .ok_or_else(|| "Error: token_logo must be specified".to_string())?;
+
+        const PREFIX: &str = "data:image/png;base64,";
+
+        if token_logo.len() > SnsMetadata::MAX_LOGO_LENGTH {
+            return Err(format!(
+                "Error: token_logo must be less than {} characters, roughly 256 Kb",
+                SnsMetadata::MAX_LOGO_LENGTH
+            ));
+        }
+
+        if !token_logo.starts_with(PREFIX) {
+            return Err(format!(
+                "Error: token_logo must be a base64 encoded PNG, but the provided \
+                string doesn't begin with `{PREFIX}`."
+            ));
+        }
+
+        if base64::decode(&token_logo[PREFIX.len()..]).is_err() {
+            return Err("Couldn't decode base64 in SnsMetadata.logo".to_string());
         }
 
         Ok(())
@@ -1059,10 +1104,12 @@ impl SnsInitPayload {
     }
 
     fn validate_logo(&self) -> Result<(), String> {
-        if let Some(logo) = &self.logo {
-            SnsMetadata::validate_logo(logo)?;
-        }
-        Ok(())
+        let logo = self
+            .logo
+            .as_ref()
+            .ok_or_else(|| "Error: logo must be specified".to_string())?;
+
+        SnsMetadata::validate_logo(logo)
     }
 
     fn validate_url(&self) -> Result<(), String> {
@@ -1623,8 +1670,8 @@ impl SnsInitPayload {
     }
 
     /// Checks that no parameters not used by the legacy flow are present.
-    pub fn validate_swap_parameters_are_legacy(&self) -> Result<(), String> {
-        let stripped = self.clone().strip_non_legacy_swap_parameters();
+    pub fn validate_parameters_are_legacy(&self) -> Result<(), String> {
+        let stripped = self.clone().strip_non_legacy_parameters();
         if self == &stripped {
             Ok(())
         } else {
@@ -1683,6 +1730,9 @@ impl SnsInitPayload {
         if self.dapp_canisters.is_none() {
             missing_one_proposal_fields.push("dapp_canisters")
         }
+        if self.token_logo.is_none() {
+            missing_one_proposal_fields.push("token_logo")
+        }
 
         if missing_one_proposal_fields.is_empty() {
             Ok(())
@@ -1692,7 +1742,7 @@ impl SnsInitPayload {
     }
 
     /// Removes everything that is not used in the legacy flow
-    pub fn strip_non_legacy_swap_parameters(self) -> Self {
+    pub fn strip_non_legacy_parameters(self) -> Self {
         Self {
             min_participants: None,
             min_icp_e8s: None,
@@ -1705,6 +1755,7 @@ impl SnsInitPayload {
             swap_start_timestamp_seconds: None,
             swap_due_timestamp_seconds: None,
             dapp_canisters: None,
+            token_logo: None,
             ..self
         }
     }
@@ -1718,7 +1769,7 @@ mod test {
             FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
         },
         FractionalDeveloperVotingPower, NeuronBasketConstructionParametersValidationError,
-        RestrictedCountriesValidationError, SnsCanisterIds, SnsInitPayload,
+        RestrictedCountriesValidationError, SnsCanisterIds, SnsInitPayload, ICRC1_TOKEN_LOGO_KEY,
         MAX_CONFIRMATION_TEXT_LENGTH, MAX_DAPP_CANISTERS_COUNT,
         MAX_FALLBACK_CONTROLLER_PRINCIPAL_IDS_COUNT, MAX_TOKEN_NAME_LENGTH,
         MAX_TOKEN_SYMBOL_LENGTH,
@@ -1730,7 +1781,7 @@ mod test {
         governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
     };
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
-    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
     use std::{collections::BTreeMap, convert::TryInto};
 
@@ -2543,11 +2594,13 @@ mod test {
         let transaction_fee = 10_000;
         let token_symbol = "SNS".to_string();
         let token_name = "ServiceNervousSystem Coin".to_string();
+        let token_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
 
         let sns_init_payload = SnsInitPayload {
             token_name: Some(token_name.clone()),
             token_symbol: Some(token_symbol.clone()),
             transaction_fee_e8s: Some(transaction_fee),
+            token_logo: Some(token_logo.clone()),
             ..SnsInitPayload::with_valid_values_for_testing()
         };
 
@@ -2576,6 +2629,13 @@ mod test {
                 }
             );
             assert_eq!(ledger.transfer_fee, transaction_fee);
+            assert_eq!(
+                ledger.metadata,
+                vec![(
+                    ICRC1_TOKEN_LOGO_KEY.to_string(),
+                    MetadataValue::Text(token_logo.clone())
+                )]
+            )
         } else {
             panic!("bug: expected Init got Upgrade.");
         }
@@ -2882,6 +2942,56 @@ mod test {
         sns_init_payload.validate_post_execution().unwrap();
         sns_init_payload.validate_pre_execution().unwrap_err();
         sns_init_payload.validate_legacy_init().unwrap_err();
+    }
+
+    #[test]
+    fn test_token_logo_validation() {
+        // Build a payload that passes validation, then test the parts that wouldn't
+        let get_sns_init_payload = || {
+            SnsInitPayload::with_valid_values_for_testing()
+                .validate_post_execution()
+                .expect("Payload did not pass validation.")
+        };
+
+        let token_logo = "data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string();
+
+        // The legacy SnsInitPayload should not support the token-logo configuration
+        let mut sns_init_payload = SnsInitPayload::with_valid_legacy_values_for_testing();
+        sns_init_payload.token_logo = Some(token_logo.clone());
+        sns_init_payload.validate_legacy_init().unwrap_err();
+
+        // Not-specified
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = None;
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        // Exceeds max length
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = Some("S".repeat(SnsMetadata::MAX_LOGO_LENGTH + 1));
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        // Illegal image prefix
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = Some("NOT A DATA URL WITH BASE64".to_string());
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = Some("data:image/png;".to_string());
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap_err();
+        sns_init_payload.validate_pre_execution().unwrap_err();
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.token_logo = Some(token_logo.clone());
+        sns_init_payload.validate_legacy_init().unwrap_err();
+        sns_init_payload.validate_post_execution().unwrap();
+        sns_init_payload.validate_pre_execution().unwrap_err();
     }
 
     #[test]

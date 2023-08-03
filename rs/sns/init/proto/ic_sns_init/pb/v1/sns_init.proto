@@ -185,14 +185,17 @@ message SnsInitPayload {
   // SNS Tokens available to all investors instead of being liquid immediately.
   // See `NeuronBasketConstructionParameters` for more details on how
   // the basket is configured.
-   optional ic_sns_swap.pb.v1.NeuronBasketConstructionParameters neuron_basket_construction_parameters = 33;
+  optional ic_sns_swap.pb.v1.NeuronBasketConstructionParameters neuron_basket_construction_parameters = 33;
 
   // The ID of the NNS proposal submitted to launch this SNS decentralization
   // swap.
-   optional uint64 nns_proposal_id = 34;
+  optional uint64 nns_proposal_id = 34;
 
   // The Neurons' Fund participants of this SNS decentralization swap.
   optional NeuronsFundParticipants neurons_fund_participants = 35;
+
+  // The token_logo for the SNS project represented as a base64 encoded string.
+  optional string token_logo = 36;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures
