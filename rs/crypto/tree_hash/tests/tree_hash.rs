@@ -610,12 +610,19 @@ fn witness_generator_from_hash_tree_should_fail_on_non_sorted_labels() {
 }
 
 #[test]
-fn witness_should_fail_for_non_existing_path_at_root() {
-    // Missing label at root: (root) -> wrong_label.
-    let wrong_label = Label::from("wrong label");
-    let contents = Vec::from("ignored");
+fn witness_should_include_absence_proof_with_both_subtrees_at_root() {
+    // Generating a witness for +-- label_aa ... should result in the following
+    // absence proof
+    //
+    //    +-- label_a
+    //           \__ Pruned
+    //    +-- label_b
+    //           +-- Pruned
+
+    let label_non_existing = Label::from("label_aa");
+    let contents = Vec::from("v");
     let root_map = flatmap!(
-        wrong_label.to_owned() => LabeledTree::Leaf(contents)
+        label_non_existing => LabeledTree::Leaf(contents)
     );
     let partial_tree = LabeledTree::SubTree(root_map);
 
@@ -623,23 +630,40 @@ fn witness_should_fail_for_non_existing_path_at_root() {
     let witness_generator = builder.witness_generator().unwrap();
 
     let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
 
-    assert_eq!(err_inconsistent_partial_tree(vec![wrong_label]), res);
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Node {
+            label: Label::from("label_a"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.left_tree().node_tree().digest().clone(),
+            }),
+        }),
+        right_tree: Box::new(Witness::Node {
+            label: Label::from("label_b"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.right_tree().node_tree().digest().clone(),
+            }),
+        }),
+    });
+    assert_eq!(res, expected_result);
 }
 
 #[test]
-fn witness_should_fail_for_non_existing_sub_path() {
-    // Simple path: label_b -> wrong_label
+fn witness_should_include_absence_proof_with_smaller_labeled_subtree_at_root() {
+    // Generating a witness for +-- a ... should result in the following
+    // absence proof
+    //
+    //    +-- label_a
+    //           \__ Pruned
+    //    +-- Pruned
 
-    let label_b = Label::from("label_b");
-    let wrong_label = Label::from("wrong label");
-    let contents = Vec::from("ignored");
-
-    let subtree_map = flatmap!(
-        wrong_label.to_owned() => LabeledTree::Leaf(contents)
-    );
+    let label_non_existing = Label::from("a");
+    let contents = Vec::from("v");
     let root_map = flatmap!(
-        label_b.to_owned() => LabeledTree::SubTree(subtree_map)
+        label_non_existing => LabeledTree::Leaf(contents)
     );
     let partial_tree = LabeledTree::SubTree(root_map);
 
@@ -647,11 +671,61 @@ fn witness_should_fail_for_non_existing_sub_path() {
     let witness_generator = builder.witness_generator().unwrap();
 
     let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
 
-    assert_eq!(
-        err_inconsistent_partial_tree(vec![label_b, wrong_label]),
-        res
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Node {
+            label: Label::from("label_a"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.left_tree().node_tree().digest().clone(),
+            }),
+        }),
+        right_tree: Box::new(Witness::Pruned {
+            digest: root_nodes.right_tree().digest().clone(),
+        }),
+    });
+    assert_eq!(res, expected_result);
+}
+
+#[test]
+fn witness_should_include_absence_proof_with_largest_labeled_subtree_at_root() {
+    // Generating a witness for +-- label_bb ... should result in the following
+    // absence proof
+    //
+    //    +-- Pruned
+    //    +-- label_b
+    //           \__ Pruned
+    //
+
+    let label_non_existing = Label::from("label_bb");
+    let contents = Vec::from("v");
+    let root_map = flatmap!(
+        label_non_existing => LabeledTree::Leaf(contents)
     );
+    let partial_tree = LabeledTree::SubTree(root_map);
+
+    let builder = tree_with_a_subtree();
+    let witness_generator = builder.witness_generator().unwrap();
+
+    let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
+
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Pruned {
+            digest: root_nodes.left_tree().digest().clone(),
+        }),
+        right_tree: Box::new(Witness::Node {
+            label: Label::from("label_b"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.right_tree().node_tree().digest().clone(),
+            }),
+        }),
+    });
+    assert_eq!(res, expected_result);
 }
 
 fn add_leaf<T>(label: T, contents: &str, builder: &mut HashTreeBuilderImpl)
@@ -674,19 +748,21 @@ where
     builder.start_subtree();
 }
 
-// Generates a builder with a tree, used for witness tests.
-// (root)
-//    +-- label_a
-//           \__ contents_a
-//    +-- label_b
-//           +-- label_c
-//                  \__ contents_c
-//           +-- label_d
-//                  \__ contents_d
-//           +-- label_e
-//                  \__ contents_e
-//           +-- label_f
-//                  \__ contents_f
+/// Generates a builder with a tree, used for witness tests.
+/// ```text
+/// (root)
+///    +-- label_a
+///           \__ contents_a
+///    +-- label_b
+///           +-- label_c
+///                  \__ contents_c
+///           +-- label_d
+///                  \__ contents_d
+///           +-- label_e
+///                  \__ contents_e
+///           +-- label_f
+///                  \__ contents_f
+/// ```
 fn tree_with_a_subtree() -> HashTreeBuilderImpl {
     let default_contents = &FlatMap::new();
     tree_with_a_subtree_and_custom_contents(default_contents)
@@ -3096,25 +3172,39 @@ fn pruning_depth_0_tree_works_correctly() {
                 random_tree_desired_size,
                 min_leaves,
             );
-            if matches!(&other_labeled_tree, LabeledTree::SubTree(children) if !children.is_empty())
-            {
-                // any attempt to generate a witness with any other tree of
-                // depth > 0 should error
-                assert_matches!(
-                    builder
-                        .witness_generator()
-                        .unwrap()
-                        .witness(&other_labeled_tree),
-                    Err(TreeHashError::InconsistentPartialTree { offending_path: _ }),
+            if other_labeled_tree == labeled_tree {
+                continue;
+            }
+
+            let other_has_depth_gt_0 = matches!(&other_labeled_tree, LabeledTree::SubTree(children) if !children.is_empty());
+            if other_has_depth_gt_0 {
+                let computed_witness = builder
+                    .witness_generator()
+                    .unwrap()
+                    .witness(&other_labeled_tree);
+                let expected_witness = if matches!(&labeled_tree, LabeledTree::Leaf(_)) {
+                    Witness::Pruned {
+                        digest: builder.as_hash_tree().unwrap().digest().clone(),
+                    }
+                } else {
+                    Witness::Known()
+                };
+                // any attempt to generate a witness should result in the same witness
+                assert_eq!(
+                    computed_witness.as_ref(),
+                    Ok(&expected_witness),
                     "labeled_tree={labeled_tree:?}, other_labeled_tree={other_labeled_tree:?}"
                 );
-                // any attempt to `recompute_digest` or `prune_witness` with any
-                // other tree of depth > 0 should error
+                // A labeled tree with depth > 0 can't be plugged in to
+                // `witness`, which equals `Witness::Known`.
+                // Therefore, any attempt to `recompute_digest` or `prune_witness` with any
+                // other tree of depth > 0 should error.
                 assert_eq!(
                     recompute_digest(&other_labeled_tree, &witness),
                     Err(TreeHashError::InconsistentPartialTree {
                         offending_path: vec![]
-                    })
+                    }),
+                    "witness={witness:?}, other_labeled_tree={other_labeled_tree:?}"
                 );
                 assert_eq!(
                     prune_witness(&witness, &other_labeled_tree),
@@ -3321,4 +3411,82 @@ fn mixed_hash_tree_merge_consistency() {
         assert_eq!(MixedHashTree::merge(t1.clone(), t2.clone()), Ok(t1.clone()));
         assert_eq!(MixedHashTree::merge(t2.clone(), t1.clone()), Ok(t1.clone()));
     }
+}
+
+#[test]
+fn witness_for_a_leaf_returns_pruned_for_a_subtree() {
+    // For the trees
+    //
+    //    +-- label_b
+    //           \__ leaf
+    //
+    // should return the following Witness
+    //    +-- Pruned
+    //    +-- label_b
+    //           \__ Pruned
+
+    let partial_tree = LabeledTree::SubTree(flatmap!(
+        Label::from("label_b") => LabeledTree::Leaf(Vec::from("v"))
+    ));
+
+    let builder = tree_with_a_subtree();
+    let witness_generator = builder.witness_generator().unwrap();
+
+    let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
+
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Pruned {
+            digest: root_nodes.left_tree().digest().clone(),
+        }),
+        right_tree: Box::new(Witness::Node {
+            label: Label::from("label_b"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.right_tree().node_tree().digest().clone(),
+            }),
+        }),
+    });
+    assert_eq!(res, expected_result);
+}
+
+#[test]
+fn witness_for_a_subtree_returns_pruned_for_a_leaf() {
+    // For the tree
+    //
+    //    +-- label_a
+    //           \__ label_b
+    //                  \__ leaf
+    //
+    // should return the following Witness
+    //    +-- label_a
+    //           \__ Pruned
+    //    +-- Pruned
+
+    let partial_tree = LabeledTree::SubTree(flatmap!(
+        Label::from("label_a") => LabeledTree::SubTree(flatmap!(
+        Label::from("label_b") => LabeledTree::Leaf(Vec::from("v"))
+    ))));
+
+    let builder = tree_with_a_subtree();
+    let witness_generator = builder.witness_generator().unwrap();
+
+    let res = witness_generator.witness(&partial_tree);
+    let root_nodes = builder
+        .as_hash_tree()
+        .expect("failed to generate hash tree");
+
+    let expected_result = Ok(Witness::Fork {
+        left_tree: Box::new(Witness::Node {
+            label: Label::from("label_a"),
+            sub_witness: Box::new(Witness::Pruned {
+                digest: root_nodes.left_tree().node_tree().digest().clone(),
+            }),
+        }),
+        right_tree: Box::new(Witness::Pruned {
+            digest: root_nodes.right_tree().digest().clone(),
+        }),
+    });
+    assert_eq!(res, expected_result);
 }

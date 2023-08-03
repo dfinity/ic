@@ -1008,12 +1008,12 @@ pub trait WitnessGenerator {
     /// an error is returned.
     ///
     /// Does not `panic!`.
-    fn witness(&self, partial_tree: &LabeledTree<Vec<u8>>) -> Result<Witness, TreeHashError>;
+    fn witness(&self, partial_tree: &LabeledTree<Vec<u8>>) -> Result<Witness, MergeError<Witness>>;
 
     fn mixed_hash_tree(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
-    ) -> Result<MixedHashTree, TreeHashError>;
+    ) -> Result<MixedHashTree, MergeError<MixedHashTree>>;
 }
 
 /// `HashTreeBuilder` enables an iterative construction of a [`LabeledTree`],
