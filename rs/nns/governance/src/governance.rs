@@ -4609,17 +4609,17 @@ impl Governance {
             ))?;
 
         let withdrawal_amount_e8s = *swap_parameters
-            .neurons_fund_investment
+            .neurons_fund_investment_icp
             .as_ref()
             .ok_or(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "missing field swap_parameters.neurons_fund_investment",
+                "missing field swap_parameters.neurons_fund_investment_icp",
             ))?
             .e8s
             .as_ref()
             .ok_or(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "missing field swap_parameters.neurons_fund_investment.e8s",
+                "missing field swap_parameters.neurons_fund_investment_icp.e8s",
             ))?;
 
         let max_icp_e8s = *swap_parameters
