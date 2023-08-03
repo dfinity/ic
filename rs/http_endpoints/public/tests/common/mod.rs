@@ -18,7 +18,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_interfaces_state_manager::{Labeled, StateReader};
+use ic_interfaces_state_manager::{CertifiedStateReader, Labeled, StateReader};
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -152,6 +152,33 @@ pub fn default_read_certified_state(
     Some((rs, mht, cert))
 }
 
+pub fn default_certified_state_reader(
+) -> Option<Box<dyn CertifiedStateReader<State = ReplicatedState> + 'static>> {
+    struct FakeCertifiedStateReader(Arc<ReplicatedState>, MixedHashTree, Certification);
+
+    impl CertifiedStateReader for FakeCertifiedStateReader {
+        type State = ReplicatedState;
+
+        fn get_state(&self) -> &ReplicatedState {
+            &self.0
+        }
+
+        fn read_certified_state(
+            &self,
+            _paths: &LabeledTree<()>,
+        ) -> Option<(MixedHashTree, Certification)> {
+            Some((self.1.clone(), self.2.clone()))
+        }
+    }
+
+    let (state, hash_tree, certification) = default_read_certified_state(&LabeledTree::Leaf(()))?;
+    Some(Box::new(FakeCertifiedStateReader(
+        state,
+        hash_tree,
+        certification,
+    )))
+}
+
 pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
 
@@ -195,8 +222,16 @@ pub fn basic_state_manager_mock() -> MockStateManager {
         .returning(default_read_certified_state);
 
     mock_state_manager
+        .expect_read_certified_state()
+        .returning(default_read_certified_state);
+
+    mock_state_manager
         .expect_latest_certified_height()
         .returning(default_latest_certified_height);
+
+    mock_state_manager
+        .expect_get_certified_state_reader()
+        .returning(default_certified_state_reader);
 
     mock_state_manager
 }

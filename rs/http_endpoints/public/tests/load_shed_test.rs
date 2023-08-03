@@ -2,8 +2,9 @@ pub mod common;
 
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
-    default_get_latest_state, default_latest_certified_height, default_read_certified_state,
-    get_free_localhost_socket_addr, start_http_endpoint, wait_for_status_healthy,
+    default_certified_state_reader, default_get_latest_state, default_latest_certified_height,
+    default_read_certified_state, get_free_localhost_socket_addr, start_http_endpoint,
+    wait_for_status_healthy,
 };
 use async_trait::async_trait;
 use hyper::{Body, Client, Method, Request, StatusCode};
@@ -169,11 +170,29 @@ fn test_load_shedding_read_state() {
             // This is due to status endpoint also relying on state_reader_executor.
             if service_is_healthy_clone.load(Ordering::Relaxed) {
                 rt_clone.block_on(async {
-                    read_state_running.notify_one();
-                    load_shedder_returned.notified().await;
+                    read_state_running_clone.notify_one();
+                    load_shedder_returned_clone.notified().await;
                 })
             }
             default_read_certified_state(labeled_tree)
+        });
+
+    let service_is_healthy_clone = service_is_healthy.clone();
+    let read_state_running_clone = read_state_running.clone();
+    let load_shedder_returned_clone = load_shedder_returned.clone();
+    let rt_clone: tokio::runtime::Handle = rt.handle().clone();
+    mock_state_manager
+        .expect_get_certified_state_reader()
+        .returning(move || {
+            // Need this check, otherwise wait_for_status_healthy() will be stuck.
+            // This is due to status endpoint also relying on state_reader_executor.
+            if service_is_healthy_clone.load(Ordering::Relaxed) {
+                rt_clone.block_on(async {
+                    read_state_running_clone.notify_one();
+                    load_shedder_returned_clone.notified().await;
+                })
+            }
+            default_certified_state_reader()
         });
 
     let mock_consensus_cache = basic_consensus_pool_cache();
@@ -201,13 +220,13 @@ fn test_load_shedding_read_state() {
 
     // This agent's request wil be load shedded
     let load_shedded_agent_resp = rt.spawn(async move {
-        read_state_running_clone.notified().await;
+        read_state_running.notified().await;
 
         let response = load_shedded_agent
             .read_state_raw(paths_clone, canister)
             .await;
 
-        load_shedder_returned_clone.notify_one();
+        load_shedder_returned.notify_one();
 
         response.map(|_| ())
     });

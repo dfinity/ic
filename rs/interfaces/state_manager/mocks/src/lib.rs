@@ -1,7 +1,7 @@
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_interfaces_state_manager::{
-    CertificationMask, CertificationScope, Labeled, StateHashError, StateManager,
-    StateManagerResult, StateReader,
+    CertificationMask, CertificationScope, CertifiedStateReader, Labeled, StateHashError,
+    StateManager, StateManagerResult, StateReader,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -28,6 +28,8 @@ mock! {
             &self,
             _paths: &LabeledTree<()>
         ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
+
+        fn get_certified_state_reader(&self) -> Option<Box<dyn CertifiedStateReader<State = <MockStateManager as StateReader>::State> + 'static>>;
     }
 
     impl StateManager for StateManager {
