@@ -27,8 +27,10 @@ service : (MinterArg) -> {
         gas_price : nat;
         gas_limit : nat;
     });
-    retrieve_processed_transactions: () -> ( record {
-        minted : vec record {transaction_hash : text};
-        invalid : vec record {transaction_hash : text};
+    dump_state_for_debugging: () -> ( record {
+        ecdsa_key_name : text;
+        last_seen_block_number: nat;
+        minted_transactions : vec record {transaction_hash : text};
+        invalid_transactions : vec record {transaction_hash : text};
     }) query;
 }
