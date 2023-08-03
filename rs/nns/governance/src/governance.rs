@@ -1257,14 +1257,6 @@ impl Tally {
 }
 
 impl GovernanceProto {
-    pub fn build_known_neuron_name_index(&self) -> HashSet<String> {
-        self.neurons
-            .iter()
-            .filter(|(_id, neuron)| neuron.known_neuron_data.is_some())
-            .map(|(_id, neuron)| neuron.known_neuron_data.as_ref().unwrap().name.clone())
-            .collect()
-    }
-
     // Returns whether the proposed default following is valid by making
     // sure that the referred-to neurons exist.
     fn validate_default_followees(
@@ -1648,10 +1640,10 @@ impl Governance {
     fn initialize_indices(&mut self) {
         self.build_principal_to_neuron_ids_index();
         self.build_topic_followee_index();
-        self.known_neuron_name_set = self.proto.build_known_neuron_name_index();
+        self.build_known_neuron_name_index();
     }
 
-    pub fn build_principal_to_neuron_ids_index(&mut self) {
+    fn build_principal_to_neuron_ids_index(&mut self) {
         for neuron in self.proto.neurons.values() {
             self.principal_to_neuron_ids_index
                 .add_neuron_id_principal_ids(
@@ -1665,7 +1657,7 @@ impl Governance {
     /// index (per topic) from followee to set of followers. The
     /// neurons themselves map followers (the neuron ID) to a set of
     /// followees (per topic).
-    pub fn build_topic_followee_index(&mut self) {
+    fn build_topic_followee_index(&mut self) {
         for neuron in self.proto.neurons.values() {
             let neuron_id = neuron.id.expect("Neuron must have an id");
             let already_present_topic_followee_pairs = add_neuron_followees(
@@ -1680,9 +1672,18 @@ impl Governance {
         }
     }
 
+    fn build_known_neuron_name_index(&mut self) {
+        for neuron in self.proto.neurons.values() {
+            if let Some(known_neuron_data) = &neuron.known_neuron_data {
+                self.known_neuron_name_set
+                    .insert(known_neuron_data.name.clone());
+            }
+        }
+    }
+
     /// Update `index` to map all the given Neuron's hot keys and controller to
     /// `neuron_id`
-    pub fn add_neuron_to_principal_to_neuron_ids_index(
+    fn add_neuron_to_principal_to_neuron_ids_index(
         &mut self,
         neuron_id: NeuronId,
         principal_ids: Vec<PrincipalId>,
@@ -1692,7 +1693,7 @@ impl Governance {
             .add_neuron_id_principal_ids(&neuron_id, principal_ids);
     }
 
-    pub fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
+    fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
         &mut self,
         neuron_id: NeuronId,
         principal_id: PrincipalId,
@@ -1704,7 +1705,7 @@ impl Governance {
 
     /// Update `index` to remove the neuron from the list of neurons mapped to
     /// principals.
-    pub fn remove_neuron_from_principal_to_neuron_ids_index(
+    fn remove_neuron_from_principal_to_neuron_ids_index(
         &mut self,
         neuron_id: NeuronId,
         principal_ids: Vec<PrincipalId>,
@@ -1714,7 +1715,7 @@ impl Governance {
             .remove_neuron_id_principal_ids(&neuron_id, principal_ids);
     }
 
-    pub fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
+    fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
         &mut self,
         neuron_id: NeuronId,
         principal_id: PrincipalId,
@@ -1724,7 +1725,7 @@ impl Governance {
             .remove_neuron_id_principal_id(&neuron_id, principal_id);
     }
 
-    pub fn add_neuron_to_topic_followee_index(
+    fn add_neuron_to_topic_followee_index(
         &mut self,
         neuron_id: NeuronId,
         topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
@@ -1738,7 +1739,7 @@ impl Governance {
         log_already_present_topic_followee_pairs(neuron_id, already_present_topic_followee_pairs);
     }
 
-    pub fn remove_neuron_from_topic_followee_index(
+    fn remove_neuron_from_topic_followee_index(
         &mut self,
         neuron_id: NeuronId,
         topic_followee_pairs: BTreeSet<(Topic, NeuronId)>,
@@ -1750,6 +1751,17 @@ impl Governance {
             topic_followee_pairs,
         );
         log_already_absent_topic_followee_pairs(neuron_id, already_absent_topic_followee_pairs);
+    }
+
+    fn add_known_neuron_to_index(&mut self, known_neuron_name: &str) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        self.known_neuron_name_set
+            .insert(known_neuron_name.to_string());
+    }
+
+    fn remove_known_neuron_to_index(&mut self, known_neuron_name: &str) {
+        // TODO(NNS1-2409): Apply index updates to stable storage index.
+        self.known_neuron_name_set.remove(known_neuron_name);
     }
 
     fn transaction_fee(&self) -> u64 {
@@ -6282,10 +6294,9 @@ impl Governance {
                 .replace(known_neuron_data.clone())
                 .map(|old_known_neuron_data| old_known_neuron_data.name)
         })? {
-            self.known_neuron_name_set.remove(&old_name);
+            self.remove_known_neuron_to_index(&old_name);
         }
-        self.known_neuron_name_set
-            .insert(known_neuron_data.name.clone());
+        self.add_known_neuron_to_index(&known_neuron_data.name);
         Ok(())
     }
 
