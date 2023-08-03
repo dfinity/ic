@@ -3652,7 +3652,7 @@ struct ProposeToCreateServiceNervousSystemCmd {
     swap_duration: nervous_system_pb::Duration,
 
     #[clap(long, value_parser=parse_tokens)]
-    neurons_fund_investment: nervous_system_pb::Tokens,
+    neurons_fund_investment_icp: nervous_system_pb::Tokens,
 
     // Ledger
     // ------
@@ -3745,7 +3745,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             restrict_swap_in_country: restricted_countries,
             swap_start_time,
             swap_duration,
-            neurons_fund_investment,
+            neurons_fund_investment_icp,
 
             transaction_fee,
             token_name,
@@ -3862,7 +3862,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             let maximum_participant_icp = Some(swap_maximum_participant_icp);
             let start_time = swap_start_time;
             let duration = Some(swap_duration);
-            let neurons_fund_investment = Some(neurons_fund_investment);
+            let neurons_fund_investment_icp = Some(neurons_fund_investment_icp);
 
             let neuron_basket_construction_parameters = {
                 let count = Some(swap_neuron_count);
@@ -3888,7 +3888,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 neuron_basket_construction_parameters,
                 start_time,
                 duration,
-                neurons_fund_investment,
+                neurons_fund_investment_icp,
             })
         };
 

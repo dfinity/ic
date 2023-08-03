@@ -1596,7 +1596,7 @@ pub(crate) fn create_service_nervous_system_into_params(
         restricted_countries: _,
         start_time,
         duration,
-        neurons_fund_investment: _,
+        neurons_fund_investment_icp: _,
     } = create_service_nervous_system
         .swap_parameters
         .clone()

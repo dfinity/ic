@@ -2259,7 +2259,7 @@ pub mod create_service_nervous_system {
         /// The amount that the Neuron's Fund will collectively spend in maturity on
         /// the swap.
         #[prost(message, optional, tag = "11")]
-        pub neurons_fund_investment:
+        pub neurons_fund_investment_icp:
             ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
     }
     /// Nested message and enum types in `SwapParameters`.

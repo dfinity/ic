@@ -176,7 +176,7 @@ pub(crate) struct Swap {
     duration: nervous_system_pb::Duration,
 
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
-    neurons_fund_investment: nervous_system_pb::Tokens,
+    neurons_fund_investment_icp: nervous_system_pb::Tokens,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -668,7 +668,7 @@ impl Swap {
 
             start_time,
             duration,
-            neurons_fund_investment,
+            neurons_fund_investment_icp,
         } = self;
 
         let minimum_participants = Some(*minimum_participants);
@@ -692,7 +692,7 @@ impl Swap {
         let start_time = *start_time;
         let duration = Some(*duration);
 
-        let neurons_fund_investment = Some(*neurons_fund_investment);
+        let neurons_fund_investment_icp = Some(*neurons_fund_investment_icp);
 
         nns_governance_pb::SwapParameters {
             minimum_participants,
@@ -710,7 +710,7 @@ impl Swap {
 
             start_time,
             duration,
-            neurons_fund_investment,
+            neurons_fund_investment_icp,
         }
     }
 }

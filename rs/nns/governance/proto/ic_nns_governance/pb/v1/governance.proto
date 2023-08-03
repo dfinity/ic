@@ -1652,7 +1652,7 @@ message CreateServiceNervousSystem {
 
     // The amount that the Neuron's Fund will collectively spend in maturity on
     // the swap.
-    optional ic_nervous_system.pb.v1.Tokens neurons_fund_investment = 11;
+    optional ic_nervous_system.pb.v1.Tokens neurons_fund_investment_icp = 11;
   }
 
   SwapParameters swap_parameters = 8;

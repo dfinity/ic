@@ -77,7 +77,7 @@ fn nns_cf_neuron() -> Neuron {
     let cf_contribution = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap()
-        .neurons_fund_investment
+        .neurons_fund_investment_icp
         .unwrap()
         .e8s
         .unwrap();
@@ -134,7 +134,7 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     let cf_contribution = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap()
-        .neurons_fund_investment
+        .neurons_fund_investment_icp
         .unwrap()
         .e8s
         .unwrap();

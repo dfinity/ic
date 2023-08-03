@@ -147,7 +147,7 @@ lazy_static! {
                 seconds: Some(604_800),
             }),
 
-            neurons_fund_investment: Some(pb::Tokens {
+            neurons_fund_investment_icp: Some(pb::Tokens {
                 e8s: Some(6_100_000_000),
             }),
         })

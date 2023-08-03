@@ -77,7 +77,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "10:01 UTC",
             "--swap-duration",
             "7 days",
-            "--neurons-fund-investment",
+            "--neurons-fund-investment-icp",
             "2_tokens",
             "--transaction-fee",
             "10_000_e8s",
@@ -164,7 +164,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 duration: Some(nervous_system_pb::Duration {
                     seconds: Some(7 * SECONDS_PER_DAY),
                 }),
-                neurons_fund_investment: Some(nervous_system_pb::Tokens::from_tokens(2))
+                neurons_fund_investment_icp: Some(nervous_system_pb::Tokens::from_tokens(2))
             }),
             ledger_parameters: Some(LedgerParameters {
                 transaction_fee: Some(nervous_system_pb::Tokens { e8s: Some(10_000) }),
@@ -337,7 +337,7 @@ fn convert_from_flags_to_create_service_nervous_system_without_start_time() {
             "6w",
             "--swap-duration",
             "7 days",
-            "--neurons-fund-investment",
+            "--neurons-fund-investment-icp",
             "2_tokens",
             "--transaction-fee",
             "10_000_e8s",
