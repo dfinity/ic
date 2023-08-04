@@ -22,8 +22,8 @@ use ic_nns_common::{
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
-        governance_minting_account, neuron_subaccount, subaccount_from_slice, Environment,
-        Governance, HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        governance_minting_account, neuron_subaccount, Environment, Governance,
+        HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
         MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,

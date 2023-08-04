@@ -38,13 +38,12 @@ use ic_nns_constants::{
 };
 use ic_nns_governance::{
     governance::{
-        subaccount_from_slice, test_data::CREATE_SERVICE_NERVOUS_SYSTEM, validate_proposal_title,
-        Environment, Governance, HeapGrowthPotential,
-        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, MAX_DISSOLVE_DELAY_SECONDS,
-        MAX_NEURON_AGE_FOR_AGE_BONUS, MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, ONE_DAY_SECONDS, ONE_MONTH_SECONDS,
-        ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
-        WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
+        test_data::CREATE_SERVICE_NERVOUS_SYSTEM, validate_proposal_title, Environment, Governance,
+        HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
+        REWARD_DISTRIBUTION_PERIOD_SECONDS, WAIT_FOR_QUIET_DEADLINE_INCREASE_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
@@ -4470,7 +4469,7 @@ fn test_claim_or_refresh_neuron_does_not_overflow() {
     let (mut driver, mut gov, neuron) = create_mature_neuron(true);
     let nid = neuron.id.unwrap();
     let _account = neuron.account.clone();
-    let subaccount = subaccount_from_slice(&neuron.account).unwrap().unwrap();
+    let subaccount = neuron.subaccount().unwrap();
 
     gov.with_neuron_mut(&nid, |neuron| {
         // Increase the dissolve delay, this will make the neuron start aging from
