@@ -54,12 +54,12 @@ impl GovernanceMutationProxy<'_> {
     pub fn with_neuron_mut<R>(
         &mut self,
         neuron_id: &NeuronId,
-        f: impl FnOnce(&mut Neuron) -> R,
+        modify: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, GovernanceError> {
         match self {
-            GovernanceMutationProxy::Committing(real) => real.with_neuron_mut(neuron_id, f),
+            GovernanceMutationProxy::Committing(real) => real.with_neuron_mut(neuron_id, modify),
             GovernanceMutationProxy::Simulating(simulating) => {
-                simulating.with_neuron_mut(neuron_id, f)
+                simulating.with_neuron_mut(neuron_id, modify)
             }
         }
     }
@@ -95,14 +95,14 @@ impl SimulatingGovernance<'_> {
     pub fn with_neuron_mut<R>(
         &mut self,
         neuron_id: &NeuronId,
-        f: impl FnOnce(&mut Neuron) -> R,
+        modify: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, GovernanceError> {
         let neuron = match self.neuron_map.entry(neuron_id.id) {
             Entry::Occupied(o) => o.into_mut(),
             Entry::Vacant(entry) => entry.insert(self.real_gov.get_neuron(neuron_id)?.clone()),
         };
 
-        Ok(f(neuron))
+        Ok(modify(neuron))
     }
 }
 

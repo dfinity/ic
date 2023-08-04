@@ -1853,27 +1853,27 @@ impl Governance {
     pub fn with_neuron<R>(
         &self,
         nid: &NeuronId,
-        f: impl FnOnce(&Neuron) -> R,
+        map: impl FnOnce(&Neuron) -> R,
     ) -> Result<R, GovernanceError> {
         let neuron = self
             .proto
             .neurons
             .get(&nid.id)
             .ok_or_else(|| Self::neuron_not_found_error(nid))?;
-        Ok(f(neuron))
+        Ok(map(neuron))
     }
 
     pub fn with_neuron_mut<R>(
         &mut self,
         nid: &NeuronId,
-        f: impl FnOnce(&mut Neuron) -> R,
+        modifier: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, GovernanceError> {
         let neuron = self
             .proto
             .neurons
             .get_mut(&nid.id)
             .ok_or_else(|| Self::neuron_not_found_error(nid))?;
-        Ok(f(neuron))
+        Ok(modifier(neuron))
     }
 
     pub fn list_heap_neurons(&self) -> impl Iterator<Item = &Neuron> {
