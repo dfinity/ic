@@ -125,27 +125,24 @@ pub fn config_impl(env: TestEnv) {
         })
     })
     .expect("Httpbin server should respond to incoming requests!");
-    // the remaining code in this function is EXPERIMENTAL
-    // aiming at reducing test flakiness
-    // if it helps, we'll clean up the code
+    // TODO(BOUN-838): replace the remaining code in this function
+    // with `await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);`
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
         .unwrap()
         .get_snapshot()
         .unwrap();
     retry(env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-        boundary_node.status_is_healthy().and_then(|s| {
-            if !s {
-                exec_ssh_command(
-                    &boundary_node,
-                    "sudo systemctl restart control-plane.service",
-                )
-                .expect("Could not restart control-plane.service");
-                bail!("BN didn't report healthy, control-plane.service restarted")
-            } else {
-                Ok(())
-            }
-        })
+        if let Ok(true) = boundary_node.status_is_healthy() {
+            Ok(())
+        } else {
+            exec_ssh_command(
+                &boundary_node,
+                "sudo systemctl restart control-plane.service",
+            )
+            .expect("Could not restart control-plane.service");
+            bail!("BN didn't report healthy, control-plane.service restarted")
+        }
     })
     .expect("BN did not come up!");
 }
