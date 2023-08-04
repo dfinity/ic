@@ -5,7 +5,7 @@ use ic_cdk::api::stable::{StableReader, StableWriter};
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc3::archive::QueryTxArchiveFn;
 use icrc_ledger_types::icrc3::transactions::{
-    GetTransactionsResponse, Transaction, TransactionRange, Transfer,
+    Approve, GetTransactionsResponse, Transaction, TransactionRange, Transfer,
 };
 use icrc_ledger_types::{
     icrc1::account::Account, icrc1::account::Subaccount, icrc3::archive::ArchivedRange,
@@ -300,6 +300,14 @@ fn index_transaction(txid: u64, transaction: Transaction) -> Result<(), String> 
                 .ok_or("Got a transaction with kind 'transfer' but the transfer field was None")?;
             add_tx(txid, from);
             add_tx(txid, to);
+            Ok(())
+        }
+        "approve" => {
+            let Approve { from, spender, .. } = transaction
+                .approve
+                .ok_or("Got a transaction with kind 'approve' but the approve field was None")?;
+            add_tx(txid, from);
+            add_tx(txid, spender);
             Ok(())
         }
         kind => Err(format!("Found transaction of unknown kind {}", kind)),
