@@ -1,5 +1,5 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
-load("@python_deps//:requirements.bzl", "all_requirements", "requirement")
+load("@python_deps//:requirements.bzl", "requirement")
 load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//rs/tests:common.bzl", "symlink_dir")
@@ -14,22 +14,6 @@ py_library(
         requirement("python-gflags"),
         requirement("six"),
         requirement("termcolor"),
-    ],
-)
-
-py_library(
-    name = "notify_dashboard",
-    srcs = ["common/notify_dashboard.py"],
-    deps = [] + all_requirements,
-)
-
-py_test(
-    name = "test_notify_dashboard",
-    srcs = ["common/tests/test_notify_dashboard.py"],
-    tags = ["requires-network"],
-    deps = [
-        ":misc",
-        ":notify_dashboard",
     ],
 )
 
@@ -141,18 +125,6 @@ py_test(
         requirement("python-gflags"),
         requirement("toml"),
     ],
-)
-
-py_library(
-    name = "verify_perf",
-    srcs = ["common/verify_perf.py"],
-    deps = [":misc"] + all_requirements,
-)
-
-py_test(
-    name = "test_verify_perf",
-    srcs = ["common/tests/test_verify_perf.py"],
-    deps = [":verify_perf"],
 )
 
 py_library(
