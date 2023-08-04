@@ -4,6 +4,7 @@ use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_protobuf::registry::subnet::v1::SubnetRecord as SubnetRecordProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_local_registry::LocalRegistry;
@@ -25,6 +26,7 @@ use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
     batch::{Batch, BatchMessages},
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+    crypto::AlgorithmId,
     time::Time,
     NodeId, PrincipalId, Randomness,
 };
@@ -180,6 +182,7 @@ struct TestRecords<'a, const N: usize> {
     provisional_whitelist: Integrity<&'a ProvisionalWhitelist>,
     routing_table: Integrity<&'a RoutingTable>,
     canister_migrations: Integrity<&'a CanisterMigrations>,
+    node_public_keys: &'a BTreeMap<NodeId, Integrity<PublicKeyProto>>,
 }
 
 /// Writes records into the registry using the `FakeRegistryClient`.
@@ -369,6 +372,22 @@ impl RegistryFixture {
         )
     }
 
+    // Writes node public keys into the registry.
+    fn write_node_public_keys(
+        &self,
+        node_public_keys: &BTreeMap<NodeId, Integrity<PublicKeyProto>>,
+    ) -> Result<(), ProtoRegistryDataProviderError> {
+        use ic_registry_keys::make_crypto_node_key;
+
+        for (node_id, public_key) in node_public_keys.iter() {
+            self.write_record(
+                &make_crypto_node_key(*node_id, KeyPurpose::NodeSigning),
+                public_key.clone(),
+            )?;
+        }
+        Ok(())
+    }
+
     /// Writes the relevant records into the registry for testing
     /// `BatchProcessorImpl::try_to_read_registry()`.
     /// `subnet_ids` is used to write
@@ -398,6 +417,7 @@ impl RegistryFixture {
         self.write_root_subnet_id(input.nns_subnet_id)?;
         self.write_ecdsa_signing_subnets(input.ecdsa_signing_subnets)?;
         self.write_provisional_whitelist(input.provisional_whitelist)?;
+        self.write_node_public_keys(input.node_public_keys)?;
         self.registry.update_to_latest_version();
         Ok(())
     }
@@ -425,9 +445,11 @@ impl StateMachine for FakeStateMachine {
         _batch: Batch,
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
+        node_public_keys: NodePublicKeys,
     ) -> ReplicatedState {
         state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
+        state.metadata.node_public_keys = node_public_keys;
         *self.0.lock().unwrap() = registry_settings.clone();
         state
     }
@@ -470,7 +492,15 @@ fn try_to_read_registry(
     registry: Arc<FakeRegistryClient>,
     log: ReplicaLogger,
     own_subnet_id: SubnetId,
-) -> Result<(NetworkTopology, SubnetFeatures, RegistryExecutionSettings), ReadRegistryError> {
+) -> Result<
+    (
+        NetworkTopology,
+        SubnetFeatures,
+        RegistryExecutionSettings,
+        NodePublicKeys,
+    ),
+    ReadRegistryError,
+> {
     let (batch_processor, _, _, _) = make_batch_processor(registry.clone(), log);
     batch_processor.try_to_read_registry(registry.get_latest_version(), own_subnet_id)
 }
@@ -489,6 +519,7 @@ fn try_to_read_registry(
 #[test]
 fn try_read_registry_succeeds_with_fully_specified_registry_records() {
     with_test_replica_logger(|log| {
+        use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
         use Integrity::*;
 
         // Own subnet characteristics.
@@ -562,6 +593,25 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             )
             .unwrap();
 
+        let dummy_node_key_1 = PublicKeyProto {
+            version: 0,
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: [1; 32].to_vec(),
+            proof_data: None,
+            timestamp: None,
+        };
+        let dummy_node_key_2 = PublicKeyProto {
+            version: 0,
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: [2; 32].to_vec(),
+            proof_data: None,
+            timestamp: None,
+        };
+        let node_public_keys = btreemap! {
+            node_test_id(1) => Valid(dummy_node_key_1.clone()),
+            node_test_id(2) => Valid(dummy_node_key_2.clone()),
+        };
+
         let fixture = RegistryFixture::new();
         fixture
             .write_test_records(&TestRecords {
@@ -573,15 +623,17 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 provisional_whitelist: Valid(&provisional_whitelist),
                 routing_table: Valid(&routing_table),
                 canister_migrations: Valid(&canister_migrations),
+                node_public_keys: &node_public_keys,
             })
             .unwrap();
 
         // Reading from the registry must succeed for fully specified records.
         let (batch_processor, metrics, state_manager, registry_settings) =
             make_batch_processor(fixture.registry.clone(), log);
-        let (network_topology, own_subnet_features, registry_execution_settings) = batch_processor
-            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
-            .unwrap();
+        let (network_topology, own_subnet_features, registry_execution_settings, node_public_keys) =
+            batch_processor
+                .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id)
+                .unwrap();
 
         // Full specification includes the subnet size of `own_subnet_id`. Check the corresponding
         // critical error counter is untouched.
@@ -650,6 +702,20 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
             own_subnet_record.membership.len(),
             registry_execution_settings.subnet_size,
         );
+
+        // Check node public keys.
+        assert_eq!(node_public_keys.len(), 2);
+        for (node_id, public_key) in [
+            (node_test_id(1), &dummy_node_key_1),
+            (node_test_id(2), &dummy_node_key_2),
+        ] {
+            assert_eq!(
+                &public_key_to_der(
+                    PublicKeyBytes::try_from(public_key).expect("invalid public key")
+                ),
+                node_public_keys.get(&node_id).unwrap(),
+            );
+        }
 
         // Commit a state with `own_subnet_id` in its metadata to ensure the latest
         // state corresponds to the registry records written above.
@@ -721,6 +787,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
         };
 
         let fixture = RegistryFixture::new();
@@ -737,7 +804,7 @@ fn try_read_registry_succeeds_with_minimal_registry_records() {
         // critical error for `subnet_size` has incremented.
         assert_eq!(metrics.critical_error_missing_subnet_size.get(), 1);
         // Check the subnet size was set to the maximum for a small app subnet.
-        let (_, _, registry_execution_settings) = result.unwrap();
+        let (_, _, registry_execution_settings, _) = result.unwrap();
         assert_eq!(
             registry_execution_settings.subnet_size,
             SMALL_APP_SUBNET_MAX_SIZE
@@ -819,6 +886,7 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
         };
 
         // Corrupted Subnet Ids.
@@ -926,8 +994,118 @@ fn try_to_read_registry_returns_errors_for_corrupted_records() {
             })
             .unwrap();
         assert_matches!(
+            try_to_read_registry(fixture.registry, log.clone(), own_subnet_id),
+            Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
+        );
+
+        // Corrupted node public keys.
+        // Note a corrupted node public key here means the registry data cannot be converted into `PublicKeyProto`.
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                node_public_keys: &btreemap! {
+                    node_test_id(1) => Corrupted,
+                    node_test_id(2) => Corrupted,
+                },
+                // The membership for the own subnet cannot be empty otherwise public keys won't be read at all.
+                subnet_records: [Valid(&SubnetRecord {
+                    membership: &[node_test_id(1)],
+                    ..own_subnet_record.clone()
+                })],
+                ..minimal_input
+            })
+            .unwrap();
+        assert_matches!(
             try_to_read_registry(fixture.registry, log, own_subnet_id),
             Err(ReadRegistryError::Persistent(err)) if err.contains("RegistryClientError")
+        );
+    });
+}
+
+/// Tests that `BatchProcessorImpl::try_to_read_registry()` can skip missing or invalid node public keys.
+#[test]
+fn try_read_registry_can_skip_missing_or_invalid_node_public_keys() {
+    with_test_replica_logger(|log| {
+        use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
+        use Integrity::*;
+
+        let own_subnet_id = subnet_test_id(13);
+        let own_subnet_record = SubnetRecord {
+            max_number_of_canisters: 784,
+            // The node IDs need to be set here otherwise public keys won't be read at all.
+            membership: &[node_test_id(1), node_test_id(2), node_test_id(3)],
+            ..Default::default()
+        };
+        let own_transcript = NiDkgTranscript::dummy_transcript_for_tests();
+        let nns_subnet_id = subnet_test_id(42);
+
+        let input = TestRecords {
+            subnet_ids: Valid([own_subnet_id]),
+            subnet_records: [Valid(&own_subnet_record)],
+            ni_dkg_transcripts: [Valid(Some(&own_transcript))],
+            nns_subnet_id: Valid(nns_subnet_id),
+            ecdsa_signing_subnets: &BTreeMap::default(),
+            provisional_whitelist: Missing,
+            routing_table: Missing,
+            canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
+        };
+
+        // An invalid node public key.
+        // An invalid key here refers to the fact that the content of PublicKeyProto does not constitute a valid Ed25519 public key.
+        let invalid_node_key = PublicKeyProto {
+            version: 0,
+            algorithm: AlgorithmId::MultiBls12_381 as i32,
+            key_value: [0; 96].to_vec(),
+            proof_data: None,
+            timestamp: None,
+        };
+
+        let valid_node_key = PublicKeyProto {
+            version: 0,
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: [0; 32].to_vec(),
+            proof_data: None,
+            timestamp: None,
+        };
+
+        let fixture = RegistryFixture::new();
+        fixture
+            .write_test_records(&TestRecords {
+                node_public_keys: &btreemap! {
+                    node_test_id(1) => Missing,
+                    node_test_id(2) => Valid(invalid_node_key),
+                    // Note that the key does not match the node ID but it does not matter for the purposes of this test.
+                    node_test_id(3) => Valid(valid_node_key.clone()),
+                },
+                subnet_records: [Valid(&own_subnet_record)],
+                ..input
+            })
+            .unwrap();
+
+        let (batch_processor, metrics, _, _) =
+            make_batch_processor(fixture.registry.clone(), log.clone());
+        let res = batch_processor
+            .try_to_read_registry(fixture.registry.get_latest_version(), own_subnet_id);
+        assert_matches!(res, Ok(_));
+
+        // check that critical error counter is incremented both for missing and invalid keys.
+        assert_eq!(
+            metrics
+                .critical_error_missing_or_invalid_node_public_keys
+                .get(),
+            2
+        );
+
+        let (_, _, _, node_public_keys) = res.unwrap();
+        assert_eq!(node_public_keys.len(), 1);
+        assert!(!node_public_keys.contains_key(&node_test_id(1)));
+        assert!(!node_public_keys.contains_key(&node_test_id(2)));
+        assert_eq!(
+            &public_key_to_der(
+                PublicKeyBytes::try_from(&valid_node_key).expect("invalid public key")
+            ),
+            node_public_keys.get(&node_test_id(3)).unwrap(),
         );
     });
 }
@@ -964,6 +1142,7 @@ fn check_critical_error_counter_is_not_incremented_for_transient_error() {
             provisional_whitelist: Missing,
             routing_table: Missing,
             canister_migrations: Missing,
+            node_public_keys: &BTreeMap::default(),
         };
 
         let fixture = RegistryFixture::new();

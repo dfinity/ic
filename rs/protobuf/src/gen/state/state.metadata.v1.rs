@@ -278,6 +278,14 @@ pub struct BitcoinGetSuccessorsFollowUpResponses {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NodePublicKeyEntry {
+    #[prost(message, optional, tag = "1")]
+    pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub public_key: ::prost::alloc::vec::Vec<u8>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SystemMetadata {
     #[prost(message, optional, tag = "2")]
     pub prev_state_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
@@ -322,6 +330,8 @@ pub struct SystemMetadata {
     #[prost(message, repeated, tag = "18")]
     pub bitcoin_get_successors_follow_up_responses:
         ::prost::alloc::vec::Vec<BitcoinGetSuccessorsFollowUpResponses>,
+    #[prost(message, repeated, tag = "19")]
+    pub node_public_keys: ::prost::alloc::vec::Vec<NodePublicKeyEntry>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

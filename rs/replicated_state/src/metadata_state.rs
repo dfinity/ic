@@ -90,6 +90,9 @@ pub struct SystemMetadata {
 
     pub own_subnet_features: SubnetFeatures,
 
+    /// DER-encoded public keys of the subnet's nodes.
+    pub node_public_keys: BTreeMap<NodeId, Vec<u8>>,
+
     /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
     /// replicated state is in the process of being split from `original_subnet_id`;
     /// `None` otherwise.
@@ -498,6 +501,14 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                     },
                 )
                 .collect(),
+            node_public_keys: item
+                .node_public_keys
+                .iter()
+                .map(|(node_id, public_key)| pb_metadata::NodePublicKeyEntry {
+                    node_id: Some(node_id_into_protobuf(*node_id)),
+                    public_key: public_key.clone(),
+                })
+                .collect(),
         }
     }
 }
@@ -551,6 +562,12 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
         }
 
         let batch_time = Time::from_nanos_since_unix_epoch(item.batch_time_nanos);
+
+        let mut node_public_keys = BTreeMap::<NodeId, Vec<u8>>::new();
+        for entry in item.node_public_keys {
+            node_public_keys.insert(node_id_try_from_option(entry.node_id)?, entry.public_key);
+        }
+
         Ok(Self {
             own_subnet_id: subnet_id_try_from_protobuf(try_from_option_field(
                 item.own_subnet_id,
@@ -561,6 +578,7 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             // properly set this value.
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
+            node_public_keys,
             // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
             // when present.
             split_from: None,
@@ -616,6 +634,7 @@ impl SystemMetadata {
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
+            node_public_keys: Default::default(),
             split_from: None,
             // StateManager populates proper values of these fields before
             // committing each state.
@@ -879,6 +898,8 @@ impl SystemMetadata {
             own_subnet_type,
             // Overwritten as soon as the round begins, no explicit action needed.
             own_subnet_features,
+            // Overwritten as soon as the round begins, no explicit action needed.
+            node_public_keys,
             split_from,
             subnet_call_context_manager,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
@@ -915,6 +936,7 @@ impl SystemMetadata {
             own_subnet_id,
             own_subnet_type,
             own_subnet_features,
+            node_public_keys,
             // Split complete, reset split marker.
             split_from: None,
             subnet_call_context_manager,

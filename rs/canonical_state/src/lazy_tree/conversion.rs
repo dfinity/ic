@@ -22,7 +22,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue},
-    CanisterId, PrincipalId, SubnetId,
+    CanisterId, NodeId, PrincipalId, SubnetId,
 };
 use std::collections::BTreeMap;
 use std::convert::{AsRef, TryFrom, TryInto};
@@ -36,6 +36,7 @@ use LazyTree::Blob;
 struct FiniteMap<'a>(BTreeMap<Label, Lazy<'a, LazyTree<'a>>>);
 
 impl<'a> FiniteMap<'a> {
+    /// Adds a function returning a subtree with the specified label to this map.
     pub fn with<B, T>(mut self, blob: B, func: T) -> Self
     where
         B: AsRef<[u8]>,
@@ -48,6 +49,19 @@ impl<'a> FiniteMap<'a> {
     /// Adds a subtree with the specified label to this map.
     pub fn with_tree<B: AsRef<[u8]>>(mut self, label: B, tree: LazyTree<'a>) -> Self {
         self.0.insert(Label::from(label), Lazy::Value(tree));
+        self
+    }
+
+    /// If condition is true, adds a function returning a subtree with the specified label to this map.
+    /// Otherwise does nothing.
+    pub fn with_if<B, T>(mut self, condition: bool, blob: B, func: T) -> Self
+    where
+        B: AsRef<[u8]>,
+        T: Fn() -> LazyTree<'a> + 'a + Send + Sync,
+    {
+        if condition {
+            self.0.insert(Label::from(blob), Lazy::Func(Arc::new(func)));
+        }
         self
     }
 
@@ -283,8 +297,11 @@ fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
                 let inverted_routing_table = Arc::new(invert_routing_table(
                     &state.metadata.network_topology.routing_table,
                 ));
+                let own_subnet_id = state.metadata.own_subnet_id;
                 subnets_as_tree(
                     &state.metadata.network_topology.subnets,
+                    own_subnet_id,
+                    &state.metadata.node_public_keys,
                     inverted_routing_table,
                     certification_version,
                 )
@@ -622,11 +639,13 @@ fn canisters_as_tree(
     })
 }
 
-fn subnets_as_tree(
-    subnets: &BTreeMap<SubnetId, SubnetTopology>,
+fn subnets_as_tree<'a>(
+    subnets: &'a BTreeMap<SubnetId, SubnetTopology>,
+    own_subnet_id: SubnetId,
+    own_subnet_node_public_keys: &'a BTreeMap<NodeId, Vec<u8>>,
     inverted_routing_table: Arc<BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>>>,
     certification_version: CertificationVersion,
-) -> LazyTree<'_> {
+) -> LazyTree<'a> {
     fork(MapTransformFork {
         map: subnets,
         certification_version,
@@ -645,8 +664,27 @@ fn subnets_as_tree(
                                 )
                             }
                         }),
+                    )
+                    .with_if(
+                        certification_version > CertificationVersion::V11
+                            && subnet_id == own_subnet_id,
+                        "node",
+                        move || nodes_as_tree(own_subnet_node_public_keys, certification_version),
                     ),
             )
+        },
+    })
+}
+
+fn nodes_as_tree(
+    own_subnet_node_public_keys: &BTreeMap<NodeId, Vec<u8>>,
+    certification_version: CertificationVersion,
+) -> LazyTree<'_> {
+    fork(MapTransformFork {
+        map: own_subnet_node_public_keys,
+        certification_version,
+        mk_tree: |_node_id, public_key, _version| {
+            fork(FiniteMap::default().with_tree("public_key", Blob(&public_key[..], None)))
         },
     })
 }

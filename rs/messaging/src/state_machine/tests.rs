@@ -161,6 +161,7 @@ fn state_machine_populates_network_topology() {
             provided_batch,
             Default::default(),
             &test_registry_settings(),
+            Default::default(),
         );
 
         assert_eq!(state.metadata.network_topology, fixture.network_topology);
@@ -188,6 +189,7 @@ fn test_delivered_batch(provided_batch: Batch) {
             provided_batch,
             Default::default(),
             &test_registry_settings(),
+            Default::default(),
         );
     });
 }

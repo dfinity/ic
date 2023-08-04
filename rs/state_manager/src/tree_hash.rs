@@ -77,7 +77,9 @@ mod tests {
     };
     use ic_test_utilities::{
         state::new_canister_state,
-        types::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+        types::ids::{
+            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
+        },
         types::messages::{RequestBuilder, ResponseBuilder},
     };
     use ic_types::{
@@ -233,6 +235,11 @@ mod tests {
                 );
             }
 
+            state.metadata.node_public_keys = btreemap! {
+                node_test_id(1) => vec![1; 44],
+                node_test_id(2) => vec![2; 44],
+            };
+
             let mut routing_table = RoutingTable::new();
             routing_table
                 .insert(
@@ -288,6 +295,7 @@ mod tests {
             "410BD1929B6884DE65DDBACC54749FDCC2A5FA3585898B9B2644147DE2760678",
             "4BAB4FD35605188FDDCA534204C8E8852C9E450CEB6BE53129FB84DF109D8905",
             "1ED37E00D177681A4111B6D45F518DF3E414B0B614333BB6552EBC0D8492B687",
+            "62B2E77DFCD17C7E0CE3E762FD37281776C4B0A38CE1B83A1316614C3F849E39",
         ];
 
         for certification_version in CertificationVersion::iter() {
