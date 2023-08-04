@@ -251,6 +251,7 @@ sh_test(
         IC_OS_ENV + ":disk-img.tar.zst.cas-url",
         IC_OS_ENV + ":disk-img.tar.zst.sha256",
         IC_OS_ENV + ":version.txt",
+        "@dfx",
     ],
     env = {
         "E2E_TEST_BIN": "$(rootpath :e2e-scalability-tests)",
@@ -258,6 +259,7 @@ sh_test(
         "IC_OS_VERSION_FILE": "$(rootpath " + IC_OS_ENV + ":version.txt)",
         "IC_OS_IMAGE_URL": "$(rootpath " + IC_OS_ENV + ":disk-img.tar.zst.cas-url)",
         "IC_OS_IMAGE_SHA256SUM": "$(rootpath " + IC_OS_ENV + ":disk-img.tar.zst.sha256)",
+        "dfx_path": "$(rootpath @dfx//:dfx)",
     },
     env_inherit = [
         "HOME",

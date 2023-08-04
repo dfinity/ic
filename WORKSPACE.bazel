@@ -409,6 +409,11 @@ load("//pre-commit:candid.bzl", "candid")
 
 candid(name = "candid")
 
+# dfx binary for haskell linting
+load("//bazel:dfx.bzl", "dfx")
+
+dfx(name = "dfx")
+
 load("//bazel:jq.bzl", "jq_repository")
 
 jq_repository(name = "jq")
