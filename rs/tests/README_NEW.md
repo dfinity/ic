@@ -84,7 +84,7 @@ During/after test execution one may naturally be interested in looking at the te
 ## For manual test executions
 Console displays only test logs, i.e., everything that is sent to the stdout/stderr from the Rust source code of the test itself. Logs of the IC nodes are pushed to the Elastic Search and can be retrieved by following the Kibana link, which is printed in the console output in the form:
 ```
-See replica logs in Kibana: https://kibana.testnet.dfinity.systems/...
+See replica logs in Kibana: https://kibana.testnet.dfinity.network/...
 ```
 During test execution one can also login to VMs directly via browser links. Test stdout prints these console links in the form:
 ```

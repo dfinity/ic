@@ -2119,7 +2119,7 @@ benchmarks:
           .revCount = 1' \
           > report.json
         curl -sS -o /dev/null -H 'Content-Type: application/json' --data @report.json \
-          "http://elasticsearch.dfinity.systems:9200/ci-performance-test/properties?pretty"
+          "https://elasticsearch.testnet.dfinity.network/ci-performance-test/properties?pretty"
       done < <(find -L ./bazel-out -type d -path '*/new')
   tags:
     - rust-benchmarks
@@ -5911,7 +5911,7 @@ test-testnet-deployment:
     SHELL_WRAPPER: "/usr/bin/time"
     TESTNET: small14
 variables:
-  TEST_ES_HOSTNAMES: elasticsearch-node-0.testnet.dfinity.systems:443, elasticsearch-node-1.testnet.dfinity.systems:443, elasticsearch-node-2.testnet.dfinity.systems:443
+  TEST_ES_HOSTNAMES: elasticsearch.testnet.dfinity.network:443
 xnet-nightly:
   artifacts:
     expire_in: 3 days

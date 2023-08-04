@@ -413,7 +413,7 @@ fn create_and_upload_config_disk_image(
         .arg("--ipv6_monitoring_ips")
         .arg("::/0")
         .arg("--elasticsearch_url")
-        .arg("https://elasticsearch.testnet.dfinity.systems")
+        .arg("https://elasticsearch.testnet.dfinity.network")
         .arg("--name_servers")
         .arg("2606:4700:4700::1111 2606:4700:4700::1001");
 
