@@ -54,6 +54,7 @@ BLACKLIST = [
     ("b0d3c45e14b116f8213ed88dea064fbc631c038c", "1667834847"),
     ("903c8b3a520c69a953b4cdf6468bf2612e86be49", "1660642902"),
     ("2a0ff6c34e61d64e6fe8b0ce47e7edbec30e8c1e", "1674507377"),
+    ("06c65888fb8afa8da2b8c553a93df8f18ffe6d3a", "1679995234"),
 ]
 
 
@@ -654,8 +655,26 @@ if __name__ == "__main__":
             parse_rps_experiment_latency,
             None,
             yaxis_title="Latency",
-            # time_start=1666142871,
+            time_start=1666757546,
         )
+
+        # Boundary nodes
+        data["plot_boundary_nodes_query_failure_rate"] = render_results(
+            ["run_boundary_node_baseline_experiment"],
+            ["query"],
+            parse_rps_experiment_failure_rate,
+            None,
+            yaxis_title="Failure rate",
+        )
+        data["plot_boundary_nodes_query_latency"] = render_results(
+            ["run_boundary_node_baseline_experiment"],
+            ["query"],
+            parse_rps_experiment_latency,
+            None,
+            yaxis_title="Latency",
+            time_start=1666757546,
+        )
+        # / Boundary nodes
 
         data["plot_exp1_update"] = render_results(
             ["experiment_1", "run_system_baseline_experiment",

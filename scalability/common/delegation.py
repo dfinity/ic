@@ -78,7 +78,8 @@ def get_ii_canister_id(host_url):
 
         identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
         logging.info("Initializing salt ..")
-        identityCanister.init_salt()
+
+        retry_call(identityCanister.init_salt)
 
     return ii_canister_id
 

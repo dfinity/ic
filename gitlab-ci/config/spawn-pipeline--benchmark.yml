@@ -58,7 +58,6 @@ maximum-capacity-canister-http:
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -100,7 +99,6 @@ maximum-capacity-system-baseline-query:
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -156,7 +154,6 @@ maximum-capacity-large-memory-query:
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -210,7 +207,6 @@ maximum-capacity-multiple-large-memory-update:
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -267,7 +263,6 @@ maximum-capacity-mixed-counter-memory:
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -319,7 +314,6 @@ maximum-capacity-sha256:
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -374,8 +368,6 @@ benchmark-xnet:
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
@@ -492,7 +484,6 @@ system-baseline-update-performance-test-nightly:
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
       $SHELL_WRAPPER python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=2300
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --branch="$CURRENT_BRANCH" --is_max_capacity_run="False" --gitlab_job_id="$CI_JOB_ID"
 
       cd -
 
@@ -554,8 +545,6 @@ large-response-downloading-nightly:
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
 
       $SHELL_WRAPPER python3 common/verify_perf.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --median_latency_threshold=3300
-
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --branch="$CURRENT_BRANCH" --is_max_capacity_run="False" --gitlab_job_id="$CI_JOB_ID"
 
       cd -
 
@@ -691,7 +680,6 @@ maximum-capacity-boundary-nodes-queries:
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
-      $SHELL_WRAPPER python3 common/notify_dashboard.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP" --is_max_capacity_run="True" --branch="$CURRENT_BRANCH" --gitlab_job_id="$CI_JOB_ID"
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
 

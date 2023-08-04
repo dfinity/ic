@@ -70,7 +70,8 @@ def main(argv):
         base_arguments = [
             "--nns_url",
             ic_url,
-            "--cache_path=/tmp/cache" "--no_instrument=True",
+            "--cache_path=/tmp/cache",
+            "--no_instrument=True",
             "--no_prometheus=True",
             f"--prometheus_url=http://[{farm_instance.prometheus_ipv6}]:9090",
             f"--testnet={farm_instance.group_name}",

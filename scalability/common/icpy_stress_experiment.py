@@ -359,14 +359,15 @@ class IcPyStressExperiment(BaseExperiment):
     def __init__(self, use_delegation: bool = True):
         """Init."""
         super().__init__(request_type="update")
+        self.nns_host = self._get_nns_url()
         self.host_ip = self.get_machine_to_instrument()
         self.host_url = f"http://[{self.host_ip}]:8080"
         if use_delegation:
             print(f"Running with {FLAGS.num_identities} delegated indentities.")
-            ii_canister_id = get_ii_canister_id(self.host_url)
+            ii_canister_id = get_ii_canister_id(self.nns_host)
             with multiprocessing.Pool(FLAGS.num_procs) as pool:
                 # We get all delegates from the same host
-                raw_result = pool.starmap(get_delegation, [(self.host_url, ii_canister_id)] * FLAGS.num_identities)
+                raw_result = pool.starmap(get_delegation, [(self.nns_host, ii_canister_id)] * FLAGS.num_identities)
                 self.identities = [element[0] for element in raw_result]
         else:
             print(f"Running with {FLAGS.num_identities} different non-delegated identities.")
