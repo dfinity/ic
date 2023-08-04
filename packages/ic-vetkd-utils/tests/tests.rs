@@ -18,7 +18,7 @@ fn protocol_flow() {
     let did = b"message";
     let ad = b"aes-256-gcm-siv";
     let key = tsk
-        .decrypt_and_hash(ek_bytes.clone(), dpk_bytes.clone(), did, 32, ad)
+        .decrypt_and_hash(&ek_bytes, &dpk_bytes, did, 32, ad)
         .unwrap();
 
     assert_eq!(
@@ -26,7 +26,7 @@ fn protocol_flow() {
         "e4e8c37bbc2ec30be431edea85551f5d4161da1dcd9bc76c854cc1d6a9a28a89"
     );
 
-    let ibe_key = tsk.decrypt(ek_bytes, dpk_bytes.clone(), did).unwrap();
+    let ibe_key = tsk.decrypt(&ek_bytes, &dpk_bytes, did).unwrap();
 
     let msg = b"is this thing on?";
     let seed: [u8; 32] =
@@ -34,7 +34,7 @@ fn protocol_flow() {
             .unwrap()
             .try_into()
             .expect("Correct len");
-    let ctext = IBECiphertext::encrypt(dpk_bytes, did, msg, &seed).unwrap();
+    let ctext = IBECiphertext::encrypt(&dpk_bytes, did, msg, &seed).unwrap();
 
     let ctext_bytes = ctext.serialize();
 
