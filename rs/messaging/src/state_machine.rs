@@ -1,4 +1,4 @@
-use crate::message_routing::MessageRoutingMetrics;
+use crate::message_routing::{MessageRoutingMetrics, NodePublicKeys};
 use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, RegistryExecutionSettings, Scheduler,
@@ -26,6 +26,7 @@ pub(crate) trait StateMachine: Send {
         batch: Batch,
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
+        node_public_keys: NodePublicKeys,
     ) -> ReplicatedState;
 }
 pub(crate) struct StateMachineImpl {
@@ -71,12 +72,14 @@ impl StateMachine for StateMachineImpl {
         mut batch: Batch,
         subnet_features: SubnetFeatures,
         registry_settings: &RegistryExecutionSettings,
+        node_public_keys: NodePublicKeys,
     ) -> ReplicatedState {
         let phase_timer = Timer::start();
 
         state.metadata.batch_time = batch.time;
         state.metadata.network_topology = network_topology;
         state.metadata.own_subnet_features = subnet_features;
+        state.metadata.node_public_keys = node_public_keys;
         if let Err(message) = state.metadata.init_allocation_ranges_if_empty() {
             self.metrics
                 .observe_no_canister_allocation_range(&self.log, message);

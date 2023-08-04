@@ -11,8 +11,8 @@ use ic_test_utilities::{
     mock_time,
     types::{
         ids::{
-            canister_test_id, message_test_id, subnet_test_id, user_test_id, SUBNET_0, SUBNET_1,
-            SUBNET_2,
+            canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id,
+            SUBNET_0, SUBNET_1, SUBNET_2,
         },
         messages::{RequestBuilder, ResponseBuilder},
         xnet::{StreamHeaderBuilder, StreamSliceBuilder},
@@ -427,6 +427,14 @@ fn roundtrip_encoding() {
         ..Default::default()
     };
     system_metadata.network_topology = network_topology;
+
+    use ic_crypto_internal_basic_sig_ed25519::{public_key_to_der, types::PublicKeyBytes};
+    use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
+    let pk_der =
+        public_key_to_der(PublicKeyBytes::try_from(&valid_node_signing_public_key()).unwrap());
+    system_metadata.node_public_keys = btreemap! {
+        node_test_id(1) => pk_der,
+    };
 
     // Decoding a `SystemMetadata` with no `canister_allocation_ranges` succeeds.
     let mut proto = pb::SystemMetadata::from(&system_metadata);

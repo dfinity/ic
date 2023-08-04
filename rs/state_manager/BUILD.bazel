@@ -82,6 +82,7 @@ rust_test(
     crate_root = "tests/state_manager.rs",
     deps = [
         ":state_manager",
+        "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/crypto/tree_hash",
         "//rs/interfaces",
@@ -89,6 +90,7 @@ rust_test(
         "//rs/interfaces/state_manager",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
+        "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/replicated_state",
         "//rs/state_layout",

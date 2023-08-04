@@ -29,6 +29,8 @@ pub enum CertificationVersion {
     V10 = 10,
     /// Producing `error_code` field in `request_status` subtree.
     V11 = 11,
+    /// Added `/subnet/<own_subnet_id>/node` subtree, with node public keys.
+    V12 = 12,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -67,7 +69,7 @@ pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVer
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V11;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V12;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {

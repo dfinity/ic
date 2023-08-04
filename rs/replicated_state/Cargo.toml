@@ -11,7 +11,9 @@ ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
+ic-crypto-internal-basic-sig-ed25519 = { path = "../crypto/internal/crypto_lib/basic_sig/ed25519" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
+ic-crypto-test-utils-keys = { path = "../crypto/test_utils/keys" }
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
