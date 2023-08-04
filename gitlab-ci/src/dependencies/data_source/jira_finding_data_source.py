@@ -76,6 +76,7 @@ class JiraFindingDataSource(FindingDataSource):
     subscribers: List[FindingDataSourceSubscriber]
     findings: Dict[Tuple[str, str, str, str], Tuple[Finding, Issue]]
     findings_cached_for_scanner: Set[str]
+    deleted_findings_cached: Dict[Tuple[str, str, str], List[Finding]]
     risk_assessors: List[User]
 
     def __init__(self, subscribers: List[FindingDataSourceSubscriber], custom_jira: Optional[JIRA] = None):
@@ -86,6 +87,7 @@ class JiraFindingDataSource(FindingDataSource):
         )
         self.findings = {}
         self.findings_cached_for_scanner = set()
+        self.deleted_findings_cached = {}
         self.risk_assessors = []
 
     @staticmethod
@@ -504,6 +506,34 @@ class JiraFindingDataSource(FindingDataSource):
             if finding.repository == repository and finding.scanner == scanner:
                 res[finding.id()] = deepcopy(finding)
         return res
+
+    def get_deleted_findings(
+        self, repository: str, scanner: str, dependency_id: str
+    ) -> List[Finding]:
+        cache_key = (repository, scanner, dependency_id)
+        if cache_key in self.deleted_findings_cached:
+            return deepcopy(self.deleted_findings_cached[cache_key])
+
+        logging.debug(f"get_deleted_findings({repository}, {scanner}, {dependency_id})")
+        jql_query: str = (
+            f'project = "{JIRA_BOARD_KEY}" and '
+            f"issuetype = {JIRA_FINDING_ISSUE_TYPE['id']} and "
+            f"status != open and "
+            f"\"{JIRA_FINDING_TO_CUSTOM_FIELD.get('repository')[1]}\" ~ \"{repository}\" and "
+            f"\"{JIRA_FINDING_TO_CUSTOM_FIELD.get('scanner')[1]}\" ~ \"{scanner}\" and "
+            f"\"{JIRA_FINDING_TO_CUSTOM_FIELD.get('vulnerable_dependency_id')[1]}\" ~ \"{dependency_id}\" "
+            f"ORDER BY created DESC"
+        )
+        logging.debug(f"calling jira.search_issues({jql_query})")
+        issues: ResultList[Issue] = self.jira.search_issues(jql_str=jql_query, maxResults=100)
+        logging.debug(f"received {len(issues)} non-open issue(s) for query ({repository}, {scanner}, {dependency_id})")
+        result = []
+        for issue in issues:
+            finding: Finding = self.__jira_to_finding(issue)
+            if finding.repository == repository and finding.scanner == scanner and finding.vulnerable_dependency.id == dependency_id:
+                result.append(finding)
+        self.deleted_findings_cached[cache_key] = result
+        return deepcopy(result)
 
     def commit_has_block_exception(self, commit_type: CommitType, commit_hash: str) -> bool:
         logging.debug(f"commit_has_block_exception({commit_type}, {commit_hash})")

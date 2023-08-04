@@ -120,13 +120,18 @@ class DependencyScanner:
                         else:
                             cur_finding = current_findings[index]
                             cur_finding.risk_assessor = self.finding_data_source.get_risk_assessor()
-                            prev_findings = existing_findings_by_vul_dep_id[cur_finding.vulnerable_dependency.id] if cur_finding.vulnerable_dependency.id in existing_findings_by_vul_dep_id else []
-                            cur_finding.update_risk_and_vulnerabilities_for_related_findings(prev_findings)
+                            prev_open_findings = existing_findings_by_vul_dep_id[cur_finding.vulnerable_dependency.id] if cur_finding.vulnerable_dependency.id in existing_findings_by_vul_dep_id else []
+                            prev_deleted_findings = self.finding_data_source.get_deleted_findings(repository.name, self.dependency_manager.get_scanner_id(), cur_finding.vulnerable_dependency.id)
+                            cur_finding.update_risk_and_vulnerabilities_for_related_findings(prev_open_findings + prev_deleted_findings)
 
                             # rest of the parameters needs to be set by the risk assessor for a new finding.
                             self.finding_data_source.create_or_update_open_finding(cur_finding)
-                            for prev_finding in prev_findings:
+                            for prev_finding in prev_open_findings:
                                 self.finding_data_source.link_findings(prev_finding, cur_finding)
+                            if len(prev_deleted_findings) > 0:
+                                # only link the last created deleted finding to the current finding
+                                self.finding_data_source.link_findings(prev_deleted_findings[0], cur_finding)
+
                 findings_to_remove = set(existing_findings.keys()).difference(map(lambda x: x.id(), current_findings))
                 for key in findings_to_remove:
                     self.finding_data_source.delete_finding(existing_findings[key])
