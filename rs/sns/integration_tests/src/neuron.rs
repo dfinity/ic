@@ -6,8 +6,10 @@ use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha2::Sha256;
-use ic_ledger_core::tokens::CheckedAdd;
-use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
+use ic_ledger_core::{
+    tokens::{CheckedAdd, TOKEN_SUBDIVIDABLE_BY},
+    Tokens,
+};
 use ic_nervous_system_common::{cmc::FakeCmc, i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
