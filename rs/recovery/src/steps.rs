@@ -540,7 +540,8 @@ impl Step for UploadAndRestartStep {
 
         let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(
-                "Found multiple checkpoints in upload directory"));
+                "Found multiple checkpoints in upload directory",
+            ));
         };
 
         if self.check_ic_replay_height {

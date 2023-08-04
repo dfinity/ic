@@ -95,7 +95,7 @@ impl TryFrom<pb::CertificationMessage> for CertificationMessage {
     type Error = ProxyDecodeError;
     fn try_from(share: pb::CertificationMessage) -> Result<Self, Self::Error> {
         let Some(msg) = share.msg else {
-            return Err(ProxyDecodeError::MissingField("CertificationMessage::msg"))
+            return Err(ProxyDecodeError::MissingField("CertificationMessage::msg"));
         };
         Ok(match msg {
             Msg::Certification(inner) => Self::Certification(inner.try_into()?),

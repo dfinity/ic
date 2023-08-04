@@ -721,9 +721,12 @@ impl SnsRootCanister {
 
 async fn get_swap_status(env: &impl Environment, swap_id: PrincipalId) -> CanisterSummary {
     let Ok(canister_id) = CanisterId::new(swap_id) else {
-        log!(ERROR,
-        "The recorded Swap principal id, '{}', is not a valid CanisterId.", swap_id);
-       return CanisterSummary::new_with_no_status(swap_id);
+        log!(
+            ERROR,
+            "The recorded Swap principal id, '{}', is not a valid CanisterId.",
+            swap_id
+        );
+        return CanisterSummary::new_with_no_status(swap_id);
     };
 
     let status = match env
