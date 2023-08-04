@@ -121,7 +121,7 @@ enum LabelRepr {
     /// first byte of the array indicates the number of bytes that should be
     /// used as label value, so we can fit up to SMALL_LABEL_SIZE bytes.
     Value([u8; SMALL_LABEL_SIZE + 1]),
-    /// Label of size SMALL_LABEL_SIZE or longer.
+    /// Label of size above SMALL_LABEL_SIZE.
     Ref(Vec<u8>),
 }
 
@@ -156,7 +156,10 @@ impl PartialOrd for Label {
 impl Label {
     pub fn as_bytes(&self) -> &[u8] {
         match &self.0 {
-            LabelRepr::Value(bytes) => &bytes[1..=bytes[0] as usize],
+            LabelRepr::Value(bytes) => {
+                debug_assert!(bytes[0] as usize <= SMALL_LABEL_SIZE);
+                &bytes[1..=bytes[0] as usize]
+            }
             LabelRepr::Ref(v) => &v[..],
         }
     }
@@ -214,6 +217,7 @@ where
             let mut buf = [0u8; SMALL_LABEL_SIZE + 1];
             buf[0] = n as u8;
             buf[1..=n].copy_from_slice(slice);
+            debug_assert!(buf[0] as usize <= SMALL_LABEL_SIZE);
             Self(LabelRepr::Value(buf))
         } else {
             Self(LabelRepr::Ref(slice.to_vec()))
