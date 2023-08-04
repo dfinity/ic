@@ -54,6 +54,8 @@ type InitArgs = record {
     minting_account : Account;
     fee_collector_account : opt Account;
     transfer_fee : nat;
+    decimals : opt nat8;
+    max_memo_length : opt nat16;
     token_symbol : text;
     token_name : text;
     metadata : vec record { text; MetadataValue };
