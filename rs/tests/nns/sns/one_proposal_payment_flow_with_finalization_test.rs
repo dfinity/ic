@@ -109,9 +109,6 @@ fn sns_setup_with_one_proposal(env: TestEnv) {
     );
 }
 
-/// Initiate the token swap with the parameters returned by
-/// [`create_service_nervous_system_proposal`] (rather than the default
-/// parameters)
 fn wait_for_swap_to_start(env: TestEnv) {
     block_on(sns_deployment::wait_for_swap_to_start(env));
 }

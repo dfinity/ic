@@ -814,6 +814,12 @@ pub trait GetFirstHealthyNodeSnapshot {
         subnet_pred: F,
     ) -> IcNodeSnapshot;
 
+    fn get_first_healthy_node_snapshot_from_nth_subnet_where<F: Fn(&SubnetSnapshot) -> bool>(
+        &self,
+        subnet_pred: F,
+        n: usize,
+    ) -> IcNodeSnapshot;
+
     fn get_first_healthy_node_snapshot(&self) -> IcNodeSnapshot;
     fn get_first_healthy_application_node_snapshot(&self) -> IcNodeSnapshot;
     fn get_first_healthy_system_node_snapshot(&self) -> IcNodeSnapshot;
@@ -828,13 +834,25 @@ impl<T: HasTopologySnapshot> GetFirstHealthyNodeSnapshot for T {
         &self,
         subnet_pred: F,
     ) -> IcNodeSnapshot {
-        let random_node = self
+        self.get_first_healthy_node_snapshot_from_nth_subnet_where(subnet_pred, 0)
+    }
+    fn get_first_healthy_node_snapshot_from_nth_subnet_where<F: Fn(&SubnetSnapshot) -> bool>(
+        &self,
+        subnet_pred: F,
+        n: usize,
+    ) -> IcNodeSnapshot {
+        let subnet = self
             .topology_snapshot()
             .subnets()
             .filter(subnet_pred)
-            .flat_map(|subnet| subnet.nodes())
+            .nth(n)
+            .expect("Expected there to be at least one subnet that matched the predicate!");
+
+        let random_node = subnet
+            .nodes()
             .next()
-            .expect("Expected there to be at least one node!");
+            .expect("Expected there to be at least one node in the subnet!");
+
         random_node.await_status_is_healthy().unwrap_or_else(|e| {
             panic!(
                 "Expected random node {:?} to be healthy but got error {e:?}",
