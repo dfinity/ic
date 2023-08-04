@@ -363,7 +363,7 @@ class Pipeline:
     def run(self, groups: Dict[str, Group]):
         assert (
             len(groups) > 0
-        ), "check if system tests are running via https://grafana.dfinity.systems/d/uwEFG_yGk/testing-dashboard"
+        ), "check if system tests are running via https://grafana.testnet.dfinity.network/d/uwEFG_yGk/testing-dashboard"
 
         eprint(f"Starting policy monitoring for groups {', '.join(groups.keys())} ...")
 

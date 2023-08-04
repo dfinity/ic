@@ -925,7 +925,9 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
 
     fn get_journalbeat_hosts(&self) -> Result<Vec<String>> {
         let dep_rel_path = "journalbeat_hosts";
-        let hosts = self.read_dependency_to_string(dep_rel_path).unwrap_or_else(|_| "elasticsearch-node-0.testnet.dfinity.systems:443,elasticsearch-node-1.testnet.dfinity.systems:443,elasticsearch-node-2.testnet.dfinity.systems:443".to_string());
+        let hosts = self
+            .read_dependency_to_string(dep_rel_path)
+            .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
         parse_journalbeat_hosts(Some(hosts))
     }
 

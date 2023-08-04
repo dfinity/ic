@@ -47,7 +47,7 @@ pub const LOG_CLOSE_TIMEOUT: Duration = Duration::from_secs(10);
 fn node_logs(farm_group_name: &str) -> String {
     format!("/app/kibana#/discover?_g=(time:(from:now-1y,to:now))&_a=(columns:!(_source),index:c8cf8e20-593f-11ec-9f11-0fb8445c6897,interval:auto,query:(language:kuery,query:'tags:%22{}%22'),sort:!(!('@timestamp',desc)))", farm_group_name)
 }
-const KIBANA_BASE_URL: &str = "https://kibana.testnet.dfinity.systems";
+const KIBANA_BASE_URL: &str = "https://kibana.testnet.dfinity.network";
 
 pub fn kibana_link(farm_group_name: &str) -> String {
     format!("{}{}", KIBANA_BASE_URL, node_logs(farm_group_name))

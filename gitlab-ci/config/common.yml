@@ -21,9 +21,7 @@ default:
 
 variables:
   TEST_ES_HOSTNAMES: >-
-    elasticsearch-node-0.testnet.dfinity.systems:443,
-    elasticsearch-node-1.testnet.dfinity.systems:443,
-    elasticsearch-node-2.testnet.dfinity.systems:443
+    elasticsearch.testnet.dfinity.network:443
 
 before_script:
   - |

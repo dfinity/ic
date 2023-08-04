@@ -19,8 +19,8 @@ from pipeline.pipeline import Pipeline
 from pipeline.pre_processor import UniversalPreProcessor
 from util import docker, env
 
-DEFAULT_MAINNET_ES_ENDPOINT = "elasticsearch.mercury.dfinity.systems"
-DEFAULT_TESTNET_ES_ENDPOINT = "elasticsearch-v4.testnet.dfinity.systems"
+DEFAULT_MAINNET_ES_ENDPOINT = "https://elasticsearch.mainnet.dfinity.network"
+DEFAULT_TESTNET_ES_ENDPOINT = "https://elasticsearch.testnet.dfinity.network"
 
 LARGE_LOG_THRESHOLD = 1_073_741_824  # 1 GiB
 
