@@ -21,12 +21,18 @@ use crate::driver::test_env_api::{
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome};
 use crate::sns_client::openchat_create_service_nervous_system_proposal;
+use crate::types::CanisterStatusResult;
+use crate::types::CreateCanisterResult;
+use crate::util::UniversalCanister;
+use candid::Decode;
 use candid::{Nat, Principal};
+use ic_agent::Agent;
 use ic_agent::{Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
+use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
@@ -35,7 +41,10 @@ use ic_sns_governance::pb::v1::governance::Mode;
 use ic_sns_swap::pb::v1::GetLifecycleResponse;
 use ic_sns_swap::pb::v1::{new_sale_ticket_response, DerivedState, GetStateResponse, Lifecycle};
 use ic_sns_swap::swap::principal_to_subaccount;
+use ic_types::Cycles;
 use ic_types::Height;
+use ic_universal_canister::management;
+use ic_universal_canister::wasm;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
@@ -55,7 +64,7 @@ use crate::driver::ic::{
 use crate::driver::test_env::TestEnvAttribute;
 
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL};
-use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 
 use super::sns_aggregator::AggregatorClient;
@@ -295,15 +304,33 @@ pub fn setup(
 
     install_nns(&env, canister_wasm_strategy, sale_participants, neurons);
 
+    // get the first application node from the second subnet, which should be the dapp subnet
+    let dapp_node = env.get_first_healthy_node_snapshot_from_nth_subnet_where(
+        |s| s.subnet_type() == SubnetType::Application,
+        1,
+    );
+    let dapp_agent = dapp_node.build_default_agent();
+
+    // Create a canister and give it to NNS root
+    let dapp_canister = block_on(DappCanister::new(&env, dapp_node, &dapp_agent));
+    let create_service_nervous_system_proposal = CreateServiceNervousSystem {
+        dapp_canisters: vec![Canister {
+            id: Some(PrincipalId::from(dapp_canister.canister_id)),
+        }],
+        ..create_service_nervous_system_proposal
+    };
+
     // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
     install_sns(
         &env,
         canister_wasm_strategy,
         create_service_nervous_system_proposal,
     );
+
+    block_on(dapp_canister.check_exclusively_owned_by_sns_root(&env));
 }
 
-///  Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
+/// Sets up the IC, the NNS, and sets up an SNS using the legacy, non-one-proposal flow.
 pub fn setup_legacy(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
@@ -336,11 +363,19 @@ fn setup_ic(env: &TestEnv, fast_test_setup: bool) {
     }
 
     let mut ic = InternetComputer::new()
+        // NNS
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(SUBNET_SIZE),
         )
+        // SNS
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_dkg_interval_length(Height::from(DKG_INTERVAL))
+                .add_nodes(SUBNET_SIZE),
+        )
+        // Dapps
         .add_subnet(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -1164,13 +1199,13 @@ pub fn generate_ticket_participants_workload(
 
     let future_generator = {
         let nns_node = env.get_first_healthy_nns_node_snapshot();
-        let app_node = env.get_first_healthy_application_node_snapshot();
+        let sns_node = env.get_first_healthy_application_node_snapshot();
         let sns_client = SnsClient::read_attribute(&env);
         let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
         let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
 
         move |idx| {
-            let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
+            let (nns_node, app_node) = (nns_node.clone(), sns_node.clone());
             async move {
                 let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
                 let overall_start_time = Instant::now();
@@ -1238,7 +1273,7 @@ async fn create_one_sale_participant(
     seed: u64,
     contribution: u64,
     nns_node: IcNodeSnapshot,
-    app_node: IcNodeSnapshot,
+    sns_node: IcNodeSnapshot,
     ledger_canister_id: Principal,
     sns_request_provider: SnsRequestProvider,
     outcome: &mut Vec<(String, RequestOutcome<(), String>)>,
@@ -1258,7 +1293,7 @@ async fn create_one_sale_participant(
             seed,
         );
         let ledger_agent = nns_node.build_canister_agent_with_identity(p.clone()).await;
-        let canister_agent = app_node.build_canister_agent_with_identity(p.clone()).await;
+        let canister_agent = sns_node.build_canister_agent_with_identity(p.clone()).await;
         (p, ledger_agent, canister_agent)
     };
     let sns_subaccount = Subaccount(principal_to_subaccount(&participant.principal_id));
@@ -1550,6 +1585,118 @@ pub async fn finalize_swap_and_check_success(
     // TODO(NNS1-2250): We should check that the swap finalized as expected. Some ideas for what might be relevant:
     // 1. Check that every participant got the neurons we expected them to
     // 2. Ask Lara Schmid, Max Summe, and Björn Assmann for additional suggestions
+}
+
+struct DappCanister<'a> {
+    canister_id: Principal,
+    original_controller: UniversalCanister<'a>,
+}
+
+impl<'a> DappCanister<'a> {
+    // Creates a canister and gives control to NNS root
+    async fn new(
+        env: &TestEnv,
+        dapp_node: IcNodeSnapshot,
+        dapp_agent: &'a Agent,
+    ) -> DappCanister<'a> {
+        let logger = env.logger();
+
+        let original_controller_canister = UniversalCanister::new_with_retries(
+            dapp_agent,
+            dapp_node.effective_canister_id(),
+            &logger,
+        )
+        .await;
+
+        let controllers = vec![
+            Principal::from(ROOT_CANISTER_ID),
+            original_controller_canister.canister_id(),
+        ];
+
+        // The original_controller_canister canister creates the dapp canister,
+        // and also assigns the NNS root canister as a controller
+        let dapp_canister = original_controller_canister
+            .update(
+                wasm().call(
+                    management::create_canister(Cycles::from(2_000_000_000_000u64).into_parts())
+                        .with_controllers(controllers.clone()),
+                ),
+            )
+            .await
+            .map(|res| {
+                Decode!(res.as_slice(), CreateCanisterResult)
+                    .unwrap()
+                    .canister_id
+            })
+            .unwrap();
+
+        // Check that the dummy_controller_canister can ask for the status.
+        original_controller_canister
+            .update(wasm().call(management::canister_status(dapp_canister)))
+            .await
+            .map(|res| {
+                let canister_status_result = Decode!(res.as_slice(), CanisterStatusResult).unwrap();
+
+                // Check result matches the expected value.
+                let observed_controllers = canister_status_result.settings.controllers();
+                let expected_controllers = controllers
+                    .iter()
+                    .map(crate::util::to_principal_id)
+                    .collect::<Vec<PrincipalId>>();
+                assert_eq!(
+                    observed_controllers, expected_controllers,
+                    "Controllers did not match expectation"
+                );
+            })
+            .unwrap();
+
+        DappCanister {
+            canister_id: dapp_canister,
+            original_controller: original_controller_canister,
+        }
+    }
+
+    async fn check_exclusively_owned_by_sns_root(&self, env: &TestEnv) {
+        let log = env.logger();
+
+        // Check that the original_controller can't ask for the status.
+        self.original_controller
+            .update(wasm().call(management::canister_status(self.canister_id)))
+            .await
+            .map(|res| Decode!(res.as_slice(), CanisterStatusResult).unwrap())
+            .unwrap_err();
+
+        let sns_node = env.get_first_healthy_application_node_snapshot();
+        let sns_client = SnsClient::read_attribute(env);
+        let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+        let sns_agent = sns_node.build_canister_agent().await;
+
+        let sns_canisters_summary = {
+            let request = sns_request_provider.get_sns_canisters_summary();
+            sns_agent.call_and_parse(&request).await.result().unwrap()
+        };
+
+        let dapp_canister_summaries = sns_canisters_summary.dapp_canister_summaries();
+        let dapp_canister_summary = dapp_canister_summaries
+            .iter()
+            .find(|summary| summary.canister_id.unwrap() == self.canister_id.into())
+            .expect("Canister should be in canister summary!");
+
+        assert_eq!(
+            dapp_canister_summary
+                .status
+                .as_ref()
+                .unwrap()
+                .settings
+                .controllers,
+            vec![sns_client.sns_canisters.root.unwrap()]
+        );
+
+        info!(
+            log,
+            "The dapp canister is now under the exclusive control of the SNS."
+        );
+    }
 }
 
 const SNS_ENDPOINT_RETRY_TIMEOUT: Duration = Duration::from_secs(5 * 60); // 5 minutes

@@ -30,7 +30,7 @@ pub(crate) struct CanisterIdRecord {
     pub canister_id: Principal,
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 pub(crate) struct CanisterStatusResult {
     pub status: CanisterStatusType,
     pub module_hash: Option<Vec<u8>>,
