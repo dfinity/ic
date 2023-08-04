@@ -1471,7 +1471,11 @@ pub async fn finalize_swap_and_check_success(
         .result()
         .unwrap();
 
-    let GetStateResponse { swap: Some(swap_state), derived: Some(derived_swap_state) } = get_state_response else {
+    let GetStateResponse {
+        swap: Some(swap_state),
+        derived: Some(derived_swap_state),
+    } = get_state_response
+    else {
         panic!("Unexpected get_state_response: {get_state_response:?}");
     };
 

@@ -787,7 +787,7 @@ impl TryFrom<pb::ConsensusMessage> for ConsensusMessage {
     type Error = ProxyDecodeError;
     fn try_from(value: pb::ConsensusMessage) -> Result<Self, Self::Error> {
         let Some(msg) = value.msg else {
-            return Err(ProxyDecodeError::MissingField("ConsensusMessage::msg"))
+            return Err(ProxyDecodeError::MissingField("ConsensusMessage::msg"));
         };
         Ok(match msg {
             Msg::RandomBeacon(x) => ConsensusMessage::RandomBeacon(x.try_into()?),

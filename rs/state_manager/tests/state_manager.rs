@@ -3793,7 +3793,9 @@ fn remove_old_diverged_checkpoint() {
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
                     UtimensatFlags::NoFollowSymlink,
-                ) else { return };
+                ) else {
+                    return;
+                };
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
                 let (_, state) = state_manager.take_tip();
@@ -3875,7 +3877,9 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                     &TimeSpec::zero(),
                     &TimeSpec::zero(),
                     UtimensatFlags::NoFollowSymlink,
-                ) else { return };
+                ) else {
+                    return;
+                };
 
                 panic!();
             }),

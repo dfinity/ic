@@ -1,5 +1,5 @@
 {
-  "checksum": "399547e87ceba5621046afc2029dc84ca19969e392f1358e443409287edaea56",
+  "checksum": "6492e23a4496051a3ffd42f282cd940567b270815d2d1dd69cdb04fe7a00c42d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -4492,7 +4492,16 @@
       "build_script_attrs": {
         "data_glob": [
           "**"
-        ]
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "clang-sys 1.6.1",
+              "target": "clang_sys"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "BSD-3-Clause"
     },
@@ -27105,6 +27114,22 @@
             ]
           }
         },
+        "link_deps": {
+          "common": [
+            {
+              "id": "libz-sys 1.1.9",
+              "target": "libz_sys"
+            }
+          ],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "openssl-sys 0.9.90",
+                "target": "openssl_sys"
+              }
+            ]
+          }
+        },
         "links": "ssh2"
       },
       "license": "MIT/Apache-2.0"
@@ -30069,7 +30094,18 @@
       "build_script_attrs": {
         "data_glob": [
           "**"
-        ]
+        ],
+        "link_deps": {
+          "common": [],
+          "selects": {
+            "cfg(not(any(target_os = \"windows\", target_os = \"macos\", target_os = \"ios\")))": [
+              {
+                "id": "openssl-sys 0.9.90",
+                "target": "openssl_sys"
+              }
+            ]
+          }
+        }
       },
       "license": "MIT/Apache-2.0"
     },
@@ -32666,7 +32702,7 @@
         "data_glob": [
           "**"
         ],
-        "deps": {
+        "link_deps": {
           "common": [
             {
               "id": "openssl-sys 0.9.90",
@@ -42495,7 +42531,16 @@
       "build_script_attrs": {
         "data_glob": [
           "**"
-        ]
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "ring 0.16.20",
+              "target": "ring"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "Apache-2.0/ISC/MIT"
     },
@@ -42575,7 +42620,16 @@
       "build_script_attrs": {
         "data_glob": [
           "**"
-        ]
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "ring 0.16.20",
+              "target": "ring"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
@@ -50393,7 +50447,16 @@
       "build_script_attrs": {
         "data_glob": [
           "**"
-        ]
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "openssl-sys 0.9.90",
+              "target": "openssl_sys"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "MIT/Apache-2.0"
     },
@@ -53541,7 +53604,7 @@
         "data_glob": [
           "**"
         ],
-        "deps": {
+        "link_deps": {
           "common": [
             {
               "id": "unwind-sys 0.1.3",
@@ -59094,7 +59157,16 @@
       "build_script_attrs": {
         "data_glob": [
           "**"
-        ]
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "zstd-sys 2.0.8+zstd.1.5.5",
+              "target": "zstd_sys"
+            }
+          ],
+          "selects": {}
+        }
       },
       "license": "MIT/Apache-2.0"
     },
@@ -59617,8 +59689,6 @@
       "riscv32imc-unknown-none-elf",
       "riscv64gc-unknown-none-elf",
       "s390x-unknown-linux-gnu",
-      "thumbv7em-none-eabi",
-      "thumbv8m.main-none-eabi",
       "wasm32-unknown-unknown",
       "wasm32-wasi",
       "x86_64-apple-darwin",

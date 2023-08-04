@@ -675,7 +675,8 @@ pub(crate) fn create_data_payload_helper(
         curr_interval_registry_version,
         registry_client,
         &log,
-    )? else {
+    )?
+    else {
         return Ok(None);
     };
     let enabled_signing_keys = get_enabled_signing_keys(
