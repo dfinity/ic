@@ -13,6 +13,7 @@ use ic_bls12_381::{
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+use std::array::TryFromSliceError;
 use std::ops::Neg;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -62,12 +63,12 @@ impl TransportSecretKey {
     /// decrypt_and_hash
     pub fn decrypt(
         &self,
-        encrypted_key_bytes: Vec<u8>,
-        derived_public_key_bytes: Vec<u8>,
+        encrypted_key_bytes: &[u8],
+        derived_public_key_bytes: &[u8],
         derivation_id: &[u8],
     ) -> Result<Vec<u8>, String> {
-        let encrypted_key = EncryptedKey::from_bytes_vec(encrypted_key_bytes)?;
-        let derived_public_key = DerivedPublicKey::from_bytes_vec(derived_public_key_bytes)
+        let encrypted_key = EncryptedKey::deserialize(encrypted_key_bytes)?;
+        let derived_public_key = DerivedPublicKey::deserialize(derived_public_key_bytes)
             .map_err(|e| format!("failed to deserialize public key: {:?}", e))?;
         Ok(encrypted_key
             .decrypt_and_verify(self, derived_public_key, derivation_id)?
@@ -83,8 +84,8 @@ impl TransportSecretKey {
     /// the protocol and cipher that this key will be used for.
     pub fn decrypt_and_hash(
         &self,
-        encrypted_key_bytes: Vec<u8>,
-        derived_public_key_bytes: Vec<u8>,
+        encrypted_key_bytes: &[u8],
+        derived_public_key_bytes: &[u8],
         derivation_id: &[u8],
         symmetric_key_bytes: usize,
         symmetric_key_associated_data: &[u8],
@@ -126,11 +127,11 @@ impl DerivedPublicKey {
     const BYTES: usize = G2AFFINE_BYTES;
 
     /// Deserialize a derived public key
-    fn from_bytes_vec(bytes: Vec<u8>) -> Result<Self, DerivedPublicKeyDeserializationError> {
-        let dpk_bytes: [u8; Self::BYTES] = bytes
-            .try_into()
-            .map_err(|_e| DerivedPublicKeyDeserializationError::InvalidPublicKey)?;
-        let dpk = option_from_ctoption(G2Affine::from_compressed(&dpk_bytes))
+    fn deserialize(bytes: &[u8]) -> Result<Self, DerivedPublicKeyDeserializationError> {
+        let dpk_bytes: &[u8; Self::BYTES] = bytes.try_into().map_err(|_e: TryFromSliceError| {
+            DerivedPublicKeyDeserializationError::InvalidPublicKey
+        })?;
+        let dpk = option_from_ctoption(G2Affine::from_compressed(dpk_bytes))
             .ok_or(DerivedPublicKeyDeserializationError::InvalidPublicKey)?;
         Ok(Self { point: dpk })
     }
@@ -176,15 +177,17 @@ impl EncryptedKey {
     }
 
     /// Deserializes an encrypted key from a byte vector
-    fn from_bytes_vec(bytes: Vec<u8>) -> Result<EncryptedKey, String> {
-        let ek_bytes: [u8; Self::BYTES] = bytes.try_into().map_err(|bytes: Vec<u8>| {
+    fn deserialize(bytes: &[u8]) -> Result<EncryptedKey, String> {
+        let ek_bytes: &[u8; Self::BYTES] = bytes.try_into().map_err(|_e: TryFromSliceError| {
             format!("key not {} bytes but {}", Self::BYTES, bytes.len())
         })?;
-        Self::from_bytes(&ek_bytes).map_err(|e| format!("{:?}", e))
+        Self::deserialize_array(ek_bytes).map_err(|e| format!("{:?}", e))
     }
 
     /// Deserializes an encrypted key from a byte array
-    fn from_bytes(val: &[u8; Self::BYTES]) -> Result<Self, EncryptedKeyDeserializationError> {
+    fn deserialize_array(
+        val: &[u8; Self::BYTES],
+    ) -> Result<Self, EncryptedKeyDeserializationError> {
         let c2_start = G1AFFINE_BYTES;
         let c3_start = G1AFFINE_BYTES + G2AFFINE_BYTES;
 
@@ -291,12 +294,12 @@ impl IBECiphertext {
     /// generated with a cryptographically secure random number generator. Do
     /// not reuse the seed for encrypting another message or any other purpose.
     pub fn encrypt(
-        derived_public_key_bytes: Vec<u8>,
+        derived_public_key_bytes: &[u8],
         derivation_id: &[u8],
         msg: &[u8],
         seed: &[u8],
     ) -> Result<IBECiphertext, String> {
-        let dpk = DerivedPublicKey::from_bytes_vec(derived_public_key_bytes)
+        let dpk = DerivedPublicKey::deserialize(derived_public_key_bytes)
             .map_err(|e| format!("failed to deserialize public key: {:?}", e))?;
 
         let seed: &[u8; IBE_SEED_BYTES] = seed
