@@ -12,7 +12,6 @@ use ic_ic00_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResult,
     CanisterStatusResultV2, UpdateSettingsArgs,
 };
-
 use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_common::pb::v1::NeuronId;
@@ -249,6 +248,21 @@ pub fn get_canister_status(
         &CanisterIdRecord::from(target),
         sender,
     )
+}
+
+pub fn get_canister_status_from_root(
+    machine: &StateMachine,
+    target: CanisterId,
+) -> ic_nervous_system_clients::canister_status::CanisterStatusResult {
+    update_with_sender(
+        machine,
+        ROOT_CANISTER_ID,
+        "canister_status",
+        candid_one,
+        &CanisterIdRecord::from(target),
+        PrincipalId::new_anonymous(),
+    )
+    .unwrap()
 }
 
 /// Compiles the universal canister, builds it's initial payload and installs it with cycles
@@ -1170,6 +1184,20 @@ pub fn sns_wait_for_proposal_executed_or_failed(
         }
         machine.advance_time(Duration::from_millis(100));
     }
+}
+
+pub fn sns_get_icp_treasury_account_balance(
+    machine: &StateMachine,
+    sns_governance_id: PrincipalId,
+) -> Tokens {
+    icrc1_balance(
+        machine,
+        LEDGER_CANISTER_ID,
+        Account {
+            owner: sns_governance_id.0,
+            subaccount: None,
+        },
+    )
 }
 
 /// Get the ICP/XDR conversion rate from the cycles minting canister.

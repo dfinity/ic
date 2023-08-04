@@ -1,8 +1,3 @@
-use std::{
-    sync::{Arc, Mutex},
-    thread,
-};
-
 use candid::{Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
@@ -30,6 +25,10 @@ use icrc_ledger_types::icrc1::{
     transfer::{Memo, TransferArg},
 };
 use lazy_static::lazy_static;
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+};
 
 lazy_static! {
     pub static ref DEFAULT_MINTING_ACCOUNT: Account = Account {
