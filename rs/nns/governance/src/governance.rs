@@ -216,30 +216,6 @@ impl NetworkEconomics {
     }
 }
 
-// Utility to transform a subaccount vector, as stored in the protobuf, into an
-// optional subaccount.
-// If the subaccount vector is empty, returns None.
-// If the subaccount vector has exactly 32 bytes return the corresponding array.
-// In any other case returns an error.
-pub fn subaccount_from_slice(subaccount: &[u8]) -> Result<Option<Subaccount>, GovernanceError> {
-    match subaccount.len() {
-        0 => Ok(None),
-        _ => {
-            let arr: [u8; 32] = subaccount.try_into().map_err(|_| {
-                GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    format!(
-                        "A slice of length {} bytes cannot be converted to a Subaccount: \
-                        subaccounts are exactly 32 bytes in length.",
-                        subaccount.len()
-                    ),
-                )
-            })?;
-            Ok(Some(Subaccount(arr)))
-        }
-    }
-}
-
 impl GovernanceError {
     pub fn new(error_type: ErrorType) -> Self {
         GovernanceError {
@@ -1614,12 +1590,7 @@ impl Governance {
             let _ =
                 n.id.as_ref()
                     .expect("Currently neurons must have been pre-assigned an id.");
-            let subaccount = Subaccount(n.account.clone().as_slice().try_into().map_err(|_| {
-                GovernanceError::new_with_message(
-                    ErrorType::PreconditionFailed,
-                    "Invalid subaccount",
-                )
-            })?);
+            let subaccount = n.subaccount()?;
             if !subaccounts.insert(subaccount) {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
@@ -2224,11 +2195,11 @@ impl Governance {
     /// Consider changing this if getting a neuron by subaccount ever gets in a
     /// hot path.
     pub fn get_neuron_by_subaccount(&self, subaccount: &Subaccount) -> Option<&Neuron> {
-        self.proto.neurons.values().find(|&n| {
-            if let Ok(s) = &&Subaccount::try_from(&n.account[..]) {
-                return s == subaccount;
-            }
-            false
+        self.proto.neurons.values().find(|neuron| {
+            neuron
+                .subaccount()
+                .map(|neuron_subaccount| neuron_subaccount == *subaccount)
+                .unwrap_or_default()
         })
     }
 
@@ -2323,7 +2294,8 @@ impl Governance {
             .with_neuron(donor_neuron_id, |donor_neuron| {
                 let is_donor_controlled_by_gtc =
                     donor_neuron.controller.as_ref() == Some(GENESIS_TOKEN_CANISTER_ID.get_ref());
-                let donor_subaccount = Subaccount::try_from(&donor_neuron.account[..])
+                let donor_subaccount = donor_neuron
+                    .subaccount()
                     .expect("Couldn't create a Subaccount from donor_neuron");
                 let donor_cached_neuron_stake_e8s = donor_neuron.cached_neuron_stake_e8s;
                 (
@@ -2333,7 +2305,8 @@ impl Governance {
                 )
             })?;
         let recipient_subaccount = self.with_neuron(recipient_neuron_id, |recipient_neuron| {
-            Subaccount::try_from(&recipient_neuron.account[..])
+            recipient_neuron
+                .subaccount()
                 .expect("Couldn't create a Subaccount from recipient_neuron")
         })?;
 
@@ -2403,7 +2376,7 @@ impl Governance {
             is_neuron_controlled_by_caller,
             neuron_state,
             is_neuron_kyc_verified,
-            neuron_account,
+            neuron_subaccount,
             fees_amount_e8s,
             neuron_minted_stake_e8s,
         ) = self.with_neuron(id, |neuron| {
@@ -2411,7 +2384,7 @@ impl Governance {
                 neuron.is_controlled_by(caller),
                 neuron.state(self.env.now()),
                 neuron.kyc_verified,
-                neuron.account.clone(),
+                neuron.subaccount(),
                 neuron.neuron_fees_e8s,
                 neuron.minted_stake_e8s(),
             )
@@ -2444,16 +2417,7 @@ impl Governance {
             ));
         }
 
-        let from_subaccount = subaccount_from_slice(&neuron_account)?.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "Neuron {} has no associated subaccount, \
-                     therefore we cannot know the corresponding ledger account.",
-                    id.id
-                ),
-            )
-        })?;
+        let from_subaccount = neuron_subaccount?;
 
         // If no account was provided, transfer to the caller's account.
         let to_account: AccountIdentifier = match disburse.to_account.as_ref() {
@@ -2644,12 +2608,7 @@ impl Governance {
         let creation_timestamp_seconds = self.env.now();
         let child_nid = self.new_neuron_id();
 
-        let from_subaccount = subaccount_from_slice(&parent_neuron.account)?.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "From subaccount not present.",
-            )
-        })?;
+        let from_subaccount = parent_neuron.subaccount()?;
 
         let to_subaccount = Subaccount(self.env.random_byte_array());
 
@@ -3232,12 +3191,7 @@ impl Governance {
         }
 
         let child_nid = self.new_neuron_id();
-        let from_subaccount = subaccount_from_slice(&parent_neuron.account)?.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "From subaccount not specified",
-            )
-        })?;
+        let from_subaccount = parent_neuron.subaccount()?;
 
         // The account is derived from the new owner's principal so it can be found by
         // the owner on the ledger. There is no need to length-prefix the
@@ -6048,8 +6002,7 @@ impl Governance {
         let (nid, subaccount) = match id {
             NeuronIdOrSubaccount::NeuronId(nid) => {
                 let neuron = self.get_neuron(&nid)?;
-                let subaccount = Self::bytes_to_subaccount(&neuron.account)?;
-                (nid, subaccount)
+                (nid, neuron.subaccount()?)
             }
             NeuronIdOrSubaccount::Subaccount(sid) => {
                 let subaccount = Self::bytes_to_subaccount(&sid)?;

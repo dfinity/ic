@@ -5,7 +5,7 @@ use crate::{
             saturating_add_or_subtract_u64_i128, GovernanceMutationProxy, GovernanceNeuronMutation,
             NeuronDeltas,
         },
-        neuron_subaccount, subaccount_from_slice,
+        neuron_subaccount,
     },
     pb::v1::{governance_error::ErrorType, GovernanceError},
 };
@@ -164,21 +164,10 @@ impl GovernanceNeuronMutation for MergeNeuronMutation {
         if source_stake_less_transaction_fee_e8s > 0 {
             let transaction_fee_e8s = gov.transaction_fee();
             let target_neuron = gov.get_neuron(&self.target_neuron_id)?;
-            let to_subaccount =
-                subaccount_from_slice(&target_neuron.account)?.ok_or_else(|| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidCommand,
-                        "Subaccount of target neuron is not valid",
-                    )
-                })?;
+            let to_subaccount = target_neuron.subaccount()?;
 
             let from_subaccount = gov.with_neuron(&self.source_neuron_id, |source_neuron| {
-                subaccount_from_slice(&source_neuron.account)?.ok_or_else(|| {
-                    GovernanceError::new_with_message(
-                        ErrorType::InvalidCommand,
-                        "Subaccount of source neuron is not valid",
-                    )
-                })
+                source_neuron.subaccount()
             })??;
 
             let original_delta_cached_neuron_stake_e8s = source_delta.cached_neuron_stake_e8s;

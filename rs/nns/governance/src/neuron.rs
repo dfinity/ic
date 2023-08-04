@@ -16,6 +16,7 @@ use crate::{
 use dfn_core::println;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use icp_ledger::Subaccount;
 use std::collections::{BTreeSet, HashMap};
 
 // Use the same logic as GTC canister for resetting the aging timestamp.
@@ -26,6 +27,17 @@ const GTC_NEURON_PRE_AGE_DURATION_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
+
+    /// Returns the subaccount constructed from the `account` vector if it's well-formed (32 bytes).
+    /// Otherwise returns None.
+    pub fn subaccount(&self) -> Result<Subaccount, GovernanceError> {
+        self.account.as_slice().try_into().map_err(|_| {
+            GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!("Neuron {:?} has invalid account", self.id),
+            )
+        })
+    }
 
     /// Returns the state the neuron would be in a time
     /// `now_seconds`. See [NeuronState] for details.
