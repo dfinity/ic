@@ -15,6 +15,7 @@ type Transaction = record {
      burn : opt record {
          amount : nat;
          from : Account;
+         spender : opt Account;
          memo : opt blob;
          created_at_time : opt nat64;
      };
@@ -22,6 +23,17 @@ type Transaction = record {
          amount : nat;
          from : Account;
          to : Account;
+         spender : opt Account;
+         memo : opt blob;
+         created_at_time : opt nat64;
+         fee : opt nat;
+     };
+     approve : opt record {
+         amount : nat;
+         from : Account;
+         spender : opt Account;
+         expected_allowance : opt nat;
+         expires_at : opt nat64;
          memo : opt blob;
          created_at_time : opt nat64;
          fee : opt nat;
