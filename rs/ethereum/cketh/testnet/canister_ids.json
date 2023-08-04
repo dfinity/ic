@@ -1,4 +1,7 @@
 {
+  "ledger": {
+    "ic": "apia6-jaaaa-aaaar-qabma-cai"
+  },
   "minter": {
     "ic": "jzenf-aiaaa-aaaar-qaa7q-cai"
   }
