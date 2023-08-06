@@ -53,7 +53,10 @@ use ic_nervous_system_governance::index::{
         add_neuron_followees, remove_neuron_followees, update_neuron_category_followees,
         HeapNeuronFollowingIndex, NeuronFollowingIndex,
     },
-    neuron_principal::{HeapNeuronPrincipalIndex, NeuronPrincipalIndex},
+    neuron_principal::{
+        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, HeapNeuronPrincipalIndex,
+        NeuronPrincipalIndex,
+    },
 };
 use ic_nervous_system_proto::pb::v1::GlobalTimeOfDay;
 use ic_nns_common::{
@@ -1616,11 +1619,17 @@ impl Governance {
 
     fn build_principal_to_neuron_ids_index(&mut self) {
         for neuron in self.proto.neurons.values() {
-            self.principal_to_neuron_ids_index
-                .add_neuron_id_principal_ids(
-                    &neuron.id.unwrap(),
-                    neuron.principal_ids_with_special_permissions(),
+            let already_present_principal_ids = add_neuron_id_principal_ids(
+                &mut self.principal_to_neuron_ids_index,
+                &neuron.id.unwrap(),
+                neuron.principal_ids_with_special_permissions(),
+            );
+            for already_present_principal_id in already_present_principal_ids {
+                println!(
+                    "{} Principal {:?}  already present in the index for neuron {:?}",
+                    LOG_PREFIX, already_present_principal_id, neuron.id
                 );
+            }
         }
     }
 
@@ -1659,9 +1668,17 @@ impl Governance {
         neuron_id: NeuronId,
         principal_ids: Vec<PrincipalId>,
     ) {
-        // TODO(NNS1-2409): Apply index updates to stable storage index.
-        self.principal_to_neuron_ids_index
-            .add_neuron_id_principal_ids(&neuron_id, principal_ids);
+        let already_present_principal_ids = add_neuron_id_principal_ids(
+            &mut self.principal_to_neuron_ids_index,
+            &neuron_id,
+            principal_ids,
+        );
+        for already_present_principal_id in already_present_principal_ids {
+            println!(
+                "{} Principal {:?}  already present in the index for neuron {:?}",
+                LOG_PREFIX, already_present_principal_id, neuron_id
+            );
+        }
     }
 
     fn add_neuron_to_principal_in_principal_to_neuron_ids_index(
@@ -1670,8 +1687,15 @@ impl Governance {
         principal_id: PrincipalId,
     ) {
         // TODO(NNS1-2409): Apply index updates to stable storage index.
-        self.principal_to_neuron_ids_index
-            .add_neuron_id_principal_id(&neuron_id, principal_id);
+        if !self
+            .principal_to_neuron_ids_index
+            .add_neuron_id_principal_id(&neuron_id, principal_id)
+        {
+            println!(
+                "{} Principal {:?}  already present in the index for neuron {:?}",
+                LOG_PREFIX, principal_id, neuron_id
+            );
+        }
     }
 
     /// Update `index` to remove the neuron from the list of neurons mapped to
@@ -1682,8 +1706,17 @@ impl Governance {
         principal_ids: Vec<PrincipalId>,
     ) {
         // TODO(NNS1-2409): Apply index updates to stable storage index.
-        self.principal_to_neuron_ids_index
-            .remove_neuron_id_principal_ids(&neuron_id, principal_ids);
+        let already_absent_principal_ids = remove_neuron_id_principal_ids(
+            &mut self.principal_to_neuron_ids_index,
+            &neuron_id,
+            principal_ids,
+        );
+        for already_absent_principal_id in already_absent_principal_ids {
+            println!(
+                "{} Principal {:?}  already absent in the index for neuron {:?}",
+                LOG_PREFIX, already_absent_principal_id, neuron_id
+            );
+        }
     }
 
     fn remove_neuron_from_principal_in_principal_to_neuron_ids_index(
@@ -1692,8 +1725,15 @@ impl Governance {
         principal_id: PrincipalId,
     ) {
         // TODO(NNS1-2409): Apply index updates to stable storage index.
-        self.principal_to_neuron_ids_index
-            .remove_neuron_id_principal_id(&neuron_id, principal_id);
+        if !self
+            .principal_to_neuron_ids_index
+            .remove_neuron_id_principal_id(&neuron_id, principal_id)
+        {
+            println!(
+                "{} Principal {:?}  already absent in the index for neuron {:?}",
+                LOG_PREFIX, principal_id, neuron_id
+            );
+        }
     }
 
     fn add_neuron_to_topic_followee_index(
