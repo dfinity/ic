@@ -1,79 +1,115 @@
 use ic_base_types::PrincipalId;
-use ic_stable_structures::{
-    memory_manager::VirtualMemory, BoundedStorable, DefaultMemoryImpl, StableBTreeMap,
-};
+use ic_stable_structures::{BoundedStorable, Memory, StableBTreeMap};
 use num_traits::bounds::LowerBounded;
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
 use std::{clone::Clone, cmp::Ord, hash::Hash};
 
-/// An index to make it easy to look up neuron ids by principal.
-pub trait NeuronPrincipalIndex<ID> {
-    /// Adds a neuron-principal pair to the index.
-    fn add_neuron_id_principal_id(&mut self, neuron_id: &ID, principal_id: PrincipalId);
-    /// Removes a neuron-principal pair to the index. It is OK if the pair does not exist.
-    fn remove_neuron_id_principal_id(&mut self, neuron_id: &ID, principal_id: PrincipalId);
-    /// Returns a list of neuron ids by principal.
-    fn get_neuron_ids(&self, principal: PrincipalId) -> HashSet<ID>;
+/// An index to make it easy to look up neuron ids by principal id.
+pub trait NeuronPrincipalIndex<NeuronId> {
+    /// Adds a neuron-principal pair to the index and returns whether the change was actually made: the pair was newly
+    /// inserted.
+    #[must_use]
+    fn add_neuron_id_principal_id(
+        &mut self,
+        neuron_id: &NeuronId,
+        principal_id: PrincipalId,
+    ) -> bool;
 
-    /// Adds a neuron id and a list of principals.
-    fn add_neuron_id_principal_ids(&mut self, neuron_id: &ID, principal_ids: Vec<PrincipalId>) {
-        for principal_id in principal_ids {
-            self.add_neuron_id_principal_id(neuron_id, principal_id);
-        }
-    }
+    /// Removes a neuron-principal pair to the index and returns whether the change was actually made: the pair was
+    /// newly removed.
+    #[must_use]
+    fn remove_neuron_id_principal_id(
+        &mut self,
+        neuron_id: &NeuronId,
+        principal_id: PrincipalId,
+    ) -> bool;
 
-    /// Removes a neuron id and a list of principals.
-    fn remove_neuron_id_principal_ids(&mut self, neuron_id: &ID, principal_ids: Vec<PrincipalId>) {
-        for principal_id in principal_ids {
-            self.remove_neuron_id_principal_id(neuron_id, principal_id);
-        }
-    }
+    /// Returns a list of neuron ids by principal id.
+    fn get_neuron_ids(&self, principal: PrincipalId) -> HashSet<NeuronId>;
+}
+
+/// Adds a neuron id and a list of principal ids and returns a list of principal ids that were already present.
+#[must_use]
+pub fn add_neuron_id_principal_ids<NeuronId>(
+    index: &mut dyn NeuronPrincipalIndex<NeuronId>,
+    neuron_id: &NeuronId,
+    principal_ids: Vec<PrincipalId>,
+) -> Vec<PrincipalId> {
+    principal_ids
+        .into_iter()
+        .filter(|principal_id| {
+            let newly_added = index.add_neuron_id_principal_id(neuron_id, *principal_id);
+            !newly_added
+        })
+        .collect()
+}
+
+/// Removes a neuron id and a list of principal ids and returns a list of principal ids that were already absent.
+#[must_use]
+pub fn remove_neuron_id_principal_ids<NeuronId>(
+    index: &mut dyn NeuronPrincipalIndex<NeuronId>,
+    neuron_id: &NeuronId,
+    principal_ids: Vec<PrincipalId>,
+) -> Vec<PrincipalId> {
+    principal_ids
+        .into_iter()
+        .filter(|principal_id| {
+            let newly_removed = index.remove_neuron_id_principal_id(neuron_id, *principal_id);
+            !newly_removed
+        })
+        .collect()
 }
 
 /// An in-memory implementation of the neuron principal index.
-pub struct HeapNeuronPrincipalIndex<ID> {
-    index_map: BTreeMap<PrincipalId, HashSet<ID>>,
+#[derive(Default)]
+pub struct HeapNeuronPrincipalIndex<NeuronId> {
+    principal_to_neuron_id_set: BTreeMap<PrincipalId, HashSet<NeuronId>>,
 }
 
-impl<ID> HeapNeuronPrincipalIndex<ID> {
+impl<NeuronId> HeapNeuronPrincipalIndex<NeuronId> {
     pub fn new() -> Self {
         Self {
-            index_map: BTreeMap::new(),
+            principal_to_neuron_id_set: BTreeMap::new(),
         }
     }
 }
 
-impl<ID> Default for HeapNeuronPrincipalIndex<ID> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<ID: Eq + Hash + Clone> NeuronPrincipalIndex<ID> for HeapNeuronPrincipalIndex<ID> {
-    fn add_neuron_id_principal_id(&mut self, neuron_id: &ID, principal: PrincipalId) {
-        self.index_map
+impl<NeuronId> NeuronPrincipalIndex<NeuronId> for HeapNeuronPrincipalIndex<NeuronId>
+where
+    NeuronId: Eq + Hash + Clone,
+{
+    fn add_neuron_id_principal_id(&mut self, neuron_id: &NeuronId, principal: PrincipalId) -> bool {
+        self.principal_to_neuron_id_set
             .entry(principal)
             .or_insert_with(HashSet::new)
-            .insert(neuron_id.clone());
+            .insert(neuron_id.clone())
     }
 
-    fn remove_neuron_id_principal_id(&mut self, neuron_id: &ID, principal: PrincipalId) {
-        self.index_map.entry(principal).and_modify(|neuron_ids| {
-            neuron_ids.remove(neuron_id);
-        });
+    fn remove_neuron_id_principal_id(
+        &mut self,
+        neuron_id: &NeuronId,
+        principal: PrincipalId,
+    ) -> bool {
+        let entry = self.principal_to_neuron_id_set.entry(principal);
+        let mut entry = match entry {
+            Entry::Vacant(_) => return false,
+            Entry::Occupied(entry) => entry,
+        };
+
+        let neuron_ids = entry.get_mut();
+        let newly_absent = neuron_ids.remove(neuron_id);
+
         // Removes the set if empty.
-        if self
-            .index_map
-            .get(&principal)
-            .map(|neuron_ids| neuron_ids.is_empty())
-            .unwrap_or_default()
-        {
-            self.index_map.remove(&principal);
+        if neuron_ids.is_empty() {
+            entry.remove();
         }
+
+        newly_absent
     }
 
-    fn get_neuron_ids(&self, principal: PrincipalId) -> HashSet<ID> {
-        self.index_map
+    fn get_neuron_ids(&self, principal: PrincipalId) -> HashSet<NeuronId> {
+        self.principal_to_neuron_id_set
             .get(&principal)
             .map(|ids| ids.iter().cloned().collect())
             .unwrap_or_default()
@@ -81,33 +117,55 @@ impl<ID: Eq + Hash + Clone> NeuronPrincipalIndex<ID> for HeapNeuronPrincipalInde
 }
 
 /// A stable memory implementation of the index.
-pub struct StableNeuronPrincipalIndex<ID: BoundedStorable + Default + Clone + Ord> {
-    index_map: StableBTreeMap<(PrincipalId, ID), (), VirtualMemory<DefaultMemoryImpl>>,
+pub struct StableNeuronPrincipalIndex<NeuronId, M>
+where
+    NeuronId: BoundedStorable + Default + Clone + Ord,
+    M: Memory,
+{
+    principal_id_and_neuron_id_set: StableBTreeMap<(PrincipalId, NeuronId), (), M>,
 }
 
-impl<ID: BoundedStorable + Default + Clone + Ord> StableNeuronPrincipalIndex<ID> {
-    pub fn new(memory: VirtualMemory<DefaultMemoryImpl>) -> Self {
+impl<NeuronId, M> StableNeuronPrincipalIndex<NeuronId, M>
+where
+    NeuronId: BoundedStorable + Default + Clone + Ord,
+    M: Memory,
+{
+    pub fn new(memory: M) -> Self {
         Self {
-            index_map: StableBTreeMap::init(memory),
+            principal_id_and_neuron_id_set: StableBTreeMap::init(memory),
         }
     }
 }
 
-impl<ID: BoundedStorable + Default + Clone + Ord + LowerBounded + Hash> NeuronPrincipalIndex<ID>
-    for StableNeuronPrincipalIndex<ID>
+impl<NeuronId, M> NeuronPrincipalIndex<NeuronId> for StableNeuronPrincipalIndex<NeuronId, M>
+where
+    NeuronId: BoundedStorable + Default + Clone + Ord + LowerBounded + Hash,
+    M: Memory,
 {
-    fn add_neuron_id_principal_id(&mut self, neuron_id: &ID, principal: PrincipalId) {
-        self.index_map.insert((principal, neuron_id.clone()), ());
+    fn add_neuron_id_principal_id(
+        &mut self,
+        neuron_id: &NeuronId,
+        principal_id: PrincipalId,
+    ) -> bool {
+        self.principal_id_and_neuron_id_set
+            .insert((principal_id, neuron_id.clone()), ())
+            .is_none()
     }
 
-    fn remove_neuron_id_principal_id(&mut self, neuron_id: &ID, principal: PrincipalId) {
-        self.index_map.remove(&(principal, neuron_id.clone()));
+    fn remove_neuron_id_principal_id(
+        &mut self,
+        neuron_id: &NeuronId,
+        principal_id: PrincipalId,
+    ) -> bool {
+        self.principal_id_and_neuron_id_set
+            .remove(&(principal_id, neuron_id.clone()))
+            .is_some()
     }
 
-    fn get_neuron_ids(&self, principal: PrincipalId) -> HashSet<ID> {
-        self.index_map
-            .range((principal, ID::min_value())..)
-            .take_while(|(k, _)| k.0 == principal)
+    fn get_neuron_ids(&self, principal_id: PrincipalId) -> HashSet<NeuronId> {
+        self.principal_id_and_neuron_id_set
+            .range((principal_id, NeuronId::min_value())..)
+            .take_while(|(k, _)| k.0 == principal_id)
             .map(|(k, _)| k.1)
             .collect()
     }
@@ -115,24 +173,12 @@ impl<ID: BoundedStorable + Default + Clone + Ord + LowerBounded + Hash> NeuronPr
 
 #[cfg(test)]
 mod tests {
-    use crate::index::neuron_principal::{
-        HeapNeuronPrincipalIndex, NeuronPrincipalIndex, StableNeuronPrincipalIndex,
-    };
+    use super::*;
 
-    use ic_base_types::PrincipalId;
-    use ic_stable_structures::{
-        memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-        BoundedStorable, DefaultMemoryImpl, Storable,
-    };
+    use ic_stable_structures::{Storable, VectorMemory};
     use maplit::hashset;
     use num_traits::bounds::LowerBounded;
     use std::borrow::Cow;
-
-    thread_local! {
-        // Each test will have a separate copy of the memory manager since each thread
-        // is run in a separate thread.
-        static MEMORY_MANAGER: MemoryManager<DefaultMemoryImpl> =  MemoryManager::init(DefaultMemoryImpl::default());
-    }
 
     #[derive(Clone, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd)]
     struct TestNeuronId([u8; 32]);
@@ -158,26 +204,26 @@ mod tests {
         }
     }
 
-    fn get_memory() -> VirtualMemory<DefaultMemoryImpl> {
-        MEMORY_MANAGER.with(|memory_manager| memory_manager.get(MemoryId::new(0)))
-    }
-
-    fn get_stable_index() -> StableNeuronPrincipalIndex<TestNeuronId> {
-        StableNeuronPrincipalIndex::<TestNeuronId>::new(get_memory())
+    fn get_stable_index() -> StableNeuronPrincipalIndex<TestNeuronId, VectorMemory> {
+        StableNeuronPrincipalIndex::new(VectorMemory::default())
     }
 
     fn get_heap_index() -> HeapNeuronPrincipalIndex<TestNeuronId> {
-        HeapNeuronPrincipalIndex::<TestNeuronId>::new()
+        HeapNeuronPrincipalIndex::new()
     }
 
     // The following test helpers will be run by both implementations.
     fn test_add_single_neuron_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        index.add_neuron_id_principal_ids(
-            &TestNeuronId([1u8; 32]),
-            vec![
-                PrincipalId::new_user_test_id(1),
-                PrincipalId::new_user_test_id(2),
-            ],
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &TestNeuronId([1u8; 32]),
+                vec![
+                    PrincipalId::new_user_test_id(1),
+                    PrincipalId::new_user_test_id(2),
+                ],
+            ),
+            vec![]
         );
         assert_eq!(
             index.get_neuron_ids(PrincipalId::new_user_test_id(1)),
@@ -190,13 +236,21 @@ mod tests {
     }
 
     fn test_remove_neuron_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        index.add_neuron_id_principal_ids(
-            &TestNeuronId([1u8; 32]),
-            vec![PrincipalId::new_user_test_id(1)],
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &TestNeuronId([1u8; 32]),
+                vec![PrincipalId::new_user_test_id(1)],
+            ),
+            vec![]
         );
-        index.remove_neuron_id_principal_ids(
-            &TestNeuronId([1u8; 32]),
-            vec![PrincipalId::new_user_test_id(1)],
+        assert_eq!(
+            remove_neuron_id_principal_ids(
+                &mut index,
+                &TestNeuronId([1u8; 32]),
+                vec![PrincipalId::new_user_test_id(1)],
+            ),
+            vec![]
         );
         assert_eq!(
             index.get_neuron_ids(PrincipalId::new_user_test_id(1)),
@@ -205,19 +259,27 @@ mod tests {
     }
 
     fn test_add_multiple_neurons_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
-        index.add_neuron_id_principal_ids(
-            &TestNeuronId([1u8; 32]),
-            vec![
-                PrincipalId::new_user_test_id(1),
-                PrincipalId::new_user_test_id(2),
-            ],
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &TestNeuronId([1u8; 32]),
+                vec![
+                    PrincipalId::new_user_test_id(1),
+                    PrincipalId::new_user_test_id(2),
+                ],
+            ),
+            vec![]
         );
-        index.add_neuron_id_principal_ids(
-            &TestNeuronId([2u8; 32]),
-            vec![
-                PrincipalId::new_user_test_id(2),
-                PrincipalId::new_user_test_id(3),
-            ],
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &TestNeuronId([2u8; 32]),
+                vec![
+                    PrincipalId::new_user_test_id(2),
+                    PrincipalId::new_user_test_id(3),
+                ],
+            ),
+            vec![]
         );
 
         assert_eq!(
@@ -231,6 +293,100 @@ mod tests {
         assert_eq!(
             index.get_neuron_ids(PrincipalId::new_user_test_id(3)),
             hashset! {TestNeuronId([2u8; 32])}
+        );
+    }
+
+    fn test_remove_add_principal_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
+        let neuron_id = TestNeuronId([1u8; 32]);
+        let principal_id_1 = PrincipalId::new_user_test_id(1);
+        let principal_id_2 = PrincipalId::new_user_test_id(2);
+        let principal_id_3 = PrincipalId::new_user_test_id(3);
+        // At first, principal ids 1 and 2 are in the index.
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &neuron_id,
+                vec![principal_id_1, principal_id_2,],
+            ),
+            vec![]
+        );
+
+        // After removing 1, only 2 is in the index.
+        assert!(index.remove_neuron_id_principal_id(&neuron_id, principal_id_1));
+        assert_eq!(
+            index.get_neuron_ids(PrincipalId::new_user_test_id(1)),
+            hashset! {}
+        );
+        assert_eq!(
+            index.get_neuron_ids(PrincipalId::new_user_test_id(2)),
+            hashset! {neuron_id.clone()}
+        );
+        assert_eq!(
+            index.get_neuron_ids(PrincipalId::new_user_test_id(3)),
+            hashset! {}
+        );
+
+        // After adding 3, 2 and 3 are in the index.
+        assert!(index.add_neuron_id_principal_id(&neuron_id, principal_id_3));
+        assert_eq!(
+            index.get_neuron_ids(PrincipalId::new_user_test_id(1)),
+            hashset! {}
+        );
+        assert_eq!(
+            index.get_neuron_ids(PrincipalId::new_user_test_id(2)),
+            hashset! {neuron_id.clone()}
+        );
+        assert_eq!(
+            index.get_neuron_ids(PrincipalId::new_user_test_id(3)),
+            hashset! {neuron_id.clone()}
+        );
+    }
+
+    fn test_add_existing_neuron_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
+        let neuron_id = TestNeuronId([1u8; 32]);
+        let principal_id_1 = PrincipalId::new_user_test_id(1);
+        let principal_id_2 = PrincipalId::new_user_test_id(2);
+
+        // First add returns empty.
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &neuron_id,
+                vec![principal_id_1, principal_id_2],
+            ),
+            vec![]
+        );
+
+        // Second add returns principal_id_1 since it's already present.
+        assert_eq!(
+            add_neuron_id_principal_ids(&mut index, &neuron_id, vec![principal_id_1],),
+            vec![principal_id_1]
+        );
+    }
+
+    fn test_remove_absent_neuron_helper(mut index: impl NeuronPrincipalIndex<TestNeuronId>) {
+        let neuron_id = TestNeuronId([1u8; 32]);
+        let principal_id_1 = PrincipalId::new_user_test_id(1);
+        let principal_id_2 = PrincipalId::new_user_test_id(2);
+        assert_eq!(
+            add_neuron_id_principal_ids(
+                &mut index,
+                &neuron_id,
+                vec![principal_id_1, principal_id_2],
+            ),
+            vec![]
+        );
+
+        // First remove returns empty.
+        assert_eq!(
+            remove_neuron_id_principal_ids(&mut index, &neuron_id, vec![principal_id_2],),
+            vec![]
+        );
+
+        // Second add returns principal_id_2 since it's already absent.
+        assert_eq!(
+            remove_neuron_id_principal_ids(&mut index, &neuron_id, vec![principal_id_2],),
+            vec![principal_id_2]
         );
     }
 
@@ -262,5 +418,35 @@ mod tests {
     #[test]
     fn test_add_multiple_neurons_stable() {
         test_add_multiple_neurons_helper(get_stable_index());
+    }
+
+    #[test]
+    fn test_remove_add_principal_in_memory() {
+        test_remove_add_principal_helper(get_heap_index());
+    }
+
+    #[test]
+    fn test_remove_add_principal_stable() {
+        test_remove_add_principal_helper(get_stable_index());
+    }
+
+    #[test]
+    fn test_add_existing_neuron_in_memory() {
+        test_add_existing_neuron_helper(get_heap_index());
+    }
+
+    #[test]
+    fn test_add_existing_neuron_stable() {
+        test_add_existing_neuron_helper(get_stable_index());
+    }
+
+    #[test]
+    fn test_remove_absent_neuron_in_memory() {
+        test_remove_absent_neuron_helper(get_heap_index());
+    }
+
+    #[test]
+    fn test_remove_absent_neuron_stable() {
+        test_remove_absent_neuron_helper(get_stable_index());
     }
 }
