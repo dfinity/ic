@@ -846,6 +846,36 @@ pub fn nns_wait_for_proposal_execution(machine: &mut StateMachine, proposal_id: 
     );
 }
 
+/// Returns when the proposal has failed execution. A proposal is considered to be
+/// executed when failed_timestamp_seconds > 0.
+pub fn nns_wait_for_proposal_failure(machine: &mut StateMachine, proposal_id: u64) {
+    // We create some blocks until the proposal has finished failing (machine.tick())
+    let mut attempt_count = 0;
+    let mut last_proposal = None;
+    while attempt_count < 50 {
+        attempt_count += 1;
+
+        machine.tick();
+        let proposal = nns_governance_get_proposal_info_as_anonymous(machine, proposal_id);
+        if proposal.failed_timestamp_seconds > 0 {
+            return;
+        }
+        assert_eq!(
+            proposal.executed_timestamp_seconds, 0,
+            "Proposal execution succeeded when it was not supposed to: {:#?}",
+            proposal
+        );
+
+        last_proposal = Some(proposal);
+        machine.advance_time(Duration::from_millis(100));
+    }
+
+    panic!(
+        "Looks like proposal {:?} is never going to be executed: {:#?}",
+        proposal_id, last_proposal,
+    );
+}
+
 pub fn sns_stake_neuron(
     machine: &StateMachine,
     governance_canister_id: CanisterId,
