@@ -89,11 +89,6 @@ wat = "1.0.52"
 name = "calls"
 harness = false
 
-# TODO(RPL-268)
-# [[bench]]
-# name = "execution_only_update"
-# harness = false
-
 [[bin]]
 name = "replica"
 path = "src/main.rs"
