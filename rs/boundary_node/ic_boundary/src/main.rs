@@ -290,6 +290,7 @@ async fn main() -> Result<(), Error> {
     let proxy_router = Arc::new(ProxyRouter::new(
         Arc::clone(&http_client),
         Arc::clone(&lookup_table),
+        nns_pub_key.into_bytes().into(),
     ));
 
     let routers_https: Router<_> = Router::new()
