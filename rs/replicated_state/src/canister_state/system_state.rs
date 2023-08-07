@@ -3,6 +3,7 @@ mod call_context_manager;
 use super::queues::can_push;
 pub use super::queues::memory_required_to_push_request;
 pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
+use crate::metadata_state::subnet_call_context_manager::InstallCodeRequestId;
 use crate::{CanisterQueues, CanisterState, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
@@ -436,6 +437,9 @@ pub enum ExecutionTask {
     // usage low if there are too many long-running executions.
     AbortedInstallCode {
         message: CanisterCall,
+        // The request id used by the subnet to identify long running install
+        // code requests.
+        request_id: Option<InstallCodeRequestId>,
         // The execution cost that has already been charged from the canister.
         // Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
@@ -486,6 +490,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             }
             ExecutionTask::AbortedInstallCode {
                 message,
+                request_id,
                 prepaid_execution_cycles,
             } => {
                 use pb::execution_task::aborted_install_code::Message;
@@ -497,6 +502,7 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                     task: Some(pb::execution_task::Task::AbortedInstallCode(
                         pb::execution_task::AbortedInstallCode {
                             message: Some(message),
+                            request_id: request_id.map(|request_id| request_id.get()),
                             prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
                         },
                     )),
@@ -577,6 +583,9 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     .unwrap_or_else(Cycles::zero);
                 ExecutionTask::AbortedInstallCode {
                     message,
+                    request_id: aborted
+                        .request_id
+                        .map(|request_id| InstallCodeRequestId::from(request_id)),
                     prepaid_execution_cycles,
                 }
             }

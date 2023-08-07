@@ -215,19 +215,21 @@ pub struct BitcoinSendTransactionInternalContextTree {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InstallCodeContext {
+pub struct InstallCodeRequest {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
     #[prost(message, optional, tag = "2")]
     pub time: ::core::option::Option<Time>,
+    #[prost(message, optional, tag = "3")]
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct InstallCodeContextTree {
+pub struct InstallCodeRequestTree {
     #[prost(uint64, tag = "1")]
-    pub callback_id: u64,
+    pub request_id: u64,
     #[prost(message, optional, tag = "2")]
-    pub context: ::core::option::Option<InstallCodeContext>,
+    pub request: ::core::option::Option<InstallCodeRequest>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -247,8 +249,10 @@ pub struct SubnetCallContextManager {
     #[prost(message, repeated, tag = "9")]
     pub bitcoin_send_transaction_internal_contexts:
         ::prost::alloc::vec::Vec<BitcoinSendTransactionInternalContextTree>,
-    #[prost(message, repeated, tag = "10")]
-    pub install_code_contexts: ::prost::alloc::vec::Vec<InstallCodeContextTree>,
+    #[prost(message, repeated, tag = "11")]
+    pub install_code_requests: ::prost::alloc::vec::Vec<InstallCodeRequestTree>,
+    #[prost(uint64, tag = "12")]
+    pub next_install_code_request_id: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -1,6 +1,6 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::{
-    SubnetCallContext, SubnetCallContextManager,
+    InstallCodeRequest, SubnetCallContext, SubnetCallContextManager,
 };
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
@@ -632,6 +632,7 @@ fn subnet_call_contexts_deserialization() {
     let mut system_call_context_manager: SubnetCallContextManager =
         SubnetCallContextManager::default();
 
+    // Define HTTP request.
     let canister_http_request = CanisterHttpRequestContext {
         request: RequestBuilder::default()
             .sender(canister_test_id(1))
@@ -649,18 +650,32 @@ fn subnet_call_contexts_deserialization() {
         canister_http_request,
     ));
 
+    // Define install code request.
+    let request = RequestBuilder::default()
+        .sender(canister_test_id(1))
+        .receiver(canister_test_id(2))
+        .build();
+    let install_code_request = InstallCodeRequest {
+        request,
+        effective_canister_id: canister_test_id(3),
+        time: mock_time(),
+    };
+    let request_id =
+        system_call_context_manager.push_install_code_request(install_code_request.clone());
+
+    // Encode and decode.
     let system_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&system_call_context_manager).into();
-    let deserialized_system_call_context_manager: SubnetCallContextManager =
+    let mut deserialized_system_call_context_manager: SubnetCallContextManager =
         SubnetCallContextManager::try_from((mock_time(), system_call_context_manager_proto))
             .unwrap();
 
+    // Check HTTP request deserialization.
     assert_eq!(
         deserialized_system_call_context_manager
             .canister_http_request_contexts
             .len(),
         1
     );
-
     let deserialized_http_request_context = deserialized_system_call_context_manager
         .canister_http_request_contexts
         .get(&CallbackId::from(0))
@@ -671,6 +686,16 @@ fn subnet_call_contexts_deserialization() {
         CanisterHttpMethod::GET
     );
     assert_eq!(deserialized_http_request_context.transform, Some(transform));
+
+    // Check install code request deserialization.
+    assert_eq!(
+        deserialized_system_call_context_manager.install_code_contexts_len(),
+        1
+    );
+    let deserialized_install_code_request = deserialized_system_call_context_manager
+        .retrieve_install_code_request(request_id)
+        .expect("Did not find the install code request");
+    assert_eq!(deserialized_install_code_request, install_code_request);
 }
 
 #[test]

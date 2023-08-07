@@ -9,8 +9,9 @@ use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, Request},
-    node_id_into_protobuf, node_id_try_from_option, NodeId, RegistryVersion, Time,
+    node_id_into_protobuf, node_id_try_from_option, CanisterId, NodeId, RegistryVersion, Time,
 };
+use phantom_newtype::Id;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{From, TryFrom},
@@ -23,7 +24,6 @@ pub enum SubnetCallContext {
     EcdsaDealings(EcdsaDealingsContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
     BitcoinSendTransactionInternal(BitcoinSendTransactionInternalContext),
-    InstallCode(InstallCodeContext),
 }
 
 impl SubnetCallContext {
@@ -35,7 +35,6 @@ impl SubnetCallContext {
             SubnetCallContext::EcdsaDealings(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => &context.request,
-            SubnetCallContext::InstallCode(context) => &context.request,
         }
     }
 
@@ -47,8 +46,63 @@ impl SubnetCallContext {
             SubnetCallContext::EcdsaDealings(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
             SubnetCallContext::BitcoinSendTransactionInternal(context) => context.time,
-            SubnetCallContext::InstallCode(context) => context.time,
         }
+    }
+}
+
+pub struct InstallCodeRequestIdTag;
+pub type InstallCodeRequestId = Id<InstallCodeRequestIdTag, u64>;
+
+/// It is responsible for keeping track of all install code messages that
+/// cannot complete execution in a single round.
+///
+/// During a subnet split, these messages will be autmatically rejected if
+/// the targeted canister is moved to a new subnet.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct InstallCodeRequestManager {
+    next_request_id: u64,
+    install_code_requests: BTreeMap<InstallCodeRequestId, InstallCodeRequest>,
+}
+
+impl InstallCodeRequestManager {
+    fn push_request(&mut self, request: InstallCodeRequest) -> InstallCodeRequestId {
+        let request_id = InstallCodeRequestId::new(self.next_request_id);
+        self.next_request_id += 1;
+        self.install_code_requests.insert(request_id, request);
+
+        request_id
+    }
+
+    fn retrieve_request(&mut self, request_id: InstallCodeRequestId) -> Option<InstallCodeRequest> {
+        self.install_code_requests.remove(&request_id)
+    }
+
+    fn install_code_requests_len(&self) -> usize {
+        self.install_code_requests.len()
+    }
+}
+
+/// It is responsible for keeping track of all subnet messages that
+/// do not require work to be done by another IC layer and
+/// cannot finalize the execution in a single round.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct CanisterManagementRequests {
+    install_code_request_manager: InstallCodeRequestManager,
+}
+
+impl CanisterManagementRequests {
+    fn push_request(&mut self, request: InstallCodeRequest) -> InstallCodeRequestId {
+        self.install_code_request_manager.push_request(request)
+    }
+
+    fn retrieve_request(&mut self, request_id: InstallCodeRequestId) -> Option<InstallCodeRequest> {
+        self.install_code_request_manager
+            .retrieve_request(request_id)
+    }
+
+    pub fn install_code_requests_len(&self) -> usize {
+        self.install_code_request_manager
+            .install_code_requests_len()
     }
 }
 
@@ -62,7 +116,7 @@ pub struct SubnetCallContextManager {
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
-    pub install_code_contexts: BTreeMap<CallbackId, InstallCodeContext>,
+    canister_management_requests: CanisterManagementRequests,
 }
 
 impl SubnetCallContextManager {
@@ -92,10 +146,8 @@ impl SubnetCallContextManager {
                 self.bitcoin_send_transaction_internal_contexts
                     .insert(callback_id, context);
             }
-            SubnetCallContext::InstallCode(context) => {
-                self.install_code_contexts.insert(callback_id, context);
-            }
         };
+
         callback_id
     }
 
@@ -180,6 +232,26 @@ impl SubnetCallContextManager {
                     })
             })
     }
+
+    pub fn push_install_code_request(
+        &mut self,
+        request: InstallCodeRequest,
+    ) -> InstallCodeRequestId {
+        self.canister_management_requests.push_request(request)
+    }
+
+    pub fn retrieve_install_code_request(
+        &mut self,
+        request_id: InstallCodeRequestId,
+    ) -> Option<InstallCodeRequest> {
+        self.canister_management_requests
+            .retrieve_request(request_id)
+    }
+
+    pub fn install_code_contexts_len(&self) -> usize {
+        self.canister_management_requests
+            .install_code_requests_len()
+    }
 }
 
 impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
@@ -246,16 +318,22 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     }
                 })
                 .collect(),
-            install_code_contexts: item
-                .install_code_contexts
+            install_code_requests: item
+                .canister_management_requests
+                .install_code_request_manager
+                .install_code_requests
                 .iter()
                 .map(
-                    |(callback_id, context)| pb_metadata::InstallCodeContextTree {
-                        callback_id: callback_id.get(),
-                        context: Some(context.into()),
+                    |(request_id, request)| pb_metadata::InstallCodeRequestTree {
+                        request_id: request_id.get(),
+                        request: Some(request.into()),
                     },
                 )
                 .collect(),
+            next_install_code_request_id: item
+                .canister_management_requests
+                .install_code_request_manager
+                .next_request_id,
         }
     }
 }
@@ -319,13 +397,17 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 .insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut install_code_contexts = BTreeMap::<CallbackId, InstallCodeContext>::new();
-        for entry in item.install_code_contexts {
-            let pb_context =
-                try_from_option_field(entry.context, "SystemMetadata::InstallCodeContext")?;
-            let context = InstallCodeContext::try_from((time, pb_context))?;
-            install_code_contexts.insert(CallbackId::new(entry.callback_id), context);
+        let mut install_code_requests = BTreeMap::<InstallCodeRequestId, InstallCodeRequest>::new();
+        for entry in item.install_code_requests {
+            let pb_request =
+                try_from_option_field(entry.request, "SystemMetadata::InstallCodeRequest")?;
+            let request = InstallCodeRequest::try_from((time, pb_request))?;
+            install_code_requests.insert(InstallCodeRequestId::new(entry.request_id), request);
         }
+        let install_code_request_manager = InstallCodeRequestManager {
+            next_request_id: item.next_install_code_request_id,
+            install_code_requests,
+        };
 
         Ok(Self {
             next_callback_id: item.next_callback_id,
@@ -335,7 +417,9 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             ecdsa_dealings_contexts,
             bitcoin_get_successors_contexts,
             bitcoin_send_transaction_internal_contexts,
-            install_code_contexts,
+            canister_management_requests: CanisterManagementRequests {
+                install_code_request_manager,
+            },
         })
     }
 }
@@ -582,32 +666,39 @@ impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct InstallCodeContext {
+pub struct InstallCodeRequest {
     pub request: Request,
     pub time: Time,
+    pub effective_canister_id: CanisterId,
 }
 
-impl From<&InstallCodeContext> for pb_metadata::InstallCodeContext {
-    fn from(context: &InstallCodeContext) -> Self {
-        pb_metadata::InstallCodeContext {
-            request: Some((&context.request).into()),
+impl From<&InstallCodeRequest> for pb_metadata::InstallCodeRequest {
+    fn from(install_code_request: &InstallCodeRequest) -> Self {
+        pb_metadata::InstallCodeRequest {
+            request: Some((&install_code_request.request).into()),
+            effective_canister_id: Some((install_code_request.effective_canister_id).into()),
             time: Some(pb_metadata::Time {
-                time_nanos: context.time.as_nanos_since_unix_epoch(),
+                time_nanos: install_code_request.time.as_nanos_since_unix_epoch(),
             }),
         }
     }
 }
 
-impl TryFrom<(Time, pb_metadata::InstallCodeContext)> for InstallCodeContext {
+impl TryFrom<(Time, pb_metadata::InstallCodeRequest)> for InstallCodeRequest {
     type Error = ProxyDecodeError;
     fn try_from(
-        (time, context): (Time, pb_metadata::InstallCodeContext),
+        (time, install_code_request): (Time, pb_metadata::InstallCodeRequest),
     ) -> Result<Self, Self::Error> {
         let request: Request =
-            try_from_option_field(context.request, "InstallCodeContext::request")?;
-        Ok(InstallCodeContext {
+            try_from_option_field(install_code_request.request, "InstallCodeRequest::request")?;
+        let effective_canister_id: CanisterId = try_from_option_field(
+            install_code_request.effective_canister_id,
+            "InstallCodeRequest::effective_canister_id",
+        )?;
+        Ok(InstallCodeRequest {
             request,
-            time: context
+            effective_canister_id,
+            time: install_code_request
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
         })
