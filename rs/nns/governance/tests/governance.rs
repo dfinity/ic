@@ -8663,11 +8663,13 @@ fn test_compute_cached_metrics() {
     let now = 100;
     let neurons = hashmap! {
         1 => Neuron {
+            id: Some(NeuronId {id: 1}),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
             ..Default::default()
         },
         2 => Neuron {
+            id: Some(NeuronId {id: 2}),
             cached_neuron_stake_e8s: 234_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             joined_community_fund_timestamp_seconds: Some(1),
@@ -8675,31 +8677,37 @@ fn test_compute_cached_metrics() {
             ..Default::default()
         },
         3 => Neuron {
+            id: Some(NeuronId {id: 3}),
             cached_neuron_stake_e8s: 568_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 4)),
             ..Default::default()
         },
         4 => Neuron {
+            id: Some(NeuronId {id: 4}),
             cached_neuron_stake_e8s: 1_123_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 4)),
             ..Default::default()
         },
         5 => Neuron {
+            id: Some(NeuronId {id: 5}),
             cached_neuron_stake_e8s: 6_087_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 8)),
             ..Default::default()
         },
         6 => Neuron {
+            id: Some(NeuronId {id: 5}),
             cached_neuron_stake_e8s: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
             ..Default::default()
         },
         7 => Neuron {
+            id: Some(NeuronId {id: 7}),
             cached_neuron_stake_e8s: 100,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
             ..Default::default()
         },
         8 => Neuron {
+            id: Some(NeuronId {id: 8}),
             cached_neuron_stake_e8s: 234_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS,
@@ -8707,6 +8715,7 @@ fn test_compute_cached_metrics() {
             ..Default::default()
         },
         9 => Neuron {
+            id: Some(NeuronId {id: 9}),
             cached_neuron_stake_e8s: 568_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 3,
@@ -8714,6 +8723,7 @@ fn test_compute_cached_metrics() {
             ..Default::default()
         },
         10 => Neuron {
+            id: Some(NeuronId {id: 10}),
             cached_neuron_stake_e8s: 1_123_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 5,
@@ -8721,6 +8731,7 @@ fn test_compute_cached_metrics() {
             ..Default::default()
         },
         11 => Neuron {
+            id: Some(NeuronId {id: 11}),
             cached_neuron_stake_e8s: 6_087_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 5,
@@ -8728,6 +8739,7 @@ fn test_compute_cached_metrics() {
             ..Default::default()
         },
         12 => Neuron {
+            id: Some(NeuronId {id: 12}),
             cached_neuron_stake_e8s: 18_000_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 7,
@@ -8735,14 +8747,17 @@ fn test_compute_cached_metrics() {
             ..Default::default()
         },
         13 => Neuron {
+            id: Some(NeuronId {id: 13}),
             cached_neuron_stake_e8s: 4_450_000_000,
             ..Default::default()
         },
         14 => Neuron {
+            id: Some(NeuronId {id: 14}),
             cached_neuron_stake_e8s: 1_220_000_000,
             ..Default::default()
         },
         15 => Neuron {
+            id: Some(NeuronId {id: 15}),
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
             ..Default::default()
@@ -8753,11 +8768,17 @@ fn test_compute_cached_metrics() {
         ..Default::default()
     };
 
-    let gov = GovernanceProto {
-        economics: Some(economics),
-        neurons,
-        ..Default::default()
-    };
+    let driver = fake::FakeDriver::default();
+    let gov = Governance::new(
+        GovernanceProto {
+            economics: Some(economics),
+            neurons,
+            ..Default::default()
+        },
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
 
     let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(147, 0).unwrap());
 
@@ -9285,7 +9306,7 @@ fn test_join_community_fund() {
         driver.get_fake_cmc(),
     );
     {
-        let actual_metrics = gov.proto.compute_cached_metrics(now, total_icp_suppply);
+        let actual_metrics = gov.compute_cached_metrics(now, total_icp_suppply);
         assert_eq!(200, actual_metrics.total_supply_icp);
         assert_eq!(130 * 100_000_000, actual_metrics.total_staked_e8s);
         assert_eq!(0, actual_metrics.community_fund_total_staked_e8s);
@@ -9331,7 +9352,7 @@ fn test_join_community_fund() {
             .now_or_never()
             .unwrap();
         assert!(result.is_ok());
-        let actual_metrics = gov.proto.compute_cached_metrics(now, total_icp_suppply);
+        let actual_metrics = gov.compute_cached_metrics(now, total_icp_suppply);
         assert_eq!(200, actual_metrics.total_supply_icp);
         assert_eq!(130 * 100_000_000, actual_metrics.total_staked_e8s);
         assert_eq!(
@@ -9379,7 +9400,7 @@ fn test_join_community_fund() {
             .now_or_never()
             .unwrap();
         assert!(result.is_ok());
-        let actual_metrics = gov.proto.compute_cached_metrics(now, total_icp_suppply);
+        let actual_metrics = gov.compute_cached_metrics(now, total_icp_suppply);
         assert_eq!(200, actual_metrics.total_supply_icp);
         assert_eq!(130 * 100_000_000, actual_metrics.total_staked_e8s);
         assert_eq!(
@@ -12452,11 +12473,6 @@ async fn test_metrics() {
         community_fund_total_maturity_e8s_equivalent: 0,
         total_locked_e8s: 600_000_000,
     };
-    let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
-    assert_eq!(
-        expected_metrics, actual_metrics,
-        "Cached metrics don't match expected metrics."
-    );
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
     let mut gov = Governance::new(
@@ -12465,12 +12481,17 @@ async fn test_metrics() {
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
     );
+
+    let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
+    assert_eq!(
+        expected_metrics, actual_metrics,
+        "Cached metrics don't match expected metrics."
+    );
+
     gov.run_periodic_tasks().now_or_never();
 
     // Check again after periodic task.
-    let actual_metrics = gov
-        .proto
-        .compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
+    let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
     assert_eq!(
         expected_metrics, actual_metrics,
         "Invalid metrics after period tasks execution."
