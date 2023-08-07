@@ -67,11 +67,13 @@ rust_canister(
     deps = [
         ":minter",
         "//rs/crypto/ecdsa_secp256k1",
+        "//rs/rust_canisters/http_types",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
         "@crate_index//:ethabi",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
+        "@crate_index//:ic-metrics-encoder",
     ],
 )
