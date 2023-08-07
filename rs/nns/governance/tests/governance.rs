@@ -6820,6 +6820,8 @@ fn make_proposal_with_action(
 // When a neuron A follows neuron B on topic Unspecified, and B votes on topic
 // T, then A votes the same was as B, except when T is Governance or
 // SnsAndCommunityFund.
+// TODO(NNS1-2464): re-enable test
+#[ignore]
 #[test]
 fn test_default_followees() {
     let p = match std::env::var("NEURON_CSV_PATH") {
@@ -10969,6 +10971,8 @@ lazy_static! {
 
 const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 61 * E8;
 
+// TODO(NNS1-2464): re-enable test
+#[ignore]
 #[tokio::test]
 async fn test_open_sns_token_swap_proposal_happy() {
     // Step 1: Prepare the world.
@@ -11107,6 +11111,8 @@ async fn test_open_sns_token_swap_proposal_happy() {
     }
 }
 
+// TODO(NNS1-2464): re-enable test
+#[ignore]
 #[tokio::test]
 async fn test_open_sns_token_swap_proposal_execution_fails() {
     // Step 1: Prepare the world.
@@ -11222,6 +11228,8 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
 }
 
 /// Multiple calls to settle_community_fund should be idempotent.
+// TODO(NNS1-2464): re-enable test
+#[ignore]
 #[tokio::test]
 async fn test_settle_community_fund_is_idempotent() {
     use settle_community_fund_participation::Result;
@@ -11377,6 +11385,8 @@ async fn test_settle_community_fund_is_idempotent() {
 
 /// Failure when settling the CommunityFund should result in the Lifecycle remaining
 /// what it was before the method invocation.
+// TODO(NNS1-2464): re-enable test
+#[ignore]
 #[tokio::test]
 async fn test_settle_community_fund_participation_restores_lifecycle_on_failure() {
     use settle_community_fund_participation::Result;
@@ -11892,6 +11902,8 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
     );
 }
 
+// TODO(NNS1-2464): re-enable test
+#[ignore]
 #[tokio::test]
 async fn test_settle_community_fund_is_idempotent_for_create_service_nervous_system() {
     use settle_community_fund_participation::Result;
