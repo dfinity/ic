@@ -786,9 +786,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "process",
                 ],
             ),
-            "prometheus-parse": crate.spec(
-                version = "^0.2.3",
-            ),
             "proptest": crate.spec(
                 version = "^1.0.0",
             ),
