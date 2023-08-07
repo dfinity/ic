@@ -212,10 +212,11 @@ impl Neuron {
 
     /// Returns the list of followees on the manage neuron topic for
     /// this neuron.
-    pub(crate) fn neuron_managers(&self) -> Option<&Vec<NeuronId>> {
+    pub(crate) fn neuron_managers(&self) -> Vec<NeuronId> {
         self.followees
             .get(&(Topic::NeuronManagement as i32))
-            .map(|x| &x.followees)
+            .map(|x| x.followees.clone())
+            .unwrap_or_default()
     }
 
     /// Register that this neuron has cast a ballot for a
