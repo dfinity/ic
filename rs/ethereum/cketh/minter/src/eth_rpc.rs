@@ -370,6 +370,10 @@ impl BlockNumber {
     pub fn new(value: u128) -> Self {
         Self(Quantity::from(value))
     }
+
+    pub fn as_f64(&self) -> f64 {
+        self.0.as_f64()
+    }
 }
 
 impl Add<u128> for BlockNumber {

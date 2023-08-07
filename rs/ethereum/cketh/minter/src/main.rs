@@ -1,4 +1,5 @@
 use candid::candid_method;
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::Address;
@@ -415,6 +416,60 @@ fn dump_state_for_debugging() -> DebugState {
         minted_transactions: s.minted_transactions.iter().map(to_tx).collect(),
         invalid_transactions: s.invalid_transactions.iter().map(to_tx).collect(),
     })
+}
+
+#[candid_method(query)]
+#[query]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    use ic_metrics_encoder::MetricsEncoder;
+
+    if req.path() == "/metrics" {
+        let mut writer = MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        fn encode_metrics(w: &mut MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+            read_state(|s| {
+                w.gauge_vec("cycle_balance", "Cycle balance of this canister.")?
+                    .value(
+                        &[("canister", "cketh-minter")],
+                        ic_cdk::api::canister_balance128() as f64,
+                    )?;
+
+                w.encode_gauge(
+                    "cketh_minter_last_processed_block",
+                    s.last_seen_block_number.as_f64(),
+                    "The last Ethereum block the ckETH minter checked for deposits.",
+                )?;
+
+                w.gauge_vec(
+                    "cketh_minter_accepted_deposits",
+                    "The number of deposits the ckETH minter processed, by status.",
+                )?
+                .value(
+                    &[("status", "accepted")],
+                    s.minted_transactions.len() as f64,
+                )?
+                .value(
+                    &[("status", "rejected")],
+                    s.invalid_transactions.len() as f64,
+                )?;
+
+                Ok(())
+            })
+        }
+
+        match encode_metrics(&mut writer) {
+            Ok(()) => HttpResponseBuilder::ok()
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .with_body_and_content_length(writer.into_inner())
+                .build(),
+            Err(err) => {
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    .build()
+            }
+        }
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
 }
 
 fn main() {}

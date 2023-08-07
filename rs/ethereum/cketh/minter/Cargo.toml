@@ -15,11 +15,13 @@ ethnum = { workspace = true }
 hex = "0.4"
 ic-ic00-types = { path = "../../../types/ic00_types" }
 hex-literal = "0.4.1"
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-crypto-ecdsa-secp256k1 = { path = "../../../crypto/ecdsa_secp256k1" }
 ic-crypto-sha3 = { path = "../../../crypto/sha3" }
+ic-metrics-encoder = "1"
 rlp = "0.5.2"
 num-bigint = "0.4.3"
 serde = "1"
