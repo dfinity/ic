@@ -227,13 +227,12 @@ fn address_display() {
 
 #[test]
 fn test_encoding() {
-    use crate::tx::TransactionRequest;
+    use crate::tx::Eip1559TransactionRequest;
     use ethers_core::abi::ethereum_types::H160;
-    use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest;
     use ethers_core::types::transaction::eip2930::AccessList;
     use ethers_core::types::Bytes;
 
-    let other_raw_tx = Eip1559TransactionRequest {
+    let other_raw_tx = ethers_core::types::transaction::eip1559::Eip1559TransactionRequest {
         from: None,
         to: Some(ethers_core::types::NameOrAddress::Address(H160::zero())),
         gas: Some(1.into()),
@@ -245,17 +244,16 @@ fn test_encoding() {
         max_fee_per_gas: Some(4.into()),
         chain_id: Some(1.into()),
     };
-    let raw_tx = TransactionRequest {
+    let raw_tx = Eip1559TransactionRequest {
         chain_id: 1,
-        to: crate::address::Address::new([0; 20]),
-        nonce: 0_u32.into(),
+        destination: Address::new([0; 20]),
+        nonce: 0_u64.into(),
         gas_limit: 1_u32.into(),
-        max_fee_per_gas: 4_u32.into(),
-        value: 2_u32.into(),
+        max_fee_per_gas: 4_u64.into(),
+        amount: 2_u64.into(),
         data: vec![],
-        transaction_type: 0,
         access_list: vec![],
-        max_priority_fee_per_gas: 3_u32.into(),
+        max_priority_fee_per_gas: 3_u64.into(),
     };
     assert_eq!(
         raw_tx.encode_eip1559_payload(None)[1..],
@@ -267,6 +265,7 @@ mod eth_get_block_by_number {
     use crate::eth_rpc::{
         into_nat, Block, BlockNumber, BlockSpec, BlockTag, GetBlockByNumberParams, Quantity,
     };
+    use crate::numeric::Wei;
 
     #[test]
     fn should_serialize_get_block_by_number_params_as_tuple() {
@@ -604,7 +603,7 @@ mod eth_get_block_by_number {
             block,
             Block {
                 number: BlockNumber::new(0x10eb3c6),
-                base_fee_per_gas: Quantity::new(0x4b85a0fcd),
+                base_fee_per_gas: Wei::new(0x4b85a0fcd),
             }
         )
     }
@@ -621,6 +620,7 @@ mod eth_fee_history {
     use crate::eth_rpc::{
         BlockNumber, BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity,
     };
+    use crate::numeric::Wei;
 
     #[test]
     fn should_serialize_fee_history_params_as_tuple() {
@@ -688,38 +688,38 @@ mod eth_fee_history {
             FeeHistory {
                 oldest_block: BlockNumber::new(0x10f73fc),
                 base_fee_per_gas: vec![
-                    Quantity::new(0x729d3f3b3),
-                    Quantity::new(0x766e503ea),
-                    Quantity::new(0x75b51b620),
-                    Quantity::new(0x74094f2b4),
-                    Quantity::new(0x716724f03),
-                    Quantity::new(0x73b467f76)
+                    Wei::new(0x729d3f3b3),
+                    Wei::new(0x766e503ea),
+                    Wei::new(0x75b51b620),
+                    Wei::new(0x74094f2b4),
+                    Wei::new(0x716724f03),
+                    Wei::new(0x73b467f76)
                 ],
                 reward: vec![
                     vec![
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x68e7780)
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x68e7780)
                     ],
                     vec![
-                        Quantity::new(0x55d4a80),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100)
+                        Wei::new(0x55d4a80),
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x5f5e100)
                     ],
                     vec![
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100)
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x5f5e100)
                     ],
                     vec![
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100)
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x5f5e100)
                     ],
                     vec![
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x5f5e100),
-                        Quantity::new(0x180789e0)
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x5f5e100),
+                        Wei::new(0x180789e0)
                     ]
                 ],
             }

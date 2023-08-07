@@ -68,6 +68,7 @@ rust_canister(
         ":minter",
         "//rs/crypto/ecdsa_secp256k1",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:ethabi",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",

@@ -27,6 +27,7 @@ service : (MinterArg) -> {
         gas_price : nat;
         gas_limit : nat;
     });
+    withdraw : (nat64, text) -> (record {block_index : nat});
     dump_state_for_debugging: () -> ( record {
         ecdsa_key_name : text;
         last_seen_block_number: nat;

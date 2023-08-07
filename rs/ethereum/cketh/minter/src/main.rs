@@ -1,18 +1,20 @@
 use candid::candid_method;
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk::api::stable::{StableReader, StableWriter};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::{
     DebugState, DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice,
-    EthTransaction, MinterArg, ReceivedEthEvent, TransactionStatus,
+    EthTransaction, MinterArg, ReceivedEthEvent, RetrieveEthRequest, TransactionStatus,
 };
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
-use ic_cketh_minter::eth_rpc::{into_nat, GasPrice, Hash, BLOCK_PI_RPC_PROVIDER_URL};
+use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash, BLOCK_PI_RPC_PROVIDER_URL};
 use ic_cketh_minter::eth_rpc::{JsonRpcResult, Transaction};
+use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::mutate_state;
 use ic_cketh_minter::state::read_state;
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::state::STATE;
-use ic_cketh_minter::tx::TransactionRequest;
+use ic_cketh_minter::tx::{estimate_transaction_price, Eip1559TransactionRequest};
 use ic_cketh_minter::{eth_logs, eth_rpc};
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use std::cmp::{min, Ordering};
@@ -108,6 +110,12 @@ async fn scrap_eth_logs() {
     }
 }
 
+#[pre_upgrade]
+fn pre_upgrade() {
+    read_state(|s| ciborium::ser::into_writer(s, StableWriter::default()))
+        .expect("failed to encode ledger state");
+}
+
 #[update]
 #[candid_method(update)]
 async fn minter_address() -> String {
@@ -182,17 +190,16 @@ type TransferResult = ic_cketh_minter::eth_rpc::JsonRpcResult<String>;
 #[update]
 #[candid_method(update)]
 async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferResult {
-    let tx_bytes = TransactionRequest {
+    let tx_bytes = Eip1559TransactionRequest {
         chain_id: SEPOLIA_TEST_CHAIN_ID,
-        to: Address::from_str(&to_string).unwrap(),
-        nonce: nonce.into(),
+        destination: Address::from_str(&to_string).unwrap(),
+        nonce: TransactionNonce::from(nonce),
         gas_limit: 100000_u32.into(),
-        max_fee_per_gas: 1946965145_u32.into(),
-        value: value.into(),
+        max_fee_per_gas: Wei::new(1946965145_u128),
+        amount: value.into(),
         data: vec![],
-        transaction_type: 2,
         access_list: vec![],
-        max_priority_fee_per_gas: 1946965145_u32.into(),
+        max_priority_fee_per_gas: Wei::new(1946965145_u128),
     }
     .sign()
     .await
@@ -239,13 +246,8 @@ async fn test_get_transaction_by_hash(transaction_hash: String) -> TransactionSt
 #[update]
 #[candid_method(update)]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
+    use candid::Nat;
     use eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity};
-    use ic_cketh_minter::eth_rpc::into_nat;
-
-    // average value between the `minSuggestedMaxPriorityFeePerGas`
-    // used by Metamask, see
-    // https://github.com/MetaMask/core/blob/f5a4f52e17f407c6411e4ef9bd6685aab184b91d/packages/gas-fee-controller/src/fetchGasEstimatesViaEthFeeHistory/calculateGasFeeEstimatesForPriorityLevels.ts#L14
-    const MIN_MAX_PRIORITY_FEE_PER_GAS: u64 = 1_500_000_000; //1.5 gwei
 
     let fee_history: FeeHistory = eth_rpc::call(
         "https://rpc.sepolia.org",
@@ -261,37 +263,17 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
     .unwrap();
 
     debug_assert_eq!(fee_history.base_fee_per_gas.len(), 6);
-    let base_fee_from_last_finalized_block = into_nat(fee_history.base_fee_per_gas[4]);
-    let base_fee_of_next_finalized_block = into_nat(fee_history.base_fee_per_gas[5]);
-    let max_priority_fee_per_gas = {
-        let mut rewards: Vec<Quantity> = fee_history.reward.into_iter().flatten().collect();
-        let historic_max_priority_fee_per_gas = into_nat(
-            *median(&mut rewards).expect("should be non-empty with rewards of the last 5 blocks"),
-        );
-        std::cmp::max(
-            historic_max_priority_fee_per_gas,
-            candid::Nat::from(MIN_MAX_PRIORITY_FEE_PER_GAS),
-        )
-    };
-    let max_fee_per_gas =
-        (2_u32 * base_fee_of_next_finalized_block.clone()) + max_priority_fee_per_gas.clone();
-    let gas_limit = candid::Nat::from(TRANSACTION_GAS_LIMIT);
+    let base_fee_from_last_finalized_block = Nat::from(fee_history.base_fee_per_gas[4]);
+    let base_fee_of_next_finalized_block = Nat::from(fee_history.base_fee_per_gas[5]);
+    let price = estimate_transaction_price(&fee_history);
 
     Eip1559TransactionPrice {
         base_fee_from_last_finalized_block,
         base_fee_of_next_finalized_block,
-        max_priority_fee_per_gas,
-        max_fee_per_gas,
-        gas_limit,
+        max_priority_fee_per_gas: price.max_priority_fee_per_gas.into(),
+        max_fee_per_gas: price.max_fee_per_gas.into(),
+        gas_limit: into_nat(price.gas_limit),
     }
-}
-
-fn median<T: Ord>(values: &mut [T]) -> Option<&T> {
-    if values.is_empty() {
-        return None;
-    }
-    let (_, item, _) = values.select_nth_unstable(values.len() / 2);
-    Some(item)
 }
 
 /// Estimate price of EIP-2930 or legacy transactions based on the value returned by
@@ -299,20 +281,103 @@ fn median<T: Ord>(values: &mut [T]) -> Option<&T> {
 #[update]
 #[candid_method(update)]
 async fn eip_2930_transaction_price() -> Eip2930TransactionPrice {
-    use ic_cketh_minter::eth_rpc::into_nat;
+    use ic_cketh_minter::numeric::Wei;
 
-    let gas_price: GasPrice = eth_rpc::call("https://rpc.sepolia.org", "eth_gasPrice", ())
+    let gas_price: Wei = eth_rpc::call("https://rpc.sepolia.org", "eth_gasPrice", ())
         .await
         .expect("HTTP call failed")
         .unwrap();
 
-    let gas_price = into_nat(gas_price.0);
+    let gas_price = candid::Nat::from(gas_price);
     let gas_limit = candid::Nat::from(TRANSACTION_GAS_LIMIT);
 
     Eip2930TransactionPrice {
         gas_price,
         gas_limit,
     }
+}
+
+#[update]
+#[candid_method(update)]
+async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
+    let caller = validate_caller_not_anonymous();
+    let amount = Wei::from(amount);
+    let destination = Address::from_str(&recipient)
+        .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to parse recipient address: {:?}", e)));
+    //TODO FI-868: verify that the source account has enough funds on the ledger
+    ic_cdk::println!(
+        "Principal {} withdrawing {:?} to {:?}",
+        caller,
+        amount,
+        destination
+    );
+
+    let transaction_price = estimate_transaction_price(&eth_fee_history().await);
+    let max_transaction_fee = transaction_price.max_transaction_fee();
+    ic_cdk::println!("Estimated max transaction fee: {:?}", max_transaction_fee);
+    if max_transaction_fee >= amount {
+        ic_cdk::trap(&format!(
+            "WARN: skipping transaction since fee {:?} is at least the amount {:?} to be withdrawn",
+            max_transaction_fee, amount
+        ));
+    }
+
+    //TODO FI-868: contact ledger to burn funds
+    let ledger_burn_index = LedgerBurnIndex(0);
+    ic_cdk::println!(
+        "Burning {:?}",
+        amount
+            .checked_sub(max_transaction_fee)
+            .expect("cannot underflow due to previous check that max_transaction_fee >= amount")
+    );
+
+    let nonce = mutate_state(|s| s.increment_and_get_nonce());
+    let transaction = Eip1559TransactionRequest::new_transfer(
+        SEPOLIA_TEST_CHAIN_ID,
+        nonce,
+        transaction_price,
+        destination,
+        amount,
+    );
+    ic_cdk::println!("Queuing transaction: {:?} for signing", transaction,);
+    mutate_state(|s| {
+        s.pending_retrieve_eth_requests
+            .insert(ledger_burn_index, transaction.clone())
+            .unwrap_or_else(|e| {
+                ic_cdk::trap(&format!(
+                    "BUG: skipping transaction {:?} since it could not be queued for signing: {}",
+                    transaction, e
+                ))
+            });
+    });
+
+    RetrieveEthRequest {
+        block_index: candid::Nat::from(ledger_burn_index),
+    }
+}
+
+fn validate_caller_not_anonymous() -> candid::Principal {
+    let principal = ic_cdk::caller();
+    if principal == candid::Principal::anonymous() {
+        panic!("anonymous principal is not allowed");
+    }
+    principal
+}
+
+async fn eth_fee_history() -> FeeHistory {
+    use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
+    eth_rpc::call(
+        "https://rpc.sepolia.org",
+        "eth_feeHistory",
+        FeeHistoryParams {
+            block_count: Quantity::from(5_u8),
+            highest_block: BlockSpec::Tag(BlockTag::Finalized),
+            reward_percentiles: vec![20],
+        },
+    )
+    .await
+    .expect("HTTP call failed")
+    .unwrap()
 }
 
 #[post_upgrade]
@@ -323,7 +388,12 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
         }
         None | Some(MinterArg::UpgradeArg) => {
             ic_cdk::println!("Upgrading...");
-            STATE.with(|cell| *cell.borrow_mut() = Some(State::default()));
+            STATE.with(|cell| {
+                *cell.borrow_mut() = Some(
+                    ciborium::de::from_reader(StableReader::default())
+                        .expect("failed to decode ledger state"),
+                );
+            });
         }
     }
     ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || {

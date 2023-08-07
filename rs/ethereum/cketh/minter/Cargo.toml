@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
+ciborium = { workspace = true }
 ethabi = "18.0.0"
 ethnum = { workspace = true }
 hex = "0.4"
