@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
-const SMART_CONTRACT_ADDRESS: [u8; 20] = hex!("b44B5e756A894775FC32EDdf3314Bb1B1944dC34");
+pub const SMART_CONTRACT_ADDRESS: [u8; 20] = hex!("b44B5e756A894775FC32EDdf3314Bb1B1944dC34");
 
 pub async fn last_received_eth_events(
     from: BlockNumber,

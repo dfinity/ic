@@ -5,7 +5,7 @@ use std::fmt::{Formatter, LowerHex, UpperHex};
 use std::str::FromStr;
 
 /// An Ethereum account address.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Address(#[serde(with = "crate::serde_data")] [u8; 20]);
 

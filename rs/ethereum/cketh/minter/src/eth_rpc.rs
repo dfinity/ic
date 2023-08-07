@@ -2,6 +2,7 @@
 //! interface.
 
 use crate::address::Address;
+use crate::numeric::Wei;
 use candid::{candid_method, CandidType, Principal};
 use ethnum::u256;
 use ic_cdk::api::call::{call_with_payment128, CallResult};
@@ -350,9 +351,9 @@ pub struct FeeHistory {
     /// This includes the next block after the newest of the returned range,
     /// because this value can be derived from the newest block.
     /// Zeroes are returned for pre-EIP-1559 blocks.
-    pub base_fee_per_gas: Vec<Quantity>,
+    pub base_fee_per_gas: Vec<Wei>,
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
-    pub reward: Vec<Vec<Quantity>>,
+    pub reward: Vec<Vec<Wei>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd)]
@@ -391,11 +392,8 @@ pub struct Block {
     ///The block number. `None` when its pending block.
     pub number: BlockNumber,
     /// Base fee value of this block
-    pub base_fee_per_gas: Quantity,
+    pub base_fee_per_gas: Wei,
 }
-
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct GasPrice(pub Quantity);
 
 /// An envelope for all JSON-RPC requests.
 #[derive(Serialize)]

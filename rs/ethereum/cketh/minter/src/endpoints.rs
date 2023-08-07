@@ -57,6 +57,11 @@ pub struct EthTransaction {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct RetrieveEthRequest {
+    pub block_index: Nat,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
 pub enum TransactionStatus {
     NotFound,
     Pending,
