@@ -203,7 +203,7 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
 
         let mut guard = self.state.lock().unwrap();
         let state = &mut *guard;
-        state.buf.put_u32(data.len() as u32);
+        state.buf.put_u64(data.len() as u64);
         state.buf.extend_from_slice(data);
         state.fds.extend_from_slice(fds);
         if !state.sending_in_background {
