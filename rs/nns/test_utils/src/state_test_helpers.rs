@@ -36,6 +36,7 @@ use ic_sns_governance::{
     },
     types::DEFAULT_TRANSFER_FEE,
 };
+use ic_sns_swap::pb::v1::{GetAutoFinalizationStatusRequest, GetAutoFinalizationStatusResponse};
 use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
     pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
@@ -850,11 +851,8 @@ pub fn nns_wait_for_proposal_execution(machine: &mut StateMachine, proposal_id: 
 /// executed when failed_timestamp_seconds > 0.
 pub fn nns_wait_for_proposal_failure(machine: &mut StateMachine, proposal_id: u64) {
     // We create some blocks until the proposal has finished failing (machine.tick())
-    let mut attempt_count = 0;
     let mut last_proposal = None;
-    while attempt_count < 50 {
-        attempt_count += 1;
-
+    for _ in 0..50 {
         machine.tick();
         let proposal = nns_governance_get_proposal_info_as_anonymous(machine, proposal_id);
         if proposal.failed_timestamp_seconds > 0 {
@@ -1123,6 +1121,25 @@ pub fn sns_governance_get_mode(
     let GetModeResponse { mode } = Decode!(&get_mode_response, sns_pb::GetModeResponse).unwrap();
 
     Ok(mode.unwrap())
+}
+
+pub fn sns_swap_get_auto_finalization_status(
+    state_machine: &StateMachine,
+    sns_swap_canister_id: CanisterId,
+) -> GetAutoFinalizationStatusResponse {
+    let get_auto_finalization_status_response = query(
+        state_machine,
+        sns_swap_canister_id,
+        "get_auto_finalization_status",
+        Encode!(&GetAutoFinalizationStatusRequest {}).unwrap(),
+    )
+    .unwrap();
+
+    Decode!(
+        &get_auto_finalization_status_response,
+        GetAutoFinalizationStatusResponse
+    )
+    .unwrap()
 }
 
 /// Get a proposal from an SNS
