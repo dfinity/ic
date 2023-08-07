@@ -25,8 +25,8 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState,
-    SystemState,
+    metadata_state::subnet_call_context_manager::InstallCodeRequestId, CallOrigin, CanisterState,
+    CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_system_api::ExecutionParameters;
 use ic_types::messages::{MessageId, SignedIngressContent};
@@ -66,6 +66,7 @@ pub(crate) enum DtsInstallCodeResult {
     Finished {
         canister: CanisterState,
         message: CanisterCall,
+        request_id: Option<InstallCodeRequestId>,
         instructions_used: NumInstructions,
         result: Result<InstallCodeResult, CanisterManagerError>,
     },
@@ -643,6 +644,7 @@ impl CanisterManager {
             context,
             message,
             None,
+            None,
             old_canister,
             time,
             "NOT_USED".into(),
@@ -656,6 +658,7 @@ impl CanisterManager {
         match dts_result {
             DtsInstallCodeResult::Finished {
                 canister,
+                request_id: _,
                 message: _,
                 instructions_used,
                 result,
@@ -698,6 +701,7 @@ impl CanisterManager {
         &self,
         context: InstallCodeContext,
         message: CanisterCall,
+        request_id: Option<InstallCodeRequestId>,
         prepaid_execution_cycles: Option<Cycles>,
         mut canister: CanisterState,
         time: Time,
@@ -713,6 +717,7 @@ impl CanisterManager {
             return DtsInstallCodeResult::Finished {
                 canister,
                 message,
+                request_id,
                 instructions_used: NumInstructions::from(0),
                 result: Err(err),
             };
@@ -734,6 +739,7 @@ impl CanisterManager {
                         return DtsInstallCodeResult::Finished {
                             canister,
                             message,
+                            request_id,
                             instructions_used: NumInstructions::from(0),
                             result: Err(CanisterManagerError::InstallCodeNotEnoughCycles(err)),
                         };
@@ -742,12 +748,13 @@ impl CanisterManager {
             }
         };
 
-        let original = OriginalContext {
+        let original: OriginalContext = OriginalContext {
             execution_parameters,
             mode: context.mode,
             canister_layout_path,
             config: self.config.clone(),
             message,
+            request_id,
             prepaid_execution_cycles,
             time,
             compilation_cost_handling,
@@ -1715,8 +1722,12 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
     ) -> DtsInstallCodeResult;
 
     /// Aborts the paused execution.
-    /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles);
+    /// Returns the original message, the cycles prepaid for execution,
+    /// and a request id that exist only for inter-canister messages.
+    fn abort(
+        self: Box<Self>,
+        log: &ReplicaLogger,
+    ) -> (CanisterCall, Option<InstallCodeRequestId>, Cycles);
 }
 
 #[cfg(test)]

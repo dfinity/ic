@@ -5,6 +5,7 @@ use ic_ic00_types::{
 };
 use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
 use ic_replicated_state::canister_state::system_state::CanisterHistory;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeRequestId;
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities::{
     mock_time,
@@ -199,6 +200,7 @@ fn test_encode_decode_task_queue() {
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Ingress(Arc::clone(&ingress)),
             prepaid_execution_cycles: Cycles::new(1),
+            request_id: None,
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::clone(&request))),
@@ -207,6 +209,7 @@ fn test_encode_decode_task_queue() {
         ExecutionTask::AbortedInstallCode {
             message: CanisterCall::Request(Arc::clone(&request)),
             prepaid_execution_cycles: Cycles::new(3),
+            request_id: Some(InstallCodeRequestId::new(3u64)),
         },
         ExecutionTask::AbortedExecution {
             input: CanisterMessageOrTask::Message(CanisterMessage::Response(Arc::clone(&response))),

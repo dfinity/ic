@@ -191,6 +191,7 @@ message ExecutionTask {
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.
     state.queues.v1.Cycles prepaid_execution_cycles = 3;
+    optional uint64 request_id = 4;
   }
 
   oneof task {

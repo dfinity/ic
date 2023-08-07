@@ -321,6 +321,8 @@ pub mod execution_task {
         #[prost(message, optional, tag = "3")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
+        #[prost(uint64, optional, tag = "4")]
+        pub request_id: ::core::option::Option<u64>,
         #[prost(oneof = "aborted_install_code::Message", tags = "1, 2")]
         pub message: ::core::option::Option<aborted_install_code::Message>,
     }
