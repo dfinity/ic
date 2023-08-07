@@ -531,7 +531,6 @@ fn try_read_registry_succeeds_with_fully_specified_registry_records() {
                 canister_sandboxing: true,
                 http_requests: true,
                 sev_status: Some(SevFeatureStatus::Disabled),
-                onchain_observability: Some(true),
             },
             ecdsa_config: EcdsaConfig {
                 key_ids: vec![

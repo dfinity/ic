@@ -204,7 +204,6 @@ type SubnetFeatures = record {
   canister_sandboxing : bool;
   sev_status : opt SevFeatureStatus;
   http_requests : bool;
-  onchain_observability : opt bool;
 };
 type SubnetType = variant { application; verified_application; system };
 type UpdateElectedReplicaVersionsPayload = record {

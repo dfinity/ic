@@ -34,7 +34,6 @@ ic-messaging = { path = "../messaging" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
-ic-onchain-observability-server = { path = "../monitoring/onchain_observability/server" }
 ic-p2p = { path = "../p2p" }
 ic-pprof = { path = "../monitoring/pprof" }
 ic-protobuf = { path = "../protobuf" }

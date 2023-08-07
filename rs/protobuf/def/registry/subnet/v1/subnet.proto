@@ -368,8 +368,8 @@ message SubnetFeatures {
     // Status of the SEV-SNP feature.
     optional SevFeatureStatus sev_status = 7;
 
-    // Controls whether to collect/publish data to the onchain observability canister
-    optional bool onchain_observability = 8;
+    reserved "onchain_observability";
+    reserved 8;
 }
 
 // Per subnet ECDSA configuration

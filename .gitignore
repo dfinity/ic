@@ -101,7 +101,6 @@ prestorecon.o
 **/bin/ic-consensus-pool-util
 **/bin/ic-crypto-csp
 **/bin/ic-regedit
-**/bin/ic-onchain-observability-adapter
 **/bin/orchestrator
 **/bin/replica
 **/bin/state-tool

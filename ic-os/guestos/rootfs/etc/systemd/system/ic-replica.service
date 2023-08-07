@@ -18,8 +18,6 @@ After=network-online.target
 BindsTo=network-online.target
 After=systemd-networkd.service
 PartOf=systemd-networkd.service
-# Set up a socket to serve gRPC requests to the onchain observability adapter
-Wants=ic-onchain-observability-adapter.socket
 StartLimitBurst=5
 StartLimitIntervalSec=60
 
@@ -41,4 +39,3 @@ RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-Also=ic-onchain-observability-adapter.socket

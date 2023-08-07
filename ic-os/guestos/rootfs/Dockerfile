@@ -120,14 +120,6 @@ RUN addgroup ic-http-adapter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC Canister HTTP Adapter" ic-http-adapter && \
     adduser ic-http-adapter ic-http-adapter
 
-# The "onchain-observability" account. Used to run `ic-onchain-observability-adapter` binary
-# to send connectivity data to the observability canister.
-RUN addgroup onchain-observability && \
-    adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC Onchain Observability Adapter" onchain-observability && \
-    adduser onchain-observability onchain-observability && \ 
-    adduser onchain-observability ic-csp-vault-socket && \
-    adduser onchain-observability ic-registry-local-store
-
 # User which will run the replica service.
 RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-home ic-replica && \
     adduser ic-replica backup && \
@@ -135,7 +127,6 @@ RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-
     adduser ic-replica nonconfidential && \
     adduser ic-replica ic-registry-local-store && \
     adduser ic-replica ic-http-adapter && \
-    adduser ic-replica onchain-observability && \
     adduser ic-replica vsock
 
 # Accounts to allow remote access to state bits

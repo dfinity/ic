@@ -131,7 +131,6 @@ class EsDoc:
             "ic-btc-adapter",
             "ic-crypto-csp",
             "ic-https-outcalls-adapter",
-            "ic-onchain-observability-adapter",
             # TODO: all components that use the ReplicaLogger library
         ]
     )
