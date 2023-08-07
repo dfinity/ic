@@ -8949,6 +8949,7 @@ dependencies = [
  "ic-registry-transport",
  "ic-sns-governance",
  "ic-sns-init",
+ "ic-sns-swap",
  "ic-sns-wasm",
  "ic-state-machine-tests",
  "ic-test-utilities",

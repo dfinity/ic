@@ -39,6 +39,7 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-transport = { path = "../../registry/transport" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-governance = { path = "../../sns/governance" }
+ic-sns-swap = { path = "../../sns/swap" }
 ic-sns-wasm = { path = "../sns-wasm" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-test-utilities = { path = "../../test_utilities" }
