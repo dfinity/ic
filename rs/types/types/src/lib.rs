@@ -78,7 +78,6 @@ pub mod malicious_flags;
 pub mod messages;
 pub mod methods;
 pub mod nominal_cycles;
-pub mod onchain_observability;
 pub mod p2p;
 pub mod registry;
 pub mod replica_config;

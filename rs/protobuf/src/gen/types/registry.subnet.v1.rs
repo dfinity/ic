@@ -361,9 +361,6 @@ pub struct SubnetFeatures {
     /// Status of the SEV-SNP feature.
     #[prost(enumeration = "SevFeatureStatus", optional, tag = "7")]
     pub sev_status: ::core::option::Option<i32>,
-    /// Controls whether to collect/publish data to the onchain observability canister
-    #[prost(bool, optional, tag = "8")]
-    pub onchain_observability: ::core::option::Option<bool>,
 }
 /// Per subnet ECDSA configuration
 #[derive(serde::Serialize, serde::Deserialize)]

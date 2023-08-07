@@ -162,7 +162,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/monitoring/adapter_metrics_server/                  @dfinity-lab/teams/networking-team
 /rs/monitoring/adapter_metrics_service/                 @dfinity-lab/teams/networking-team
 /rs/monitoring/backtrace/                               @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/networking-team
-/rs/monitoring/onchain_observability/                   @dfinity-lab/teams/networking-team
 /rs/nervous_system/                                     @dfinity-lab/teams/nns-team
 /rs/nns/                                                @dfinity-lab/teams/nns-team
 /rs/observability/                                      @dfinity-lab/teams/DRE

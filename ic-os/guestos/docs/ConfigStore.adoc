@@ -131,12 +131,6 @@ Must be a file of key/value pairs separated by "=" (one per line) with the follo
 
 - socks_proxy: URL of the socks proxy to use. E.g socks5://socksproxy.com:1080
 
-=== onchain_observability_overrides.json
-
-A json object containing config-values that will override the existing values in the onchain observability config. Key names must match those in the actual config.
-
-- onchain_observability_overrides: Struct containing the overrides
-
 === bitcoin_addr.conf
 
 Configuration for bitcoin adapter.

@@ -69,8 +69,8 @@ const DOMAIN_SIGNED_REQUEST_BYTES: &str = "signed_request_bytes_domain";
 
 const DOMAIN_MESSAGEID: &str = "messageid_domain";
 
-pub(crate) const DOMAIN_IC_ONCHAIN_OBSERVABILITY_REPORT: &str =
-    "ic-onchain-observability-report-domain";
+// TODO: remove once NET-1501 is done
+const _DOMAIN_IC_ONCHAIN_OBSERVABILITY_REPORT: &str = "ic-onchain-observability-report-domain";
 
 pub(crate) const DOMAIN_RANDOM_TAPE_CONTENT: &str = "random_tape_content_domain";
 const DOMAIN_RANDOM_TAPE: &str = "random_tape_domain";

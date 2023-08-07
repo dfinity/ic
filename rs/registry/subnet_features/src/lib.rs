@@ -18,10 +18,6 @@ pub struct SubnetFeatures {
     pub http_requests: bool,
 
     pub sev_status: Option<SevFeatureStatus>,
-
-    // This feature flag controls whether the onchain observability adapter systemd process collects data
-    // and sends it to the onchain observability canister.
-    pub onchain_observability: Option<bool>,
 }
 
 impl SubnetFeatures {
@@ -42,7 +38,6 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
                 SevFeatureStatus::SecureNoUpgradeEnabled => 3,
                 SevFeatureStatus::SecureEnabled => 4,
             }),
-            onchain_observability: features.onchain_observability,
         }
     }
 }
@@ -59,7 +54,6 @@ impl From<pb::SubnetFeatures> for SubnetFeatures {
                 4 => SevFeatureStatus::SecureEnabled,
                 _ => SevFeatureStatus::Disabled,
             }),
-            onchain_observability: features.onchain_observability,
         }
     }
 }
@@ -79,7 +73,6 @@ impl FromStr for SubnetFeatures {
             match feature {
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
-                "onchain_observability" => features.onchain_observability = Some(true),
                 _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
             }
         }

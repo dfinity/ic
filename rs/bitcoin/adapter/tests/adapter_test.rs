@@ -98,8 +98,6 @@ async fn start_client(
         bitcoin_testnet_uds_metrics_path: None,
         https_outcalls_uds_path: None,
         https_outcalls_uds_metrics_path: None,
-        onchain_observability_enable_grpc_server: false,
-        onchain_observability_uds_metrics_path: None,
     };
 
     setup_bitcoin_adapter_clients(

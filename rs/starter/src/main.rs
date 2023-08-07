@@ -303,7 +303,6 @@ struct CliArgs {
         possible_values = &[
             "canister_sandboxing",
             "http_requests",
-            "onchain_observability",
             "bitcoin_testnet",
             "bitcoin_testnet_syncing",
             "bitcoin_testnet_paused",
@@ -568,15 +567,10 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     } else {
         None
     };
-    let onchain_observability = features
-        .iter()
-        .any(|s| s.as_str() == "onchain_observability")
-        .then_some(true);
     SubnetFeatures {
         canister_sandboxing,
         http_requests,
         sev_status,
-        onchain_observability,
     }
 }
 

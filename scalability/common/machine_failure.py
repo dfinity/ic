@@ -28,7 +28,6 @@ class MachineFailure(threading.Thread):
             "ic-btc-adapter",
             "ic-https-outcalls-adapter",
             "ic-crypto-csp",
-            "ic-onchain-observability-adapter",
         ]
 
     def kill_nodes(machines: [str]):

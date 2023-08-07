@@ -42,7 +42,6 @@ pub struct InternetComputer {
     name: String,
     pub bitcoind_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
-    pub onchain_observability_overrides: Option<OnchainObservabilityOverrides>,
     use_specified_ids_allocation_range: bool,
 }
 
@@ -54,12 +53,6 @@ pub enum VmAllocationStrategy {
     DistributeWithinSingleHost,
     #[serde(rename = "distributeAcrossDcs")]
     DistributeAcrossDcs,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct OnchainObservabilityOverrides {
-    pub report_length_sec: u64,
-    pub sampling_interval_sec: u64,
 }
 
 impl InternetComputer {
@@ -164,14 +157,6 @@ impl InternetComputer {
 
     pub fn with_socks_proxy(mut self, socks_proxy: String) -> Self {
         self.socks_proxy = Some(socks_proxy);
-        self
-    }
-
-    pub fn with_onchain_observability_overrides(
-        mut self,
-        overrides: OnchainObservabilityOverrides,
-    ) -> Self {
-        self.onchain_observability_overrides = Some(overrides);
         self
     }
 
