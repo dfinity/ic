@@ -5275,10 +5275,18 @@ impl Governance {
 
     /// There can be at most one OpenSnsTokenSwap proposal at a time.
     /// Of course, such proposals must be valid on their own as well.
+    #[allow(unreachable_code)]
     async fn validate_open_sns_token_swap(
         &mut self,
-        open_sns_token_swap: &OpenSnsTokenSwap,
+        _open_sns_token_swap: &OpenSnsTokenSwap,
     ) -> Result<(), GovernanceError> {
+        // TODO(NNS1-2464): Re-enable OpenSnsTokenSwap proposals.
+        // TODO(NNS1-2464): Remove allow(unreachable_code) above.
+        return Err(GovernanceError::new_with_message(
+            ErrorType::Unavailable,
+            "OpenSnsTokenSwap proposals are temporary unavailable.".to_string(),
+        ));
+
         /*
         TODO(NNS1-1919): Replace the body of this function with the chunk of
         code in this comment block when we are about to release that feature.
@@ -5292,7 +5300,7 @@ impl Governance {
         */
 
         // Inspect open_sns_token_swap on its own.
-        validate_open_sns_token_swap(open_sns_token_swap, &mut *self.env).await?;
+        validate_open_sns_token_swap(_open_sns_token_swap, &mut *self.env).await?;
 
         // Enforce that it would be unique.
         let other_proposal_ids =

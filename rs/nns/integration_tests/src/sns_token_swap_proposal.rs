@@ -36,6 +36,8 @@ const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
 /// second should fail because only one SetSnsTokenSwapOpenTimeWindow proposal can be open
 /// at a time. After executing the first proposal, a third is submitted and should not be
 /// rejected.
+// TODO(NNS1-2464): re-enable test
+#[ignore]
 #[test]
 fn test_only_one_sns_token_swap_proposal_can_be_open() {
     // Step 1: Prepare the world.
