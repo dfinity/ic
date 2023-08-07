@@ -5,6 +5,7 @@ use ic_types::messages::Blob;
 
 struct ProxyRouter {
     node: Node,
+    root_key: Vec<u8>,
 }
 
 #[async_trait]
@@ -26,12 +27,20 @@ impl Proxier for ProxyRouter {
     fn health(&self) -> ReplicaHealthStatus {
         ReplicaHealthStatus::Healthy
     }
+
+    fn get_root_key(&self) -> &Vec<u8> {
+        &self.root_key
+    }
 }
 
 #[tokio::test]
 async fn test_status() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
-    let state = ProxyRouter { node };
+    let root_key = vec![8, 6, 7, 5, 3, 0, 9];
+    let state = ProxyRouter {
+        node,
+        root_key: root_key.clone(),
+    };
 
     let resp = status(State(Arc::new(state))).await;
     assert_eq!(resp.status(), StatusCode::OK);
@@ -44,6 +53,7 @@ async fn test_status() -> Result<(), Error> {
         health.replica_health_status,
         Some(ReplicaHealthStatus::Healthy)
     );
+    assert_eq!(health.root_key.as_deref(), Some(&root_key),);
 
     Ok(())
 }
@@ -51,7 +61,11 @@ async fn test_status() -> Result<(), Error> {
 #[tokio::test]
 async fn test_query() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
-    let state = ProxyRouter { node: node.clone() };
+    let root_key = vec![8, 6, 7, 5, 3, 0, 9];
+    let state = ProxyRouter {
+        node: node.clone(),
+        root_key,
+    };
 
     let sender = Principal::from_text("sqjm4-qahae-aq").unwrap();
     let canister_id = Principal::from_text("sxiki-5ygae-aq").unwrap();

@@ -158,6 +158,8 @@ pub trait Proxier {
     fn lookup_node(&self, canister_id: Principal) -> Result<Node, ErrorCause>;
 
     fn health(&self) -> ReplicaHealthStatus;
+
+    fn get_root_key(&self) -> &Vec<u8>;
 }
 
 // Router that helps handlers do their job by looking up in routing table
@@ -165,16 +167,19 @@ pub trait Proxier {
 pub struct ProxyRouter {
     http_client: Arc<reqwest::Client>,
     published_routes: Arc<ArcSwapOption<Routes>>,
+    root_key: Vec<u8>,
 }
 
 impl ProxyRouter {
     pub fn new(
         http_client: Arc<reqwest::Client>,
         published_routes: Arc<ArcSwapOption<Routes>>,
+        root_key: Vec<u8>,
     ) -> Self {
         Self {
             http_client,
             published_routes,
+            root_key,
         }
     }
 }
@@ -258,6 +263,10 @@ impl Proxier for ProxyRouter {
             // Usually this is only for the first 10sec after startup
             None => ReplicaHealthStatus::Starting,
         }
+    }
+
+    fn get_root_key(&self) -> &Vec<u8> {
+        &self.root_key
     }
 }
 
@@ -404,7 +413,7 @@ pub async fn status(State(state): State<Arc<impl Proxier>>) -> Response {
     let response = HttpStatusResponse {
         // TODO which one to use?
         ic_api_version: "0.18.0".to_string(),
-        root_key: None,
+        root_key: Some(state.get_root_key().into()),
         impl_version: None,
         impl_hash: None,
         replica_health_status: Some(state.health()),
