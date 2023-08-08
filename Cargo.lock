@@ -7174,6 +7174,7 @@ dependencies = [
  "threadpool",
  "tokio",
  "tower",
+ "wasmparser 0.100.0",
  "wat",
 ]
 

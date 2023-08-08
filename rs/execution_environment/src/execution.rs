@@ -9,6 +9,7 @@ mod nonreplicated_response;
 
 pub mod install;
 pub mod install_code;
+mod orthogonal_persistence;
 pub mod upgrade;
 
 // Common helpers.
