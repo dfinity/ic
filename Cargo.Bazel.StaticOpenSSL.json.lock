@@ -1,5 +1,5 @@
 {
-  "checksum": "d4001e1e7499c1dd6686bc137f75cd84dcdc1d5bbc2caabe25a12fe9042137e2",
+  "checksum": "f3a4d06cbf2dfce4245c5e8429bbd7d83bb787a8c380be3b3bbeac94e0277023",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13787,6 +13787,14 @@
               "target": "ic_bls12_381"
             },
             {
+              "id": "icrc1-test-env 0.1.0",
+              "target": "icrc1_test_env"
+            },
+            {
+              "id": "icrc1-test-suite 0.1.0",
+              "target": "icrc1_test_suite"
+            },
+            {
               "id": "idna 0.3.0",
               "target": "idna"
             },
@@ -23024,6 +23032,113 @@
         "version": "0.8.0"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "icrc1-test-env 0.1.0": {
+      "name": "icrc1-test-env",
+      "version": "0.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/icrc1-test-env/0.1.0/download",
+          "sha256": "742ac065f9340e129b1e2497036aafed4937d66d7ab225c4989a1405496b9b18"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "icrc1_test_env",
+            "crate_root": "lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "icrc1_test_env",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.72",
+              "target": "anyhow"
+            },
+            {
+              "id": "candid 0.8.4",
+              "target": "candid"
+            },
+            {
+              "id": "serde 1.0.171",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.71",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0"
+    },
+    "icrc1-test-suite 0.1.0": {
+      "name": "icrc1-test-suite",
+      "version": "0.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/icrc1-test-suite/0.1.0/download",
+          "sha256": "e65c993be0c4fc3fa8f2209834ec39674fb327bde0ec07b5c0b2f40fd0dd8a9c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "icrc1_test_suite",
+            "crate_root": "lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "icrc1_test_suite",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "anyhow 1.0.72",
+              "target": "anyhow"
+            },
+            {
+              "id": "candid 0.8.4",
+              "target": "candid"
+            },
+            {
+              "id": "futures 0.3.28",
+              "target": "futures"
+            },
+            {
+              "id": "icrc1-test-env 0.1.0",
+              "target": "icrc1_test_env"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0"
     },
     "id-arena 2.2.1": {
       "name": "id-arena",
