@@ -3,9 +3,9 @@
 use crate::{
     blockchainmanager::BlockchainManager, common::DEFAULT_CHANNEL_BUFFER_SIZE, config::Config,
     connectionmanager::ConnectionManager, metrics::RouterMetrics, stream::handle_stream,
-    transaction_manager::TransactionManager, AdapterState, BlockchainManagerRequest,
-    BlockchainState, Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError,
-    ProcessEvent, TransactionManagerRequest,
+    transaction_store::TransactionStore, AdapterState, BlockchainManagerRequest, BlockchainState,
+    Channel, ProcessBitcoinNetworkMessage, ProcessBitcoinNetworkMessageError, ProcessEvent,
+    TransactionManagerRequest,
 };
 use bitcoin::network::message::NetworkMessage;
 use ic_logger::ReplicaLogger;
@@ -25,8 +25,8 @@ use tokio::{
 /// After receiving a message, it is dispached to _all_ relevant components for processing.
 /// Having a design where we have a separate task that awaits on messages from the
 /// ConnectionManager, we keep the ConnectionManager free of dependencies like the
-/// TransactionManager or the BlockchainManager.
-pub fn start_router(
+/// TransactionStore or the BlockchainManager.
+pub fn start_main_event_loop(
     config: &Config,
     logger: ReplicaLogger,
     blockchain_state: Arc<Mutex<BlockchainState>>,
@@ -42,7 +42,7 @@ pub fn start_router(
 
     let mut blockchain_manager =
         BlockchainManager::new(blockchain_state, logger.clone(), router_metrics.clone());
-    let mut transaction_manager = TransactionManager::new(logger.clone(), metrics_registry);
+    let mut transaction_manager = TransactionStore::new(logger.clone(), metrics_registry);
     let mut connection_manager = ConnectionManager::new(
         config,
         logger,
@@ -112,7 +112,7 @@ pub fn start_router(
                     connection_manager.tick(blockchain_manager.get_height().await, handle_stream);
                     blockchain_manager
                         .tick(&mut connection_manager).await;
-                    transaction_manager.tick(&mut connection_manager);
+                    transaction_manager.advertise_txids(&mut connection_manager);
                 }
             };
         }

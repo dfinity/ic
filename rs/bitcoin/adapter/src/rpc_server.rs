@@ -121,7 +121,7 @@ impl BtcService for BtcServiceImpl {
 }
 
 /// Spawns in a separate Tokio task the BTC adapter gRPC service.
-pub fn spawn_grpc_server(
+pub fn start_grpc_server(
     config: Config,
     logger: ReplicaLogger,
     adapter_state: AdapterState,

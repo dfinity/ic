@@ -8,7 +8,7 @@ use bitcoin::{
     network::message_blockdata::Inventory,
 };
 use hashlink::LinkedHashMap;
-use ic_logger::{debug, trace, warn, ReplicaLogger};
+use ic_logger::{debug, info, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 
 use crate::metrics::TransactionMetrics;
@@ -59,7 +59,7 @@ impl TransactionInfo {
 }
 
 /// This struct stores the list of transactions submitted by the system component.
-pub struct TransactionManager {
+pub struct TransactionStore {
     /// This field contains a logger for the transaction manager to
     logger: ReplicaLogger,
     /// This field contains the transactions being tracked by the manager.
@@ -67,21 +67,14 @@ pub struct TransactionManager {
     metrics: TransactionMetrics,
 }
 
-impl TransactionManager {
+impl TransactionStore {
     /// This function creates a new transaction manager.
     pub fn new(logger: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
-        TransactionManager {
+        TransactionStore {
             logger,
             transactions: LinkedHashMap::new(),
             metrics: TransactionMetrics::new(metrics_registry),
         }
-    }
-
-    /// This heartbeat method is called periodically by the adapter.
-    /// This method is used to send messages to Bitcoin peers.
-    pub fn tick(&mut self, channel: &mut impl Channel) {
-        self.advertise_txids(channel);
-        self.reap();
     }
 
     /// This method is used to enqueue a single transaction.
@@ -109,26 +102,31 @@ impl TransactionManager {
         }
     }
 
-    /// Clear out transactions that have been held on to for more than the transaction timeout period.
-    fn reap(&mut self) {
+    /// Clear out transactions that have been held on to for more than the transaction's ttl period.
+    fn remove_old_txns(&mut self) {
         let now = SystemTime::now();
-        self.transactions
-            .retain(|tx, info| {
-                if info.ttl < now {
-                    self.metrics.txn_ops.with_label_values(&["remove","ttled"]).inc();
-                    warn!(self.logger, "Advertising bitcoin transaction {} timed out, meaning it was not picked up by any bitcoin peer.", tx);
-                    false
-                }
-                else {
-                    true
-                }
-            });
+        self.transactions.retain(|tx, info| {
+            if info.ttl < now {
+                self.metrics
+                    .txn_ops
+                    .with_label_values(&["remove", "ttled"])
+                    .inc();
+                info!(
+                    self.logger,
+                    "Advertising bitcoin transaction {} timed out.", tx
+                );
+                false
+            } else {
+                true
+            }
+        });
     }
 
     /// This method is used to broadcast known transaction IDs to connected peers.
     /// If the timeout period has passed for a transaction ID, it is broadcasted again.
     /// If the transaction has not been broadcasted, the transaction ID is broadcasted.
-    fn advertise_txids(&mut self, channel: &mut impl Channel) {
+    pub fn advertise_txids(&mut self, channel: &mut impl Channel) {
+        self.remove_old_txns();
         for address in channel.available_connections() {
             let mut inventory = vec![];
             for (txid, info) in self.transactions.iter_mut() {
@@ -211,8 +209,8 @@ mod test {
     use std::str::FromStr;
 
     /// This function creates a new transaction manager with a test logger.
-    fn make_transaction_manager() -> TransactionManager {
-        TransactionManager::new(no_op_logger(), &MetricsRegistry::default())
+    fn make_transaction_manager() -> TransactionStore {
+        TransactionStore::new(no_op_logger(), &MetricsRegistry::default())
     }
 
     /// This function pulls a transaction out of the `regtest` genesis block.
@@ -225,21 +223,24 @@ mod test {
             .expect("There should be a transaction here.")
     }
 
-    /// This function tests the `TransactionManager::reap(...)` method.
+    /// This function tests the `TransactionStore::reap(...)` method.
     /// Test Steps:
     /// 1. Receive a transaction
     /// 2. Attempt to reap the transaction that was just received.
-    /// 3. Update the TransactionManager's `last_received_transactions_at` field to a timestamp
+    /// 3. Update the TransactionStore's `last_received_transactions_at` field to a timestamp
     ///    in the future.
     /// 4. Attempt to reap transactions again.
     #[test]
     fn test_reap() {
+        let mut channel = TestChannel::new(vec![
+            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address")
+        ]);
         let mut manager = make_transaction_manager();
         let transaction = get_transaction();
         let raw_tx = serialize(&transaction);
         manager.enqueue_transaction(&raw_tx);
         assert_eq!(manager.transactions.len(), 1);
-        manager.reap();
+        manager.advertise_txids(&mut channel);
         assert_eq!(manager.transactions.len(), 1);
 
         let info = manager
@@ -247,11 +248,11 @@ mod test {
             .get_mut(&transaction.txid())
             .expect("transaction should be map");
         info.ttl = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
-        manager.reap();
+        manager.advertise_txids(&mut channel);
         assert_eq!(manager.transactions.len(), 0);
     }
 
-    /// This function tests the `TransactionManager::broadcast_txids(...)` method.
+    /// This function tests the `TransactionStore::broadcast_txids(...)` method.
     /// Test Steps:
     /// 1. Receive a transaction
     /// 2. Perform an initial broadcast.
@@ -335,7 +336,7 @@ mod test {
         transaction.lock_time = 0;
         let raw_tx = serialize(&transaction);
         manager.enqueue_transaction(&raw_tx);
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
         channel.pop_front().unwrap();
 
         // Request transaction
@@ -349,7 +350,7 @@ mod test {
         // Send transaction
         channel.pop_front().unwrap();
 
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
         // Transaction should not be readvertised.
         assert_eq!(channel.command_count(), 0);
         // Transaction should be marked as advertised
@@ -390,7 +391,7 @@ mod test {
         transaction.lock_time = 0;
         let raw_tx = serialize(&transaction);
         manager.enqueue_transaction(&raw_tx);
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
         // Transaction advertisment to both peers.
         assert_eq!(channel.command_count(), 2);
         channel.pop_front().unwrap();
@@ -408,7 +409,7 @@ mod test {
         channel.pop_front().unwrap();
         assert_eq!(channel.command_count(), 0);
 
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
         // Transaction should not be readvertised.
         assert_eq!(channel.command_count(), 0);
     }
@@ -431,7 +432,7 @@ mod test {
         transaction.lock_time = 0;
         let raw_tx = serialize(&transaction);
         manager.enqueue_transaction(&raw_tx);
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
         assert_eq!(channel.command_count(), 1);
         channel.pop_front().unwrap();
 
@@ -447,13 +448,13 @@ mod test {
         assert_eq!(channel.command_count(), 0);
 
         // 3.
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
         assert_eq!(channel.command_count(), 0);
 
         // 4.
         let address2 = SocketAddr::from_str("127.0.0.2:8333").expect("invalid address");
         channel.add_address(address2);
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
 
         // 5.
         assert_eq!(
@@ -465,7 +466,7 @@ mod test {
         );
     }
 
-    /// This function tests the `TransactionManager::process_bitcoin_network_message(...)` method.
+    /// This function tests the `TransactionStore::process_bitcoin_network_message(...)` method.
     /// Test Steps:
     /// 1. Receive a transaction.
     /// 2. Process a [StreamEvent](StreamEvent) containing a `getdata` network message.
@@ -493,7 +494,7 @@ mod test {
         assert!(matches!(command.message, NetworkMessage::Tx(t) if t.txid() == txid));
     }
 
-    /// This function tests the `TransactionManager::process_bitcoin_network_message(...)` method.
+    /// This function tests the `TransactionStore::process_bitcoin_network_message(...)` method.
     /// Test Steps:
     /// 1. Receive a more than `MAXIMUM_TRANSACTION_PER_INV` transaction.
     /// 2. Process a [StreamEvent](StreamEvent) containing a `getdata` network message and reject.
@@ -522,7 +523,7 @@ mod test {
             .unwrap_err();
     }
 
-    /// This function tests the `TransactionManager::tick(...)` method.
+    /// This function tests the `TransactionStore::tick(...)` method.
     /// Test Steps:
     /// 1. Receive a transaction.
     /// 2. Process a [StreamEvent](StreamEvent) containing a `getdata` network message.
@@ -537,7 +538,7 @@ mod test {
         let raw_tx = serialize(&transaction);
         let txid = transaction.txid();
         manager.enqueue_transaction(&raw_tx);
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
         manager
             .process_bitcoin_network_message(
                 &mut channel,
@@ -568,7 +569,7 @@ mod test {
             .get_mut(&transaction.txid())
             .expect("transaction should be in the map");
         info.ttl = SystemTime::now() - Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS);
-        manager.tick(&mut channel);
+        manager.advertise_txids(&mut channel);
         assert_eq!(manager.transactions.len(), 0);
     }
 }
