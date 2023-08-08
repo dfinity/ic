@@ -52,6 +52,7 @@ DEPENDENCIES = [
     "@crate_index//:threadpool",
     "@crate_index//:tokio",
     "@crate_index//:tower",
+    "@crate_index//:wasmparser",
 ]
 
 MACRO_DEPENDENCIES = []

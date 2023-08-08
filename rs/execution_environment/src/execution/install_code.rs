@@ -29,6 +29,7 @@ use crate::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
     canister_settings::{validate_canister_settings, CanisterSettings},
+    execution::orthogonal_persistence::OrthogonalPersistence,
     execution_environment::RoundContext,
     CompilationCostHandling, RoundLimits,
 };
@@ -438,7 +439,12 @@ impl InstallCodeHelper {
         let new_wasm_custom_sections_memory_used = execution_state.metadata.memory_usage();
 
         if let Some(old) = self.canister.execution_state.take() {
-            execution_state.wasm_memory = old.wasm_memory;
+            let wasm_binary = execution_state.wasm_binary.clone();
+            let old_memory = old.wasm_memory;
+            let new_memory = execution_state.wasm_memory;
+            execution_state.wasm_memory =
+                OrthogonalPersistence::upgrade_memory(wasm_binary, old_memory, new_memory);
+
             if stable_memory_handling == StableMemoryHandling::Keep {
                 execution_state.stable_memory = old.stable_memory;
             }
