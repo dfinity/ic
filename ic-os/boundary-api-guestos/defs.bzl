@@ -33,5 +33,6 @@ def image_deps():
             # additional files to install
             "//publish/binaries:boundary-node-control-plane": "/opt/ic/bin/boundary-node-control-plane:0755",
             "//publish/binaries:ic-registry-replicator": "/opt/ic/bin/ic-registry-replicator:0755",
+            "//publish/binaries:ic-boundary": "/opt/ic/bin/ic-boundary:0755",
         },
     }

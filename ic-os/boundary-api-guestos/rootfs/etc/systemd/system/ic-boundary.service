@@ -1,0 +1,18 @@
+[Unit]
+Description=IC Boundary Reverse Proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+LogRateLimitIntervalSec=1ms
+LogRateLimitBurst=1000
+User=root
+Group=root
+Restart=always
+ExecStart=/opt/ic/bin/ic-boundary \
+    --local-store-path "/var/opt/registry/store" \
+    --nns-pub-key-pem "/run/ic-node/etc/default/nns_public_key.pem" \
+    --http-port "4444"
+
+[Install]
+WantedBy=multi-user.target

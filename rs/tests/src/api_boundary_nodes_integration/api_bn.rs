@@ -650,7 +650,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
                     cnt_err += 1;
                 }
                 Err(err) => {
-                    error!(logger, "test paniced: {}", err);
+                    error!(logger, "test panicked: {}", err);
                     cnt_err += 1;
                 }
                 _ => {}
