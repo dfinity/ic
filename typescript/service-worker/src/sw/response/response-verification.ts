@@ -1,5 +1,5 @@
 import {
-  CertificationResult,
+  VerificationInfo,
   verifyRequestResponsePair,
 } from '@dfinity/response-verification';
 import {
@@ -16,7 +16,7 @@ export function responseVerification(
   minAllowedVerificationVersion: number,
   canisterId: Principal,
   rootKey: ArrayBuffer
-): CertificationResult {
+): VerificationInfo {
   const currentTimeNs = BigInt.asUintN(64, BigInt(Date.now() * 1_000_000)); // from ms to nanoseconds
 
   return verifyRequestResponsePair(
@@ -24,6 +24,7 @@ export function responseVerification(
       headers: httpRequest.headers,
       method: httpRequest.method,
       url: httpRequest.url,
+      body: httpRequest.body,
     },
     {
       statusCode: httpResponse.status_code,
