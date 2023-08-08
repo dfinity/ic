@@ -3,7 +3,6 @@ use axum::extract::State;
 use axum::routing::post;
 use axum::{extract::Path, http::StatusCode, routing::get, Router, Server};
 use clap::Parser;
-use file_lock::{FileLock, FileOptions};
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto::threshold_sig_public_key_to_der;
@@ -17,6 +16,7 @@ use itertools::Itertools;
 use pocket_ic::{CanisterCall, RawCanisterId, Request, Request::*};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
 use std::time::Instant;
@@ -52,71 +52,97 @@ impl FromRef<AppState> for Arc<RwLock<Instant>> {
     }
 }
 
-// Command line arguments to PocketIC service
+// Command line arguments to PocketIC service.
 #[derive(Parser)]
 struct Args {
     #[clap(long)]
-    lock_file: String,
+    pid: u32,
 }
 
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let file_opts = FileOptions::new().write(true).create(true);
-    let mut lock_file = FileLock::lock(args.lock_file, false, file_opts)
-        .expect("Failed to acquire lock on port file. Shutting down.");
+    let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
+    let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
 
-    // The shared, mutable state of the PocketIC process.
-    let instance_map: InstanceMap = Arc::new(RwLock::new(HashMap::new()));
-    // A time-to-live mechanism: Requests bump this value, and the server
-    // gracefully shuts down when the value wasn't bumped for a while
-    // TODO: Implement ttl increase for every handler.
-    let last_request = Arc::new(RwLock::new(Instant::now()));
-    let app_state = AppState {
-        instance_map,
-        last_request,
-    };
+    let port_file = File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(&port_file_path);
 
-    let app = Router::new()
-        //
-        // Get health of service.
-        .route("/status", get(status))
-        //
-        // List all IC instances.
-        .route("/instance", get(list_instances))
-        //
-        // Create a new IC instance. Returns an InstanceId.
-        // Body is currently ignored.
-        .route("/instance", post(create_instance))
-        //
-        // Call the specified IC instance.
-        // Body contains a Request.
-        // Returns the IC's Response.
-        .route("/instance/:id", post(call_instance))
-        .with_state(app_state.clone());
+    // .create_new(true) ensures atomically that this file was created newly, and gives an error otherwise.
+    if let Ok(mut new_port_file) = port_file {
+        // This process is the one to start PocketIC.
+        println!("New PocketIC will be started");
+        // The shared, mutable state of the PocketIC process.
+        let instance_map: InstanceMap = Arc::new(RwLock::new(HashMap::new()));
+        // A time-to-live mechanism: Requests bump this value, and the server
+        // gracefully shuts down when the value wasn't bumped for a while
+        // TODO: Implement ttl increase for every handler.
+        let last_request = Arc::new(RwLock::new(Instant::now()));
+        let app_state = AppState {
+            instance_map,
+            last_request,
+        };
 
-    // bind to port 0; the OS will give a specific port; communicate that to parent process via stdout
-    let server = Server::bind(&"127.0.0.1:0".parse().expect("Failed to parse address"))
-        .serve(app.into_make_service());
-    let real_port = server.local_addr().port();
-    let _ = lock_file.file.write_all(real_port.to_string().as_bytes());
-    let _ = lock_file.file.flush();
+        let app = Router::new()
+            //
+            // Get health of service.
+            .route("/status", get(status))
+            //
+            // List all IC instances.
+            .route("/instance", get(list_instances))
+            //
+            // Create a new IC instance. Returns an InstanceId.
+            // Body is currently ignored.
+            .route("/instance", post(create_instance))
+            //
+            // Call the specified IC instance.
+            // Body contains a Request.
+            // Returns the IC's Response.
+            .route("/instance/:id", post(call_instance))
+            .with_state(app_state.clone());
 
-    // This is a safeguard against orphaning this child process.
-    let shutdown_signal = async {
-        loop {
-            let guard = app_state.last_request.read().await;
-            // TODO: implement ttl increase for every handler.
-            if guard.elapsed() > Duration::from_secs(TTL_SEC) {
-                break;
-            }
-            drop(guard);
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+        // bind to port 0; the OS will give a specific port; communicate that to parent process via stdout
+        let server = Server::bind(&"127.0.0.1:0".parse().expect("Failed to parse address"))
+            .serve(app.into_make_service());
+        let real_port = server.local_addr().port();
+        let _ = new_port_file.write_all(real_port.to_string().as_bytes());
+        let _ = new_port_file.flush();
+
+        let ready_file = File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&ready_file_path);
+        if ready_file.is_ok() {
+            println!("The PocketIC backend port can now be safely read by others");
+        } else {
+            eprintln!("The .ready file already exists; This should not happen unless the PID has been reused, and/or the tmp dir has not been properly cleaned up");
         }
-        eprintln!("PocketIC process will exit.");
-    };
-    let server = server.with_graceful_shutdown(shutdown_signal);
-    server.await.expect("Failed to launch pocketIC.");
+
+        // This is a safeguard against orphaning this child process.
+        let shutdown_signal = async {
+            loop {
+                let guard = app_state.last_request.read().await;
+                // TODO: implement ttl increase for every handler.
+                if guard.elapsed() > Duration::from_secs(TTL_SEC) {
+                    break;
+                }
+                drop(guard);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            println!("PocketIC process will exit");
+            // Clean up tmpfiles.
+            let _ = std::fs::remove_file(ready_file_path);
+            let _ = std::fs::remove_file(port_file_path);
+        };
+        let server = server.with_graceful_shutdown(shutdown_signal);
+        server.await.expect("Failed to launch PocketIC");
+    } else {
+        println!("PocketIC will be reused");
+    }
 }
 
 async fn status() -> StatusCode {
