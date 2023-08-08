@@ -646,6 +646,38 @@ pub enum EcdsaMessage {
     EcdsaOpening(EcdsaOpening),
 }
 
+impl From<&EcdsaMessage> for pb::EcdsaMessage {
+    fn from(value: &EcdsaMessage) -> Self {
+        use pb::ecdsa_message::Msg;
+        let msg = match value {
+            EcdsaMessage::EcdsaSignedDealing(x) => Msg::SignedDealing(x.into()),
+            EcdsaMessage::EcdsaDealingSupport(x) => Msg::DealingSupport(x.into()),
+            EcdsaMessage::EcdsaSigShare(x) => Msg::SigShare(x.into()),
+            EcdsaMessage::EcdsaComplaint(x) => Msg::Complaint(x.into()),
+            EcdsaMessage::EcdsaOpening(x) => Msg::Opening(x.into()),
+        };
+        Self { msg: Some(msg) }
+    }
+}
+
+impl TryFrom<&pb::EcdsaMessage> for EcdsaMessage {
+    type Error = ProxyDecodeError;
+
+    fn try_from(proto: &pb::EcdsaMessage) -> Result<Self, Self::Error> {
+        use pb::ecdsa_message::Msg;
+        let Some(msg) = &proto.msg else {
+            return Err(ProxyDecodeError::MissingField("EcdsaMessage::msg"));
+        };
+        Ok(match &msg {
+            Msg::SignedDealing(x) => EcdsaMessage::EcdsaSignedDealing(x.try_into()?),
+            Msg::DealingSupport(x) => EcdsaMessage::EcdsaDealingSupport(x.try_into()?),
+            Msg::SigShare(x) => EcdsaMessage::EcdsaSigShare(x.try_into()?),
+            Msg::Complaint(x) => EcdsaMessage::EcdsaComplaint(x.try_into()?),
+            Msg::Opening(x) => EcdsaMessage::EcdsaOpening(x.try_into()?),
+        })
+    }
+}
+
 /// EcdsaArtifactId is the unique identifier for the artifacts. It is made of a prefix + crypto
 /// hash of the message itself:
 /// EcdsaArtifactId = `<EcdsaPrefix, CryptoHash<Message>>`
@@ -956,6 +988,25 @@ impl EcdsaComplaint {
     }
 }
 
+impl From<&EcdsaComplaint> for pb::EcdsaComplaint {
+    fn from(value: &EcdsaComplaint) -> Self {
+        Self {
+            content: Some((&value.content).into()),
+            signature: Some(value.signature.clone().into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaComplaint> for EcdsaComplaint {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaComplaint) -> Result<Self, Self::Error> {
+        Ok(Self {
+            content: try_from_option_field(value.content.as_ref(), "EcdsaComplaint::content")?,
+            signature: try_from_option_field(value.signature.clone(), "EcdsaComplaint::signature")?,
+        })
+    }
+}
+
 impl From<&EcdsaComplaintContent> for pb::EcdsaComplaintContent {
     fn from(value: &EcdsaComplaintContent) -> Self {
         Self {
@@ -1011,6 +1062,25 @@ pub type EcdsaOpening = Signed<EcdsaOpeningContent, BasicSignature<EcdsaOpeningC
 impl EcdsaOpening {
     pub fn get(&self) -> &EcdsaOpeningContent {
         &self.content
+    }
+}
+
+impl From<&EcdsaOpening> for pb::EcdsaOpening {
+    fn from(value: &EcdsaOpening) -> Self {
+        Self {
+            content: Some((&value.content).into()),
+            signature: Some(value.signature.clone().into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::EcdsaOpening> for EcdsaOpening {
+    type Error = ProxyDecodeError;
+    fn try_from(value: &pb::EcdsaOpening) -> Result<Self, Self::Error> {
+        Ok(Self {
+            content: try_from_option_field(value.content.as_ref(), "EcdsaOpening::content")?,
+            signature: try_from_option_field(value.signature.clone(), "EcdsaOpening::signature")?,
+        })
     }
 }
 
