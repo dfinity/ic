@@ -18,40 +18,6 @@ const POCKET_IC_BIN_PATH: &str = "../../target/debug/pocket-ic-backend";
 
 type InstanceId = String;
 
-fn get_service_port(lock_file: PathBuf, bin_path: PathBuf) -> u16 {
-    let start = Instant::now();
-    loop {
-        match lock_file.try_exists() {
-            Ok(true) => {
-                // If the file exists, we expect it to have content, otherwise we need not continue.
-                let line = std::fs::read_to_string(lock_file)
-                    .expect("Failed to read port from lock file.");
-                return line.parse().expect("Failed to parse port to number");
-            }
-            _ => {
-                println!("Attempting to start PocketIC server...");
-                let _process = Command::new(bin_path.clone())
-                    .arg("--lock-file")
-                    .arg(lock_file.clone().as_os_str())
-                    .spawn()
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "Failed to launch PocketIC server process from bin_path {:?}",
-                            bin_path
-                        )
-                    });
-                std::thread::sleep(Duration::from_millis(20));
-                // Now, try again. the child process will try to acquire a lock on the lock_file,
-                // so even though we may launch a second child process, it will shutdown immediately
-                // if it fails to get the lock.
-            }
-        }
-        if start.elapsed() > Duration::from_secs(5) {
-            panic!("Failed to start PocketIC service in time.");
-        }
-    }
-}
-
 // ======================================================================================================
 // Code borrowed from https://github.com/dfinity/test-state-machine-client/blob/main/src/lib.rs
 // The StateMachine struct is renamed to `PocketIc` and given new interface.
@@ -67,8 +33,16 @@ pub struct PocketIc {
 
 impl PocketIc {
     pub fn new() -> Self {
+        // Attempt to start new PocketIC backend if it's not already running.
+        let parent_pid = std::os::unix::process::parent_id();
+        Command::new(PathBuf::from(POCKET_IC_BIN_PATH))
+            .arg("--pid")
+            .arg(parent_pid.to_string())
+            .spawn()
+            .expect("Failed to start PocketIC binary");
+        // Use the parent process ID to find the PocketIC backend port for this `cargo test` run.
+        let daemon_url = Self::get_daemon_url(parent_pid);
         let reqwest_client = reqwest::blocking::Client::new();
-        let daemon_url = Self::start_or_reuse_daemon();
         let instance_id = reqwest_client
             .post(daemon_url.join("instance").unwrap())
             .send()
@@ -90,15 +64,27 @@ impl PocketIc {
         }
     }
 
-    fn start_or_reuse_daemon() -> Url {
-        // use the parent process ID, so that we have one PocketIC per `cargo test` invocation
-        let ppid = std::os::unix::process::parent_id();
-        let lock_file = std::env::temp_dir().join(format!("pocket_ic.{}.port", ppid));
-        let port = get_service_port(lock_file, PathBuf::from(POCKET_IC_BIN_PATH));
-        let url =
-            Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).expect("Failed to parse url.");
-        println!("Found PocketIC server running on {}", &url);
-        url
+    fn get_daemon_url(parent_pid: u32) -> Url {
+        let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", parent_pid));
+        let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", parent_pid));
+        let start = Instant::now();
+        loop {
+            match ready_file_path.try_exists() {
+                Ok(true) => {
+                    let port_string = std::fs::read_to_string(port_file_path)
+                        .expect("Failed to read port from port file");
+                    let port: u16 = port_string.parse().expect("Failed to parse port to number");
+                    let daemon_url =
+                        Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+                    println!("Found PocketIC running at {}", daemon_url);
+                    return daemon_url;
+                }
+                _ => std::thread::sleep(Duration::from_millis(20)),
+            }
+            if start.elapsed() > Duration::from_secs(5) {
+                panic!("Failed to start PocketIC service in time");
+            }
+        }
     }
 
     pub fn list_instances(&self) -> Vec<InstanceId> {
