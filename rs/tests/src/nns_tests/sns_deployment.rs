@@ -681,17 +681,12 @@ pub fn install_sns_legacy(
 pub fn initiate_token_swap(
     env: TestEnv,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
-    community_fund_investment_e8s: u64,
 ) {
     let log = env.logger();
     let start_time = Instant::now();
 
     let sns_client = SnsClient::read_attribute(&env);
-    sns_client.initiate_token_swap_immediately(
-        &env,
-        create_service_nervous_system_proposal,
-        community_fund_investment_e8s,
-    );
+    sns_client.initiate_token_swap_immediately(&env, create_service_nervous_system_proposal);
     block_on(sns_client.assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap));
     info!(
         log,
@@ -707,12 +702,7 @@ pub fn initiate_token_swap(
 /// This function should be the one used "by default" for most tests, to ensure
 /// that the tests are using realistic parameters.
 pub fn initiate_token_swap_with_oc_parameters(env: TestEnv) {
-    let community_fund_investment_e8s = 333_333 * E8;
-    initiate_token_swap(
-        env,
-        openchat_create_service_nervous_system_proposal(),
-        community_fund_investment_e8s,
-    );
+    initiate_token_swap(env, openchat_create_service_nervous_system_proposal());
 }
 
 pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
