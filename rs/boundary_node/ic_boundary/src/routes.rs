@@ -5,11 +5,12 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
     body::{Body, Bytes, StreamBody},
-    extract::{FromRequestParts, Host, MatchedPath, OriginalUri, Path, RawBody, State},
+    extract::{FromRef, FromRequestParts, Host, MatchedPath, OriginalUri, Path, RawBody, State},
     http::{uri::PathAndQuery, Request, StatusCode, Uri},
     middleware::{self, Next},
     response::{IntoResponse, IntoResponseParts, Redirect, Response, ResponseParts},
-    Extension, RequestExt, RequestPartsExt,
+    routing::get,
+    Extension, RequestExt, RequestPartsExt, Router,
 };
 use bytes::Buf;
 use candid::Principal;
@@ -30,7 +31,7 @@ use tokio::sync::RwLock;
 use tower_http::request_id::{MakeRequestId, RequestId};
 use tracing::{error, info};
 
-use crate::{persist::Routes, snapshot::Node};
+use crate::{metrics::HttpMetricParams, persist::Routes, snapshot::Node};
 
 // Type of IC request
 #[derive(Default, Clone, Copy)]
@@ -70,7 +71,7 @@ pub enum ErrorCause {
 }
 
 impl ErrorCause {
-    fn status_code(&self) -> StatusCode {
+    pub fn status_code(&self) -> StatusCode {
         match self {
             Self::NoError => StatusCode::OK,
             Self::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -84,7 +85,7 @@ impl ErrorCause {
         }
     }
 
-    fn details(&self) -> Option<String> {
+    pub fn details(&self) -> Option<String> {
         match self {
             Self::Other(x) => Some(x.clone()),
             Self::UnableToParseCBOR(x) => Some(x.clone()),
@@ -114,14 +115,14 @@ impl fmt::Display for ErrorCause {
 // Object that holds per-request information
 #[derive(Default, Clone)]
 pub struct RequestContext {
-    canister_id: Option<Principal>,
-    canister_id_cbor: Option<Principal>,
-    node: Option<Node>,
-    sender: Option<Principal>,
-    method_name: Option<String>,
-    request_type: RequestType,
-    error_cause: ErrorCause,
-    request_size: u32,
+    pub canister_id: Option<Principal>,
+    pub canister_id_cbor: Option<Principal>,
+    pub node: Option<Node>,
+    pub sender: Option<Principal>,
+    pub method_name: Option<String>,
+    pub request_type: RequestType,
+    pub error_cause: ErrorCause,
+    pub request_size: u32,
 }
 
 impl RequestContext {
@@ -164,6 +165,7 @@ pub trait Proxier {
 
 // Router that helps handlers do their job by looking up in routing table
 // and owning HTTP client for outgoing requests
+#[derive(Clone)]
 pub struct ProxyRouter {
     http_client: Arc<reqwest::Client>,
     published_routes: Arc<ArcSwapOption<Routes>>,
@@ -296,49 +298,18 @@ pub async fn redirect_to_https(
     )
 }
 
-// Logs the outcome of the request
-pub async fn log_request(request: Request<Body>, next: Next<Body>) -> Result<Response, StatusCode> {
-    let request_id = request.extensions().get::<RequestId>().unwrap().clone();
-    let request_id = request_id.header_value().to_str().unwrap();
+// Combined state for middlewares
+#[derive(Clone)]
+pub struct MiddlewareState<T> {
+    pub proxier: Arc<T>,
+    pub metric_params: HttpMetricParams,
+}
 
-    let now = Instant::now();
-    let response = next.run(request).await;
-    let duration = now.elapsed();
-
-    let ctx = response
-        .extensions()
-        .get::<RequestContext>()
-        .cloned()
-        .unwrap_or_default();
-
-    // TODO easier way to get resp size?
-    let response_size = response
-        .headers()
-        .get(header::CONTENT_LENGTH)
-        .unwrap_or(&HeaderValue::from_str("0").unwrap())
-        .to_str()
-        .unwrap()
-        .parse::<u32>()
-        .unwrap();
-
-    info!(
-        request_id,
-        request_type = format!("{}", ctx.request_type),
-        error_cause = format!("{}", ctx.error_cause),
-        error_details = ctx.error_cause.details(),
-        status = response.status().as_u16(),
-        subnet_id = ctx.node.as_ref().map(|x| x.subnet_id.to_string()),
-        node_id = ctx.node.as_ref().map(|x| x.id.to_string()),
-        canister_id = ctx.canister_id.map(|x| x.to_string()),
-        canister_id_cbor = ctx.canister_id_cbor.map(|x| x.to_string()),
-        sender = ctx.sender.map(|x| x.to_string()),
-        method_name = ctx.method_name,
-        duration = duration.as_secs_f64(),
-        request_size = ctx.request_size,
-        response_size,
-    );
-
-    Ok(response)
+// Get the proxier from the combined state
+impl<T: Proxier + Clone> FromRef<MiddlewareState<T>> for Arc<T> {
+    fn from_ref(state: &MiddlewareState<T>) -> Arc<T> {
+        state.proxier.clone()
+    }
 }
 
 // Consumes request and returns it as byte slice
@@ -372,7 +343,7 @@ pub fn parse_body(ctx: &mut RequestContext, body: &[u8]) -> Result<(), Error> {
 
 // Preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
-    State(state): State<Arc<impl Proxier>>,
+    State(proxier): State<Arc<impl Proxier>>,
     mut request: Request<Body>,
     next: Next<Body>,
 ) -> Result<Response, Response> {
@@ -396,7 +367,11 @@ pub async fn preprocess_request(
             .map_err(|e| ctx.respond(ErrorCause::UnableToParseCBOR(e.to_string())))?;
 
         // Try to look up a target node using canister id
-        ctx.node = Some(state.lookup_node(canister_id).map_err(|e| ctx.respond(e))?);
+        ctx.node = Some(
+            proxier
+                .lookup_node(canister_id)
+                .map_err(|e| ctx.respond(e))?,
+        );
     }
 
     // Reconstruct request back from parts

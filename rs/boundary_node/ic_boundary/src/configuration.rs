@@ -53,7 +53,11 @@ impl<T: Configure> Configure for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let MetricParams { action } = &self.1;
+        let MetricParams {
+            action,
+            counter,
+            durationer,
+        } = &self.1;
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
