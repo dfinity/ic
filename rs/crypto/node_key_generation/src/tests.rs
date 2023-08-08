@@ -15,6 +15,7 @@ use ic_crypto_test_utils_keys::public_keys::{
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::CurrentNodePublicKeys;
+use ic_types::time::Time;
 use ic_types_test_utils::ids::node_test_id;
 
 const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "99991231235959Z";
@@ -64,7 +65,7 @@ mod generate_tls_keys {
     #[test]
     fn should_delegate_to_csp_with_correct_not_after() {
         let mut csp = MockAllCryptoServiceProvider::new();
-        let expected_tls_certificate = with_csp_gen_tls_key_pair(
+        let (expected_tls_certificate, _validation_time) = with_csp_gen_tls_key_pair(
             &mut csp,
             node_test_id(NODE_ID),
             RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE.to_string(),
@@ -305,13 +306,13 @@ fn with_csp_gen_tls_key_pair(
     csp: &mut MockAllCryptoServiceProvider,
     node_id: NodeId,
     not_after: String,
-) -> TlsPublicKeyCert {
-    let tls_certificate = valid_tls_certificate();
+) -> (TlsPublicKeyCert, Time) {
+    let (tls_certificate, validation_time) = valid_tls_certificate();
     csp.expect_gen_tls_key_pair()
         .times(1)
         .withf(move |_node_id, _not_after| *_node_id == node_id && _not_after == not_after)
         .return_const(Ok(tls_certificate.clone()));
-    tls_certificate
+    (tls_certificate, validation_time)
 }
 
 fn with_csp_dkg_gen_dealing_encryption_key_pair(
@@ -351,13 +352,14 @@ fn with_csp_generating_all_keys(csp: &mut MockAllCryptoServiceProvider) -> Valid
         .expect("invalid node signing public key")
         .derived_node_id();
     let committee_signing_pk = with_csp_gen_committee_signing_key_pair(csp);
-    let tls_certificate = with_csp_gen_tls_key_pair(
+    let (tls_certificate, validation_time) = with_csp_gen_tls_key_pair(
         csp,
         node_id,
         RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE.to_string(),
     );
     let dkg_dealing_encryption_pk = with_csp_dkg_gen_dealing_encryption_key_pair(csp, node_id);
     let idkg_dealing_encryption_pk = with_csp_idkg_gen_dealing_encryption_key_pair(csp);
+
     ValidNodePublicKeys::try_from(
         CurrentNodePublicKeys {
             node_signing_public_key: Some(node_signing_pk),
@@ -367,6 +369,7 @@ fn with_csp_generating_all_keys(csp: &mut MockAllCryptoServiceProvider) -> Valid
             idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_pk),
         },
         node_id,
+        validation_time,
     )
     .expect("invalid node public keys")
 }
@@ -375,20 +378,27 @@ fn valid_node_public_keys() -> ValidNodePublicKeys {
     let node_id = *ValidNodeSigningPublicKey::try_from(valid_node_signing_public_key())
         .expect("invalid node signing public key")
         .derived_node_id();
+    let (valid_tls_certificate, validation_time) = valid_tls_certificate();
+
     ValidNodePublicKeys::try_from(
         CurrentNodePublicKeys {
             node_signing_public_key: Some(valid_node_signing_public_key()),
             committee_signing_public_key: Some(valid_committee_signing_public_key()),
-            tls_certificate: Some(valid_tls_certificate().to_proto()),
+            tls_certificate: Some(valid_tls_certificate.to_proto()),
             dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
             idkg_dealing_encryption_public_key: Some(valid_idkg_dealing_encryption_public_key()),
         },
         node_id,
+        validation_time,
     )
     .expect("invalid node public keys")
 }
 
-fn valid_tls_certificate() -> TlsPublicKeyCert {
-    TlsPublicKeyCert::try_from(ic_crypto_test_utils_keys::public_keys::valid_tls_certificate())
-        .expect("invalid TLS certificate")
+fn valid_tls_certificate() -> (TlsPublicKeyCert, Time) {
+    let (tls_cert, validation_time) =
+        ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time();
+    (
+        TlsPublicKeyCert::try_from(tls_cert).expect("invalid TLS certificate"),
+        validation_time,
+    )
 }

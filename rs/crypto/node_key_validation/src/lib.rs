@@ -3,8 +3,8 @@
 //! Such verification is used, for example, to ensure that only valid node key
 //! material is stored in the registry or to check registry invariants.
 //!
-//! Use `ValidNodePublicKeys::try_from(keys, node_id)` to perform the validation
-//! checks.
+//! Use `ValidNodePublicKeys::try_from(keys, node_id, current_time)` to perform
+//! the validation checks.
 //!
 //! Validation of a *node's signing key* includes verifying that
 //! * the key is present and well-formed
@@ -46,6 +46,7 @@ use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::CurrentNodePublicKeys;
+use ic_types::Time;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
@@ -108,14 +109,18 @@ impl
 impl ValidNodePublicKeys {
     /// Determines if the given node public key material is valid.
     ///
-    /// Returns `ValidNodePublicKeys` iff the `keys` are valid and iff they
-    /// are valid for `node_id`. After successful validation, callers shall
-    /// only work with `ValidNodePublicKeys` in their API and not with
-    /// the possibly invalid `CurrentNodePublicKeys` so as to avoid confusion about
-    /// whether key material is validated or not.
+    /// Returns `ValidNodePublicKeys` iff the `keys` are valid with respect to
+    /// the given `node_id` and `current_time`. For additional information on
+    /// how the keys are validated, see this crate's documentation.
+    ///
+    /// After successful validation, callers shall only work with
+    /// `ValidNodePublicKeys` in their API and not with the possibly invalid
+    /// `CurrentNodePublicKeys` so as to avoid confusion about whether key
+    /// material is validated or not.
     pub fn try_from(
         keys: CurrentNodePublicKeys,
         node_id: NodeId,
+        current_time: Time,
     ) -> Result<Self, KeyValidationError> {
         let node_signing_public_key_proto = keys
             .node_signing_public_key
@@ -132,7 +137,8 @@ impl ValidNodePublicKeys {
         let tls_certificate_proto = keys.tls_certificate.ok_or_else(|| TlsCertValidationError {
             error: "invalid TLS certificate: certificate is missing".to_string(),
         })?;
-        let tls_certificate = ValidTlsCertificate::try_from((tls_certificate_proto, node_id))?;
+        let tls_certificate =
+            ValidTlsCertificate::try_from((tls_certificate_proto, node_id, current_time))?;
 
         let dkg_dealing_encryption_public_key_proto = keys
             .dkg_dealing_encryption_public_key

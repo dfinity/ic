@@ -904,11 +904,14 @@ mod validate_pks_and_sks {
         valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
         valid_idkg_dealing_encryption_public_key, valid_idkg_dealing_encryption_public_key_2,
         valid_idkg_dealing_encryption_public_key_3, valid_node_signing_public_key,
-        valid_tls_certificate,
+        valid_tls_certificate_and_validation_time,
     };
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
+    use ic_test_utilities::FastForwardTimeSource;
+    use ic_types::time::Time;
     use std::collections::HashSet;
+    use std::sync::Arc;
 
     #[test]
     fn should_return_empty_public_key_store_when_no_keys() {
@@ -923,35 +926,35 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     node_signing_public_key: None,
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::NodeSigningKeyError(PublicKeyNotFound),
             },
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     committee_signing_public_key: None,
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyNotFound),
             },
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     tls_certificate: None,
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyNotFound),
             },
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     dkg_dealing_encryption_public_key: None,
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyNotFound),
             },
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     idkg_dealing_encryption_public_keys: vec![],
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyNotFound),
             },
@@ -975,7 +978,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     node_signing_public_key: Some(invalid_node_signing_public_key()),
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(
                     "invalid node signing key: verification failed".to_string(),
@@ -984,7 +987,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     committee_signing_public_key: Some(invalid_committee_signing_public_key()),
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(
                     "invalid committee signing key: Malformed MultiBls12_381 public key"
@@ -994,7 +997,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     tls_certificate: Some(tls_certificate_with_invalid_not_before_time()),
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(
                     "invalid TLS certificate: failed to parse DER".to_string(),
@@ -1003,7 +1006,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     dkg_dealing_encryption_public_key: Some(invalid_dkg_dealing_encryption_key()),
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(
                     "invalid DKG dealing encryption key: verification failed".to_string(),
@@ -1015,13 +1018,20 @@ mod validate_pks_and_sks {
             // passes the first check, but fails the second.
         ];
 
+        let time_source = FastForwardTimeSource::new();
+        time_source
+            .set_time(required_node_public_keys_and_time().1)
+            .expect("failed to set time");
+
         for test in tests {
             let mut sks = MockSecretKeyStore::new();
+
             sks.expect_contains().return_const(true);
             let vault = LocalCspVault::builder_for_test()
                 .with_mock_stores()
                 .with_public_key_store(public_key_store_containing_exactly(test.input))
                 .with_node_secret_key_store(sks)
+                .with_time_source(Arc::clone(&time_source) as Arc<_>)
                 .build();
 
             let result = vault.validate_pks_and_sks();
@@ -1050,7 +1060,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     node_signing_public_key: Some(invalid_public_key()),
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(
                     "expected public key algorithm Ed25519".to_string(),
@@ -1059,7 +1069,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     committee_signing_public_key: Some(invalid_public_key()),
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(
                     "expected public key algorithm MultiBls12_381".to_string(),
@@ -1068,7 +1078,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     tls_certificate: Some(invalid_tls_certificate()),
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(
                     "Malformed certificate".to_string(),
@@ -1077,7 +1087,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     dkg_dealing_encryption_public_key: Some(invalid_public_key()),
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(
                     "Malformed public key: Expected public key algorithm Groth20_Bls12_381"
@@ -1087,7 +1097,7 @@ mod validate_pks_and_sks {
             ParameterizedTest {
                 input: LocalNodePublicKeys {
                     idkg_dealing_encryption_public_keys: vec![invalid_public_key()],
-                    ..required_node_public_keys()
+                    ..required_node_public_keys_and_time().0
                 },
                 expected: ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyInvalid(
                     "Malformed public key: unsupported algorithm".to_string(),
@@ -1134,7 +1144,7 @@ mod validate_pks_and_sks {
                     invalid_public_key(),
                     valid_idkg_dealing_encryption_public_key_2(),
                 ],
-                ..required_node_public_keys()
+                ..required_node_public_keys_and_time().0
             }))
             .build();
 
@@ -1150,7 +1160,7 @@ mod validate_pks_and_sks {
 
     #[test]
     fn should_return_secret_key_not_found() {
-        let (required_public_keys, required_key_ids) =
+        let (required_public_keys, _validation_time, required_key_ids) =
             required_node_public_keys_and_their_key_ids();
 
         let tests = vec![
@@ -1234,7 +1244,7 @@ mod validate_pks_and_sks {
                     idkg_pk_with_no_secret_key,
                     idkg_pk_3,
                 ],
-                ..required_node_public_keys()
+                ..required_node_public_keys_and_time().0
             }))
             .with_node_secret_key_store(secret_key_store_containing_exactly(LocalKeyIds {
                 idkg_dealing_encryption_key_ids: vec![idkg_key_id_1, idkg_key_id_3],
@@ -1249,9 +1259,63 @@ mod validate_pks_and_sks {
     }
 
     #[test]
+    fn should_return_tls_certificate_pk_invalid_when_tls_certificate_is_not_yet_valid() {
+        use crate::vault::api::ValidatePksAndSksKeyPairError;
+        use core::time::Duration;
+        use ic_crypto_node_key_validation::ValidNodePublicKeys;
+
+        let (required_node_public_keys, valid_time) = required_node_public_keys_and_time();
+
+        fn test_impl(
+            required_node_public_keys: LocalNodePublicKeys,
+            time: Time,
+        ) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
+            let time_source = FastForwardTimeSource::new();
+            time_source.set_time(time).expect("failed to set time");
+
+            let mut sks = MockSecretKeyStore::new();
+            sks.expect_contains().return_const(true);
+
+            let vault = LocalCspVault::builder_for_test()
+                .with_mock_stores()
+                .with_public_key_store(public_key_store_containing_exactly(
+                    required_node_public_keys,
+                ))
+                .with_node_secret_key_store(sks)
+                .with_time_source(Arc::clone(&time_source) as Arc<_>)
+                .build();
+
+            vault.validate_pks_and_sks()
+        }
+
+        // validating with correct validation time works
+        let result = test_impl(required_node_public_keys.clone(), valid_time);
+        assert_matches!(result, Ok(_));
+
+        // validating with time one second earlier than `not_before` doesn't
+        // work
+        let one_sec_too_early_validation_time = valid_time
+            .checked_sub_duration(Duration::from_secs(1))
+            .expect("failed to compute too early validation time");
+        let result = test_impl(required_node_public_keys, one_sec_too_early_validation_time);
+
+        assert_matches!(
+            result,
+            Err(ValidatePksAndSksError::TlsCertificateError(ValidatePksAndSksKeyPairError::PublicKeyInvalid(e))) if
+                e.contains("invalid TLS certificate: notBefore date") &&
+                e.contains("is in the future compared to current time")
+        );
+    }
+
+    #[test]
     fn should_return_valid_node_public_keys() {
-        let (required_public_keys, required_key_ids) =
+        let (required_public_keys, validation_time, required_key_ids) =
             required_node_public_keys_and_their_key_ids();
+
+        let time_source = FastForwardTimeSource::new();
+        time_source
+            .set_time(validation_time)
+            .expect("failed to set time");
 
         let vault = LocalCspVault::builder_for_test()
             .with_mock_stores()
@@ -1259,6 +1323,7 @@ mod validate_pks_and_sks {
                 required_public_keys.clone(),
             ))
             .with_node_secret_key_store(secret_key_store_containing_exactly(required_key_ids))
+            .with_time_source(time_source)
             .build();
 
         let result = vault.validate_pks_and_sks();
@@ -1280,16 +1345,25 @@ mod validate_pks_and_sks {
         let idkg_key_id_1 = idkg_dealing_encryption_key_id_from(&idkg_pk_1);
         let idkg_key_id_2 = idkg_dealing_encryption_key_id_from(&idkg_pk_2);
         let idkg_key_id_3 = idkg_dealing_encryption_key_id_from(&idkg_pk_3);
+
+        let (node_public_keys, validation_time) = required_node_public_keys_and_time();
+
+        let time_source = FastForwardTimeSource::new();
+        time_source
+            .set_time(validation_time)
+            .expect("failed to set time");
+
         let vault = LocalCspVault::builder_for_test()
             .with_mock_stores()
             .with_public_key_store(public_key_store_containing_exactly(LocalNodePublicKeys {
                 idkg_dealing_encryption_public_keys: vec![idkg_pk_1, idkg_pk_2, idkg_pk_3.clone()],
-                ..required_node_public_keys()
+                ..node_public_keys
             }))
             .with_node_secret_key_store(secret_key_store_containing_exactly(LocalKeyIds {
                 idkg_dealing_encryption_key_ids: vec![idkg_key_id_1, idkg_key_id_2, idkg_key_id_3],
                 ..required_key_ids()
             }))
+            .with_time_source(time_source)
             .build();
 
         let result = vault.validate_pks_and_sks();
@@ -1297,7 +1371,7 @@ mod validate_pks_and_sks {
         assert_matches!(result, Ok(public_keys)
             if public_keys.node_signing_key() == &valid_node_signing_public_key()
             && public_keys.committee_signing_key() == & valid_committee_signing_public_key()
-            && public_keys.tls_certificate() == & valid_tls_certificate()
+            && public_keys.tls_certificate() == & valid_tls_certificate_and_validation_time().0
             && public_keys.dkg_dealing_encryption_key() == & valid_dkg_dealing_encryption_public_key()
             && public_keys.idkg_dealing_encryption_key() == & idkg_pk_3
         )
@@ -1385,14 +1459,22 @@ mod validate_pks_and_sks {
         secret_key_store
     }
 
-    fn required_node_public_keys() -> LocalNodePublicKeys {
-        LocalNodePublicKeys {
-            node_signing_public_key: Some(valid_node_signing_public_key()),
-            committee_signing_public_key: Some(valid_committee_signing_public_key()),
-            tls_certificate: Some(valid_tls_certificate()),
-            dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
-            idkg_dealing_encryption_public_keys: vec![valid_idkg_dealing_encryption_public_key()],
-        }
+    /// Returns the required node public keys and hard-coded validation time for
+    /// which the TLS certificate is valid.
+    fn required_node_public_keys_and_time() -> (LocalNodePublicKeys, Time) {
+        let (tls_certificate, validation_time) = valid_tls_certificate_and_validation_time();
+        (
+            LocalNodePublicKeys {
+                node_signing_public_key: Some(valid_node_signing_public_key()),
+                committee_signing_public_key: Some(valid_committee_signing_public_key()),
+                tls_certificate: Some(tls_certificate),
+                dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
+                idkg_dealing_encryption_public_keys: vec![
+                    valid_idkg_dealing_encryption_public_key(),
+                ],
+            },
+            validation_time,
+        )
     }
 
     fn node_signing_secret_key_id() -> KeyId {
@@ -1412,8 +1494,12 @@ mod validate_pks_and_sks {
 
     fn tls_certificate_key_id() -> KeyId {
         KeyId::try_from(
-            &TlsPublicKeyCert::new_from_der(valid_tls_certificate().certificate_der)
-                .expect("invalid certificate"),
+            &TlsPublicKeyCert::new_from_der(
+                valid_tls_certificate_and_validation_time()
+                    .0
+                    .certificate_der,
+            )
+            .expect("invalid certificate"),
         )
         .expect("invalid certificate")
     }
@@ -1510,7 +1596,8 @@ mod validate_pks_and_sks {
         }
     }
 
-    fn required_node_public_keys_and_their_key_ids() -> (LocalNodePublicKeys, LocalKeyIds) {
-        (required_node_public_keys(), required_key_ids())
+    fn required_node_public_keys_and_their_key_ids() -> (LocalNodePublicKeys, Time, LocalKeyIds) {
+        let (keys, validation_time) = required_node_public_keys_and_time();
+        (keys, validation_time, required_key_ids())
     }
 }

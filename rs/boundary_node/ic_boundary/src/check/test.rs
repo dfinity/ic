@@ -5,7 +5,7 @@ use std::{
 };
 
 use arc_swap::ArcSwapOption;
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
+use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_protobuf::registry::subnet::v1::SubnetType;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use mockall::{predicate::*, *};
@@ -52,7 +52,9 @@ pub fn generate_custom_routing_table(
                 subnet_id,
                 addr: IpAddr::V4(Ipv4Addr::new(192, 168, i as u8, j as u8)),
                 port: 8080,
-                tls_certificate: valid_tls_certificate().certificate_der,
+                tls_certificate: valid_tls_certificate_and_validation_time()
+                    .0
+                    .certificate_der,
                 replica_version: "7742d96ddd30aa6b607c9d2d4093a7b714f5b25b".to_string(),
             };
 

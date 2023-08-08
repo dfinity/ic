@@ -6,7 +6,7 @@ use ic_crypto_utils_tls::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
-use ic_types::{NodeId, RegistryVersion};
+use ic_types::{NodeId, RegistryVersion, Time};
 use std::{sync::Arc, time::SystemTime};
 use tokio_rustls::rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
@@ -101,7 +101,7 @@ impl ServerCertVerifier for NodeServerCertVerifier {
         _server_name: &ServerName,
         _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
-        _now: SystemTime,
+        now: SystemTime,
     ) -> Result<ServerCertVerified, TLSError> {
         verify_node_cert(
             end_entity,
@@ -109,6 +109,7 @@ impl ServerCertVerifier for NodeServerCertVerifier {
             &self.allowed_nodes,
             self.registry_client.as_ref(),
             self.registry_version,
+            system_time_to_ic_time(now)?,
         )
         .map(|_| ServerCertVerified::assertion())
     }
@@ -131,7 +132,7 @@ impl ClientCertVerifier for NodeClientCertVerifier {
         &self,
         end_entity: &Certificate,
         intermediates: &[Certificate],
-        _now: SystemTime,
+        now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
         verify_node_cert(
             end_entity,
@@ -139,6 +140,7 @@ impl ClientCertVerifier for NodeClientCertVerifier {
             &self.allowed_nodes,
             self.registry_client.as_ref(),
             self.registry_version,
+            system_time_to_ic_time(now)?,
         )
         .map(|()| ClientCertVerified::assertion())
     }
@@ -150,6 +152,7 @@ fn verify_node_cert(
     allowed_nodes: &SomeOrAllNodes,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
+    current_time: Time,
 ) -> Result<(), TLSError> {
     ensure_intermediate_certs_empty(intermediates)?;
     let end_entity = tls_pubkey_cert_from_rustls_certs(std::slice::from_ref(end_entity_der))?;
@@ -169,7 +172,7 @@ fn verify_node_cert(
     // to not just pass any untrusted data to it. We consider the DER here trusted
     // because it is equal to the certificate DER stored in the registry, as checked
     // above.
-    ensure_node_certificate_is_valid(end_entity_der.0.clone(), end_entity_node_id)?;
+    ensure_node_certificate_is_valid(end_entity_der.0.clone(), end_entity_node_id, current_time)?;
     Ok(())
 }
 
@@ -225,8 +228,23 @@ fn ensure_certificates_equal(
 fn ensure_node_certificate_is_valid(
     certificate_der: Vec<u8>,
     cert_node_id: NodeId,
+    current_time: Time,
 ) -> Result<(), TLSError> {
-    ValidTlsCertificate::try_from((X509PublicKeyCert { certificate_der }, cert_node_id))
-        .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {}", e)))?;
+    ValidTlsCertificate::try_from((
+        X509PublicKeyCert { certificate_der },
+        cert_node_id,
+        current_time,
+    ))
+    .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {}", e)))?;
     Ok(())
+}
+
+fn system_time_to_ic_time(now: SystemTime) -> Result<Time, TLSError> {
+    let nanos = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| TLSError::FailedToGetCurrentTime)?
+        .as_nanos();
+    Ok(Time::from_nanos_since_unix_epoch(
+        u64::try_from(nanos).map_err(|_| TLSError::FailedToGetCurrentTime)?,
+    ))
 }

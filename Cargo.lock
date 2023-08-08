@@ -6625,6 +6625,7 @@ dependencies = [
  "ic-protobuf",
  "ic-registry-client-fake",
  "ic-registry-proto-data-provider",
+ "ic-test-utilities",
  "ic-types",
  "ic-types-test-utils",
  "openssl",
@@ -6648,6 +6649,7 @@ dependencies = [
  "ic-crypto-test-utils-keys",
  "ic-crypto-tls-cert-validation",
  "ic-crypto-utils-basic-sig",
+ "ic-interfaces",
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types",
@@ -6867,6 +6869,7 @@ version = "0.8.0"
 dependencies = [
  "hex",
  "ic-protobuf",
+ "ic-types",
 ]
 
 [[package]]
@@ -6955,7 +6958,6 @@ dependencies = [
  "assert_matches",
  "chrono",
  "curve25519-dalek",
- "dfn_core",
  "hex",
  "ic-base-types",
  "ic-crypto-internal-basic-sig-ed25519",
@@ -6963,7 +6965,6 @@ dependencies = [
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-keys",
  "ic-protobuf",
- "ic-test-utilities",
  "ic-types",
  "openssl",
  "serde",

@@ -1,11 +1,13 @@
 use crate::tls::rustls::node_cert_verifier::NodeClientCertVerifier;
 use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
+use assert_matches::assert_matches;
 use ic_base_types::NodeId;
 use ic_crypto_test_utils::tls::registry::{TlsRegistry, REG_V1};
 use ic_crypto_test_utils::tls::x509_certificates::{x509_public_key_cert, CertWithPrivateKey};
 use ic_crypto_tls_interfaces::SomeOrAllNodes;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use maplit::btreeset;
+use std::time::SystemTime;
 use tokio_rustls::rustls::{
     client::ServerCertVerifier, server::ClientCertVerifier, Certificate, Error as TLSError,
 };
@@ -27,10 +29,13 @@ mod client_cert_verifier_tests {
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
 
-        let result =
-            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
+        let result = verifier.verify_client_cert(
+            &Certificate(node_1_cert.cert_der()),
+            &[],
+            SystemTime::now(),
+        );
 
-        assert!(result.is_ok());
+        assert_matches!(result, Ok(_));
     }
 
     #[test]
@@ -48,10 +53,39 @@ mod client_cert_verifier_tests {
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
 
-        let result =
-            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
+        let result = verifier.verify_client_cert(
+            &Certificate(node_1_cert.cert_der()),
+            &[],
+            SystemTime::now(),
+        );
 
-        assert!(result.is_ok());
+        assert_matches!(result, Ok(_));
+    }
+
+    #[test]
+    fn should_return_error_if_validation_time_is_before_notbefore_variable() {
+        const VALIDATION_TIME: SystemTime = UNIX_EPOCH;
+        /// One second after now/validation time (`=UNIX_EPOCH`).
+        const NOT_BEFORE: i64 = 1;
+
+        let node_1_cert = CertWithPrivateKey::builder()
+            .cn(NODE_1.to_string())
+            .not_before_unix(NOT_BEFORE)
+            .build_ed25519();
+        let registry = TlsRegistry::new();
+        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        registry
+            .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
+            .update();
+
+        let result =
+            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], VALIDATION_TIME);
+
+        assert_matches!(
+            result, Err(TLSError::General(e)) if
+                e.contains("invalid TLS certificate: notBefore date") &&
+                e.contains(" is in the future compared to current time ")
+        );
     }
 
     #[test]
@@ -313,6 +347,7 @@ mod client_cert_verifier_tests {
 /// the implementation calls the same method as the `ClientCertVerifier`.
 mod server_cert_verifier_tests {
     use super::*;
+    use assert_matches::assert_matches;
     use std::{collections::BTreeSet, time::UNIX_EPOCH};
     use tokio_rustls::rustls::{CertificateError, ServerName};
 
@@ -333,10 +368,41 @@ mod server_cert_verifier_tests {
             &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
             &mut [].iter().copied(),
             &[],
-            UNIX_EPOCH,
+            SystemTime::now(),
         );
 
-        assert!(result.is_ok());
+        assert_matches!(result, Ok(_));
+    }
+
+    #[test]
+    fn should_return_error_if_validation_time_is_before_not_before_variable() {
+        const VALIDATION_TIME: SystemTime = UNIX_EPOCH;
+        /// One second after now/validation time (`=UNIX_EPOCH`).
+        const NOT_BEFORE: i64 = 1;
+        let node_1_cert = CertWithPrivateKey::builder()
+            .cn(NODE_1.to_string())
+            .not_before_unix(NOT_BEFORE)
+            .build_ed25519();
+        let registry = TlsRegistry::new();
+        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        registry
+            .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
+            .update();
+
+        let result = verifier.verify_server_cert(
+            &Certificate(node_1_cert.cert_der()),
+            &[],
+            &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
+            &mut [].iter().copied(),
+            &[],
+            VALIDATION_TIME,
+        );
+
+        assert_matches!(
+            result, Err(TLSError::General(e)) if
+                e.contains("invalid TLS certificate: notBefore date") &&
+                e.contains(" is in the future compared to current time ")
+        );
     }
 
     #[test]
