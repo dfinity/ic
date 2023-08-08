@@ -61,7 +61,7 @@ pub struct GetSuccessorsResponse {
 /// server.
 pub struct GetSuccessorsHandler {
     state: Arc<Mutex<BlockchainState>>,
-    command_sender: Sender<BlockchainManagerRequest>,
+    blockchain_manager_tx: Sender<BlockchainManagerRequest>,
     last_request: std::sync::Mutex<Option<(GetSuccessorsRequest, GetSuccessorsResponse)>>,
     network: Network,
     metrics: GetSuccessorMetrics,
@@ -73,12 +73,12 @@ impl GetSuccessorsHandler {
     pub fn new(
         config: &Config,
         state: Arc<Mutex<BlockchainState>>,
-        command_sender: Sender<BlockchainManagerRequest>,
+        blockchain_manager_tx: Sender<BlockchainManagerRequest>,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
             state,
-            command_sender,
+            blockchain_manager_tx,
             last_request: std::sync::Mutex::new(None),
             network: config.network,
             metrics: GetSuccessorMetrics::new(metrics_registry),
@@ -154,15 +154,14 @@ impl GetSuccessorsHandler {
 
         if !response.next.is_empty() {
             // TODO: better handling of full channel as the receivers are never closed.
-            self.command_sender
+            self.blockchain_manager_tx
                 .try_send(BlockchainManagerRequest::EnqueueNewBlocksToDownload(
                     response.next.clone(),
                 ))
                 .ok();
         }
-
         // TODO: better handling of full channel as the receivers are never closed.
-        self.command_sender
+        self.blockchain_manager_tx
             .try_send(BlockchainManagerRequest::PruneBlocks(
                 request.anchor,
                 request.processed_block_hashes,
@@ -295,7 +294,8 @@ mod test {
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
@@ -446,7 +446,8 @@ mod test {
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
@@ -492,7 +493,8 @@ mod test {
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
@@ -556,7 +558,8 @@ mod test {
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
@@ -627,7 +630,8 @@ mod test {
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
@@ -663,7 +667,8 @@ mod test {
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
@@ -755,7 +760,8 @@ mod test {
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
@@ -817,7 +823,8 @@ mod test {
         let blockchain_state = BlockchainState::new(&config, &MetricsRegistry::default());
         let genesis = *blockchain_state.genesis();
         let genesis_hash = genesis.block_hash();
-        let (blockchain_manager_tx, _) = channel::<BlockchainManagerRequest>(10);
+        let (blockchain_manager_tx, _blockchain_manager_rx) =
+            channel::<BlockchainManagerRequest>(10);
         let handler = GetSuccessorsHandler::new(
             &config,
             Arc::new(Mutex::new(blockchain_state)),
