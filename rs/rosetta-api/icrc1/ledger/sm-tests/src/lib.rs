@@ -2817,3 +2817,155 @@ where
         );
     }
 }
+
+pub fn test_icrc1_test_suite<T: candid::CandidType>(
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) {
+    use anyhow::Context;
+    use async_trait::async_trait;
+    use candid::utils::{decode_args, encode_args, ArgumentDecoder, ArgumentEncoder};
+    use futures::FutureExt;
+    use icrc1_test_env::LedgerEnv;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+
+    #[derive(Clone)]
+    pub struct SMLedger {
+        counter: Arc<AtomicU64>,
+        sm: Arc<StateMachine>,
+        sender: Principal,
+        canister_id: Principal,
+    }
+
+    impl SMLedger {
+        fn parse_ledger_response<Output>(
+            &self,
+            res: WasmResult,
+            method: &str,
+        ) -> anyhow::Result<Output>
+        where
+            Output: for<'a> ArgumentDecoder<'a>,
+        {
+            match res {
+                WasmResult::Reply(bytes) => decode_args(&bytes).with_context(|| {
+                    format!(
+                        "Failed to decode method {} response into type {}, bytes: {}",
+                        method,
+                        std::any::type_name::<Output>(),
+                        hex::encode(bytes)
+                    )
+                }),
+                WasmResult::Reject(msg) => Err(anyhow::Error::msg(format!(
+                    "Ledger {} rejected the {method} call: {}",
+                    self.canister_id, msg
+                ))),
+            }
+        }
+    }
+
+    #[async_trait(?Send)]
+    impl LedgerEnv for SMLedger {
+        fn fork(&self) -> Self {
+            Self {
+                counter: self.counter.clone(),
+                sm: self.sm.clone(),
+                sender: PrincipalId::new_user_test_id(self.counter.fetch_add(1, Ordering::Relaxed))
+                    .0,
+                canister_id: self.canister_id,
+            }
+        }
+
+        fn principal(&self) -> Principal {
+            self.sender
+        }
+
+        fn time(&self) -> std::time::SystemTime {
+            self.sm.time()
+        }
+
+        async fn query<Input, Output>(&self, method: &str, input: Input) -> anyhow::Result<Output>
+        where
+            Input: ArgumentEncoder + std::fmt::Debug,
+            Output: for<'a> ArgumentDecoder<'a>,
+        {
+            let debug_inputs = format!("{:?}", input);
+            let in_bytes = encode_args(input)
+                .with_context(|| format!("Failed to encode arguments {}", debug_inputs))?;
+            self.parse_ledger_response(
+                self.sm
+                    .query_as(
+                        ic_base_types::PrincipalId(self.sender),
+                        ic_base_types::CanisterId::try_from(ic_base_types::PrincipalId(
+                            self.canister_id,
+                        ))
+                        .unwrap(),
+                        method,
+                        in_bytes,
+                    )
+                    .map_err(|err| anyhow::Error::msg(err.to_string()))
+                    .with_context(|| {
+                        format!(
+                            "failed to execute query call {} on canister {}",
+                            method, self.canister_id
+                        )
+                    })?,
+                method,
+            )
+        }
+
+        async fn update<Input, Output>(&self, method: &str, input: Input) -> anyhow::Result<Output>
+        where
+            Input: ArgumentEncoder + std::fmt::Debug,
+            Output: for<'a> ArgumentDecoder<'a>,
+        {
+            let debug_inputs = format!("{:?}", input);
+            let in_bytes = encode_args(input)
+                .with_context(|| format!("Failed to encode arguments {}", debug_inputs))?;
+            self.parse_ledger_response(
+                self.sm
+                    .execute_ingress_as(
+                        ic_base_types::PrincipalId(self.sender),
+                        ic_base_types::CanisterId::try_from(ic_base_types::PrincipalId(
+                            self.canister_id,
+                        ))
+                        .unwrap(),
+                        method,
+                        in_bytes,
+                    )
+                    .map_err(|err| anyhow::Error::msg(err.to_string()))
+                    .with_context(|| {
+                        format!(
+                            "failed to execute update call {} on canister {}",
+                            method, self.canister_id
+                        )
+                    })?,
+                method,
+            )
+        }
+    }
+
+    let test_acc = PrincipalId::new_user_test_id(1);
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(test_acc.0), 100_000_000)],
+    );
+    let ledger_env = SMLedger {
+        counter: Arc::new(AtomicU64::new(10)),
+        sm: env.into(),
+        sender: test_acc.0,
+        canister_id: canister_id.into(),
+    };
+
+    let tests = icrc1_test_suite::test_suite(ledger_env)
+        .now_or_never()
+        .unwrap();
+
+    if !icrc1_test_suite::execute_tests(tests)
+        .now_or_never()
+        .unwrap()
+    {
+        panic!("The ICRC-1 test suite failed");
+    }
+}

@@ -463,6 +463,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ic0": crate.spec(
                 version = "0.18.9",
             ),
+            "icrc1-test-env": crate.spec(
+                version = "0.1.0",
+            ),
+            "icrc1-test-suite": crate.spec(
+                version = "0.1.0",
+            ),
             "ic-agent": crate.spec(
                 version = "^0.24.1",
                 features = [

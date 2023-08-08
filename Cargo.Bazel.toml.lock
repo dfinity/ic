@@ -2740,6 +2740,8 @@ dependencies = [
  "ic-xrc-types",
  "ic0",
  "ic_bls12_381",
+ "icrc1-test-env",
+ "icrc1-test-suite",
  "idna 0.3.0",
  "indicatif 0.15.0",
  "indicatif 0.17.5",
@@ -4610,6 +4612,30 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "icrc1-test-env"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "742ac065f9340e129b1e2497036aafed4937d66d7ab225c4989a1405496b9b18"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "candid 0.8.4",
+ "serde",
+]
+
+[[package]]
+name = "icrc1-test-suite"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e65c993be0c4fc3fa8f2209834ec39674fb327bde0ec07b5c0b2f40fd0dd8a9c"
+dependencies = [
+ "anyhow",
+ "candid 0.8.4",
+ "futures",
+ "icrc1-test-env",
 ]
 
 [[package]]
