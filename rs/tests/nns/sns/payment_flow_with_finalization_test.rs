@@ -26,8 +26,6 @@ use rand_chacha::ChaChaRng;
 use rust_decimal::prelude::ToPrimitive;
 use std::time::Duration;
 
-const CF_CONTRIBUTION: u64 = 100 * E8;
-
 fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     // The higher the value for MIN_PARTICIPANTS, the longer the test will take.
     // But lower values are less realistic. In the long term, we should have a
@@ -73,10 +71,17 @@ fn nns_cf_neuron() -> Neuron {
         rng.fill_bytes(&mut bytes);
         Subaccount(bytes)
     };
+    let cf_contribution = create_service_nervous_system_proposal()
+        .swap_parameters
+        .unwrap()
+        .neurons_fund_investment_icp
+        .unwrap()
+        .e8s
+        .unwrap();
     Neuron {
         id,
         account: account.into(),
-        maturity_e8s_equivalent: CF_CONTRIBUTION,
+        maturity_e8s_equivalent: cf_contribution,
         cached_neuron_stake_e8s: E8,
         controller: Some(principal),
         dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
@@ -101,11 +106,7 @@ fn sns_setup_legacy(env: TestEnv) {
 /// [`create_service_nervous_system_proposal`] (rather than the default
 /// parameters)
 fn initiate_token_swap_with_custom_parameters(env: TestEnv) {
-    initiate_token_swap(
-        env,
-        create_service_nervous_system_proposal(),
-        CF_CONTRIBUTION,
-    );
+    initiate_token_swap(env, create_service_nervous_system_proposal());
 }
 
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
@@ -124,10 +125,18 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     let num_participants = swap_params.minimum_participants.unwrap();
 
     // Calculate a value for `contribution_per_user` that will cause the icp
-    // raised by the swap to exactly equal `params.max_icp_e8s - CF_CONTRIBUTION`.
+    // raised by the swap to exactly equal `params.max_icp_e8s - cf_contribution`.
+    let cf_contribution = create_service_nervous_system_proposal()
+        .swap_parameters
+        .unwrap()
+        .neurons_fund_investment_icp
+        .unwrap()
+        .e8s
+        .unwrap();
+
     let contribution_per_user = ic_tests::util::divide_perfectly(
         "max_icp_e8s",
-        swap_params.maximum_icp.unwrap().e8s.unwrap() - CF_CONTRIBUTION,
+        swap_params.maximum_icp.unwrap().e8s.unwrap() - cf_contribution,
         num_participants,
     )
     .unwrap();

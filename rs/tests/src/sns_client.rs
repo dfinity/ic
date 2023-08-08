@@ -122,17 +122,13 @@ impl SnsClient {
         &self,
         env: &TestEnv,
         create_service_nervous_system_proposal: CreateServiceNervousSystem,
-        community_fund_investment_e8s: u64,
     ) {
         let log = env.logger();
         let swap_id = self.sns_canisters.swap();
         info!(log, "Sending open token swap proposal");
         let payload = {
-            let mut payload = open_sns_token_swap_payload(
-                swap_id.get(),
-                create_service_nervous_system_proposal,
-                community_fund_investment_e8s,
-            );
+            let mut payload =
+                open_sns_token_swap_payload(swap_id.get(), create_service_nervous_system_proposal);
             // Make sure there's no delay. (Therefore, the sale will be opened immediately.)
             payload.params.as_mut().unwrap().sale_delay_seconds = Some(0);
             payload
@@ -618,16 +614,23 @@ pub fn two_days_from_now_in_secs() -> u64 {
 fn open_sns_token_swap_payload(
     sns_swap_canister_id: PrincipalId,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
-    community_fund_investment_e8s: u64,
 ) -> OpenSnsTokenSwap {
     let params = create_service_nervous_system_into_params(
-        create_service_nervous_system_proposal,
+        create_service_nervous_system_proposal.clone(),
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_secs(),
     )
     .unwrap();
+
+    let community_fund_investment_e8s = create_service_nervous_system_proposal
+        .swap_parameters
+        .unwrap()
+        .neurons_fund_investment_icp
+        .unwrap()
+        .e8s
+        .unwrap();
     OpenSnsTokenSwap {
         target_swap_canister_id: Some(sns_swap_canister_id),
         // Taken (mostly) from https://github.com/open-ic/open-chat/blob/master/sns_proposal.sh
