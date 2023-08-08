@@ -1,19 +1,16 @@
-//! This test has been temporarily disabled because the functionality required
-//! to test one-proposal milestone 3 has not yet been implemented
-
 use anyhow::Result;
 use ic_nervous_system_common::{i2d, E8};
 use ic_nervous_system_proto::pb::v1::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
-use ic_sns_swap::pb::v1::DerivedState;
+use ic_sns_swap::pb::v1::GetDerivedStateResponse;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
 use ic_tests::nns_tests::{
-    sns_deployment,
-    sns_deployment::{finalize_swap_and_check_success, generate_ticket_participants_workload},
+    sns_deployment, sns_deployment::generate_ticket_participants_workload, swap_finalization,
+    swap_finalization::finalize_committed_swap_and_check_success,
 };
 use ic_tests::sns_client::{
     openchat_create_service_nervous_system_proposal, SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
@@ -110,7 +107,7 @@ fn sns_setup_with_one_proposal(env: TestEnv) {
 }
 
 fn wait_for_swap_to_start(env: TestEnv) {
-    block_on(sns_deployment::wait_for_swap_to_start(env));
+    block_on(swap_finalization::wait_for_swap_to_start(env));
 }
 
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
@@ -169,17 +166,17 @@ fn finalize_swap(env: TestEnv) {
         .unwrap())
     .checked_div(i2d(swap_params.maximum_icp.unwrap().e8s.unwrap()))
     .and_then(|d| d.to_f32())
-    .unwrap();
+    .unwrap() as f64;
 
-    let expected_derived_swap_state = DerivedState {
+    let expected_derived_swap_state = GetDerivedStateResponse {
         direct_participant_count: swap_params.minimum_participants,
         cf_participant_count: Some(1),
         cf_neuron_count: Some(1),
-        buyer_total_icp_e8s: swap_params.maximum_icp.unwrap().e8s.unwrap(),
-        sns_tokens_per_icp,
+        buyer_total_icp_e8s: swap_params.maximum_icp.unwrap().e8s,
+        sns_tokens_per_icp: Some(sns_tokens_per_icp),
     };
 
-    block_on(finalize_swap_and_check_success(
+    block_on(finalize_committed_swap_and_check_success(
         env,
         expected_derived_swap_state,
         create_service_nervous_system_proposal,

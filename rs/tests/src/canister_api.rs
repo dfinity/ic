@@ -18,11 +18,12 @@ use ic_sns_swap::pb::v1::{
     GetAutoFinalizationStatusRequest as GetAutoFinalizationStatusReq,
     GetAutoFinalizationStatusResponse as GetAutoFinalizationStatusRes,
     GetBuyerStateRequest as GetBuyerStateReq, GetBuyerStateResponse as GetBuyerStateRes,
-    GetLifecycleRequest as GetLifecycleReq, GetLifecycleResponse as GetLifecycleRes,
-    GetOpenTicketRequest as GetOpenTicketReq, GetOpenTicketResponse as GetOpenTicketRes,
-    GetStateRequest as GetStateReq, GetStateResponse as GetStateRes,
-    NewSaleTicketRequest as NewSaleTicketReq, NewSaleTicketResponse as NewSaleTicketRes,
-    RefreshBuyerTokensRequest as RefreshBuyerTokensReq,
+    GetDerivedStateRequest as GetDerivedSwapStateReq,
+    GetDerivedStateResponse as GetDerivedSwapStateRes, GetLifecycleRequest as GetLifecycleReq,
+    GetLifecycleResponse as GetLifecycleRes, GetOpenTicketRequest as GetOpenTicketReq,
+    GetOpenTicketResponse as GetOpenTicketRes, GetStateRequest as GetStateReq,
+    GetStateResponse as GetStateRes, NewSaleTicketRequest as NewSaleTicketReq,
+    NewSaleTicketResponse as NewSaleTicketRes, RefreshBuyerTokensRequest as RefreshBuyerTokensReq,
     RefreshBuyerTokensResponse as RefreshBuyerTokensRes,
 };
 use icp_ledger::Subaccount;
@@ -759,6 +760,36 @@ impl GetLifecycleRequest {
 }
 
 #[derive(Clone, Debug)]
+pub struct GetDerivedSwapStateRequest {
+    mode: CallMode,
+    sale_canister: Principal,
+}
+
+impl Request<GetDerivedSwapStateRes> for GetDerivedSwapStateRequest {
+    fn mode(&self) -> CallMode {
+        self.mode.clone()
+    }
+    fn canister_id(&self) -> Principal {
+        self.sale_canister
+    }
+    fn method_name(&self) -> String {
+        "get_derived_state".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&GetDerivedSwapStateReq {}).unwrap()
+    }
+}
+
+impl GetDerivedSwapStateRequest {
+    pub fn new(sale_canister: Principal, mode: CallMode) -> Self {
+        Self {
+            mode,
+            sale_canister,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct GetAutoFinalizationStatusRequest {
     mode: CallMode,
     sale_canister: Principal,
@@ -967,6 +998,14 @@ impl SnsRequestProvider {
     ) -> impl Request<GetLifecycleRes> + std::fmt::Debug + Clone + Sync + Send {
         let swap_canister = self.sns_canisters.swap().get().into();
         GetLifecycleRequest::new(swap_canister, mode)
+    }
+
+    pub fn get_derived_swap_state(
+        &self,
+        mode: CallMode,
+    ) -> impl Request<GetDerivedSwapStateRes> + std::fmt::Debug + Clone + Sync + Send {
+        let swap_canister = self.sns_canisters.swap().get().into();
+        GetDerivedSwapStateRequest::new(swap_canister, mode)
     }
 
     pub fn get_auto_finalization_status(
