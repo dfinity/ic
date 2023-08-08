@@ -15,7 +15,7 @@ use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
 use axum::{
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, State},
     handler::Handler,
     middleware,
     routing::method_routing::{get, post},
@@ -33,7 +33,18 @@ use ic_registry_replicator::RegistryReplicator;
 use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
 use lazy_static::lazy_static;
 use nns::Load;
-use prometheus::{labels, Registry as MetricsRegistry};
+use opentelemetry::{
+    global,
+    metrics::{Counter, Histogram},
+    sdk::{
+        export::metrics::aggregation,
+        metrics::{controllers, processors, selectors},
+        Resource,
+    },
+    KeyValue,
+};
+use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
+use prometheus::{labels, Encoder as PrometheusEncoder, TextEncoder};
 use tokio::sync::{Mutex, RwLock};
 use tower::ServiceBuilder;
 use tower_http::{
@@ -52,7 +63,7 @@ use crate::{
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
     metrics::{MetricParams, WithMetrics},
     nns::Loader,
-    routes::ProxyRouter,
+    routes::{MiddlewareState, ProxyRouter},
     snapshot::{DnsResolver, Runner as SnapshotRunner, TlsVerifier},
 };
 
@@ -167,14 +178,6 @@ struct Cli {
     metrics_addr: SocketAddr,
 }
 
-lazy_static! {
-    static ref METRICS: MetricsRegistry = MetricsRegistry::new_custom(
-        None,
-        Some(labels! {"service".into() => SERVICE_NAME.into()})
-    )
-    .unwrap();
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
@@ -187,7 +190,25 @@ async fn main() -> Result<(), Error> {
     )
     .expect("failed to set global subscriber");
 
-    let metrics = &*METRICS;
+    // Metrics
+    let exporter = ExporterBuilder::new(
+        controllers::basic(
+            processors::factory(
+                selectors::simple::histogram([]),
+                aggregation::cumulative_temporality_selector(),
+            )
+            .with_memory(true),
+        )
+        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
+        .build(),
+    )
+    .init();
+
+    let meter = global::meter(SERVICE_NAME);
+
+    let metrics_router = Router::new()
+        .route("/metrics", get(metrics::metrics_handler))
+        .with_state(metrics::MetricsHandlerArgs { exporter });
 
     info!(
         msg = format!("Starting {SERVICE_NAME}"),
@@ -265,7 +286,7 @@ async fn main() -> Result<(), Error> {
     let fw_configurator = WithDeduplication::wrap(fw_configurator);
     let fw_configurator = WithMetrics(
         fw_configurator,
-        MetricParams::new(SERVICE_NAME, "configure_firewall"),
+        MetricParams::new(&meter, SERVICE_NAME, "configure_firewall"),
     );
 
     // Service Configurator
@@ -281,7 +302,7 @@ async fn main() -> Result<(), Error> {
     );
     let configuration_runner = WithMetrics(
         configuration_runner,
-        MetricParams::new(SERVICE_NAME, "run_configuration"),
+        MetricParams::new(&meter, SERVICE_NAME, "run_configuration"),
     );
     let configuration_runner = WithThrottle(configuration_runner, ThrottleParams::new(10 * SECOND));
     let mut configuration_runner = configuration_runner;
@@ -293,6 +314,10 @@ async fn main() -> Result<(), Error> {
         nns_pub_key.into_bytes().into(),
     ));
 
+    let state = MiddlewareState {
+        proxier: proxy_router,
+        metric_params: metrics::HttpMetricParams::new(&meter, SERVICE_NAME, "http_request"),
+    };
     let routers_https: Router<_> = Router::new()
         .route("/api/v2/status", get(routes::status))
         .route("/api/v2/canister/:canister_id/query", post(routes::query))
@@ -306,13 +331,16 @@ async fn main() -> Result<(), Error> {
                 .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
                 .set_x_request_id(MakeRequestUuid)
                 .propagate_x_request_id()
-                .layer(middleware::from_fn(routes::log_request))
                 .layer(middleware::from_fn_with_state(
-                    Arc::clone(&proxy_router),
+                    state.metric_params.clone(),
+                    metrics::with_metrics_middleware,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    state.proxier.clone(),
                     routes::preprocess_request,
                 )),
         )
-        .with_state(Arc::clone(&proxy_router));
+        .with_state(state);
 
     #[cfg(feature = "tls")]
     let routers_http = Router::new()
@@ -349,7 +377,7 @@ async fn main() -> Result<(), Error> {
     let snapshot_runner = SnapshotRunner::new(Arc::clone(&routing_table), registry_client);
     let snapshot_runner = WithMetrics(
         snapshot_runner,
-        MetricParams::new(SERVICE_NAME, "run_snapshot"),
+        MetricParams::new(&meter, SERVICE_NAME, "run_snapshot"),
     );
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(10 * SECOND));
     let mut snapshot_runner = snapshot_runner;
@@ -357,11 +385,11 @@ async fn main() -> Result<(), Error> {
     // Checks
     let persister = WithMetrics(
         persist::Persister::new(Arc::clone(&lookup_table)),
-        MetricParams::new(SERVICE_NAME, "persist"),
+        MetricParams::new(&meter, SERVICE_NAME, "persist"),
     );
 
     let checker = Checker::new(Arc::clone(&http_client)); // HTTP client does not need Arc
-    let checker = WithMetrics(checker, MetricParams::new(SERVICE_NAME, "check"));
+    let checker = WithMetrics(checker, MetricParams::new(&meter, SERVICE_NAME, "check"));
     let checker = WithRetryLimited(
         checker,
         cli.check_retries,
@@ -375,7 +403,10 @@ async fn main() -> Result<(), Error> {
         persister,
         checker,
     );
-    let check_runner = WithMetrics(check_runner, MetricParams::new(SERVICE_NAME, "run_check"));
+    let check_runner = WithMetrics(
+        check_runner,
+        MetricParams::new(&meter, SERVICE_NAME, "run_check"),
+    );
     let check_runner = WithThrottle(
         check_runner,
         ThrottleParams::new(Duration::from_secs(cli.check_interval)),
@@ -390,9 +421,6 @@ async fn main() -> Result<(), Error> {
     ];
 
     TokioScope::scope_and_block(|s| {
-        let metrics_handler = || metrics::handler(metrics);
-        let metrics_router = Router::new().route("/metrics", get(metrics_handler));
-
         s.spawn(
             axum::Server::bind(&cli.metrics_addr)
                 .serve(metrics_router.into_make_service())
@@ -507,7 +535,7 @@ async fn prepare_tls(
     let tls_configurator = WithDeduplication::wrap(tls_configurator);
     let tls_configurator = WithMetrics(
         tls_configurator,
-        MetricParams::new(SERVICE_NAME, "configure_tls"),
+        MetricParams::new(&global::meter(SERVICE_NAME), SERVICE_NAME, "configure_tls"),
     );
 
     let tls_acceptor = CustomAcceptor::new(tls_acceptor);
@@ -530,7 +558,11 @@ impl<T: Run> Run for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let MetricParams { action } = &self.1;
+        let MetricParams {
+            action,
+            counter,
+            durationer,
+        } = &self.1;
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
