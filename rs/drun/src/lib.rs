@@ -54,6 +54,8 @@ mod message;
 const MAX_BATCHES_UNTIL_RESPONSE: u64 = 10000;
 // how long to wait between batches
 const WAIT_PER_BATCH: Duration = Duration::from_millis(5);
+// Use the new orthogonal persistence.
+const KEEP_MAIN_MEMORY_ON_UPGRADE: bool = true;
 
 pub struct DrunOptions {
     pub msg_filename: String,

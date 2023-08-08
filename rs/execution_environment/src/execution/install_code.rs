@@ -27,6 +27,7 @@ use crate::{
         CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeResult,
     },
     canister_settings::{validate_canister_settings, CanisterSettings},
+    execution::orthogonal_persistence::OrthogonalPersistence,
     execution_environment::RoundContext,
     CompilationCostHandling, RoundLimits,
 };
@@ -34,12 +35,21 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// Indicates whether to keep the old stable memory or replace it with the new
-/// (empty) stable memory.
+/// Indicates whether to keep the old memory or replace it with the new (empty) memory.
+/// * On install and re-install: Replace
+/// * On upgrade: Keep
+///   - For new orthogonal persistence in Motoko: Retain both main and stable memory.
+///   - For standard non-Motoko canisters: Retain only stable memory and erase main memory.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum StableMemoryHandling {
-    Keep,
+pub(crate) enum MemoryHandling {
+    /// Replace both main memory and stable memory on (re-)installation.
     Replace,
+    /// Keep only stable memory.
+    /// Used for standard non-Motoko canisters on an upgrade.
+    KeepOnlyStableMemory,
+    /// Keep both main memory and stable memory.
+    /// Used for Motoko's new orthogonal persistence.
+    KeepBothMemories,
 }
 
 /// The main steps of `install_code` execution that may fail with an error or
@@ -51,7 +61,7 @@ pub(crate) enum InstallCodeStep {
     ReplaceExecutionStateAndAllocations {
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        stable_memory_handling: StableMemoryHandling,
+        memory_handling: MemoryHandling,
     },
     HandleWasmExecution {
         canister_state_changes: Option<CanisterStateChanges>,
@@ -407,14 +417,14 @@ impl InstallCodeHelper {
         &mut self,
         instructions_from_compilation: NumInstructions,
         maybe_execution_state: HypervisorResult<ExecutionState>,
-        stable_memory_handling: StableMemoryHandling,
+        memory_handling: MemoryHandling,
         original: &OriginalContext,
     ) -> Result<(), CanisterManagerError> {
         self.steps
             .push(InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state: maybe_execution_state.clone(),
-                stable_memory_handling,
+                memory_handling,
             });
 
         self.execution_parameters
@@ -436,13 +446,22 @@ impl InstallCodeHelper {
 
         let new_wasm_custom_sections_memory_used = execution_state.metadata.memory_usage();
 
-        execution_state.stable_memory =
-            match (stable_memory_handling, self.canister.execution_state.take()) {
-                (StableMemoryHandling::Keep, Some(old)) => old.stable_memory,
-                (StableMemoryHandling::Keep, None) | (StableMemoryHandling::Replace, _) => {
-                    execution_state.stable_memory
-                }
-            };
+        if let Some(old) = self.canister.execution_state.take() {
+            if memory_handling == MemoryHandling::KeepOnlyStableMemory
+                || memory_handling == MemoryHandling::KeepBothMemories
+            {
+                execution_state.stable_memory = old.stable_memory;
+            }
+
+            if memory_handling == MemoryHandling::KeepBothMemories {
+                let wasm_binary = execution_state.wasm_binary.clone();
+                let old_memory = old.wasm_memory;
+                let new_memory = execution_state.wasm_memory;
+                execution_state.wasm_memory =
+                    OrthogonalPersistence::upgrade_memory(wasm_binary, old_memory, new_memory);
+            }
+        };
+
         self.canister.execution_state = Some(execution_state);
 
         // Update the compute allocation.
@@ -641,11 +660,11 @@ impl InstallCodeHelper {
             InstallCodeStep::ReplaceExecutionStateAndAllocations {
                 instructions_from_compilation,
                 maybe_execution_state,
-                stable_memory_handling,
+                memory_handling,
             } => self.replace_execution_state_and_allocations(
                 instructions_from_compilation,
                 maybe_execution_state,
-                stable_memory_handling,
+                memory_handling,
                 original,
             ),
             InstallCodeStep::HandleWasmExecution {
