@@ -9,9 +9,8 @@ use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
 use ic_tests::nns_tests::{
-    sns_deployment,
-    sns_deployment::{generate_ticket_participants_workload, initiate_token_swap},
-    swap_finalization::finalize_committed_swap_and_check_success,
+    sns_deployment, sns_deployment::generate_ticket_participants_workload, swap_finalization,
+    swap_finalization::finalize_aborted_swap_and_check_success,
 };
 use ic_tests::sns_client::{
     openchat_create_service_nervous_system_proposal, SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
@@ -25,8 +24,6 @@ use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaChaRng;
 use rust_decimal::prelude::ToPrimitive;
 use std::time::Duration;
-
-const CF_CONTRIBUTION: u64 = 100 * E8;
 
 fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     // The higher the value for MIN_PARTICIPANTS, the longer the test will take.
@@ -73,21 +70,33 @@ fn nns_cf_neuron() -> Neuron {
         rng.fill_bytes(&mut bytes);
         Subaccount(bytes)
     };
+
+    let cf_contribution = create_service_nervous_system_proposal()
+        .swap_parameters
+        .unwrap()
+        .neurons_fund_investment_icp
+        .unwrap()
+        .e8s
+        .unwrap();
+
     Neuron {
         id,
         account: account.into(),
-        maturity_e8s_equivalent: CF_CONTRIBUTION,
+        maturity_e8s_equivalent: cf_contribution,
         cached_neuron_stake_e8s: E8,
         controller: Some(principal),
         dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
         not_for_profit: false,
-        joined_community_fund_timestamp_seconds: Some(1000), // should be a long time ago
+        // Join the community fund some time in the past.
+        // (It's unclear what the semantics should be if the neuron joins in the
+        // future.)
+        joined_community_fund_timestamp_seconds: Some(1000),
         ..Default::default()
     }
 }
 
-fn sns_setup_legacy(env: TestEnv) {
-    sns_deployment::setup_legacy(
+fn sns_setup_with_one_proposal(env: TestEnv) {
+    sns_deployment::setup(
         env,
         vec![],
         vec![nns_cf_neuron()],
@@ -97,20 +106,13 @@ fn sns_setup_legacy(env: TestEnv) {
     );
 }
 
-/// Initiate the token swap with the parameters returned by
-/// [`create_service_nervous_system_proposal`] (rather than the default
-/// parameters)
-fn initiate_token_swap_with_custom_parameters(env: TestEnv) {
-    initiate_token_swap(
-        env,
-        create_service_nervous_system_proposal(),
-        CF_CONTRIBUTION,
-    );
+fn wait_for_swap_to_start(env: TestEnv) {
+    block_on(swap_finalization::wait_for_swap_to_start(env));
 }
 
 /// Creates ticket participants which will contribute in such a way that they'll hit max_icp_e8s with min_participants.
 /// So if min_participants is 3 and max_participant_icp_e8s is 12 icp, we'll create 3 participants who contribute 4 icp each.
-fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEnv) {
+fn generate_ticket_participants_workload_necessary_to_abort_the_swap(env: TestEnv) {
     let swap_params = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap();
@@ -121,16 +123,22 @@ fn generate_ticket_participants_workload_necessary_to_close_the_swap(env: TestEn
     );
     // We'll have the test use params.min_participants as the number of
     // participants, to allow the swap to have enough participants to close.
-    let num_participants = swap_params.minimum_participants.unwrap();
+    let num_participants = 1;
+    assert!(num_participants < swap_params.minimum_participants.unwrap());
+
+    let cf_contribution = create_service_nervous_system_proposal()
+        .swap_parameters
+        .unwrap()
+        .neurons_fund_investment_icp
+        .unwrap()
+        .e8s
+        .unwrap();
 
     // Calculate a value for `contribution_per_user` that will cause the icp
-    // raised by the swap to exactly equal `params.max_icp_e8s - CF_CONTRIBUTION`.
-    let contribution_per_user = ic_tests::util::divide_perfectly(
-        "max_icp_e8s",
-        swap_params.maximum_icp.unwrap().e8s.unwrap() - CF_CONTRIBUTION,
-        num_participants,
-    )
-    .unwrap();
+    // raised by the swap to exactly equal `params.max_icp_e8s - cf_contribution`.
+    // Since we won't have reached swap_params.minimum_participants, this will
+    // cause the swap to fail
+    let contribution_per_user = swap_params.maximum_icp.unwrap().e8s.unwrap() - cf_contribution;
 
     // The number of participants is the rps * the duration in seconds.
     // So if we set rps to `1`, and the duration to `num_participants`, we'll
@@ -159,21 +167,22 @@ fn finalize_swap(env: TestEnv) {
     .unwrap() as f64;
 
     let expected_derived_swap_state = GetDerivedStateResponse {
-        direct_participant_count: swap_params.minimum_participants,
+        direct_participant_count: Some(1),
         cf_participant_count: Some(1),
         cf_neuron_count: Some(1),
         buyer_total_icp_e8s: swap_params.maximum_icp.unwrap().e8s,
         sns_tokens_per_icp: Some(sns_tokens_per_icp),
     };
 
-    block_on(finalize_committed_swap_and_check_success(
+    block_on(finalize_aborted_swap_and_check_success(
         env,
         expected_derived_swap_state,
         create_service_nervous_system_proposal,
     ));
 }
 
-/// This test is similar to //rs/tests/nns/sns:payment_flow_test, except it also finalizes the swap.
+/// This test is similar to //rs/tests/nns/sns:payment_flow_test, except it causes the swap to be aborted
+/// and also finalizes the swap.
 /// A load test is currently not possible because finalization is too slow. This will be fixed during
 /// one-proposal, so a load test will be added then.
 ///
@@ -194,10 +203,10 @@ fn finalize_swap(env: TestEnv) {
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(15 * 60)) // 15 min
-        .with_setup(sns_setup_legacy)
-        .add_test(systest!(initiate_token_swap_with_custom_parameters))
+        .with_setup(sns_setup_with_one_proposal)
+        .add_test(systest!(wait_for_swap_to_start))
         .add_test(systest!(
-            generate_ticket_participants_workload_necessary_to_close_the_swap
+            generate_ticket_participants_workload_necessary_to_abort_the_swap
         ))
         .add_test(systest!(finalize_swap))
         .execute_from_args()?;
