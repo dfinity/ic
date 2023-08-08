@@ -39,14 +39,14 @@ impl Validate for Validator {
             return Ok(());
         }
 
-        let certification_result = match (
+        match (
             request.is_certification_required(),
             response.has_ic_certificate(),
         ) {
             // TODO: Remove this (FOLLOW-483)
             // Canisters don't have to provide certified variables
             // This should change in the future, grandfathering in current implementations
-            (false, false) => return Ok(()),
+            (false, false) => Ok(()),
             (_, _) => {
                 let ic_public_key = agent.read_root_key();
                 verify_request_response_pair(
@@ -58,13 +58,9 @@ impl Validate for Validator {
                     ic_public_key.as_slice(),
                     MIN_VERIFICATION_VERSION,
                 )
-                .map_err(|e| e.to_string())?
+                .map_err(|_| "Body does not pass verification")?;
+                Ok(())
             }
-        };
-
-        match certification_result.passed {
-            true => Ok(()),
-            false => Err("Body does not pass verification".into()),
         }
     }
 }

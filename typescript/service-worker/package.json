@@ -18,7 +18,7 @@
     "@dfinity/agent": "~0.18.0",
     "@dfinity/candid": "~0.18.0",
     "@dfinity/principal": "~0.18.0",
-    "@dfinity/response-verification": "^0.2.1",
+    "@dfinity/response-verification": "^1.0.0",
     "idb": "^7.1.1",
     "lit": "^2.6.1",
     "pako": "^2.0.3"

@@ -40,6 +40,7 @@ impl From<&HttpRequest> for Request {
             url: http_request.uri.to_string(),
             method: http_request.method.clone(),
             headers: http_request.headers.clone(),
+            body: http_request.body.clone(),
         }
     }
 }

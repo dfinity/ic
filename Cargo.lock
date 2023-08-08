@@ -61,7 +61,7 @@ dependencies = [
  "actix-service",
  "actix-utils",
  "ahash 0.8.3",
- "base64 0.21.0",
+ "base64 0.21.2",
  "bitflags 1.3.2",
  "brotli",
  "bytes",
@@ -839,9 +839,9 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.21.0"
+version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
+checksum = "604178f6c5c21f02dc555784810edfb88d34ac2c73b2eae109655649ee73ce3d"
 
 [[package]]
 name = "base64-url"
@@ -5603,16 +5603,6 @@ dependencies = [
 
 [[package]]
 name = "ic-certification"
-version = "0.23.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "beb68e0ea2fe6b533ddab6ae2142274f9669acacbacd83ac64bb1cd268d33104"
-dependencies = [
- "hex",
- "sha2 0.10.6",
-]
-
-[[package]]
-name = "ic-certification"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce514ae665701b9d85d5fbba87d177befef83a808b92adf53e2496376303a910"
@@ -5620,6 +5610,16 @@ dependencies = [
  "hex",
  "serde",
  "serde_bytes",
+ "sha2 0.10.6",
+]
+
+[[package]]
+name = "ic-certification"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6561f6ae522da62b6fb89c0594337c18e96a69fa1f89baae8542f3634023635b"
+dependencies = [
+ "hex",
  "sha2 0.10.6",
 ]
 
@@ -9914,16 +9914,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-response-verification"
-version = "0.2.1"
+name = "ic-representation-independent-hash"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0808226c0567472d822b246231b93fa91929c4945cb2d5ca2a072865f308f4e"
+checksum = "f2204e06271a81f9ffee9b7bc0c4d90687d035eba95f2eb3894e19d8ff263f9e"
 dependencies = [
- "base64 0.13.1",
- "candid 0.8.4",
+ "leb128",
+ "sha2 0.10.6",
+]
+
+[[package]]
+name = "ic-response-verification"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2034aab93c484311ad040475195496dc39a6ddefd5374c3b9e37b3266850f7e"
+dependencies = [
+ "base64 0.21.2",
+ "candid 0.9.1",
  "flate2",
+ "hex",
  "http",
- "ic-certification 0.23.2",
+ "ic-certification 0.25.0",
+ "ic-representation-independent-hash",
  "leb128",
  "log",
  "miracl_core_bls12381",
@@ -11897,7 +11909,7 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3d50eb225913c1903c788287ddd0b16369771e5abc988756a5e5927390ba04f"
 dependencies = [
- "base64 0.21.0",
+ "base64 0.21.2",
  "hyper",
  "hyper-rustls 0.24.0",
  "ring",
@@ -11912,7 +11924,7 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b94f62e8dd2b561e7646bd0cc92e4c9d940859fc1c146ad8ab6e5d3e6f7c03"
 dependencies = [
- "base64 0.21.0",
+ "base64 0.21.2",
  "hyper",
  "hyper-rustls 0.24.0",
  "ring",
@@ -13972,7 +13984,7 @@ version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b13fe415cdf3c8e44518e18a7c95a13431d9bdf6d15367d82b23c377fdd441a"
 dependencies = [
- "base64 0.21.0",
+ "base64 0.21.2",
  "serde",
 ]
 
@@ -14208,7 +14220,7 @@ dependencies = [
 name = "pocket-ic"
 version = "0.0.1"
 dependencies = [
- "base64 0.21.0",
+ "base64 0.13.1",
  "candid 0.9.1",
  "ic-cdk 0.10.0",
  "once_cell",
@@ -15293,7 +15305,7 @@ version = "0.11.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cde824a14b7c14f85caff81225f411faacc04a2013f41670f41443742b1c1c55"
 dependencies = [
- "base64 0.21.0",
+ "base64 0.21.2",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -15724,7 +15736,7 @@ version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d194b56d58803a43635bdc398cd17e383d6f71f9182b9a192c127ca42494a59b"
 dependencies = [
- "base64 0.21.0",
+ "base64 0.21.2",
 ]
 
 [[package]]
@@ -19165,7 +19177,7 @@ checksum = "bd7b0b5b253ebc0240d6aac6dd671c495c467420577bf634d3064ae7e6fa2b4c"
 dependencies = [
  "assert-json-diff",
  "async-trait",
- "base64 0.21.0",
+ "base64 0.21.2",
  "deadpool",
  "futures",
  "futures-timer",

@@ -177,6 +177,7 @@ impl Check for Checker {
             method: String::from("GET"),
             url: String::from("/.well-known/ic-domains"),
             headers: vec![],
+            body: vec![],
         };
 
         let (response,) = HttpRequestCanister::create(&self.agent, canister_id)
