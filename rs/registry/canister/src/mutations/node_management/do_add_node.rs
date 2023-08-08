@@ -18,6 +18,7 @@ use crate::mutations::node_management::common::{
     get_node_operator_record, make_add_node_registry_mutations, make_update_node_operator_mutation,
 };
 use ic_types::crypto::CurrentNodePublicKeys;
+use ic_types::time::Time;
 use prost::Message;
 
 impl Registry {
@@ -214,10 +215,21 @@ fn valid_keys_from_payload(
     };
 
     // 5. validate the keys and the node_id
-    match ValidNodePublicKeys::try_from(node_pks, node_id) {
+    match ValidNodePublicKeys::try_from(node_pks, node_id, now()?) {
         Ok(valid_pks) => Ok((node_id, valid_pks)),
         Err(e) => Err(format!("Could not validate public keys, due to {:?}", e)),
     }
+}
+
+fn now() -> Result<Time, String> {
+    let duration = dfn_core::api::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("Could not get current time since UNIX_EPOCH: {e}"))?;
+
+    let nanos = u64::try_from(duration.as_nanos())
+        .map_err(|e| format!("Current time cannot be converted to u64: {:?}", e))?;
+
+    Ok(Time::from_nanos_since_unix_epoch(nanos))
 }
 
 #[cfg(test)]

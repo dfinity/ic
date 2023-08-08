@@ -6,7 +6,7 @@ use std::{
     time::SystemTime,
 };
 
-use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
+use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
 use ic_protobuf::registry::{
     node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
@@ -95,7 +95,7 @@ pub fn create_fake_registry_client(subnet_count: u8) -> FakeRegistryClient {
             .add(
                 &make_crypto_tls_cert_key(node_id),
                 reg_ver,
-                Some(valid_tls_certificate()),
+                Some(valid_tls_certificate_and_validation_time().0),
             )
             .expect("failed to add TLS certificate to registry");
 
@@ -205,7 +205,9 @@ async fn test_routing_table() -> Result<(), Error> {
 
         assert_eq!(
             sn.nodes[0].tls_certificate,
-            valid_tls_certificate().certificate_der,
+            valid_tls_certificate_and_validation_time()
+                .0
+                .certificate_der,
         );
     }
 
@@ -251,7 +253,9 @@ async fn test_verify_tls_certificate() -> Result<(), Error> {
         check_certificate_verification(
             &helper,
             node_name.as_str(),
-            valid_tls_certificate().certificate_der,
+            valid_tls_certificate_and_validation_time()
+                .0
+                .certificate_der,
         )?;
 
         // Check with different cert -> should fail

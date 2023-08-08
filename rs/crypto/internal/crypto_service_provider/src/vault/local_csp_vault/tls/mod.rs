@@ -15,10 +15,11 @@ use ic_crypto_secrets_containers::{SecretArray, SecretVec};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::AlgorithmId;
-use ic_types::NodeId;
+use ic_types::{NodeId, Time};
 use openssl::asn1::Asn1Time;
 use openssl::pkey::PKey;
 use rand::{CryptoRng, Rng};
+use std::time::Duration;
 
 #[cfg(test)]
 mod tests;
@@ -104,6 +105,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         node: NodeId,
         not_after: &str,
     ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+        const TWO_MINUTES: Duration = Duration::from_secs(120);
+
+        let issuance_time: Time = self
+            .time_source
+            .get_relative_time()
+            .saturating_sub_duration(TWO_MINUTES);
+
         let common_name = &node.get().to_string()[..];
         let not_after_asn1 = Asn1Time::from_str_x509(not_after).map_err(|_| {
             CspTlsKeygenError::InvalidNotAfterDate {
@@ -111,10 +119,11 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 not_after: not_after.to_string(),
             }
         })?;
-        let secs_since_unix_epoch = (self
-            .time_source
-            .get_relative_time()
-            .as_secs_since_unix_epoch()) as i64;
+
+        let secs_since_unix_epoch = i64::try_from(issuance_time.as_secs_since_unix_epoch())
+            .map_err(|e| CspTlsKeygenError::InternalError {
+                internal_error: format!("invalid time in seconds since UNIX_EPOCH: {e}"),
+            })?;
         let not_before = Asn1Time::from_unix(secs_since_unix_epoch).map_err(|_| {
             CspTlsKeygenError::InternalError {
                 internal_error: format!("Failed to convert raw not_before ({secs_since_unix_epoch} seconds since Unix epoch) to Asn1Time"),
@@ -150,7 +159,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             })?;
         let secret_key = CspSecretKey::TlsEd25519(secret_key);
         let cert_proto = x509_pk_cert.to_proto();
-        let valid_cert = validate_tls_certificate(cert_proto, node)?;
+        let valid_cert = validate_tls_certificate(cert_proto, node, issuance_time)?;
         self.store_tls_key_pair(key_id, secret_key, valid_cert.get().clone())?;
 
         Ok(x509_pk_cert)
@@ -238,8 +247,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 fn validate_tls_certificate(
     cert_proto: X509PublicKeyCert,
     node: NodeId,
+    current_time: Time,
 ) -> Result<ValidTlsCertificate, CspTlsKeygenError> {
-    ValidTlsCertificate::try_from((cert_proto, node)).map_err(|error| {
+    ValidTlsCertificate::try_from((cert_proto, node, current_time)).map_err(|error| {
         CspTlsKeygenError::InternalError {
             internal_error: format!("TLS certificate validation error: {}", error),
         }

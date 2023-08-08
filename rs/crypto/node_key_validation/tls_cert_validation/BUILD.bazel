@@ -16,17 +16,13 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:serde",
     "@crate_index//:x509-parser",
-] + select({
-    "@rules_rust//rust/platform:wasm32-unknown-unknown": ["//rs/rust_canisters/dfn_core"],
-    "//conditions:default": [],
-})
+]
 
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/keys",
-    "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:curve25519-dalek",
     "@crate_index//:openssl",

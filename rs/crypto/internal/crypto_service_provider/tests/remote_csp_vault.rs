@@ -570,7 +570,7 @@ mod public_and_secret_key_store_csp_vault {
     use ic_crypto_test_utils_keys::public_keys::{
         valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
         valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
-        valid_tls_certificate,
+        valid_tls_certificate_and_validation_time,
     };
     use ic_types::crypto::CurrentNodePublicKeys;
     use proptest::prelude::Just;
@@ -625,15 +625,17 @@ mod public_and_secret_key_store_csp_vault {
         let node_id = *ValidNodeSigningPublicKey::try_from(valid_node_signing_public_key())
             .expect("invalid node signing public key")
             .derived_node_id();
+        let (valid_tls_certificate, validation_time) = valid_tls_certificate_and_validation_time();
         ValidNodePublicKeys::try_from(
             CurrentNodePublicKeys {
                 node_signing_public_key: Some(valid_node_signing_public_key()),
                 committee_signing_public_key: Some(valid_committee_signing_public_key()),
-                tls_certificate: Some(valid_tls_certificate()),
+                tls_certificate: Some(valid_tls_certificate),
                 dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
                 idkg_dealing_encryption_public_key: Some(valid_idkg_dealing_encryption_public_key()),
             },
             node_id,
+            validation_time,
         )
             .expect("invalid node public keys")
     }
@@ -689,7 +691,7 @@ mod tls_handshake_csp_vault {
         arb_csp_signature, arb_csp_tls_keygen_error, arb_csp_tls_sign_error, arb_key_id,
         arb_node_id,
     };
-    use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
+    use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate_and_validation_time;
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use proptest::{prelude::Just, result::maybe_err_weighted};
 
@@ -746,7 +748,8 @@ mod tls_handshake_csp_vault {
     }
 
     fn valid_tls_public_key_cert() -> TlsPublicKeyCert {
-        TlsPublicKeyCert::try_from(valid_tls_certificate()).expect("valid TLS certificate")
+        TlsPublicKeyCert::try_from(valid_tls_certificate_and_validation_time().0)
+            .expect("valid TLS certificate")
     }
 }
 

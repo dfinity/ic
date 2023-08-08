@@ -37,6 +37,7 @@ mod keygen {
     use std::sync::Arc;
 
     const NOT_AFTER: &str = "99991231235959Z";
+    const NANOS_PER_SEC: i64 = 1_000_000_000;
 
     #[test]
     fn should_generate_tls_key_pair_and_store_certificate() {
@@ -233,7 +234,9 @@ mod keygen {
 
     proptest! {
         #[test]
-        fn should_pass_the_correct_time_and_date(secs in 0..1_000_000i64) {
+        fn should_pass_the_correct_time_and_date(secs in 0..i64::MAX / NANOS_PER_SEC) {
+            const GRACE_PERIOD_SECS: i64 = 120;
+
             let mut mock = MockTimeSource::new();
             mock.expect_get_relative_time()
                 .return_const(Time::from_secs_since_unix_epoch(secs as u64).expect("failed to create Time object"));
@@ -246,7 +249,7 @@ mod keygen {
                 .expect("Failed to generate certificate");
             let not_before = cert.as_x509().not_before();
 
-            let expected_not_before: &Asn1TimeRef = &Asn1Time::from_unix(secs).expect("failed to convert time");
+            let expected_not_before: &Asn1TimeRef = &Asn1Time::from_unix(secs.saturating_sub(GRACE_PERIOD_SECS)).expect("failed to convert time");
             let diff = not_before.diff(expected_not_before).expect("failed to obtain time diff");
 
             assert_eq!(diff, openssl::asn1::TimeDiff{

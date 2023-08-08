@@ -7,3 +7,4 @@ description = "Test utility containing hard-coded keys"
 [dependencies]
 hex = "0.4.2"
 ic-protobuf = { path = "../../../protobuf" }
+ic-types = { path = "../../../types/types" }
