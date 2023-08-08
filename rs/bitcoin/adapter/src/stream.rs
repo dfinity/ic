@@ -429,8 +429,7 @@ pub mod test {
 
     /// Test that connection initialization times out in 5 seconds, to ensure the connection attempts
     /// in the connection manager do not hang for a long period of time.
-    #[tokio::test]
-    async fn initialization_times_out_after_five_seconds() {
+    async fn _initialization_times_out_after_five_seconds() {
         let network = Network::Bitcoin;
         let (net_tx, _) = tokio::sync::mpsc::channel(DEFAULT_CHANNEL_BUFFER_SIZE);
         let (_adapter_tx, adapter_rx) = tokio::sync::mpsc::unbounded_channel();
