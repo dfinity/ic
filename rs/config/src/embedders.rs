@@ -88,6 +88,14 @@ impl Default for FeatureFlags {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum MeteringType {
+    Old,
+    New,
+    /// for testing and benchmarking
+    None,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
     pub max_wasm_stack_size: usize,
@@ -124,6 +132,9 @@ pub struct Config {
 
     /// Flags to enable or disable features that are still experimental.
     pub feature_flags: FeatureFlags,
+
+    /// Instruction counting strategy
+    pub metering_type: MeteringType,
 
     // Maximum number of stable memory dirty pages that a single message execution
     // is allowed to produce.
@@ -174,6 +185,7 @@ impl Config {
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::const_default(),
+            metering_type: MeteringType::Old,
             stable_memory_dirty_page_limit: NumPages::new(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
             stable_memory_accessed_page_limit: NumPages::new(STABLE_MEMORY_ACCESSED_PAGE_LIMIT),
             min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,

@@ -38,7 +38,35 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = match EmbeddersConfig:
     FlagStatus::Enabled => 2_670_000,
     FlagStatus::Disabled => 1_044_000,
 };
-const TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS: u64 = 30;
+
+// instruction cost of executing inc method on the test canister
+fn inc_instruction_cost(_config: HypervisorConfig) -> u64 {
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let cs = instruction_to_cost(&wasmparser::Operator::I32Store {
+        memarg: wasmparser::MemArg {
+            align: 0,
+            max_align: 0,
+            offset: 0,
+            memory: 0,
+        },
+    });
+    let cl = instruction_to_cost(&wasmparser::Operator::I32Load {
+        memarg: wasmparser::MemArg {
+            align: 0,
+            max_align: 0,
+            offset: 0,
+            memory: 0,
+        },
+    });
+    let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
+    let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
+    let csys =
+        ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY_DATA_APPEND
+            .get();
+
+    5 * cc + cs + cl + ca + 2 * ccall + csys
+}
 
 /// This is a canister that keeps a counter on the heap and exposes various test
 /// methods. Exposed methods:
@@ -1067,7 +1095,7 @@ fn test_subnet_size_execute_message_cost() {
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = calculate_execution_cost(
         &config,
-        NumInstructions::from(TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS),
+        NumInstructions::from(inc_instruction_cost(HypervisorConfig::default())),
         reference_subnet_size,
     );
 

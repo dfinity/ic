@@ -1,4 +1,5 @@
-use ic_config::embedders::Config as EmbeddersConfig;
+use ic_config::embedders::{Config as EmbeddersConfig, MeteringType};
+use ic_config::subnet_config::SchedulerConfig;
 use ic_embedders::{
     wasm_utils::{
         validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, wasm_transform::Module,
@@ -11,6 +12,17 @@ use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
+
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+use ic_embedders::wasmtime_embedder::WasmtimeInstance;
+use ic_interfaces::execution_environment::HypervisorError;
+use ic_interfaces::execution_environment::SystemApi;
+use ic_replicated_state::Global;
+use ic_test_utilities::wasmtime_instance::WasmtimeInstanceBuilder;
+use ic_types::{
+    methods::{FuncRef, WasmMethod},
+    NumInstructions,
+};
 
 /// Assert what the output of wasm instrumentation should be using the [`insta`]
 /// crate.
@@ -206,4 +218,435 @@ fn test_exports_only_reserved_symbols() {
     for export in module.exports {
         assert!(RESERVED_SYMBOLS.contains(&export.name))
     }
+}
+
+fn instr_used(instance: &mut WasmtimeInstance<impl SystemApi>) -> u64 {
+    let instruction_counter = instance.instruction_counter();
+    let system_api = &instance.store_data().system_api;
+    system_api
+        .slice_instructions_executed(instruction_counter)
+        .get()
+}
+
+#[allow(clippy::field_reassign_with_default)]
+fn new_instance(wat: &str, instruction_limit: u64) -> WasmtimeInstance<impl SystemApi> {
+    let mut config = ic_config::embedders::Config::default();
+    config.metering_type = MeteringType::New;
+    config.dirty_page_overhead = SchedulerConfig::application_subnet().dirty_page_overhead;
+    WasmtimeInstanceBuilder::new()
+        .with_config(config)
+        .with_wat(wat)
+        .with_num_instructions(NumInstructions::new(instruction_limit))
+        .build()
+}
+
+fn func_ref(name: &str) -> FuncRef {
+    FuncRef::Method(WasmMethod::Update(name.to_string()))
+}
+fn add_one() -> String {
+    r#"(i64.add (i64.const 1))
+"#
+    .to_string()
+}
+
+// cost of the addition group (get glob, do adds, set glob)
+fn cost_a(n: u64) -> u64 {
+    let ca = instruction_to_cost(&wasmparser::Operator::I64Add);
+    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
+    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 })
+        + instruction_to_cost(&wasmparser::Operator::GlobalGet { global_index: 0 });
+
+    (ca + cc) * n + cg
+}
+
+#[test]
+fn metering_plain() {
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                global.get $g1
+                {body}
+                global.set $g1
+            )
+        )"#,
+        body = add_one().repeat(10)
+    );
+    let mut instance = new_instance(&wat, 1000);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I64(10));
+
+    let instructions_used = instr_used(&mut instance);
+    assert_eq!(instructions_used, cost_a(10));
+
+    // Now run the same with insufficient instructions
+    let mut instance = new_instance(&wat, instructions_used - 1);
+    let err = instance.run(func_ref("test")).unwrap_err();
+    assert_eq!(err, HypervisorError::InstructionLimitExceeded);
+
+    // with early return
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                global.get $g1
+                {p1}
+                global.set $g1
+                return
+                global.get $g1
+                {p2}
+                global.set $g1
+            )
+        )"#,
+        p1 = add_one().repeat(10),
+        p2 = add_one().repeat(10),
+    );
+    let mut instance = new_instance(&wat, 30);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I64(10));
+
+    let instructions_used = instr_used(&mut instance);
+    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+    assert_eq!(instructions_used, cost_a(10) + cret);
+
+    // Now run the same with insufficient instructions
+    let mut instance = new_instance(&wat, instructions_used - 1);
+    let err = instance.run(func_ref("test")).unwrap_err();
+    assert_eq!(err, HypervisorError::InstructionLimitExceeded);
+
+    // with early trap
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                global.get $g1
+                {p1}
+                global.set $g1
+                unreachable
+                global.get $g1
+                {p2}
+                global.set $g1
+            )
+        )"#,
+        p1 = add_one().repeat(10),
+        p2 = add_one().repeat(10),
+    );
+    let mut instance = new_instance(&wat, 30);
+    instance.run(func_ref("test")).unwrap_err();
+
+    let instructions_used = instr_used(&mut instance);
+    let ctrap = instruction_to_cost(&wasmparser::Operator::Unreachable);
+    assert_eq!(instructions_used, cost_a(10) + ctrap);
+}
+
+#[test]
+fn metering_block() {
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                (block $b1
+                    global.get $g1
+                    {body}
+                    global.set $g1
+                )
+            )
+        )"#,
+        body = add_one().repeat(10)
+    );
+
+    let mut instance = new_instance(&wat, 30);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I64(10));
+
+    let instructions_used = instr_used(&mut instance);
+    assert_eq!(instructions_used, cost_a(10));
+
+    // another one, more complex
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                global.get $g1
+                {p1}
+                global.set $g1
+
+                (block $b1
+                    global.get $g1
+                    {p2a}
+                    global.set $g1
+                    (block $b2
+                        br $b1
+                    )
+                    global.get $g1
+                    {p2b}
+                    global.set $g1
+                )
+
+                global.get $g1
+                {p3}
+                global.set $g1
+            )
+        )"#,
+        p1 = add_one().repeat(10),
+        p2a = add_one().repeat(100),
+        p2b = add_one().repeat(50),
+        p3 = add_one().repeat(10),
+    );
+
+    let mut instance = new_instance(&wat, 1_000);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I64(120));
+
+    let instructions_used = instr_used(&mut instance);
+    let cbr = instruction_to_cost(&wasmparser::Operator::Br { relative_depth: 1 });
+    assert_eq!(instructions_used, cost_a(100) + cost_a(10) * 2 + cbr);
+
+    // another one, with return
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                global.get $g1
+                {p1}
+                global.set $g1
+
+                (block $b1
+                    global.get $g1
+                    {p2a}
+                    global.set $g1
+                    (block $b2
+                        return
+                    )
+                    global.get $g1
+                    {p2b}
+                    global.set $g1
+                )
+
+                global.get $g1
+                {p3}
+                global.set $g1
+            )
+        )"#,
+        p1 = add_one().repeat(10),
+        p2a = add_one().repeat(100),
+        p2b = add_one().repeat(50),
+        p3 = add_one().repeat(10),
+    );
+
+    let mut instance = new_instance(&wat, 1_000);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I64(110));
+
+    let instructions_used = instr_used(&mut instance);
+    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+    assert_eq!(instructions_used, cost_a(100) + cost_a(10) + cret);
+}
+
+#[test]
+fn metering_if() {
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                global.get $g1
+                {p1}
+                global.set $g1
+                (i32.const 0)
+                (if
+                    (then
+                        global.get $g1
+                        {p2}
+                        global.set $g1
+                    )
+                    (else
+                        global.get $g1
+                        {p3}
+                        global.set $g1
+                    )
+                )
+                global.get $g1
+                {p4}
+                global.set $g1
+            )
+        )"#,
+        p1 = add_one().repeat(5),
+        p2 = add_one().repeat(10),
+        p3 = add_one().repeat(20),
+        p4 = add_one().repeat(30)
+    );
+
+    let mut instance = new_instance(&wat, 100);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I64(55));
+
+    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
+    let cif = instruction_to_cost(&wasmparser::Operator::If {
+        blockty: wasmparser::BlockType::Empty,
+    });
+
+    let instructions_used = instr_used(&mut instance);
+    assert_eq!(
+        instructions_used,
+        cost_a(5) + cost_a(20) + cost_a(30) + cc + cif
+    );
+
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                global.get $g1
+                {p1}
+                global.set $g1
+                (i32.const 1)
+                (if
+                    (then
+                        global.get $g1
+                        {p2}
+                        global.set $g1
+                        return
+                    )
+                    (else
+                        global.get $g1
+                        {p3}
+                        global.set $g1
+                    )
+                )
+                global.get $g1
+                {p4}
+                global.set $g1
+            )
+        )"#,
+        p1 = add_one().repeat(5),
+        p2 = add_one().repeat(10),
+        p3 = add_one().repeat(20),
+        p4 = add_one().repeat(30),
+    );
+
+    let mut instance = new_instance(&wat, 1000);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I64(15));
+
+    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+
+    let instructions_used = instr_used(&mut instance);
+    assert_eq!(instructions_used, cost_a(5) + cost_a(10) + cc + cif + cret);
+}
+
+#[test]
+fn metering_loop() {
+    let wat = format!(
+        r#"
+        (module
+            (global $g1 (export "g1") (mut i64) (i64.const 0))
+            (func $test (export "canister_update test")
+                (local $i i32)
+
+                global.get $g1
+                {p1}
+                global.set $g1
+                (loop $loop_a
+                    global.get $g1
+                    {p2}
+                    global.set $g1
+
+                    local.get $i
+                    (i32.add (i32.const 1))
+                    local.set $i
+
+                    local.get $i
+                    i32.const 5
+                    i32.lt_s
+                    br_if $loop_a
+
+                    global.get $g1
+                    {p3}
+                    global.set $g1
+                )
+                global.get $g1
+                {p4}
+                global.set $g1
+            )
+        )"#,
+        p1 = add_one().repeat(5),
+        p2 = add_one().repeat(10),
+        p3 = add_one().repeat(20),
+        p4 = add_one().repeat(30)
+    );
+
+    let mut instance = new_instance(&wat, 1000);
+    let res = instance.run(func_ref("test")).unwrap();
+
+    let g = &res.exported_globals;
+    assert_eq!(g[0], Global::I64(105));
+
+    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
+    let cbrif = instruction_to_cost(&wasmparser::Operator::BrIf { relative_depth: 0 });
+
+    let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
+    let clts = instruction_to_cost(&wasmparser::Operator::I32LtS);
+    let cset = instruction_to_cost(&wasmparser::Operator::LocalSet { local_index: 0 });
+    let cget = instruction_to_cost(&wasmparser::Operator::LocalGet { local_index: 0 });
+
+    let c_loop = cost_a(10) + cc * 2 + ca + cget + cset * 2 + clts + cbrif;
+
+    let instructions_used = instr_used(&mut instance);
+    assert_eq!(
+        instructions_used,
+        cost_a(5) + (c_loop) * 5 + cost_a(20) + cost_a(30)
+    );
+}
+
+#[test]
+fn test_metering_for_table_fill() {
+    let wat = r#"
+    (module
+        (table $table 101 funcref)
+        (elem func 0)
+        (func $test (export "canister_update test")
+          (table.fill 0 (i32.const 0) (ref.func 0) (i32.const 50))
+        )
+      )"#;
+
+    let mut instance = new_instance(wat, 1000000);
+    let _res = instance.run(func_ref("test")).unwrap();
+
+    let param1 = instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 });
+    let param2 = instruction_to_cost(&wasmparser::Operator::RefFunc { function_index: 0 });
+    let param3 = instruction_to_cost(&wasmparser::Operator::I32Const { value: 50 });
+    let table_fill = instruction_to_cost(&wasmparser::Operator::TableFill { table: 0 });
+    // The third parameter of table.fill is the number of elements to fill
+    // and we charge dynamically 1 for each byte written.
+    let dynamic_cost_table_fill = 50;
+
+    let instructions_used = instr_used(&mut instance);
+    assert_eq!(
+        instructions_used,
+        param1 + param2 + param3 + table_fill + dynamic_cost_table_fill
+    );
+
+    let mut instance = new_instance(wat, instructions_used);
+    instance.run(func_ref("test")).unwrap();
 }
