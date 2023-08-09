@@ -2210,7 +2210,7 @@ impl StateManagerImpl {
                 .metrics
                 .checkpoint_metrics
                 .make_checkpoint_step_duration
-                .with_label_values(&["wait_for_manifest"])
+                .with_label_values(&["wait_for_manifest_and_flush"])
                 .start_timer();
             // We need the previous manifest computation to complete because:
             //   1) We need it it speed up the next manifest computation using ManifestDelta
@@ -2219,6 +2219,12 @@ impl StateManagerImpl {
         }
 
         let previous_checkpoint_info = {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["previous_checkpoint_info"])
+                .start_timer();
             let states = self.states.read();
             states
                 .states_metadata
@@ -2241,9 +2247,17 @@ impl StateManagerImpl {
                 })
         };
 
-        // We don't need to persist the deltas to the tip because we
-        // flush deltas before calling this method, see flush_page_maps.
-        strip_page_map_deltas(state, self.get_fd_factory());
+        {
+            // We don't need to persist the deltas to the tip because we
+            // flush deltas before calling this method, see flush_page_maps.
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["strip_page_map_deltas"])
+                .start_timer();
+            strip_page_map_deltas(state, self.get_fd_factory());
+        }
         let result = {
             checkpoint::make_checkpoint(
                 state,
@@ -2254,16 +2268,8 @@ impl StateManagerImpl {
                 self.get_fd_factory(),
             )
         };
-        let elapsed = start.elapsed();
         let (cp_layout, checkpointed_state) = match result {
-            Ok(checkpointed_state) => {
-                info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
-                self.metrics
-                    .checkpoint_op_duration
-                    .with_label_values(&["create"])
-                    .observe(elapsed.as_secs_f64());
-                checkpointed_state
-            }
+            Ok(checkpointed_state) => checkpointed_state,
             Err(CheckpointError::AlreadyExists(_)) => {
                 warn!(
                     self.log,
@@ -2310,13 +2316,27 @@ impl StateManagerImpl {
                 err
             ),
         };
-        switch_to_checkpoint(state, &checkpointed_state);
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["switch_to_checkpoint"])
+                .start_timer();
+            switch_to_checkpoint(state, &checkpointed_state);
+        }
 
         // On the NNS subnet we never allow incremental manifest computation
         let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
         let manifest_delta = if is_nns {
             None
         } else {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["manifest_delta"])
+                .start_timer();
             previous_checkpoint_info.map(
                 |PreviousCheckpointInfo {
                      dirty_pages,
@@ -2333,24 +2353,40 @@ impl StateManagerImpl {
             )
         };
 
-        CreateCheckpointResult {
-            checkpointed_state,
-            state_metadata: StateMetadata {
-                checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                bundled_manifest: None,
-                state_sync_file_group: None,
-            },
-            compute_manifest_request: TipRequest::ComputeManifest {
-                checkpoint_layout: cp_layout,
-                manifest_delta: if is_nns { None } else { manifest_delta },
-                states: self.states.clone(),
-                persist_metadata_guard: self.persist_metadata_guard.clone(),
-            },
-            tip_requests: vec![TipRequest::DefragTip {
-                height,
-                page_map_types: PageMapType::list_all(state),
-            }],
-        }
+        let result = {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["create_checkpoint_result"])
+                .start_timer();
+            CreateCheckpointResult {
+                checkpointed_state,
+                state_metadata: StateMetadata {
+                    checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+                    bundled_manifest: None,
+                    state_sync_file_group: None,
+                },
+                compute_manifest_request: TipRequest::ComputeManifest {
+                    checkpoint_layout: cp_layout,
+                    manifest_delta: if is_nns { None } else { manifest_delta },
+                    states: self.states.clone(),
+                    persist_metadata_guard: self.persist_metadata_guard.clone(),
+                },
+                tip_requests: vec![TipRequest::DefragTip {
+                    height,
+                    page_map_types: PageMapType::list_all(state),
+                }],
+            }
+        };
+
+        let elapsed = start.elapsed();
+        info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
+        self.metrics
+            .checkpoint_op_duration
+            .with_label_values(&["create"])
+            .observe(elapsed.as_secs_f64());
+        result
     }
 
     pub fn test_only_send_wait_to_tip_channel(&self, sender: Sender<()>) {

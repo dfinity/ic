@@ -74,10 +74,16 @@ pub(crate) fn make_checkpoint(
         recv.recv().unwrap()?
     };
 
-    // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
-    let (send, recv) = unbounded();
-    tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
-    recv.recv().unwrap();
+    {
+        // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
+        let _timer = metrics
+            .make_checkpoint_step_duration
+            .with_label_values(&["wait_for_reflinking"])
+            .start_timer();
+        let (send, recv) = unbounded();
+        tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
+        recv.recv().unwrap();
+    }
 
     let state = {
         let _timer = metrics
