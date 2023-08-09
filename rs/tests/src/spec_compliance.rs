@@ -1,12 +1,15 @@
+use crate::boundary_nodes_integration::boundary_nodes::exec_ssh_command;
 use crate::canister_http::lib::get_universal_vm_address;
 use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    await_boundary_node_healthy, HasDependencies, HasPublicApiUrl, HasRegistryLocalStore,
-    HasTopologySnapshot, IcNodeContainer, SubnetSnapshot, TopologySnapshot,
+    HasDependencies, HasPublicApiUrl, HasRegistryLocalStore, HasTopologySnapshot, IcNodeContainer,
+    SubnetSnapshot, TopologySnapshot,
 };
+use crate::driver::test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF};
 use crate::driver::universal_vm::UniversalVm;
+use anyhow::bail;
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -120,8 +123,25 @@ pub fn config_impl(env: TestEnv) {
         })
     })
     .expect("Httpbin server should respond to incoming requests!");
-
-    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
+    // TODO(VER-2435): clean up the remaining code in this function
+    let boundary_node = env
+        .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    retry(env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
+        if let Ok(true) = boundary_node.status_is_healthy() {
+            Ok(())
+        } else {
+            exec_ssh_command(
+                &boundary_node,
+                "sudo systemctl restart control-plane.service",
+            )
+            .expect("Could not restart control-plane.service");
+            bail!("BN didn't report healthy, control-plane.service restarted")
+        }
+    })
+    .expect("BN did not come up!");
 }
 
 fn find_subnet(
