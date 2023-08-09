@@ -543,16 +543,16 @@ impl StateLayout {
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
-        sync_and_mark_files_readonly(scratchpad, &self.metrics, thread_pool).map_err(|err| {
-            LayoutError::IoError {
+        sync_and_mark_files_readonly(&self.log, scratchpad, &self.metrics, thread_pool).map_err(
+            |err| LayoutError::IoError {
                 path: scratchpad.to_path_buf(),
                 message: format!(
                     "Could not sync and mark readonly scratchpad for checkpoint {}",
                     height
                 ),
                 io_err: err,
-            }
-        })?;
+            },
+        )?;
         std::fs::rename(scratchpad, cp_path).map_err(|err| {
             if is_already_exists_err(&err) {
                 LayoutError::AlreadyExists(height)
@@ -1863,6 +1863,7 @@ fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 /// Recursively set permissions to readonly for all files under the given
 /// `path`.
 fn sync_and_mark_files_readonly(
+    #[allow(unused)] log: &ReplicaLogger,
     path: &Path,
     #[allow(unused)] metrics: &StateLayoutMetrics,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
@@ -1898,6 +1899,7 @@ fn sync_and_mark_files_readonly(
         metrics
             .state_layout_syncfs_duration
             .observe(elapsed.as_secs_f64());
+        info!(log, "syncfs took {:?}", elapsed);
     }
     Ok(())
 }
