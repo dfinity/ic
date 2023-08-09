@@ -455,3 +455,33 @@ pub fn compute_fork_digest(left_digest: &Digest, right_digest: &Digest) -> Diges
 pub fn empty_subtree_hash() -> Digest {
     Hasher::for_domain(DOMAIN_HASHTREE_EMPTY_SUBTREE).finalize()
 }
+
+/// This error indicates that the algorithm exceeded the recursion depth limit.
+#[derive(thiserror::Error, Debug, PartialEq)]
+#[error("The algorithm failed due to too deep recursion (depth={0})")]
+pub struct TooDeepRecursion(pub u32);
+
+/// Recomputes root hash of the full tree that this mixed tree was
+/// constructed from.
+pub fn mixed_hash_tree_digest_recursive(tree: &MixedHashTree) -> Result<Digest, TooDeepRecursion> {
+    fn digest_impl(t: &MixedHashTree, depth: u32) -> Result<Digest, TooDeepRecursion> {
+        if depth as usize > MAX_HASH_TREE_DEPTH {
+            return Err(TooDeepRecursion(depth));
+        }
+        let result = match t {
+            MixedHashTree::Empty => empty_subtree_hash(),
+            MixedHashTree::Fork(lr) => compute_fork_digest(
+                &digest_impl(&lr.0, depth + 1)?,
+                &digest_impl(&lr.1, depth + 1)?,
+            ),
+            MixedHashTree::Labeled(label, subtree) => {
+                compute_node_digest(label, &digest_impl(subtree, depth + 1)?)
+            }
+            MixedHashTree::Leaf(buf) => compute_leaf_digest(&buf[..]),
+            MixedHashTree::Pruned(digest) => digest.clone(),
+        };
+        Ok(result)
+    }
+
+    digest_impl(tree, 1)
+}

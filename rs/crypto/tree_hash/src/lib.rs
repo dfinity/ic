@@ -447,15 +447,64 @@ impl MixedHashTree {
     /// Recomputes root hash of the full tree that this mixed tree was
     /// constructed from.
     pub fn digest(&self) -> Digest {
-        match self {
-            Self::Empty => tree_hash::empty_subtree_hash(),
-            Self::Fork(lr) => tree_hash::compute_fork_digest(&lr.0.digest(), &lr.1.digest()),
-            Self::Labeled(label, subtree) => {
-                tree_hash::compute_node_digest(label, &subtree.digest())
-            }
-            Self::Leaf(buf) => tree_hash::compute_leaf_digest(&buf[..]),
-            Self::Pruned(digest) => digest.clone(),
+        #[derive(Debug)]
+        enum StackItem<'a> {
+            Expand(&'a MixedHashTree),
+            Collect(&'a MixedHashTree),
         }
+
+        impl<'a> StackItem<'a> {
+            fn to_collect(&self) -> Self {
+                match self {
+                    Self::Expand(t) => Self::Collect(t),
+                    Self::Collect(_) => panic!("expected Expand, got Collect"),
+                }
+            }
+        }
+
+        let mut stack: Vec<StackItem<'_>> = Vec::new();
+        let mut digests: Vec<Digest> = Vec::new();
+
+        stack.push(StackItem::Expand(self));
+
+        while let Some(t) = stack.pop() {
+            match t {
+                StackItem::Expand(Self::Fork(lr)) => {
+                    stack.push(t.to_collect());
+                    stack.push(StackItem::Expand(&lr.1));
+                    stack.push(StackItem::Expand(&lr.0));
+                }
+                StackItem::Expand(Self::Labeled(_, subtree)) => {
+                    stack.push(t.to_collect());
+                    stack.push(StackItem::Expand(subtree));
+                }
+                StackItem::Collect(Self::Fork(_)) => {
+                    let right = digests.pop().expect("bug: missing right subtree digest");
+                    let left = digests.pop().expect("bug: missing left subtree digest");
+                    digests.push(tree_hash::compute_fork_digest(&left, &right));
+                }
+                StackItem::Collect(Self::Labeled(label, _)) => {
+                    let subtree_digest = digests.pop().expect("bug: missing subtree digest");
+                    let labeled_digest = tree_hash::compute_node_digest(label, &subtree_digest);
+                    digests.push(labeled_digest);
+                }
+                StackItem::Collect(Self::Leaf(buf)) => {
+                    digests.push(tree_hash::compute_leaf_digest(&buf[..]))
+                }
+                StackItem::Collect(Self::Pruned(digest)) => digests.push(digest.clone()),
+                StackItem::Collect(Self::Empty) => digests.push(tree_hash::empty_subtree_hash()),
+                t /* Expand of Leaf, Pruned or Empty */ => stack.push(t.to_collect()),
+            }
+        }
+
+        assert_eq!(
+            digests.len(),
+            1,
+            "bug: reduced tree to not exactly one digest: {digests:?}"
+        );
+        assert!(stack.is_empty(), "bug: stack is not empty: {stack:?}");
+
+        digests[0].clone()
     }
 
     /// Finds a label in a hash tree.
