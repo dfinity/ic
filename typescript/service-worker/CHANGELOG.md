@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased 
+## Unreleased
+
+## 1.8.4
+
+- upgrade response verification package to version 1.0.0
 
 ## 1.8.3
 
@@ -28,9 +32,9 @@
 
 - Do not throw exceptions for response bodies larger than 10mb
 
-## 1.7.0 
+## 1.7.0
 
-- Integrate verification logic with `@dfinity/response-verification` package 
+- Integrate verification logic with `@dfinity/response-verification` package
 
 ## 1.6.1 (2023-03-26)
 
