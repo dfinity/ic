@@ -144,7 +144,10 @@ pub(crate) fn assert_subnet_is_healthy(
     msg: &str,
     logger: &Logger,
 ) {
-    // Confirm that ALL nodes are now healthy and running on the new version
+    info!(
+        logger,
+        "Confirm that ALL nodes are now healthy and running on the new version {target_version}"
+    );
     for node in subnet {
         assert_assigned_replica_version(node, &target_version, logger.clone());
         info!(

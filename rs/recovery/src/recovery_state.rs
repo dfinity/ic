@@ -185,6 +185,8 @@ mod tests {
                 upload_node: None,
                 ecdsa_subnet_id: Some(fake_subnet_id()),
                 next_step: None,
+                upgrade_image_url: None,
+                upgrade_image_hash: None,
             }),
             neuron_args: None,
         }
