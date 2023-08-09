@@ -1842,6 +1842,22 @@ message Governance {
   // that it should finish before being called again.
   optional bool spawning_neurons = 19;
 
+  // Records that making an OpenSnsTokenSwap (OSTS) proposal is in progress. We
+  // only want one of these to be happening at the same time, because otherwise,
+  // it is error prone to enforce that open OSTS proposals are unique. In
+  // particular, the result of checking that the proposal currently being made
+  // would be unique is liable to becoming invalid during an .await.
+  //
+  // This is a temporary measure, because OSTS is part of the SNS flow that will
+  // be replaced by 1-proposal very soon.
+  message MakingSnsProposal {
+    ic_nns_common.pb.v1.NeuronId proposer_id = 1;
+    ic_base_types.pb.v1.PrincipalId caller = 2;
+    Proposal proposal = 3;
+  }
+
+  MakingSnsProposal making_sns_proposal = 20;
+
   reserved 6;
   reserved "authz";
 }

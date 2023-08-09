@@ -7,7 +7,7 @@ use crate::{
         add_or_remove_node_provider::Change,
         governance::{
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-            GovernanceCachedMetrics, NeuronInFlightCommand,
+            GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
         },
         governance_error::ErrorType,
         manage_neuron,
@@ -201,6 +201,22 @@ pub const KNOWN_NEURON_DESCRIPTION_MAX_LEN: usize = 3000;
 const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
+
+// Wrapping MakeProposalLock in Option seems to cause #[must_use] to not have
+// the desired effect. Therefore, #[must_use] is kind of useless here, except to
+// convey intent to the reader.
+#[must_use]
+#[derive(Debug)]
+struct MakeProposalLock {
+    governance: *mut Governance,
+}
+
+impl Drop for MakeProposalLock {
+    fn drop(&mut self) {
+        let governance: &mut Governance = unsafe { &mut *self.governance };
+        governance.unlock_make_sns_proposal();
+    }
+}
 
 // The default values for network economics (until we initialize it).
 // Can't implement Default since it conflicts with Prost's.
@@ -5204,17 +5220,17 @@ impl Governance {
 
     /// There can be at most one OpenSnsTokenSwap proposal at a time.
     /// Of course, such proposals must be valid on their own as well.
-    #[allow(unreachable_code)]
     async fn validate_open_sns_token_swap(
         &mut self,
-        _open_sns_token_swap: &OpenSnsTokenSwap,
+        open_sns_token_swap: &OpenSnsTokenSwap,
     ) -> Result<(), GovernanceError> {
         // TODO(NNS1-2464): Re-enable OpenSnsTokenSwap proposals.
-        // TODO(NNS1-2464): Remove allow(unreachable_code) above.
-        return Err(GovernanceError::new_with_message(
-            ErrorType::Unavailable,
-            "OpenSnsTokenSwap proposals are temporary unavailable.".to_string(),
-        ));
+        if !open_sns_token_swap_is_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "OpenSnsTokenSwap proposals are temporary unavailable.".to_string(),
+            ));
+        }
 
         /*
         TODO(NNS1-1919): Replace the body of this function with the chunk of
@@ -5229,7 +5245,7 @@ impl Governance {
         */
 
         // Inspect open_sns_token_swap on its own.
-        validate_open_sns_token_swap(_open_sns_token_swap, &mut *self.env).await?;
+        validate_open_sns_token_swap(open_sns_token_swap, &mut *self.env).await?;
 
         // Enforce that it would be unique.
         let other_proposal_ids =
@@ -5326,12 +5342,111 @@ impl Governance {
             .collect()
     }
 
+    /// Returns Ok(false) if proposal is not an OpenSnsTokenSwap (OSTS).
+    /// Whereas, if there is already such a proposal being made, returns Err.
+    /// Otherwise, locks, preventing other OSTS proposals from being made, and
+    /// returns Ok(true).
+    ///
+    /// The returned object should almost certinaly be stored in a local
+    /// variable, with a name like named _unlock_on_return. Example:
+    ///
+    /// ```
+    /// let _unlock_on_return = self.lock_make_open_sns_token_swap_proposal(
+    ///     proposer_id,
+    ///     caller,
+    ///     proposal,
+    /// )?;
+    /// ```
+    ///
+    /// Reason:
+    ///
+    /// It is important to hang onto the return value, even though the caller
+    /// would not directly do anything with it. This is because when the return
+    /// value is Ok(Some(...)), it holds onto the lock until it is dropped.
+    ///
+    /// (TODO: Figure out how to use #[must_use] to enforce storing the return
+    /// value in _unlock_on_return or similar.)
+    ///
+    /// In order oo hang onto the return value, it must be assigned to a local
+    /// variable with a name like "_unlock_on_return". Because of clippy, the
+    /// variable name must begin with an underscore. At the same time, the name
+    /// must NOT be "_" (i.e. a single underscore), because that gets dropped
+    /// immediately.
+    fn lock_make_sns_proposal(
+        &mut self,
+        proposer_id: &NeuronId,
+        caller: &PrincipalId,
+        proposal: &Proposal,
+    ) -> Result<Option<MakeProposalLock>, GovernanceError> {
+        // No need to acquire lock for non-OpenSnsTokenSwap proposals.
+        match proposal.action {
+            Some(Action::OpenSnsTokenSwap(_)) => (),
+            _ => return Ok(None),
+        }
+
+        // Return Err if another OpenSnsTokenSwap proposal is being made.
+        match &self.proto.making_sns_proposal {
+            None => (),
+            Some(making_sns_proposal) => {
+                // Someone else is already making a proposal right now.
+                // Therefore, tell the caller to try again later.
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::Unavailable,
+                    format!(
+                        "Another OpenSnsTokenSwap proposal is being made right now. \
+                         Please, try again later. MakeProposalInProgress:\n{:#?}",
+                        making_sns_proposal,
+                    ),
+                ));
+            }
+        }
+
+        // Record (in GovernanceProto) that the current operation is in progress.
+        let proposer_id = Some(*proposer_id);
+        let caller = Some(*caller);
+        let proposal = Some(proposal.clone());
+        self.proto.making_sns_proposal = Some(MakingSnsProposal {
+            proposer_id,
+            caller,
+            proposal,
+        });
+
+        // Give caller an object that will automatically unlock when the
+        // returned object gets dropped.
+        let governance: *mut Governance = self;
+        Ok(Some(MakeProposalLock { governance }))
+    }
+
+    fn unlock_make_sns_proposal(&mut self) {
+        let field = &mut self.proto.making_sns_proposal;
+
+        // Log an error if we were not already locked.
+        match field {
+            Some(_) => (),
+            None => {
+                println!(
+                    "{}WARNING: unlock_make_sns_proposal was called, \
+                     but we are not locked.",
+                    LOG_PREFIX,
+                );
+            }
+        }
+
+        // Perform the actual modification.
+        *field = None;
+
+        // Log that we are now unlocking.
+        println!("{}Unlocked making OpenSnsTokenSwap proposals.", LOG_PREFIX);
+    }
+
     pub async fn make_proposal(
         &mut self,
         proposer_id: &NeuronId,
         caller: &PrincipalId,
         proposal: &Proposal,
     ) -> Result<ProposalId, GovernanceError> {
+        let _unlock_on_return = self.lock_make_sns_proposal(proposer_id, caller, proposal)?;
+
         let topic = proposal.topic();
         let now_seconds = self.env.now();
 
@@ -8376,4 +8491,14 @@ impl FromStr for BitcoinNetwork {
 pub struct BitcoinSetConfigProposal {
     pub network: BitcoinNetwork,
     pub payload: Vec<u8>,
+}
+
+// TODO(NNS1-2464): Re-enable OpenSnsTokenSwap proposals.
+#[cfg(feature = "test")]
+fn open_sns_token_swap_is_enabled() -> bool {
+    true
+}
+#[cfg(not(feature = "test"))]
+fn open_sns_token_swap_is_enabled() -> bool {
+    false
 }

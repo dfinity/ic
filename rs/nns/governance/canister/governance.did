@@ -139,6 +139,7 @@ type Followees = record { followees : vec NeuronId };
 type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
+  making_sns_proposal : opt MakingSnsProposal;
   most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
   maturity_modulation_last_updated_at_timestamp_seconds : opt nat64;
   wait_for_quiet_threshold_seconds : nat64;
@@ -228,6 +229,11 @@ type ListProposalInfo = record {
 };
 type ListProposalInfoResponse = record { proposal_info : vec ProposalInfo };
 type MakeProposalResponse = record { proposal_id : opt NeuronId };
+type MakingSnsProposal = record {
+  proposal : opt Proposal;
+  caller : opt principal;
+  proposer_id : opt NeuronId;
+};
 type ManageNeuron = record {
   id : opt NeuronId;
   command : opt Command;
