@@ -96,10 +96,11 @@ RUN sudo pip3 install --ignore-installed -r /tmp/requirements.txt
 RUN sudo pip3 install pre-commit
 
 # Add buf
-ARG BUF_BIN="/usr/local/bin"
-ARG BUF_VERSION="1.21.0"
-RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" \
-    -o "${BUF_BIN}/buf" && chmod +x "${BUF_BIN}/buf"
+ARG BUF_BIN="/usr/local/bin/buf"
+ARG BUF_VERSION="1.25.1"
+RUN curl -sSL "https://github.com/bufbuild/buf/releases/download/v${BUF_VERSION}/buf-$(uname -s)-$(uname -m)" -o "${BUF_BIN}" && \
+    echo "3e013b7b7d204ee0ca2952da076fd3fd6e014d11aa92e6262a4343bd61747f34  ${BUF_BIN}" | shasum -a 256 -c - && \
+    chmod +x "${BUF_BIN}"
 
 # Add zshrc generated from zsh-newuser-install (option 2)
 COPY --chown=ubuntu:ubuntu ./gitlab-ci/container/files/zshrc /home/ubuntu/.zshrc
