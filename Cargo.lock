@@ -7011,6 +7011,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "proptest",
  "rand 0.8.5",
+ "thiserror",
 ]
 
 [[package]]

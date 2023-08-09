@@ -3,7 +3,9 @@ use ic_crypto_tree_hash::{
     flatmap, lookup_path, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, LabeledTree::*,
     MixedHashTree, WitnessGenerator,
 };
-use ic_crypto_tree_hash_test_utils::hash_tree_builder_from_labeled_tree;
+use ic_crypto_tree_hash_test_utils::{
+    hash_tree_builder_from_labeled_tree, mixed_hash_tree_digest_recursive,
+};
 use ic_types_test_utils::ids::message_test_id;
 
 fn new_request_status_tree(num_subtrees: usize) -> LabeledTree<Vec<u8>> {
@@ -198,8 +200,20 @@ pub fn criterion_benchmark(c: &mut Criterion) {
                 c.benchmark_group("compute_digest");
 
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
-                b.iter(|| black_box(mixed_hash_tree.digest()));
+                b.iter(|| {
+                    black_box(
+                        mixed_hash_tree_digest_recursive(&mixed_hash_tree)
+                            .expect("too deep recursion"),
+                    )
+                });
             });
+
+            g.bench_function(
+                BenchmarkId::new("mixed_hash_tree_iterative", num_subtrees),
+                |b| {
+                    b.iter(|| black_box(mixed_hash_tree.digest()));
+                },
+            );
 
             g.bench_function(BenchmarkId::new("witness", num_subtrees), |b| {
                 b.iter(|| {
