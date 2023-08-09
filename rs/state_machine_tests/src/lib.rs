@@ -10,6 +10,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::{
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_test_utils_keys::public_keys::valid_node_signing_public_key;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 pub use ic_error_types::{ErrorCode, UserError};
@@ -43,8 +44,9 @@ use ic_protobuf::types::v1::SubnetId as SubnetIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::subnet::SubnetListRegistry;
 use ic_registry_keys::{
-    make_canister_migrations_record_key, make_ecdsa_signing_subnet_list_key, make_node_record_key,
-    make_provisional_whitelist_record_key, make_routing_table_record_key, ROOT_SUBNET_ID_KEY,
+    make_canister_migrations_record_key, make_crypto_node_key, make_ecdsa_signing_subnet_list_key,
+    make_node_record_key, make_provisional_whitelist_record_key, make_routing_table_record_key,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -74,7 +76,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubn
 pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{
     canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId, CombinedThresholdSig,
-    CombinedThresholdSigOf, Signable, Signed,
+    CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::messages::{CallbackId, Certificate, Response};
@@ -210,6 +212,15 @@ fn make_nodes_registry(
                 &make_node_record_key(*node_id),
                 registry_version,
                 Some(node_record),
+            )
+            .unwrap();
+
+        let node_key = valid_node_signing_public_key();
+        data_provider
+            .add(
+                &make_crypto_node_key(*node_id, KeyPurpose::NodeSigning),
+                registry_version,
+                Some(node_key),
             )
             .unwrap();
     }
