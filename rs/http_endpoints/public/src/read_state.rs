@@ -186,7 +186,6 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
                 &read_state.paths,
                 &targets,
                 effective_canister_id,
-                &metrics,
             ) {
                 return Ok(make_plaintext_response(status, message));
             }
@@ -239,7 +238,6 @@ fn verify_paths(
     paths: &[Path],
     targets: &CanisterIdSet,
     effective_canister_id: CanisterId,
-    metrics: &HttpHandlerMetrics,
 ) -> Result<(), HttpError> {
     let mut request_status_id: Option<MessageId> = None;
 
@@ -252,11 +250,6 @@ fn verify_paths(
     for path in paths {
         match path.as_slice() {
             [b"time"] => {}
-            [b"canister", canister_id, b"controller"] => {
-                let canister_id = parse_canister_id(canister_id)?;
-                verify_canister_ids(&canister_id, &effective_canister_id)?;
-                metrics.read_state_canister_controller_total.inc();
-            }
             [b"canister", canister_id, b"controllers" | b"module_hash"] => {
                 let canister_id = parse_canister_id(canister_id)?;
                 verify_canister_ids(&canister_id, &effective_canister_id)?;
@@ -399,13 +392,11 @@ fn can_read_canister_metadata(
 mod test {
     use crate::{
         common::test::{array, assert_cbor_ser_equal, bytes, int},
-        metrics::HttpHandlerMetrics,
         read_state::{can_read_canister_metadata, verify_paths},
         HttpError,
     };
     use hyper::StatusCode;
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
-    use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{
@@ -541,7 +532,6 @@ mod test {
                 &[Path::from(Label::from("time"))],
                 &CanisterIdSet::all(),
                 canister_test_id(1),
-                &HttpHandlerMetrics::new(&MetricsRegistry::default())
             ),
             Ok(())
         );
@@ -563,7 +553,6 @@ mod test {
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1),
-                &HttpHandlerMetrics::new(&MetricsRegistry::default())
             ),
             Ok(())
         );
@@ -576,7 +565,6 @@ mod test {
             ],
             &CanisterIdSet::all(),
             canister_test_id(1),
-            &HttpHandlerMetrics::new(&MetricsRegistry::default())
         )
         .is_err());
     }
