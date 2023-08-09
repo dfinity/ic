@@ -8,7 +8,7 @@ use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlg
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry, Timer};
 use ic_types::{
-    consensus::{dkg::Summary, BlockPayload, HasHeight},
+    consensus::{dkg::Summary, HasHeight},
     crypto::threshold_sig::ni_dkg::{
         errors::load_transcript_error::DkgLoadTranscriptError, NiDkgId, NiDkgTag,
         NiDkgTargetSubnet, NiDkgTranscript,
@@ -205,8 +205,9 @@ impl DkgKeyManager {
         let cup = cache.catch_up_package();
         let cup_height = Some(cup.height());
         if self.last_cup_height < cup_height {
-            let summary = BlockPayload::from(cup.content.block.into_inner().payload).into_summary();
-            self.load_transcripts_from_summary(Arc::new(summary.dkg));
+            let block = cup.content.block.into_inner();
+            let summary = block.payload.as_ref().as_summary();
+            self.load_transcripts_from_summary(&summary.dkg);
             self.last_cup_height = cup_height;
         }
 
@@ -215,9 +216,8 @@ impl DkgKeyManager {
         // last seen height.
         let summary_block = cache.summary_block();
         if self.last_dkg_summary_height < Some(summary_block.height) {
-            let summary = BlockPayload::from(summary_block.payload).into_summary();
+            let summary = summary_block.payload.as_ref().as_summary();
             self.update_dkg_metrics(&summary.dkg);
-            let dkg_summary = Arc::new(summary.dkg);
             // Note that the order of these two calls is critical. We remove DKG keys that
             // are no longer relevant by telling the CSP which transcripts are still
             // relevant. However, over time, we may load new transcripts that are relevant.
@@ -230,7 +230,7 @@ impl DkgKeyManager {
             // the next transcript before the previous removal (which would consider the
             // next transcript key irrelevant and remove it).
             self.delete_inactive_keys(pool_reader);
-            self.load_transcripts_from_summary(Arc::clone(&dkg_summary));
+            self.load_transcripts_from_summary(&summary.dkg);
             self.last_dkg_summary_height = Some(summary_block.height);
         }
     }
@@ -301,7 +301,7 @@ impl DkgKeyManager {
     /// being loaded already. Note this functionality relies on the assumption,
     /// that CSP does not reload transcripts, which were successfully loaded
     /// before.
-    fn load_transcripts_from_summary(&mut self, summary: Arc<Summary>) {
+    fn load_transcripts_from_summary(&mut self, summary: &Summary) {
         let transcripts_to_load: Vec<_> = {
             let current_interval_start = summary.height;
             let next_interval_start = summary.get_next_start_height();
@@ -431,16 +431,16 @@ impl DkgKeyManager {
         // transcripts in the latest CUP and in all subsequent finalized summary blocks.
         let mut transcripts_to_retain: HashSet<NiDkgTranscript> = HashSet::new();
         let mut dkg_summary = Some(
-            BlockPayload::from(
-                pool_reader
-                    .as_cache()
-                    .catch_up_package()
-                    .content
-                    .block
-                    .into_inner()
-                    .payload,
-            )
-            .into_summary(),
+            pool_reader
+                .as_cache()
+                .catch_up_package()
+                .content
+                .block
+                .into_inner()
+                .payload
+                .as_ref()
+                .as_summary()
+                .clone(),
         );
 
         while let Some(summary) = dkg_summary {
@@ -451,7 +451,7 @@ impl DkgKeyManager {
 
             dkg_summary = pool_reader
                 .get_finalized_block(next_summary_height)
-                .map(|b| BlockPayload::from(b.payload).into_summary());
+                .map(|b| b.payload.as_ref().as_summary().clone());
         }
 
         let crypto = self.crypto.clone();
@@ -588,9 +588,8 @@ mod tests {
 
                 // Emulate the first invocation of the dkg key manager and make sure all
                 // transcripts (exactly 2) were loaded from the genesis summary.
-                let dkg_summary = BlockPayload::from(pool.get_cache().finalized_block().payload)
-                    .into_summary()
-                    .dkg;
+                let block = pool.get_cache().finalized_block();
+                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
                 assert_eq!(dkg_summary.height, Height::from(0));
                 key_manager.on_state_change(&PoolReader::new(&pool));
                 key_manager.sync();
@@ -624,9 +623,8 @@ mod tests {
                     Height::from(0)
                 );
 
-                let dkg_summary = BlockPayload::from(pool.get_cache().finalized_block().payload)
-                    .into_summary()
-                    .dkg;
+                let block = pool.get_cache().finalized_block();
+                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
                 assert_eq!(dkg_summary.height, Height::from(2 * (dkg_interval_len + 1)));
                 let summary_2_transcripts = dkg_summary
                     .current_transcripts()
@@ -655,9 +653,8 @@ mod tests {
                     pool.get_cache().catch_up_package().height(),
                     Height::from(3 * (dkg_interval_len + 1))
                 );
-                let dkg_summary = BlockPayload::from(pool.get_cache().finalized_block().payload)
-                    .into_summary()
-                    .dkg;
+                let block = pool.get_cache().finalized_block();
+                let dkg_summary = &block.payload.as_ref().as_summary().dkg;
                 assert_eq!(dkg_summary.height, Height::from(3 * (dkg_interval_len + 1)));
                 let summary_3_transcripts = dkg_summary
                     .current_transcripts()

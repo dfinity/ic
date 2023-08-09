@@ -61,11 +61,7 @@ impl<'a> PoolReader<'a> {
     /// Find ancestor blocks of `block`, and return an iterator that starts
     /// from `block` and ends when a parent is not found (e.g. genesis).
     pub fn chain_iterator(&self, block: Block) -> Box<dyn Iterator<Item = Block> + 'a> {
-        Box::new(ChainIterator::new(
-            self.pool,
-            block,
-            Some(self.get_highest_catch_up_package().content.block),
-        ))
+        self.cache.chain_iterator(self.pool, block)
     }
 
     /// Get the range of ancestor blocks of `block` specified (inclusively) by
@@ -506,10 +502,13 @@ impl<'a> PoolReader<'a> {
         self.chain_iterator(self.get_finalized_tip())
             .take_while(|block| !block.payload.is_summary())
             .flat_map(|block| {
-                BlockPayload::from(block.payload)
-                    .into_data()
+                block
+                    .payload
+                    .as_ref()
+                    .as_data()
                     .dealings
                     .messages
+                    .clone()
                     .into_iter()
             })
             .map(|message| (message.signature.signer, message.content.dealing))

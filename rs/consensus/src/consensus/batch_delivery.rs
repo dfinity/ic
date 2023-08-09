@@ -28,7 +28,7 @@ use ic_types::{
     batch::{Batch, BatchMessages},
     consensus::{
         ecdsa::{self, CompletedSignature, EcdsaBlockReader},
-        Block, BlockPayload,
+        Block,
     },
     crypto::{
         canister_threshold_sig::MasterEcdsaPublicKey,
@@ -138,9 +138,10 @@ pub fn deliver_batches(
                 let batch_messages = if block.payload.is_summary() {
                     BatchMessages::default()
                 } else {
-                    let batch_payload = BlockPayload::from(block.payload).into_data().batch;
-                    batch_stats.add_from_payload(&batch_payload);
+                    let batch_payload = &block.payload.as_ref().as_data().batch;
+                    batch_stats.add_from_payload(batch_payload);
                     batch_payload
+                        .clone()
                         .into_messages()
                         .map_err(|err| {
                             error!(log, "batch payload deserialization failed: {:?}", err);

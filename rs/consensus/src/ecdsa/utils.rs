@@ -112,8 +112,17 @@ impl EcdsaBlockReader for EcdsaBlockReaderImpl {
         &self,
         transcript_ref: &TranscriptRef,
     ) -> Result<IDkgTranscript, TranscriptLookupError> {
-        let ecdsa_payload = match self.chain.ecdsa_payload(transcript_ref.height) {
-            Ok(ecdsa_payload) => ecdsa_payload,
+        let ecdsa_payload = match self.chain.get_block_by_height(transcript_ref.height) {
+            Ok(block) => {
+                if let Some(ecdsa_payload) = block.payload.as_ref().as_ecdsa() {
+                    ecdsa_payload
+                } else {
+                    return Err(format!(
+                        "transcript(): chain look up failed {:?}: EcdsaPayload not found",
+                        transcript_ref
+                    ));
+                }
+            }
             Err(err) => {
                 return Err(format!(
                     "transcript(): chain look up failed {:?}: {:?}",

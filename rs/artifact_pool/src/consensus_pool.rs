@@ -11,8 +11,8 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
     artifact_pool::{ChangeResult, MutablePool, ValidatedPoolReader},
     consensus_pool::{
-        ChainIterator, ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain,
-        ConsensusPool, ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
+        ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
+        ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     time_source::TimeSource,
@@ -25,7 +25,7 @@ use ic_types::{
     artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
 };
 use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
-use std::{cmp::Ordering, marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 #[derive(Debug, Clone)]
 pub enum PoolSectionOp<T> {
@@ -537,7 +537,8 @@ impl ConsensusPoolImpl {
 
         if let Some(proposal) = finalized_proposal {
             artifacts_for_backup.extend(
-                ChainIterator::new(self, proposal.content.into_inner(), None)
+                self.as_cache()
+                    .chain_iterator(self, proposal.content.into_inner())
                     .take_while(|block| block.height > latest_finalization_height)
                     .filter_map(|block| {
                         find_proposal_by(block.height, &|proposal: &BlockProposal| {
@@ -870,83 +871,6 @@ impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
                 )
                 .chain(random_tape_iterator),
         )
-    }
-}
-
-/// An iterator for block ancestors.
-/// TODO: this is currently used only for ConsensusBlockChainImpl. Migrate
-/// other call sites from ChainIterator to BlockChainIterator.
-#[allow(dead_code)]
-pub struct BlockChainIterator<'a> {
-    consensus_pool: &'a dyn ConsensusPool,
-    summary_height: Height,
-    cursor: Option<Block>,
-}
-
-impl<'a> BlockChainIterator<'a> {
-    /// Return an iterator that iterates block ancestors, going backwards
-    /// from the `from_block` to the nearest summary block ancestor (both inclusive),
-    /// or until a parent is not found in the consensus pool.
-    pub fn new(consensus_pool: &'a dyn ConsensusPool, from_block: Block) -> Self {
-        Self {
-            consensus_pool,
-            summary_height: from_block.payload.as_ref().dkg_interval_start_height(),
-            cursor: Some(from_block),
-        }
-    }
-
-    fn get_parent_block(&self, block: &Block) -> Option<Block> {
-        if block.height() == Height::from(0) {
-            return None;
-        }
-
-        let parent_height = block.height().decrement();
-        let parent_hash = &block.parent;
-
-        // First look up the block proposals
-        self.consensus_pool
-            .validated()
-            .block_proposal()
-            .get_by_height(parent_height)
-            .find_map(|proposal| {
-                if proposal.content.get_hash() == parent_hash {
-                    Some(proposal.content.into_inner())
-                } else {
-                    None
-                }
-            })
-            .or_else(|| {
-                // Parent block proposal not found, look up the CUPs only if parent
-                // is the summary height
-                if parent_height.cmp(&self.summary_height) == Ordering::Equal {
-                    self.consensus_pool
-                        .validated()
-                        .catch_up_package()
-                        .get_by_height(parent_height)
-                        .find_map(|cup| {
-                            if cup.content.block.get_hash() == parent_hash {
-                                Some(cup.content.block.into_inner())
-                            } else {
-                                None
-                            }
-                        })
-                } else {
-                    None
-                }
-            })
-    }
-}
-
-impl<'a> Iterator for BlockChainIterator<'a> {
-    type Item = Block;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let cur_block = self.cursor.as_ref()?;
-        let parent_block = match cur_block.height().cmp(&self.summary_height) {
-            Ordering::Greater => self.get_parent_block(cur_block),
-            Ordering::Equal | Ordering::Less => None,
-        };
-        std::mem::replace(&mut self.cursor, parent_block)
     }
 }
 
@@ -1955,8 +1879,10 @@ mod tests {
 
     // Verifies the iterator output, starting from the given block
     fn check_iterator(pool: &dyn ConsensusPool, from: Block, expected_heights: Vec<u64>) {
-        let mut blocks = Vec::new();
-        BlockChainIterator::new(pool, from).for_each(|block| blocks.push(block));
+        let blocks = pool
+            .as_cache()
+            .chain_iterator(pool, from)
+            .collect::<Vec<_>>();
         assert_eq!(blocks.len(), expected_heights.len());
 
         for (block, expected_height) in blocks.iter().zip(expected_heights.iter()) {
