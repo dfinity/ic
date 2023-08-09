@@ -76,14 +76,14 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^4.3.0",
             ),
             "addr": crate.spec(
-                version = "=0.15.6",
+                version = "^0.15.6",
                 default_features = False,
                 features = [
                     "idna",
                 ],
             ),
             "arbitrary": crate.spec(
-                version = "=1.3.0",
+                version = "^1.3.0",
             ),
             "arc-swap": crate.spec(
                 version = "^1",
@@ -456,9 +456,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "hyper-tls": crate.spec(
                 version = "^0.5.0",
-            ),
-            "iai": crate.spec(
-                version = "^0.1",
             ),
             "ic0": crate.spec(
                 version = "0.18.9",
@@ -1185,15 +1182,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "tower-http": crate.spec(
-                version = "^0.3",
-                features = [
-                    "trace",
-                    "request-id",
-                    "util",
-                ],
-            ),
-            "tower-http-0_4": crate.spec(
-                package = "tower-http",
                 version = "^0.4",
                 features = [
                     "trace",
