@@ -16,6 +16,7 @@ use slog::{info, Logger};
 use std::{iter::Peekable, net::IpAddr};
 use strum::{EnumMessage, IntoEnumIterator};
 use strum_macros::{EnumIter, EnumString};
+use url::Url;
 
 #[derive(
     Debug, Copy, Clone, PartialEq, EnumIter, EnumString, Serialize, Deserialize, EnumMessage,
@@ -59,6 +60,14 @@ pub struct AppSubnetRecoveryArgs {
     /// Replica version to upgrade the broken subnet to
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub upgrade_version: Option<ReplicaVersion>,
+
+    /// URL of the upgrade image
+    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    pub upgrade_image_url: Option<Url>,
+
+    /// SHA256 hash of the upgrade image
+    #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
+    pub upgrade_image_hash: Option<String>,
 
     #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
     /// Replace the members of the given subnet with these nodes
@@ -289,7 +298,17 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::BlessVersion => {
                 if let Some(upgrade_version) = &self.params.upgrade_version {
-                    let step = self.recovery.elect_replica_version(upgrade_version)?;
+                    let params = self.params.clone();
+                    let (url, hash) = params
+                        .upgrade_image_url
+                        .and_then(|url| params.upgrade_image_hash.map(|hash| (url, hash)))
+                        .or_else(|| Recovery::get_img_url_and_sha(upgrade_version).ok())
+                        .ok_or(RecoveryError::UnexpectedError(
+                            "couldn't retrieve the upgrade image params".into(),
+                        ))?;
+                    let step = self
+                        .recovery
+                        .elect_replica_version(upgrade_version, url, hash)?;
                     Ok(Box::new(step))
                 } else {
                     Err(RecoveryError::StepSkipped)
