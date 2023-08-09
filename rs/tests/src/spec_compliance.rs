@@ -23,8 +23,6 @@ const REPLICATION_FACTOR: usize = 2;
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
-    // tECDSA is not enabled in the test yet
-    "$0 ~ /tECDSA/",
     // the replica does not yet check that the effective canister id is valid in all cases
     "$0 ~ /wrong effective canister id.in mangement call/",
     "$0 ~ /access denied with different effective canister id/",
@@ -158,7 +156,7 @@ pub fn test_subnet(
     let webserver_ipv6 = get_universal_vm_address(&env);
     let httpbin = format!("[{webserver_ipv6}]:20443");
     let ic_ref_test_path = env
-        .get_dependency_path("rs/tests/ic-hs/ic-ref-test")
+        .get_dependency_path("rs/tests/ic-hs/bin/ic-ref-test")
         .into_os_string()
         .into_string()
         .unwrap();

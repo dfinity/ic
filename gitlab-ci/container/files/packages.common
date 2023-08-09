@@ -42,6 +42,12 @@ llvm
 liblmdb-dev
 liblzma-dev
 
+# Haskell
+libtinfo5
+libtinfo-dev
+libffi-dev
+libgmp-dev
+
 # IC-OS
 python3
 python-is-python3

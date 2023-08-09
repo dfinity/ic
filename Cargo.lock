@@ -18436,6 +18436,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "wabt-tests"
+version = "0.1.0"
+dependencies = [
+ "leb128",
+ "wat",
+]
+
+[[package]]
 name = "wait-timeout"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

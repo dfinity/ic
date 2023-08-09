@@ -24,6 +24,19 @@ sol_register_toolchains(
 )
 
 http_archive(
+    name = "bazel_skylib",
+    sha256 = "66ffd9315665bfaafc96b52278f57c7e2dd09f5ede279ea6d39b2be471e7e3aa",
+    urls = [
+        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz",
+        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.4.2/bazel-skylib-1.4.2.tar.gz",
+    ],
+)
+
+load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
+
+bazel_skylib_workspace()
+
+http_archive(
     name = "io_bazel_rules_go",
     sha256 = "099a9fb96a376ccbbb7d291ed4ecbdfd42f6bc822ab77ae6f1b5cb9e914e94fa",
     urls = [
@@ -49,15 +62,6 @@ go_rules_dependencies()
 go_register_toolchains(go_version = "1.19.3")
 
 gazelle_dependencies(go_repository_default_config = "//:WORKSPACE.bazel")
-
-http_archive(
-    name = "bazel_skylib",
-    sha256 = "f7be3474d42aae265405a592bb7da8e171919d74c16f082a5457840f06054728",
-    urls = [
-        "https://mirror.bazel.build/github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
-        "https://github.com/bazelbuild/bazel-skylib/releases/download/1.2.1/bazel-skylib-1.2.1.tar.gz",
-    ],
-)
 
 http_archive(
     name = "rules_rust",
@@ -326,10 +330,6 @@ load("@buildifier_prebuilt//:deps.bzl", "buildifier_prebuilt_deps")
 
 buildifier_prebuilt_deps()
 
-load("@bazel_skylib//:workspace.bzl", "bazel_skylib_workspace")
-
-bazel_skylib_workspace()
-
 load("@buildifier_prebuilt//:defs.bzl", "buildifier_prebuilt_register_toolchains")
 
 buildifier_prebuilt_register_toolchains()
@@ -454,17 +454,6 @@ new_git_repository(
     )""",
     commit = "4f77306bb63151631d84f58dedf67958eb9911b9",
     remote = "https://github.com/WebAssembly/testsuite.git",
-)
-
-http_archive(
-    name = "ic-hs",
-    build_file_content = """
-package(default_visibility = ["//visibility:public"])
-filegroup(name = "artifacts", srcs = glob(["build/*"]), visibility = ["//visibility:public"])
-exports_files(["test-data"])
-      """,
-    sha256 = "780e5d2c6031ad05cd6b85173048a83680748159e31450c811aa78373959a457",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-f718f74d-x86_64-linux.tar.gz"],
 )
 
 # Deployed NNS canisters
@@ -658,4 +647,263 @@ http_file(
     name = "ic-icrc1-ledger-first-version.wasm.gz",
     sha256 = "7af4f7308c883c286d4a5c0448b6bd03bd4d8bffebd58c4fc7114761ad652932",
     url = "https://download.dfinity.systems/ic/0456f740295aabdd287811f1ed51829082b3df01/canisters/ic-icrc1-ledger.wasm.gz",
+)
+
+# Haskell toolchain for spec_compliance tests
+
+http_archive(
+    name = "rules_haskell",
+    sha256 = "ebc5309d1617492b7edb63cded5d5cec4c32f146f2dee2935ae133f036e441f4",
+    strip_prefix = "rules_haskell-9d29e14b313123a0735abd0989c620d754500452",
+    url = "https://github.com/tweag/rules_haskell/archive/9d29e14b313123a0735abd0989c620d754500452.tar.gz",
+)
+
+http_archive(
+    name = "rules_sh",
+    sha256 = "d4ad015a8e72e92a5c171efa760524502e098cd927ae800dfad03b02dad2299a",
+    strip_prefix = "rules_sh-06170f1fbff23f900bc04dfbdb75ed1acf2b8c42",
+    urls = ["https://github.com/tweag/rules_sh/archive/06170f1fbff23f900bc04dfbdb75ed1acf2b8c42.tar.gz"],
+)
+
+load(
+    "@rules_haskell//haskell:toolchain.bzl",
+    "rules_haskell_toolchains",
+)
+
+rules_haskell_toolchains(
+    version = "9.6.2",
+)
+
+load(
+    "@rules_haskell//haskell:cabal.bzl",
+    "stack_snapshot",
+)
+
+stack_snapshot(
+    name = "stackage",
+    components = {
+        "attoparsec": [
+            "lib",
+            "lib:attoparsec-internal",
+        ],
+    },
+    components_dependencies = {
+        "attoparsec": """{"lib:attoparsec": ["lib:attoparsec-internal"]}""",
+    },
+    packages = [
+        "QuickCheck",
+        "aeson",
+        "array",
+        "asn1-encoding",
+        "asn1-types",
+        "async",
+        "atomic-write",
+        "base",
+        "base16",
+        "base32",
+        "base64-bytestring",
+        "binary",
+        "bytes",
+        "bytestring",
+        "case-insensitive",
+        "cborg",
+        "cereal",
+        "conduit",
+        "constraints",
+        "containers",
+        "crypton-connection",
+        "crypton-x509",
+        "crypton-x509-store",
+        "crypton-x509-validation",
+        "cryptonite",
+        "data-default-class",
+        "deepseq",
+        "digest",
+        "directory",
+        "dlist",
+        "ed25519",
+        "either",
+        "entropy",
+        "file-embed",
+        "filepath",
+        "hashable",
+        "hex-text",
+        "hspec",
+        "http-client",
+        "http-client-tls",
+        "http-types",
+        "leb128-cereal",
+        "megaparsec",
+        "memory",
+        "mtl",
+        "murmur3",
+        "network",
+        "network-uri",
+        "optparse-applicative",
+        "parallel",
+        "parser-combinators",
+        "prettyprinter",
+        "primitive",
+        "process",
+        "quickcheck-io",
+        "random",
+        "row-types",
+        "safe",
+        "scientific",
+        "secp256k1-haskell",
+        "serialise",
+        "split",
+        "splitmix",
+        "string-conversions",
+        "tasty",
+        "tasty-ant-xml",
+        "tasty-html",
+        "tasty-hunit",
+        "tasty-quickcheck",
+        "tasty-rerun",
+        "template-haskell",
+        "temporary",
+        "text",
+        "time",
+        "tls",
+        "transformers",
+        "uglymemo",
+        "unordered-containers",
+        "utf8-string",
+        "vector",
+        "wai",
+        "wai-cors",
+        "wai-extra",
+        "warp",
+        "wide-word",
+        "word8",
+        "zlib",
+    ],
+    snapshot = "nightly-2023-07-29",
+)
+
+http_archive(
+    name = "haskell-candid",
+    sha256 = "df5116a59502da272d261a772cd7019486f9ddc47361d43a195316ccb8500f84",
+    strip_prefix = "haskell-candid-a682fca78f5770d3ec0c1184ecf7de866dc5ae77",
+    urls = ["https://github.com/nomeata/haskell-candid/archive/a682fca78f5770d3ec0c1184ecf7de866dc5ae77.tar.gz"],
+)
+
+http_archive(
+    name = "miracl-core",
+    build_file_content = """
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
+py_binary(
+    name = "generate",
+    srcs = ["c/config64.py"],
+    main = "c/config64.py",
+    data = [],
+    deps = [],
+)
+run_binary(
+    name = "cbits",
+    srcs = glob(["c/*.c", "c/*.h"]),
+    outs = [
+      "aes.c",
+      "big_384_58.c",
+      "bls_BLS12381.c",
+      "ecp2_BLS12381.c",
+      "ecp_BLS12381.c",
+      "fp12_BLS12381.c",
+      "fp2_BLS12381.c",
+      "fp4_BLS12381.c",
+      "fp_BLS12381.c",
+      "gcm.c",
+      "hash.c",
+      "hmac.c",
+      "newhope.c",
+      "oct.c",
+      "pair_BLS12381.c",
+      "randapi.c",
+      "rand.c",
+      "rom_curve_BLS12381.c",
+      "rom_field_BLS12381.c",
+      "share.c",
+      "arch.h",
+      "big_384_58.h",
+      "bls_BLS12381.h",
+      "config_big_384_58.h",
+      "config_curve_BLS12381.h",
+      "config_field_BLS12381.h",
+      "core.h",
+      "ecdh_BLS12381.h",
+      "ecp2_BLS12381.h",
+      "ecp_BLS12381.h",
+      "fp12_BLS12381.h",
+      "fp2_BLS12381.h",
+      "fp4_BLS12381.h",
+      "fp_BLS12381.h",
+      "hpke_BLS12381.h",
+      "mpin_BLS12381.h",
+      "newhope.h",
+      "pair_BLS12381.h",
+      "randapi.h",
+      "x509.h",
+    ],
+    args = ["--options=31", "--path=$(location c/arch.h)", "--output-path=$(location arch.h)"],
+    target_compatible_with = ["@platforms//os:linux"],
+    tool = ":generate",
+    visibility = ["//visibility:public"],
+)
+cc_library(
+    name = "lib",
+    srcs = [
+      ":aes.c",
+      ":big_384_58.c",
+      ":bls_BLS12381.c",
+      ":ecp2_BLS12381.c",
+      ":ecp_BLS12381.c",
+      ":fp12_BLS12381.c",
+      ":fp2_BLS12381.c",
+      ":fp4_BLS12381.c",
+      ":fp_BLS12381.c",
+      ":gcm.c",
+      ":hash.c",
+      ":hmac.c",
+      ":newhope.c",
+      ":oct.c",
+      ":pair_BLS12381.c",
+      ":randapi.c",
+      ":rand.c",
+      ":rom_curve_BLS12381.c",
+      ":rom_field_BLS12381.c",
+      ":share.c",
+    ],
+    hdrs = [
+      ":arch.h",
+      ":big_384_58.h",
+      ":bls_BLS12381.h",
+      ":config_big_384_58.h",
+      ":config_curve_BLS12381.h",
+      ":config_field_BLS12381.h",
+      ":core.h",
+      ":ecdh_BLS12381.h",
+      ":ecp2_BLS12381.h",
+      ":ecp_BLS12381.h",
+      ":fp12_BLS12381.h",
+      ":fp2_BLS12381.h",
+      ":fp4_BLS12381.h",
+      ":fp_BLS12381.h",
+      ":hpke_BLS12381.h",
+      ":mpin_BLS12381.h",
+      ":newhope.h",
+      ":pair_BLS12381.h",
+      ":randapi.h",
+      ":x509.h",
+    ],
+    includes = [":cbits"],
+    visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//os:linux"],
+)""",
+    patch_args = ["-p1"],
+    patches = ["//rs/tests/testing_verification/spec_compliance:miracl-core.patch"],
+    sha256 = "b93a14c35f56eca8dddaab95dea94294d51ca680a7d6bb1c1f048e1cd71550cd",
+    strip_prefix = "core-ec77b2817a0e360b1893affe4cfa44d19391efc7",
+    urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],
 )
