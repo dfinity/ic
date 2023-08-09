@@ -1501,7 +1501,7 @@ pub fn spawn_round_robin_workload_engine(
         let log_null = slog::Logger::root(slog::Discard, slog::o!());
         let aggregator = LoadTestMetrics::new(log_null)
             .with_requests_duration_categorizations(requests_duration_categorizations);
-        let engine = Engine::new(log, generator, rps, duration)
+        let engine = Engine::new(log, generator, rps as f64, duration)
             .increase_dispatch_timeout(requests_dispatch_extra_timeout);
         block_on(engine.execute(aggregator, LoadTestMetrics::aggregator_fn))
             .expect("Execution of the workload failed.")

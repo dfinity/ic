@@ -465,7 +465,7 @@ pub fn workload_via_aggregator(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
@@ -513,7 +513,7 @@ pub fn workload_direct(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
@@ -571,7 +571,7 @@ pub fn workload_direct_auth(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
