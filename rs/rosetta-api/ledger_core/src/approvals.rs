@@ -1,9 +1,8 @@
 use crate::timestamp::TimeStamp;
 use crate::tokens::{TokensType, Zero};
 use serde::{Deserialize, Serialize};
-use std::cmp::Reverse;
 use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, BinaryHeap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 
 #[cfg(test)]
@@ -87,7 +86,7 @@ where
     K: Ord,
 {
     allowances: BTreeMap<K, Allowance<Tokens>>,
-    expiration_queue: BinaryHeap<Reverse<(TimeStamp, K)>>,
+    expiration_queue: BTreeSet<(TimeStamp, K)>,
     #[serde(skip)]
     #[serde(default)]
     _marker: PhantomData<fn(&AccountId, &AccountId) -> K>,
@@ -106,7 +105,7 @@ where
     pub fn new() -> Self {
         Self {
             allowances: BTreeMap::new(),
-            expiration_queue: BinaryHeap::new(),
+            expiration_queue: BTreeSet::new(),
             _marker: PhantomData,
         }
     }
@@ -169,7 +168,7 @@ where
                     }
                 }
                 if let Some(expires_at) = expires_at {
-                    self.expiration_queue.push(Reverse((expires_at, key)));
+                    self.expiration_queue.insert((expires_at, key));
                 }
                 e.insert(Allowance { amount, expires_at });
                 Ok(amount)
@@ -184,6 +183,9 @@ where
                     }
                 }
                 if amount == Tokens::zero() {
+                    if let Some(expires_at) = e.get().expires_at {
+                        self.expiration_queue.remove(&(expires_at, key.clone()));
+                    }
                     e.remove();
                     return Ok(amount);
                 }
@@ -191,8 +193,11 @@ where
                 let old_expiration = std::mem::replace(&mut allowance.expires_at, expires_at);
 
                 if expires_at != old_expiration {
+                    if let Some(old_expiration) = old_expiration {
+                        self.expiration_queue.remove(&(old_expiration, key.clone()));
+                    }
                     if let Some(expires_at) = expires_at {
-                        self.expiration_queue.push(Reverse((expires_at, key)));
+                        self.expiration_queue.insert((expires_at, key));
                     }
                 }
                 Ok(e.get().amount)
@@ -209,7 +214,7 @@ where
     ) -> Result<Tokens, InsufficientAllowance<Tokens>> {
         let key = K::from((account, spender));
 
-        match self.allowances.entry(key) {
+        match self.allowances.entry(key.clone()) {
             Entry::Vacant(_) => Err(InsufficientAllowance(Tokens::zero())),
             Entry::Occupied(mut e) => {
                 if e.get().expires_at.unwrap_or_else(remote_future) <= now {
@@ -225,6 +230,9 @@ where
                         .expect("Underflow when using allowance");
                     let rest = allowance.amount;
                     if rest.is_zero() {
+                        if let Some(expires_at) = e.get().expires_at {
+                            self.expiration_queue.remove(&(expires_at, key));
+                        }
                         e.remove();
                     }
                     Ok(rest)
@@ -252,9 +260,8 @@ where
     fn prune(&mut self, now: TimeStamp, limit: usize) -> usize {
         let mut pruned = 0;
         for _ in 0..limit {
-            match self.expiration_queue.peek() {
-                Some(Reverse((ts, _key))) => {
-                    println!("{:?}", ts);
+            match self.expiration_queue.first() {
+                Some((ts, _key)) => {
                     if *ts > now {
                         return pruned;
                     }
@@ -263,7 +270,7 @@ where
                     return pruned;
                 }
             }
-            if let Some(Reverse((_, key))) = self.expiration_queue.pop() {
+            if let Some((_, key)) = self.expiration_queue.pop_first() {
                 if let Some(allowance) = self.allowances.get(&key) {
                     if allowance.expires_at.unwrap_or_else(remote_future) <= now {
                         self.allowances.remove(&key);
@@ -276,6 +283,12 @@ where
     }
 
     fn len(&self) -> usize {
+        debug_assert!(
+            self.expiration_queue.len() <= self.allowances.len(),
+            "expiration queue length ({}) larger than allowances length ({})",
+            self.expiration_queue.len(),
+            self.allowances.len()
+        );
         self.allowances.len()
     }
 }
