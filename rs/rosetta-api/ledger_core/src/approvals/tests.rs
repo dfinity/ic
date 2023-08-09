@@ -208,6 +208,108 @@ fn allowance_table_pruning_obsolete_expirations() {
 }
 
 #[test]
+fn allowance_table_pruning_expired_approvals() {
+    let mut table = TestAllowanceTable::default();
+
+    table
+        .approve(
+            &Account(1),
+            &Account(2),
+            tokens(100),
+            Some(ts(100)),
+            ts(1),
+            None,
+        )
+        .unwrap();
+
+    table
+        .approve(
+            &Account(1),
+            &Account(3),
+            tokens(150),
+            Some(ts(300)),
+            ts(1),
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(table.len(), 2);
+
+    assert_eq!(table.prune(ts(200), 100), 1);
+
+    assert_eq!(table.len(), 1);
+
+    assert_eq!(
+        table.allowance(&Account(1), &Account(2), ts(200)),
+        Allowance {
+            amount: tokens(0),
+            expires_at: None
+        }
+    );
+    assert_eq!(
+        table.allowance(&Account(1), &Account(3), ts(200)),
+        Allowance {
+            amount: tokens(150),
+            expires_at: Some(ts(300))
+        }
+    );
+}
+
+#[test]
+fn allowance_table_pruning_used_allowance() {
+    let mut table = TestAllowanceTable::default();
+
+    table
+        .approve(
+            &Account(1),
+            &Account(2),
+            tokens(100),
+            Some(ts(100)),
+            ts(1),
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(table.len(), 1);
+
+    table
+        .use_allowance(&Account(1), &Account(2), tokens(100), ts(1))
+        .unwrap();
+    assert_eq!(table.len(), 0);
+}
+
+#[test]
+fn allowance_table_pruning_zero_allowance() {
+    let mut table = TestAllowanceTable::default();
+
+    table
+        .approve(
+            &Account(1),
+            &Account(2),
+            tokens(100),
+            Some(ts(100)),
+            ts(1),
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(table.len(), 1);
+
+    table
+        .approve(
+            &Account(1),
+            &Account(2),
+            tokens(0),
+            Some(ts(100)),
+            ts(1),
+            None,
+        )
+        .unwrap();
+
+    assert_eq!(table.len(), 0);
+}
+
+#[test]
 fn expected_allowance_checked() {
     let mut table = TestAllowanceTable::default();
 
