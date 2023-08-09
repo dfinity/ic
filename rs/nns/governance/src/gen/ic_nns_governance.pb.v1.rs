@@ -2465,6 +2465,8 @@ pub struct Governance {
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "19")]
     pub spawning_neurons: ::core::option::Option<bool>,
+    #[prost(message, optional, tag = "20")]
+    pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2580,6 +2582,31 @@ pub mod governance {
         pub community_fund_total_maturity_e8s_equivalent: u64,
         #[prost(uint64, tag = "18")]
         pub total_locked_e8s: u64,
+    }
+    /// Records that making an OpenSnsTokenSwap (OSTS) proposal is in progress. We
+    /// only want one of these to be happening at the same time, because otherwise,
+    /// it is error prone to enforce that open OSTS proposals are unique. In
+    /// particular, the result of checking that the proposal currently being made
+    /// would be unique is liable to becoming invalid during an .await.
+    ///
+    /// This is a temporary measure, because OSTS is part of the SNS flow that will
+    /// be replaced by 1-proposal very soon.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct MakingSnsProposal {
+        #[prost(message, optional, tag = "1")]
+        pub proposer_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
+        #[prost(message, optional, tag = "2")]
+        pub caller: ::core::option::Option<::ic_base_types::PrincipalId>,
+        #[prost(message, optional, tag = "3")]
+        pub proposal: ::core::option::Option<super::Proposal>,
     }
 }
 /// Proposals with restricted voting are not included unless the caller

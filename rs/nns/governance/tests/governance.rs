@@ -18,7 +18,7 @@ use fixtures::{
     new_motion_proposal, principal, LedgerBuilder, NNSBuilder, NNSStateChange, NeuronBuilder,
     ProposalNeuronBehavior, NNS,
 };
-use futures::future::FutureExt;
+use futures::future::{join_all, FutureExt};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
@@ -2197,26 +2197,26 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::default()),
         neurons: hashmap! {
-             1 =>
+            1 =>
                 Neuron {
                     id: Some(NeuronId {id: 1}),
-                 controller: Some(principal(1)),
+                    controller: Some(principal(1)),
                     cached_neuron_stake_e8s: 23,
                     account: driver.random_byte_array().to_vec(),
-                 // One year
-                 dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
-                 ..Default::default()
-             },
-         2 =>
+                    // One year
+                    dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
+                    ..Default::default()
+                },
+            2 =>
                 Neuron {
                     id: Some(NeuronId {id: 2}),
-                 controller: Some(principal(2)),
+                    controller: Some(principal(2)),
                     cached_neuron_stake_e8s: 951,
                     account: driver.random_byte_array().to_vec(),
-                 // One year
-                 dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
-                 ..Default::default()
-             },
+                    // One year
+                    dissolve_state: Some(neuron::DissolveState::DissolveDelaySeconds(31557600)),
+                    ..Default::default()
+                },
         },
         ..Default::default()
     }
@@ -6820,8 +6820,6 @@ fn make_proposal_with_action(
 // When a neuron A follows neuron B on topic Unspecified, and B votes on topic
 // T, then A votes the same was as B, except when T is Governance or
 // SnsAndCommunityFund.
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn test_default_followees() {
     let p = match std::env::var("NEURON_CSV_PATH") {
@@ -10613,6 +10611,10 @@ struct MockEnvironment<'a> {
             )>,
         >,
     >,
+
+    // If Some, tokio::time::sleep will be used to ensure that
+    // call_canister_method actually does .await internally.
+    call_canister_method_min_duration: Option<std::time::Duration>,
 }
 
 #[async_trait]
@@ -10628,7 +10630,17 @@ impl Environment for MockEnvironment<'_> {
             .lock()
             .unwrap()
             .pop_front()
-            .unwrap();
+            .unwrap_or_else(|| {
+                panic!(
+                    "A canister call was observed, but no more calls were expected.\n\
+                     target: {}\n\
+                     method_name: {}\n\
+                     request.len(): {}",
+                    target,
+                    method_name,
+                    request.len(),
+                );
+            });
 
         assert_eq!(
             ExpectedCallCanisterMethodCallArguments {
@@ -10655,6 +10667,11 @@ impl Environment for MockEnvironment<'_> {
                 _ => "???".to_string(),
             },
         );
+
+        // If requested, use the .await operator.
+        if let Some(call_canister_method_min_duration) = self.call_canister_method_min_duration {
+            tokio::time::sleep(call_canister_method_min_duration).await;
+        }
 
         result
     }
@@ -10992,8 +11009,6 @@ lazy_static! {
 
 const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 61 * E8;
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[tokio::test]
 async fn test_open_sns_token_swap_proposal_happy() {
     // Step 1: Prepare the world.
@@ -11025,6 +11040,7 @@ async fn test_open_sns_token_swap_proposal_happy() {
         governance_proto,
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
@@ -11132,8 +11148,6 @@ async fn test_open_sns_token_swap_proposal_happy() {
     }
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[tokio::test]
 async fn test_open_sns_token_swap_proposal_execution_fails() {
     // Step 1: Prepare the world.
@@ -11171,6 +11185,7 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
         // swap canister.
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
@@ -11249,8 +11264,6 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
 }
 
 /// Multiple calls to settle_community_fund should be idempotent.
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[tokio::test]
 async fn test_settle_community_fund_is_idempotent() {
     use settle_community_fund_participation::Result;
@@ -11285,6 +11298,7 @@ async fn test_settle_community_fund_is_idempotent() {
         governance_proto,
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
@@ -11406,8 +11420,6 @@ async fn test_settle_community_fund_is_idempotent() {
 
 /// Failure when settling the CommunityFund should result in the Lifecycle remaining
 /// what it was before the method invocation.
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[tokio::test]
 async fn test_settle_community_fund_participation_restores_lifecycle_on_failure() {
     use settle_community_fund_participation::Result;
@@ -11446,6 +11458,7 @@ async fn test_settle_community_fund_participation_restores_lifecycle_on_failure(
         governance_proto,
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
         }),
         Box::new(icp_ledger),
         driver.get_fake_cmc(),
@@ -11591,6 +11604,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_commit() {
         governance_proto,
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
@@ -11722,6 +11736,7 @@ async fn test_create_service_nervous_system_settles_neurons_fund_abort() {
         governance_proto,
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
@@ -11864,6 +11879,7 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
         // swap canister.
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
@@ -11923,8 +11939,6 @@ async fn test_create_service_nervous_system_proposal_execution_fails() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[tokio::test]
 async fn test_settle_community_fund_is_idempotent_for_create_service_nervous_system() {
     use settle_community_fund_participation::Result;
@@ -11953,6 +11967,7 @@ async fn test_settle_community_fund_is_idempotent_for_create_service_nervous_sys
         governance_proto,
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+            call_canister_method_min_duration: None,
         }),
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
@@ -12308,6 +12323,174 @@ async fn test_proposal_url_not_on_list_fails() {
     )
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn make_open_sns_token_swap_proposals_concurrently_targetting_the_same_sns() {
+    let proposal = Proposal {
+        title: Some("Put Widget Dapp Under SNS Control".to_string()),
+        url: "https://forum.dfinity.org/why-the-widget-sns-will-be-epic".to_string(),
+        summary: "Best Dapp evar.".to_string(),
+        action: Some(Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
+            target_swap_canister_id: Some(*TARGET_SWAP_CANISTER_ID),
+            params: Some(SWAP_PARAMS.clone()),
+            community_fund_investment_e8s: None,
+        })),
+    };
+
+    let proposals = vec![
+        proposal.clone(),
+        proposal.clone(),
+        proposal.clone(),
+        proposal.clone(),
+        proposal.clone(),
+    ];
+    drop(proposal);
+
+    make_open_sns_token_swap_proposals_concurrently(proposals).await;
+}
+
+#[tokio::test]
+async fn make_open_sns_token_swap_proposals_concurrently_targetting_different_snses() {
+    let proposal_1 = Proposal {
+        title: Some("Put Widget Dapp Under SNS Control".to_string()),
+        url: "https://forum.dfinity.org/why-the-widget-sns-will-be-epic".to_string(),
+        summary: "Best Dapp evar.".to_string(),
+        action: Some(Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
+            target_swap_canister_id: Some(*TARGET_SWAP_CANISTER_ID),
+            params: Some(SWAP_PARAMS.clone()),
+            community_fund_investment_e8s: None,
+        })),
+    };
+
+    // Same as proposal_1, except targets a different swap.
+    let proposal_2 = Proposal {
+        title: Some("Put Widget Dapp Under SNS Control".to_string()),
+        url: "https://forum.dfinity.org/why-the-widget-sns-will-be-epic".to_string(),
+        summary: "Best Dapp evar.".to_string(),
+        action: Some(Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
+            target_swap_canister_id: Some(principal(760_407)),
+            params: Some(SWAP_PARAMS.clone()),
+            community_fund_investment_e8s: None,
+        })),
+    };
+
+    let proposals = vec![proposal_1, proposal_2];
+
+    make_open_sns_token_swap_proposals_concurrently(proposals).await;
+}
+
+lazy_static! {
+    static ref MAKE_OPEN_SNS_TOKEN_SWAP_PROPOSALS_CONCURRENTLY_MUTEX: tokio::sync::Mutex<()> =
+        tokio::sync::Mutex::new(());
+}
+
+async fn make_open_sns_token_swap_proposals_concurrently(proposals: Vec<Proposal>) {
+    // Step 1: Prepare the world.
+
+    // This can only be run one at a time.
+    let _unlock_on_return = MAKE_OPEN_SNS_TOKEN_SWAP_PROPOSALS_CONCURRENTLY_MUTEX
+        .lock()
+        .await;
+
+    let expected_call_canister_method_calls = Arc::new(Mutex::new(VecDeque::from([
+        EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
+        EXPECTED_SWAP_GET_STATE_CALL.clone(),
+        EXPECTED_SWAP_GET_STATE_CALL.clone(),
+        EXPECTED_SNS_ROOT_GET_SNS_CANISTERS_SUMMARY_CALL.clone(),
+    ])));
+    let environment = Box::new(MockEnvironment {
+        expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+
+        // Try "really hard" to make the first dequeued request block all
+        // others. This is overkill, because even with 1 ms,
+        // --runs_per_test=1000 resulted in no flakes.
+        call_canister_method_min_duration: Some(std::time::Duration::from_millis(100)),
+    });
+
+    let fake_driver = fake::FakeDriver::default();
+    let fixture = GovernanceProto {
+        short_voting_period_seconds: SECONDS_PER_DAY,
+        wait_for_quiet_threshold_seconds: SECONDS_PER_DAY,
+        ..fixture_two_neurons_second_is_bigger()
+    };
+
+    static mut GOVERNANCE: Option<Governance> = None;
+    // This mirrors what we do in canister.rs. unsafe is needed, because we are
+    // using a mutable static. This is very bad when the object is touched by >
+    // 1 thread, but we only have one thread here.
+    unsafe {
+        GOVERNANCE = Some(Governance::new(
+            fixture,
+            environment,
+            fake_driver.get_fake_ledger(),
+            fake_driver.get_fake_cmc(),
+        ));
+    }
+    fn governance_mut() -> &'static mut Governance {
+        // Ditto the comment on the previous unsafe block.
+        unsafe { GOVERNANCE.as_mut().unwrap() }
+    }
+
+    // Step 2: Call the code under test.
+
+    // Make proposals concurrently.
+    let controller_1 = principal(1);
+    let requests = proposals.iter().map(|proposal: &Proposal| {
+        // Notice that we do NOT await here. That will be done later,
+        // indirectly via join_all. That way, all of these requests are
+        // made concurrently.
+        governance_mut().make_proposal(&NeuronId { id: 1 }, &controller_1, proposal)
+    });
+    let responses = join_all(requests).await;
+
+    // Step 3: Inspect results.
+
+    // One request went through, but not the other one.
+    let mut ok_count = 0;
+    let mut err_count = 0;
+    for response in &responses {
+        match response {
+            Ok(ProposalId { id }) => {
+                assert!(*id > 0);
+                ok_count += 1;
+            }
+
+            Err(GovernanceError {
+                error_type,
+                error_message,
+            }) => {
+                // Assert that type is Unavailable.
+                let error_type = ErrorType::from_i32(*error_type).unwrap();
+                assert_eq!(error_type, ErrorType::Unavailable, "{}", error_message);
+
+                // Assert that message contains all the right keywords.
+                assert!(
+                    error_message.contains("OpenSnsTokenSwap"),
+                    "{}",
+                    error_message
+                );
+                let error_message = error_message.to_lowercase();
+                assert!(error_message.contains("another"), "{}", error_message);
+                assert!(error_message.contains("proposal"), "{}", error_message);
+                assert!(error_message.contains("try again"), "{}", error_message);
+
+                err_count += 1;
+            }
+        }
+    }
+    assert_eq!(ok_count, 1, "{} {}", ok_count, err_count);
+    assert_eq!(err_count, responses.len() - 1, "{} {}", ok_count, err_count);
+
+    // All expected canister calls were made.
+    assert!(
+        expected_call_canister_method_calls
+            .lock()
+            .unwrap()
+            .is_empty(),
+        "Calls that should have been made, but were not: {:#?}",
+        expected_call_canister_method_calls,
+    );
 }
 
 #[test]
