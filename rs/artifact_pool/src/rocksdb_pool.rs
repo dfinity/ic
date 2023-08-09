@@ -1236,6 +1236,9 @@ mod tests {
         crate::test_utils::test_as_pool_section::<RocksDBConfig>()
     }
 
+    // This test is disabled because the RocksDB version of the consensus pool does not
+    // implement selective purging, and there is no plan of supporting it.
+    #[ignore]
     #[test]
     fn test_as_height_indexed_pool() {
         crate::test_utils::test_as_height_indexed_pool::<RocksDBConfig>()

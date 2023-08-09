@@ -235,15 +235,6 @@ impl AsRef<BlockPayload> for Payload {
     }
 }
 
-impl From<Payload> for BlockPayload {
-    fn from(payload: Payload) -> BlockPayload {
-        match Arc::try_unwrap(payload.payload) {
-            Ok(payload) => payload.into_inner().into_inner(),
-            Err(payload) => payload.get_value().as_ref().clone(),
-        }
-    }
-}
-
 impl From<(dkg::Summary, ecdsa::Summary)> for BlockPayload {
     fn from((dkg, ecdsa): (dkg::Summary, ecdsa::Summary)) -> BlockPayload {
         BlockPayload::Summary(SummaryPayload { dkg, ecdsa })

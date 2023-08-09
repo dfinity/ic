@@ -61,7 +61,7 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
     artifact_kind::ConsensusArtifact,
-    consensus::{BlockPayload, ConsensusMessageAttribute, ConsensusMessageHashable},
+    consensus::{ConsensusMessageAttribute, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
@@ -363,8 +363,8 @@ impl ConsensusImpl {
     /// Checks, whether DKG transcripts for this replica are available
     fn dkgs_available(&self, pool_reader: &PoolReader) -> bool {
         // Get last summary
-        let block_payload =
-            BlockPayload::from(pool_reader.get_highest_summary_block().payload).into_summary();
+        let summary_block = pool_reader.get_highest_summary_block();
+        let block_payload = summary_block.payload.as_ref().as_summary();
 
         // Get transcripts from summary
         let transcripts = block_payload.dkg.current_transcripts();
