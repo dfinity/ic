@@ -10,7 +10,7 @@ pub struct Engine<F> {
     /// Callback function generating Futures for the Engine.
     futures_generator: F,
     /// Number of requests per second.
-    rps: usize,
+    rps: f64,
     /// Overall duration of the Engine execution.
     duration: Duration,
     /// All futures should be started strictly within this time bound. Note that actual execution can take additional time.
@@ -24,7 +24,8 @@ where
     Fut: Future<Output = Out> + Send + 'static,
 {
     // Constructor of the Engine.
-    pub fn new(log: slog::Logger, future_generator: F, rps: usize, duration: Duration) -> Self {
+    pub fn new(log: slog::Logger, future_generator: F, rps: f64, duration: Duration) -> Self {
+        assert!(rps > 0.0, "Requests per second have to be positive.");
         Self {
             futures_generator: future_generator,
             rps,
@@ -47,7 +48,7 @@ where
         A: Send + 'static,
     {
         let log = self.log;
-        let futures_count = self.rps * self.duration.as_secs() as usize;
+        let futures_count = (self.rps * self.duration.as_secs_f64()).floor() as usize;
         let (fut_snd, mut fut_rcv) = tokio::sync::mpsc::unbounded_channel();
         info!(
             log,
@@ -62,8 +63,7 @@ where
                 for idx in 0..futures_count {
                     let fut = (self.futures_generator)(idx);
                     // Future is expected to start at this time instance.
-                    let target_instant =
-                        start + Duration::from_secs_f64(idx as f64 / self.rps as f64);
+                    let target_instant = start + Duration::from_secs_f64(idx as f64 / self.rps);
                     sleep_until(tokio::time::Instant::from_std(target_instant)).await;
                     let task_jh = task::spawn(fut);
                     if fut_snd.send((idx, task_jh)).is_err() {
@@ -135,7 +135,7 @@ pub enum EngineError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    const RPS: usize = 10;
+    const RPS: f64 = 10.0;
     const DURATION: Duration = Duration::from_secs(5);
     const EXTRA_TIMEOUT: Duration = Duration::from_secs(5);
 

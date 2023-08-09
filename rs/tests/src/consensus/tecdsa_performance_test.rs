@@ -35,9 +35,9 @@ use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
 const NODES_COUNT: usize = 25;
-const SUCCESS_THRESHOLD: f32 = 0.33; // If more than 33% of the expected calls are successful the test passes
+const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
-const TESTING_PERIOD: Duration = Duration::from_secs(600);
+const TESTING_PERIOD: Duration = Duration::from_secs(900);
 const DKG_INTERVAL: u64 = 499;
 const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
@@ -46,7 +46,7 @@ const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 const QUADRUPLES_TO_CREATE: u32 = 20;
 const MAX_QUEUE_SIZE: u32 = 40;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: usize = 2;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 1.9;
 
 pub fn setup(env: TestEnv) {
     PrometheusVm::default()
@@ -214,8 +214,8 @@ pub fn test(env: TestEnv) {
         info!(log, "Reporting workload execution results");
         env.emit_report(format!("{}", metrics));
         info!(log, "Step 4: Assert expected number of successful requests");
-        let requests_count = rps * duration.as_secs() as usize;
-        let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count as f32) as usize;
+        let requests_count = rps * duration.as_secs_f64();
+        let min_expected_success_calls = (SUCCESS_THRESHOLD * requests_count) as usize;
         info!(
             log,
             "Minimal expected number of success calls {}", min_expected_success_calls,

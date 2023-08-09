@@ -160,7 +160,7 @@ pub fn workload_static_testnet_fe_users(env: TestEnv) {
     let raw_rps = effective_rps * num_requests;
 
     // --- Generate workload ---
-    let workload = Engine::new(log.clone(), future_generator, raw_rps, duration)
+    let workload = Engine::new(log.clone(), future_generator, raw_rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = {
@@ -209,7 +209,7 @@ pub fn workload_static_testnet_get_account(env: TestEnv) {
     };
 
     // --- Generate workload ---
-    let workload = Engine::new(log.clone(), future_generator, rps, duration)
+    let workload = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = {
@@ -253,7 +253,7 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
     };
 
     // --- Generate workload ---
-    let workload = Engine::new(log.clone(), future_generator, rps, duration)
+    let workload = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = {
@@ -764,7 +764,7 @@ pub fn generate_sns_workload_with_many_users<T, R>(
         }
     };
 
-    let workload = Engine::new(log.clone(), future_generator, rps, duration)
+    let workload = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
     let metrics = {
         let aggr = LoadTestMetrics::new(log);
@@ -1174,7 +1174,7 @@ pub fn generate_ticket_participants_workload(
             }
         }
     };
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(SNS_ENDPOINT_RETRY_TIMEOUT);
 
     let metrics = {
@@ -1538,7 +1538,7 @@ where
             async move { agent.call(&request).await.map(|_| ()).into_test_outcome() }
         }
     };
-    let engine = Engine::new(log.clone(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps as f64, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = {

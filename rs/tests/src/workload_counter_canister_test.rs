@@ -172,7 +172,7 @@ fn test(
                 }
             }
         };
-        let metrics = Engine::new(log.clone(), generator, rps, duration)
+        let metrics = Engine::new(log.clone(), generator, rps as f64, duration)
             .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
             .execute_simply(log.clone())
             .await;
