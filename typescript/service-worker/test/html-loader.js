@@ -1,5 +1,7 @@
 module.exports = {
   process: function (src) {
-    return `module.exports = ${JSON.stringify(src)};`;
+    return {
+      code: `module.exports = ${JSON.stringify(src)};`,
+    };
   },
 };

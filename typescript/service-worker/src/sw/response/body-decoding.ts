@@ -1,4 +1,3 @@
-import { inflate, ungzip } from 'pako';
 import { HeaderField } from '../../http-interface/canister_http_interface_types';
 import { HTTPHeaders } from '../requests';
 
@@ -11,6 +10,15 @@ function getContentEncoding(responseHeaders: HeaderField[]): string {
   );
 }
 
+const createStream = (array: Uint8Array): ReadableStream => {
+  return new ReadableStream({
+    start: (controller) => {
+      controller.enqueue(array);
+      controller.close();
+    },
+  });
+};
+
 /**
  * Decode a body (ie. deflate or gunzip it) based on its content-encoding.
  *
@@ -20,17 +28,18 @@ function getContentEncoding(responseHeaders: HeaderField[]): string {
 export function decodeBody(
   responseBody: Uint8Array,
   responseHeaders: HeaderField[]
-): Uint8Array {
+): ReadableStream {
   const encoding = getContentEncoding(responseHeaders);
+  const bodyStream = createStream(responseBody);
 
   switch (encoding) {
     case 'identity':
     case '':
-      return responseBody;
+      return bodyStream;
     case 'gzip':
-      return ungzip(responseBody);
+      return bodyStream.pipeThrough(new DecompressionStream('gzip'));
     case 'deflate':
-      return inflate(responseBody);
+      return bodyStream.pipeThrough(new DecompressionStream('deflate'));
     default:
       throw new Error(`Unsupported encoding: "${encoding}"`);
   }
