@@ -356,9 +356,8 @@ impl Recovery {
         &self,
         subnet_id: SubnetId,
         upgrade_version: ReplicaVersion,
-        upgrade_url: Url,
-        sha256: String,
     ) -> RecoveryResult<impl Step> {
+        let (upgrade_url, sha256) = Recovery::get_img_url_and_sha(&upgrade_version)?;
         let version_record = format!(
             r#"{{ "release_package_sha256_hex": "{}", "release_package_urls": ["{}"] }}"#,
             sha256, upgrade_url
@@ -485,13 +484,22 @@ impl Recovery {
 
     /// Lookup the image [Url] and sha hash of the given [ReplicaVersion]
     pub fn get_img_url_and_sha(version: &ReplicaVersion) -> RecoveryResult<(Url, String)> {
-        let version_string = version.to_string();
+        let mut version_string = version.to_string();
+        let mut test_version = false;
+        let parts: Vec<_> = version_string.split('-').collect();
+        if parts.len() > 1 && parts[parts.len() - 1] == "test" {
+            test_version = true;
+            version_string = parts[..parts.len() - 1].join("-");
+        }
         let url_base = format!(
             "https://download.dfinity.systems/ic/{}/guest-os/update-img/",
             version_string
         );
 
-        let image_name = "update-img.tar.zst";
+        let image_name = format!(
+            "update-img{}.tar.zst",
+            if test_version { "-test" } else { "" }
+        );
         let upgrade_url_string = format!("{}{}", url_base, image_name);
         let invalid_url = |url, e| {
             RecoveryError::invalid_output_error(format!("Invalid Url string: {}, {}", url, e))
@@ -534,9 +542,8 @@ impl Recovery {
     pub fn elect_replica_version(
         &self,
         upgrade_version: &ReplicaVersion,
-        upgrade_url: Url,
-        sha256: String,
     ) -> RecoveryResult<impl Step> {
+        let (upgrade_url, sha256) = Recovery::get_img_url_and_sha(upgrade_version)?;
         Ok(AdminStep {
             logger: self.logger.clone(),
             ic_admin_cmd: self
