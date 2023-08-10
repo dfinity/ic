@@ -416,9 +416,7 @@ fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(),
             debit(block_index, from, amount.get_e8s() + fee.get_e8s());
             credit(block_index, to, amount.get_e8s())
         }
-        _ => {
-            return Err("[process_balance_changes]: Indexer only supports Burn, Mint and Transfer Operations".to_owned());
-        }
+        Operation::Approve { from, fee, .. } => debit(block_index, from, fee.get_e8s()),
     };
     Ok(())
 }
@@ -457,10 +455,7 @@ fn get_account_identifiers(block: &Block) -> Result<Vec<AccountIdentifier>, Stri
         Operation::Burn { from, .. } => Ok(vec![from]),
         Operation::Mint { to, .. } => Ok(vec![to]),
         Operation::Transfer { from, to, .. } => Ok(vec![from, to]),
-        _ => Err(
-            "[get_account_identifiers]: Indexer only supports Burn, Mint and Transfer Operations"
-                .to_owned(),
-        ),
+        Operation::Approve { from, spender, .. } => Ok(vec![from, spender]),
     }
 }
 

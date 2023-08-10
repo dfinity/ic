@@ -6,19 +6,21 @@ use ic_icp_index::{
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::BlockType;
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::Tokens;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
     AccountIdentifier, GetBlocksArgs, QueryEncodedBlocksResponse, MAX_BLOCKS_PER_REQUEST,
 };
-use icp_ledger::{LedgerCanisterInitPayload, Memo, Operation, Transaction};
+use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation, Transaction};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
 use num_traits::cast::ToPrimitive;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
@@ -74,6 +76,7 @@ fn install_ledger(
         .token_symbol_and_name(TOKEN_SYMBOL, TOKEN_NAME)
         .archive_options(archive_options)
         .initial_values(initial_balances)
+        .feature_flags(FeatureFlags { icrc2: true })
         .build()
         .unwrap();
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
@@ -217,6 +220,35 @@ fn transfer(
     Decode!(&res, Result<BlockIndex, TransferError>)
         .expect("Failed to decode Result<BlockIndex, TransferError>")
         .expect("Failed to transfer tokens")
+}
+
+fn approve(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    from: Account,
+    spender: Account,
+    amount: u64,
+    expires_at: Option<u64>,
+) -> BlockIndex {
+    let Account { owner, subaccount } = from;
+    let req = ApproveArgs {
+        from_subaccount: subaccount,
+        spender,
+        amount: amount.into(),
+        created_at_time: None,
+        fee: None,
+        memo: None,
+        expected_allowance: None,
+        expires_at,
+    };
+    let req = Encode!(&req).expect("Failed to encode ApproveArgs");
+    let res = env
+        .execute_ingress_as(owner.into(), ledger_id, "icrc2_approve", req)
+        .expect("Failed to create an approval")
+        .bytes();
+    Decode!(&res, Result<BlockIndex, ApproveError>)
+        .expect("Failed to decode Result<BlockIndex, ApproveError>")
+        .expect("Failed to create an approval")
 }
 
 fn get_account_identifier_transactions(
@@ -430,6 +462,28 @@ fn test_get_account_identifier_transactions() {
             icrc1_memo: None,
         },
     };
+    let expires_at = env
+        .time()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64
+        + Duration::from_secs(3600).as_nanos() as u64;
+    let tx4 = TransactionWithId {
+        id: 4u64,
+        transaction: Transaction {
+            operation: Operation::Approve {
+                from: account(1, 0).into(),
+                spender: account(4, 4).into(),
+                allowance: Tokens::from_e8s(1_000_000u64),
+                fee: Tokens::from_e8s(10_000),
+                expected_allowance: None,
+                expires_at: Some(TimeStamp::from_nanos_since_unix_epoch(expires_at)),
+            },
+            memo: Memo(0),
+            created_at_time: None,
+            icrc1_memo: None,
+        },
+    };
 
     ////////////
     //// phase 1: only 1 mint to (1, 0)
@@ -501,6 +555,28 @@ fn test_get_account_identifier_transactions() {
         get_account_identifier_transactions(env, index_id, account(1, 1).into(), None, u64::MAX)
             .transactions;
     assert_txs_with_id_eq(actual_txs, vec![tx3]);
+
+    ////////////
+    //// phase 4: approve from (1, 0) spender (4, 4)
+    approve(
+        env,
+        ledger_id,
+        account(1, 0),
+        account(4, 4),
+        1_000_000,
+        Some(expires_at),
+    );
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    let actual_txs =
+        get_account_identifier_transactions(env, index_id, account(1, 0).into(), None, 1)
+            .transactions;
+    assert_txs_with_id_eq(actual_txs, vec![tx4.clone()]);
+
+    let actual_txs =
+        get_account_identifier_transactions(env, index_id, account(4, 4).into(), None, u64::MAX)
+            .transactions;
+    assert_txs_with_id_eq(actual_txs, vec![tx4]);
 }
 
 #[test]
@@ -728,6 +804,19 @@ fn test_icp_balance_of() {
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(3, 0)),
         index_balance_of(env, index_id, account(3, 0).into())
+    );
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(2, 0)),
+        index_balance_of(env, index_id, account(2, 0).into())
+    );
+
+    // Test approve operations
+    approve(env, ledger_id, account(1, 0), account(2, 0), 100_000, None);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, account(1, 0)),
+        index_balance_of(env, index_id, account(1, 0).into())
     );
     assert_eq!(
         icrc1_balance_of(env, ledger_id, account(2, 0)),
