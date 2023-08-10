@@ -2,13 +2,8 @@
 :toc:
  
 == Introduction ==
- 
-The directory contains replica components that listen on network sockets, manage connections and serve HTTP requests.
 
-The replica components in this directory are:
-
-* link:public/README.adoc[public HTTPS API endpoint], serving incoming requests from boundary nodes and other replica nodes
-* metrics HTTPS endpoint, used by https://prometheus.io/[Prometheus] for scraping
+The purpose of this README is to list and argue about common design patterns when implementing a HTTPS server.
 
 == Connection management ==
 
@@ -27,7 +22,7 @@ The above rules serve as protection against:
  *  shared resource exhaustion (e.g. file descriptor exhaustion due to many connections, 
  CPU exhaustion due to excessive number of TLS handshakes).
 
-=== Detecing idle connections ===
+=== Detecting idle connections ===
 
 Each server must implement detection for dead connections, disconnections due
 to network inactivity and peers holding on to connections without sending requests.
@@ -89,24 +84,20 @@ If the system is not at capacity this implies the system througput is enough to 
 However, when the system is at capacity, it needs to make sure that it processes requests fairly.
 
 As explained above, there are bounded request queues for different API endpoints. The system is at capacity when queues are full.
-When a queue is full new reqests are rejected (in other scenarios it may be that the call that adds the element to the queue waits until there is space in the queue).
+When a queue is full new requests are rejected (in other scenarios it may be that the call that adds the element to the queue waits until there is space in the queue).
 
 In this queueing model, as long as there is a fair thread/task scheduler this would guarantee fairness across threads/tasks that try to 
 add elements into a full queue.
 
-== Too large and too slow requests ==
+== Request validation ==
 
 If a http request body is greater than the configured limit, the endpoints responds with `+413 Payload Too Large+`.
 
 If a http request does not complete within the specified timeout it will be aborted and a `+408 Request Timeout+` response will be sent.
 
-== Graceful shutdown ==
+== Components ==
 
-All the components are written in Rust async, implementing at least one event loop that lives for the duration
-of the replica process. For graceful shutdown of such event loops the replica relies on the Tokio runtime to cancel the 
-running and queued futures. Such cancellation happens when the runtime is dropped.
+The directory contains all HTTP(s) servers/endpoints required by the Internet Computer. Those are:
 
-== HTTP vs HTTPS ==
-
-Each component has a single listening port that accepts a TCP connection. After a connection is accepted, 
-the component peeks the first byte of the TCP stream to determine if a TLS connection is initiated.
+* link:public/README.adoc[public HTTPS API endpoint], which implements the https://internetcomputer.org/docs/current/references/ic-interface-spec#http-interface[HTTPS Interface] defined by the Internet Computer Interface Specification
+* metrics HTTPS endpoint, used by https://prometheus.io/[Prometheus] for scraping metrics
