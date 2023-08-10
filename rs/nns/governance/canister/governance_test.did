@@ -157,8 +157,14 @@ type Governance = record {
   genesis_timestamp_seconds : nat64;
 };
 type GovernanceCachedMetrics = record {
+  total_maturity_e8s_equivalent : nat64;
   not_dissolving_neurons_e8s_buckets : vec record { nat64; float64 };
+  dissolving_neurons_staked_maturity_e8s_equivalent_sum : nat64;
   garbage_collectable_neurons_count : nat64;
+  dissolving_neurons_staked_maturity_e8s_equivalent_buckets : vec record {
+    nat64;
+    float64;
+  };
   neurons_with_invalid_stake_count : nat64;
   not_dissolving_neurons_count_buckets : vec record { nat64; nat64 };
   total_supply_icp : nat64;
@@ -168,8 +174,14 @@ type GovernanceCachedMetrics = record {
   total_staked_e8s : nat64;
   not_dissolving_neurons_count : nat64;
   total_locked_e8s : nat64;
+  total_staked_maturity_e8s_equivalent : nat64;
+  not_dissolving_neurons_staked_maturity_e8s_equivalent_sum : nat64;
   dissolved_neurons_e8s : nat64;
   neurons_with_less_than_6_months_dissolve_delay_e8s : nat64;
+  not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets : vec record {
+    nat64;
+    float64;
+  };
   dissolving_neurons_count_buckets : vec record { nat64; nat64 };
   dissolving_neurons_count : nat64;
   dissolving_neurons_e8s_buckets : vec record { nat64; float64 };

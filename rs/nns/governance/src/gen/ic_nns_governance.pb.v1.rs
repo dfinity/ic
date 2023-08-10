@@ -2543,7 +2543,8 @@ pub mod governance {
         }
     }
     /// Stores metrics that are too costly to compute each time metrics are
-    /// requested
+    /// requested. For bucketed metrics, keys are bucket IDs, i.e., number of full
+    /// half-year dissolve delay intervals of neurons counted towards this bucket.
     #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[compare_default]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -2584,6 +2585,20 @@ pub mod governance {
         pub community_fund_total_maturity_e8s_equivalent: u64,
         #[prost(uint64, tag = "18")]
         pub total_locked_e8s: u64,
+        #[prost(uint64, tag = "19")]
+        pub total_maturity_e8s_equivalent: u64,
+        #[prost(uint64, tag = "20")]
+        pub total_staked_maturity_e8s_equivalent: u64,
+        #[prost(map = "uint64, double", tag = "21")]
+        pub dissolving_neurons_staked_maturity_e8s_equivalent_buckets:
+            ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, tag = "22")]
+        pub dissolving_neurons_staked_maturity_e8s_equivalent_sum: u64,
+        #[prost(map = "uint64, double", tag = "23")]
+        pub not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets:
+            ::std::collections::HashMap<u64, f64>,
+        #[prost(uint64, tag = "24")]
+        pub not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: u64,
     }
     /// Records that making an OpenSnsTokenSwap (OSTS) proposal is in progress. We
     /// only want one of these to be happening at the same time, because otherwise,
