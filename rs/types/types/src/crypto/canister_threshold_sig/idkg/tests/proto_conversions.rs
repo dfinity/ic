@@ -8,7 +8,7 @@ use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use crate::{Height, NodeId, PrincipalId};
 
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
-    create_params_for_dealers, mock_transcript, mock_unmasked_transcript_type,
+    create_idkg_params, mock_transcript, mock_unmasked_transcript_type,
 };
 use crate::crypto::{BasicSig, BasicSigOf};
 use crate::signature::BasicSignature;
@@ -72,7 +72,7 @@ fn should_fail_parsing_extended_derivation_path_proto_without_caller() {
     let mut proto = ExtendedDerivationPathProto::from(derivation_path);
     proto.caller = None;
     let parsing_result = ExtendedDerivationPath::try_from(proto);
-    assert_matches!(parsing_result, 
+    assert_matches!(parsing_result,
         Err(ProxyDecodeError::MissingField(field)) if field == "ExtendedDerivationPath::caller");
 }
 
@@ -90,12 +90,14 @@ fn initial_dealings_without_empty_or_default_data() -> InitialIDkgDealings {
     let previous_transcript =
         mock_transcript(Some(previous_receivers), mock_unmasked_transcript_type());
     let dealers = set_of_nodes(&[35, 36, 38]);
+    let receivers = set_of_nodes(&[39, 40, 41]);
 
     // For a Resharing Unmasked transcript, the dealer set should be a subset of the previous receiver set.
     assert!(dealers.is_subset(previous_transcript.receivers.get()));
 
-    let params = create_params_for_dealers(
+    let params = create_idkg_params(
         &dealers,
+        &receivers,
         IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
     );
     let dealings = mock_signed_dealings(params.transcript_id(), &dealers);

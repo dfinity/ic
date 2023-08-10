@@ -1,6 +1,6 @@
 use crate::crypto::canister_threshold_sig::error::InitialIDkgDealingsValidationError;
 use crate::crypto::canister_threshold_sig::idkg::tests::test_utils::{
-    create_params_for_dealers, mock_masked_transcript_type, mock_transcript,
+    create_idkg_params, mock_masked_transcript_type, mock_transcript,
     mock_unmasked_transcript_type, random_transcript_id,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
@@ -16,8 +16,9 @@ use std::collections::BTreeSet;
 #[test]
 fn should_not_create_initial_dealings_with_wrong_operation() {
     let dealers = set_of_nodes(&[1, 2, 3]);
+    let receivers = set_of_nodes(&[4, 5, 6]);
 
-    let random_params = create_params_for_dealers(&dealers, IDkgTranscriptOperation::Random);
+    let random_params = create_idkg_params(&dealers, &receivers, IDkgTranscriptOperation::Random);
     let initial_dealings_for_random = InitialIDkgDealings::new(random_params, Vec::new());
 
     // Random transcript creation not enabled for XNet resharing
@@ -28,8 +29,9 @@ fn should_not_create_initial_dealings_with_wrong_operation() {
 
     let masked_transcript = mock_transcript(Some(dealers.clone()), mock_masked_transcript_type());
 
-    let masked_params = create_params_for_dealers(
+    let masked_params = create_idkg_params(
         &dealers,
+        &receivers,
         IDkgTranscriptOperation::ReshareOfMasked(masked_transcript.clone()),
     );
 
@@ -44,8 +46,9 @@ fn should_not_create_initial_dealings_with_wrong_operation() {
     let unmasked_transcript =
         mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
 
-    let unmasked_times_masked_params = create_params_for_dealers(
+    let unmasked_times_masked_params = create_idkg_params(
         &dealers,
+        &receivers,
         IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_transcript),
     );
 
@@ -62,13 +65,15 @@ fn should_not_create_initial_dealings_with_wrong_operation() {
 #[test]
 fn should_not_create_initial_dealings_with_insufficient_dealings() {
     let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+    let receivers = set_of_nodes(&(7..15).collect::<Vec<_>>());
 
     // Transcript to be reshared
     let unmasked_transcript =
         mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
 
-    let params = create_params_for_dealers(
+    let params = create_idkg_params(
         &dealers,
+        &receivers,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
 
@@ -96,15 +101,40 @@ fn should_not_create_initial_dealings_with_insufficient_dealings() {
 }
 
 #[test]
-fn should_create_initial_dealings_with_sufficient_dealings() {
+fn should_not_create_initial_dealings_when_dealers_and_receivers_not_disjoint() {
     let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+    let receivers = set_of_nodes(&(5..12).collect::<Vec<_>>());
 
     // Transcript to be reshared
     let unmasked_transcript =
         mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
 
-    let params = create_params_for_dealers(
+    let params = create_idkg_params(
         &dealers,
+        &receivers,
+        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+    );
+
+    let dealings = mock_signed_dealings(params.transcript_id, &dealers);
+    let initial_dealings = InitialIDkgDealings::new(params, dealings);
+    assert_eq!(
+        initial_dealings,
+        Err(InitialIDkgDealingsValidationError::DealersAndReceiversNotDisjoint)
+    );
+}
+
+#[test]
+fn should_create_initial_dealings_with_sufficient_dealings() {
+    let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+    let receivers = set_of_nodes(&(7..15).collect::<Vec<_>>());
+
+    // Transcript to be reshared
+    let unmasked_transcript =
+        mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
+
+    let params = create_idkg_params(
+        &dealers,
+        &receivers,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
 
@@ -132,13 +162,15 @@ fn should_create_initial_dealings_with_sufficient_dealings() {
 #[test]
 fn should_create_initial_dealings_with_minimum_dealings() {
     let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+    let receivers = set_of_nodes(&(7..15).collect::<Vec<_>>());
 
     // Transcript to be reshared
     let unmasked_transcript =
         mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
 
-    let params = create_params_for_dealers(
+    let params = create_idkg_params(
         &dealers,
+        &receivers,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
     let collection_threshold = params
@@ -162,13 +194,15 @@ fn should_create_initial_dealings_with_minimum_dealings() {
 #[test]
 fn should_not_include_multiple_dealings_from_the_same_dealer() {
     let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+    let receivers = set_of_nodes(&(7..15).collect::<Vec<_>>());
 
     // Transcript to be reshared
     let unmasked_transcript =
         mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
 
-    let params = create_params_for_dealers(
+    let params = create_idkg_params(
         &dealers,
+        &receivers,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
 
@@ -205,13 +239,15 @@ fn should_not_include_multiple_dealings_from_the_same_dealer() {
 #[test]
 fn should_not_create_initial_dealings_with_wrong_dealers() {
     let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+    let receivers = set_of_nodes(&(7..15).collect::<Vec<_>>());
 
     // Transcript to be reshared
     let unmasked_transcript =
         mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
 
-    let params = create_params_for_dealers(
+    let params = create_idkg_params(
         &dealers,
+        &receivers,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
 
@@ -242,13 +278,15 @@ fn should_not_create_initial_dealings_with_wrong_dealers() {
 #[test]
 fn should_not_create_initial_dealings_with_mismatching_transcript_id() {
     let dealers = set_of_nodes(&(0..7).collect::<Vec<_>>());
+    let receivers = set_of_nodes(&(7..15).collect::<Vec<_>>());
 
     // Transcript to be reshared
     let unmasked_transcript =
         mock_transcript(Some(dealers.clone()), mock_unmasked_transcript_type());
 
-    let params = create_params_for_dealers(
+    let params = create_idkg_params(
         &dealers,
+        &receivers,
         IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
     );
 
@@ -278,7 +316,8 @@ fn should_not_create_initial_dealings_with_mismatching_transcript_id() {
 #[test]
 fn should_not_deserialize_if_invariants_violated() {
     let dealers = set_of_nodes(&[1, 2, 3]);
-    let random_params = create_params_for_dealers(&dealers, IDkgTranscriptOperation::Random);
+    let receivers = set_of_nodes(&[4, 5, 6]);
+    let random_params = create_idkg_params(&dealers, &receivers, IDkgTranscriptOperation::Random);
     let initial_dealings_with_violated_invariants_created_without_new_constructor =
         InitialIDkgDealings {
             params: random_params,

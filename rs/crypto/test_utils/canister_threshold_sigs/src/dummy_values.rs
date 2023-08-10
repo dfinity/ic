@@ -1,9 +1,10 @@
 use crate::{
-    create_params_for_dealers, mock_transcript, mock_unmasked_transcript_type, set_of_nodes,
+    create_idkg_params, mock_transcript, mock_unmasked_transcript_type, random_transcript_id,
+    set_of_nodes,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgComplaint, IDkgDealing, IDkgOpening, IDkgTranscriptId, IDkgTranscriptOperation,
-    InitialIDkgDealings, SignedIDkgDealing,
+    IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::{BasicSig, BasicSigOf};
 use ic_types::signature::BasicSignature;
@@ -64,11 +65,26 @@ pub fn dummy_initial_idkg_dealing_for_tests<R: Rng + CryptoRng>(
     // For a Resharing Unmasked transcript, the dealer set should be a subset of the previous receiver set.
     assert!(dealers.is_subset(previous_transcript.receivers.get()));
 
-    let params = create_params_for_dealers(
+    // For a XNet Re-sharing Unmasked transcript, the receiver set shall be disjoint from the dealer set.
+    let receivers = set_of_nodes(&[39, 40, 41]);
+
+    let previous_params = create_idkg_params(
+        &dealers,
         &dealers,
         IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
         rng,
     );
+    let operation_type = previous_params.operation_type().clone();
+    let params = IDkgTranscriptParams::new(
+        random_transcript_id(rng),
+        previous_params.dealers().get().clone(),
+        receivers,
+        previous_params.registry_version(),
+        previous_params.algorithm_id(),
+        operation_type,
+    )
+    .expect("failed to create resharing/multiplication IDkgTranscriptParams");
+
     let dealings = dummy_dealings(params.transcript_id(), &dealers);
 
     InitialIDkgDealings::new(params, dealings)

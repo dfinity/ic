@@ -33,15 +33,16 @@ use std::sync::Arc;
 
 pub mod dummy_values;
 
-pub fn create_params_for_dealers<R: RngCore + CryptoRng>(
+pub fn create_idkg_params<R: RngCore + CryptoRng>(
     dealer_set: &BTreeSet<NodeId>,
+    receiver_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,
     rng: &mut R,
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
         random_transcript_id(rng),
         dealer_set.clone(),
-        dealer_set.clone(),
+        receiver_set.clone(),
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         operation,
@@ -1016,7 +1017,8 @@ pub enum IDkgParticipants {
     /// - Choose a random subset with at least one node to be dealers.
     /// - Choose a random subset with at least one node to be receivers.
     /// Both dealers and receivers are chosen independently of each other and it could be the case
-    /// that some nodes are neither dealers nor receivers.
+    /// that some nodes are neither dealers nor receivers. It could also be the case that some
+    /// nodes are both dealers and receivers.
     /// This is equivalent to `RandomWithAtLeast{min_num_dealers: 1, min_num_receivers: 1}`.
     Random,
 
@@ -1024,7 +1026,8 @@ pub enum IDkgParticipants {
     /// - Choose a random subset with at least `min_num_dealers` nodes to be dealers.
     /// - Choose a random subset with at least `min_num_receivers` nodes to be receivers.
     /// Both dealers and receivers are chosen independently of each other and it could be the case
-    /// that some nodes are neither dealers nor receivers.
+    /// that some nodes are neither dealers nor receivers. It could also be the case that some
+    /// nodes are both dealers and receivers.
     ///
     /// # Panics
     /// - If `min_num_dealers` is zero.
