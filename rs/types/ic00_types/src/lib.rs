@@ -970,6 +970,7 @@ pub struct InstallCodeArgs {
     pub canister_id: PrincipalId,
     #[serde(with = "serde_bytes")]
     pub wasm_module: Vec<u8>,
+    #[serde(with = "serde_bytes")]
     pub arg: Vec<u8>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
