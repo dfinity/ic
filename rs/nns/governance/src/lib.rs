@@ -139,7 +139,52 @@ pub mod proposals;
 mod reward;
 pub mod storage;
 
+use std::{collections::HashMap, io};
+
 use crate::governance::Governance;
+
+trait Metric {
+    fn into(self) -> f64;
+}
+
+impl Metric for f64 {
+    fn into(self) -> f64 {
+        self
+    }
+}
+
+impl Metric for u64 {
+    fn into(self) -> f64 {
+        self as f64
+    }
+}
+
+/// Helper function that encodes neuron-related gauge vector metrics groupped into the following buckets:
+/// forall n: Neuron.
+///     n in bucket_0 <==>        0 <= dissolve_delay(n) < 6 months
+///     n in bucket_1 <==> 6 months <= dissolve_delay(n) < 12 months
+///     ...
+fn encode_dissolve_delay_buckets<W, T>(
+    mut builder: ic_metrics_encoder::LabeledMetricsBuilder<W>,
+    half_year_buckets: &HashMap<u64, T>,
+) where
+    W: io::Write,
+    T: Metric + Copy,
+{
+    for (k, v) in half_year_buckets.iter() {
+        let lower_bound_months = k * 6;
+        let upper_bound_months = (1 + k) * 6;
+        builder = builder
+            .value(
+                &[
+                    ("dissolve_delay_ge_months", &lower_bound_months.to_string()),
+                    ("dissolve_delay_lt_months", &upper_bound_months.to_string()),
+                ],
+                (*v).into(),
+            )
+            .unwrap();
+    }
+}
 
 /// Encodes
 pub fn encode_metrics(
@@ -293,45 +338,41 @@ pub fn encode_metrics(
             "Total number of neurons having an invalid stake, e.g. less than the minimum allowed stake.",
         )?;
 
-        w.encode_histogram(
-            "governance_dissolving_neurons_e8s",
-            metrics
-                .dissolving_neurons_e8s_buckets
-                .iter()
-                .map(|(k, v)| (*k as f64, *v)),
-            metrics.dissolving_neurons_count as f64,
-            "Total e8s held in dissolving neurons, grouped by dissolve delay (in years)",
-        )?;
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                "governance_dissolving_neurons_e8s",
+                "Total e8s held in dissolving neurons, grouped by dissolve delay",
+            )
+            .unwrap(),
+            &metrics.dissolving_neurons_e8s_buckets,
+        );
 
-        w.encode_histogram(
-            "governance_dissolving_neurons_count",
-            metrics
-                .dissolving_neurons_count_buckets
-                .iter()
-                .map(|(k, v)| (*k as f64, *v as f64)),
-            metrics.dissolving_neurons_count as f64,
-            "Total number of dissolving neurons, grouped by dissolve delay (in years)",
-        )?;
+        encode_dissolve_delay_buckets(
+            w.counter_vec(
+                "governance_dissolving_neurons_count",
+                "Total number of dissolving neurons, grouped by dissolve delay",
+            )
+            .unwrap(),
+            &metrics.dissolving_neurons_count_buckets,
+        );
 
-        w.encode_histogram(
-            "governance_not_dissolving_neurons_e8s",
-            metrics
-                .not_dissolving_neurons_e8s_buckets
-                .iter()
-                .map(|(k, v)| (*k as f64, *v)),
-            metrics.not_dissolving_neurons_count as f64,
-            "Total e8s held in not dissolving neurons, grouped by dissolve delay (in years)",
-        )?;
+        encode_dissolve_delay_buckets(
+            w.gauge_vec(
+                "governance_not_dissolving_neurons_e8s",
+                "Total e8s held in not dissolving neurons, grouped by dissolve delay",
+            )
+            .unwrap(),
+            &metrics.not_dissolving_neurons_e8s_buckets,
+        );
 
-        w.encode_histogram(
-            "governance_not_dissolving_neurons_count",
-            metrics
-                .not_dissolving_neurons_count_buckets
-                .iter()
-                .map(|(k, v)| (*k as f64, *v as f64)),
-            metrics.not_dissolving_neurons_count as f64,
-            "Total number of not dissolving neurons, grouped by dissolve delay (in years)",
-        )?;
+        encode_dissolve_delay_buckets(
+            w.counter_vec(
+                "governance_not_dissolving_neurons_count",
+                "Total number of not dissolving neurons, grouped by dissolve delay",
+            )
+            .unwrap(),
+            &metrics.not_dissolving_neurons_count_buckets,
+        );
 
         w.encode_gauge(
             "governance_neurons_with_less_than_6_months_dissolve_delay_count",
@@ -356,6 +397,38 @@ pub fn encode_metrics(
             metrics.community_fund_total_maturity_e8s_equivalent as f64,
             "The amount of Neurons' maturity committed to the Internet Computer's community fund",
         )?;
+
+        w.encode_gauge(
+            "governance_total_maturity_e8s_equivalent",
+            metrics.total_maturity_e8s_equivalent as f64,
+            "The total amount of Neurons' maturity",
+        )?;
+
+        w.encode_gauge(
+            "governance_total_staked_maturity_e8s_equivalent",
+            metrics.total_staked_maturity_e8s_equivalent as f64,
+            "The total amount of Neurons' staked maturity",
+        )?;
+
+        encode_dissolve_delay_buckets(
+            w
+                .gauge_vec(
+                    "governance_dissolving_neurons_staked_maturity_e8s_equivalent",
+                    "Total staked maturity e8s equivalent held in dissolving neurons, grouped by neuron dissolve delay",
+                )
+                .unwrap(),
+            &metrics.dissolving_neurons_staked_maturity_e8s_equivalent_buckets
+        );
+
+        encode_dissolve_delay_buckets(
+            w
+                .gauge_vec(
+                    "governance_not_dissolving_neurons_staked_maturity_e8s_equivalent",
+                    "Total staked maturity e8s equivalent held in not dissolving neurons, grouped by neuron dissolve delay",
+                )
+                .unwrap(),
+            &metrics.not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets
+        );
     }
 
     Ok(())

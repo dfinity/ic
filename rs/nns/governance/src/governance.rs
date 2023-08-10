@@ -7336,6 +7336,9 @@ impl Governance {
 
         for neuron in self.list_heap_neurons() {
             metrics.total_staked_e8s += neuron.minted_stake_e8s();
+            metrics.total_staked_maturity_e8s_equivalent +=
+                neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+            metrics.total_maturity_e8s_equivalent += neuron.maturity_e8s_equivalent;
 
             if neuron.joined_community_fund_timestamp_seconds.unwrap_or(0) > 0 {
                 metrics.community_fund_total_staked_e8s += neuron.minted_stake_e8s();
@@ -7360,6 +7363,7 @@ impl Governance {
                     neuron.minted_stake_e8s();
             }
 
+            let bucket = dissolve_delay_seconds / (6 * ONE_MONTH_SECONDS);
             match neuron.state(now) {
                 NeuronState::Unspecified => (),
                 NeuronState::Spawning => (),
@@ -7368,36 +7372,61 @@ impl Governance {
                     metrics.dissolved_neurons_e8s += neuron.cached_neuron_stake_e8s;
                 }
                 NeuronState::Dissolving => {
-                    metrics.dissolving_neurons_count += 1;
-                    let bucket = dissolve_delay_seconds / ONE_YEAR_SECONDS;
+                    {
+                        // Neurons with minted stake count metrics
+                        let e8s_entry = metrics
+                            .dissolving_neurons_e8s_buckets
+                            .entry(bucket)
+                            .or_insert(0.0);
+                        *e8s_entry += neuron.minted_stake_e8s() as f64;
 
-                    let e8s_entry = metrics
-                        .dissolving_neurons_e8s_buckets
-                        .entry(bucket)
-                        .or_insert(0.0);
-                    *e8s_entry += neuron.minted_stake_e8s() as f64;
+                        let count_entry = metrics
+                            .dissolving_neurons_count_buckets
+                            .entry(bucket)
+                            .or_insert(0);
+                        *count_entry += 1;
 
-                    let count_entry = metrics
-                        .dissolving_neurons_count_buckets
-                        .entry(bucket)
-                        .or_insert(0);
-                    *count_entry += 1;
+                        metrics.dissolving_neurons_count += 1;
+                    }
+                    {
+                        // Staked maturity metrics
+                        let increment = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+                        metrics.dissolving_neurons_staked_maturity_e8s_equivalent_sum += increment;
+                        let e8s_entry = metrics
+                            .dissolving_neurons_staked_maturity_e8s_equivalent_buckets
+                            .entry(bucket)
+                            .or_insert(0.0);
+                        *e8s_entry += increment as f64;
+                    }
                 }
                 NeuronState::NotDissolving => {
-                    metrics.not_dissolving_neurons_count += 1;
-                    let bucket = dissolve_delay_seconds / ONE_YEAR_SECONDS;
+                    {
+                        // Neurons with minted stake count metrics
+                        let e8s_entry = metrics
+                            .not_dissolving_neurons_e8s_buckets
+                            .entry(bucket)
+                            .or_insert(0.0);
+                        *e8s_entry += neuron.minted_stake_e8s() as f64;
 
-                    let e8s_entry = metrics
-                        .not_dissolving_neurons_e8s_buckets
-                        .entry(bucket)
-                        .or_insert(0.0);
-                    *e8s_entry += neuron.minted_stake_e8s() as f64;
+                        let count_entry = metrics
+                            .not_dissolving_neurons_count_buckets
+                            .entry(bucket)
+                            .or_insert(0);
+                        *count_entry += 1;
 
-                    let count_entry = metrics
-                        .not_dissolving_neurons_count_buckets
-                        .entry(bucket)
-                        .or_insert(0);
-                    *count_entry += 1;
+                        metrics.not_dissolving_neurons_count += 1;
+                    }
+                    {
+                        // Staked maturity metrics
+                        let increment = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+                        metrics.not_dissolving_neurons_staked_maturity_e8s_equivalent_sum +=
+                            increment;
+                        let e8s_entry = metrics
+                            .not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets
+                            .entry(bucket)
+                            .or_insert(0.0);
+                        *e8s_entry += increment as f64;
+                    }
                 }
             }
         }

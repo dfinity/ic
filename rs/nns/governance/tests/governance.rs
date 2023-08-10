@@ -290,16 +290,22 @@ fn test_single_neuron_proposal_new() {
                         GovernanceCachedMetricsChange::TimestampSeconds(U64Change(0, 999111016)),
                         GovernanceCachedMetricsChange::NotDissolvingNeuronsCount(U64Change(0, 1)),
                         GovernanceCachedMetricsChange::NotDissolvingNeuronsE8SBuckets(vec![
-                            MapChange::Added(0, 1.0),
+                            MapChange::Added(1, 1.0),
                         ]),
                         GovernanceCachedMetricsChange::NotDissolvingNeuronsCountBuckets(vec![
-                            MapChange::Added(0, 1),
+                            MapChange::Added(1, 1),
                         ]),
                         GovernanceCachedMetricsChange::GarbageCollectableNeuronsCount(U64Change(
                             0, 1
                         )),
                         GovernanceCachedMetricsChange::TotalStakedE8S(U64Change(0, 1)),
                         GovernanceCachedMetricsChange::TotalLockedE8S(U64Change(0, 1)),
+                        GovernanceCachedMetricsChange::NotDissolvingNeuronsStakedMaturityE8SEquivalentBuckets(vec![
+                            MapChange::Added(
+                                1,
+                                0.0,
+                            ),
+                        ]),
                     ]),
                 )),
                 GovernanceChange::CachedDailyMaturityModulationBasisPoints(
@@ -8785,29 +8791,29 @@ fn test_compute_cached_metrics() {
         total_supply_icp: 147,
         dissolving_neurons_count: 5,
         dissolving_neurons_e8s_buckets: [
-            (3, 568000000.0),
-            (5, 7210000000.0),
-            (1, 234000000.0),
-            (7, 18000000000.0),
+            (2, 234000000.0),
+            (6, 568000000.0),
+            (10, 7210000000.0),
+            (14, 18000000000.0),
         ]
         .iter()
         .cloned()
         .collect(),
-        dissolving_neurons_count_buckets: [(5, 2), (3, 1), (7, 1), (1, 1)]
+        dissolving_neurons_count_buckets: [(2, 1), (6, 1), (10, 2), (14, 1)]
             .iter()
             .cloned()
             .collect(),
         not_dissolving_neurons_count: 7,
         not_dissolving_neurons_e8s_buckets: [
-            (8, 6087000000.0),
-            (4, 1691000000.0),
-            (1, 234000000.0),
             (0, 100000100.0),
+            (2, 234000000.0),
+            (8, 1691000000.0),
+            (16, 6087000000.0),
         ]
         .iter()
         .cloned()
         .collect(),
-        not_dissolving_neurons_count_buckets: [(0, 3), (1, 1), (4, 2), (8, 1)]
+        not_dissolving_neurons_count_buckets: [(0, 3), (2, 1), (8, 2), (16, 1)]
             .iter()
             .cloned()
             .collect(),
@@ -8821,6 +8827,28 @@ fn test_compute_cached_metrics() {
         community_fund_total_staked_e8s: 234_000_000,
         community_fund_total_maturity_e8s_equivalent: 450_988_012,
         total_locked_e8s: 34_124_000_100,
+        total_maturity_e8s_equivalent: 450_988_012,
+        total_staked_maturity_e8s_equivalent: 0_u64,
+        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [
+            (2, 0.0),
+            (6, 0.0),
+            (10, 0.0),
+            (14, 0.0),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [
+            (0, 0.0),
+            (2, 0.0),
+            (8, 0.0),
+            (16, 0.0),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
     };
 
     assert_eq!(expected_metrics, actual_metrics);
@@ -12637,14 +12665,14 @@ async fn test_metrics() {
         timestamp_seconds: 100,
         total_supply_icp: 0,
         dissolving_neurons_count: 1,
-        dissolving_neurons_e8s_buckets: [(3, 300000000.0)].iter().cloned().collect(),
-        dissolving_neurons_count_buckets: [(3, 1)].iter().cloned().collect(),
+        dissolving_neurons_e8s_buckets: [(6, 300000000.0)].iter().cloned().collect(),
+        dissolving_neurons_count_buckets: [(6, 1)].iter().cloned().collect(),
         not_dissolving_neurons_count: 2,
-        not_dissolving_neurons_e8s_buckets: [(1, 200000000.0), (0, 100000000.0)]
+        not_dissolving_neurons_e8s_buckets: [(2, 200000000.0), (0, 100000000.0)]
             .iter()
             .cloned()
             .collect(),
-        not_dissolving_neurons_count_buckets: [(0, 1), (1, 1)].iter().cloned().collect(),
+        not_dissolving_neurons_count_buckets: [(0, 1), (2, 1)].iter().cloned().collect(),
         dissolved_neurons_count: 1,
         dissolved_neurons_e8s: 400000000,
         garbage_collectable_neurons_count: 0,
@@ -12655,6 +12683,18 @@ async fn test_metrics() {
         community_fund_total_staked_e8s: 0,
         community_fund_total_maturity_e8s_equivalent: 0,
         total_locked_e8s: 600_000_000,
+        total_maturity_e8s_equivalent: 0_u64,
+        total_staked_maturity_e8s_equivalent: 0_u64,
+        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [(6, 0.0)]
+            .iter()
+            .cloned()
+            .collect(),
+        dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [(0, 0.0), (2, 0.0)]
+            .iter()
+            .cloned()
+            .collect(),
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
     };
 
     let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
@@ -12685,14 +12725,14 @@ async fn test_metrics() {
         timestamp_seconds: 60 * 60 * 24 * 30,
         total_supply_icp: 0,
         dissolving_neurons_count: 1,
-        dissolving_neurons_e8s_buckets: [(2, 300000000.0)].iter().cloned().collect(),
-        dissolving_neurons_count_buckets: [(2, 1)].iter().cloned().collect(),
+        dissolving_neurons_e8s_buckets: [(5, 300000000.0)].iter().cloned().collect(),
+        dissolving_neurons_count_buckets: [(5, 1)].iter().cloned().collect(),
         not_dissolving_neurons_count: 2,
-        not_dissolving_neurons_e8s_buckets: [(1, 200000000.0), (0, 100000000.0)]
+        not_dissolving_neurons_e8s_buckets: [(2, 200000000.0), (0, 100000000.0)]
             .iter()
             .cloned()
             .collect(),
-        not_dissolving_neurons_count_buckets: [(0, 1), (1, 1)].iter().cloned().collect(),
+        not_dissolving_neurons_count_buckets: [(0, 1), (2, 1)].iter().cloned().collect(),
         dissolved_neurons_count: 1,
         dissolved_neurons_e8s: 400000000,
         garbage_collectable_neurons_count: 0,
@@ -12703,6 +12743,18 @@ async fn test_metrics() {
         community_fund_total_staked_e8s: 0,
         community_fund_total_maturity_e8s_equivalent: 0,
         total_locked_e8s: 600_000_000,
+        total_maturity_e8s_equivalent: 0,
+        total_staked_maturity_e8s_equivalent: 0_u64,
+        dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [(5, 0.0)]
+            .iter()
+            .cloned()
+            .collect(),
+        dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets: [(0, 0.0), (2, 0.0)]
+            .iter()
+            .cloned()
+            .collect(),
+        not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: 0_u64,
     };
     let metrics = gov.get_metrics().expect("Error while querying metrics.");
     assert_eq!(

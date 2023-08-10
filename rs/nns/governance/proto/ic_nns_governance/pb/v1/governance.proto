@@ -1810,7 +1810,8 @@ message Governance {
   uint64 short_voting_period_seconds = 14;
 
   // Stores metrics that are too costly to compute each time metrics are
-  // requested
+  // requested. For bucketed metrics, keys are bucket IDs, i.e., number of full
+  // half-year dissolve delay intervals of neurons counted towards this bucket.
   message GovernanceCachedMetrics {
     uint64 timestamp_seconds = 1;
     uint64 total_supply_icp = 2;
@@ -1830,6 +1831,12 @@ message Governance {
     uint64 community_fund_total_staked_e8s = 16;
     uint64 community_fund_total_maturity_e8s_equivalent = 17;
     uint64 total_locked_e8s = 18;
+    uint64 total_maturity_e8s_equivalent = 19;
+    uint64 total_staked_maturity_e8s_equivalent = 20;
+    map<uint64, double> dissolving_neurons_staked_maturity_e8s_equivalent_buckets = 21;
+    uint64 dissolving_neurons_staked_maturity_e8s_equivalent_sum = 22;
+    map<uint64, double> not_dissolving_neurons_staked_maturity_e8s_equivalent_buckets = 23;
+    uint64 not_dissolving_neurons_staked_maturity_e8s_equivalent_sum = 24;
   }
 
   GovernanceCachedMetrics metrics = 15;
