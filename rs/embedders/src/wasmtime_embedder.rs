@@ -159,6 +159,13 @@ struct WasmMemoryInfo {
     dirty_page_tracking: DirtyPageTracking,
 }
 
+/// Explicitly disable Wasm features which aren't handled in validation and
+/// instrumentation.
+fn disable_unused_features(config: &mut wasmtime::Config) {
+    config.wasm_function_references(false);
+    config.wasm_relaxed_simd(false);
+}
+
 pub struct WasmtimeEmbedder {
     log: ReplicaLogger,
     config: EmbeddersConfig,
@@ -186,6 +193,7 @@ impl WasmtimeEmbedder {
         let mut config = wasmtime::Config::default();
         config.cranelift_opt_level(OptLevel::None);
         ensure_determinism(&mut config);
+        disable_unused_features(&mut config);
         if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled
             || embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled
         {
