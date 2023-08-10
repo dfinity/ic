@@ -7199,11 +7199,13 @@ impl Governance {
                     &mut self.proto.neurons,
                     &proposal_data.cf_participants,
                 );
-                println!(
-                    "{}WARN: Neurons are missing from Governance when attempting to refund \
-                    community fund participation in an SNS Sale. Missing Neurons: {:?}",
-                    LOG_PREFIX, missing_neurons
-                );
+                if !missing_neurons.is_empty() {
+                    println!(
+                        "{}WARN: Neurons are missing from Governance when attempting to refund \
+                        community fund participation in an SNS Sale. Missing Neurons: {:?}",
+                        LOG_PREFIX, missing_neurons
+                    );
+                }
                 Ok(())
             }
         };
