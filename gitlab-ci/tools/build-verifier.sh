@@ -60,8 +60,7 @@ print_usage() {
     -h	    this help message
     -p      proposal id to check - the proposal has to be for an update-img
     -c	    git revision/commit to use - the commit has to exist on master branch of
-            the IC repository on GitHub and you should be running the script
-            from that branch
+            the IC repository on GitHub
     <empty> no option - uses the commit at the tip of the branch this is run on
 USAGE
 }
@@ -84,6 +83,8 @@ check_git_repo() {
     log_debug "Check we are inside a Git repository"
     if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then
         error "Please run this script inside of a git repository"
+    else
+        log_debug "Inside git repository"
     fi
 }
 
@@ -95,9 +96,12 @@ check_ic_repo() {
     # git@gitlab.com:dfinity-lab/public/ic.git
     # git@github.com:dfinity/ic.git
     # https://github.com/dfinity/ic.git
-    if [ "$git_remote" != "*/ic.git" ]; then
+    if [[ "$git_remote" == */ic.git ]] || [[ "$git_remote" == */ic ]]; then
+        log_debug "Inside IC repository"
+    else
         error "When not specifying any option please run this script inside an IC git repository"
     fi
+
 }
 
 #################### Set-up
@@ -170,16 +174,6 @@ if [ "$OPTIND" -eq 1 ]; then
     check_ic_repo
 
     no_option="true"
-fi
-
-# Check `git_commit` exists on the master branch of the IC repository on GitHub
-if [ -n "$git_commit" ]; then
-    check_git_repo
-    check_ic_repo
-
-    if [ -z "$(git branch master --contains $git_commit)" ]; then
-        error "When specifying the -c option please specify a hash which exists on the master branch of the IC repository"
-    fi
 fi
 
 # set the `git_hash` from the `proposal_id` or from the environment
@@ -263,11 +257,13 @@ curl --silent --show-error --location --retry 5 --retry-delay 10 --remote-name -
 
 log "Check the hash upload matches with the image uploaded"
 pushd "$ci_out"
-grep "update-img.tar.gz" SHA256SUMS | shasum -a256 -c- >/dev/null
+grep "update-img.tar.gz" SHA256SUMS | shasum -a256 -c- >/dev/null || error "The hash $git_hash does not have an associated published artifact"
 log_success "The CI's artefacts and hash match"
 
 # extract the hash from the SHA256SUMS file
 ci_package_sha256_hex="$(grep update-img.tar.gz SHA256SUMS | cut -d' ' -f 1)"
+
+# check the hash exists
 
 popd
 
@@ -282,16 +278,28 @@ if [ -n "$proposal_id" ]; then
 fi
 
 ################### Verify CI Image == Dev Image
+pushd "$tmpdir"
 # Copy if we are in CI, if there wasn't an option specified or if it was `git_commit`
-if [ -n "${CI:-}" ] || [ -n "$no_option" ] || [ -n "$git_commit" ]; then
+if [ -n "${CI:-}" ] || [ -n "$no_option" ]; then
     log "Copy IC repository from $pwd to temporary directory"
-    git clone --depth 1 "$pwd" .
+    git clone "$pwd" ic
 else
     log "Clone IC repository"
     git clone https://github.com/dfinity/ic
 fi
 
 pushd ic
+
+# Check `git_commit` exists on the master branch of the IC repository on GitHub
+if [ -n "$git_commit" ]; then
+    check_git_repo
+    check_ic_repo
+
+    if ! git cat-file -e "$git_commit^{commit}"; then
+        error "When specifying the -c option please specify a git hash which exists as a commit on a branch of the IC repository"
+    fi
+fi
+
 log "Check out $git_hash commit"
 git fetch --quiet origin "$git_hash"
 git checkout --quiet "$git_hash"
