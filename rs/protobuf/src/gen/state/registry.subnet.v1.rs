@@ -321,7 +321,7 @@ pub struct GossipConfig {
     /// period for polling the registry for updates 1_000/3_000/30_000
     #[prost(uint32, tag = "7")]
     pub registry_poll_period_ms: u32,
-    /// period for sending a retransmission request    
+    /// period for sending a retransmission request
     ///
     /// config for advert distribution.
     #[prost(uint32, tag = "8")]

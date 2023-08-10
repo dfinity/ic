@@ -1679,7 +1679,7 @@ pub struct GetAutoFinalizationStatusResponse {
     #[prost(bool, optional, tag = "2")]
     pub has_auto_finalize_been_attempted: ::core::option::Option<bool>,
     /// Will be populated with the FinalizeSwapResponse once auto-finalization has
-    /// completed.  
+    /// completed.
     #[prost(message, optional, tag = "3")]
     pub auto_finalize_swap_response: ::core::option::Option<FinalizeSwapResponse>,
 }

@@ -47,7 +47,7 @@ enum NeuronPermissionType {
   // The principal has permission to stake the neuron's maturity.
   NEURON_PERMISSION_TYPE_STAKE_MATURITY = 9;
 
-  // The principal has permission to grant/revoke permission to vote and submit 
+  // The principal has permission to grant/revoke permission to vote and submit
   // proposals on behalf of the neuron to other principals.
   NEURON_PERMISSION_TYPE_MANAGE_VOTING_PERMISSION = 10;
 }
@@ -151,7 +151,9 @@ message Neuron {
   }
 
   // A list of a neuron's followees for a specific function.
-  message Followees {repeated NeuronId followees = 1;}
+  message Followees {
+    repeated NeuronId followees = 1;
+  }
 
   // The neuron's followees, specified as a map of proposal functions IDs to followees neuron IDs.
   // The map's keys are represented by integers as Protobuf does not support enum keys in maps.
@@ -283,7 +285,6 @@ message NervousSystemFunction {
 // the SNS for execution.
 // The canister and method to call are derived from the `function_id`.
 message ExecuteGenericNervousSystemFunction {
-
   // This enum value determines what canister to call and what
   // function to call on that canister.
   //
@@ -314,7 +315,6 @@ message UpgradeSnsControlledCanister {
   // Canister install_code mode.
   optional types.v1.CanisterInstallMode mode = 4;
 }
-
 
 // A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 // target principal.
@@ -363,8 +363,8 @@ message UpgradeSnsToNextVersion {}
 // A proposal to register a list of dapps in the root canister.
 message RegisterDappCanisters {
   // The canister IDs to be registered (i.e. under the management of the SNS).
-  // The canisters must be already controlled by the SNS root canister before 
-  // making this proposal. Any controllers besides the root canister will be 
+  // The canisters must be already controlled by the SNS root canister before
+  // making this proposal. Any controllers besides the root canister will be
   // removed when the proposal is executed.
   // At least one canister ID is required.
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
@@ -732,21 +732,21 @@ message ProposalData {
 
   // False if both (initial|final)_reward_rate_basis_points are zero when the
   // proposal was made.
-  // This field is not very useful and will be removed in the future. The plan 
-  // is to treat all proposals as eligible for rewards, and not distribute 
+  // This field is not very useful and will be removed in the future. The plan
+  // is to treat all proposals as eligible for rewards, and not distribute
   // anything if the reward rate is zero.
   // The original purpose of this field is to make sure that proposals that are
-  // not eligible for rewards are not be blocked from garbage collection, 
+  // not eligible for rewards are not be blocked from garbage collection,
   // which normally only happens after rewards are distributed.
   bool is_eligible_for_rewards = 16;
 
-  // The initial voting period of the proposal, identical in meaning to the one in  
-  // NervousSystemParameters, and duplicated here so the parameters can be changed 
+  // The initial voting period of the proposal, identical in meaning to the one in
+  // NervousSystemParameters, and duplicated here so the parameters can be changed
   // without affecting existing proposals.
   uint64 initial_voting_period_seconds = 17;
 
-  // The wait_for_quiet_deadline_increase_seconds of the proposal, identical in 
-  // meaning to the one in NervousSystemParameters, and duplicated here so the 
+  // The wait_for_quiet_deadline_increase_seconds of the proposal, identical in
+  // meaning to the one in NervousSystemParameters, and duplicated here so the
   // parameters can be changed without affecting existing proposals.
   uint64 wait_for_quiet_deadline_increase_seconds = 18;
 
@@ -801,13 +801,13 @@ message NervousSystemParameters {
 
   // The wait for quiet algorithm extends the voting period of a proposal when
   // there is a flip in the majority vote during the proposal's voting period.
-  // This parameter determines the maximum time period that the voting period 
+  // This parameter determines the maximum time period that the voting period
   // may be extended after a flip. If there is a flip at the very end of the
   // original proposal deadline, the remaining time will be set to this parameter.
   // If there is a flip before or after the original deadline, the deadline will
   // extended by somewhat less than this parameter.
-  // The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds. 
-  // For more information, see the wiki page on the wait-for-quiet algorithm: 
+  // The maximum total voting period extension is 2 * wait_for_quiet_deadline_increase_seconds.
+  // For more information, see the wiki page on the wait-for-quiet algorithm:
   // https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet
   optional uint64 wait_for_quiet_deadline_increase_seconds = 18;
 
@@ -923,7 +923,7 @@ message VotingRewardsParameters {
   //
   // This supercedes super.reward_distribution_period_seconds.
   optional uint64 round_duration_seconds = 1;
-  
+
   // No longer needed because we assume the start time is the SNS genesis.
   reserved "start_timestamp_seconds";
   reserved 2;
@@ -935,11 +935,11 @@ message VotingRewardsParameters {
   optional uint64 reward_rate_transition_duration_seconds = 3;
 
   // The amount of rewards is proportional to token_supply * current_rate. In
-  // turn, current_rate is somewhere between `initial_reward_rate_basis_points` 
-  // and `final_reward_rate_basis_points`. In the first reward period, it is the 
-  // initial growth rate, and after the growth rate transition period has elapsed, 
-  // the growth rate becomes the final growth rate, and remains at that value for 
-  // the rest of time. The transition between the initial and final growth rates is 
+  // turn, current_rate is somewhere between `initial_reward_rate_basis_points`
+  // and `final_reward_rate_basis_points`. In the first reward period, it is the
+  // initial growth rate, and after the growth rate transition period has elapsed,
+  // the growth rate becomes the final growth rate, and remains at that value for
+  // the rest of time. The transition between the initial and final growth rates is
   // quadratic, and levels out at the end of the growth rate transition period.
   //
   // (A basis point is one in ten thousand.)
@@ -1010,22 +1010,22 @@ message RewardEvent {
   // making similar changes.
   optional uint64 end_timestamp_seconds = 5;
 
-  // In some cases, the rewards that would have been distributed in one round are 
+  // In some cases, the rewards that would have been distributed in one round are
   // "rolled over" into the next reward event. This field keeps track of how many
-  // rounds have passed since the last time rewards were distributed (rather 
+  // rounds have passed since the last time rewards were distributed (rather
   // than being rolled over).
-  // 
+  //
   // For the genesis reward event, this field will be zero.
   //
-  // In normal operation, this field will almost always be 1. There are two 
+  // In normal operation, this field will almost always be 1. There are two
   // reasons that rewards might not be distributed in a given round.
   //
-  // 1. "Missed" rounds: there was a long period when we did calculate rewards 
-  //    (longer than 1 round). (I.e. distribute_rewards was not called by 
+  // 1. "Missed" rounds: there was a long period when we did calculate rewards
+  //    (longer than 1 round). (I.e. distribute_rewards was not called by
   //    heartbeat for whatever reason, most likely some kind of bug.)
   //
-  // 2. Rollover: We tried to distribute rewards, but there were no proposals 
-  //    settled to distribute rewards for. 
+  // 2. Rollover: We tried to distribute rewards, but there were no proposals
+  //    settled to distribute rewards for.
   //
   // In both of these cases, the rewards purse rolls over into the next round.
   optional uint64 rounds_since_last_distribution = 6;
@@ -1114,7 +1114,6 @@ message Governance {
   // Metrics that are too costly to compute each time when they are
   // requested.
   message GovernanceCachedMetrics {
-
     reserved 16;
 
     // The timestamp when these metrics were computed, as seconds since
@@ -1311,6 +1310,7 @@ message GetSnsInitializationParametersRequest {}
 message GetSnsInitializationParametersResponse {
   string sns_initialization_parameters = 1;
 }
+
 // Request for the SNS's currently running version.
 message GetRunningSnsVersionRequest {}
 
@@ -1431,7 +1431,6 @@ message ManageNeuron {
     // The percentage of maturity to merge, from 1 to 100.
     uint32 percentage_to_merge = 1;
   }
-
 
   // Stake the maturity of a neuron.
   // The caller can choose a percentage of of the current maturity to stake.
@@ -1724,7 +1723,6 @@ message ListProposals {
   // with reward status PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
   repeated ProposalRewardStatus include_reward_status = 4;
 
-
   // A list of proposal decision statuses, specifying that only proposals that
   // that have one of the define decision statuses should be included
   // in the list.
@@ -1782,11 +1780,9 @@ message SetMode {
   Governance.Mode mode = 1;
 }
 
-message SetModeResponse {
-}
+message SetModeResponse {}
 
-message GetMode {
-}
+message GetMode {}
 
 message GetModeResponse {
   optional Governance.Mode mode = 1;
@@ -1797,7 +1793,8 @@ message ClaimSwapNeuronsRequest {
   // NeuronParameters groups parameters for creating a neuron in the
   // `claim_swap_neurons` method.
   message NeuronParameters {
-    reserved "memo"; reserved 4;
+    reserved "memo";
+    reserved 4;
 
     // The PrincipalId that will have permissions when the neuron is created.
     // The permissions that are granted are controlled my
@@ -1894,9 +1891,12 @@ enum ClaimSwapNeuronsError {
 
 // The response for the `claim_swap_neurons` method.
 message ClaimSwapNeuronsResponse {
-  reserved 1; reserved "successful_claims";
-  reserved 2; reserved "skipped_claims";
-  reserved 3; reserved "failed_claims";
+  reserved 1;
+  reserved "successful_claims";
+  reserved 2;
+  reserved "skipped_claims";
+  reserved 3;
+  reserved "failed_claims";
 
   // ClaimSwapNeurons will either return an error, in which
   // no requested neurons were claimed, or a vector with
@@ -1926,8 +1926,7 @@ message ClaimSwapNeuronsResponse {
   }
 }
 
-message GetMaturityModulationRequest {
-}
+message GetMaturityModulationRequest {}
 
 message GetMaturityModulationResponse {
   Governance.MaturityModulation maturity_modulation = 1;

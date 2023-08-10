@@ -62,7 +62,7 @@ message CanisterHttpShare {
 }
 
 message CanisterHttpResponseDivergence {
-   repeated CanisterHttpShare shares = 1;
+  repeated CanisterHttpShare shares = 1;
 }
 
 message CanisterHttpResponseMessage {
