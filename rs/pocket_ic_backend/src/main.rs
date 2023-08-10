@@ -37,8 +37,18 @@ struct Args {
     pid: u32,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .worker_threads(16)
+        // we use the tokio rt to dispatch blocking operations in the background
+        .max_blocking_threads(16)
+        .build()
+        .expect("Could not create tokio runtime!");
+    rt.block_on(async { main_().await });
+}
+
+async fn main_() {
     let args = Args::parse();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
