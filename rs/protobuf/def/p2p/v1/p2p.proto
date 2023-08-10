@@ -37,14 +37,14 @@ message GossipChunk {
 enum P2PError {
   P2P_ERROR_UNSPECIFIED = 0;
   P2P_ERROR_NOT_FOUND = 1;
-};
+}
 
 message ArtifactFilter {
   ConsensusMessageFilter consensus_filter = 1;
   CertificationMessageFilter certification_message_filter = 3;
   StateSyncFilter state_sync_filter = 4;
   reserved 2;
-};
+}
 
 message ConsensusMessageFilter {
   uint64 height = 1;
@@ -61,7 +61,7 @@ message StateSyncFilter {
 message ArtifactChunk {
   repeated bytes witnesses = 1;
   oneof data {
-    bytes artifact = 2;  // TODO(P2P-483): bincode-encoded Artifact to proto-encoding
+    bytes artifact = 2; // TODO(P2P-483): bincode-encoded Artifact to proto-encoding
     bytes chunk = 3;
   }
 }

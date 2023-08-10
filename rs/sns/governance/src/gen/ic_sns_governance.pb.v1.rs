@@ -908,7 +908,7 @@ pub struct ProposalData {
     /// which normally only happens after rewards are distributed.
     #[prost(bool, tag = "16")]
     pub is_eligible_for_rewards: bool,
-    /// The initial voting period of the proposal, identical in meaning to the one in  
+    /// The initial voting period of the proposal, identical in meaning to the one in
     /// NervousSystemParameters, and duplicated here so the parameters can be changed
     /// without affecting existing proposals.
     #[prost(uint64, tag = "17")]

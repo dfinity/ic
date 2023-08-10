@@ -19,7 +19,7 @@ message ConnectionEndpoint {
 message FlowEndpoint {
   reserved 1;
   reserved "flow_tag";
-  
+
   // The IP/port for this flow.
   ConnectionEndpoint endpoint = 2;
 }
@@ -52,7 +52,7 @@ message NodeRecord {
   reserved "public_api";
   reserved "private_api";
   reserved "prometheus_metrics";
-  reserved "xnet_api";  
+  reserved "xnet_api";
 
   // The id of the node operator that added this node.
   bytes node_operator_id = 15;

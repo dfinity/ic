@@ -1704,6 +1704,8 @@ pub struct DerivedProposalInformation {
 /// the swap canister.
 ///
 /// (See Governance::fetch_swap_background_information for how this is compiled.)
+///
+/// Obsolete. Superseded by newer fields.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
