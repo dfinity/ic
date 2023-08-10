@@ -524,17 +524,45 @@ const CONTROLLERS_LABEL: &[u8] = b"controllers";
 const METADATA_LABEL: &[u8] = b"metadata";
 const MODULE_HASH_LABEL: &[u8] = b"module_hash";
 
-const CANISTER_LABELS: [(&[u8], CertificationVersion); 5] = [
-    (CERTIFIED_DATA_LABEL, CertificationVersion::V0),
-    (CONTROLLER_LABEL, CertificationVersion::V1),
-    (CONTROLLERS_LABEL, CertificationVersion::V2),
-    (METADATA_LABEL, CertificationVersion::V6),
-    (MODULE_HASH_LABEL, CertificationVersion::V1),
+const CANISTER_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 5] = [
+    (
+        CERTIFIED_DATA_LABEL,
+        CertificationVersion::V0,
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
+    ),
+    (
+        CONTROLLER_LABEL,
+        CertificationVersion::V1,
+        CertificationVersion::V12,
+    ),
+    (
+        CONTROLLERS_LABEL,
+        CertificationVersion::V2,
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
+    ),
+    (
+        METADATA_LABEL,
+        CertificationVersion::V6,
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
+    ),
+    (
+        MODULE_HASH_LABEL,
+        CertificationVersion::V1,
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
+    ),
 ];
 
-const CANISTER_NO_MODULE_LABELS: [(&[u8], CertificationVersion); 2] = [
-    (CONTROLLER_LABEL, CertificationVersion::V1),
-    (CONTROLLERS_LABEL, CertificationVersion::V2),
+const CANISTER_NO_MODULE_LABELS: [(&[u8], CertificationVersion, CertificationVersion); 2] = [
+    (
+        CONTROLLER_LABEL,
+        CertificationVersion::V1,
+        CertificationVersion::V12,
+    ),
+    (
+        CONTROLLERS_LABEL,
+        CertificationVersion::V2,
+        MAX_SUPPORTED_CERTIFICATION_VERSION,
+    ),
 ];
 
 #[derive(Clone)]
@@ -573,9 +601,9 @@ impl<'a> CanisterFork<'a> {
 
 impl<'a> LazyFork<'a> for CanisterFork<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
-        CANISTER_LABELS
-            .iter()
-            .find(|(l, v)| l == &label.as_bytes() && *v <= self.version)?;
+        CANISTER_LABELS.iter().find(|(l, minv, maxv)| {
+            l == &label.as_bytes() && *minv <= self.version && self.version <= *maxv
+        })?;
 
         self.edge_no_checks(label.as_bytes())
     }
@@ -586,25 +614,33 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
             Box::new(
                 CANISTER_LABELS
                     .iter()
-                    .filter_map(move |(label, v)| (*v <= version).then_some(Label::from(label))),
+                    .filter_map(move |(label, minv, maxv)| {
+                        (*minv <= version && version <= *maxv).then_some(Label::from(label))
+                    }),
             )
         } else {
             Box::new(
                 CANISTER_NO_MODULE_LABELS
                     .iter()
-                    .filter_map(move |(label, v)| (*v <= version).then_some(Label::from(label))),
+                    .filter_map(move |(label, minv, maxv)| {
+                        (*minv <= version && version <= *maxv).then_some(Label::from(label))
+                    }),
             )
         }
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
         let canister = self.clone();
-        Box::new(CANISTER_LABELS.iter().filter_map(move |(label, v)| {
-            if *v > canister.version {
-                return None;
-            }
-            Some((Label::from(label), canister.edge_no_checks(label)?))
-        }))
+        Box::new(
+            CANISTER_LABELS
+                .iter()
+                .filter_map(move |(label, minv, maxv)| {
+                    if !(*minv <= canister.version && canister.version <= *maxv) {
+                        return None;
+                    }
+                    Some((Label::from(label), canister.edge_no_checks(label)?))
+                }),
+        )
     }
 
     fn len(&self) -> usize {
@@ -612,12 +648,12 @@ impl<'a> LazyFork<'a> for CanisterFork<'a> {
         if self.canister.execution_state.is_some() {
             CANISTER_LABELS
                 .iter()
-                .filter(move |(_, v)| *v <= version)
+                .filter(move |(_, minv, maxv)| *minv <= version && version <= *maxv)
                 .count()
         } else {
             CANISTER_NO_MODULE_LABELS
                 .iter()
-                .filter(move |(_, v)| *v <= version)
+                .filter(move |(_, minv, maxv)| *minv <= version && version <= *maxv)
                 .count()
         }
     }
