@@ -6797,6 +6797,7 @@ dependencies = [
 name = "ic-crypto-test-utils-canister-threshold-sigs"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "ic-crypto-internal-csp",
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-temp-crypto",

@@ -457,20 +457,26 @@ impl ExhaustiveSet for NiDkgId {
 
 impl ExhaustiveSet for InitialIDkgDealings {
     fn exhaustive_set<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<Self> {
-        let node_ids = BTreeSet::<NodeId>::exhaustive_set(rng);
+        let dealers = BTreeSet::<NodeId>::exhaustive_set(rng);
+        let mut receivers = BTreeSet::<NodeId>::exhaustive_set(rng).pop().unwrap();
+        while !receivers.is_disjoint(&dealers[0]) {
+            receivers = BTreeSet::<NodeId>::exhaustive_set(rng).pop().unwrap();
+        }
         let mut previous_transcript = IDkgTranscript::exhaustive_set(rng).pop().unwrap();
-        // Invariant: dealers need to be contained in previous receivers
-        previous_transcript.receivers = IDkgReceivers::new(node_ids[0].clone()).unwrap();
+        // Invariant: dealers need to be contained in previous receivers,
+        // and the receivers need to be disjoint from the dealers (for XNet resharing, which is what
+        // `InitialIdkgDealings::new` is used for).
+        previous_transcript.receivers = IDkgReceivers::new(dealers[0].clone()).unwrap();
         let params = IDkgTranscriptParams::new(
             IDkgTranscriptId::exhaustive_set(rng).pop().unwrap(),
-            node_ids[0].clone(),
-            node_ids[0].clone(),
+            dealers[0].clone(),
+            receivers,
             RegistryVersion::exhaustive_set(rng).pop().unwrap(),
             AlgorithmId::ThresholdEcdsaSecp256k1,
             IDkgTranscriptOperation::ReshareOfUnmasked(previous_transcript),
         )
         .unwrap();
-        let dealings = dummy_dealings(params.transcript_id(), &node_ids[0]);
+        let dealings = dummy_dealings(params.transcript_id(), &dealers[0]);
         vec![Self::new(params, dealings).unwrap()]
     }
 }

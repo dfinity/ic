@@ -12,14 +12,15 @@ use std::collections::{BTreeMap, BTreeSet};
 // Due to a quasi-circular dependency with ic-types
 // the test utilities here cannot be replaced by the ones in
 // ic-crypto-test-utils-canister-threshold-sigs
-pub fn create_params_for_dealers(
+pub fn create_idkg_params(
     dealer_set: &BTreeSet<NodeId>,
+    receiver_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,
 ) -> IDkgTranscriptParams {
     IDkgTranscriptParams::new(
         random_transcript_id(),
         dealer_set.clone(),
-        dealer_set.clone(),
+        receiver_set.clone(),
         RegistryVersion::from(0),
         AlgorithmId::ThresholdEcdsaSecp256k1,
         operation,
