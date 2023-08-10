@@ -12,7 +12,6 @@ use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterCall, CanisterCallOrTask};
 use ic_logger::{error, fatal, warn, ReplicaLogger};
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
@@ -20,7 +19,10 @@ use ic_replicated_state::{
 };
 use ic_system_api::sandbox_safe_system_state::SystemStateChanges;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
-use ic_types::messages::{CallContextId, CallbackId, MessageId, Payload, RejectContext, Response};
+use ic_types::messages::{
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Payload, RejectContext,
+    Response,
+};
 use ic_types::methods::{Callback, WasmMethod};
 use ic_types::{Cycles, MemoryAllocation, NumInstructions, Time, UserId};
 

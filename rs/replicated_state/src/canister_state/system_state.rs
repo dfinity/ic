@@ -8,7 +8,6 @@ use crate::{CanisterQueues, CanisterState, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
 use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
-use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -16,7 +15,10 @@ use ic_protobuf::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    messages::{Ingress, RejectContext, Request, RequestOrResponse, Response, StopCanisterContext},
+    messages::{
+        CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask, Ingress, RejectContext,
+        Request, RequestOrResponse, Response, StopCanisterContext,
+    },
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, Cycles, MemoryAllocation, NumBytes, PrincipalId, Time,
 };

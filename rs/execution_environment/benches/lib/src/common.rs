@@ -15,7 +15,6 @@ use ic_execution_environment::{
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
-use ic_interfaces::messages::CanisterMessage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
@@ -32,7 +31,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_types::{
-    messages::{CallbackId, Payload, RejectContext},
+    messages::{CallbackId, CanisterMessage, Payload, RejectContext},
     methods::{Callback, WasmClosure},
     Cycles, MemoryAllocation, NumBytes, NumInstructions, Time,
 };

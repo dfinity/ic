@@ -15,11 +15,12 @@ use ic_ic00_types::IC_00;
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterCall, CanisterMessageOrTask, CanisterTask};
-use ic_interfaces::messages::{CanisterCallOrTask, CanisterMessage};
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
-use ic_types::messages::CallContextId;
+use ic_types::messages::{
+    CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
+    CanisterTask,
+};
 use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 

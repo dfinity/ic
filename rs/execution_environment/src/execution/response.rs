@@ -14,13 +14,14 @@ use ic_embedders::wasm_executor::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::{CanisterMessage, CanisterMessageOrTask};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{CallContextId, CallbackId, Payload, Response};
+use ic_types::messages::{
+    CallContextId, CallbackId, CanisterMessage, CanisterMessageOrTask, Payload, Response,
+};
 use ic_types::methods::{Callback, FuncRef, WasmClosure};
 use ic_types::Cycles;
 use ic_types::{NumBytes, NumInstructions, Time};

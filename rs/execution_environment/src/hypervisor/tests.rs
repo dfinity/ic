@@ -4,7 +4,6 @@ use ic_base_types::{NumSeconds, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
-use ic_interfaces::messages::CanisterTask;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
@@ -22,12 +21,13 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
-use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
-    ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, methods::WasmMethod,
-    CanisterId, Cycles, NumBytes, NumInstructions,
+    ingress::{IngressState, IngressStatus, WasmResult},
+    messages::CanisterTask,
+    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+    methods::WasmMethod,
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES,
 };
-use ic_types::{ComputeAllocation, MAX_STABLE_MEMORY_IN_BYTES};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};

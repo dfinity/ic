@@ -16,10 +16,7 @@ use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionRoundType, RegistryExecutionSettings,
 };
-use ic_interfaces::{
-    execution_environment::{IngressHistoryWriter, Scheduler},
-    messages::CanisterMessage,
-};
+use ic_interfaces::execution_environment::{IngressHistoryWriter, Scheduler};
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
@@ -33,7 +30,7 @@ use ic_system_api::InstructionLimits;
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{Ingress, MessageId},
+    messages::{CanisterMessage, Ingress, MessageId},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };

@@ -13,13 +13,13 @@ use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
-use ic_interfaces::messages::CanisterCall;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeRequestId, CanisterState, SystemState,
 };
 use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
+use ic_types::messages::CanisterCall;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 /// Installs a new code in canister. The algorithm consists of five stages:

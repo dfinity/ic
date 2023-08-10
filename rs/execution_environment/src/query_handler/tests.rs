@@ -2,7 +2,6 @@ use crate::InternalHttpQueryHandler;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::messages::CanisterTask;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::{
@@ -11,7 +10,9 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::{
-    ingress::WasmResult, messages::UserQuery, time, CountBytes, Cycles, NumInstructions,
+    ingress::WasmResult,
+    messages::{CanisterTask, UserQuery},
+    time, CountBytes, Cycles, NumInstructions,
 };
 use std::{sync::Arc, time::Duration};
 

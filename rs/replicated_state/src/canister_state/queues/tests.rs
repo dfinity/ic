@@ -6,7 +6,6 @@ use super::{
 use crate::{CanisterState, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
-use ic_interfaces::messages::CanisterMessage;
 use ic_test_utilities::{
     mock_time,
     state::arb_num_receivers,
@@ -16,7 +15,10 @@ use ic_test_utilities::{
         messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     },
 };
-use ic_types::{messages::CallbackId, time::expiry_time_from_now};
+use ic_types::{
+    messages::{CallbackId, CanisterMessage},
+    time::expiry_time_from_now,
+};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::convert::TryInto;

@@ -1,5 +1,4 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_interfaces::messages::CanisterMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::DEFAULT_QUEUE_CAPACITY,
@@ -12,7 +11,7 @@ use ic_test_utilities::types::{
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    messages::{Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    messages::{CanisterMessage, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
     CanisterId, Cycles,
 };
 use std::sync::Arc;

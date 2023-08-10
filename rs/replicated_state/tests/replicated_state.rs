@@ -8,7 +8,6 @@ use ic_ic00_types::{
     BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
     Payload as _,
 };
-use ic_interfaces::messages::CanisterMessage;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
@@ -25,7 +24,9 @@ use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test
 use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
-    messages::{Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
+    messages::{
+        CanisterMessage, Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES,
+    },
     CountBytes, Cycles, MemoryAllocation, Time,
 };
 use maplit::btreemap;

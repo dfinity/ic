@@ -3,7 +3,6 @@ use super::*;
 use ic_ic00_types::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
 };
-use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
 use ic_replicated_state::canister_state::system_state::CanisterHistory;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeRequestId;
 use ic_test_utilities::types::ids::user_test_id;
@@ -16,6 +15,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
+use ic_types::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
 use std::sync::Arc;
 
 fn default_canister_state_bits() -> CanisterStateBits {

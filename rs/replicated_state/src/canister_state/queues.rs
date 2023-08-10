@@ -7,7 +7,6 @@ use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
-use ic_interfaces::messages::CanisterMessage;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue as ProtoNextInputQueue},
@@ -15,7 +14,7 @@ use ic_protobuf::{
 };
 use ic_types::{
     messages::{
-        Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
+        CanisterMessage, Ingress, Payload, RejectContext, Request, RequestOrResponse, Response,
         MAX_RESPONSE_COUNT_BYTES,
     },
     xnet::{QueueId, SessionId},
@@ -1504,9 +1503,8 @@ pub mod testing {
     use super::{CanisterQueues, MemoryUsageStats, QueueOp};
     use crate::canister_state::queues::OutputQueuesStats;
     use crate::{InputQueueType, StateError};
-    use ic_interfaces::messages::CanisterMessage;
     use ic_types::{
-        messages::{Request, RequestOrResponse},
+        messages::{CanisterMessage, Request, RequestOrResponse},
         CanisterId, Time,
     };
     use std::{collections::VecDeque, sync::Arc};

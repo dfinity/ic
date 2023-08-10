@@ -3,7 +3,6 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00};
 use ic_interfaces::execution_environment::SystemApi;
-use ic_interfaces::messages::CanisterMessage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
@@ -23,7 +22,8 @@ use ic_test_utilities::{
 };
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
-    messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, ComputeAllocation, Cycles, NumInstructions,
+    messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
+    ComputeAllocation, Cycles, NumInstructions,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
