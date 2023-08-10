@@ -147,7 +147,7 @@ after_script:
   artifacts:
     expire_in: 3 days
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:2e96a3115fa6dcfa79508173f1468347ab455498eb9fcba6dd276ab8db98751e"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:9c07c78617dc6163b828c99982a94410a2632e1fa136f4918825245633e671ff"
   tags:
     - dfinity-ic
   variables:
@@ -157,7 +157,7 @@ after_script:
   artifacts:
     expire_in: 3 days
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:2e96a3115fa6dcfa79508173f1468347ab455498eb9fcba6dd276ab8db98751e"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:9c07c78617dc6163b828c99982a94410a2632e1fa136f4918825245633e671ff"
   tags:
     - dfinity-ic
   variables:
