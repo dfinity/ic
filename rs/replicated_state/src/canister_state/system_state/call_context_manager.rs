@@ -3,18 +3,15 @@ mod tests;
 
 use crate::StateError;
 use ic_ic00_types::IC_00;
-use ic_interfaces::messages::CanisterCallOrTask;
-use ic_interfaces::{execution_environment::HypervisorError, messages::CanisterCall};
+use ic_interfaces::execution_environment::HypervisorError;
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
-use ic_types::messages::Response;
-use ic_types::Time;
 use ic_types::{
     ingress::WasmResult,
-    messages::{CallContextId, CallbackId, MessageId},
+    messages::{CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Response},
     methods::Callback,
-    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, PrincipalId,
+    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, PrincipalId, Time,
     UserId,
 };
 use serde::{Deserialize, Serialize};

@@ -24,12 +24,9 @@ use ic_ic00_types::{
     CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method, Payload,
     ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
-use ic_interfaces::{
-    execution_environment::{
-        ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
-        RegistryExecutionSettings, SubnetAvailableMemory,
-    },
-    messages::{CanisterCall, CanisterMessage, CanisterTask},
+use ic_interfaces::execution_environment::{
+    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
+    RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -52,8 +49,8 @@ use ic_types::{
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response, UserQuery,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        AnonymousQuery, CallbackId, CanisterCall, CanisterMessage, CanisterTask, MessageId,
+        RequestOrResponse, Response, UserQuery, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
     CanisterId, Cycles, Height, NumInstructions, NumPages, Time, UserId,
 };

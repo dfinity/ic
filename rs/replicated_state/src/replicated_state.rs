@@ -11,13 +11,12 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::{execution_environment::CanisterOutOfCyclesError, messages::CanisterMessage};
+use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::messages::Ingress;
 use ic_types::{
     ingress::IngressStatus,
-    messages::{CallbackId, MessageId, RequestOrResponse, Response},
+    messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };

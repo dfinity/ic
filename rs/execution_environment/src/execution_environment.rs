@@ -32,14 +32,9 @@ use ic_ic00_types::{
     ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetControllerArgs,
     SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
-use ic_interfaces::{
-    execution_environment::{
-        ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
-        SubnetAvailableMemory,
-    },
-    messages::{
-        CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
-    },
+use ic_interfaces::execution_environment::{
+    ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
+    SubnetAvailableMemory,
 };
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
@@ -62,8 +57,9 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::NiDkgTargetId,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        extract_effective_canister_id, AnonymousQuery, Payload, RejectContext, Request, Response,
-        SignedIngressContent, StopCanisterContext,
+        extract_effective_canister_id, AnonymousQuery, CanisterCall, CanisterCallOrTask,
+        CanisterMessage, CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request,
+        Response, SignedIngressContent, StopCanisterContext,
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,

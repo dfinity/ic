@@ -24,11 +24,8 @@ use ic_ic00_types::{
     CanisterInstallMode, CanisterSettingsArgsBuilder, CanisterStatusType, CreateCanisterArgs,
     EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
 };
-use ic_interfaces::{
-    execution_environment::{
-        ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
-    },
-    messages::CanisterCall,
+use ic_interfaces::execution_environment::{
+    ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -64,7 +61,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, StopCanisterContext},
+    messages::{CallbackId, CanisterCall, StopCanisterContext},
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, QueryAllocation, SubnetId, Time, UserId,

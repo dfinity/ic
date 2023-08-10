@@ -1,5 +1,4 @@
 use assert_matches::assert_matches;
-use ic_interfaces::messages::CanisterTask;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
@@ -7,6 +6,7 @@ use ic_state_machine_tests::{Cycles, StateMachine};
 use ic_state_machine_tests::{StateMachineBuilder, WasmResult};
 use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
+use ic_types::messages::CanisterTask;
 use ic_types::NumBytes;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;

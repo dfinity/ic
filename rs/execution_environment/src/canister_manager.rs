@@ -19,7 +19,6 @@ use ic_ic00_types::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
 };
-use ic_interfaces::messages::CanisterCall;
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -34,7 +33,9 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::NumInstructions;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
-    messages::{Payload, RejectContext, Response as CanisterResponse, StopCanisterContext},
+    messages::{
+        CanisterCall, Payload, RejectContext, Response as CanisterResponse, StopCanisterContext,
+    },
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, InvalidComputeAllocationError,
     InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
     PrincipalId, QueryAllocation, SubnetId, Time,

@@ -7,11 +7,8 @@ use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::CanisterStateChanges;
 use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode};
-use ic_interfaces::{
-    execution_environment::{
-        HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
-    },
-    messages::CanisterCall,
+use ic_interfaces::execution_environment::{
+    HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeRequestId;
@@ -20,8 +17,8 @@ use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
 use ic_types::{
-    funds::Cycles, CanisterTimer, ComputeAllocation, Height, MemoryAllocation, NumInstructions,
-    Time,
+    funds::Cycles, messages::CanisterCall, CanisterTimer, ComputeAllocation, Height,
+    MemoryAllocation, NumInstructions, Time,
 };
 use ic_wasm_types::WasmHash;
 

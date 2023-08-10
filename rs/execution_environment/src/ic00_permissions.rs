@@ -1,7 +1,7 @@
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::Method as Ic00Method;
-use ic_interfaces::messages::CanisterCall;
 use ic_replicated_state::ReplicatedState;
+use ic_types::messages::CanisterCall;
 use ic_types::{CanisterId, SubnetId};
 
 /// Keeps track of when an IC00 method is allowed to be executed.

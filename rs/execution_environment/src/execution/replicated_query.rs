@@ -9,10 +9,11 @@ use crate::execution::common::{
 };
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::messages::CanisterCall;
-use ic_interfaces::messages::CanisterCallOrTask;
 use ic_replicated_state::{CallOrigin, CanisterState};
-use ic_types::{NumBytes, NumInstructions, Time};
+use ic_types::{
+    messages::{CanisterCall, CanisterCallOrTask},
+    NumBytes, NumInstructions, Time,
+};
 
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, WasmMethod};
