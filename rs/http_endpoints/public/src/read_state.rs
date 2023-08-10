@@ -267,6 +267,7 @@ fn verify_paths(
                 can_read_canister_metadata(user, &canister_id, &name, state)?
             }
             [b"subnet"] => {}
+            [b"subnet", _subnet_id] => {}
             [b"subnet", _subnet_id, b"public_key" | b"canister_ranges"] => {}
             [b"request_status", request_id]
             | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
