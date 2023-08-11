@@ -1,15 +1,15 @@
 use anyhow::Result;
-use ic_nervous_system_common::{i2d, E8};
+use ic_nervous_system_common::i2d;
 use ic_nervous_system_proto::pb::v1::Tokens;
-use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
-use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
+use ic_nns_governance::pb::v1::Neuron;
 use ic_sns_swap::pb::v1::GetDerivedStateResponse;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
+use ic_tests::nns_tests::neurons_fund;
+use ic_tests::nns_tests::sns_deployment;
 use ic_tests::nns_tests::{
-    sns_deployment,
     sns_deployment::{generate_ticket_participants_workload, initiate_token_swap},
     swap_finalization::finalize_committed_swap_and_check_success,
 };
@@ -18,11 +18,7 @@ use ic_tests::sns_client::{
     SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
 };
 use ic_tests::systest;
-use ic_tests::util::{block_on, generate_identity};
-use icp_ledger::Subaccount;
-use rand::RngCore;
-use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaChaRng;
+use ic_tests::util::block_on;
 use rust_decimal::prelude::ToPrimitive;
 use std::time::Duration;
 
@@ -56,21 +52,7 @@ fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     }
 }
 
-/// Deterministically generates a neuron that's joined the community fund (CF).
-/// As long as at least one neuron is in the CF, the CF will contribute to the SNS.
 fn nns_cf_neuron() -> Neuron {
-    const TWELVE_MONTHS_SECONDS: u64 = 12 * 30 * 24 * 60 * 60;
-
-    let (_keypair, _pubkey, principal) = generate_identity(2000);
-
-    let mut rng = ChaChaRng::seed_from_u64(2000_u64);
-
-    let id = Some(NeuronId { id: rng.next_u64() });
-    let account = {
-        let mut bytes = [0u8; 32];
-        rng.fill_bytes(&mut bytes);
-        Subaccount(bytes)
-    };
     let cf_contribution = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap()
@@ -78,17 +60,8 @@ fn nns_cf_neuron() -> Neuron {
         .unwrap()
         .e8s
         .unwrap();
-    Neuron {
-        id,
-        account: account.into(),
-        maturity_e8s_equivalent: cf_contribution,
-        cached_neuron_stake_e8s: E8,
-        controller: Some(principal),
-        dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
-        not_for_profit: false,
-        joined_community_fund_timestamp_seconds: Some(1000), // should be a long time ago
-        ..Default::default()
-    }
+
+    neurons_fund::initial_nns_neuron(cf_contribution * 100).neuron
 }
 
 fn sns_setup_legacy(env: TestEnv) {

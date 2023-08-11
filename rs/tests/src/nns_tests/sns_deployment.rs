@@ -65,6 +65,7 @@ use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPA
 use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 
+use super::neurons_fund::get_current_nns_neuron_info;
 use super::sns_aggregator::AggregatorClient;
 
 const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
@@ -318,11 +319,31 @@ pub fn setup(
         ..create_service_nervous_system_proposal
     };
 
+    let starting_nf_neuron_info = block_on(get_current_nns_neuron_info(&env)).unwrap();
+
     // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
     install_sns(
         &env,
         canister_wasm_strategy,
-        create_service_nervous_system_proposal,
+        create_service_nervous_system_proposal.clone(),
+    );
+
+    let post_sns_creation_nf_neuron_info = block_on(get_current_nns_neuron_info(&env)).unwrap();
+
+    // Assert that the NF NNS neuron's maturity has decreased by the same amount
+    // as the neuron fund's investment in the SNS.
+    let neurons_fund_investment_icp = create_service_nervous_system_proposal
+        .swap_parameters
+        .unwrap()
+        .neurons_fund_investment_icp
+        .unwrap()
+        .e8s
+        .unwrap();
+    assert_eq!(
+        starting_nf_neuron_info.maturity_e8s_equivalent
+            - post_sns_creation_nf_neuron_info.maturity_e8s_equivalent,
+        neurons_fund_investment_icp,
+        "NNS neuron ID did not increase after SNS creation"
     );
 
     block_on(dapp_canister.check_exclusively_owned_by_sns_root(&env));
