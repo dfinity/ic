@@ -1,4 +1,4 @@
-use crate::lazy_tree::LazyTree;
+use crate::lazy_tree::{LazyFork, LazyTree};
 use ic_crypto_tree_hash::{
     self as crypto, hasher::Hasher, Digest, Label, LabeledTree, WitnessBuilder,
 };
@@ -10,6 +10,11 @@ use std::ops::Range;
 
 /// The number of threads we use for building HashTree
 const NUMBER_OF_CERTIFICATION_THREADS: u32 = 16;
+
+/// The maximum number of allowed recursions during hash tree calculation
+/// Note that in the current implementation the recursion depth corresponds to
+/// the depth of the lazy tree.
+const MAX_RECURSION_DEPTH: u32 = 128;
 
 /// SHA256 of the domain separator "ic-hashtree-empty"
 const EMPTY_HASH: Digest = Digest([
@@ -71,30 +76,48 @@ impl NodeId {
         }
     }
 
-    /// Constructss a node id for a new Fork with the specified index.
+    /// Constructs a node id for a new Fork with the specified index.
     #[inline]
-    fn fork(bucket: usize, idx: usize) -> Self {
-        Self {
-            bucket: bucket as u32,
-            index_and_kind: FORK_KIND | idx as u32,
+    fn fork(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
+        if idx > INDEX_MASK as usize {
+            Err(HashTreeError::IndexOverflow)
+        } else {
+            Ok(Self {
+                bucket: bucket
+                    .try_into()
+                    .map_err(|_| HashTreeError::IndexOverflow)?,
+                index_and_kind: FORK_KIND | idx as u32,
+            })
         }
     }
 
-    /// Constructss a node id for a new Leaf with the specified index.
+    /// Constructs a node id for a new Leaf with the specified index.
     #[inline]
-    fn leaf(bucket: usize, idx: usize) -> Self {
-        Self {
-            bucket: bucket as u32,
-            index_and_kind: LEAF_KIND | idx as u32,
+    fn leaf(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
+        if idx > INDEX_MASK as usize {
+            Err(HashTreeError::IndexOverflow)
+        } else {
+            Ok(Self {
+                bucket: bucket
+                    .try_into()
+                    .map_err(|_| HashTreeError::IndexOverflow)?,
+                index_and_kind: LEAF_KIND | idx as u32,
+            })
         }
     }
 
-    /// Constructss a node id for a new Node with the specified index.
+    /// Constructs a node id for a new Node with the specified index.
     #[inline]
-    fn node(bucket: usize, idx: usize) -> Self {
-        Self {
-            bucket: bucket as u32,
-            index_and_kind: NODE_KIND | idx as u32,
+    fn node(bucket: usize, idx: usize) -> Result<Self, HashTreeError> {
+        if idx > INDEX_MASK as usize {
+            Err(HashTreeError::IndexOverflow)
+        } else {
+            Ok(Self {
+                bucket: bucket
+                    .try_into()
+                    .map_err(|_| HashTreeError::IndexOverflow)?,
+                index_and_kind: NODE_KIND | idx as u32,
+            })
         }
     }
 
@@ -280,9 +303,43 @@ impl HashTree {
         }
     }
 
+    /// Number of digests in the HashTree
+    pub fn size(&self) -> usize {
+        let leaf_size: usize = self.leaf_digests.iter().map(|bucket| bucket.len()).sum();
+        let fork_size: usize = self.fork_digests.iter().map(|bucket| bucket.len()).sum();
+        let node_size: usize = self.node_digests.iter().map(|bucket| bucket.len()).sum();
+
+        // Since this is for metrics only we don't care about potential overflows
+        leaf_size + fork_size + node_size
+    }
+
+    /// Largest index in the HashTree
+    pub fn max_index(&self) -> usize {
+        let leaf_size = self
+            .leaf_digests
+            .iter()
+            .map(|bucket| bucket.len())
+            .max()
+            .unwrap_or(0);
+        let fork_size = self
+            .fork_digests
+            .iter()
+            .map(|bucket| bucket.len())
+            .max()
+            .unwrap_or(0);
+        let node_size = self
+            .node_digests
+            .iter()
+            .map(|bucket| bucket.len())
+            .max()
+            .unwrap_or(0);
+
+        leaf_size.max(fork_size).max(node_size)
+    }
+
     /// Note that new forks are always added to fork_digests[0], but in order
     /// to access it, you use a NodeId with bucket set to self.bucket_offset.
-    fn new_fork(&mut self, d: Digest, l: NodeId, r: NodeId) -> NodeId {
+    fn new_fork(&mut self, d: Digest, l: NodeId, r: NodeId) -> Result<NodeId, HashTreeError> {
         let id = self.fork_digests[0].len();
 
         self.fork_digests[0].push(d);
@@ -300,7 +357,7 @@ impl HashTree {
     }
 
     /// Constructs a new leaf without a parent.
-    fn new_leaf(&mut self, d: Digest) -> NodeId {
+    fn new_leaf(&mut self, d: Digest) -> Result<NodeId, HashTreeError> {
         let id = self.leaf_digests[0].len();
         self.leaf_digests[0].push(d);
         NodeId::leaf(self.bucket_offset, id)
@@ -308,12 +365,18 @@ impl HashTree {
 
     /// Preallocates `len` nodes. Makes the new nodes root if the `parent` is
     /// `Empty`. Returns the [`NodeIndexRange`] to the allocated nodes.
-    fn preallocate_nodes(&mut self, len: usize, parent: NodeId) -> NodeIndexRange {
+    fn preallocate_nodes(
+        &mut self,
+        len: usize,
+        parent: NodeId,
+    ) -> Result<NodeIndexRange, HashTreeError> {
         if parent != NodeId::empty() {
             debug_assert_eq!(parent.bucket(), self.bucket_offset);
         }
         let old_len = self.node_labels[0].len();
-        let new_len = old_len + len;
+        let new_len = old_len
+            .checked_add(len)
+            .ok_or(HashTreeError::IndexOverflow)?;
 
         self.node_labels[0].resize(new_len, Default::default());
         self.node_digests[0].resize(new_len, Digest([0; 32]));
@@ -331,7 +394,7 @@ impl HashTree {
             debug_assert_eq!(NodeKind::Node, parent.kind());
             self.node_children_labels_ranges[0][parent.index()] = range.clone()
         }
-        range
+        Ok(range)
     }
 
     /// Returns [`NodeIndexRange`] to the children of `parent` or to the root children if
@@ -340,6 +403,9 @@ impl HashTree {
         if parent == NodeId::empty() {
             self.root_labels_range.clone()
         } else {
+            // This assert is true by how we construct the tree. As (sub-) tree with a bucket_offset does not have
+            // any internal references to nodes in buckets < self.bucket_offset.
+            debug_assert!(parent.bucket() >= self.bucket_offset);
             self.node_children_labels_ranges[parent.bucket() - self.bucket_offset][parent.index()]
                 .clone()
         }
@@ -517,7 +583,8 @@ impl HashTree {
             let result = match labels.binary_search(l) {
                 Ok(offset) => {
                     let idx = label_range.start + offset;
-                    let node_id = NodeId::node(bucket, idx);
+                    // This expect can't fail because the same error would have occurred on ht's construction
+                    let node_id = NodeId::node(bucket, idx).expect("Invalid hash tree.");
                     let subwitness = B::make_node(
                         l.clone(),
                         go::<B>(ht, node_id, ht.node_children[bucket][idx], subtree)?,
@@ -699,9 +766,18 @@ pub enum HashTreeView<'a> {
     Node(&'a Digest, &'a Label, NodeId),
 }
 
+/// Error produced when computing hash trees
+#[derive(thiserror::Error, Debug, PartialEq, Copy, Clone)]
+pub enum HashTreeError {
+    #[error("Hash tree calculation failed due to too deep recursion (depth={0})")]
+    RecursionTooDeep(u32),
+    #[error("Hash tree calculation failed due to an index overflowing")]
+    IndexOverflow,
+}
+
 /// Materializes the provided lazy tree and builds its hash tree that can be
 /// used to produce witnesses.
-pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
+pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
     struct SubtreeRoot {
         children_range: NodeIndexRange,
         root: NodeId,
@@ -738,7 +814,12 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
         ht: &mut HashTree,
         parent: NodeId,
         par_strategy: &mut ParStrategy,
-    ) -> NodeId {
+        recursion_depth: u32,
+    ) -> Result<NodeId, HashTreeError> {
+        if recursion_depth > MAX_RECURSION_DEPTH {
+            return Err(HashTreeError::RecursionTooDeep(MAX_RECURSION_DEPTH));
+        }
+
         match t {
             LazyTree::Blob(b, None) => {
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");
@@ -765,7 +846,7 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
                 let NodeIndexRange {
                     bucket,
                     index_range: range,
-                } = ht.preallocate_nodes(num_children, parent);
+                } = ht.preallocate_nodes(num_children, parent)?;
                 let mut nodes = Vec::with_capacity(num_children);
 
                 // We only use multithreading if the number of children is large. It is generally
@@ -776,89 +857,38 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
                 // We do not pass the thread pool down after use, so we are not spawning new threads
                 // in a nested way.
                 if num_children > 100 && par_strategy.is_concurrent() {
-                    let thread_pool = par_strategy.pool().unwrap();
-                    let bucket_offset = ht.node_children.len();
-                    let threads = thread_pool.thread_count() as usize;
-                    let children: Vec<_> = f.children().collect();
-                    let per_thread = ((children.len() + threads - 1) / threads).max(1);
-                    // Each thread produces one HashTree containing the subtrees of a set of children
-                    let mut subtrees: Vec<Option<HashTree>> = vec![None; threads];
-                    // Since each thread is assigned multiple children, we also produce a list of roots
-                    // that need to be combined correctly for the final result
-                    let mut roots: Vec<Vec<SubtreeRoot>> =
-                        repeat_with(|| Vec::with_capacity(per_thread))
-                            .take(threads)
-                            .collect();
-
-                    thread_pool.scoped(|scope| {
-                        for (i, (children, subtree, roots)) in izip!(
-                            children.chunks(per_thread),
-                            subtrees.iter_mut(),
-                            roots.iter_mut()
-                        )
-                        .enumerate()
-                        {
-                            scope.execute(move || {
-                                // In each thread, we use a bucket offset b. All e.g fork digests
-                                // produced by this thread will be in ht.fork_digests[b] in the final
-                                // hash tree, so the NodeIds of the internal links need to reflect that.
-                                // Note that we always add new nodes, leaves and forks to bucket 0.
-                                // The bucket offset only comes into play when determining NodeIds and
-                                // lookup based on NodeId.
-                                let mut ht = HashTree::new_with_bucket_offset(bucket_offset + i);
-                                for (_, child) in children {
-                                    // Since the parent is outside of `ht`, we set the parent to NodeId::empty()
-                                    // and fix the link from `root` to the parent later
-                                    let root = go(
-                                        child,
-                                        &mut ht,
-                                        NodeId::empty(),
-                                        &mut ParStrategy::Sequential,
-                                    );
-                                    roots.push(SubtreeRoot {
-                                        root,
-                                        children_range: ht.root_labels_range.clone(),
-                                    });
-                                }
-                                subtree.replace(ht);
-                            });
-                        }
-                    });
-
-                    // Combine all subtrees to HashTree
-                    for subtree in subtrees.into_iter().flatten() {
-                        ht.splice_subtree(subtree);
-                    }
-
-                    // Connect all subtree roots to their labelled nodes
-                    for (i, (label, _), root) in izip!(range, children, roots.into_iter().flatten())
-                    {
-                        ht.node_children_labels_ranges[bucket][i] = root.children_range;
-                        let mut h = Hasher::for_domain("ic-hashtree-labeled");
-                        h.update(label.as_bytes());
-                        h.update(ht.digest(root.root).as_bytes());
-                        ht.node_digests[bucket][i] = h.finalize();
-                        ht.node_children[bucket][i] = root.root;
-                        ht.node_labels[bucket][i] = label;
-                        nodes.push(NodeId::node(bucket, i));
-                    }
+                    fork_parallel(
+                        par_strategy.pool().unwrap(),
+                        ht,
+                        &mut nodes,
+                        f,
+                        recursion_depth,
+                        bucket,
+                        &range,
+                    )?;
                 } else {
                     for (i, (label, child)) in range.zip(f.children()) {
-                        let child = go(&child, ht, NodeId::node(bucket, i), par_strategy);
+                        let child = go(
+                            &child,
+                            ht,
+                            NodeId::node(bucket, i)?,
+                            par_strategy,
+                            recursion_depth + 1,
+                        )?;
                         let mut h = Hasher::for_domain("ic-hashtree-labeled");
                         h.update(label.as_bytes());
                         h.update(ht.digest(child).as_bytes());
                         ht.node_digests[0][i] = h.finalize();
                         ht.node_children[0][i] = child;
                         ht.node_labels[0][i] = label;
-                        nodes.push(NodeId::node(bucket, i));
+                        nodes.push(NodeId::node(bucket, i)?);
                     }
                 }
 
                 if nodes.is_empty() {
-                    return NodeId::empty();
+                    return Ok(NodeId::empty());
                 } else if nodes.len() == 1 {
-                    return nodes[0];
+                    return Ok(nodes[0]);
                 }
 
                 // Build a binary tree of forks on top of the labelled nodes
@@ -869,14 +899,14 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
                         let mut h = Hasher::for_domain("ic-hashtree-fork");
                         h.update(ht.digest(pair[0]).as_bytes());
                         h.update(ht.digest(pair[1]).as_bytes());
-                        next.push(ht.new_fork(h.finalize(), pair[0], pair[1]));
+                        next.push(ht.new_fork(h.finalize(), pair[0], pair[1])?);
                     }
                     if nodes.len() % 2 == 1 {
                         next.push(*nodes.last().unwrap());
                     }
 
                     if next.len() == 1 {
-                        return next[0];
+                        return Ok(next[0]);
                     }
 
                     nodes.clear();
@@ -885,12 +915,102 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
             }
         }
     }
+
+    /// Does the same as the single-threaded else branch, but using multiple threads
+    fn fork_parallel(
+        thread_pool: &mut scoped_threadpool::Pool,
+        ht: &mut HashTree,
+        nodes: &mut Vec<NodeId>,
+        fork_f: &std::sync::Arc<dyn LazyFork + Send + Sync + '_>,
+        depth: u32,
+        bucket: usize,
+        range: &Range<usize>,
+    ) -> Result<(), HashTreeError> {
+        let bucket_offset = ht.node_children.len();
+        let threads = thread_pool.thread_count() as usize;
+        let children: Vec<_> = fork_f.children().collect();
+        debug_assert!(threads > 0);
+        let per_thread = ((children
+            .len()
+            .checked_add(threads)
+            .ok_or(HashTreeError::IndexOverflow)?
+            - 1)
+            / threads)
+            .max(1);
+        let mut subtrees: Vec<Option<Result<HashTree, HashTreeError>>> = vec![None; threads];
+        let mut roots: Vec<Vec<SubtreeRoot>> = repeat_with(|| Vec::with_capacity(per_thread))
+            .take(threads)
+            .collect();
+        thread_pool.scoped(|scope| {
+            for (i, (children, subtree, roots)) in izip!(
+                children.chunks(per_thread),
+                subtrees.iter_mut(),
+                roots.iter_mut()
+            )
+            .enumerate()
+            {
+                scope.execute(move || {
+                    // In each thread, we use a bucket offset b. All e.g fork digests
+                    // produced by this thread will be in ht.fork_digests[b] in the final
+                    // hash tree, so the NodeIds of the internal links need to reflect that.
+                    // Note that we always add new nodes, leaves and forks to bucket 0.
+                    // The bucket offset only comes into play when determining NodeIds and
+                    // lookup based on NodeId.
+                    let mut ht = HashTree::new_with_bucket_offset(bucket_offset + i);
+                    let mut error: Option<HashTreeError> = None;
+                    for (_, child) in children {
+                        // Since the parent is outside of `ht`, we set the parent to NodeId::empty()
+                        // and fix the link from `root` to the parent later
+                        let root = go(
+                            child,
+                            &mut ht,
+                            NodeId::empty(),
+                            &mut ParStrategy::Sequential,
+                            depth + 1,
+                        );
+                        match root {
+                            Ok(root) => {
+                                roots.push(SubtreeRoot {
+                                    root,
+                                    children_range: ht.root_labels_range.clone(),
+                                });
+                            }
+                            Err(err) => {
+                                error = Some(err);
+                                break;
+                            }
+                        }
+                    }
+                    let tree_or_error = match error {
+                        Some(err) => Err(err),
+                        None => Ok(ht),
+                    };
+                    subtree.replace(tree_or_error);
+                });
+            }
+        });
+        for subtree in subtrees.into_iter().flatten() {
+            ht.splice_subtree(subtree?);
+        }
+        for (i, (label, _), root) in izip!(range.clone(), children, roots.into_iter().flatten()) {
+            ht.node_children_labels_ranges[bucket][i] = root.children_range;
+            let mut h = Hasher::for_domain("ic-hashtree-labeled");
+            h.update(label.as_bytes());
+            h.update(ht.digest(root.root).as_bytes());
+            ht.node_digests[bucket][i] = h.finalize();
+            ht.node_children[bucket][i] = root.root;
+            ht.node_labels[bucket][i] = label;
+            nodes.push(NodeId::node(bucket, i)?);
+        }
+        Ok(())
+    }
+
     let mut ht = HashTree::new();
-    ht.root = go(t, &mut ht, NodeId::empty(), &mut ParStrategy::Concurrent);
+    ht.root = go(t, &mut ht, NodeId::empty(), &mut ParStrategy::Concurrent, 0)?;
 
     ht.check_invariants();
 
-    ht
+    Ok(ht)
 }
 
 /// TODO(CRP-2151) don't compile `crypto_hash_lazy_tree()` in prod.

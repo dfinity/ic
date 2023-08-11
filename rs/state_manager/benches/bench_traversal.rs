@@ -130,7 +130,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
 
     assert_eq!(
         hash_state(&state).digest(),
-        hash_lazy_tree(&LazyTree::from(&state)).root_hash(),
+        hash_lazy_tree(&LazyTree::from(&state)).unwrap().root_hash(),
     );
 
     c.bench_function("traverse/hash_tree", |b| {
@@ -138,7 +138,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/hash_tree_new", |b| {
-        b.iter(|| black_box(hash_lazy_tree(&LazyTree::from(&state))))
+        b.iter(|| black_box(hash_lazy_tree(&LazyTree::from(&state)).unwrap()))
     });
 
     c.bench_function("traverse/hash_tree_direct", |b| {
@@ -219,7 +219,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/certify_response/100/new", |b| {
-        let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+        let hash_tree = hash_lazy_tree(&LazyTree::from(&state)).unwrap();
         b.iter(|| {
             black_box(
                 hash_tree
@@ -242,7 +242,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     };
 
     c.bench_function("traverse/hash_custom_sections/100", |b| {
-        b.iter(|| black_box(hash_lazy_tree(&LazyTree::from(&state_100_custom_sections))));
+        b.iter(|| black_box(hash_lazy_tree(&LazyTree::from(&state_100_custom_sections)).unwrap()));
     });
 
     let mut group = c.benchmark_group("drop_tree");
@@ -253,7 +253,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     group.bench_function(
         BenchmarkId::new("canonical_state::HashTree", NUM_STATUSES),
         |b| {
-            let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+            let hash_tree = hash_lazy_tree(&LazyTree::from(&state)).unwrap();
             b.iter_batched(|| hash_tree.clone(), std::mem::drop, BatchSize::LargeInput)
         },
     );
