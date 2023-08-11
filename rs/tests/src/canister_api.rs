@@ -1,12 +1,15 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
-use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_governance::pb::v1::{
+    ListNeurons as ListNnsNeuronsReq, ListNeuronsResponse as ListNnsNeuronsRes,
+};
 use ic_nns_gtc::pb::v1::AccountState;
 use ic_sns_governance::pb::v1::{
     GetMetadataRequest as GetMetadataReq, GetMetadataResponse as GetMetadataRes,
-    GetMode as GetModeReq, GetModeResponse as GetModeRes, ListNeurons as ListNeuronsReq,
-    ListNeuronsResponse as SnsListNeuronsRes, NeuronId,
+    GetMode as GetModeReq, GetModeResponse as GetModeRes, ListNeurons as ListSnsNeuronsReq,
+    ListNeuronsResponse as ListSnsNeuronsRes, NeuronId,
 };
 use ic_sns_root::{
     pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes,
@@ -661,10 +664,10 @@ impl Icrc1RequestProvider {
 pub struct ListSnsNeuronsRequest {
     mode: CallMode,
     sns_governance_canister: Principal,
-    payload: ListNeuronsReq,
+    payload: ListSnsNeuronsReq,
 }
 
-impl Request<SnsListNeuronsRes> for ListSnsNeuronsRequest {
+impl Request<ListSnsNeuronsRes> for ListSnsNeuronsRequest {
     fn mode(&self) -> CallMode {
         self.mode.clone()
     }
@@ -690,10 +693,47 @@ impl ListSnsNeuronsRequest {
         Self {
             mode,
             sns_governance_canister: governance_canister,
-            payload: ListNeuronsReq {
+            payload: ListSnsNeuronsReq {
                 limit,
                 start_page_at,
                 of_principal,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ListNnsNeuronsRequest {
+    mode: CallMode,
+    payload: ListNnsNeuronsReq,
+}
+
+impl Request<ListNnsNeuronsRes> for ListNnsNeuronsRequest {
+    fn mode(&self) -> CallMode {
+        self.mode.clone()
+    }
+    fn canister_id(&self) -> Principal {
+        Principal::from(GOVERNANCE_CANISTER_ID)
+    }
+    fn method_name(&self) -> String {
+        "list_neurons".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&self.payload).unwrap()
+    }
+}
+
+impl ListNnsNeuronsRequest {
+    pub fn new(
+        neuron_ids: Vec<u64>,
+        include_neurons_readable_by_caller: bool,
+        mode: CallMode,
+    ) -> Self {
+        Self {
+            mode,
+            payload: ListNnsNeuronsReq {
+                neuron_ids,
+                include_neurons_readable_by_caller,
             },
         }
     }
@@ -1022,7 +1062,7 @@ impl SnsRequestProvider {
         start_page_at: Option<NeuronId>,
         of_principal: Option<PrincipalId>,
         mode: CallMode,
-    ) -> impl Request<SnsListNeuronsRes> + std::fmt::Debug + Clone + Sync + Send {
+    ) -> impl Request<ListSnsNeuronsRes> + std::fmt::Debug + Clone + Sync + Send {
         let sns_governance_canister = self.sns_canisters.governance().get().into();
         ListSnsNeuronsRequest::new(
             sns_governance_canister,
@@ -1045,5 +1085,19 @@ impl SnsRequestProvider {
     ) -> impl Request<GetModeRes> + std::fmt::Debug + Clone + Sync + Send {
         let sns_governance_canister = self.sns_canisters.governance().get().into();
         GetModeRequest::new(sns_governance_canister)
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub struct NnsRequestProvider {}
+
+impl NnsRequestProvider {
+    pub fn list_neurons(
+        &self,
+        neuron_ids: Vec<u64>,
+        include_neurons_readable_by_caller: bool,
+        mode: CallMode,
+    ) -> impl Request<ListNnsNeuronsRes> + std::fmt::Debug + Clone + Sync + Send {
+        ListNnsNeuronsRequest::new(neuron_ids, include_neurons_readable_by_caller, mode)
     }
 }
