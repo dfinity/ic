@@ -6,9 +6,6 @@ package(default_visibility = ["//visibility:public"])
 system_test(
     name = "sale_participation",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "manual",  # TODO(NNS1-2464): re-enable this test
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
@@ -18,12 +15,9 @@ system_test(
 system_test(
     name = "sale_mass_participation",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    # tags = [
-    #     "system_test_hourly",
-    #     "system_test_nightly",
-    # ],
     tags = [
-        "manual",  # TODO(NNS1-2464): re-enable this test
+        "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
@@ -77,9 +71,6 @@ system_test(
 system_test(
     name = "aggregation_canister_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "manual",  # TODO(NNS1-2464): re-enable this test
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
@@ -153,9 +144,6 @@ system_test(
 system_test(
     name = "payment_flow_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "manual",  # TODO(NNS1-2464): re-enable this test
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
@@ -165,9 +153,6 @@ system_test(
 system_test(
     name = "payment_flow_with_finalization_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "manual",  # TODO(NNS1-2464): re-enable this test
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
                    SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,

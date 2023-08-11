@@ -627,8 +627,6 @@ fn stuff_ballot_box(
     assert!(proposal.decided_timestamp_seconds > 0, "{:#?}", proposal);
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn swap_lifecycle_happy_one_neuron_legacy() {
     assert_successful_swap_finalizes_correctly_legacy(
@@ -640,8 +638,6 @@ fn swap_lifecycle_happy_one_neuron_legacy() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn swap_lifecycle_happy_two_neurons_legacy() {
     assert_successful_swap_finalizes_correctly_legacy(
@@ -653,8 +649,6 @@ fn swap_lifecycle_happy_two_neurons_legacy() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn swap_lifecycle_happy_more_neurons_legacy() {
     assert_successful_swap_finalizes_correctly_legacy(
@@ -730,8 +724,6 @@ fn swap_due_from_now_timestamp_seconds(state_machine: &StateMachine) -> u64 {
 
 // Swap should succeed when there are many large Community Fund neurons (i.e. CF
 // neurons with a large amount of maturity), and few small ones.
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn many_large_community_fund_neurons_and_some_small_ones_legacy() {
     let maturities_e8s = [
@@ -784,8 +776,6 @@ fn many_large_community_fund_neurons_and_some_small_ones_legacy() {
 // Similar to the pervious test, swap should succeed when there are many small
 // Community Fund neurons (i.e. CF neurons with a large amount of maturity), and
 // few large ones.
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn many_small_community_fund_neurons_and_some_large_ones() {
     let maturities_e8s = [
@@ -835,8 +825,6 @@ fn many_small_community_fund_neurons_and_some_large_ones() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn same_principal_can_participate_via_community_fund_and_directly() {
     let double_participant_principal_id = PrincipalId::new_user_test_id(544564);
@@ -875,8 +863,6 @@ fn same_principal_can_participate_via_community_fund_and_directly() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn neurons_only_join_the_community_fund_during_voting() {
     assert_community_fund_can_change_while_proposal_is_being_voted_on(
@@ -887,8 +873,6 @@ fn neurons_only_join_the_community_fund_during_voting() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn neurons_only_leave_the_community_fund_during_voting() {
     assert_community_fund_can_change_while_proposal_is_being_voted_on(
@@ -899,8 +883,6 @@ fn neurons_only_leave_the_community_fund_during_voting() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn some_neurons_leave_and_join_the_community_fund_during_voting() {
     assert_community_fund_can_change_while_proposal_is_being_voted_on(
@@ -911,8 +893,6 @@ fn some_neurons_leave_and_join_the_community_fund_during_voting() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn some_neurons_leave_but_more_join_the_community_fund_during_voting() {
     assert_community_fund_can_change_while_proposal_is_being_voted_on(
@@ -923,8 +903,6 @@ fn some_neurons_leave_but_more_join_the_community_fund_during_voting() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn more_neurons_leave_and_join_the_community_fund_during_voting() {
     assert_community_fund_can_change_while_proposal_is_being_voted_on(
@@ -1023,8 +1001,6 @@ fn assert_community_fund_can_change_while_proposal_is_being_voted_on(
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn small_community_fund_neuron_gets_dropped_due_to_cf_growth_during_voting() {
     let mut next_start: u64 = 1;
@@ -1187,8 +1163,6 @@ fn assert_community_fund_can_change_while_proposal_is_being_voted_on_with_specif
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn stake_maturity_does_not_interfere_with_community_fund_legacy() {
     let maturity_staking_principal_id = PrincipalId::new_user_test_id(807614);
@@ -1262,8 +1236,6 @@ fn do_nothing_special_before_proposal_is_adopted(_state_machine: &mut StateMachi
     // This function intentionally left blank.
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to_normal_mode_after_sale_legacy(
 ) {
@@ -2315,8 +2287,6 @@ fn assert_successful_swap_finalizes_correctly_legacy(
     }
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn swap_lifecycle_sad() {
     // Step 0: Constants
@@ -2739,8 +2709,6 @@ fn test_upgrade() {
     assert_eq!(state_before_upgrade, state_after_upgrade);
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn test_deletion_of_sale_ticket_legacy() {
     // Step 1: Prepare the world.
@@ -2971,8 +2939,6 @@ fn test_deletion_of_sale_ticket_legacy() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn test_get_sale_parameters_legacy() {
     // Step 1: Prepare the world.
@@ -3000,8 +2966,6 @@ fn test_get_sale_parameters_legacy() {
     );
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn test_list_community_fund_participants_legacy() {
     // Step 1: Prepare the world.
@@ -3215,8 +3179,6 @@ fn test_last_man_less_than_min() {
     assert!(err.contains("minimum required to participate"), "{}", err);
 }
 
-// TODO(NNS1-2464): re-enable test
-#[ignore]
 #[test]
 fn test_refresh_buyer_token_legacy() {
     // Step 1: Prepare the world.
