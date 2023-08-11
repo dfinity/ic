@@ -23,17 +23,16 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            IcNodeSnapshot, NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, TopologySnapshot,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    util::assert_create_agent,
+    util::{assert_create_agent, block_on},
 };
-
 use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
-use futures::stream::FuturesUnordered;
+use futures::{future::join_all, stream::FuturesUnordered};
 use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
 use ic_base_types::PrincipalId;
 use ic_interfaces_registry::RegistryValue;
@@ -199,6 +198,7 @@ fn setup(api_bn_https_config: ApiBoundaryNodeHttpsConfig, env: TestEnv) {
 
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     let nns_node = env
@@ -357,6 +357,74 @@ pub fn canister_test(env: TestEnv) {
     });
 
     panic_handler.disable();
+}
+
+/* tag::catalog[]
+Title:: Handle incoming canister calls by the API boundary node.
+
+Goal:: Verify that ic-boundary service of the API boundary node routes canister requests (query/call/read_state) on different subnets correctly.
+
+Runbook:
+. Setup:
+    . Subnets(>=2) with node/s(>=1) on each subnet.
+    . A single API boundary node.
+. Install three counter canisters on each subnet.
+. Set unique counter values on each canister via update (`write`) calls. All calls are executed via boundary node agent.
+. Verify an OK execution status of each update call via read_state call.
+. Retrieve counter values from each canister via query (`read`) call.
+. Assert that retrieved values match the expected ones.
+
+end::catalog[] */
+
+pub fn canister_routing_test(env: TestEnv) {
+    let log: slog::Logger = env.logger();
+    let topology = env.topology_snapshot();
+    let canisters_per_subnet = 3;
+    let subnets = topology.subnets().count() as u32;
+    assert!(subnets >= 2);
+    // These values will be set via update `write` call. Each counter value is chosen to be unique.
+    let canister_values: Vec<u32> = (0..canisters_per_subnet * subnets).collect();
+    info!(
+        log,
+        "Installing {canisters_per_subnet} canisters on each of the {subnets} subnets ...",
+    );
+    let canister_ids: Vec<Principal> = block_on(async {
+        install_canisters(
+            topology,
+            wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+            canisters_per_subnet,
+        )
+        .await
+    });
+    info!(
+        log,
+        "All {} canisters ({canisters_per_subnet} per subnet) were successfully installed",
+        canister_ids.len()
+    );
+    // As creating an agent requires a status call, the status endpoint is implicitly tested.
+    let bn_agent = {
+        let api_boundary_node = env
+            .get_deployed_api_boundary_node(API_BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+        api_boundary_node.build_default_agent()
+    };
+    info!(
+        log,
+        "Incrementing counters on canisters via BN agent update calls ..."
+    );
+    block_on(set_counters_on_canisters(
+        bn_agent.clone(),
+        canister_ids.clone(),
+        canister_values.clone(),
+    ));
+    info!(
+        log,
+        "Asserting expected counters on canisters via BN agent query calls ... "
+    );
+    let counters = block_on(read_counters_on_canisters(bn_agent, canister_ids));
+    assert_eq!(counters, canister_values);
 }
 
 /* tag::catalog[]
@@ -878,4 +946,91 @@ pub fn reboot_test(env: TestEnv) {
         .expect("API Boundary node did not come up healthy.");
 
     panic_handler.disable();
+}
+
+async fn install_canisters(
+    topology: TopologySnapshot,
+    canister_bytes: &[u8],
+    canisters_count: u32,
+) -> Vec<Principal> {
+    // Select one node from each subnet.
+    let nodes: Vec<IcNodeSnapshot> = topology
+        .subnets()
+        .map(|subnet| subnet.nodes().next().unwrap())
+        .collect();
+    // Install canisters in parallel via joining multiple futures.
+    let mut futures = vec![];
+    for node in nodes.iter() {
+        for _ in 0..canisters_count {
+            futures.push(async {
+                let agent = node.build_default_agent_async().await;
+                let effective_canister_id = node.effective_canister_id();
+                let mgr = ManagementCanister::create(&agent);
+                let (canister_id,) = mgr
+                    .create_canister()
+                    .as_provisional_create_with_amount(None)
+                    .with_effective_canister_id(effective_canister_id)
+                    .call_and_wait()
+                    .await
+                    .map_err(|err| {
+                        format!("Couldn't create canister with provisional API: {}", err)
+                    })
+                    .unwrap();
+                let install_code = mgr.install_code(&canister_id, canister_bytes);
+                install_code
+                    .call_and_wait()
+                    .await
+                    .map_err(|err| format!("Couldn't install canister: {}", err))
+                    .unwrap();
+                canister_id
+            });
+        }
+    }
+    join_all(futures).await
+}
+
+async fn set_counters_on_canisters(
+    agent: Agent,
+    canisters: Vec<Principal>,
+    counter_values: Vec<u32>,
+) {
+    // Perform update calls in parallel via multiple futures.
+    let mut futures = Vec::new();
+    for (idx, canister_id) in canisters.iter().enumerate() {
+        let agent = agent.clone();
+        let calls = counter_values[idx];
+        futures.push(async move {
+            for call in 1..calls + 1 {
+                let res = agent
+                    .update(canister_id, "write")
+                    .call_and_wait()
+                    .await
+                    .unwrap();
+                let counter = u32::from_le_bytes(
+                    res.as_slice()
+                        .try_into()
+                        .expect("slice with incorrect length"),
+                );
+                assert_eq!(call, counter);
+            }
+        });
+    }
+    join_all(futures).await;
+}
+
+async fn read_counters_on_canisters(agent: Agent, canisters: Vec<Principal>) -> Vec<u32> {
+    // Perform query calls in parallel via multiple futures.
+    let mut futures = Vec::new();
+    for canister_id in canisters {
+        let agent = agent.clone();
+        futures.push(async move {
+            let res = agent.query(&canister_id, "read").call().await.unwrap();
+            u32::from_le_bytes(
+                res.as_slice()
+                    .try_into()
+                    .expect("slice with incorrect length"),
+            )
+        });
+    }
+    join_all(futures).await
 }
