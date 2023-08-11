@@ -603,6 +603,12 @@ impl MixedHashTree {
             }
 
             let result = match (lhs, rhs) {
+                (Pruned(l), Pruned(r)) if l != r => {
+                    return Err(MergeError::<MixedHashTree>::InconsistentWitnesses(
+                        Pruned(l),
+                        Pruned(r),
+                    ))
+                }
                 (Pruned(_), r) => r,
                 (l, Pruned(_)) => l,
                 (Empty, Empty) => Empty,
@@ -981,6 +987,12 @@ impl Witness {
             }
 
             let result = match (lhs, rhs) {
+                (Pruned { digest: l }, Pruned { digest: r }) if l != r => {
+                    return Err(MergeError::<Witness>::InconsistentWitnesses(
+                        Pruned { digest: l },
+                        Pruned { digest: r },
+                    ))
+                }
                 (Pruned { .. }, r) => r,
                 (l, Pruned { .. }) => l,
                 (Known(), Known()) => Known(),
@@ -999,14 +1011,15 @@ impl Witness {
                 },
                 (
                     Node {
-                        label,
+                        label: ll,
                         sub_witness: lw,
                     },
                     Node {
-                        sub_witness: rw, ..
+                        label: rl,
+                        sub_witness: rw,
                     },
-                ) => Node {
-                    label,
+                ) if ll == rl => Node {
+                    label: ll,
                     sub_witness: Box::new(merge_impl(*lw, *rw, depth + 1)?),
                 },
                 (l, r) => return Err(MergeError::<Witness>::InconsistentWitnesses(l, r)),
