@@ -227,12 +227,15 @@ fn address_display() {
 
 #[test]
 fn test_encoding() {
-    use crate::tx::Eip1559TransactionRequest;
+    use crate::tx::{self, Eip1559TransactionRequest};
     use ethers_core::abi::ethereum_types::H160;
+    use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest as EthersCoreEip1559TransactionRequest;
     use ethers_core::types::transaction::eip2930::AccessList;
-    use ethers_core::types::Bytes;
+    use ethers_core::types::Signature as EthersCoreSignature;
+    use ethers_core::types::{Bytes, U256};
+    use ethnum::u256;
 
-    let other_raw_tx = ethers_core::types::transaction::eip1559::Eip1559TransactionRequest {
+    let ethers_core_tx = EthersCoreEip1559TransactionRequest {
         from: None,
         to: Some(ethers_core::types::NameOrAddress::Address(H160::zero())),
         gas: Some(1.into()),
@@ -244,7 +247,7 @@ fn test_encoding() {
         max_fee_per_gas: Some(4.into()),
         chain_id: Some(1.into()),
     };
-    let raw_tx = Eip1559TransactionRequest {
+    let minter_tx = Eip1559TransactionRequest {
         chain_id: 1,
         destination: Address::new([0; 20]),
         nonce: 0_u64.into(),
@@ -255,9 +258,41 @@ fn test_encoding() {
         access_list: vec![],
         max_priority_fee_per_gas: 3_u64.into(),
     };
+
     assert_eq!(
-        raw_tx.encode_eip1559_payload(None)[1..],
-        other_raw_tx.rlp().to_vec()
+        minter_tx.encode_eip1559_payload(None)[1..],
+        ethers_core_tx.rlp().to_vec()
+    );
+
+    assert_eq!(
+        minter_tx.encode_eip1559_payload(Some(tx::Signature {
+            v: 1,
+            r: u256::from_str_radix(
+                "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
+                16
+            )
+            .unwrap(),
+            s: u256::from_str_radix(
+                "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
+                16
+            )
+            .unwrap(),
+        }))[1..],
+        ethers_core_tx
+            .rlp_signed(&EthersCoreSignature {
+                v: 1,
+                r: U256::from_str_radix(
+                    "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
+                    16
+                )
+                .unwrap(),
+                s: U256::from_str_radix(
+                    "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
+                    16
+                )
+                .unwrap(),
+            })
+            .to_vec()
     );
 }
 
