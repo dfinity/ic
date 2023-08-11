@@ -120,6 +120,7 @@ pub enum HttpMethod {
 pub struct CanisterHttpResponsePayload {
     pub status: u128,
     pub headers: Vec<HttpHeader>,
+    #[serde(with = "serde_bytes")]
     pub body: Vec<u8>,
 }
 
