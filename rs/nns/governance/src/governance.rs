@@ -211,8 +211,15 @@ struct MakeProposalLock {
     governance: *mut Governance,
 }
 
+// TODO
 impl Drop for MakeProposalLock {
     fn drop(&mut self) {
+        // It's always ok to dereference the governance when a LedgerUpdateLock
+        // goes out of scope. Indeed, in the scope of any Governance method,
+        // &self always remains alive. The 'mut' is not an issue, because
+        // 'unlock_neuron' will verify that the lock exists.
+        //
+        // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
         let governance: &mut Governance = unsafe { &mut *self.governance };
         governance.unlock_make_sns_proposal();
     }
@@ -1343,6 +1350,8 @@ impl Drop for LedgerUpdateLock {
         // goes out of scope. Indeed, in the scope of any Governance method,
         // &self always remains alive. The 'mut' is not an issue, because
         // 'unlock_neuron' will verify that the lock exists.
+        //
+        // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
         let gov: &mut Governance = unsafe { &mut *self.gov };
         gov.unlock_neuron(self.nid);
     }
@@ -3862,6 +3871,8 @@ impl Governance {
         //
         // - in prod, "self" in a reference to the GOVERNANCE static variable, which is
         //   initialized only once (in canister_init or canister_post_upgrade)
+        //
+        // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
         spawn(governance.process_rejected_proposal(pid));
     }
@@ -3911,7 +3922,7 @@ impl Governance {
     fn start_proposal_execution(
         &mut self,
         pid: u64,
-        action: &proposal::Action,
+        action: &Action,
         original_total_community_fund_maturity_e8s_equivalent: Option<u64>,
     ) {
         // `perform_action` is an async method of &mut self.
@@ -3927,6 +3938,8 @@ impl Governance {
         //
         // - in prod, "self" in a reference to the GOVERNANCE static variable, which is
         //   initialized only once (in canister_init or canister_post_upgrade)
+        //
+        // See "Recommendations for Using `unsafe` in the Governance canister" in canister.rs
         let governance: &'static mut Governance = unsafe { std::mem::transmute(self) };
         spawn(governance.perform_action(
             pid,
@@ -5334,12 +5347,12 @@ impl Governance {
             .collect()
     }
 
-    /// Returns Ok(false) if proposal is not an OpenSnsTokenSwap (OSTS).
-    /// Whereas, if there is already such a proposal being made, returns Err.
-    /// Otherwise, locks, preventing other OSTS proposals from being made, and
-    /// returns Ok(true).
+    /// Returns Ok(false) if proposal is not an OpenSnsTokenSwap (OSTS) or
+    /// CreateServiceNervousSystem (CSNS). Whereas, if there is already such
+    /// a proposal being made, returns Err. Otherwise, locks, preventing
+    /// other OSTS or CSNS proposals from being made, and returns Ok(true).
     ///
-    /// The returned object should almost certinaly be stored in a local
+    /// The returned object should almost certainly be stored in a local
     /// variable, with a name like named _unlock_on_return. Example:
     ///
     /// ```
@@ -5370,13 +5383,14 @@ impl Governance {
         caller: &PrincipalId,
         proposal: &Proposal,
     ) -> Result<Option<MakeProposalLock>, GovernanceError> {
-        // No need to acquire lock for non-OpenSnsTokenSwap proposals.
+        // No need to acquire lock for non OpenSnsTokenSwap or CreateServiceNervousSystem proposals.
         match proposal.action {
             Some(Action::OpenSnsTokenSwap(_)) => (),
+            Some(Action::CreateServiceNervousSystem(_)) => (),
             _ => return Ok(None),
         }
 
-        // Return Err if another OpenSnsTokenSwap proposal is being made.
+        // Return Err if another OpenSnsTokenSwap or CreateServiceNervousSystem proposal is being made.
         match &self.proto.making_sns_proposal {
             None => (),
             Some(making_sns_proposal) => {
@@ -5385,8 +5399,8 @@ impl Governance {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::Unavailable,
                     format!(
-                        "Another OpenSnsTokenSwap proposal is being made right now. \
-                         Please, try again later. MakeProposalInProgress:\n{:#?}",
+                        "Another OpenSnsTokenSwap or CreateServiceNervousSystem proposal is being \
+                        made right now. Please, try again later. MakeProposalInProgress:\n{:#?}",
                         making_sns_proposal,
                     ),
                 ));
@@ -5428,7 +5442,7 @@ impl Governance {
         *field = None;
 
         // Log that we are now unlocking.
-        println!("{}Unlocked making OpenSnsTokenSwap proposals.", LOG_PREFIX);
+        println!("{}Unlocked making SNS proposals.", LOG_PREFIX);
     }
 
     pub async fn make_proposal(
@@ -5474,7 +5488,7 @@ impl Governance {
             );
         }
 
-        if let Some(proposal::Action::ManageNeuron(m)) = &proposal.action {
+        if let Some(Action::ManageNeuron(m)) = &proposal.action {
             assert_eq!(topic, Topic::NeuronManagement);
             return self.make_manage_neuron_proposal(
                 proposer_id,
@@ -5493,7 +5507,7 @@ impl Governance {
         // Find the proposing neuron.
         let (
             is_proposer_authorized_to_vote,
-            proposer_disolve_delay_seconds,
+            proposer_dissolve_delay_seconds,
             proposer_minted_stake_e8s,
         ) = self.with_neuron(proposer_id, |neuron| {
             (
@@ -5516,7 +5530,7 @@ impl Governance {
         // The proposer must be eligible to vote on its own
         // proposal. This also ensures that the neuron cannot be
         // dissolved until the proposal has been adopted or rejected.
-        if proposer_disolve_delay_seconds < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS {
+        if proposer_dissolve_delay_seconds < MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Neuron's dissolve delay is too short.",

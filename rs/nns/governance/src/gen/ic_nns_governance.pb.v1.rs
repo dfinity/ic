@@ -2600,10 +2600,10 @@ pub mod governance {
         #[prost(uint64, tag = "24")]
         pub not_dissolving_neurons_staked_maturity_e8s_equivalent_sum: u64,
     }
-    /// Records that making an OpenSnsTokenSwap (OSTS) proposal is in progress. We
-    /// only want one of these to be happening at the same time, because otherwise,
-    /// it is error prone to enforce that open OSTS proposals are unique. In
-    /// particular, the result of checking that the proposal currently being made
+    /// Records that making an OpenSnsTokenSwap (OSTS) or CreateServiceNervousSystem (CSNS)
+    /// proposal is in progress. We only want one of these to be happening at the same time,
+    /// because otherwise, it is error prone to enforce that open OSTS or CSNS proposals are
+    /// unique. In particular, the result of checking that the proposal currently being made
     /// would be unique is liable to becoming invalid during an .await.
     ///
     /// This is a temporary measure, because OSTS is part of the SNS flow that will
