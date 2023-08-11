@@ -166,6 +166,53 @@
       }, false);
     </script>
 
+    <h4>Failure rate</h4>
+
+    <div id="plot_exp1_update_failure_rate" class="plot"></div>
+    <script>
+      const plot_exp1_update_links_failure_rate = new Map();
+      {{#each plot_exp1_update_failure_rate.data}}
+        plot_exp1_update_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp1_update_failure_rate');
+          Plotly.newPlot(plot, {{{plot_exp1_update_failure_rate.plot}}},  {{{plot_exp1_update_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_update_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h4>Latency</h4>
+
+    <p>Older data is not displayed, as query latencies used to have an unreasonable high time out and
+    therefore make the plot unreadable.</p>
+
+    <div id="plot_exp1_update_latency" class="plot"></div>
+    <script>
+      const plot_exp1_update_links_latency = new Map();
+      {{#each plot_exp1_update_latency.data}}
+        plot_exp1_update_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp1_update_latency');
+          Plotly.newPlot(plot, {{{plot_exp1_update_latency.plot}}},  {{{plot_exp1_update_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_update_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
     <h2>Boundary node performance</h2>
     <a name="boundary-nodes" />
 
@@ -256,6 +303,50 @@
               window.open(link, "_self");
           });
 
+      }, false);
+    </script>
+
+    <h3>Failure rate</h4>
+    <div id="plot_exp2_update_failure_rate" class="plot"></div>
+    <script>
+      const plot_exp2_update_links_failure_rate = new Map();
+      {{#each plot_exp2_update_failure_rate.data}}
+        plot_exp2_update_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp2_update_failure_rate');
+          Plotly.newPlot(plot, {{{plot_exp2_update_failure_rate.plot}}},  {{{plot_exp2_update_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp2_update_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>
+
+    <h3>Latency</h4>
+
+
+    <div id="plot_exp2_update_latency" class="plot"></div>
+    <script>
+      const plot_exp2_update_links_latency = new Map();
+      {{#each plot_exp2_update_latency.data}}
+        plot_exp2_update_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp2_update_latency');
+          Plotly.newPlot(plot, {{{plot_exp2_update_latency.plot}}},  {{{plot_exp2_update_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp2_update_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
       }, false);
     </script>
 

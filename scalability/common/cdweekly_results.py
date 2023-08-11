@@ -55,6 +55,10 @@ BLACKLIST = [
     ("903c8b3a520c69a953b4cdf6468bf2612e86be49", "1660642902"),
     ("2a0ff6c34e61d64e6fe8b0ce47e7edbec30e8c1e", "1674507377"),
     ("06c65888fb8afa8da2b8c553a93df8f18ffe6d3a", "1679995234"),
+    # Boundary nodes experiment was broken in those
+    ("7e7da27133791d515e48ca647565ae6d67df2a68", "1690808695"),
+    ("eadfad49344bab8a173395d6a85fb60c4f8c384c", "1690624219"),
+    ("53cbc5963d464d61ccb56d3e87e9fc0afa4d3683", "1690026459"),
 ]
 
 
@@ -544,6 +548,7 @@ def render_results(
     threshold: [str],
     testnets: [str] = ["cdslo", "cdmax"],
     time_start=None,
+    filter=None,
     yaxis_title="maximum rate [requests / s]",
     **kwargs,
 ):
@@ -552,6 +557,9 @@ def render_results(
     raw_data = {}
 
     for result in find_results(experiment_names, experiment_type, testnets, time_start):
+
+        if filter is not None and not filter(result):
+            continue
 
         resultfile = result.result_file_path
         githash = result.githash
@@ -618,6 +626,13 @@ def render_results(
     return {"plot": plots, "layout": layout, "data": meta_data}
 
 
+def filter_multiple_canisters(result: ExperimentResultDirectory):
+    """Filter out experiments that have multiple canisters."""
+    canister_ids = result.result_file_content.canister_id
+    # Flatten canister ID dict into list of canisters
+    canister_ids = [i for canisters in canister_ids.values() for i in canisters]
+    return len(canister_ids) > 1
+
 if __name__ == "__main__":
 
     misc.load_artifacts("../artifacts/release")
@@ -632,33 +647,61 @@ if __name__ == "__main__":
             "last_generated": int(time.time()),
         }
 
-        data["plot_exp1_query"] = render_results(
-            ["experiment_1", "run_system_baseline_experiment",
-                "system-baseline-experiment"],
-            ["query"],
+        # Query counter
+        # --------------------------------------------------------------------------------
+        experiments = ["experiment_1", "run_system_baseline_experiment", "system-baseline-experiment"]
+        request_type = ["query"]
+        label = "plot_exp1_query"
+        data[f"{label}"] = render_results(
+            experiments,
+            request_type,
             parse_rps_experiment_max_capacity,
             4000,
         )
-        data["plot_exp1_query_failure_rate"] = render_results(
-            ["experiment_1", "run_system_baseline_experiment",
-                "system-baseline-experiment"],
-            ["query"],
+        data[f"{label}_failure_rate"] = render_results(
+            experiments,
+            request_type,
             parse_rps_experiment_failure_rate,
             None,
             yaxis_title="Failure rate",
-            # time_start=1666142871,
         )
-        data["plot_exp1_query_latency"] = render_results(
-            ["experiment_1", "run_system_baseline_experiment",
-                "system-baseline-experiment"],
-            ["query"],
+        data[f"{label}_latency"] = render_results(
+            experiments,
+            request_type,
             parse_rps_experiment_latency,
             None,
             yaxis_title="Latency",
             time_start=1666757546,
         )
 
+        # Update counter
+        # -----------------------------------------------------------------------------
+        experiments = ["experiment_1", "run_system_baseline_experiment", "system-baseline-experiment"]
+        request_type = ["update"]
+        label = "plot_exp1_update"
+        data[f"{label}"] = render_results(
+            experiments,
+            request_type,
+            parse_rps_experiment_max_capacity,
+            800,
+        )
+        data[f"{label}_failure_rate"] = render_results(
+            experiments,
+            request_type,
+            parse_rps_experiment_failure_rate,
+            None,
+            yaxis_title="Failure rate",
+        )
+        data[f"{label}_latency"] = render_results(
+            experiments,
+            request_type,
+            parse_rps_experiment_latency,
+            None,
+            yaxis_title="Latency",
+        )
+
         # Boundary nodes
+        # --------------------------------------------------------------------------------
         data["plot_boundary_nodes_query_failure_rate"] = render_results(
             ["run_boundary_node_baseline_experiment"],
             ["query"],
@@ -674,24 +717,41 @@ if __name__ == "__main__":
             yaxis_title="Latency",
             time_start=1666757546,
         )
-        # / Boundary nodes
 
-        data["plot_exp1_update"] = render_results(
-            ["experiment_1", "run_system_baseline_experiment",
-                "system-baseline-experiment"],
-            ["update"],
-            parse_rps_experiment_max_capacity,
-            800,
-        )
-
-        data["plot_exp2_update"] = render_results(
-            ["experiment_2", "run_large_memory_experiment"],
-            ["update", "update_copy"],
+        # Memory test canister performance
+        # -----------------------------------------------------------------------------
+        experiments = ["experiment_2", "run_large_memory_experiment"]
+        request_type = ["update", "update_copy"]
+        label = "plot_exp2_update"
+        data[f"{label}"] = render_results(
+            experiments,
+            request_type,
             parse_rps_experiment_max_capacity,
             20,
             time_start=1639939557,
+            filter=filter_multiple_canisters,
+        )
+        data[f"{label}_failure_rate"] = render_results(
+            experiments,
+            request_type,
+            parse_rps_experiment_failure_rate,
+            None,
+            yaxis_title="Failure rate",
+            time_start=1639939557,
+            filter=filter_multiple_canisters,
+        )
+        data[f"{label}_latency"] = render_results(
+            experiments,
+            request_type,
+            parse_rps_experiment_latency,
+            None,
+            yaxis_title="Latency",
+            time_start=1639939557,
+            filter=filter_multiple_canisters,
         )
 
+        # Others
+        # -----------------------------------------------------------------------------
         data["plot_statesync"] = render_results(
             ["run_statesync_experiment"],
             ["query"],
