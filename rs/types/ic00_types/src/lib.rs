@@ -19,6 +19,7 @@ use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_c
 use num_traits::cast::ToPrimitive;
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 use serde::{Deserializer, Serialize};
+use serde_bytes::ByteBuf;
 use std::mem::size_of;
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
 use strum_macros::{Display, EnumIter, EnumString};
@@ -1520,21 +1521,21 @@ fn ecdsa_key_id_round_trip() {
 }
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
-pub struct DerivationPath(Vec<Vec<u8>>);
+pub struct DerivationPath(Vec<ByteBuf>);
 
 impl DerivationPath {
-    pub fn new(path: Vec<Vec<u8>>) -> Self {
+    pub fn new(path: Vec<ByteBuf>) -> Self {
         Self(path)
     }
 
-    pub fn get(&self) -> Vec<Vec<u8>> {
+    pub fn get(&self) -> Vec<ByteBuf> {
         self.0.clone()
     }
 }
 
 impl<'de> Deserialize<'de> for DerivationPath {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let decoded: Vec<Vec<u8>> = Deserialize::deserialize(deserializer)?;
+        let decoded: Vec<ByteBuf> = Deserialize::deserialize(deserializer)?;
         if decoded.len() > MAXIMUM_DERIVATION_PATH_LENGTH {
             Err(serde::de::Error::custom(format!(
                 "Derivation path length {} exceeds maximum allowed {}",
@@ -1552,7 +1553,7 @@ impl Payload<'_> for DerivationPath {}
 #[test]
 fn verify_max_derivation_path_length() {
     for i in 0..=MAXIMUM_DERIVATION_PATH_LENGTH {
-        let path = DerivationPath::new(vec![vec![0_u8, 32]; i]);
+        let path = DerivationPath::new(vec![ByteBuf::from(vec![0_u8, 32]); i]);
         let encoded = path.encode();
         assert_eq!(DerivationPath::decode(&encoded).unwrap(), path);
 
@@ -1588,7 +1589,7 @@ fn verify_max_derivation_path_length() {
     }
 
     for i in MAXIMUM_DERIVATION_PATH_LENGTH + 1..=MAXIMUM_DERIVATION_PATH_LENGTH + 100 {
-        let path = DerivationPath::new(vec![vec![0_u8, 32]; i]);
+        let path = DerivationPath::new(vec![ByteBuf::from(vec![0_u8, 32]); i]);
         let encoded = path.encode();
         let res = DerivationPath::decode(&encoded).unwrap_err();
         assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);

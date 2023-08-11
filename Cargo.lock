@@ -3324,6 +3324,7 @@ dependencies = [
  "ic-cdk-macros 0.6.10",
  "ic-ic00-types",
  "serde",
+ "serde_bytes",
  "serde_json",
 ]
 
@@ -5759,6 +5760,7 @@ dependencies = [
  "num-bigint 0.4.3",
  "rlp",
  "serde",
+ "serde_bytes",
  "serde_json",
 ]
 
@@ -7304,6 +7306,7 @@ dependencies = [
  "rand 0.8.5",
  "scoped_threadpool",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "slog",
  "strum 0.23.0",

@@ -333,6 +333,7 @@ mod tests {
     use ic_replicated_state::SubnetTopology;
     use ic_test_utilities::types::ids::{canister_test_id, node_test_id, subnet_test_id};
     use maplit::btreemap;
+    use serde_bytes::ByteBuf;
 
     use super::*;
 
@@ -394,7 +395,7 @@ mod tests {
     fn ecdsa_sign_req(key_id: EcdsaKeyId) -> Vec<u8> {
         let args = SignWithECDSAArgs {
             message_hash: [1; 32],
-            derivation_path: DerivationPath::new(vec![vec![0; 10]]),
+            derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
             key_id,
         };
         Encode!(&args).unwrap()
@@ -403,7 +404,7 @@ mod tests {
     fn public_key_req(key_id: EcdsaKeyId) -> Vec<u8> {
         let args = ECDSAPublicKeyArgs {
             canister_id: Some(canister_test_id(1)),
-            derivation_path: DerivationPath::new(vec![vec![0; 10]]),
+            derivation_path: DerivationPath::new(vec![ByteBuf::from(vec![0; 10])]),
             key_id,
         };
         Encode!(&args).unwrap()
