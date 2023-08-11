@@ -1528,13 +1528,11 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> MessageId {
-        self.nonce.store(
-            self.nonce.load(Ordering::Relaxed) + 1,
-            core::sync::atomic::Ordering::Relaxed,
-        );
+        // increment the global nonce and use it as the current nonce.
+        let nonce = self.nonce.fetch_add(1, Ordering::Relaxed) + 1;
         let builder = PayloadBuilder::new()
             .with_max_expiry_time_from_now(self.time())
-            .with_nonce(self.nonce.load(Ordering::Relaxed))
+            .with_nonce(nonce)
             .ingress(sender, canister_id, method, payload);
 
         let msg_id = builder.ingress_ids().pop().unwrap();
