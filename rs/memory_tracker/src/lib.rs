@@ -1,10 +1,10 @@
 use bit_vec::BitVec;
 use ic_logger::{debug, ReplicaLogger};
 use ic_replicated_state::{
-    page_map::{FileDescriptor, MemoryRegion},
+    page_map::{FileDescriptor, MemoryInstructions},
     PageIndex, PageMap,
 };
-use ic_sys::{PageBytes, PAGE_SIZE};
+use ic_sys::PAGE_SIZE;
 use nix::{
     errno::Errno,
     sys::mman::{mmap, mprotect, MapFlags, ProtFlags},
@@ -20,10 +20,10 @@ use std::{
 // throughput in memory intensive workloads, but may regress performance
 // in other workloads because it increases work per signal handler call.
 const MAX_PAGES_TO_MAP: usize = 128;
-// The upper bound on the number of pages copied from PageMap. In contrast
-// to `MAX_PAGES_TO_MAP`, this value also affects memory usage. Setting it
-// too high may increase memory usage.
-const MAX_PAGES_TO_COPY: usize = 64;
+
+// The target number of memory instructions allowed when prefetching
+// beyond the minimum range
+const TARGET_MEMORY_INSTRUCTIONS: usize = 0;
 
 // The new signal handler requires `AccessKind` which currently available only
 // on Linux without WSL.
@@ -170,6 +170,9 @@ impl PageBitmap {
     // based on the marked pages before the start of the given range.
     fn restrict_range_to_predicted(&self, range: Range<PageIndex>) -> Range<PageIndex> {
         let range = range_intersection(&range, &self.page_range());
+        if range.is_empty() {
+            return range;
+        }
 
         let start = range.start.get() as usize;
         let old_end = range.end.get() as usize;
@@ -256,32 +259,12 @@ impl SigsegvMemoryTracker {
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
         if tracker.use_new_signal_handler {
-            match tracker.page_map.get_checkpoint_memory_region() {
-                MemoryRegion::BackedByFile(page_map_range, FileDescriptor { fd }) => {
-                    // Pages outside `mmap_range` will be automatically initialized to zeros
-                    // because of the mapping set up by `MmapMemoryCreator`. This is exactly
-                    // what we need for Wasm `memory.grow()`.
-                    let mmap_range = range_intersection(&tracker.page_range(), &page_map_range);
-                    // The checkpoint page range must be a subset of the Wasm memory page range.
-                    assert_eq!(mmap_range, page_map_range);
-                    let start_addr = tracker.page_start_addr_from(mmap_range.start);
-                    let start_offset_in_file = mmap_range.start.get() as usize * PAGE_SIZE;
-                    let actual_addr = unsafe {
-                        mmap(
-                            start_addr,
-                            range_size_in_bytes(&mmap_range),
-                            ProtFlags::PROT_NONE,
-                            MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
-                            fd,
-                            start_offset_in_file as i64,
-                        )?
-                    };
-                    assert_eq!(actual_addr, start_addr, "mmap ignored MAP_FIXED");
-                }
-                MemoryRegion::BackedByPage(_) | MemoryRegion::Zeros(_) => {
-                    unsafe { mprotect(addr, size, ProtFlags::PROT_NONE)? };
-                }
-            }
+            let mut instructions = tracker.page_map.get_base_memory_instructions();
+
+            // Restrict to tracked range before applying
+            instructions.range = tracker.page_range();
+
+            apply_memory_instructions(&tracker, ProtFlags::PROT_NONE, instructions);
         } else {
             unsafe { mprotect(addr, size, ProtFlags::PROT_NONE)? }
         }
@@ -295,7 +278,7 @@ impl SigsegvMemoryTracker {
         fault_address: *mut libc::c_void,
     ) -> bool {
         if self.use_new_signal_handler {
-            sigsegv_fault_handler_new(self, &self.page_map, access_kind.unwrap(), fault_address)
+            sigsegv_fault_handler_new(self, access_kind.unwrap(), fault_address)
         } else {
             sigsegv_fault_handler_old(self, &self.page_map, fault_address)
         }
@@ -540,7 +523,6 @@ pub fn sigsegv_fault_handler_old(
 /// like the old signal handler does.
 pub fn sigsegv_fault_handler_new(
     tracker: &SigsegvMemoryTracker,
-    page_map: &PageMap,
     access_kind: AccessKind,
     fault_address: *mut libc::c_void,
 ) -> bool {
@@ -569,9 +551,7 @@ pub fn sigsegv_fault_handler_new(
                 accessed_bitmap.restrict_range_to_predicted(max_prefetch_range.clone());
             let prefetch_range = map_unaccessed_pages(
                 tracker,
-                page_map,
                 ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                faulting_page,
                 min_prefetch_range,
                 max_prefetch_range,
             );
@@ -586,9 +566,7 @@ pub fn sigsegv_fault_handler_new(
                 accessed_bitmap.restrict_range_to_predicted(max_prefetch_range.clone());
             let prefetch_range = map_unaccessed_pages(
                 tracker,
-                page_map,
                 ProtFlags::PROT_READ,
-                faulting_page,
                 min_prefetch_range,
                 max_prefetch_range,
             );
@@ -637,9 +615,7 @@ pub fn sigsegv_fault_handler_new(
                 let prefetch_range = dirty_bitmap.restrict_range_to_predicted(prefetch_range);
                 let prefetch_range = map_unaccessed_pages(
                     tracker,
-                    page_map,
                     ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                    faulting_page,
                     prefetch_range.clone(),
                     prefetch_range,
                 );
@@ -652,113 +628,117 @@ pub fn sigsegv_fault_handler_new(
     true
 }
 
-// Sets up page mapping for the given `faulting_page` and its subsequent pages
-// using the backing memory from the given `page_map`. The range of mapped pages
-// depends on the type of the backing memory. If it is cheap to map then the
-// largest range specified by `max_prefetch_range` is used. If it involves
-// copying then the smallest range specified by `min_prefetch_range` is used.
-// The function is allowed to map less pages than specified by the ranges.
+/// Sets up page mapping for a given range. This function takes two ranges, `min_prefetch_range`
+/// and `max_prefetch_range` and returns the range that was initialized.
+/// Preconditions:
+///    * The pages in `max_prefetch_range` have not been dirtied before.
+///    * `min_prefetch_range` ⊆ `max_prefetch_range`
+/// Guarantees:
+///    * `min_prefetch_range` ⊆ result ⊆ `max_prefetch_range`
+///    * Any data read from the tracker's memory within the result range will be equal
+///      to the pages according to the PageMap.
 fn map_unaccessed_pages(
     tracker: &SigsegvMemoryTracker,
-    page_map: &PageMap,
     page_protection_flags: ProtFlags,
-    faulting_page: PageIndex,
     min_prefetch_range: Range<PageIndex>,
     max_prefetch_range: Range<PageIndex>,
 ) -> Range<PageIndex> {
-    assert!(min_prefetch_range.contains(&faulting_page));
-    assert!(max_prefetch_range.contains(&faulting_page));
+    debug_assert!(
+        min_prefetch_range.start >= max_prefetch_range.start
+            && min_prefetch_range.end <= max_prefetch_range.end
+    );
 
-    let memory_region = page_map.get_memory_region(faulting_page);
-    match memory_region {
-        MemoryRegion::Zeros(page_map_range) | MemoryRegion::BackedByFile(page_map_range, _) => {
-            assert!(page_map_range.contains(&faulting_page));
-            let mprotect_range = range_intersection(&max_prefetch_range, &page_map_range);
-            let start_addr = tracker.page_start_addr_from(mprotect_range.start);
-            unsafe {
-                mprotect(
-                    start_addr,
-                    range_size_in_bytes(&mprotect_range),
-                    page_protection_flags,
-                )
-                .map_err(print_enomem_help)
-                .unwrap()
-            };
-            mprotect_range
-        }
+    let instructions = tracker.page_map.get_memory_instructions(
+        min_prefetch_range,
+        max_prefetch_range,
+        TARGET_MEMORY_INSTRUCTIONS,
+    );
 
-        MemoryRegion::BackedByPage(contents) => {
-            let prefetch_range = range_intersection(
-                &range_from_count(faulting_page, MAX_PAGES_TO_COPY),
-                &min_prefetch_range,
-            );
+    let range = instructions.range.clone();
 
-            // Get the largest contiguous memory region backed by pages.
-            let mut pages: [Option<&PageBytes>; MAX_PAGES_TO_COPY] = [None; MAX_PAGES_TO_COPY];
-            pages[0] = Some(contents);
-            let mut count = 1;
-            while count < range_count(&prefetch_range) {
-                match page_map.get_memory_region(PageIndex::new(faulting_page.get() + count as u64))
-                {
-                    MemoryRegion::Zeros(_) | MemoryRegion::BackedByFile(_, _) => {
-                        break;
-                    }
-                    MemoryRegion::BackedByPage(contents) => {
-                        pages[count] = Some(contents);
-                    }
-                }
-                count += 1;
-            }
+    apply_memory_instructions(tracker, page_protection_flags, instructions);
 
-            let mprotect_range = range_from_count(faulting_page, count);
-            let page_start_addr = tracker.page_start_addr_from(mprotect_range.start);
+    range
+}
 
-            // Make the page writable because we are going to copy bytes.
-            unsafe {
-                mprotect(
-                    page_start_addr,
-                    range_size_in_bytes(&mprotect_range),
-                    ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
-                )
-                .map_err(print_enomem_help)
-                .unwrap()
-            };
-
-            // Copy the contents of the pages.
-            for (index, page) in pages.iter().enumerate() {
-                if let Some(contents) = *page {
-                    assert!(index < count);
-                    unsafe {
-                        std::ptr::copy_nonoverlapping(
-                            contents.as_ptr(),
-                            (page_start_addr as *mut u8).add(index * PAGE_SIZE),
-                            PAGE_SIZE,
-                        )
-                    };
-                }
-            }
-
-            if !page_protection_flags.contains(ProtFlags::PROT_WRITE) {
-                // Make the page read-only to intercept the future write accesses.
-                // TODO(EXC-447): This `mprotect` call is the main performance bottleneck
-                // for messages that need to track dirty pages. It causes expensive TLB flushes
-                // because it reduces the protection flags from Read/Write to Read.
-                // There are two ways to eliminate this call:
-                // 1) Implement an mmap allocator for `PageDelta` pages so that we can mmap it.
-                // 2) Track all accessed pages and after execution filter dirty pages by
-                //    comparing the page contents.
+/// Apply the given MemoryInstructions to a range and mprotect the entire range
+/// Precondition: The protection level of the entire `prefetch_range` is PROT_NONE
+fn apply_memory_instructions(
+    tracker: &SigsegvMemoryTracker,
+    page_protection_flags: ProtFlags,
+    memory_instructions: MemoryInstructions,
+) {
+    let MemoryInstructions {
+        range: prefetch_range,
+        instructions,
+    } = memory_instructions;
+    // We want to do as few mprotect calls as possible. However, to do any copies, we need to make the range read/write.
+    // As long as we only have mmap instructions, we mmap them with protection flag PROT_NONE, such that the entire range
+    // remains uniformly PROT_NONE. Before the first time we copy, we mark the entire range read/write and maintain that
+    // for any later mmap calls.
+    let mut current_prot_flags = ProtFlags::PROT_NONE;
+    for (range, mmap_or_data) in instructions {
+        let clamped_range = range_intersection(&prefetch_range, &range);
+        let start_offset = (clamped_range.start.get() - range.start.get()) as usize;
+        match mmap_or_data {
+            ic_replicated_state::page_map::MemoryMapOrData::MemoryMap(
+                FileDescriptor { fd },
+                offset,
+            ) => {
                 unsafe {
-                    mprotect(
-                        page_start_addr,
-                        range_size_in_bytes(&mprotect_range),
-                        ProtFlags::PROT_READ,
+                    mmap(
+                        tracker.page_start_addr_from(clamped_range.start),
+                        range_size_in_bytes(&clamped_range),
+                        current_prot_flags,
+                        MapFlags::MAP_PRIVATE | MapFlags::MAP_FIXED,
+                        fd,
+                        (offset + start_offset * PAGE_SIZE) as i64,
                     )
                     .map_err(print_enomem_help)
                     .unwrap()
                 };
             }
-            mprotect_range
+            ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
+                if current_prot_flags != ProtFlags::PROT_READ | ProtFlags::PROT_WRITE {
+                    current_prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
+                    unsafe {
+                        mprotect(
+                            tracker.page_start_addr_from(prefetch_range.start),
+                            range_size_in_bytes(&prefetch_range),
+                            current_prot_flags,
+                        )
+                        .map_err(print_enomem_help)
+                        .unwrap()
+                    };
+                }
+                unsafe {
+                    let data = &data[start_offset * PAGE_SIZE
+                        ..start_offset * PAGE_SIZE + range_size_in_bytes(&clamped_range)];
+                    debug_assert_eq!(data.len(), range_size_in_bytes(&clamped_range));
+                    std::ptr::copy_nonoverlapping(
+                        data.as_ptr() as *const libc::c_void,
+                        tracker.page_start_addr_from(clamped_range.start),
+                        range_size_in_bytes(&clamped_range),
+                    )
+                }
+            }
         }
+    }
+
+    // There are two situations where the whole range already has the correct protections level
+    // 1. `page_protection_flags` is PROT_NONE, and we only did mmap calls with PROT_NONE
+    // 2. `page_protection_flags` is read/write, and we already made the whole range read/write
+    //    just before the first copy
+    if page_protection_flags != current_prot_flags {
+        unsafe {
+            mprotect(
+                tracker.page_start_addr_from(prefetch_range.start),
+                range_size_in_bytes(&prefetch_range),
+                page_protection_flags,
+            )
+            .map_err(print_enomem_help)
+            .unwrap()
+        };
     }
 }
 
@@ -778,10 +758,6 @@ fn range_from_count(page: PageIndex, count: usize) -> Range<PageIndex> {
         start: page,
         end: PageIndex::new(page.get() + count as u64),
     }
-}
-
-fn range_count(range: &Range<PageIndex>) -> usize {
-    (range.end.get() - range.start.get()) as usize
 }
 
 fn print_enomem_help(errno: Errno) -> Errno {
