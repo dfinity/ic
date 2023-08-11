@@ -1654,6 +1654,7 @@ impl Payload<'_> for SignWithECDSAArgs {}
 /// Struct used to return an ECDSA signature.
 #[derive(CandidType, Deserialize, Debug)]
 pub struct SignWithECDSAReply {
+    #[serde(with = "serde_bytes")]
     pub signature: Vec<u8>,
 }
 
@@ -1685,7 +1686,9 @@ impl Payload<'_> for ECDSAPublicKeyArgs {}
 /// ```
 #[derive(CandidType, Deserialize, Debug)]
 pub struct ECDSAPublicKeyResponse {
+    #[serde(with = "serde_bytes")]
     pub public_key: Vec<u8>,
+    #[serde(with = "serde_bytes")]
     pub chain_code: Vec<u8>,
 }
 
