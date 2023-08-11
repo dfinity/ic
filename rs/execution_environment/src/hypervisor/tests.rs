@@ -9,8 +9,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::{
-    canister_state::execution_state::CustomSectionType, page_map::MemoryRegion, ExportedFunctions,
-    Global, PageIndex,
+    canister_state::execution_state::CustomSectionType, ExportedFunctions, Global, PageIndex,
 };
 use ic_replicated_state::{CanisterStatus, NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
@@ -3522,20 +3521,12 @@ impl MemoryAccessor {
 
     fn verify_dirty_pages(&self, is_dirty_page: &[bool]) {
         let execution_state = self.test.execution_state(self.canister_id);
-        for (page_index, is_dirty_page) in is_dirty_page.iter().enumerate() {
-            match execution_state
-                .wasm_memory
-                .page_map
-                .get_memory_region(PageIndex::new(page_index as u64))
-            {
-                MemoryRegion::Zeros(_) | MemoryRegion::BackedByFile(_, _) => {
-                    assert!(!is_dirty_page,);
-                }
-                MemoryRegion::BackedByPage(_) => {
-                    assert!(is_dirty_page);
-                }
-            }
+        let mut actual_dirty = vec![false; is_dirty_page.len()];
+        for (index, _) in execution_state.wasm_memory.page_map.delta_pages_iter() {
+            assert!((index.get() as usize) < actual_dirty.len());
+            actual_dirty[index.get() as usize] = true;
         }
+        assert_eq!(is_dirty_page, &actual_dirty);
     }
 }
 
