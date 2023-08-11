@@ -77,7 +77,7 @@ pub(crate) fn arb_valid_versioned_stream_header(
         // 8.
         (
             arb_stream_header(/* sig_min_size */ 0, sig_max_size),
-            Just(CertificationVersion::V8..=CertificationVersion::V9)
+            Just(CertificationVersion::V8..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
     ]
 }
@@ -109,7 +109,7 @@ lazy_static! {
         ),
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
-            CertificationVersion::V0..=CertificationVersion::V9,
+            CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "StreamHeader",
             |v| StreamHeaderV8::proxy_encode(v),
             |v| StreamHeaderV8::proxy_decode(v),
@@ -298,6 +298,10 @@ prop_compose! {
 }
 
 /// Produces a `SystemMetadata` valid at all certification versions in the range.
+///
+/// Returns one of two disjoint version ranges, because the encoding of the same
+/// `SystemMetadata` is different between the two version ranges.
+///
 pub(crate) fn arb_valid_system_metadata(
 ) -> impl Strategy<Value = (SystemMetadata, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
