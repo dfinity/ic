@@ -4374,7 +4374,7 @@ async fn main() {
 
             // Download the IC-OS upgrade, do not check sha256 yet, we will do that
             // explicitly later
-            let file_downloader = FileDownloader::new(None);
+            let file_downloader = FileDownloader::new(None).follow_redirects();
             if version.release_package_urls.iter().all(|url| {
                 tokio::runtime::Handle::current()
                     .block_on(file_downloader.download_file(url, &tmp_file, None))
