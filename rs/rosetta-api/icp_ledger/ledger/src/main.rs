@@ -1326,10 +1326,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
         None => None,
     };
 
-    const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_nanos() as u64;
-    let default_expiration =
-        TimeStamp::from_nanos_since_unix_epoch(time_nanos() + DEFAULT_APPROVAL_EXPIRATION);
-
     let expected_fee = LEDGER.read().unwrap().transfer_fee;
     if arg.fee.is_some() && arg.fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
         return Err(ApproveError::BadFee {
@@ -1345,12 +1341,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 spender,
                 allowance,
                 expected_allowance,
-                expires_at: Some(
-                    arg.expires_at
-                        .map(TimeStamp::from_nanos_since_unix_epoch)
-                        .map(|expires_at| expires_at.min(default_expiration))
-                        .unwrap_or(default_expiration),
-                ),
+                expires_at: arg.expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
                 fee: expected_fee,
             },
             created_at_time: arg

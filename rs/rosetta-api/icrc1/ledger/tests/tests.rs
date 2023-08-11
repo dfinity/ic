@@ -217,11 +217,6 @@ fn test_approve_pruning() {
 }
 
 #[test]
-fn test_approve_max_expiration() {
-    ic_icrc1_ledger_sm_tests::test_approve_max_expiration(ledger_wasm(), encode_init_args);
-}
-
-#[test]
 fn test_approve_from_minter() {
     ic_icrc1_ledger_sm_tests::test_approve_from_minter(ledger_wasm(), encode_init_args);
 }

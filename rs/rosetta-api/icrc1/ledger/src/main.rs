@@ -37,10 +37,8 @@ use icrc_ledger_types::{
 use num_traits::{bounds::Bounded, ToPrimitive};
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
-use std::time::Duration;
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
-const DEFAULT_APPROVAL_EXPIRATION: u64 = Duration::from_secs(3600 * 24 * 7).as_nanos() as u64;
 
 #[cfg(not(feature = "u256-tokens"))]
 type Tokens = ic_icrc1_tokens_u64::U64;
@@ -558,10 +556,6 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
             None => None,
         };
 
-        let default_expiration = TimeStamp::from_nanos_since_unix_epoch(
-            ic_cdk::api::time() + DEFAULT_APPROVAL_EXPIRATION,
-        );
-
         let expected_fee_tokens = ledger.transfer_fee();
         let expected_fee: Nat = expected_fee_tokens.into();
         if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
@@ -574,12 +568,7 @@ async fn icrc2_approve(arg: ApproveArgs) -> Result<Nat, ApproveError> {
                 spender: arg.spender,
                 amount,
                 expected_allowance,
-                expires_at: Some(
-                    arg.expires_at
-                        .map(TimeStamp::from_nanos_since_unix_epoch)
-                        .map(|expires_at| expires_at.min(default_expiration))
-                        .unwrap_or(default_expiration),
-                ),
+                expires_at: arg.expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
                 fee: arg.fee.map(|_| expected_fee_tokens),
             },
             created_at_time: arg.created_at_time,
