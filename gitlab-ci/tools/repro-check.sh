@@ -22,6 +22,10 @@ print_green() {
     echo -e "\033[0;32m$(date +'%Y/%m/%d | %H:%M:%S | %s') $*\033[0m"
 }
 
+print_yellow() {
+    echo -e "\033[0;33m$(date +'%Y/%m/%d | %H:%M:%S | %s') $*\033[0m"
+}
+
 print_blue() {
     echo -e "\033[0;34m$(date +'%Y/%m/%d | %H:%M:%S | %s') $*\033[0m"
 }
@@ -36,6 +40,10 @@ log() {
 
 log_success() {
     print_green "[+] $*"
+}
+
+log_warning() {
+    print_yellow "[!] Warning - $*"
 }
 
 log_stderr() {
@@ -141,25 +149,25 @@ fi
 if [ "${NAME:-}" == "Ubuntu" ]; then
     log_success "Ubuntu OS detected"
 else
-    error "Please run this script on Ubuntu OS"
+    log_warning "Please run this script on Ubuntu OS"
 fi
 
 if [[ $(echo "${VERSION_ID:-} > 22.03" | bc) == 1 ]]; then
     log_success "Version >22.04 detected"
 else
-    error "Please run this script on Ubuntu version 22.04 or higher"
+    log_warning "Please run this script on Ubuntu version 22.04 or higher"
 fi
 
 if [[ "$(cat /proc/meminfo | grep MemTotal | awk '{ print int($2/1024**2) }')" -ge 15 ]]; then
     log_success "More than 16GB of RAM detected"
 else
-    error "You need at least 16GB of RAM on this machine"
+    log_warning "You need at least 16GB of RAM on this machine"
 fi
 
 if [[ $(("$(df . --output=avail | tail -n 1)" / 1000000)) -ge 100 ]]; then
     log_success "More than 100GB of free disk space detected"
 else
-    error "You need at least 100GB of free disk space on this machine"
+    log_warning "You need at least 100GB of free disk space on this machine"
 fi
 
 log "Update package registry"
