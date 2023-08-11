@@ -17,7 +17,7 @@ mod tests;
 /// Check that for each leaf, the witness looks the same for both implementations
 /// Also check that the new and old way of computing hash trees are equivalent
 pub fn test_tree<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut R) {
-    let hash_tree = hash_lazy_tree(&as_lazy(full_tree));
+    let hash_tree = hash_lazy_tree(&as_lazy(full_tree)).unwrap();
     let witness_gen = build_witness_gen(full_tree);
 
     let paths = partial_trees_to_leaves_and_empty_subtrees(full_tree);

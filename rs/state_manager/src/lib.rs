@@ -18,7 +18,7 @@ use crate::{
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
 use ic_canonical_state::{
-    hash_tree::{hash_lazy_tree, HashTree},
+    hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
     lazy_tree::{materialize::materialize_partial, LazyTree},
 };
 use ic_config::flag_status::FlagStatus;
@@ -132,6 +132,8 @@ pub struct StateManagerMetrics {
     tip_handler_queue_length: IntGauge,
     decode_slice_status: IntCounterVec,
     height_update_time_seconds: Histogram,
+    latest_hash_tree_size: IntGauge,
+    latest_hash_tree_max_index: IntGauge,
 }
 
 #[derive(Clone)]
@@ -331,6 +333,16 @@ impl StateManagerMetrics {
             decimal_buckets(0, 2),
         );
 
+        let latest_hash_tree_size = metrics_registry.int_gauge(
+            "state_manager_latest_hash_tree_size",
+            "Number of digests in the latest hash tree.",
+        );
+
+        let latest_hash_tree_max_index = metrics_registry.int_gauge(
+            "state_manager_latest_hash_tree_max_index",
+            "Largest index in the latest hash tree.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -350,6 +362,8 @@ impl StateManagerMetrics {
             tip_handler_queue_length,
             decode_slice_status,
             height_update_time_seconds,
+            latest_hash_tree_size,
+            latest_hash_tree_max_index,
         }
     }
 
@@ -1702,12 +1716,13 @@ impl StateManagerImpl {
         metrics: &StateManagerMetrics,
         log: &ReplicaLogger,
         state: &ReplicatedState,
-    ) -> CertificationMetadata {
+    ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
-        let hash_tree = hash_lazy_tree(&LazyTree::from(state));
+        let hash_tree = hash_lazy_tree(&LazyTree::from(state))?;
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
+        update_hash_tree_metrics(&hash_tree, metrics);
         metrics
             .checkpoint_op_duration
             .with_label_values(&["hash_tree"])
@@ -1715,11 +1730,11 @@ impl StateManagerImpl {
 
         let certified_state_hash = crypto_hash_of_tree(&hash_tree);
 
-        CertificationMetadata {
+        Ok(CertificationMetadata {
             hash_tree: Some(Arc::new(hash_tree)),
             certified_state_hash,
             certification: None,
-        }
+        })
     }
 
     /// Populates appropriate CertificationsMetadata and StatesMetadata for a StateManager
@@ -1742,7 +1757,8 @@ impl StateManagerImpl {
         for (height, state) in states {
             certifications_metadata.insert(
                 height,
-                Self::compute_certification_metadata(metrics, log, &state),
+                Self::compute_certification_metadata(metrics, log, &state)
+                    .unwrap_or_else(|err| fatal!(log, "Failed to compute hash tree: {:?}", err)),
             );
 
             let checkpoint_layout = layout.checkpoint(height).unwrap();
@@ -1914,7 +1930,9 @@ impl StateManagerImpl {
             }
         }
 
-        let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+        let hash_tree = hash_lazy_tree(&LazyTree::from(&state))
+            .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+        update_hash_tree_metrics(&hash_tree, &self.metrics);
         let certification_metadata = CertificationMetadata {
             certified_state_hash: crypto_hash_of_tree(&hash_tree),
             hash_tree: Some(Arc::new(hash_tree)),
@@ -2425,6 +2443,14 @@ fn update_latest_height(cached: &AtomicU64, h: Height) -> u64 {
     cached.fetch_max(h, Ordering::Relaxed).max(h)
 }
 
+/// Helper function to set metrics related to hash trees
+fn update_hash_tree_metrics(hash_tree: &HashTree, metrics: &StateManagerMetrics) {
+    metrics.latest_hash_tree_size.set(hash_tree.size() as i64);
+    metrics
+        .latest_hash_tree_max_index
+        .set(hash_tree.max_index() as i64);
+}
+
 impl StateManager for StateManagerImpl {
     /// Note that this function intentionally does not use
     /// `latest_state_height()` to figure out if state at the requested height
@@ -2497,7 +2523,9 @@ impl StateManager for StateManagerImpl {
                 // optimize this.
                 let hash_tree = hash_lazy_tree(&LazyTree::from(
                     initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
-                ));
+                ))
+                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
+                update_hash_tree_metrics(&hash_tree, &self.metrics);
                 Some(CryptoHashOfPartialState::from(crypto_hash_of_tree(
                     &hash_tree,
                 )))
@@ -2959,7 +2987,8 @@ impl StateManager for StateManagerImpl {
         };
 
         let certification_metadata =
-            Self::compute_certification_metadata(&self.metrics, &self.log, &checkpointed_state);
+            Self::compute_certification_metadata(&self.metrics, &self.log, &checkpointed_state)
+                .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
 
         let mut states = self.states.write();
         #[cfg(debug_assertions)]
