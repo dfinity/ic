@@ -462,7 +462,7 @@ pub async fn call<I: Serialize, O: DeserializeOwned>(
     ic_cdk::println!("REQUEST: {payload}");
     let request = CanisterHttpRequestArgument {
         url: url.to_string(),
-        max_response_bytes: Some(200 * KIB),
+        max_response_bytes: Some(10 * KIB),
         method: HttpMethod::POST,
         headers: vec![HttpHeader {
             name: "Content-Type".to_string(),
