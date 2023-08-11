@@ -422,42 +422,44 @@ impl SystemStateChanges {
         Ok(())
     }
 
+    /// Returns `self.cycles_balance_change` without cycles that are accounted
+    /// for in `self.consumed_cycles_by_use_case`.
+    fn cycles_balance_change_without_consumed_cycles_by_use_case(&self) -> CyclesBalanceChange {
+        // `self.cycles_balance_change` consists of:
+        // - CyclesBalanceChange::added(cycles_accepted_from_the_call_context)
+        // - CyclesBalanceChange::remove(cycles_sent_via_outgoing_calls)
+        // - CyclesBalanceChange::remove(cycles_consumed_by_various_fees)
+        // This loop removes the last part from `self.cycles_balance_change`.
+        let mut result = self.cycles_balance_change;
+        for (_use_case, amount) in self.consumed_cycles_by_use_case.iter() {
+            result = result + CyclesBalanceChange::added(*amount)
+        }
+        result
+    }
+
     /// Applies the balance change to the given state.
     pub fn apply_balance_changes(&self, state: &mut SystemState) {
-        let balance_before = state.balance();
-        let mut removed_consumed_cycles = Cycles::new(0);
-        for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
-            state.remove_cycles(*amount, *use_case);
-            removed_consumed_cycles += *amount;
-        }
-
-        // The final balance of the canister should reflect `cycles_balance_change`.
-        // Since we removed `removed_consumed_cycles` above, we need to add it back
-        // to the `cycles_balance_change` to make sure the final balance of the canister is correct.
-        match self.cycles_balance_change {
+        let initial_balance = state.balance();
+        let non_consumed_cycles_change =
+            self.cycles_balance_change_without_consumed_cycles_by_use_case();
+        match non_consumed_cycles_change {
             CyclesBalanceChange::Added(added) => {
-                // When 'cycles_balance_change' is positive we should add 'removed_consumed_cycles'.
-                state.add_cycles(added + removed_consumed_cycles, CyclesUseCase::NonConsumed);
-                debug_assert_eq!(balance_before + added, state.balance());
+                state.add_cycles(added, CyclesUseCase::NonConsumed)
             }
             CyclesBalanceChange::Removed(removed) => {
-                // When 'cycles_balance_change' is negative we are adding 'removed_consumed_cycles'
-                // but additionaly we should take care about the sign of the sum, which will
-                // determine whether we are adding or removing cycles from the balance.
-                if removed_consumed_cycles > removed {
-                    state.add_cycles(
-                        removed_consumed_cycles - removed,
-                        CyclesUseCase::NonConsumed,
-                    );
-                } else {
-                    state.remove_cycles(
-                        removed - removed_consumed_cycles,
-                        CyclesUseCase::NonConsumed,
-                    );
-                }
-                debug_assert_eq!(balance_before - removed, state.balance());
+                state.remove_cycles(removed, CyclesUseCase::NonConsumed)
             }
         }
+        for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
+            state.remove_cycles(*amount, *use_case);
+        }
+        // All changes applied above should be equivalent to simply applying
+        // `self.cycles_balance_change` to the initial balance.
+        let expected_balance = match self.cycles_balance_change {
+            CyclesBalanceChange::Added(added) => initial_balance + added,
+            CyclesBalanceChange::Removed(removed) => initial_balance - removed,
+        };
+        assert_eq!(state.balance(), expected_balance);
     }
 
     fn add_consumed_cycles(&mut self, consumed_cycles: &[(CyclesUseCase, Cycles)]) {
