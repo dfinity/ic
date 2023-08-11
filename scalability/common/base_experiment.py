@@ -303,6 +303,7 @@ class BaseExperiment:
         """Return path to ic-admin."""
         return os.path.join(self.artifacts_path, "ic-admin")
 
+    @retry(tries=5)
     def __get_topology(self, nns_url=None):
         """
         Get the current topology from the registry.
@@ -419,7 +420,9 @@ class BaseExperiment:
         for subnet, info in topology["topology"]["subnets"].items():
             if subnet == MAINNET_NNS_SUBNET_ID:
                 node_id = random.choice(info["records"][0]["value"]["membership"])
-                return self.get_node_ip_address(node_id, nns_url=MAINNET_NNS_URL)
+                nns_ip = self.get_node_ip_address(node_id, nns_url=MAINNET_NNS_URL)
+                print(f"Using NNS ip address: {nns_ip}")
+                return nns_ip
         raise Exception(f"Failed to get the mainnet NNS url from {MAINNET_NNS_URL}")
 
     def _get_nns_ip(self):
@@ -651,6 +654,8 @@ class BaseExperiment:
 
     def get_iter_logs_from_targets(self, machines: List[str], since_time: str, outdir: str):
         """Fetch logs from target machines since the given time."""
+        if FLAGS.no_instrument:
+            return
         ssh.run_all_ssh_in_parallel(
             machines,
             [f"journalctl -u ic-replica --since={since_time}" for m in machines],
