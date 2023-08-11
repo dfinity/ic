@@ -5224,14 +5224,6 @@ impl Governance {
         &mut self,
         open_sns_token_swap: &OpenSnsTokenSwap,
     ) -> Result<(), GovernanceError> {
-        // TODO(NNS1-2464): Re-enable OpenSnsTokenSwap proposals.
-        if !open_sns_token_swap_is_enabled() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "OpenSnsTokenSwap proposals are temporary unavailable.".to_string(),
-            ));
-        }
-
         /*
         TODO(NNS1-1919): Replace the body of this function with the chunk of
         code in this comment block when we are about to release that feature.
@@ -8522,14 +8514,4 @@ impl FromStr for BitcoinNetwork {
 pub struct BitcoinSetConfigProposal {
     pub network: BitcoinNetwork,
     pub payload: Vec<u8>,
-}
-
-// TODO(NNS1-2464): Re-enable OpenSnsTokenSwap proposals.
-#[cfg(feature = "test")]
-fn open_sns_token_swap_is_enabled() -> bool {
-    true
-}
-#[cfg(not(feature = "test"))]
-fn open_sns_token_swap_is_enabled() -> bool {
-    false
 }
