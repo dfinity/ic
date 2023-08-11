@@ -12,4 +12,6 @@ pub mod tx;
 #[cfg(test)]
 mod tests;
 
-pub const MAIN_DERIVATION_PATH: Vec<Vec<u8>> = vec![];
+use serde_bytes::ByteBuf;
+
+pub const MAIN_DERIVATION_PATH: Vec<ByteBuf> = vec![];

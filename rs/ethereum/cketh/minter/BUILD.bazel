@@ -42,6 +42,7 @@ rust_library(
         "@crate_index//:num-bigint",
         "@crate_index//:rlp",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
     ],
 )

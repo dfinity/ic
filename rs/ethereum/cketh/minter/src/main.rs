@@ -126,7 +126,10 @@ async fn minter_address() -> String {
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     let (response,) = ecdsa_public_key(EcdsaPublicKeyArgument {
         canister_id: None,
-        derivation_path: ic_cketh_minter::MAIN_DERIVATION_PATH,
+        derivation_path: ic_cketh_minter::MAIN_DERIVATION_PATH
+            .into_iter()
+            .map(|x| x.to_vec())
+            .collect(),
         key_id: EcdsaKeyId {
             curve: EcdsaCurve::Secp256k1,
             name: key_name,
