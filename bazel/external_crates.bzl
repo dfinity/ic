@@ -527,12 +527,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.3.0",
             ),
             "indicatif": crate.spec(
-                version = "^0.15",
-                features = [
-                    "improved_unicode",
-                ],
-            ),
-            "indicatif_0_17_3": crate.spec(
                 package = "indicatif",
                 version = "^0.17.3",
             ),
@@ -540,7 +534,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.0.6",
             ),
             "insta": crate.spec(
-                version = "=1.8.0",
+                version = "^1.31.0",
             ),
             "instant-acme": crate.spec(
                 version = "^0.3.2",
@@ -1290,9 +1284,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.5",
             ),
             "wiremock": crate.spec(
-                # Pinning to 0.5.18 because we are pinned to Rust 1.66
-                # where pin_macro is unstable.
-                version = "=0.5.18",
+                version = "^0.5.19",
             ),
             "x509-parser": crate.spec(
                 version = "^0.12.0",
