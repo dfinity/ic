@@ -9012,6 +9012,7 @@ dependencies = [
  "ic-registry-nns-data-provider",
  "ic-registry-subnet-type",
  "ic-replica-setup-ic-network",
+ "ic-state-manager",
  "ic-test-utilities",
  "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
