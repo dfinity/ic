@@ -84,7 +84,23 @@ pub async fn finalize_committed_swap_and_check_success(
     let expected_neuron_count = initial_neuron_count as u64 + created_neuron_count;
     assert_eq!(neurons.len() as u64, expected_neuron_count);
 
-    // TODO(NNS1-2250): Expand on the assertions that finalize_swap was successful.
+    // Check that the dapp canisters are exclusively owned by the root canister
+    let get_sns_canisters_summary_response = {
+        let request = sns_request_provider.get_sns_canisters_summary();
+        canister_agent
+            .call_and_parse(&request)
+            .await
+            .result()
+            .unwrap()
+    };
+    for canister_summary in get_sns_canisters_summary_response.dapps {
+        let controllers = canister_summary.status.unwrap().settings.controllers;
+        assert_eq!(
+            controllers,
+            vec![sns_client.sns_canisters.root.unwrap()],
+            "dapp canisters should be exclusively owned by the root canister"
+        );
+    }
 }
 
 /// If the swap is aborted, waits for the swap to finalize (for up to 2 minutes), and verifies that the swap was finalized as expected.
@@ -144,6 +160,21 @@ pub async fn finalize_aborted_swap_and_check_success(
     // No neurons should have been created
     let initial_neuron_count = developer_distribution.developer_neurons.len();
     assert_eq!(neurons.len(), initial_neuron_count);
+
+    // The SNS should control no dapps
+    let get_sns_canisters_summary_response = {
+        let request = sns_request_provider.get_sns_canisters_summary();
+        canister_agent
+            .call_and_parse(&request)
+            .await
+            .result()
+            .unwrap()
+    };
+    assert_eq!(
+        get_sns_canisters_summary_response.dapps,
+        vec![],
+        "The SNS should control no dapps"
+    );
 }
 
 async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
