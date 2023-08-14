@@ -12,6 +12,7 @@ candid = { workspace = true }
 ciborium = { workspace = true }
 ethabi = "18.0.0"
 ethnum = { workspace = true }
+futures = "0.3"
 hex = "0.4"
 ic-ic00-types = { path = "../../../types/ic00_types" }
 hex-literal = "0.4.1"

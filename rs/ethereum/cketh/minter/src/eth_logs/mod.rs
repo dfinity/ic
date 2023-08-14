@@ -3,10 +3,8 @@ mod tests;
 
 use crate::address::Address;
 use crate::endpoints::ReceivedEthEvent;
-use crate::eth_rpc;
-use crate::eth_rpc::{
-    into_nat, BlockNumber, FixedSizeData, Hash, LogEntry, BLOCK_PI_RPC_PROVIDER_URL,
-};
+use crate::eth_rpc::{into_nat, BlockNumber, FixedSizeData, Hash, LogEntry};
+use crate::RPC_CLIENT;
 use candid::Principal;
 use hex_literal::hex;
 use num_bigint::BigUint;
@@ -29,19 +27,15 @@ pub async fn last_received_eth_events(
         ));
     }
 
-    let result: Vec<LogEntry> = eth_rpc::call(
-        BLOCK_PI_RPC_PROVIDER_URL,
-        "eth_getLogs",
-        vec![GetLogsParam {
+    let result: Vec<LogEntry> = RPC_CLIENT
+        .eth_get_logs(GetLogsParam {
             from_block: from.into(),
             to_block: to.into(),
             address: vec![Address::new(SMART_CONTRACT_ADDRESS)],
             topics: vec![FixedSizeData(RECEIVED_ETH_EVENT_TOPIC)],
-        }],
-    )
-    .await
-    .expect("HTTP call failed")
-    .unwrap();
+        })
+        .await
+        .expect("HTTP call failed");
 
     let (ok, not_ok): (Vec<_>, Vec<_>) = result
         .into_iter()

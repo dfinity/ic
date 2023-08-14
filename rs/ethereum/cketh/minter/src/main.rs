@@ -8,7 +8,7 @@ use ic_cketh_minter::endpoints::{
     EthTransaction, MinterArg, ReceivedEthEvent, RetrieveEthRequest, TransactionStatus,
 };
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
-use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash, BLOCK_PI_RPC_PROVIDER_URL};
+use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
 use ic_cketh_minter::eth_rpc::{JsonRpcResult, Transaction};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::mutate_state;
@@ -16,7 +16,7 @@ use ic_cketh_minter::state::read_state;
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::state::STATE;
 use ic_cketh_minter::tx::{estimate_transaction_price, Eip1559TransactionRequest};
-use ic_cketh_minter::{eth_logs, eth_rpc};
+use ic_cketh_minter::{eth_logs, eth_rpc, RPC_CLIENT};
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use std::cmp::{min, Ordering};
 use std::str::FromStr;
@@ -43,8 +43,7 @@ fn init(arg: MinterArg) {
 }
 
 async fn scrap_eth_logs() {
-    use eth_rpc::{Block, BlockSpec, BlockTag};
-    use ic_cketh_minter::eth_rpc::GetBlockByNumberParams;
+    use eth_rpc::Block;
 
     const MAX_BLOCK_SPREAD: u128 = 1024;
 
@@ -54,22 +53,10 @@ async fn scrap_eth_logs() {
         last_seen_block_number
     );
 
-    let finalized_block: Block = eth_rpc::call(
-        // contrary to other endpoints we do not use
-        // rpc.sepolia.org for the PoC because its view on latest finalized block seems delayed
-        // by a few **days**:
-        // Last finalized block according to rpc.sepolia.org: 0x3c19ee (https://sepolia.etherscan.io/block/3938798)
-        // Last finalized block according to blockpi: 0x3c6d08 (https://sepolia.etherscan.io/block/3960072)
-        BLOCK_PI_RPC_PROVIDER_URL,
-        "eth_getBlockByNumber",
-        GetBlockByNumberParams {
-            block: BlockSpec::Tag(BlockTag::Finalized),
-            include_full_transactions: false,
-        },
-    )
-    .await
-    .expect("HTTP call failed")
-    .unwrap();
+    let finalized_block: Block = RPC_CLIENT
+        .eth_get_last_finalized_block()
+        .await
+        .expect("HTTP call failed");
     ic_cdk::println!("Last finalized block: {:?}", finalized_block);
 
     match last_seen_block_number.cmp(&finalized_block.number) {
@@ -209,14 +196,14 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
     .await
     .expect("signing failed");
     let hex_string = format!("0x{}", hex::encode(&tx_bytes));
-    let result: JsonRpcResult<String> = eth_rpc::call(
-        "https://rpc.sepolia.org",
-        "eth_sendRawTransaction",
-        vec![hex_string],
-    )
-    .await
-    .expect("HTTP call failed");
-    result
+    match RPC_CLIENT
+        .eth_send_raw_transaction(hex_string)
+        .await
+        .expect("HTTP call failed")
+    {
+        JsonRpcResult::Result(tx_hash) => JsonRpcResult::Result(tx_hash.to_string()),
+        JsonRpcResult::Error { code, message } => JsonRpcResult::Error { code, message },
+    }
 }
 
 #[update]
@@ -224,14 +211,10 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
 async fn test_get_transaction_by_hash(transaction_hash: String) -> TransactionStatus {
     let transaction_hash = Hash::from_str(&transaction_hash)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to parse transaction hash: {:?}", e)));
-    let transaction: Option<Transaction> = eth_rpc::call(
-        BLOCK_PI_RPC_PROVIDER_URL,
-        "eth_getTransactionByHash",
-        vec![transaction_hash],
-    )
-    .await
-    .expect("HTTP call failed")
-    .unwrap();
+    let transaction: Option<Transaction> = RPC_CLIENT
+        .eth_get_transaction_by_hash(transaction_hash)
+        .await
+        .expect("HTTP call failed");
     match transaction {
         None => TransactionStatus::NotFound,
         Some(transaction) => {
@@ -251,20 +234,17 @@ async fn test_get_transaction_by_hash(transaction_hash: String) -> TransactionSt
 #[candid_method(update)]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
     use candid::Nat;
-    use eth_rpc::{BlockSpec, BlockTag, FeeHistory, FeeHistoryParams, Quantity};
+    use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
 
-    let fee_history: FeeHistory = eth_rpc::call(
-        "https://rpc.sepolia.org",
-        "eth_feeHistory",
-        FeeHistoryParams {
+    let fee_history = RPC_CLIENT
+        .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
             highest_block: BlockSpec::Tag(BlockTag::Finalized),
             reward_percentiles: vec![20],
-        },
-    )
-    .await
-    .expect("HTTP call failed")
-    .unwrap();
+        })
+        .await
+        .expect("HTTP call failed")
+        .unwrap();
 
     debug_assert_eq!(fee_history.base_fee_per_gas.len(), 6);
     let base_fee_from_last_finalized_block = Nat::from(fee_history.base_fee_per_gas[4]);
@@ -370,18 +350,15 @@ fn validate_caller_not_anonymous() -> candid::Principal {
 
 async fn eth_fee_history() -> FeeHistory {
     use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
-    eth_rpc::call(
-        "https://rpc.sepolia.org",
-        "eth_feeHistory",
-        FeeHistoryParams {
+    RPC_CLIENT
+        .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
             highest_block: BlockSpec::Tag(BlockTag::Finalized),
             reward_percentiles: vec![20],
-        },
-    )
-    .await
-    .expect("HTTP call failed")
-    .unwrap()
+        })
+        .await
+        .expect("HTTP call failed")
+        .unwrap()
 }
 
 #[post_upgrade]

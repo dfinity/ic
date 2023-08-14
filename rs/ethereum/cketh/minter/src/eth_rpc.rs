@@ -418,7 +418,7 @@ pub struct JsonRpcReply<T> {
 }
 
 /// An envelope for all JSON-RPC replies.
-#[derive(Debug, PartialEq, Eq, Deserialize, CandidType)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, CandidType)]
 #[serde(rename_all = "camelCase")]
 pub enum JsonRpcResult<T> {
     Result(T),
@@ -447,7 +447,7 @@ pub const BLOCK_PI_RPC_PROVIDER_URL: &str =
     "https://ethereum-sepolia.blockpi.network/v1/rpc/public";
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
 pub async fn call<I: Serialize, O: DeserializeOwned>(
-    url: &'static str,
+    url: impl Into<String>,
     method: impl Into<String>,
     params: I,
 ) -> CallResult<JsonRpcResult<O>> {
@@ -461,7 +461,7 @@ pub async fn call<I: Serialize, O: DeserializeOwned>(
     .unwrap();
     ic_cdk::println!("REQUEST: {payload}");
     let request = CanisterHttpRequestArgument {
-        url: url.to_string(),
+        url: url.into(),
         max_response_bytes: Some(10 * KIB),
         method: HttpMethod::POST,
         headers: vec![HttpHeader {
