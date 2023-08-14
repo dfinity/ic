@@ -856,7 +856,7 @@ impl TransactionBuilder {
     }
 
     /// Add a `Request::Transfer` to the Transaction.
-    /// This handles `Send`, `Mint`, and `Burn`.
+    /// This handles `Send`, `Mint`, `Approve` and `Burn`.
     pub fn transfer(
         &mut self,
         operation: &LedgerOperation,

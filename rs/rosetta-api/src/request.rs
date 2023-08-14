@@ -25,7 +25,7 @@ pub mod transaction_results;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub enum Request {
-    /// Contains `Send`, `Mint`, and `Burn` operations.
+    /// Contains `Send`, `Mint`, `Approve` and `Burn` operations.
     /// Attempting to serialize or deserialize any Mint, or Burn will error.
     #[serde(rename = "TRANSACTION")]
     #[serde(with = "serde_transfer")]

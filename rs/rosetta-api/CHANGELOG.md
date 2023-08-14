@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixes
 ### Added
+- BREAKING CHANGE: update the database structure to support the ICRC-2 standard transactions.
+  The clients have to delete the old database and re-sync the Rosetta node from scratch. 
 ### Changed
 
 ## [1.8.0] - 2023-01-16
