@@ -64,6 +64,26 @@ fn zk_proofs(c: &mut Criterion) {
     c.bench_function("ProofOfProduct::verify", |b| {
         b.iter(|| proof.verify(&lhs_c, &rhs_c, &product_c, &ad).unwrap());
     });
+
+    let secret = EccScalar::random(curve, &mut rng);
+    let base1 = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"domain").unwrap();
+    let base2 = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"domain").unwrap();
+
+    c.bench_function("ProofOfDLogEquivalence::create", |b| {
+        b.iter(|| {
+            zk::ProofOfDLogEquivalence::create(seed.clone(), &secret, &base1, &base2, &ad).unwrap()
+        });
+    });
+
+    let proof =
+        zk::ProofOfDLogEquivalence::create(seed.clone(), &secret, &base1, &base2, &ad).unwrap();
+
+    let b1s = base1.scalar_mul(&secret).unwrap();
+    let b2s = base2.scalar_mul(&secret).unwrap();
+
+    c.bench_function("ProofOfDLogEquivalence::verify", |b| {
+        b.iter(|| proof.verify(&base1, &base2, &b1s, &b2s, &ad).unwrap())
+    });
 }
 
 criterion_group!(benches, zk_proofs);

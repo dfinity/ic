@@ -6,6 +6,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
+use std::sync::Arc;
 use subtle::Choice;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -416,10 +417,30 @@ impl TryFrom<&EccScalar> for EccScalarBytes {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, Eq)]
 pub struct EccPoint {
     point: EccPointInternal,
-    precompute: Option<NafLut>,
+    precompute: Option<Arc<NafLut>>,
+}
+
+impl Zeroize for EccPoint {
+    fn zeroize(&mut self) {
+        self.point.zeroize();
+        self.precompute = None;
+    }
+}
+
+impl Drop for EccPoint {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl PartialEq for EccPoint {
+    fn eq(&self, other: &Self) -> bool {
+        // comparison ignores the precomputed state
+        self.point == other.point
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
@@ -639,7 +660,7 @@ impl EccPoint {
     /// # Errors
     /// * ThresholdEcdsaError::InvalidArguments if `window_size` is out of bounds.
     pub fn precompute(&mut self, window_size: usize) -> ThresholdEcdsaResult<()> {
-        self.precompute = Some(NafLut::new(&self.clone(), window_size)?);
+        self.precompute = Some(Arc::new(NafLut::new(&self.clone(), window_size)?));
         Ok(())
     }
 
