@@ -25,6 +25,7 @@ enum Trans {
     Buy(AccountIdentifier, Tokens),
     Sell(AccountIdentifier, Tokens),
     Transfer(AccountIdentifier, AccountIdentifier, Tokens),
+    Approve(AccountIdentifier, AccountIdentifier, Tokens),
 }
 
 pub struct Scribe {
@@ -181,6 +182,30 @@ impl Scribe {
         self.add_block(transaction, DEFAULT_TRANSFER_FEE);
     }
 
+    pub fn approve(&mut self, src: AccountIdentifier, dst: AccountIdentifier, amount: u64) {
+        let amount = Tokens::from_e8s(amount);
+        self.transactions
+            .push_back(Trans::Approve(src, dst, amount));
+        let balance = self.balance_book.get_mut(&src).unwrap();
+        *balance = balance.checked_sub(&DEFAULT_TRANSFER_FEE).unwrap();
+        let memo = self.next_message();
+        let transaction = Transaction {
+            operation: Operation::Approve {
+                from: src,
+                spender: dst,
+                allowance: amount,
+                expected_allowance: None,
+                expires_at: None,
+                fee: DEFAULT_TRANSFER_FEE,
+            },
+            memo,
+            icrc1_memo: None,
+            created_at_time: Some(self.time().into()),
+        };
+        self.balance_history.push_back(self.balance_book.clone());
+        self.add_block(transaction, DEFAULT_TRANSFER_FEE);
+    }
+
     pub fn get_rand_account(&mut self, min_amount: Tokens) -> AccountIdentifier {
         let mut acc_idx = self.dice_num(self.num_accounts()) as usize;
         let mut acc = self.accounts[acc_idx];
@@ -191,7 +216,7 @@ impl Scribe {
         acc
     }
 
-    pub fn gen_transfer(&mut self) {
+    fn gen_transfer_args(&mut self) -> (AccountIdentifier, AccountIdentifier, u64) {
         let x = (1 + self.dice_num(3)) * 100;
         let amount = self.rand_val(x, 0.1);
         let icpt_amount = Tokens::from_e8s(amount);
@@ -207,6 +232,11 @@ impl Scribe {
             acc2 = self.get_rand_account(Tokens::ZERO);
             safety_belt -= 1;
         }
+        (acc1, acc2, amount)
+    }
+
+    pub fn gen_transfer(&mut self) {
+        let (acc1, acc2, amount) = self.gen_transfer_args();
         self.transfer(acc1, acc2, amount);
     }
 
@@ -224,10 +254,16 @@ impl Scribe {
         self.sell(acc, amount);
     }
 
+    pub fn gen_approve(&mut self) {
+        let (acc1, acc2, amount) = self.gen_transfer_args();
+        self.approve(acc1, acc2, amount);
+    }
+
     pub fn gen_transaction(&mut self) {
-        match self.dice_num(4) {
+        match self.dice_num(5) {
             0 => self.gen_buy(),
             1 => self.gen_sell(),
+            2 => self.gen_approve(),
             _ => self.gen_transfer(),
         };
     }

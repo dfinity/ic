@@ -521,7 +521,6 @@ async fn verify_account_search(
             icp_ledger::Operation::Approve { from, spender, .. } => {
                 assert_ne!(from, spender);
                 index(from, hb.index);
-                index(spender, hb.index);
             }
         }
     }
