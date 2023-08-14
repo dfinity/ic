@@ -18,7 +18,7 @@ pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
 }
 #[cfg(not(feature = "test"))]
 pub(crate) fn create_service_nervous_system_proposals_is_enabled() -> bool {
-    false
+    true
 }
 
 #[derive(Clone, Debug)]
