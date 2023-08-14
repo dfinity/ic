@@ -1,7 +1,7 @@
 use crate::pb::v1::{
     create_service_nervous_system,
-    create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters, proposal,
-    CreateServiceNervousSystem, Proposal,
+    create_service_nervous_system::swap_parameters::NeuronBasketConstructionParameters,
+    CreateServiceNervousSystem,
 };
 use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
@@ -82,56 +82,6 @@ impl TryFrom<ExecutedCreateServiceNervousSystemProposal> for SnsInitPayload {
 }
 
 impl CreateServiceNervousSystem {
-    pub fn upgrade_to_proposal(self) -> Proposal {
-        let Self {
-            name,
-            url,
-            description,
-            ..
-        } = &self;
-
-        let name = name.clone().unwrap_or_else(|| "A Profound".to_string());
-        let title = Some(format!("Create {} Service Nervous System", name));
-
-        let description = description.clone().unwrap_or_else(|| {
-            "Ladies and gentlemen,
-             it is with great pleasure that present to you, \
-             a fabulous new SNS for the good of all humankind. \
-             You will surely be in awe of its grandeur, \
-             once your eyes have beheld is glorious majesty."
-                .to_string()
-        });
-
-        let url = url.clone().unwrap_or_default();
-
-        let summary = {
-            let url_line = if url.is_empty() {
-                "".to_string()
-            } else {
-                format!("URL: {}\n", url)
-            };
-
-            format!(
-                "Name: {}\n\
-                 {}\
-                 \n\
-                 ## Description\n\
-                 \n\
-                 {}",
-                name, url_line, description,
-            )
-        };
-
-        let action = Some(proposal::Action::CreateServiceNervousSystem(self));
-
-        Proposal {
-            title,
-            summary,
-            url,
-            action,
-        }
-    }
-
     pub fn sns_token_e8s(&self) -> Option<u64> {
         self.initial_token_distribution
             .as_ref()?

@@ -175,6 +175,11 @@ fn test_parse() {
                 e8s: Some(1000 * E8),
             },
         },
+        nns_proposal: NnsProposal {
+            title: "Proposal to Create an SNS named Daniel".to_string(),
+            summary: "This is just a short summary, but I think it's pretty good.".to_string(),
+            url: Some("https://forum.dfinity.org/".to_string()),
+        },
     };
 
     assert_eq!(

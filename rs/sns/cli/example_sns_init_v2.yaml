@@ -8,6 +8,12 @@ description: >
 logo: test.png
 url: https://forum.dfinity.org/thread-where-this-sns-is-discussed
 
+NnsProposal:
+    title: "Proposal to Create an SNS named Daniel"
+    url: "https://forum.dfinity.org/"
+    summary: "This is just a short summary, but I think it's pretty good."
+
+
 Principals:
     - id: 5zxxw-63ouu-faaaa-aaaap-4ai
       name: Bruce Wayne
