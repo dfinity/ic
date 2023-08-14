@@ -26,6 +26,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        # according to discussions here: https://github.com/actions/runner-images/issues/1187#issuecomment-686735760 disabling network offloading can help with github runner flakiness
+      - name: Disable network offload
+        run: sudo ethtool -K eth0 tx off rx off
       - name: Run Bazel Test All
         id: bazel-test-all
         run: ${GITHUB_WORKSPACE}/gitlab-ci/src/bazel-ci/main.sh
