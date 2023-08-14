@@ -1,6 +1,9 @@
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
-use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
+use ic_nns_governance::{
+    governance::validate_user_submitted_proposal_fields,
+    pb::v1::{proposal::Action, CreateServiceNervousSystem, Proposal},
+};
 use ic_sns_init::pb::v1::SnsInitPayload;
 use std::{
     fmt::Debug,
@@ -59,6 +62,9 @@ pub(crate) struct SnsConfigurationFile {
 
     #[serde(rename = "Swap")]
     swap: Swap,
+
+    #[serde(rename = "NnsProposal")]
+    nns_proposal: NnsProposal,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -226,6 +232,13 @@ pub(crate) struct InitialBalances {
     swap: nervous_system_pb::Tokens,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+pub(crate) struct NnsProposal {
+    title: String,
+    summary: String,
+    url: Option<String>,
+}
+
 struct AliasToPrincipalId<'a> {
     #[allow(unused)]
     source: &'a Vec<PrincipalAlias>,
@@ -301,6 +314,48 @@ fn parse_image_path(
 }
 
 impl SnsConfigurationFile {
+    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<Proposal, String> {
+        // Extract the proposal action from the config file
+        let create_service_nervous_system =
+            self.try_convert_to_create_service_nervous_system(base_path)?;
+
+        let SnsConfigurationFile {
+            name: _,
+            description: _,
+            logo: _,
+            url: _,
+            principals: _,
+            fallback_controller_principals: _,
+            dapp_canisters: _,
+            token: _,
+            proposals: _,
+            neurons: _,
+            voting: _,
+            distribution: _,
+            swap: _,
+            nns_proposal,
+        } = self;
+
+        // Extract the Proposal metadata (title, url, description, etc) from the config file
+        let title = Some(nns_proposal.title.clone());
+        let summary = nns_proposal.summary.clone();
+        // Empty strings is a legal NNS Proposal Url.
+        let url = nns_proposal.url.clone().unwrap_or_default();
+
+        let proposal = Proposal {
+            title,
+            summary,
+            url,
+            action: Some(Action::CreateServiceNervousSystem(
+                create_service_nervous_system,
+            )),
+        };
+
+        validate_user_submitted_proposal_fields(&proposal)?;
+
+        Ok(proposal)
+    }
+
     pub fn try_convert_to_create_service_nervous_system(
         &self,
         base_path: &Path,
@@ -320,6 +375,7 @@ impl SnsConfigurationFile {
             voting,
             distribution,
             swap,
+            nns_proposal: _, // We ignore the NNS Proposal fields
         } = self;
 
         // Step 2: Convert components.

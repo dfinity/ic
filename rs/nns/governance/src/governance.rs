@@ -46,7 +46,7 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    cmc::CMC, ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError, SECONDS_PER_DAY,
+    cmc::CMC, ledger, ledger::IcpLedger, NervousSystemError, SECONDS_PER_DAY,
 };
 use ic_nervous_system_governance::index::{
     neuron_following::{
@@ -5063,51 +5063,27 @@ impl Governance {
     }
 
     async fn validate_proposal(&mut self, proposal: &Proposal) -> Result<(), GovernanceError> {
-        let invalid_proposal = |message| {
-            Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                message,
-            ))
-        };
-
-        if proposal.topic() == Topic::Unspecified {
-            return invalid_proposal(format!("Topic not specified. proposal: {:#?}", proposal));
+        impl From<String> for GovernanceError {
+            fn from(message: String) -> Self {
+                Self::new_with_message(ErrorType::InvalidProposal, message)
+            }
         }
 
-        validate_proposal_title(&proposal.title)?;
+        if proposal.topic() == Topic::Unspecified {
+            Err(format!("Topic not specified. proposal: {:#?}", proposal))?;
+        }
+
+        validate_user_submitted_proposal_fields(proposal)?;
 
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
         }
 
-        if proposal.summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
-            return invalid_proposal(format!(
-                "The maximum proposal summary size is {} bytes, this proposal is: {} bytes",
-                PROPOSAL_SUMMARY_BYTES_MAX,
-                proposal.summary.len(),
-            ));
-        }
-
-        // An empty string will fail validation as it is not a valid url,
-        // but it's fine for us.
-        if !proposal.url.is_empty() {
-            validate_proposal_url(
-                &proposal.url,
-                PROPOSAL_URL_CHAR_MIN,
-                PROPOSAL_URL_CHAR_MAX,
-                "Proposal url",
-                Some(vec!["forum.dfinity.org"]),
-            )
-            .map_err(|err| invalid_proposal(err).unwrap_err())?;
-        }
-
         // Require that oneof action is populated.
-        let action = proposal.action.as_ref().ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Proposal lacks an action: {:?}", proposal,),
-            )
-        })?;
+        let action = proposal
+            .action
+            .as_ref()
+            .ok_or(format!("Proposal lacks an action: {:?}", proposal))?;
 
         // Finally, perform Action-specific validation.
         match action {
@@ -7448,38 +7424,69 @@ impl Governance {
     }
 }
 
-// Returns whether the following requirements are met:
-//   1. proposal must have a title.
-//   2. title len (bytes, not characters) is between min and max.
-pub fn validate_proposal_title(title: &Option<String>) -> Result<(), GovernanceError> {
+/// Validates the user submitted proposal fields.
+pub fn validate_user_submitted_proposal_fields(proposal: &Proposal) -> Result<(), String> {
+    validate_proposal_title(&proposal.title)?;
+    validate_proposal_summary(&proposal.summary)?;
+    validate_proposal_url(&proposal.url)?;
+
+    Ok(())
+}
+
+/// Returns whether the following requirements are met:
+///   1. proposal must have a title.
+///   2. title len (bytes, not characters) is between min and max.
+pub fn validate_proposal_title(title: &Option<String>) -> Result<(), String> {
     // Require that proposal has a title.
-    let len = title
-        .as_ref()
-        .ok_or_else(|| {
-            GovernanceError::new_with_message(ErrorType::InvalidProposal, "Proposal lacks a title")
-        })?
-        .len();
+    let len = title.as_ref().ok_or("Proposal lacks a title")?.len();
 
     // Require that title is not too short.
     if len < PROPOSAL_TITLE_BYTES_MIN {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!(
-                "Proposal title is too short (must be at least {} bytes)",
-                PROPOSAL_TITLE_BYTES_MIN,
-            ),
+        return Err(format!(
+            "Proposal title is too short (must be at least {} bytes)",
+            PROPOSAL_TITLE_BYTES_MIN,
         ));
     }
 
     // Require that title is not too long.
     if len > PROPOSAL_TITLE_BYTES_MAX {
-        return Err(GovernanceError::new_with_message(
-            ErrorType::InvalidProposal,
-            format!(
-                "Proposal title is too long (can be at most {} bytes)",
-                PROPOSAL_TITLE_BYTES_MAX,
-            ),
+        return Err(format!(
+            "Proposal title is too long (can be at most {} bytes)",
+            PROPOSAL_TITLE_BYTES_MAX,
         ));
+    }
+
+    Ok(())
+}
+
+/// Returns whether the following requirements are met:
+///   1. summary len (bytes, not characters) is below the max.
+pub fn validate_proposal_summary(summary: &String) -> Result<(), String> {
+    if summary.len() > PROPOSAL_SUMMARY_BYTES_MAX {
+        return Err(format!(
+            "The maximum proposal summary size is {} bytes, this proposal is: {} bytes",
+            PROPOSAL_SUMMARY_BYTES_MAX,
+            summary.len(),
+        ));
+    }
+
+    Ok(())
+}
+
+/// Returns whether the following requirements are met:
+///   1. If a url is provided, it is between the max and min
+///   2. If a url is specified, it must be from the list of allowed domains.
+pub fn validate_proposal_url(url: &String) -> Result<(), String> {
+    // An empty string will fail validation as it is not a valid url,
+    // but it's fine for us.
+    if !url.is_empty() {
+        ic_nervous_system_common::validate_proposal_url(
+            url,
+            PROPOSAL_URL_CHAR_MIN,
+            PROPOSAL_URL_CHAR_MAX,
+            "Proposal url",
+            Some(vec!["forum.dfinity.org"]),
+        )?
     }
 
     Ok(())
