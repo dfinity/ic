@@ -28,14 +28,6 @@ pub trait AdvertBroadcaster {
 /// the return type for the `on_artifact` function of `ArtifactManager`.
 pub enum OnArtifactError {
     NotProcessed,
-    AdvertMismatch(AdvertMismatchError),
-    MessageConversionfailed(p2p::GossipAdvert),
-}
-
-#[derive(Debug)]
-pub struct AdvertMismatchError {
-    pub received: p2p::GossipAdvert,
-    pub expected: p2p::GossipAdvert,
 }
 
 /// An abstraction of artifact processing for a sub-type of the overall
@@ -154,12 +146,8 @@ pub trait ArtifactManager: Send + Sync {
     ///
     /// See `ArtifactClient::on_artifact` for more details.
     #[allow(clippy::result_large_err)]
-    fn on_artifact(
-        &self,
-        msg: artifact::Artifact,
-        advert: p2p::GossipAdvert,
-        peer_id: &NodeId,
-    ) -> Result<(), OnArtifactError>;
+    fn on_artifact(&self, msg: artifact::Artifact, peer_id: &NodeId)
+        -> Result<(), OnArtifactError>;
 
     /// Check if the artifact specified by the id already exists in the
     /// corresponding artifact pool.

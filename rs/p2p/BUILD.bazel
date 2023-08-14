@@ -14,6 +14,7 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
+    "//rs/state_manager",
     "//rs/registry/helpers",
     "//rs/registry/subnet_type",
     "//rs/types/types",
