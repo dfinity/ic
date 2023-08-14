@@ -24,6 +24,7 @@ use crate::{
     driver::{test_env::TestEnv, universal_vm::UniversalVms},
     util::UniversalCanister,
 };
+use assert_matches::assert_matches;
 use bitcoincore_rpc::{
     bitcoin::{Address, Amount, Txid},
     bitcoincore_rpc_json::{self, LoadWalletResult},
@@ -34,6 +35,7 @@ use canister_test::Canister;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
+use ic_ckbtc_minter::updates::update_balance::UtxoStatus::Checked;
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_universal_canister::{management, wasm};
 use icrc_ledger_agent::{CallMode, Icrc1Agent, Icrc1AgentError};
@@ -602,7 +604,7 @@ pub async fn assert_no_new_utxo(agent: &CkBtcMinterAgent, subaccount: &Subaccoun
         })
         .await
         .expect("Error while calling update_balance");
-    matches!(result, Err(UpdateBalanceError::NoNewUtxos { .. }));
+    assert_matches!(result, Err(UpdateBalanceError::NoNewUtxos { .. }));
 }
 
 /// Assert that calling update_balance returns a transient error.
@@ -614,7 +616,16 @@ pub async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount
         })
         .await
         .expect("Error while calling update_balance");
-    matches!(result, Err(UpdateBalanceError::TemporarilyUnavailable(..)));
+    match result {
+        Ok(utxos_statues) => {
+            for status in utxos_statues {
+                assert_matches!(status, Checked(_));
+            }
+        }
+        Err(error) => {
+            assert_matches!(error, UpdateBalanceError::TemporarilyUnavailable(..));
+        }
+    }
 }
 
 /// Ensure wallet existence by creating one if required.
