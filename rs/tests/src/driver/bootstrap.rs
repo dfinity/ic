@@ -1,15 +1,18 @@
+use crate::driver::{
+    config::NODES_INFO,
+    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+    farm::{Farm, FarmResult, FileId},
+    ic::{InternetComputer, Node},
+    node_software_version::NodeSoftwareVersion,
+    port_allocator::AddrType,
+    resource::AllocatedVm,
+    test_env::{HasIcPrepDir, TestEnv},
+    test_env_api::{
+        HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer, NodesInfo,
+    },
+};
 use anyhow::{bail, Result};
 use flate2::{write::GzEncoder, Compression};
-use std::convert::Into;
-use std::net::IpAddr;
-use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
-
-use crate::driver::farm::FarmResult;
-use crate::driver::ic::{InternetComputer, Node};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{
-    HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer, NodesInfo,
-};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -20,16 +23,18 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use slog::{info, warn, Logger};
-use std::io::Write;
-use std::thread::{self, JoinHandle};
-use url::Url;
-
-use crate::driver::{
-    config::NODES_INFO, driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR, farm::Farm,
-    node_software_version::NodeSoftwareVersion, port_allocator::AddrType, resource::AllocatedVm,
+use std::{
+    collections::BTreeMap,
+    convert::Into,
+    fs::File,
+    io,
+    io::Write,
+    net::{IpAddr, SocketAddr},
+    path::PathBuf,
+    process::Command,
+    thread::{self, JoinHandle},
 };
-
-use crate::driver::farm::FileId;
+use url::Url;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -127,6 +132,7 @@ pub fn init_ic(
                 subnet.max_number_of_canisters,
                 subnet.ssh_readonly_access.clone(),
                 subnet.ssh_backup_access.clone(),
+                subnet.running_state,
             ),
         );
     }

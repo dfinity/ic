@@ -472,8 +472,12 @@ impl IcConfig {
         // Set the routing table after initializing the subnet ids
         let routing_table_record = if self.generate_subnet_records {
             PbRoutingTable::from(if self.use_specified_ids_allocation_range {
-                self.topology_config.get_routing_table_with_specified_ids_allocation_range(
-                ).expect("Failed to create a routing table with an allocation range for the creation of canisters with specified Canister IDs.")
+                self.topology_config
+                    .get_routing_table_with_specified_ids_allocation_range()
+                    .expect(
+                        "Failed to create a routing table with an allocation range \
+                         for the creation of canisters with specified Canister IDs.",
+                    )
             } else {
                 self.topology_config
                     .get_routing_table(self.nns_subnet_index.as_ref())

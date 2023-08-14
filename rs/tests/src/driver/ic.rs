@@ -8,8 +8,8 @@ use crate::driver::{
     test_setup::GroupSetup,
 };
 use anyhow::Result;
-use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
+use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_regedit;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
@@ -320,6 +320,7 @@ pub struct Subnet {
     pub ssh_readonly_access: Vec<String>,
     pub ssh_backup_access: Vec<String>,
     pub ecdsa_config: Option<EcdsaConfig>,
+    pub running_state: SubnetRunningState,
 }
 
 impl Subnet {
@@ -347,6 +348,7 @@ impl Subnet {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            running_state: SubnetRunningState::Active,
         }
     }
 
@@ -495,6 +497,11 @@ impl Subnet {
         self
     }
 
+    pub fn halted(mut self) -> Self {
+        self.running_state = SubnetRunningState::Halted;
+        self
+    }
+
     pub fn add_malicious_nodes(
         mut self,
         no_of_nodes: usize,
@@ -543,6 +550,7 @@ impl Default for Subnet {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             ecdsa_config: None,
+            running_state: SubnetRunningState::Active,
         }
     }
 }

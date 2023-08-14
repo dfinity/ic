@@ -9,7 +9,7 @@ use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
     prep_state_directory::IcPrepStateDir,
-    subnet_configuration::SubnetConfig,
+    subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -162,6 +162,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
             None,
             vec![],
             vec![],
+            SubnetRunningState::Active,
         ),
     );
 

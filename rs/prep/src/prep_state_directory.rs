@@ -81,7 +81,7 @@ mod tests {
     use super::*;
     use crate::internet_computer::{IcConfig, TopologyConfig};
     use crate::node::{NodeConfiguration, NodeIndex};
-    use crate::subnet_configuration::SubnetConfig;
+    use crate::subnet_configuration::{SubnetConfig, SubnetRunningState};
     use ic_crypto::threshold_sig_public_key_from_der;
     use ic_registry_subnet_type::SubnetType;
     use std::collections::BTreeMap;
@@ -156,6 +156,7 @@ mod tests {
                 None,
                 vec![],
                 vec![],
+                SubnetRunningState::Active,
             ),
         );
 

@@ -23,7 +23,7 @@ use url::Url;
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
-    subnet_configuration::{SubnetConfig, SubnetIndex},
+    subnet_configuration::{SubnetConfig, SubnetIndex, SubnetRunningState},
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -233,6 +233,7 @@ fn main() -> Result<()> {
             None,
             valid_args.ssh_readonly_access.clone(),
             valid_args.ssh_backup_access.clone(),
+            SubnetRunningState::Active,
         );
         topology_config.insert_subnet(*subnet_id, subnet_configuration);
     }
