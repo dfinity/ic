@@ -321,10 +321,6 @@ name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
 
 [[bin]]
-name = "ic-systest-workload-counter-canister-test"
-path = "testing_verification/workload_counter_canister_test.rs"
-
-[[bin]]
 name = "ic-systest-create-subnet-pre-master-test"
 path = "nns/create_subnet_pre_master_test.rs"
 
@@ -419,10 +415,6 @@ path = "consensus/node_graceful_leaving_test.rs"
 [[bin]]
 name = "test-driver-e2e-scenarios"
 path = "testing_verification/test_driver_e2e_scenarios.rs"
-
-[[bin]]
-name = "ic-systest-two-third-latency"
-path = "networking/two_third_latency_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-integration"
