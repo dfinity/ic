@@ -15,7 +15,6 @@ use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOu
 use crate::nns_dapp::set_authorized_subnets;
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::util::assert_canister_counter_with_retries;
-use crate::workload_counter_canister_test::install_counter_canister;
 
 use futures::future::join_all;
 use ic_registry_subnet_type::SubnetType;
@@ -132,9 +131,8 @@ fn test(env: TestEnv, message_size: usize, rps: f64) {
         .await;
 
         for _ in 0..canister_count {
-            canisters.push(
-                install_counter_canister(&agent.get(), app_node.effective_canister_id()).await,
-            );
+            const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
+            canisters.push(app_node.create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None));
         }
         info!(log, "{} canisters installed successfully.", canisters.len());
         assert_eq!(
