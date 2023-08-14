@@ -8614,6 +8614,7 @@ dependencies = [
  "async-trait",
  "build-info",
  "build-info-build",
+ "bytes",
  "candid 0.8.4",
  "comparable",
  "criterion 0.3.6",
