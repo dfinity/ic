@@ -44,7 +44,8 @@ where
         let pb_success = m.add(ProgressBar::new(num_expected as u64));
         pb_success.set_style(
             ProgressStyle::default_bar()
-                .template("{msg} {percent:>3}% {per_sec:>20} {bar:40.green} {pos:5}/{len:7}"),
+                .template("{msg} {percent:>3}% {per_sec:>20} {bar:40.green} {pos:5}/{len:7}")
+                .unwrap(),
         );
         pb_success.set_message("Completed successfully");
         pb_success.set_position(0);
@@ -57,7 +58,8 @@ where
         let pb_fail = m.add(ProgressBar::new(num_expected as u64));
         pb_fail.set_style(
             ProgressStyle::default_bar()
-                .template("{msg} {percent:>3}% {per_sec:>20} {bar:40.red} {pos:5}/{len:7}"),
+                .template("{msg} {percent:>3}% {per_sec:>20} {bar:40.red} {pos:5}/{len:7}")
+                .unwrap(),
         );
         pb_fail.set_message("Completed with failure");
         pb_fail.set_position(0);
@@ -65,10 +67,6 @@ where
     } else {
         None
     };
-
-    std::thread::spawn(move || {
-        m.join().unwrap();
-    });
 
     let mut num_succ = 0;
     let mut last_num_succ = 0;

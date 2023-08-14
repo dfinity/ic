@@ -1,5 +1,5 @@
 {
-  "checksum": "192f50f82474d558e9de375065e99a3cc38408f7aab73bef355b00152de1da51",
+  "checksum": "47f4e3b9f80c29f310f6b99f53c0aa752e1a72266e297bef9cfb802cdf0c4508",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -9518,64 +9518,6 @@
       },
       "license": "MIT"
     },
-    "console 0.14.1": {
-      "name": "console",
-      "version": "0.14.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/console/0.14.1/download",
-          "sha256": "3993e6445baa160675931ec041a5e03ca84b9c6e32a056150d3aa2bdda0a1f45"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "console",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "console",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "libc 0.2.147",
-              "target": "libc"
-            },
-            {
-              "id": "terminal_size 0.1.17",
-              "target": "terminal_size"
-            }
-          ],
-          "selects": {
-            "cfg(windows)": [
-              {
-                "id": "encode_unicode 0.3.6",
-                "target": "encode_unicode"
-              },
-              {
-                "id": "winapi 0.3.9",
-                "target": "winapi"
-              }
-            ]
-          }
-        },
-        "edition": "2018",
-        "version": "0.14.1"
-      },
-      "license": "MIT"
-    },
     "console 0.15.7": {
       "name": "console",
       "version": "0.15.7",
@@ -9604,7 +9546,6 @@
         "crate_features": {
           "common": [
             "ansi-parsing",
-            "default",
             "unicode-width"
           ],
           "selects": {}
@@ -13983,16 +13924,11 @@
               "target": "idna"
             },
             {
-              "id": "indicatif 0.15.0",
+              "id": "indicatif 0.17.5",
               "target": "indicatif"
             },
             {
-              "id": "indicatif 0.17.5",
-              "target": "indicatif",
-              "alias": "indicatif_0_17_3"
-            },
-            {
-              "id": "insta 1.8.0",
+              "id": "insta 1.31.0",
               "target": "insta"
             },
             {
@@ -14725,7 +14661,7 @@
               "target": "which"
             },
             {
-              "id": "wiremock 0.5.18",
+              "id": "wiremock 0.5.19",
               "target": "wiremock"
             },
             {
@@ -23876,74 +23812,6 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "indicatif 0.15.0": {
-      "name": "indicatif",
-      "version": "0.15.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/indicatif/0.15.0/download",
-          "sha256": "7baab56125e25686df467fe470785512329883aab42696d661247aca2a2896e4"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "indicatif",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "indicatif",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "improved_unicode",
-            "unicode-segmentation",
-            "unicode-width"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "console 0.15.7",
-              "target": "console"
-            },
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "number_prefix 0.3.0",
-              "target": "number_prefix"
-            },
-            {
-              "id": "regex 1.9.1",
-              "target": "regex"
-            },
-            {
-              "id": "unicode-segmentation 1.10.1",
-              "target": "unicode_segmentation"
-            },
-            {
-              "id": "unicode-width 0.1.10",
-              "target": "unicode_width"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.15.0"
-      },
-      "license": "MIT"
-    },
     "indicatif 0.17.5": {
       "name": "indicatif",
       "version": "0.17.5",
@@ -24276,13 +24144,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "insta 1.8.0": {
+    "insta 1.31.0": {
       "name": "insta",
-      "version": "1.8.0",
+      "version": "1.31.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/insta/1.8.0/download",
-          "sha256": "15226a375927344c78d39dc6b49e2d5562a5b0705e26a589093c6792e52eed8e"
+          "url": "https://crates.io/api/v1/crates/insta/1.31.0/download",
+          "sha256": "a0770b0a3d4c70567f0d58331f3088b0e4c4f56c9b8d764efe654b4a5d46de3a"
         }
       },
       "targets": [
@@ -24312,7 +24180,7 @@
         "deps": {
           "common": [
             {
-              "id": "console 0.14.1",
+              "id": "console 0.15.7",
               "target": "console"
             },
             {
@@ -24320,30 +24188,22 @@
               "target": "lazy_static"
             },
             {
-              "id": "serde 1.0.171",
-              "target": "serde"
+              "id": "linked-hash-map 0.5.6",
+              "target": "linked_hash_map"
             },
             {
-              "id": "serde_json 1.0.103",
-              "target": "serde_json"
-            },
-            {
-              "id": "serde_yaml 0.8.26",
-              "target": "serde_yaml"
-            },
-            {
-              "id": "similar 1.3.0",
+              "id": "similar 2.2.1",
               "target": "similar"
             },
             {
-              "id": "uuid 0.8.2",
-              "target": "uuid"
+              "id": "yaml-rust 0.4.5",
+              "target": "yaml_rust"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.8.0"
+        "version": "1.31.0"
       },
       "license": "Apache-2.0"
     },
@@ -32214,43 +32074,6 @@
         "version": "0.1.6"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "number_prefix 0.3.0": {
-      "name": "number_prefix",
-      "version": "0.3.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/number_prefix/0.3.0/download",
-          "sha256": "17b02fc0ff9a9e4b35b3342880f48e896ebf69f2967921fe8646bf5b7125956a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "number_prefix",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "number_prefix",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.3.0"
-      },
-      "license": "MIT"
     },
     "number_prefix 0.4.0": {
       "name": "number_prefix",
@@ -46107,13 +45930,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "similar 1.3.0": {
+    "similar 2.2.1": {
       "name": "similar",
-      "version": "1.3.0",
+      "version": "2.2.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/similar/1.3.0/download",
-          "sha256": "1ad1d488a557b235fc46dae55512ffbfc429d2482b08b4d9435ab07384ca8aec"
+          "url": "https://crates.io/api/v1/crates/similar/2.2.1/download",
+          "sha256": "420acb44afdae038210c99e69aae24109f32f15500aa708e81d46c9f29d55fcf"
         }
       },
       "targets": [
@@ -46141,7 +45964,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.3.0"
+        "version": "2.2.1"
       },
       "license": "Apache-2.0"
     },
@@ -58566,13 +58389,13 @@
       },
       "license": "MIT"
     },
-    "wiremock 0.5.18": {
+    "wiremock 0.5.19": {
       "name": "wiremock",
-      "version": "0.5.18",
+      "version": "0.5.19",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wiremock/0.5.18/download",
-          "sha256": "bd7b0b5b253ebc0240d6aac6dd671c495c467420577bf634d3064ae7e6fa2b4c"
+          "url": "https://crates.io/api/v1/crates/wiremock/0.5.19/download",
+          "sha256": "c6f71803d3a1c80377a06221e0530be02035d5b3e854af56c6ece7ac20ac441d"
         }
       },
       "targets": [
@@ -58658,7 +58481,7 @@
           ],
           "selects": {}
         },
-        "version": "0.5.18"
+        "version": "0.5.19"
       },
       "license": "MIT/Apache-2.0"
     },

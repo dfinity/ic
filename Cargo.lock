@@ -7641,7 +7641,7 @@ dependencies = [
  "ic-test-utilities-load-wasm",
  "icrc-ledger-agent",
  "icrc-ledger-types",
- "indicatif 0.17.3",
+ "indicatif",
  "lazy_static",
  "num-traits",
  "once_cell",
@@ -11440,7 +11440,7 @@ dependencies = [
  "ic-metrics",
  "ic-test-identity",
  "ic-types",
- "indicatif 0.15.0",
+ "indicatif",
  "itertools 0.10.5",
  "lazy_static",
  "leaky-bucket",
@@ -11819,26 +11819,12 @@ dependencies = [
 
 [[package]]
 name = "indicatif"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7baab56125e25686df467fe470785512329883aab42696d661247aca2a2896e4"
-dependencies = [
- "console 0.15.5",
- "lazy_static",
- "number_prefix 0.3.0",
- "regex",
- "unicode-segmentation",
- "unicode-width",
-]
-
-[[package]]
-name = "indicatif"
 version = "0.17.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cef509aa9bc73864d6756f0d34d35504af3cf0844373afe9b8669a5b8005a729"
 dependencies = [
  "console 0.15.5",
- "number_prefix 0.4.0",
+ "number_prefix",
  "portable-atomic",
  "unicode-width",
 ]
@@ -13461,12 +13447,6 @@ checksum = "2819ce041d2ee131036f4fc9d6ae7ae125a3a40e97ba64d04fe799ad9dabbb44"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "number_prefix"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17b02fc0ff9a9e4b35b3342880f48e896ebf69f2967921fe8646bf5b7125956a"
 
 [[package]]
 name = "number_prefix"
