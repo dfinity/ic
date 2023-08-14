@@ -211,6 +211,7 @@ fn subnet_to_subnet_config(
         subnet.max_number_of_canisters,
         subnet.ssh_readonly_access,
         subnet.ssh_backup_access,
+        subnet.running_state,
     )
 }
 

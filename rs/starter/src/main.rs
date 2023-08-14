@@ -42,7 +42,7 @@ use ic_logger::{info, new_replica_logger_from_config};
 use ic_prep_lib::{
     internet_computer::{IcConfig, TopologyConfig},
     node::{NodeConfiguration, NodeIndex},
-    subnet_configuration::SubnetConfig,
+    subnet_configuration::{SubnetConfig, SubnetRunningState},
 };
 use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SevFeatureStatus, SubnetFeatures};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -130,6 +130,7 @@ fn main() -> Result<()> {
                 None,
                 vec![],
                 vec![],
+                SubnetRunningState::default(),
             ),
         );
 

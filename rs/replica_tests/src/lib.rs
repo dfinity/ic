@@ -21,7 +21,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_metrics::MetricsRegistry;
 use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
 use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};
-use ic_prep_lib::subnet_configuration::SubnetConfig;
+use ic_prep_lib::subnet_configuration::{SubnetConfig, SubnetRunningState};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -250,6 +250,7 @@ pub fn get_ic_config() -> IcConfig {
             None,
             vec![],
             vec![],
+            SubnetRunningState::Active,
         ),
     );
 
