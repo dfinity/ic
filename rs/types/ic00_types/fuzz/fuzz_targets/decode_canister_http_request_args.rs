@@ -1,5 +1,5 @@
 #![no_main]
-use candid::Decode;
+use candid::{Decode, Encode};
 use ic_ic00_types::CanisterHttpRequestArgs;
 use libfuzzer_sys::fuzz_target;
 
@@ -8,8 +8,11 @@ use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
     let payload = data.to_vec();
-    let _decoded = match Decode!(payload.as_slice(), CanisterHttpRequestArgs) {
-        Ok(_v) => _v,
-        Err(_e) => return,
+    match Decode!(payload.as_slice(), CanisterHttpRequestArgs) {
+        Ok(canister_http_request_args) => {
+            let encoded = Encode!(&canister_http_request_args).unwrap();
+            assert_eq!(&encoded[..], data);
+        }
+        Err(_e) => (),
     };
 });
