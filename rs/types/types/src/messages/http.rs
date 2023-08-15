@@ -71,7 +71,7 @@ pub(crate) fn representation_independent_hash_read_state(
                 .map(|p| {
                     RawHttpRequestVal::Array(
                         p.iter()
-                            .map(|b| RawHttpRequestVal::Bytes(b.clone().to_vec()))
+                            .map(|b| RawHttpRequestVal::Bytes(b.clone().into_vec()))
                             .collect(),
                     )
                 })

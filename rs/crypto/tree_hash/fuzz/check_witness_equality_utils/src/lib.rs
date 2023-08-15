@@ -296,14 +296,9 @@ fn add_subtree_in_path(
             if path.is_empty() {
                 let mut label = label;
                 while children.contains_key(&label) {
-                    label = Label::from(
-                        label
-                            .to_vec()
-                            .iter()
-                            .chain(&[0u8])
-                            .cloned()
-                            .collect::<Vec<_>>(),
-                    );
+                    let mut data = label.into_vec();
+                    data.push(0u8);
+                    label = Label::from(data);
                 }
                 let new_children = FlatMap::from_key_values(
                     children
@@ -508,7 +503,7 @@ fn modify_label_impl<F: Fn(&mut Vec<u8>)>(
 
             for label in labels.into_iter() {
                 if *num_traversed_labels == label_index {
-                    let mut new_label_raw = label.to_vec();
+                    let mut new_label_raw = label.clone().into_vec();
                     modify_bytes_fn(&mut new_label_raw);
                     let new_child = (
                         Label::from(new_label_raw),
