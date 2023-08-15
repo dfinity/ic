@@ -284,6 +284,9 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/workload_generator/                                 @dfinity-lab/teams/runtime-owners
 /rs/xnet/                                               @dfinity-lab/teams/message-routing-owners
 
+# [Haskell]
+/hs/spec_compliance/                                    @dfinity-lab/teams/ic-testing-verification
+
 # [Scalability]
 /scalability/                                                       @dfinity-lab/teams/runtime-owners
 

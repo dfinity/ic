@@ -136,7 +136,7 @@ mapChangeDetails (ControllersChange controllers) =
       .+ #controllers
       .== Vec.fromList (map entityIdToPrincipal controllers)
 
-type ICManagement m = [candidFile|rs/tests/testing_verification/spec_compliance/ic.did|]
+type ICManagement m = [candidFile|hs/spec_compliance/ic.did|]
 
 managementMethods :: [String]
 managementMethods = R.labels @(ICManagement IO) @R.Unconstrained1
