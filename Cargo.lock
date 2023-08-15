@@ -1742,7 +1742,7 @@ dependencies = [
  "ic-response-verification",
  "ic-utils 0.24.1",
  "idna 0.3.0",
- "instant-acme 0.2.1",
+ "instant-acme",
  "leb128",
  "mockall 0.11.4",
  "opentelemetry 0.18.0",
@@ -5120,7 +5120,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
- "instant-acme 0.3.2",
+ "instant-acme",
  "lazy_static",
  "mockall 0.11.4",
  "opentelemetry 0.18.0",
@@ -11898,21 +11898,6 @@ dependencies = [
 
 [[package]]
 name = "instant-acme"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3d50eb225913c1903c788287ddd0b16369771e5abc988756a5e5927390ba04f"
-dependencies = [
- "base64 0.21.2",
- "hyper",
- "hyper-rustls 0.24.0",
- "ring",
- "serde",
- "serde_json",
- "thiserror",
-]
-
-[[package]]
-name = "instant-acme"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d8b94f62e8dd2b561e7646bd0cc92e4c9d940859fc1c146ad8ab6e5d3e6f7c03"
@@ -17235,6 +17220,7 @@ dependencies = [
  "candid 0.8.4",
  "canister-test",
  "certificate_orchestrator_interface",
+ "chacha20poly1305",
  "chrono",
  "clap 3.2.23",
  "crossbeam-channel",
@@ -17325,6 +17311,7 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-agent",
  "icrc-ledger-types",
+ "indoc",
  "itertools 0.10.5",
  "json5",
  "k256 0.13.1",

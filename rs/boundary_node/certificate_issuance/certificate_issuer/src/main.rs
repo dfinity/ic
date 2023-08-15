@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -24,7 +24,7 @@ use futures::future::TryFutureExt;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, identity::Secp256k1Identity, Agent,
 };
-use instant_acme::{Account, AccountCredentials};
+use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{
     global,
     metrics::{Counter, Histogram},
@@ -41,7 +41,7 @@ use tokio::{sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
-    config::{ResolverConfig, ResolverOpts},
+    config::{NameServerConfigGroup, ResolverConfig, ResolverOpts, GOOGLE_IPS},
     TokioAsyncResolver,
 };
 
@@ -104,14 +104,24 @@ struct Cli {
     #[arg(long)]
     delegation_domain: String,
 
-    #[arg(long)]
-    acme_account_id: String,
+    /// A set of DNS name servers the issuer will use
+    #[arg(long, value_delimiter = ',')]
+    name_servers: Option<Vec<IpAddr>>,
+
+    #[arg(long, default_value = "53")]
+    name_servers_port: u16,
 
     #[arg(long)]
-    acme_account_key: String,
+    acme_account_id: Option<String>,
+
+    #[arg(long)]
+    acme_account_key: Option<String>,
 
     #[arg(long, default_value = "https://acme-v02.api.letsencrypt.org")]
     acme_provider_url: String,
+
+    #[arg(long, default_value = "https://api.cloudflare.com/client/v4/")]
+    cloudflare_api_url: String,
 
     #[arg(long)]
     cloudflare_api_key: String,
@@ -187,8 +197,20 @@ async fn main() -> Result<(), Error> {
     };
 
     // DNS
+    let name_servers = cli.name_servers.unwrap_or_else(
+        || GOOGLE_IPS.to_owned(), // default
+    );
+
     let resolver = Resolver(TokioAsyncResolver::tokio(
-        ResolverConfig::default(),
+        ResolverConfig::from_parts(
+            None,
+            vec![],
+            NameServerConfigGroup::from_ips_clear(
+                &name_servers,         // ips
+                cli.name_servers_port, // port
+                true,                  // trust_nx_responses
+            ),
+        ),
         ResolverOpts::default(),
     )?);
 
@@ -369,20 +391,41 @@ async fn main() -> Result<(), Error> {
         ..
     } = cli;
 
-    let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
-        r#"{{
-            "id": "{acme_provider_url}/acme/acct/{acme_account_id}",
-            "key_pkcs8": "{acme_account_key}",
-            "urls": {{
-                "newNonce": "{acme_provider_url}/acme/new-nonce",
-                "newAccount": "{acme_provider_url}/acme/new-acct",
-                "newOrder": "{acme_provider_url}/acme/new-order"
-            }}
-        }}"#,
-    ))?;
+    let acme_account = match (acme_account_id, acme_account_key) {
+        // Re-use existing account
+        (Some(id), Some(key)) => {
+            let acme_credentials: AccountCredentials = serde_json::from_str(&format!(
+                r#"{{
+                    "id": "{acme_provider_url}/acme/acct/{id}",
+                    "key_pkcs8": "{key}",
+                    "urls": {{
+                        "newNonce": "{acme_provider_url}/acme/new-nonce",
+                        "newAccount": "{acme_provider_url}/acme/new-acct",
+                        "newOrder": "{acme_provider_url}/acme/new-order"
+                    }}
+                }}"#,
+            ))?;
 
-    let acme_account = Account::from_credentials(acme_credentials)
-        .context("failed to create acme account from credentials")?;
+            Account::from_credentials(acme_credentials)
+                .context("failed to create acme account from credentials")
+        }
+        (Some(_), None) | (None, Some(_)) => Err(anyhow!(
+            "must provide both acme_account_id and acme_account_key"
+        )),
+
+        // Create new ACME cccount
+        _ => Account::create(
+            &NewAccount {
+                contact: &[],
+                terms_of_service_agreed: true,
+                only_return_existing: false,
+            },
+            &acme_provider_url,
+            None,
+        )
+        .await
+        .context("failed to create acme account"),
+    }?;
 
     let acme_client = Acme::new(acme_account);
 
@@ -405,13 +448,13 @@ async fn main() -> Result<(), Error> {
     );
 
     // Cloudflare
-    let dns_creator = Cloudflare::new(&cli.cloudflare_api_key)?;
+    let dns_creator = Cloudflare::new(&cli.cloudflare_api_url, &cli.cloudflare_api_key)?;
     let dns_creator = WithMetrics(
         dns_creator,
         MetricParams::new(&meter, SERVICE_NAME, "dns_create"),
     );
 
-    let dns_deleter = Cloudflare::new(&cli.cloudflare_api_key)?;
+    let dns_deleter = Cloudflare::new(&cli.cloudflare_api_url, &cli.cloudflare_api_key)?;
     let dns_deleter = WithMetrics(
         dns_deleter,
         MetricParams::new(&meter, SERVICE_NAME, "dns_delete"),

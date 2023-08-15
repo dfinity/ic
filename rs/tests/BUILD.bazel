@@ -300,3 +300,47 @@ uvm_config_image(
     },
     tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
+
+copy_file(
+    name = "coredns_image",
+    src = "@coredns//image",
+    out = "coredns.tar",
+)
+
+copy_file(
+    name = "pebble_image",
+    src = "@pebble//image",
+    out = "pebble.tar",
+)
+
+copy_file(
+    name = "python3_image",
+    src = "@python3//image",
+    out = "python3.tar",
+)
+
+copy_file(
+    name = "openssl_image",
+    src = "@alpine_openssl//image",
+    out = "openssl.tar",
+)
+
+uvm_config_image(
+    name = "custom_domains_uvm_config_image",
+    srcs = [
+        # Docker images
+        ":coredns_image",
+        ":openssl_image",
+        ":pebble_image",
+        ":python3_image",
+
+        # Assets
+        ":src/custom_domains_integration/activate.sh",
+        ":src/custom_domains_integration/pebble_cache.py",
+        ":src/custom_domains_integration/cloudflare_api.py",
+    ],
+    mode = "664",
+    modes = {"activate": "775"},
+    remap_paths = {"/activate.sh": "/activate"},
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)

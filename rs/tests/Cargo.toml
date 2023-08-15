@@ -14,6 +14,7 @@ base64 = "0.11"
 bincode = "1.3.3"
 bitcoincore-rpc = "0.15.0"
 candid = { workspace = true }
+chacha20poly1305 = "0.10.0"
 proxy_canister = { path = "../rust_canisters/proxy_canister" }
 canister-test = { path = "../rust_canisters/canister_test" }
 certificate_orchestrator_interface = { path = "../boundary_node/certificate_issuance/certificate_orchestrator_interface" }
@@ -101,6 +102,7 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
+indoc = "1.0.6"
 json5 = "0.4.1"
 k256 = { workspace = true }
 hyper = "0.14.18"
@@ -431,6 +433,10 @@ path = "boundary_nodes/boundary_nodes_snp_test.rs"
 [[bin]]
 name = "ic-systest-boundary-node-update-workload-test"
 path = "boundary_nodes/boundary_node_update_workload_test.rs"
+
+[[bin]]
+name = "ic-systest-custom-domains-integration"
+path = "boundary_nodes/custom_domains_integration_test.rs"
 
 [[bin]]
 name = "ic-systest-general-execution"

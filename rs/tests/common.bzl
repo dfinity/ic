@@ -96,6 +96,7 @@ DEPENDENCIES = [
     "@crate_index//:bincode",
     "@crate_index//:bitcoincore-rpc",
     "@crate_index//:candid",
+    "@crate_index//:chacha20poly1305",
     "@crate_index//:chrono",
     "@crate_index//:clap",
     "@crate_index//:crossbeam-channel",
@@ -155,6 +156,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-recursion",
     "@crate_index//:async-trait",
+    "@crate_index//:indoc",
 ]
 
 GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev-fixed-version:version.txt"
@@ -351,6 +353,11 @@ GUESTOS_MALICIOUS_RUNTIME_DEPS = [
 
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests:http_uvm_config_image",
+]
+
+CUSTOM_DOMAINS_RUNTIME_DEPS = [
+    "//rs/tests:custom_domains_uvm_config_image",
+    "@asset_canister//file",
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]

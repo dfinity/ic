@@ -24,7 +24,7 @@ ic-agent = { workspace = true }
 ic-utils = { workspace = true, features = ["raw"] }
 ic-response-verification = "1.0.0"
 idna = "0.3.0"
-instant-acme = "0.2.1"
+instant-acme = "0.3.2"
 leb128 = "0.2.5"
 mockall = "0.11.3"
 opentelemetry = "0.18.0"
