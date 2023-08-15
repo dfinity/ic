@@ -1945,7 +1945,7 @@ fn observe_replicated_state_metrics(
             // Log all old call contexts, but not (nearly) every round.
             if current_round.get() % SPAMMY_LOG_INTERVAL_ROUNDS == 0 {
                 for (origin, origin_time) in &old_call_contexts {
-                    error!(
+                    warn!(
                         logger,
                         "Call context has been open for {:?}: origin: {:?}, respondent: {}",
                         state.time().saturating_sub(*origin_time),
