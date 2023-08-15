@@ -2641,7 +2641,7 @@ build-determinism:
     GIT_DEPTH: 0
     GIT_STRATEGY: fetch
     SHELL_WRAPPER: "/usr/bin/time"
-build-determinism-binaries-release:
+build-determinism-release:
   artifacts:
     expire_in: 3 days
     paths:

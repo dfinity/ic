@@ -764,7 +764,7 @@ build-determinism:
       set -eExuo pipefail
       ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
-build-determinism-binaries-release:
+build-determinism-release:
   extends:
     - .ubuntu-k8s
     - .rules-scheduled-reproducibility
