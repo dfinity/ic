@@ -98,7 +98,7 @@ fn check_leaves_and_empty_subtrees_are_known_impl(
             lhs_num_known + rhs_num_known
         }
         Witness::Node { label, sub_witness } => {
-            labels_on_path.push(label.clone().to_vec());
+            labels_on_path.push(label.clone().into_vec());
             let num_known = check_leaves_and_empty_subtrees_are_known_impl(
                 labeled_tree,
                 sub_witness.as_ref(),

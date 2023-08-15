@@ -154,6 +154,7 @@ impl PartialOrd for Label {
 }
 
 impl Label {
+    #[inline]
     pub fn as_bytes(&self) -> &[u8] {
         match &self.0 {
             LabelRepr::Value(bytes) => {
@@ -164,8 +165,12 @@ impl Label {
         }
     }
 
-    pub fn to_vec(&self) -> Vec<u8> {
-        self.as_bytes().to_vec()
+    #[inline]
+    pub fn into_vec(self) -> Vec<u8> {
+        match self {
+            Label(LabelRepr::Ref(v)) => v,
+            l => l.as_bytes().to_vec(),
+        }
     }
 }
 
@@ -202,7 +207,7 @@ impl From<Label> for String {
 
 impl From<Label> for serde_bytes::ByteBuf {
     fn from(val: Label) -> Self {
-        Self::from(val.to_vec())
+        Self::from(val.into_vec())
     }
 }
 

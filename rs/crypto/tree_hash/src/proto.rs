@@ -17,7 +17,7 @@ fn sub_tree_proto_from(map: FlatMap<Label, LabeledTreeOfBytes>) -> labeled_tree:
         children: map
             .into_iter()
             .map(|(label, node)| labeled_tree::Child {
-                label: label.to_vec(),
+                label: label.into_vec(),
                 node: Some(node.into()),
             })
             .collect(),
@@ -81,7 +81,7 @@ impl From<Witness> for pb::Witness {
             })),
 
             Witness::Node { label, sub_witness } => WitnessEnum::Node(Box::new(witness::Node {
-                label: label.to_vec(),
+                label: label.into_vec(),
                 sub_witness: Some(sub_witness.into()),
             })),
 
@@ -149,7 +149,7 @@ impl From<MixedHashTree> for pb::MixedHashTree {
                 right_tree: Some(Box::new(lr.1.into())),
             })),
             T::Labeled(label, subtree) => TreeEnum::Labeled(Box::new(Labeled {
-                label: label.to_vec(),
+                label: label.into_vec(),
                 subtree: Some(Box::new(Self::from(*subtree))),
             })),
             T::Leaf(data) => TreeEnum::LeafData(data),
