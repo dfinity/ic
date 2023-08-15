@@ -44,6 +44,9 @@ mod rpc_server;
 mod stream;
 mod transaction_store;
 
+// This module contains code that is used to return requested blocks to the Bitcoin canister.
+// For security reasons, it expects the returned blocks to be in a BFS order (for example, a
+// malicious fork can be prioritized by a DFS, thus potentially ignoring honest forks).
 mod get_successors_handler;
 
 pub use blockchainmanager::BlockchainManager;
