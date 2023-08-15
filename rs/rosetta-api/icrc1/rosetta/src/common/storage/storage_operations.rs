@@ -4,6 +4,7 @@ use candid::Principal;
 use ic_icrc1::{Operation, Transaction};
 use ic_icrc1_tokens_u64::U64;
 use ic_ledger_core::block::EncodedBlock;
+use ic_ledger_core::timestamp::TimeStamp;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use rusqlite::{params, Params};
@@ -23,7 +24,7 @@ pub fn store_blocks(
     )?;
 
     let mut stmt_transactions = connection.prepare(
-        "INSERT OR IGNORE INTO transactions (block_idx,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,memo,amount,fee,transaction_created_at_time) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        "INSERT OR IGNORE INTO transactions (block_idx,tx_hash,operation_type,from_principal,from_subaccount,to_principal,to_subaccount,spender_principal,spender_subaccount,memo,amount,expected_allowance,fee,transaction_created_at_time,approval_expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,?14,?15)",
     )?;
     for rosetta_block in rosetta_blocks.into_iter() {
         match execute(
@@ -52,8 +53,12 @@ pub fn store_blocks(
             from_subaccount,
             to_principal,
             to_subaccount,
+            spender_principal,
+            spender_subaccount,
             amount,
+            expected_allowance,
             fee,
+            approval_expires_at,
         ) = match transaction.operation {
             ic_icrc1::Operation::Mint { to, amount } => (
                 "mint",
@@ -61,7 +66,11 @@ pub fn store_blocks(
                 None,
                 Some(to.owner),
                 to.subaccount,
+                None,
+                None,
                 amount,
+                None,
+                None,
                 None,
             ),
             ic_icrc1::Operation::Transfer {
@@ -76,8 +85,12 @@ pub fn store_blocks(
                 from.subaccount,
                 Some(to.owner),
                 to.subaccount,
+                None,
+                None,
                 amount,
+                None,
                 fee,
+                None,
             ),
             ic_icrc1::Operation::Burn { from, amount, .. } => (
                 "burn",
@@ -85,10 +98,33 @@ pub fn store_blocks(
                 from.subaccount,
                 None,
                 None,
+                None,
+                None,
                 amount,
                 None,
+                None,
+                None,
             ),
-            ic_icrc1::Operation::Approve { .. } => todo!(),
+            ic_icrc1::Operation::Approve {
+                from,
+                spender,
+                amount,
+                expected_allowance,
+                expires_at,
+                fee,
+            } => (
+                "approve",
+                Some(from.owner),
+                from.subaccount,
+                None,
+                None,
+                Some(spender.owner),
+                spender.subaccount,
+                amount,
+                expected_allowance,
+                fee,
+                expires_at.map(|ts| ts.as_nanos_since_unix_epoch()),
+            ),
         };
 
         match execute(
@@ -101,10 +137,14 @@ pub fn store_blocks(
                 from_subaccount,
                 to_principal.map(|x| x.as_slice().to_vec()),
                 to_subaccount,
+                spender_principal.map(|x| x.as_slice().to_vec()),
+                spender_subaccount,
                 transaction.memo.map(|x| x.0.as_slice().to_vec()),
                 amount.to_u64(),
+                expected_allowance.map(Tokens::to_u64),
                 fee.map(Tokens::to_u64),
-                transaction.created_at_time
+                transaction.created_at_time,
+                approval_expires_at
             ],
         ) {
             Ok(_) => (),
@@ -289,10 +329,14 @@ where
             row.get(4)?,
             row.get(5).map(opt_bytes_to_principal)?,
             row.get(6)?,
-            row.get(7).map(opt_bytes_to_memo)?,
+            row.get(7).map(opt_bytes_to_principal)?,
             row.get(8)?,
-            row.get::<usize, Option<u64>>(9)?,
+            row.get(9).map(opt_bytes_to_memo)?,
             row.get(10)?,
+            row.get::<usize, Option<u64>>(11)?,
+            row.get::<usize, Option<u64>>(12)?,
+            row.get::<usize, Option<u64>>(13)?,
+            row.get::<usize, Option<u64>>(14)?,
         ))
     })?;
     let mut result = vec![];
@@ -303,10 +347,14 @@ where
             from_subaccount,
             maybe_to_principal,
             to_subaccount,
+            maybe_spender_principal,
+            spender_subaccount,
             memo,
             amount,
+            expected_allowance,
             fee,
             transaction_created_at_time,
+            approval_expires_at,
         ) = row?;
         result.push(Transaction {
             operation: match operation_type.as_str() {
@@ -345,6 +393,24 @@ where
                     },
                     spender: None,
                     amount: Tokens::new(amount),
+                },
+                "approve" => Operation::Approve {
+                    from: Account {
+                        owner: maybe_from_principal.ok_or_else(|| {
+                            anyhow!("an approve transaction is missing the from_principal field")
+                        })?,
+                        subaccount: from_subaccount,
+                    },
+                    spender: Account {
+                        owner: maybe_spender_principal.ok_or_else(|| {
+                            anyhow!("an approve transaction is missing the spender_principal field")
+                        })?,
+                        subaccount: spender_subaccount,
+                    },
+                    amount: Tokens::new(amount),
+                    expected_allowance: expected_allowance.map(|ea| Tokens::new(ea)),
+                    expires_at: approval_expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
+                    fee: fee.map(Tokens::new),
                 },
                 k => bail!("Operation type {} is not supported", k),
             },

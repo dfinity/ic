@@ -126,10 +126,14 @@ impl StorageClient {
                 from_subaccount BLOB,
                 to_principal BLOB,
                 to_subaccount BLOB,
+                spender_principal BLOB,
+                spender_subaccount BLOB,
                 memo BLOB,
                 amount INTEGER,
+                expected_allowance INTEGER,
                 fee INTEGER,
                 transaction_created_at_time INTEGER,
+                approval_expires_at INTEGER,
                 PRIMARY KEY(block_idx),
                 FOREIGN KEY(block_idx) REFERENCES blocks(idx)
             )
