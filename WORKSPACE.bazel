@@ -250,7 +250,38 @@ container_pull(
     name = "ubuntu_base",
     digest = "sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
     registry = "docker.io",
-    repository = "ubuntu:latest",
+    repository = "ubuntu",
+)
+
+container_pull(
+    name = "coredns",
+    digest = "sha256:be7652ce0b43b1339f3d14d9b14af9f588578011092c1f7893bd55432d83a378",
+    registry = "docker.io",
+    repository = "coredns/coredns",
+    tag = "1.10.1",
+)
+
+container_pull(
+    name = "pebble",
+    digest = "sha256:fc5a537bf8fbc7cc63aa24ec3142283aa9b6ba54529f86eb8ff31fbde7c5b258",
+    registry = "docker.io",
+    repository = "letsencrypt/pebble",
+    tag = "v2.3.1",
+)
+
+container_pull(
+    name = "python3",
+    digest = "sha256:0a56f24afa1fc7f518aa690cb8c7be661225e40b157d9bb8c6ef402164d9faa7",
+    registry = "docker.io",
+    repository = "python",
+    tag = "3-alpine",
+)
+
+container_pull(
+    name = "alpine_openssl",
+    digest = "sha256:cf89651f07a33d2faf4499f72e6f8b0ee2542cd40735d51c7e75b8965c17af0e",
+    registry = "docker.io",
+    repository = "alpine/openssl",
 )
 
 # This image was built with bazel (bazel build //rs/tests:ubuntu_test_runtime_image)
@@ -573,6 +604,15 @@ http_file(
     downloaded_file_path = "ic-icrc1-index.wasm.gz",
     sha256 = "bd4c020f34af4bbd705566a7330c74ffed5b4c51baf012698f7afd41d7ab4272",
     url = "https://download.dfinity.systems/ic/9bb8f35cccd013b38657c67964c39d48fac6353f/canisters/ic-icrc1-index.wasm.gz",
+)
+
+# Asset canister
+
+http_file(
+    name = "asset_canister",
+    downloaded_file_path = "assetstorage.wasm.gz",
+    sha256 = "1286960c50eb7a773cfb5fdd77cc238588f39e21f189cc3eb0f35199a99b9c7e",
+    url = "https://github.com/dfinity/sdk/raw/0.14.2/src/distributed/assetstorage.wasm.gz",
 )
 
 # Bitcoin canister

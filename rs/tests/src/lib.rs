@@ -12,6 +12,7 @@ pub mod certificate_orchestrator;
 pub mod ckbtc;
 pub mod consensus;
 pub mod crypto;
+pub mod custom_domains_integration;
 pub mod driver;
 pub mod execution;
 pub mod generic_workload_engine;
