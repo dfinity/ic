@@ -61,6 +61,7 @@ pub fn public_key_from_secret_key(secret_key: &SecretKey) -> PublicKey {
 ///     `NumberOfNodes`.
 ///   - The number of eligible receivers is below the threshold; under these
 ///     circumstances the receivers could never generate a valid threshold key.
+///   - The `threshold` is `0`.
 pub(crate) fn generate_threshold_key(
     seed: Seed,
     threshold: NumberOfNodes,
@@ -101,15 +102,6 @@ pub(crate) fn threshold_share_secret_key(
     secret: &SecretKey,
 ) -> Result<(PublicCoefficients, Vec<SecretKey>), InvalidArgumentError> {
     verify_keygen_args(threshold, receivers)?;
-    // If a secret is provided we have one additional constraint:
-    if threshold == NumberOfNodes::from(0) {
-        return Err(InvalidArgumentError {
-            message: format!(
-                "Threshold cannot be zero if the zero coefficient is provided: (threshold={})",
-                threshold.get(),
-            ),
-        });
-    }
 
     let mut rng = seed.into_rng();
     let polynomial = {
@@ -130,10 +122,17 @@ pub(crate) fn threshold_share_secret_key(
 /// This returns an error if:
 /// * The number of eligible receivers is below the threshold; under these
 ///   circumstances the receivers could never generate a valid threshold key.
+/// * The requested threshold is zero, as this is non-sensical
 fn verify_keygen_args(
     threshold: NumberOfNodes,
     receivers: NumberOfNodes,
 ) -> Result<(), InvalidArgumentError> {
+    if threshold.get() == 0 {
+        return Err(InvalidArgumentError {
+            message: "Threshold of zero is invalid".to_string(),
+        });
+    }
+
     if threshold > receivers {
         return Err(InvalidArgumentError {
             message: format!(
