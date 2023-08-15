@@ -1,6 +1,7 @@
 use candid::Principal;
 use ic_icrc1::{Block, Operation, Transaction};
 use ic_ledger_core::block::BlockType;
+use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
@@ -64,6 +65,26 @@ fn operation_strategy<Tokens: TokensType>(
                     to,
                     spender: None,
                     amount,
+                    fee
+                }),
+            (
+                account_strategy(),
+                account_strategy(),
+                prop::option::of(Just(small_token_amount(DEFAULT_TRANSFER_FEE))),
+                prop::option::of(Just({
+                    (SystemTime::now()
+                        + Duration::from_secs(rand::thread_rng().gen_range(0..=u32::MAX as u64)))
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos() as u64
+                }))
+            )
+                .prop_map(move |(spender, from, fee, expires_at)| Operation::Approve {
+                    from,
+                    spender,
+                    amount,
+                    expected_allowance: Some(amount),
+                    expires_at: expires_at.map(TimeStamp::from_nanos_since_unix_epoch),
                     fee
                 }),
         ]
