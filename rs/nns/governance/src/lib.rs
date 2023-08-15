@@ -138,6 +138,7 @@ pub mod pb;
 pub mod proposals;
 mod reward;
 pub mod storage;
+mod subaccount_index;
 
 use std::{collections::HashMap, io};
 
