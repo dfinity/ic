@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 
 use ic_tests::{
@@ -28,6 +26,5 @@ fn main() -> Result<()> {
         )
         .add_test(systest!(reboot_test))
         .execute_from_args()?;
-
     Ok(())
 }
