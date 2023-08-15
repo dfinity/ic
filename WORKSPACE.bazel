@@ -902,7 +902,7 @@ cc_library(
     target_compatible_with = ["@platforms//os:linux"],
 )""",
     patch_args = ["-p1"],
-    patches = ["//rs/tests/testing_verification/spec_compliance:miracl-core.patch"],
+    patches = ["//hs/spec_compliance:miracl-core.patch"],
     sha256 = "b93a14c35f56eca8dddaab95dea94294d51ca680a7d6bb1c1f048e1cd71550cd",
     strip_prefix = "core-ec77b2817a0e360b1893affe4cfa44d19391efc7",
     urls = ["https://github.com/miracl/core/archive/ec77b2817a0e360b1893affe4cfa44d19391efc7.tar.gz"],

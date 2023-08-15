@@ -272,14 +272,14 @@ run_binary(
     ],
     args = ["$(location valid_import.wasm)"],  # passing location of an arbitrary output file is a hack, see https://github.com/bazelbuild/bazel-skylib/blob/288731ef9f7f688932bd50e704a91a45ec185f9b/rules/run_binary.bzl#L29
     target_compatible_with = ["@platforms//os:linux"],
-    tool = "//rs/tests/testing_verification/spec_compliance/wabt-tests:generator",
+    tool = "//rs/tests/testing_verification/wabt-tests:generator",
 )
 
 symlink_dirs(
     name = "ic-hs",
     target_compatible_with = ["@platforms//os:linux"],
     targets = {
-        "//rs/tests/testing_verification/spec_compliance:ic-ref-test": "bin",
+        "//hs/spec_compliance:ic-ref-test": "bin",
         "//rs/universal_canister/impl:universal_canister": "test-data",
         "//rs/tests:wabt-tests": "test-data",
     },
