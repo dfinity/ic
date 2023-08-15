@@ -68,4 +68,28 @@ server {
 
         add_header "X-Cache-Status" $upstream_cache_status;
     }
+
+    location /_/raw/ {
+        # Observability
+        include "includes/request_id.conf";
+
+        # Prereqs
+        include "includes/empty_routes_503.conf";
+        include "includes/denylist_451.conf";
+
+        # CORS
+        set $cors_allow_methods "HEAD, GET, OPTIONS";
+        include "includes/cors_remove_proxy.conf";
+        include "includes/cors.conf";
+        include "includes/options.conf";
+
+        # Update the Host header so that icx-proxy is able to process the request
+        proxy_set_header Host "$inferred_canister_id.$primary_domain";
+
+        proxy_pass http://$icx_proxy;
+        include "includes/proxy_headers.conf";
+        include "/run/ic-node/etc/nginx/conf.d/proxy_headers_underscore.conf";
+
+        add_header "X-Cache-Status" $upstream_cache_status;
+    }
 }
