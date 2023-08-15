@@ -67,6 +67,7 @@ pub enum ErrorCause {
     SubnetNotFound,
     NoHealthyNodes,
     ReplicaUnreachable(String),
+    RouteNotFound,
     Other(String),
 }
 
@@ -82,6 +83,7 @@ impl ErrorCause {
             Self::SubnetNotFound => StatusCode::BAD_REQUEST, // TODO change to 404?
             Self::NoHealthyNodes => StatusCode::INTERNAL_SERVER_ERROR,
             Self::ReplicaUnreachable(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::RouteNotFound => StatusCode::NOT_FOUND,
         }
     }
 
@@ -108,6 +110,7 @@ impl fmt::Display for ErrorCause {
             Self::SubnetNotFound => write!(f, "subnet_not_found"),
             Self::NoHealthyNodes => write!(f, "no_healthy_nodes"),
             Self::ReplicaUnreachable(_) => write!(f, "replica_unreachable"),
+            Self::RouteNotFound => write!(f, "not_found"),
         }
     }
 }
@@ -132,12 +135,12 @@ impl RequestContext {
     }
 }
 
-// Generic IC request - subset of fields
+// This is a subset of the fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ICRequestContent {
-    canister_id: Option<Blob>,
+    sender: Principal,
+    canister_id: Option<Principal>,
     method_name: Option<String>,
-    sender: Option<Blob>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -328,14 +331,8 @@ pub fn parse_body(ctx: &mut RequestContext, body: &[u8]) -> Result<(), Error> {
     let envelope: ICRequestEnvelope = serde_cbor::from_slice(body)?;
     let content = envelope.content;
 
-    if let Some(v) = content.canister_id {
-        ctx.canister_id_cbor = Some(Principal::try_from_slice(&v.0)?);
-    }
-
-    if let Some(v) = content.sender {
-        ctx.sender = Some(Principal::try_from_slice(&v.0)?);
-    }
-
+    ctx.sender = Some(content.sender);
+    ctx.canister_id_cbor = content.canister_id;
     ctx.method_name = content.method_name;
 
     Ok(())
@@ -343,6 +340,7 @@ pub fn parse_body(ctx: &mut RequestContext, body: &[u8]) -> Result<(), Error> {
 
 // Preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
+    Path(canister_id): Path<String>,
     State(proxier): State<Arc<impl Proxier>>,
     mut request: Request<Body>,
     next: Next<Body>,
@@ -353,26 +351,24 @@ pub async fn preprocess_request(
     let (mut parts, body) = read_body(request).await.map_err(|e| ctx.respond(e))?;
     ctx.request_size = body.len() as u32;
 
-    // Extract & parse canister_id from URL if it's there
-    if let Ok(Path(canister_id)) = parts.extract::<Path<String>>().await {
-        let canister_id = Principal::from_text(canister_id).map_err(|e| {
-            ctx.respond(ErrorCause::MalformedRequest(format!(
-                "Unable to decode canister_id from URL: {e}"
-            )))
-        })?;
+    // Get canister_id from URL
+    let canister_id = Principal::from_text(canister_id).map_err(|e| {
+        ctx.respond(ErrorCause::MalformedRequest(format!(
+            "Unable to decode canister_id from URL: {e}"
+        )))
+    })?;
 
-        ctx.canister_id = Some(canister_id);
+    ctx.canister_id = Some(canister_id);
 
-        parse_body(&mut ctx, &body)
-            .map_err(|e| ctx.respond(ErrorCause::UnableToParseCBOR(e.to_string())))?;
+    parse_body(&mut ctx, &body)
+        .map_err(|e| ctx.respond(ErrorCause::UnableToParseCBOR(e.to_string())))?;
 
-        // Try to look up a target node using canister id
-        ctx.node = Some(
-            proxier
-                .lookup_node(canister_id)
-                .map_err(|e| ctx.respond(e))?,
-        );
-    }
+    // Try to look up a target node using canister id
+    ctx.node = Some(
+        proxier
+            .lookup_node(canister_id)
+            .map_err(|e| ctx.respond(e))?,
+    );
 
     // Reconstruct request back from parts
     let mut request = Request::from_parts(parts, hyper::Body::from(body));
@@ -399,16 +395,14 @@ pub async fn status(State(state): State<Arc<impl Proxier>>) -> Response {
     serde_cbor::to_vec(&response).unwrap().into_response()
 }
 
-// Handles IC query call
-// TODO create generic request handler instead of per-call-type?
+// Handler for query calls
 pub async fn query(
     State(state): State<Arc<impl Proxier>>,
     Extension(mut ctx): Extension<RequestContext>,
     request: Request<Body>,
 ) -> Result<Response, Response> {
-    ctx.request_type = RequestType::Query;
-
     // These will be Some() if we got here, otherwise middleware would refuse request earlier
+    ctx.request_type = RequestType::Query;
     let canister_id = ctx.canister_id.unwrap();
     let node = ctx.node.clone().unwrap();
 
@@ -424,12 +418,50 @@ pub async fn query(
     Ok(resp)
 }
 
-pub async fn call(State(st): State<Arc<impl Proxier>>) -> impl IntoResponse {
-    "Hello, World!"
+// Handler for update calls
+pub async fn call(
+    State(state): State<Arc<impl Proxier>>,
+    Extension(mut ctx): Extension<RequestContext>,
+    request: Request<Body>,
+) -> Result<Response, Response> {
+    ctx.request_type = RequestType::Call;
+    // These will be Some() if we got here, otherwise middleware would refuse request earlier
+    let canister_id = ctx.canister_id.unwrap();
+    let node = ctx.node.clone().unwrap();
+
+    // Proxy the request
+    let mut resp = state
+        .proxy(RequestType::Call, request, node, canister_id)
+        .await
+        .map_err(|e| ctx.respond(e))?;
+
+    // Inject context into response
+    resp.extensions_mut().insert(ctx);
+
+    Ok(resp)
 }
 
-pub async fn read_state(State(st): State<Arc<impl Proxier>>) -> impl IntoResponse {
-    "Hello, World!"
+// Handler for read_state
+pub async fn read_state(
+    State(state): State<Arc<impl Proxier>>,
+    Extension(mut ctx): Extension<RequestContext>,
+    request: Request<Body>,
+) -> Result<Response, Response> {
+    ctx.request_type = RequestType::ReadState;
+    // These will be Some() if we got here, otherwise middleware would refuse request earlier
+    let canister_id = ctx.canister_id.unwrap();
+    let node = ctx.node.clone().unwrap();
+
+    // Proxy the request
+    let mut resp = state
+        .proxy(RequestType::ReadState, request, node, canister_id)
+        .await
+        .map_err(|e| ctx.respond(e))?;
+
+    // Inject context into response
+    resp.extensions_mut().insert(ctx);
+
+    Ok(resp)
 }
 
 #[cfg(test)]
