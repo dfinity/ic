@@ -266,7 +266,7 @@ proptest! {
         })]
 
         #[test]
-        fn single_keygen_is_valid(keygen_seed: [u8;32], test_seed: [u8;32], threshold in 0_u32..5, redundancy in (0_u32..10), message: Vec<u8>) {
+        fn single_keygen_is_valid(keygen_seed: [u8;32], test_seed: [u8;32], threshold in 1_u32..5, redundancy in (0_u32..10), message: Vec<u8>) {
             let threshold = NumberOfNodes::from(threshold);
             let num_shares = threshold + NumberOfNodes::from(redundancy);
             let (public_coefficients, secret_keys) = util::generate_threshold_key(Seed::from_bytes(&keygen_seed), threshold, num_shares).expect("Failed to generate keys");
@@ -275,7 +275,7 @@ proptest! {
 
 
         #[test]
-        fn proptest_keygen_composes(keygen_seeds in proptest::collection::vec(any::<[u8;32]>(), 1..10), test_seed: [u8;32], threshold in 0_u32..10, redundancy in (0_u32..10), message: Vec<u8>) {
+        fn proptest_keygen_composes(keygen_seeds in proptest::collection::vec(any::<[u8;32]>(), 1..10), test_seed: [u8;32], threshold in 1_u32..10, redundancy in (0_u32..10), message: Vec<u8>) {
             let threshold = NumberOfNodes::from(threshold);
             let num_shares = threshold + NumberOfNodes::from(redundancy);
             let generations = keygen_seeds.into_iter().map(|seed| util::generate_threshold_key(Seed::from_bytes(&seed), threshold, num_shares).expect("Could not generate keys")).collect::<Vec<_>>();
@@ -527,4 +527,37 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
         resharing_util::interpolate_secret_key(&new_combined_receiver_shares),
         "New secret doesn't match old"
     );
+}
+
+#[test]
+fn generating_a_key_returns_expected_error_for_invalid_args() {
+    let seed = [0u8; 32];
+    let mut rng = ChaChaRng::from_seed(seed);
+
+    for threshold in 0..10 {
+        for receivers in 0..10 {
+            let result = crypto::generate_threshold_key(
+                Seed::from_rng(&mut rng),
+                NumberOfNodes::from(threshold as u32),
+                NumberOfNodes::from(receivers as u32),
+            );
+
+            match result {
+                Ok((public_coeff, shares)) => {
+                    assert!(threshold > 0);
+                    assert!(threshold <= receivers);
+                    assert_eq!(shares.len(), receivers);
+                    assert_eq!(public_coeff.coefficients.len(), threshold);
+                }
+                Err(e) => {
+                    if threshold == 0 {
+                        assert!(e.message.starts_with("Threshold of zero is invalid"));
+                    } else {
+                        assert!(threshold > receivers);
+                        assert!(e.message.starts_with("Threshold too high: "));
+                    }
+                }
+            }
+        }
+    }
 }
