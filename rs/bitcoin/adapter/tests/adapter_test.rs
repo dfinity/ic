@@ -1,4 +1,4 @@
-use bitcoin::{consensus::encode::deserialize, Address, Amount, Block};
+use bitcoin::{consensus::encode::deserialize, Address, Amount, Block, BlockHash};
 use bitcoincore_rpc::{bitcoincore_rpc_json::CreateRawTransactionInput, Auth, Client, RpcApi};
 use bitcoind::{BitcoinD, Conf, P2P};
 use ic_btc_adapter::{
@@ -16,7 +16,7 @@ use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError};
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::{SocketAddr, SocketAddrV4},
     path::Path,
     str::FromStr,
@@ -27,6 +27,27 @@ use tokio::runtime::Runtime;
 type BitcoinAdapterClient = Box<
     dyn RpcAdapterClient<BitcoinAdapterRequestWrapper, Response = BitcoinAdapterResponseWrapper>,
 >;
+
+struct ForkTestData {
+    blocks: Vec<BlockHash>,
+    exclude_start: usize,
+    exclude_stop: usize,
+}
+
+impl ForkTestData {
+    fn new(blocks: Vec<BlockHash>, exclude_start: usize, exclude_stop: usize) -> Self {
+        Self {
+            blocks,
+            exclude_start,
+            exclude_stop,
+        }
+    }
+
+    fn update_excluded(&mut self, exclude_start: usize, exclude_stop: usize) {
+        self.exclude_start = exclude_start;
+        self.exclude_stop = exclude_stop;
+    }
+}
 
 fn make_get_successors_request(
     adapter_client: &BitcoinAdapterClient,
@@ -225,13 +246,13 @@ fn sync_blocks(
     adapter_client: &BitcoinAdapterClient,
     headers: &mut Vec<Vec<u8>>,
     anchor: Vec<u8>,
-    len: usize,
+    max_num_blocks: usize,
     max_tries: u64,
 ) -> Vec<Block> {
     let mut blocks = vec![];
 
     let mut tries = 0;
-    while blocks.len() < len && tries < max_tries {
+    while blocks.len() < max_num_blocks && tries < max_tries {
         let res = make_get_successors_request(adapter_client, anchor.clone(), headers.clone());
         match res {
             Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(res)) => {
@@ -244,6 +265,39 @@ fn sync_blocks(
 
                     headers.extend(new_headers);
 
+                    blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
+                }
+            }
+            Ok(BitcoinAdapterResponseWrapper::SendTransactionResponse(_)) => {
+                panic!("Wrong type of response")
+            }
+            Err(RpcError::Unavailable(_)) => (), // Adapter still syncing headers
+            Err(err) => panic!("{:?}", err),
+        }
+        tries += 1;
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    blocks
+}
+
+// Returns once all the blocks are received. If the result is built from multiple calls then we can't properly check the BFS ordering.
+fn sync_blocks_at_once(
+    adapter_client: &BitcoinAdapterClient,
+    headers: &[Vec<u8>],
+    anchor: Vec<u8>,
+    max_num_blocks: usize,
+    max_tries: u64,
+) -> Vec<Block> {
+    let mut blocks = vec![];
+
+    let mut tries = 0;
+    while blocks.len() < max_num_blocks && tries < max_tries {
+        let res = make_get_successors_request(adapter_client, anchor.clone(), headers.to_vec());
+        match res {
+            Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(res)) => {
+                let new_blocks = res.blocks;
+                if new_blocks.len() == max_num_blocks {
                     blocks.extend(new_blocks.iter().map(|block| deserialize(block).unwrap()));
                 }
             }
@@ -311,6 +365,74 @@ fn fund_with_btc(to_fund_client: &Client, to_fund_address: &Address) {
             .unwrap(),
         Amount::from_btc(initial_amount + 50.0).unwrap()
     );
+}
+
+fn make_bfs_order(
+    forks: &[Vec<BlockHash>],
+    processed_hashes: &HashSet<BlockHash>,
+) -> Vec<BlockHash> {
+    let mut res = vec![];
+    let mut i = 0;
+    loop {
+        let mut modified = false;
+        for fork in forks.iter() {
+            if i < fork.len() && !processed_hashes.contains(&fork[i]) {
+                modified = true;
+                res.push(fork[i]);
+            }
+        }
+        if !modified {
+            break;
+        } else {
+            i += 1;
+        }
+    }
+    res
+}
+
+fn check_fork_bfs_order(
+    shared_blocks: &[BlockHash],
+    fork1: &ForkTestData,
+    fork2: &ForkTestData,
+    adapter_client: &BitcoinAdapterClient,
+    anchor: Vec<u8>,
+) -> (Vec<BlockHash>, Vec<BlockHash>, Vec<BlockHash>) {
+    let mut processed_hashes: HashSet<BlockHash> = HashSet::new();
+    processed_hashes.extend(fork1.blocks[fork1.exclude_start..fork1.exclude_stop].to_vec());
+    processed_hashes.extend(fork2.blocks[fork2.exclude_start..fork2.exclude_stop].to_vec());
+    let mut bfs_order1 = shared_blocks.to_vec();
+    let mut bfs_order2 = shared_blocks.to_vec();
+    let mut temp1 = make_bfs_order(
+        &[fork1.blocks.to_vec(), fork2.blocks.to_vec()],
+        &processed_hashes,
+    );
+    let mut temp2 = make_bfs_order(
+        &[fork2.blocks.to_vec(), fork1.blocks.to_vec()],
+        &processed_hashes,
+    );
+    bfs_order1.append(&mut temp1);
+    bfs_order2.append(&mut temp2);
+
+    let excluded_amount_fork1 = fork1.exclude_stop - fork1.exclude_start;
+    let excluded_amount_fork2 = fork2.exclude_stop - fork2.exclude_start;
+    let expected_len = shared_blocks.len() + fork1.blocks.len() + fork2.blocks.len()
+        - excluded_amount_fork1
+        - excluded_amount_fork2;
+
+    let blocks = sync_blocks_at_once(
+        adapter_client,
+        &processed_hashes
+            .iter()
+            .map(|hash| hash[..].to_vec())
+            .collect::<Vec<Vec<u8>>>(),
+        anchor,
+        expected_len,
+        200,
+    );
+    assert_eq!(blocks.len(), expected_len);
+    let block_hashes: Vec<BlockHash> = blocks.iter().map(|block| block.block_hash()).collect();
+
+    (block_hashes, bfs_order1, bfs_order2)
 }
 
 /// Checks that the client (replica) receives the mined blocks using the gRPC service.
@@ -603,4 +725,110 @@ fn test_receives_blocks_from_forks() {
     let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
     let blocks = sync_blocks(&adapter_client, &mut vec![], anchor, 75, 200);
     assert_eq!(blocks.len(), 75);
+}
+
+/// Checks that the adapter returns blocks in BFS order.
+#[test]
+fn test_bfs_order() {
+    let logger = no_op_logger();
+    let bitcoind1 = get_default_bitcoind();
+    let client1 = Client::new(
+        bitcoind1.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind1.params.cookie_file.clone()),
+    )
+    .unwrap();
+
+    let bitcoind2 = get_default_bitcoind();
+    let client2 = Client::new(
+        bitcoind2.rpc_url().as_str(),
+        Auth::CookieFile(bitcoind2.params.cookie_file.clone()),
+    )
+    .unwrap();
+
+    let url1 = get_bitcoind_url(&bitcoind1).unwrap();
+    let url2 = get_bitcoind_url(&bitcoind2).unwrap();
+
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (adapter_client, _path) = start_adapter_and_client(
+        &rt,
+        vec![SocketAddr::V4(url1), SocketAddr::V4(url2)],
+        logger,
+    );
+
+    // Connect the nodes and mine some shared blocks
+    client1
+        .onetry_node(&url2.to_string())
+        .expect("Failed to connect to the other peer");
+
+    wait_for_connection(&client1, 2);
+    wait_for_connection(&client2, 2);
+
+    let address1 = client1.get_new_address(None, None).unwrap();
+    let shared_blocks = client1.generate_to_address(5, &address1).unwrap();
+
+    wait_for_blocks(&client1, 5);
+    wait_for_blocks(&client2, 5);
+
+    // Disconnect the nodes to create a fork
+    client1
+        .disconnect_node(&url2.to_string())
+        .expect("Failed to disconnect peers");
+
+    wait_for_connection(&client1, 1);
+    wait_for_connection(&client2, 1);
+
+    let fork1 = client1.generate_to_address(15, &address1).unwrap();
+
+    let address2 = client2.get_new_address(None, None).unwrap();
+    let fork2 = client2.generate_to_address(15, &address2).unwrap();
+
+    wait_for_blocks(&client1, 20);
+    wait_for_blocks(&client2, 20);
+
+    assert_eq!(fork1.len() + fork2.len(), 30);
+
+    client1
+        .onetry_node(&url2.to_string())
+        .expect("Failed to connect to the other peer");
+
+    wait_for_connection(&client1, 2);
+    wait_for_connection(&client2, 2);
+    std::thread::sleep(std::time::Duration::from_secs(1));
+
+    let anchor = client1.get_block_hash(0).unwrap()[..].to_vec();
+
+    let mut fork_test_data1 = ForkTestData::new(fork1, 0, 0);
+
+    let mut fork_test_data2 = ForkTestData::new(fork2, 0, 0);
+
+    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
+        &shared_blocks,
+        &fork_test_data1,
+        &fork_test_data2,
+        &adapter_client,
+        anchor.clone(),
+    );
+    assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
+
+    fork_test_data1.update_excluded(5, 10);
+    fork_test_data2.update_excluded(10, 15);
+    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
+        &shared_blocks,
+        &fork_test_data1,
+        &fork_test_data2,
+        &adapter_client,
+        anchor.clone(),
+    );
+    assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
+
+    fork_test_data1.update_excluded(0, 15);
+    fork_test_data2.update_excluded(10, 15);
+    let (block_hashes, bfs_order1, bfs_order2) = check_fork_bfs_order(
+        &shared_blocks,
+        &fork_test_data1,
+        &fork_test_data2,
+        &adapter_client,
+        anchor.clone(),
+    );
+    assert!(bfs_order1 == block_hashes || bfs_order2 == block_hashes);
 }
