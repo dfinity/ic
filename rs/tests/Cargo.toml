@@ -599,3 +599,7 @@ path = "consensus/throughput_with_small_messages.rs"
 [[bin]]
 name = "ic-systest-tecdsa-performance"
 path = "consensus/tecdsa/tecdsa_performance.rs"
+
+[[bin]]
+name = "ic-systest-boundary-node-performance"
+path = "boundary_nodes/boundary_node_performance_test.rs"
