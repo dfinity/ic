@@ -1,9 +1,9 @@
 use crate::eth_rpc;
 use crate::eth_rpc::{
-    Block, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, JsonRpcResult, LogEntry, Transaction,
+    Block, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult,
+    JsonRpcResult, LogEntry, Transaction,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
-use ic_cdk::api::call::{CallResult, RejectionCode};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -37,7 +37,8 @@ impl EthRpcClient {
         }
     }
 
-    /// Query all providers in sequence until one returns an ok result (which could still be a JsonRpcResult::Error).
+    /// Query all providers in sequence until one returns an ok result
+    /// (which could still be a JsonRpcResult::Error).
     /// If none of the providers return an ok result, return the last error.
     /// This method is useful in case a provider is temporarily down but should only be for
     /// querying data that is **not** critical since the returned value comes from a single provider.
@@ -45,8 +46,8 @@ impl EthRpcClient {
         &self,
         method: impl Into<String> + Clone,
         params: I,
-    ) -> CallResult<JsonRpcResult<O>> {
-        let mut last_result: Option<CallResult<JsonRpcResult<O>>> = None;
+    ) -> HttpOutcallResult<JsonRpcResult<O>> {
+        let mut last_result: Option<HttpOutcallResult<JsonRpcResult<O>>> = None;
         for provider in self.providers() {
             ic_cdk::println!("Calling provider {:?}", provider);
             let result =
@@ -122,7 +123,7 @@ impl EthRpcClient {
     pub async fn eth_fee_history(
         &self,
         params: FeeHistoryParams,
-    ) -> CallResult<JsonRpcResult<FeeHistory>> {
+    ) -> HttpOutcallResult<JsonRpcResult<FeeHistory>> {
         self.sequential_call_until_ok("eth_feeHistory", params)
             .await
     }
@@ -130,7 +131,7 @@ impl EthRpcClient {
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
-    ) -> CallResult<JsonRpcResult<Hash>> {
+    ) -> HttpOutcallResult<JsonRpcResult<Hash>> {
         self.sequential_call_until_ok("eth_sendRawTransaction", vec![raw_signed_transaction_hex])
             .await
     }
@@ -140,12 +141,12 @@ impl EthRpcClient {
 /// Guaranteed to be non-empty.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MultiCallResults<T> {
-    results: BTreeMap<RpcNodeProvider, CallResult<JsonRpcResult<T>>>,
+    results: BTreeMap<RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>>,
 }
 
 impl<T> MultiCallResults<T> {
     fn from_non_empty_iter<
-        I: IntoIterator<Item = (RpcNodeProvider, CallResult<JsonRpcResult<T>>)>,
+        I: IntoIterator<Item = (RpcNodeProvider, HttpOutcallResult<JsonRpcResult<T>>)>,
     >(
         iter: I,
     ) -> Self {
@@ -159,14 +160,8 @@ impl<T> MultiCallResults<T> {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum MultiCallError<T> {
-    ConsistentHttpOutcallError {
-        code: RejectionCode,
-        message: String,
-    },
-    ConsistentJsonRpcError {
-        code: i64,
-        message: String,
-    },
+    ConsistentHttpOutcallError(HttpOutcallError),
+    ConsistentJsonRpcError { code: i64, message: String },
     InconsistentResults(MultiCallResults<T>),
 }
 
@@ -200,9 +195,7 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
                     Err(MultiCallError::ConsistentJsonRpcError { code, message })
                 }
             },
-            Err((code, message)) => {
-                Err(MultiCallError::ConsistentHttpOutcallError { code, message })
-            }
+            Err(error) => Err(MultiCallError::ConsistentHttpOutcallError(error)),
         }
     }
 }

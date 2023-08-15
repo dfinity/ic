@@ -3,6 +3,7 @@ use crate::eth_rpc::BlockNumber;
 use crate::eth_rpc::Hash;
 use crate::numeric::TransactionNonce;
 use crate::transactions::PendingEthTransactions;
+use candid::Principal;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -18,7 +19,12 @@ pub struct State {
     pub minted_transactions: BTreeSet<Hash>,
     pub invalid_transactions: BTreeSet<Hash>,
     pub num_issued_transactions: TransactionNonce,
+
+    /// Per-principal lock for pending_retrieve_eth_requests
+    pub retrieve_eth_principals: BTreeSet<Principal>,
     pub pending_retrieve_eth_requests: PendingEthTransactions,
+    /// Process one timer event at a time for withdrawal flow.
+    pub is_retrieve_eth_timer_running: bool,
 }
 
 impl Default for State {
@@ -34,11 +40,13 @@ impl Default for State {
             minted_transactions: BTreeSet::new(),
             invalid_transactions: BTreeSet::new(),
             num_issued_transactions: initial_nonce,
+            retrieve_eth_principals: BTreeSet::new(),
             pending_retrieve_eth_requests: PendingEthTransactions::new(
                 initial_nonce
                     .checked_increment()
                     .expect("transaction nonce overflow"),
             ),
+            is_retrieve_eth_timer_running: false,
         }
     }
 }

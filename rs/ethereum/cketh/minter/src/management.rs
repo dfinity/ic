@@ -40,9 +40,6 @@ impl fmt::Display for CallError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// The reason for the management call failure.
 pub enum Reason {
-    /// Failed to send a signature request because the local output queue is
-    /// full.
-    QueueIsFull,
     /// The canister does not have enough cycles to submit the request.
     OutOfCycles,
     /// The call failed with an error.
@@ -50,17 +47,22 @@ pub enum Reason {
     /// The management canister rejected the signature request (not enough
     /// cycles, the ECDSA subnet is overloaded, etc.).
     Rejected(String),
+    /// The call failed with a transient error. Retrying may help.
+    TransientInternalError(String),
+    /// The call failed with a non-transient error. Retrying will not help.
+    InternalError(String),
 }
 
 impl fmt::Display for Reason {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::QueueIsFull => write!(fmt, "the canister queue is full"),
             Self::OutOfCycles => write!(fmt, "the canister is out of cycles"),
             Self::CanisterError(msg) => write!(fmt, "canister error: {}", msg),
             Self::Rejected(msg) => {
                 write!(fmt, "the management canister rejected the call: {}", msg)
             }
+            Reason::TransientInternalError(msg) => write!(fmt, "transient internal error: {}", msg),
+            Reason::InternalError(msg) => write!(fmt, "internal error: {}", msg),
         }
     }
 }
@@ -68,10 +70,16 @@ impl fmt::Display for Reason {
 impl Reason {
     fn from_reject(reject_code: RejectionCode, reject_message: String) -> Self {
         match reject_code {
-            RejectionCode::SysTransient => Self::QueueIsFull,
+            RejectionCode::SysTransient => Self::TransientInternalError(reject_message),
             RejectionCode::CanisterError => Self::CanisterError(reject_message),
             RejectionCode::CanisterReject => Self::Rejected(reject_message),
-            _ => Self::QueueIsFull,
+            RejectionCode::NoError
+            | RejectionCode::SysFatal
+            | RejectionCode::DestinationInvalid
+            | RejectionCode::Unknown => Self::InternalError(format!(
+                "rejection code: {:?}, rejection message: {}",
+                reject_code, reject_message
+            )),
         }
     }
 }
@@ -127,6 +135,7 @@ pub async fn sign_with_ecdsa(
         },
     )
     .await?;
+    assert_eq!(reply.signature.len(), 64);
     let mut r_bytes: [u8; 32] = [0; 32];
     let mut s_bytes: [u8; 32] = [0; 32];
     r_bytes.copy_from_slice(&reply.signature[0..32]);

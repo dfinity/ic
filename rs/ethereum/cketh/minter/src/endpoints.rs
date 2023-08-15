@@ -49,6 +49,10 @@ pub struct DebugState {
     pub last_seen_block_number: Nat,
     pub minted_transactions: Vec<EthTransaction>,
     pub invalid_transactions: Vec<EthTransaction>,
+    pub num_issued_transactions: Nat,
+    pub unapproved_retrieve_eth_requests: Vec<String>,
+    pub signed_retrieve_eth_requests: Vec<String>,
+    pub sent_retrieve_eth_requests: Vec<String>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
@@ -61,9 +65,9 @@ pub struct RetrieveEthRequest {
     pub block_index: Nat,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
-pub enum TransactionStatus {
+#[derive(CandidType, Deserialize)]
+pub enum RetrieveEthStatus {
     NotFound,
-    Pending,
-    Finalized,
+    PendingSigning,
+    Found(EthTransaction),
 }

@@ -5,17 +5,19 @@ use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::{
     DebugState, DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice,
-    EthTransaction, MinterArg, ReceivedEthEvent, RetrieveEthRequest, TransactionStatus,
+    EthTransaction, MinterArg, ReceivedEthEvent, RetrieveEthRequest, RetrieveEthStatus,
 };
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
+use ic_cketh_minter::eth_rpc::JsonRpcResult;
 use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
-use ic_cketh_minter::eth_rpc::{JsonRpcResult, Transaction};
+use ic_cketh_minter::guard::{retrieve_eth_guard, retrieve_eth_timer_guard};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::mutate_state;
 use ic_cketh_minter::state::read_state;
 use ic_cketh_minter::state::State;
 use ic_cketh_minter::state::STATE;
-use ic_cketh_minter::tx::{estimate_transaction_price, Eip1559TransactionRequest};
+use ic_cketh_minter::transactions::PendingEthTransaction;
+use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
 use ic_cketh_minter::{eth_logs, eth_rpc, RPC_CLIENT};
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use std::cmp::{min, Ordering};
@@ -23,6 +25,8 @@ use std::str::FromStr;
 
 const TRANSACTION_GAS_LIMIT: u32 = 21_000;
 const SCRAPPING_ETH_LOGS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3 * 60);
+const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: std::time::Duration =
+    std::time::Duration::from_secs(15);
 
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 
@@ -37,8 +41,15 @@ fn init(arg: MinterArg) {
             ic_cdk::trap("cannot init canister state with upgrade args");
         }
     }
+    setup_timers();
+}
+
+fn setup_timers() {
     ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || {
         ic_cdk::spawn(scrap_eth_logs())
+    });
+    ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, || {
+        ic_cdk::spawn(process_retrieve_eth_requests())
     });
 }
 
@@ -94,6 +105,77 @@ async fn scrap_eth_logs() {
                 "BUG: last seen block number ({:?}) is greater than the last finalized block number ({:?})",
                 last_seen_block_number, finalized_block.number
             ));
+        }
+    }
+}
+
+async fn process_retrieve_eth_requests() {
+    let _guard = match retrieve_eth_timer_guard() {
+        Ok(guard) => guard,
+        Err(e) => {
+            ic_cdk::println!(
+                "Failed retrieving timer guard to process ETH requests: {:?}",
+                e
+            );
+            return;
+        }
+    };
+    sign_pending_eth_transactions().await;
+    send_signed_eth_transactions().await;
+}
+
+async fn sign_pending_eth_transactions() {
+    let tx_to_sign = read_state(|s| s.pending_retrieve_eth_requests.transactions_to_sign());
+    for tx in tx_to_sign {
+        match tx.sign().await {
+            Ok(signed_tx) => {
+                mutate_state(|s| {
+                    ic_cdk::println!("Queueing signed transaction: {:?}", signed_tx);
+                    s.pending_retrieve_eth_requests
+                        .replace_with_signed_transaction(signed_tx)
+                        .unwrap_or_else(|e| {
+                            ic_cdk::println!(
+                                "BUG: failed to replace transaction with signed one: {:?}",
+                                e
+                            );
+                        })
+                });
+            }
+            Err(e) => {
+                ic_cdk::println!("Failed to sign transaction: {:?}", e);
+            }
+        }
+    }
+}
+
+async fn send_signed_eth_transactions() {
+    let tx_to_send = read_state(|s| s.pending_retrieve_eth_requests.transactions_to_send());
+
+    for tx in tx_to_send {
+        let result = RPC_CLIENT
+            .eth_send_raw_transaction(tx.raw_transaction_hex())
+            .await
+            .expect("HTTP call failed");
+        ic_cdk::println!("Sent transaction: {:?}", result);
+        match result {
+            JsonRpcResult::Result(_) => mutate_state(|s| {
+                s.pending_retrieve_eth_requests
+                    .replace_with_sent_transaction(tx)
+                    .unwrap_or_else(|e| {
+                        ic_cdk::println!(
+                            "BUG: failed to replace transaction with sent one: {:?}",
+                            e
+                        );
+                    })
+            }),
+            JsonRpcResult::Error { code, message } => {
+                ic_cdk::println!(
+                    "Failed to send transaction {:?}: {} (error code = {:?}). Will retry later. ",
+                    tx,
+                    message,
+                    code
+                );
+            }
         }
     }
 }
@@ -181,7 +263,7 @@ type TransferResult = ic_cketh_minter::eth_rpc::JsonRpcResult<String>;
 #[update]
 #[candid_method(update)]
 async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferResult {
-    let tx_bytes = Eip1559TransactionRequest {
+    let signed_transaction = Eip1559TransactionRequest {
         chain_id: SEPOLIA_TEST_CHAIN_ID,
         destination: Address::from_str(&to_string).unwrap(),
         nonce: TransactionNonce::from(nonce),
@@ -189,41 +271,19 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
         max_fee_per_gas: Wei::new(1946965145_u128),
         amount: value.into(),
         data: vec![],
-        access_list: vec![],
+        access_list: AccessList::new(),
         max_priority_fee_per_gas: Wei::new(1946965145_u128),
     }
     .sign()
     .await
     .expect("signing failed");
-    let hex_string = format!("0x{}", hex::encode(&tx_bytes));
     match RPC_CLIENT
-        .eth_send_raw_transaction(hex_string)
+        .eth_send_raw_transaction(signed_transaction.raw_transaction_hex())
         .await
         .expect("HTTP call failed")
     {
         JsonRpcResult::Result(tx_hash) => JsonRpcResult::Result(tx_hash.to_string()),
         JsonRpcResult::Error { code, message } => JsonRpcResult::Error { code, message },
-    }
-}
-
-#[update]
-#[candid_method(update)]
-async fn test_get_transaction_by_hash(transaction_hash: String) -> TransactionStatus {
-    let transaction_hash = Hash::from_str(&transaction_hash)
-        .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to parse transaction hash: {:?}", e)));
-    let transaction: Option<Transaction> = RPC_CLIENT
-        .eth_get_transaction_by_hash(transaction_hash)
-        .await
-        .expect("HTTP call failed");
-    match transaction {
-        None => TransactionStatus::NotFound,
-        Some(transaction) => {
-            if transaction.is_confirmed() {
-                TransactionStatus::Finalized
-            } else {
-                TransactionStatus::Pending
-            }
-        }
     }
 }
 
@@ -285,6 +345,12 @@ async fn eip_2930_transaction_price() -> Eip2930TransactionPrice {
 #[candid_method(update)]
 async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
     let caller = validate_caller_not_anonymous();
+    let _guard = retrieve_eth_guard(caller).unwrap_or_else(|e| {
+        ic_cdk::trap(&format!(
+            "Failed retrieving guard for principal {}: {:?}",
+            caller, e
+        ))
+    });
     let amount = Wei::from(amount);
     let destination = Address::from_str(&recipient)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to parse recipient address: {:?}", e)));
@@ -361,6 +427,25 @@ async fn eth_fee_history() -> FeeHistory {
         .unwrap()
 }
 
+#[update]
+#[candid_method(update)]
+async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
+    let ledger_burn_index = LedgerBurnIndex(block_index);
+    let transaction = read_state(|s| {
+        s.pending_retrieve_eth_requests
+            .find_by_burn_index(ledger_burn_index)
+    });
+    match transaction {
+        Some(PendingEthTransaction::NotSigned(_)) => RetrieveEthStatus::PendingSigning,
+        Some(PendingEthTransaction::Signed(tx)) | Some(PendingEthTransaction::Sent(tx)) => {
+            RetrieveEthStatus::Found(EthTransaction {
+                transaction_hash: tx.hash().to_string(),
+            })
+        }
+        None => RetrieveEthStatus::NotFound,
+    }
+}
+
 #[post_upgrade]
 fn post_upgrade(minter_arg: Option<MinterArg>) {
     match minter_arg {
@@ -377,9 +462,7 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
             });
         }
     }
-    ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || {
-        ic_cdk::spawn(scrap_eth_logs())
-    });
+    setup_timers();
 }
 
 #[query]
@@ -390,11 +473,23 @@ fn dump_state_for_debugging() -> DebugState {
             transaction_hash: hash.to_string(),
         }
     }
+    fn vec_debug<T: std::fmt::Debug>(v: &[T]) -> Vec<String> {
+        v.iter().map(|x| format!("{:?}", x)).collect()
+    }
+
     read_state(|s| DebugState {
         ecdsa_key_name: s.ecdsa_key_name.clone(),
         last_seen_block_number: candid::Nat::from(s.last_seen_block_number.clone()),
         minted_transactions: s.minted_transactions.iter().map(to_tx).collect(),
         invalid_transactions: s.invalid_transactions.iter().map(to_tx).collect(),
+        num_issued_transactions: candid::Nat::from(s.num_issued_transactions),
+        unapproved_retrieve_eth_requests: vec_debug(
+            &s.pending_retrieve_eth_requests.transactions_to_sign(),
+        ),
+        signed_retrieve_eth_requests: vec_debug(
+            &s.pending_retrieve_eth_requests.transactions_to_send(),
+        ),
+        sent_retrieve_eth_requests: vec_debug(&s.pending_retrieve_eth_requests.transactions_sent()),
     })
 }
 

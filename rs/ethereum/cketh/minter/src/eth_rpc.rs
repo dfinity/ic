@@ -5,7 +5,7 @@ use crate::address::Address;
 use crate::numeric::Wei;
 use candid::{candid_method, CandidType, Principal};
 use ethnum::u256;
-use ic_cdk::api::call::{call_with_payment128, CallResult};
+use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
     TransformContext,
@@ -439,18 +439,36 @@ impl<T> JsonRpcResult<T> {
 #[query]
 #[candid_method(query)]
 fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
+    ic_cdk::println!("RAW RESPONSE: {:?}", args.response);
     args.response.headers.clear();
     args.response
 }
 
-pub const BLOCK_PI_RPC_PROVIDER_URL: &str =
-    "https://ethereum-sepolia.blockpi.network/v1/rpc/public";
+#[derive(Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum HttpOutcallError {
+    /// Error from the IC system API.
+    IcError {
+        code: RejectionCode,
+        message: String,
+    },
+    /// Response is not a valid JSON-RPC response,
+    /// which means that the response was not successful (status other than 2xx)
+    /// or that the response body could not be deserialized into a JSON-RPC response.
+    InvalidHttpJsonRpcResponse {
+        status: u16,
+        body: String,
+        parsing_error: Option<String>,
+    },
+}
+
+pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
+
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
 pub async fn call<I: Serialize, O: DeserializeOwned>(
     url: impl Into<String>,
     method: impl Into<String>,
     params: I,
-) -> CallResult<JsonRpcResult<O>> {
+) -> HttpOutcallResult<JsonRpcResult<O>> {
     const KIB: u64 = 1024;
     let payload = serde_json::to_string(&JsonRpcRequest {
         jsonrpc: "2.0",
@@ -486,17 +504,41 @@ pub async fn call<I: Serialize, O: DeserializeOwned>(
         (request,),
         cycles,
     )
-    .await?;
+    .await
+    .map_err(|(code, message)| HttpOutcallError::IcError { code, message })?;
 
-    ic_cdk::println!("RESPONSE: {}", String::from_utf8_lossy(&response.body));
+    // JSON-RPC responses over HTTP should have a 2xx status code,
+    // even if the contained JsonRpcResult is an error.
+    // If the server is not available, it will sometimes (wrongly) return HTML that will fail parsing as JSON.
+    let http_status_code = http_status_code(&response);
+    if !is_successful_http_code(&http_status_code) {
+        return Err(HttpOutcallError::InvalidHttpJsonRpcResponse {
+            status: http_status_code,
+            body: String::from_utf8_lossy(&response.body).to_string(),
+            parsing_error: None,
+        });
+    }
 
-    let reply: JsonRpcReply<O> = serde_json::from_slice(&response.body).unwrap_or_else(|e| {
-        panic!(
-            "failed to decode response {}: {}",
-            String::from_utf8_lossy(&response.body),
-            e
-        )
-    });
+    let reply: JsonRpcReply<O> = serde_json::from_slice(&response.body).map_err(|e| {
+        HttpOutcallError::InvalidHttpJsonRpcResponse {
+            status: http_status_code,
+            body: String::from_utf8_lossy(&response.body).to_string(),
+            parsing_error: Some(e.to_string()),
+        }
+    })?;
 
     Ok(reply.result)
+}
+
+fn http_status_code(response: &HttpResponse) -> u16 {
+    use num_traits::cast::ToPrimitive;
+    // HTTP status code are always 3 decimal digits, hence at most 999.
+    // See https://httpwg.org/specs/rfc9110.html#status.code.extensibility
+    response.status.0.to_u16().expect("valid HTTP status code")
+}
+
+fn is_successful_http_code(status: &u16) -> bool {
+    const OK: u16 = 200;
+    const REDIRECTION: u16 = 300;
+    (OK..REDIRECTION).contains(status)
 }

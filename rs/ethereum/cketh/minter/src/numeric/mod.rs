@@ -84,6 +84,13 @@ impl From<TransactionNonce> for ethnum::u256 {
     }
 }
 
+impl From<TransactionNonce> for candid::Nat {
+    fn from(value: TransactionNonce) -> Self {
+        use num_bigint::BigUint;
+        candid::Nat::from(BigUint::from_bytes_be(&value.0.to_be_bytes()))
+    }
+}
+
 #[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct LedgerBurnIndex(pub u64);
 
