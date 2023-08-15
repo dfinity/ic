@@ -32,7 +32,6 @@ use ic_types::{consensus::CatchUpPackage, messages::SignedIngress, NodeId, Subne
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::{Arc, RwLock};
-
 /// Create the consensus pool directory (if none exists)
 fn create_consensus_pool_dir(config: &Config) {
     std::fs::create_dir_all(&config.artifact_pool.consensus_pool_path).unwrap_or_else(|err| {
@@ -156,6 +155,7 @@ pub fn construct_ic_stack(
         subnet_id,
         subnet_config.cycles_account_manager_config,
     ));
+
     let execution_services = ExecutionServices::setup_execution(
         log.clone(),
         metrics_registry,
@@ -273,6 +273,7 @@ pub fn construct_ic_stack(
         P2PStateSyncClient::Client(state_sync),
         xnet_payload_builder,
         self_validating_payload_builder,
+        execution_services.query_stats_payload_builder,
         message_router,
         // TODO(SCL-213)
         Arc::clone(&crypto) as Arc<_>,

@@ -94,6 +94,8 @@ pub(super) struct QueryContext<'a> {
     query_context_time_start: Instant,
     query_context_time_limit: Duration,
     query_critical_error: &'a IntCounter,
+    // Number of instructions used in total
+    pub total_instructions_used: NumInstructions,
     subnet_memory_capacity: NumBytes,
 }
 
@@ -143,6 +145,7 @@ impl<'a> QueryContext<'a> {
             query_context_time_start: Instant::now(),
             query_context_time_limit: max_query_call_walltime,
             query_critical_error,
+            total_instructions_used: NumInstructions::from(0),
             subnet_memory_capacity,
         }
     }
@@ -395,6 +398,7 @@ impl<'a> QueryContext<'a> {
             &mut self.round_limits,
         );
         let instructions_executed = instruction_limit - instructions_left;
+        self.total_instructions_used += instructions_executed;
         measurement_scope.add(
             instructions_executed,
             NumSlices::from(1),

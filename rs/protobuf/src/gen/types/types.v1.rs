@@ -789,6 +789,8 @@ pub struct Block {
     pub canister_http_payload: ::core::option::Option<CanisterHttpPayload>,
     #[prost(bytes = "vec", tag = "15")]
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "16")]
+    pub query_stats_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "11")]
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
@@ -1002,6 +1004,28 @@ pub struct CanisterHttpPayload {
     #[prost(message, repeated, tag = "3")]
     pub divergence_responses:
         ::prost::alloc::vec::Vec<super::super::canister_http::v1::CanisterHttpResponseDivergence>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QueryStatsPayload {
+    #[prost(message, repeated, tag = "1")]
+    pub canister_stats: ::prost::alloc::vec::Vec<QueryStatsPayloadInner>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct QueryStatsPayloadInner {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<CanisterId>,
+    #[prost(uint32, tag = "2")]
+    pub num_calls: u32,
+    #[prost(uint64, tag = "3")]
+    pub num_instructions: u64,
+    #[prost(uint64, tag = "4")]
+    pub ingress_payload_size: u64,
+    #[prost(uint64, tag = "5")]
+    pub egress_payload_size: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

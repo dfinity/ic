@@ -5,6 +5,7 @@ mod query_cache;
 mod query_call_graph;
 mod query_context;
 mod query_scheduler;
+pub mod query_stats;
 #[cfg(test)]
 mod tests;
 
@@ -44,6 +45,7 @@ use tokio::sync::oneshot;
 use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
+use self::query_stats::QueryStatsCollector;
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -98,6 +100,7 @@ pub struct InternalHttpQueryHandler {
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    local_query_execution_stats: QueryStatsCollector,
     query_cache: query_cache::QueryCache,
 }
 
@@ -118,6 +121,7 @@ impl InternalHttpQueryHandler {
         metrics_registry: &MetricsRegistry,
         max_instructions_per_query: NumInstructions,
         cycles_account_manager: Arc<CyclesAccountManager>,
+        local_query_execution_stats: QueryStatsCollector,
     ) -> Self {
         let query_cache_capacity = config.query_cache_capacity;
         Self {
@@ -128,6 +132,7 @@ impl InternalHttpQueryHandler {
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
             cycles_account_manager,
+            local_query_execution_stats,
             query_cache: query_cache::QueryCache::new(metrics_registry, query_cache_capacity),
         }
     }
@@ -183,12 +188,32 @@ impl QueryHandler for InternalHttpQueryHandler {
             query.receiver,
             &self.metrics.query_critical_error,
         );
+
+        let canister_id = query.receiver;
+        let ingress_payload_size = query.method_payload.len();
+
         let result = context.run(
             query,
             &self.metrics,
             Arc::clone(&self.cycles_account_manager),
             &measurement_scope,
         );
+
+        let egress_payload_size = match &result {
+            Ok(WasmResult::Reply(vec)) => vec.len(),
+            Ok(WasmResult::Reject(_)) => 0,
+            Err(_) => 0,
+        };
+
+        // Add query statistics to the query aggregator.
+        if self.config.query_stats_aggregation == FlagStatus::Enabled {
+            self.local_query_execution_stats.register_query_statistics(
+                canister_id,
+                context.total_instructions_used,
+                ingress_payload_size as u64,
+                egress_payload_size as u64,
+            );
+        }
 
         // Add the query execution result to the query cache  (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {

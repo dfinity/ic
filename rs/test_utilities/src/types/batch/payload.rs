@@ -13,6 +13,7 @@ impl Default for PayloadBuilder {
                 // TODO(MR-70): use payload builder
                 self_validating: SelfValidatingPayload::default(),
                 canister_http: vec![],
+                query_stats: vec![],
             },
         }
     }

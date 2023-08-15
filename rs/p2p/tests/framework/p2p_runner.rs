@@ -14,7 +14,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{setup_consensus_and_p2p, P2PStateSyncClient};
 use ic_test_utilities::{
-    consensus::make_catch_up_package_with_empty_transcript,
+    consensus::{batch::MockBatchPayloadBuilder, make_catch_up_package_with_empty_transcript},
     crypto::fake_tls_handshake::FakeTlsHandshake,
     crypto::CryptoReturningOk,
     message_routing::FakeMessageRouting,
@@ -80,6 +80,8 @@ fn execute_test(
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
         let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
         let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new().expect_noop();
+        let query_stats_payload_builder = Box::new(query_stats_payload_builder);
         let no_state_sync_client = P2PStateSyncClient::TestClient();
         let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
@@ -125,6 +127,7 @@ fn execute_test(
             no_state_sync_client,
             xnet_payload_builder as Arc<_>,
             self_validating_payload_builder as Arc<_>,
+            query_stats_payload_builder,
             message_router as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
@@ -246,6 +249,8 @@ fn execute_test_chunking_pool(
         let xnet_payload_builder = Arc::new(xnet_payload_builder);
         let self_validating_payload_builder = FakeSelfValidatingPayloadBuilder::new();
         let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new();
+        let query_stats_payload_builder = Box::new(query_stats_payload_builder);
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let node_pool_dir = test_synchronizer.get_test_group_directory();
@@ -291,6 +296,7 @@ fn execute_test_chunking_pool(
             state_sync_client,
             xnet_payload_builder,
             self_validating_payload_builder,
+            query_stats_payload_builder,
             message_router,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,

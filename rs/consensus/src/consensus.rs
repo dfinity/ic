@@ -154,6 +154,7 @@ impl ConsensusImpl {
         xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
         self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
         canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+        query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -173,6 +174,7 @@ impl ConsensusImpl {
             xnet_payload_builder,
             self_validating_payload_builder,
             canister_http_payload_builder,
+            query_stats_payload_builder,
             metrics_registry.clone(),
             logger.clone(),
         ));
@@ -638,6 +640,7 @@ pub fn setup(
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
     dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
@@ -671,6 +674,7 @@ pub fn setup(
             xnet_payload_builder,
             self_validating_payload_builder,
             canister_http_payload_builder,
+            query_stats_payload_builder,
             dkg_pool,
             ecdsa_pool,
             dkg_key_manager,
@@ -699,6 +703,7 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
+        consensus::batch::MockBatchPayloadBuilder,
         ingress_selector::FakeIngressSelector,
         message_routing::FakeMessageRouting,
         self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
@@ -758,6 +763,7 @@ mod tests {
             Arc::new(FakeXNetPayloadBuilder::new()),
             Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             dkg_pool,
             ecdsa_pool,
             Arc::new(Mutex::new(DkgKeyManager::new(
