@@ -27,7 +27,8 @@ use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
 use ic_test_utilities::{
-    ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
+    consensus::batch::MockBatchPayloadBuilder, ingress_selector::FakeIngressSelector,
+    message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
@@ -151,6 +152,7 @@ pub struct ConsensusDependencies {
     pub(crate) ingress_selector: Arc<dyn IngressSelector>,
     pub(crate) self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     pub(crate) canister_http_payload_builder: Arc<dyn BatchPayloadBuilder>,
+    pub(crate) query_stats_payload_builder: Arc<dyn BatchPayloadBuilder>,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
     pub ecdsa_pool: Arc<RwLock<ecdsa_pool::EcdsaPoolImpl>>,
@@ -186,7 +188,6 @@ impl ConsensusDependencies {
             ecdsa_pool::EcdsaPoolImpl::new(pool_config, no_op_logger(), metrics_registry.clone());
         let canister_http_pool =
             canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
-
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
 
         ConsensusDependencies {
@@ -202,6 +203,7 @@ impl ConsensusDependencies {
             xnet_payload_builder: Arc::new(xnet_payload_builder),
             self_validating_payload_builder: Arc::new(FakeSelfValidatingPayloadBuilder::new()),
             canister_http_payload_builder: Arc::new(FakeCanisterHttpPayloadBuilder::new()),
+            query_stats_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             state_manager,
             metrics_registry,
             replica_config,

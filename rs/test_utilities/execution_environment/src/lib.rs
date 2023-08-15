@@ -15,7 +15,7 @@ use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    execute_canister, util::process_stopping_canisters, CompilationCostHandling,
+    execute_canister, init_query_stats, util::process_stopping_canisters, CompilationCostHandling,
     ExecuteMessageResult, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
     InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
@@ -1848,6 +1848,8 @@ impl ExecutionTestBuilder {
             config.clone(),
             Arc::clone(&cycles_account_manager),
         );
+        let (query_stats_collector, _) = init_query_stats(self.log.clone());
+
         let query_handler = InternalHttpQueryHandler::new(
             self.log.clone(),
             hypervisor,
@@ -1856,6 +1858,7 @@ impl ExecutionTestBuilder {
             &metrics_registry,
             self.instruction_limit_without_dts,
             Arc::clone(&cycles_account_manager),
+            query_stats_collector,
         );
         ExecutionTest {
             state: Some(state),

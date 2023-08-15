@@ -2,11 +2,14 @@
 //! Consensus and Message Routing.
 
 mod canister_http;
+mod execution_environment;
 mod ingress;
 mod self_validating;
 mod xnet;
 
 pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
+pub use self::execution_environment::EpochStats;
+pub use self::execution_environment::QueryStatsPayload;
 pub use self::ingress::{IngressPayload, IngressPayloadError};
 pub use self::self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES};
 pub use self::xnet::XNetPayload;
@@ -81,6 +84,7 @@ pub struct BatchPayload {
     pub xnet: XNetPayload,
     pub self_validating: SelfValidatingPayload,
     pub canister_http: Vec<u8>,
+    pub query_stats: Vec<u8>,
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.

@@ -163,6 +163,10 @@ pub struct HeightTag {}
 // Note [ExecutionRound vs Height]
 pub type Height = AmountOf<HeightTag, u64>;
 
+pub struct QueryStatsTag {}
+/// The epoch as used by query stats aggregation.
+pub type QueryStatsEpoch = AmountOf<QueryStatsTag, u64>;
+
 /// Converts a NodeId into its protobuf definition.  Normally, we would use
 /// `impl From<NodeId> for pb::NodeId` here however we cannot as both
 /// `Id` and `pb::NodeId` are defined in other crates.

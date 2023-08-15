@@ -220,6 +220,9 @@ pub struct Config {
 
     /// The capacity of the Wasm compilation cache.
     pub max_compilation_cache_size: NumBytes,
+
+    /// Indicate whether query stats should be collected or not.
+    pub query_stats_aggregation: FlagStatus,
 }
 
 impl Default for Config {
@@ -284,6 +287,7 @@ impl Default for Config {
             query_caching: FlagStatus::Enabled,
             query_cache_capacity: QUERY_CACHE_CAPACITY,
             max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
+            query_stats_aggregation: FlagStatus::Disabled,
         }
     }
 }
