@@ -11,7 +11,7 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use maplit::hashmap;
+use maplit::btreemap;
 use std::sync::{Arc, Mutex};
 
 #[test]
@@ -31,7 +31,7 @@ fn test_stake_maturity() {
 
     let mut governance = Governance::new(
         GovernanceProto {
-            neurons: hashmap! {
+            neurons: btreemap! {
                 1 => neuron_1
             },
             ..GovernanceProto::default()

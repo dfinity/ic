@@ -82,7 +82,7 @@ use pretty_assertions::assert_eq;
 use proptest::prelude::*;
 use rand::{thread_rng, Rng, SeedableRng};
 use std::{
-    collections::{hash_map, HashMap, HashSet},
+    collections::{btree_map, HashMap, HashSet},
     time::{Duration, SystemTime},
 };
 const ONE_TRILLION: u128 = 1_000_000_000_000;
@@ -242,10 +242,10 @@ fn begin_swap_legacy(
             let neuron_id = neuron.id.as_ref().unwrap().id;
             let entry = builder.governance.proto.neurons.entry(neuron_id);
             match entry {
-                hash_map::Entry::Occupied(_) => {
+                btree_map::Entry::Occupied(_) => {
                     panic!("Neuron ID {} is not unique.", neuron_id);
                 }
-                hash_map::Entry::Vacant(entry) => {
+                btree_map::Entry::Vacant(entry) => {
                     entry.insert(neuron.clone());
                 }
             }

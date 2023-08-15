@@ -20,9 +20,9 @@ use ic_sns_swap::pb::{
 };
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use lazy_static::lazy_static;
-use maplit::hashmap;
+use maplit::btreemap;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{BTreeMap, VecDeque},
     convert::TryFrom,
     string::ToString,
     sync::{Arc, Mutex},
@@ -485,7 +485,7 @@ async fn validate_open_sns_token_swap_community_fund_investment_e8s() {
 }
 
 lazy_static! {
-    static ref ID_TO_NEURON: HashMap<u64, Neuron> = craft_id_to_neuron(&[
+    static ref ID_TO_NEURON: BTreeMap<u64, Neuron> = craft_id_to_neuron(&[
         // (maturity, controller, joined cf at)
 
         // CF neurons.
@@ -511,7 +511,7 @@ fn craft_id_to_neuron(
         /* controller: */ PrincipalId,
         /* joined cf at: */ Option<u64>,
     )],
-) -> HashMap<u64, Neuron> {
+) -> BTreeMap<u64, Neuron> {
     values
         .iter()
         .enumerate()
@@ -535,9 +535,9 @@ fn craft_id_to_neuron(
 }
 
 fn assert_clean_refund(
-    id_to_neuron: &mut HashMap<u64, Neuron>,
+    id_to_neuron: &mut BTreeMap<u64, Neuron>,
     cf_participants: &Vec<sns_swap_pb::CfParticipant>,
-    expected_id_to_neuron: &HashMap<u64, Neuron>,
+    expected_id_to_neuron: &BTreeMap<u64, Neuron>,
 ) {
     let mut original_id_to_neuron = id_to_neuron.clone();
     let failed_refunds = refund_community_fund_maturity(id_to_neuron, cf_participants);
@@ -821,7 +821,7 @@ fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
 
 #[test]
 fn draw_funds_from_the_community_fund_trivial() {
-    let mut id_to_neuron = hashmap! {};
+    let mut id_to_neuron = btreemap! {};
     let original_total_community_fund_maturity_e8s_equivalent = 0;
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
@@ -833,9 +833,9 @@ fn draw_funds_from_the_community_fund_trivial() {
 
     // Inspect results.
     assert_eq!(observed_cf_neurons, vec![]);
-    assert_eq!(id_to_neuron, hashmap! {});
+    assert_eq!(id_to_neuron, btreemap! {});
 
-    assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &hashmap! {});
+    assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &btreemap! {});
 }
 
 #[test]

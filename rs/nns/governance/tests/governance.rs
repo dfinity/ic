@@ -1093,7 +1093,7 @@ fn fixture_for_following() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
         wait_for_quiet_threshold_seconds: 1,
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 =>  Neuron {
                 // Needs controller to vote.
                 controller: Some(principal(1)),
@@ -1772,7 +1772,7 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
         short_voting_period_seconds: 1,
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 created_timestamp_seconds: 1066,
                 controller: Some(principal(1)),
@@ -2202,7 +2202,7 @@ fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
     let mut driver = fake::FakeDriver::default();
     GovernanceProto {
         economics: Some(NetworkEconomics::default()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 =>
                 Neuron {
                     id: Some(NeuronId {id: 1}),
@@ -3576,7 +3576,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
     let principal3 = PrincipalId::new_self_authenticating(b"SID3");
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal1),
@@ -7326,7 +7326,7 @@ fn test_filter_proposals_neuron_visibility() {
     let proto = GovernanceProto {
         wait_for_quiet_threshold_seconds: 100,
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal1),
@@ -7414,7 +7414,7 @@ fn test_filter_proposals_include_all_manage_neuron_ignores_visibility() {
     let proto = GovernanceProto {
         wait_for_quiet_threshold_seconds: 100,
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal1),
@@ -7523,7 +7523,7 @@ fn test_filter_proposals_by_status() {
     let proto = GovernanceProto {
         wait_for_quiet_threshold_seconds: 100,
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 =>
             Neuron {
                 id: Some(NeuronId { id: 1 }),
@@ -7621,7 +7621,7 @@ fn test_filter_proposals_by_reward_status() {
     let proto = GovernanceProto {
         wait_for_quiet_threshold_seconds: 100,
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 =>
             Neuron {
                 id: Some(NeuronId { id: 1 }),
@@ -7710,7 +7710,7 @@ fn test_filter_proposals_excluding_topics() {
     let proto = GovernanceProto {
         wait_for_quiet_threshold_seconds: 100,
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 =>
             Neuron {
                 id: Some(NeuronId { id: 1 }),
@@ -7804,7 +7804,7 @@ fn test_filter_proposal_ballots() {
     let proto = GovernanceProto {
         wait_for_quiet_threshold_seconds: 100,
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal1),
@@ -7912,7 +7912,7 @@ fn test_list_neurons() {
                     },
                 )
             })
-            .collect::<HashMap<u64, Neuron>>(),
+            .collect::<BTreeMap<u64, Neuron>>(),
         ..Default::default()
     };
     let p1 = principal(1);
@@ -8665,7 +8665,7 @@ fn test_update_stake() {
 #[test]
 fn test_compute_cached_metrics() {
     let now = 100;
-    let neurons = hashmap! {
+    let neurons = btreemap! {
         1 => Neuron {
             id: Some(NeuronId {id: 1}),
             cached_neuron_stake_e8s: 100_000_000,
@@ -8859,7 +8859,7 @@ fn test_compute_cached_metrics() {
 fn fixture_for_dissolving_neuron_tests(id: u64, dissolve_state: DissolveState) -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::default()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id }),
                 controller: Some(principal(id)),
@@ -9170,7 +9170,7 @@ fn test_increase_dissolve_delay() {
     let fake_driver = fake::FakeDriver::default();
     let fixture: GovernanceProto = GovernanceProto {
         economics: Some(NetworkEconomics::default()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal(principal_id)),
@@ -9299,7 +9299,7 @@ fn test_join_community_fund() {
     let principal_b = 128;
     let fixture: GovernanceProto = GovernanceProto {
         economics: Some(NetworkEconomics::default()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 cached_neuron_stake_e8s: 10 * E8,
@@ -9587,7 +9587,7 @@ fn wait_for_quiet_test_helper(
                     },
                 )
             })
-            .collect::<HashMap<u64, Neuron>>(),
+            .collect::<BTreeMap<u64, Neuron>>(),
         wait_for_quiet_threshold_seconds: initial_expiration_seconds,
         ..Default::default()
     };
@@ -10452,7 +10452,7 @@ fn test_wfq_constant_flipping() {
 #[tokio::test]
 async fn test_known_neurons() {
     let driver = fake::FakeDriver::default();
-    let neurons = hashmap! {
+    let neurons = btreemap! {
         1 => Neuron {
             id: Some(NeuronId { id: 1 }),
             controller: Some(principal(1)),
@@ -10789,7 +10789,7 @@ lazy_static! {
     // Collectively, the Community Fund neurons have 100e-8 ICP in maturity.
     // Neurons 1 and 2 belong to principal(1); neuron 3 belongs to principal(2).
     // Neuron 4 also belongs to principal(1), but is NOT a CF neuron.
-    static ref SWAP_ID_TO_NEURON: HashMap<u64, Neuron> = {
+    static ref SWAP_ID_TO_NEURON: BTreeMap<u64, Neuron> = {
         let neuron_base = Neuron {
             cached_neuron_stake_e8s: 100_000 * E8,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(
@@ -10798,7 +10798,7 @@ lazy_static! {
             ..Default::default()
         };
 
-        hashmap! {
+        btreemap! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal(1)),
@@ -11572,7 +11572,7 @@ async fn test_settle_community_fund_participation_restores_lifecycle_on_failure(
 fn assert_neurons_fund_decremented(
     gov: &Governance,
     nf_participants: Vec<sns_swap_pb::CfParticipant>,
-    original_state: HashMap<u64, Neuron>,
+    original_state: BTreeMap<u64, Neuron>,
 ) {
     for participant in nf_participants {
         for nf_neuron in participant.cf_neurons {
@@ -11598,7 +11598,7 @@ fn assert_neurons_fund_decremented(
     }
 }
 
-fn assert_neurons_fund_unchanged(gov: &Governance, original_state: HashMap<u64, Neuron>) {
+fn assert_neurons_fund_unchanged(gov: &Governance, original_state: BTreeMap<u64, Neuron>) {
     for (id, original_neuron) in original_state {
         let current_neuron = gov.get_neuron(&NeuronId { id }).unwrap();
         assert_eq!(
@@ -12611,7 +12611,7 @@ fn test_ready_to_be_settled_proposals_ids() {
 #[tokio::test]
 async fn test_metrics() {
     let now = 100;
-    let neurons: HashMap<u64, Neuron> = hashmap! {
+    let neurons: BTreeMap<u64, Neuron> = btreemap! {
         // Not Dissolving neurons: 100m + 200m.
         1 => Neuron {
             id: Some(NeuronId {
@@ -12873,7 +12873,7 @@ fn test_maybe_reset_aging_timestamps() {
     let proto = GovernanceProto {
         wait_for_quiet_threshold_seconds: 100,
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => neuron_with_aging_timestamp(1, 1_572_992_229), // Tue, 05 Nov 2019 22:17:09 GMT
             2 => neuron_with_aging_timestamp(2, 1_572_992_230), // Tue, 05 Nov 2019 22:17:10 GMT
             3 => neuron_with_aging_timestamp(3, 1_572_992_231), // Tue, 05 Nov 2019 22:17:11 GMT

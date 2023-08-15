@@ -8,7 +8,7 @@ use ic_registry_subnet_type::SubnetType;
 use icp_ledger::{AccountIdentifier, ArchiveOptions, LedgerCanisterInitPayload};
 use prost::Message;
 use slog::{debug, error, info, Logger};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -44,7 +44,7 @@ pub fn setup(
     port: u32,
     vm_name: &str,
     ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
-    neurons: Option<HashMap<u64, Neuron>>,
+    neurons: Option<BTreeMap<u64, Neuron>>,
 ) -> RosettaApiClient {
     create_ic(env);
     let subnet_sys = subnet_sys(env);
@@ -111,7 +111,7 @@ fn create_dummy_registry_canister(env: &TestEnv, node: &IcNodeSnapshot) {
 fn create_governance_canister(
     env: &TestEnv,
     node: &IcNodeSnapshot,
-    neurons: Option<HashMap<u64, Neuron>>,
+    neurons: Option<BTreeMap<u64, Neuron>>,
 ) -> CanisterId {
     let logger = env.logger();
     block_on(async {
@@ -119,7 +119,7 @@ fn create_governance_canister(
         let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
         let mut canister = create_canister(&runtime).await;
 
-        let neurons: HashMap<u64, Neuron> = neurons.unwrap_or_default();
+        let neurons: BTreeMap<u64, Neuron> = neurons.unwrap_or_default();
         // TODO Define common predefined test neurons here (if any?).
 
         let governance_canister_init = Governance {

@@ -5680,7 +5680,7 @@ impl Governance {
         vote_of_neuron: Vote,
         topic: Topic,
         topic_followee_index: &impl NeuronFollowingIndex<NeuronId, Topic>,
-        neurons: &mut HashMap<u64, Neuron>,
+        neurons: &mut BTreeMap<u64, Neuron>,
     ) {
         assert!(topic != Topic::NeuronManagement && topic != Topic::Unspecified);
         // This is the induction variable of the loop: a map from
@@ -7495,7 +7495,7 @@ pub fn validate_proposal_url(url: &String) -> Result<(), String> {
 /// Returns the amount of maturity held by all Community Fund neurons
 /// (i.e. neurons with joined_community_fund_timestamp_seconds > 0).
 #[must_use]
-fn total_community_fund_maturity_e8s_equivalent(id_to_neuron: &HashMap<u64, Neuron>) -> u64 {
+fn total_community_fund_maturity_e8s_equivalent(id_to_neuron: &BTreeMap<u64, Neuron>) -> u64 {
     id_to_neuron
         .values()
         .filter(|neuron| {
@@ -7515,7 +7515,7 @@ fn total_community_fund_maturity_e8s_equivalent(id_to_neuron: &HashMap<u64, Neur
 /// value, which can be used as part of an OpenRequest sent to a SNS token
 /// swap canister.
 fn draw_funds_from_the_community_fund(
-    id_to_neuron: &mut HashMap<u64, Neuron>,
+    id_to_neuron: &mut BTreeMap<u64, Neuron>,
     original_total_community_fund_maturity_e8s_equivalent: u64,
     mut withdrawal_amount_e8s: u64,
     limits: &sns_swap_pb::Params,
@@ -7667,7 +7667,7 @@ fn draw_funds_from_the_community_fund(
 /// caller might not want to make.
 #[must_use]
 fn refund_community_fund_maturity(
-    id_to_neuron: &mut HashMap<u64, Neuron>,
+    id_to_neuron: &mut BTreeMap<u64, Neuron>,
     cf_participants: &Vec<sns_swap_pb::CfParticipant>,
 ) -> Vec<sns_swap_pb::CfParticipant> {
     let mut result = vec![];
