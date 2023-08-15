@@ -159,7 +159,6 @@ fn populate_canister_state() {
 
     let wasm_pages_before_neurons = heap_size_num_pages();
 
-    proto.neurons.reserve(TEST_NUM_NEURONS as usize);
     for i in 0..TEST_NUM_NEURONS {
         proto.neurons.insert(i, allocate_neuron(i));
     }
@@ -236,7 +235,6 @@ fn populate_canister_state() {
 lazy_static! {
     static ref FOLLOWEES_MAP: HashMap<i32, neuron::Followees> = {
         let mut map = HashMap::<i32, neuron::Followees>::new();
-        map.reserve(topic_iterator().count() * MAX_FOLLOWEES_PER_TOPIC);
         for topic in topic_iterator() {
             let mut followees = Vec::<NeuronIdProto>::new();
             followees.reserve_exact(MAX_FOLLOWEES_PER_TOPIC);

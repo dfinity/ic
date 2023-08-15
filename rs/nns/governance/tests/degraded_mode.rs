@@ -23,7 +23,7 @@ use ic_nns_governance::{
     },
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
-use maplit::hashmap;
+use maplit::btreemap;
 use std::convert::TryFrom;
 
 struct DegradedEnv {}
@@ -103,7 +103,7 @@ fn principal(i: u64) -> PrincipalId {
 fn fixture_two_neurons_second_is_bigger() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::default()),
-        neurons: hashmap! {
+        neurons: btreemap! {
             1 => Neuron {
                 id: Some(NeuronId {id: 1}),
                 controller: Some(principal(1)),

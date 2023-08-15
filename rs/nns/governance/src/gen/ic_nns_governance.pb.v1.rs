@@ -2381,8 +2381,8 @@ pub mod create_service_nervous_system {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Governance {
     /// Current set of neurons.
-    #[prost(map = "fixed64, message", tag = "1")]
-    pub neurons: ::std::collections::HashMap<u64, Neuron>,
+    #[prost(btree_map = "fixed64, message", tag = "1")]
+    pub neurons: ::prost::alloc::collections::BTreeMap<u64, Neuron>,
     /// Proposals.
     #[prost(btree_map = "uint64, message", tag = "2")]
     pub proposals: ::prost::alloc::collections::BTreeMap<u64, ProposalData>,
