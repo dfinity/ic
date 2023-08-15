@@ -769,12 +769,13 @@ impl ReplicatedState {
         crate::bitcoin::push_response(self, response)
     }
 
-    /// Times out all requests with expired deadlines (given `current_time`) in all
-    /// canister (but not subnet) `OutputQueues`. Returns the number of timed out
-    /// requests.
+    /// Times out all requests with expired deadlines (given the state time) in
+    /// all canister (but not subnet) `OutputQueues`. Returns the number of timed
+    /// out requests.
     ///
     /// See `CanisterQueues::time_out_requests` for further details.
-    pub fn time_out_requests(&mut self, current_time: Time) -> u64 {
+    pub fn time_out_requests(&mut self) -> u64 {
+        let current_time = self.metadata.time();
         // Because the borrow checker requires us to remove each canister before
         // calling `time_out_requests()` on it and replace it afterwards; and removing
         // and replacing every canister on a large subnet is very costly; we first

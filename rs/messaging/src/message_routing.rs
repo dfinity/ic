@@ -35,7 +35,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
-    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId,
+    Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
 };
 use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]
@@ -88,6 +88,7 @@ const CRITICAL_ERROR_MISSING_OR_INVALID_NODE_PUBLIC_KEYS: &str =
     "mr_missing_or_invalid_node_public_keys";
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
 const CRITICAL_ERROR_FAILED_TO_READ_REGISTRY: &str = "mr_failed_to_read_registry_error";
+pub const CRITICAL_ERROR_BATCH_TIME_REGRESSION: &str = "mr_batch_time_regression";
 
 /// Records the timestamp when all messages before the given index (down to the
 /// previous `MessageTime`) were first added to / learned about in a stream.
@@ -280,6 +281,9 @@ pub(crate) struct MessageRoutingMetrics {
     critical_error_no_canister_allocation_range: IntCounter,
     /// Critical error: reading from the registry failed during processing a batch.
     critical_error_failed_to_read_registry: IntCounter,
+    /// Critical error: the batch times of successive batches regressed (when they
+    /// are supposed to be monotonically increasing).
+    critical_error_batch_time_regression: IntCounter,
     /// Number of timed out requests.
     pub timed_out_requests_total: IntCounter,
 }
@@ -343,6 +347,8 @@ impl MessageRoutingMetrics {
                 .error_counter(CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE),
             critical_error_failed_to_read_registry: metrics_registry
                 .error_counter(CRITICAL_ERROR_FAILED_TO_READ_REGISTRY),
+            critical_error_batch_time_regression: metrics_registry
+                .error_counter(CRITICAL_ERROR_BATCH_TIME_REGRESSION),
             timed_out_requests_total: metrics_registry.int_counter(
                 METRIC_TIMED_OUT_REQUESTS_TOTAL,
                 "Count of timed out requests.",
@@ -354,9 +360,27 @@ impl MessageRoutingMetrics {
         self.critical_error_no_canister_allocation_range.inc();
         warn!(
             log,
-            "{}: {}. Subnet is unable to generate new canister IDs.",
-            message,
-            CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE
+            "{}: Subnet is unable to generate new canister IDs: {}.",
+            CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE,
+            message
+        );
+    }
+
+    pub fn observe_batch_time_regression(
+        &self,
+        log: &ReplicaLogger,
+        state_time: Time,
+        batch_time: Time,
+        batch_height: Height,
+    ) {
+        self.critical_error_batch_time_regression.inc();
+        warn!(
+            log,
+            "{}: Batch time regressed at height {}: state_time = {}, batch_time = {}.",
+            CRITICAL_ERROR_BATCH_TIME_REGRESSION,
+            batch_height,
+            state_time,
+            batch_time
         );
     }
 }
@@ -525,16 +549,24 @@ impl BatchProcessorImpl {
             match self.try_to_read_registry(registry_version, own_subnet_id) {
                 Ok(result) => return result,
                 Err(err) => {
-                    // Increment the critical error counter in case of a persistent error.
                     if let ReadRegistryError::Persistent(_) = err {
+                        // Increment the critical error counter in case of a persistent error.
                         self.metrics.critical_error_failed_to_read_registry.inc();
+                        warn!(
+                            self.log,
+                            "{}: Persistent error reading registry @ version {}: {:?}.",
+                            CRITICAL_ERROR_FAILED_TO_READ_REGISTRY,
+                            registry_version,
+                            err
+                        );
+                    } else {
+                        warn!(
+                            self.log,
+                            "Unable to read registry @ version {}: {:?}. Trying again...",
+                            registry_version,
+                            err
+                        );
                     }
-                    warn!(
-                        self.log,
-                        "Unable to read registry @ version {}: {:?}. Trying again...",
-                        registry_version,
-                        err
-                    );
                 }
             }
             sleep(std::time::Duration::from_millis(100));
