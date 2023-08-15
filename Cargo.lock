@@ -5760,6 +5760,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-metrics-encoder",
  "num-bigint 0.4.3",
+ "num-traits",
  "rlp",
  "serde",
  "serde_bytes",

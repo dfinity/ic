@@ -36,7 +36,7 @@ mod eth_rpc_client {
 mod multi_call_results {
 
     mod reduce_with_equality {
-        use crate::eth_rpc::JsonRpcResult;
+        use crate::eth_rpc::{HttpOutcallError, JsonRpcResult};
         use crate::eth_rpc_client::providers::{EthereumProvider, RpcNodeProvider};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
         use ic_cdk::api::call::RejectionCode;
@@ -55,11 +55,17 @@ mod multi_call_results {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (
                     ANKR,
-                    Err((RejectionCode::CanisterReject, "reject".to_string())),
+                    Err(HttpOutcallError::IcError {
+                        code: RejectionCode::CanisterReject,
+                        message: "reject".to_string(),
+                    }),
                 ),
                 (
                     CLOUDFLARE,
-                    Err((RejectionCode::SysTransient, "transient".to_string())),
+                    Err(HttpOutcallError::IcError {
+                        code: RejectionCode::SysTransient,
+                        message: "transient".to_string(),
+                    }),
                 ),
             ]);
 
@@ -109,11 +115,17 @@ mod multi_call_results {
             let results: MultiCallResults<String> = MultiCallResults::from_non_empty_iter(vec![
                 (
                     ANKR,
-                    Err((RejectionCode::CanisterReject, "reject".to_string())),
+                    Err(HttpOutcallError::IcError {
+                        code: RejectionCode::CanisterReject,
+                        message: "reject".to_string(),
+                    }),
                 ),
                 (
                     CLOUDFLARE,
-                    Err((RejectionCode::CanisterReject, "reject".to_string())),
+                    Err(HttpOutcallError::IcError {
+                        code: RejectionCode::CanisterReject,
+                        message: "reject".to_string(),
+                    }),
                 ),
             ]);
 
@@ -121,10 +133,12 @@ mod multi_call_results {
 
             assert_eq!(
                 reduced,
-                Err(MultiCallError::ConsistentHttpOutcallError {
-                    code: RejectionCode::CanisterReject,
-                    message: "reject".to_string(),
-                })
+                Err(MultiCallError::ConsistentHttpOutcallError(
+                    HttpOutcallError::IcError {
+                        code: RejectionCode::CanisterReject,
+                        message: "reject".to_string(),
+                    }
+                ))
             );
         }
 

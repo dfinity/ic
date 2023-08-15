@@ -1,7 +1,7 @@
 use crate::address::Address;
 use crate::eth_rpc::Quantity;
 use crate::numeric::{TransactionNonce, Wei};
-use crate::tx::Eip1559TransactionRequest;
+use crate::tx::{AccessList, Eip1559TransactionRequest, Signature};
 
 mod pending_eth_transactions_insert {
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
@@ -126,7 +126,7 @@ mod transactions_to_sign {
         let transactions = PendingEthTransactions::new(TransactionNonce::from(0));
         assert_eq!(
             transactions.transactions_to_sign(),
-            Vec::<&Eip1559TransactionRequest>::new()
+            Vec::<Eip1559TransactionRequest>::new()
         );
     }
 
@@ -151,14 +151,15 @@ mod transactions_to_sign {
 
         let to_sign = transactions.transactions_to_sign();
 
-        assert_eq!(to_sign, vec![&tx_1, &tx_2, &tx_3]);
+        assert_eq!(to_sign, vec![tx_1, tx_2, tx_3]);
     }
 }
 
 mod find_by_burn_index {
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
-    use crate::transactions::tests::eip_1559_transaction_request_with_nonce;
+    use crate::transactions::tests::{dummy_signature, eip_1559_transaction_request_with_nonce};
     use crate::transactions::{PendingEthTransaction, PendingEthTransactions};
+    use crate::tx::SignedEip1559TransactionRequest;
 
     #[test]
     fn should_return_none_when_empty() {
@@ -182,7 +183,7 @@ mod find_by_burn_index {
 
         let found_tx = transactions.find_by_burn_index(index_1);
 
-        assert_eq!(found_tx, Some(&PendingEthTransaction::NotSigned(tx_1)));
+        assert_eq!(found_tx, Some(PendingEthTransaction::NotSigned(tx_1)));
     }
 
     #[test]
@@ -202,6 +203,31 @@ mod find_by_burn_index {
             None
         );
     }
+
+    #[test]
+    fn should_find_transaction_with_same_burn_index_after_being_replaced_with_signed_transaction() {
+        let nonce = TransactionNonce::from(1);
+        let mut transactions = PendingEthTransactions::new(nonce);
+        let index = LedgerBurnIndex(10);
+        let tx = eip_1559_transaction_request_with_nonce(nonce);
+        assert_eq!(transactions.insert(index, tx.clone()), Ok(()));
+
+        assert_eq!(
+            transactions.find_by_burn_index(index),
+            Some(PendingEthTransaction::NotSigned(tx.clone()))
+        );
+
+        let signed_tx = SignedEip1559TransactionRequest::from((tx, dummy_signature()));
+        assert_eq!(
+            transactions.replace_with_signed_transaction(signed_tx.clone()),
+            Ok(())
+        );
+
+        assert_eq!(
+            transactions.find_by_burn_index(index),
+            Some(PendingEthTransaction::Signed(signed_tx))
+        );
+    }
 }
 
 fn eip_1559_transaction_request_with_nonce(nonce: TransactionNonce) -> Eip1559TransactionRequest {
@@ -219,6 +245,14 @@ fn eip_1559_transaction_request_with_nonce(nonce: TransactionNonce) -> Eip1559Tr
             "b214faa51d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000",
         )
         .unwrap(),
-        access_list: vec![],
+        access_list: AccessList::new(),
+    }
+}
+
+fn dummy_signature() -> Signature {
+    Signature {
+        v: 0,
+        r: Default::default(),
+        s: Default::default(),
     }
 }

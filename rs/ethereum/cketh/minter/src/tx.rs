@@ -3,7 +3,6 @@ use crate::eth_rpc::{FeeHistory, Hash, Quantity};
 use crate::numeric::{TransactionNonce, Wei};
 use crate::state::read_state;
 use ethnum::u256;
-use ic_cdk::api::call::RejectionCode;
 use ic_ic00_types::DerivationPath;
 use rlp::RlpStream;
 use serde::{Deserialize, Serialize};
@@ -11,11 +10,45 @@ use serde::{Deserialize, Serialize};
 const EIP1559_TX_ID: u8 = 2;
 
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+pub struct AccessList(pub Vec<AccessListItem>);
+
+impl AccessList {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+}
+
+impl Default for AccessList {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl rlp::Encodable for AccessList {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.append_list(&self.0);
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
 pub struct AccessListItem {
     /// Accessed address
     pub address: Address,
     /// Accessed storage keys
     pub storage_keys: Vec<[u8; 32]>,
+}
+
+impl rlp::Encodable for AccessListItem {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        const ACCESS_FIELD_COUNT: usize = 2;
+
+        s.begin_list(ACCESS_FIELD_COUNT);
+        s.append(&self.address.as_ref());
+        s.begin_list(self.storage_keys.len());
+        for storage_key in self.storage_keys.iter() {
+            s.append(&storage_key.as_ref());
+        }
+    }
 }
 
 /// https://eips.ethereum.org/EIPS/eip-1559
@@ -29,14 +62,79 @@ pub struct Eip1559TransactionRequest {
     pub destination: Address,
     pub amount: Wei,
     pub data: Vec<u8>,
-    pub access_list: Vec<AccessListItem>,
+    pub access_list: AccessList,
 }
 
-#[derive(Default, Clone, Serialize, PartialEq, Eq, Debug)]
+impl rlp::Encodable for Eip1559TransactionRequest {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_unbounded_list();
+        self.rlp_inner(s);
+        s.finalize_unbounded_list();
+    }
+}
+
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct Signature {
     pub v: u64,
     pub r: u256,
     pub s: u256,
+}
+
+impl rlp::Encodable for Signature {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.append(&self.v);
+        encode_u256(s, self.r);
+        encode_u256(s, self.s);
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
+pub struct SignedEip1559TransactionRequest {
+    transaction: Eip1559TransactionRequest,
+    signature: Signature,
+}
+
+impl From<(Eip1559TransactionRequest, Signature)> for SignedEip1559TransactionRequest {
+    fn from((transaction, signature): (Eip1559TransactionRequest, Signature)) -> Self {
+        Self {
+            transaction,
+            signature,
+        }
+    }
+}
+
+impl rlp::Encodable for SignedEip1559TransactionRequest {
+    fn rlp_append(&self, s: &mut RlpStream) {
+        s.begin_unbounded_list();
+        self.transaction.rlp_inner(s);
+        s.append(&self.signature);
+        s.finalize_unbounded_list();
+    }
+}
+
+impl SignedEip1559TransactionRequest {
+    /// An EIP-1559 transaction is encoded as follows
+    /// 0x02 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list, signature_y_parity, signature_r, signature_s]),
+    /// where `||` denotes string concatenation.
+    pub fn raw_bytes(&self) -> Vec<u8> {
+        use rlp::Encodable;
+        let mut rlp = self.rlp_bytes().to_vec();
+        rlp.insert(0, self.transaction.transaction_type());
+        rlp
+    }
+
+    pub fn raw_transaction_hex(&self) -> String {
+        format!("0x{}", hex::encode(self.raw_bytes()))
+    }
+
+    /// If included in a block, this hash value is used as reference to this transaction.
+    pub fn hash(&self) -> Hash {
+        Hash(ic_crypto_sha3::Keccak256::hash(self.raw_bytes()))
+    }
+
+    pub fn nonce(&self) -> TransactionNonce {
+        self.transaction.nonce
+    }
 }
 
 pub fn encode_u256<T: Into<u256>>(stream: &mut RlpStream, value: T) {
@@ -62,70 +160,57 @@ impl Eip1559TransactionRequest {
             destination,
             amount,
             data: Vec::new(),
-            access_list: Vec::new(),
+            access_list: AccessList::new(),
         }
     }
 
-    pub fn hash(&self) -> Hash {
-        Hash(ic_crypto_sha3::Keccak256::hash(
-            self.encode_eip1559_payload(None),
-        ))
+    pub fn transaction_type(&self) -> u8 {
+        EIP1559_TX_ID
     }
 
-    pub async fn sign(&self) -> Result<Vec<u8>, (RejectionCode, String)> {
-        let hashed_tx = self.hash();
+    pub fn rlp_inner(&self, rlp: &mut RlpStream) {
+        rlp.append(&self.chain_id);
+        encode_u256(rlp, self.nonce);
+        encode_u256(rlp, self.max_priority_fee_per_gas);
+        encode_u256(rlp, self.max_fee_per_gas);
+        encode_u256(rlp, self.gas_limit);
+        rlp.append(&self.destination.as_ref());
+        encode_u256(rlp, self.amount);
+        rlp.append(&self.data);
+        rlp.append(&self.access_list);
+    }
+
+    /// Hash of EIP-1559 transaction is computed as
+    /// keccak256(0x02 || rlp([chain_id, nonce, max_priority_fee_per_gas, max_fee_per_gas, gas_limit, destination, amount, data, access_list])),
+    /// where `||` denotes string concatenation.
+    pub fn hash(&self) -> Hash {
+        use rlp::Encodable;
+        let mut rlp = self.rlp_bytes().to_vec();
+        let mut bytes: Vec<u8> = Vec::with_capacity(rlp.len() + 1);
+        bytes.push(self.transaction_type());
+        bytes.append(&mut rlp);
+        Hash(ic_crypto_sha3::Keccak256::hash(bytes))
+    }
+
+    pub async fn sign(self) -> Result<SignedEip1559TransactionRequest, String> {
+        let hash = self.hash();
         let key_name = read_state(|s| s.ecdsa_key_name.clone());
         let (r_bytes, s_bytes) = crate::management::sign_with_ecdsa(
             key_name,
             DerivationPath::new(crate::MAIN_DERIVATION_PATH),
-            hashed_tx.0,
+            hash.0,
         )
         .await
-        .expect("failed to sign tx");
+        .map_err(|e| format!("failed to sign tx: {}", e))?;
         let v = (s_bytes[31] % 2) as u64;
         let r = u256::from_be_bytes(r_bytes);
         let s = u256::from_be_bytes(s_bytes);
         let sig = Signature { v, r, s };
 
-        Ok(self.encode_eip1559_payload(Some(sig)))
-    }
-
-    pub fn encode_eip1559_payload(&self, signature: Option<Signature>) -> Vec<u8> {
-        const ACCESS_FIELD_COUNT: usize = 2;
-        const UNSIGNED_FIELD_COUNT: usize = 9;
-        const SIGNED_FIELD_COUNT: usize = UNSIGNED_FIELD_COUNT + 3; // v, r, s
-
-        let mut rlp = RlpStream::new();
-        rlp.append_raw(&[EIP1559_TX_ID][..], 0);
-        let num_fields = if signature.is_some() {
-            SIGNED_FIELD_COUNT
-        } else {
-            UNSIGNED_FIELD_COUNT
-        };
-        rlp.begin_list(num_fields);
-        rlp.append(&self.chain_id);
-        encode_u256(&mut rlp, self.nonce);
-        encode_u256(&mut rlp, self.max_priority_fee_per_gas);
-        encode_u256(&mut rlp, self.max_fee_per_gas);
-        encode_u256(&mut rlp, self.gas_limit);
-        rlp.append(&self.destination.as_ref());
-        encode_u256(&mut rlp, self.amount);
-        rlp.append(&self.data);
-        rlp.begin_list(self.access_list.len());
-        for access in self.access_list.iter() {
-            rlp.begin_list(ACCESS_FIELD_COUNT);
-            rlp.append(&access.address.as_ref());
-            rlp.begin_list(access.storage_keys.len());
-            for storage_key in access.storage_keys.iter() {
-                rlp.append(&storage_key.as_ref());
-            }
-        }
-        if let Some(signature) = signature {
-            rlp.append(&signature.v);
-            encode_u256(&mut rlp, signature.r);
-            encode_u256(&mut rlp, signature.s);
-        }
-        rlp.out().to_vec()
+        Ok(SignedEip1559TransactionRequest {
+            transaction: self,
+            signature: sig,
+        })
     }
 }
 

@@ -225,75 +225,141 @@ fn address_display() {
     }
 }
 
-#[test]
-fn test_encoding() {
-    use crate::tx::{self, Eip1559TransactionRequest};
-    use ethers_core::abi::ethereum_types::H160;
-    use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest as EthersCoreEip1559TransactionRequest;
-    use ethers_core::types::transaction::eip2930::AccessList;
-    use ethers_core::types::Signature as EthersCoreSignature;
-    use ethers_core::types::{Bytes, U256};
+mod rlp_encoding {
+    use crate::address::Address;
+    use crate::eth_rpc::Quantity;
+    use crate::numeric::{TransactionNonce, Wei};
+    use crate::tx::{
+        AccessList, Eip1559TransactionRequest, Signature, SignedEip1559TransactionRequest,
+    };
     use ethnum::u256;
+    use rlp::Encodable;
+    use std::str::FromStr;
 
-    let ethers_core_tx = EthersCoreEip1559TransactionRequest {
-        from: None,
-        to: Some(ethers_core::types::NameOrAddress::Address(H160::zero())),
-        gas: Some(1.into()),
-        value: Some(2.into()),
-        data: Some(Bytes::new()),
-        nonce: Some(0.into()),
-        access_list: AccessList::from(vec![]),
-        max_priority_fee_per_gas: Some(3.into()),
-        max_fee_per_gas: Some(4.into()),
-        chain_id: Some(1.into()),
-    };
-    let minter_tx = Eip1559TransactionRequest {
-        chain_id: 1,
-        destination: Address::new([0; 20]),
-        nonce: 0_u64.into(),
-        gas_limit: 1_u32.into(),
-        max_fee_per_gas: 4_u64.into(),
-        amount: 2_u64.into(),
-        data: vec![],
-        access_list: vec![],
-        max_priority_fee_per_gas: 3_u64.into(),
-    };
+    const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 
-    assert_eq!(
-        minter_tx.encode_eip1559_payload(None)[1..],
-        ethers_core_tx.rlp().to_vec()
-    );
+    #[test]
+    fn test_rlp_encoding() {
+        use crate::tx::{AccessList, Eip1559TransactionRequest};
+        use ethers_core::abi::ethereum_types::H160;
+        use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest as EthersCoreEip1559TransactionRequest;
+        use ethers_core::types::transaction::eip2930::AccessList as EthersCoreAccessList;
+        use ethers_core::types::Signature as EthersCoreSignature;
+        use ethers_core::types::{Bytes, U256};
+        use ethnum::u256;
 
-    assert_eq!(
-        minter_tx.encode_eip1559_payload(Some(tx::Signature {
+        let address_bytes: [u8; 20] = [
+            180, 75, 94, 117, 106, 137, 71, 117, 252, 50, 237, 223, 51, 20, 187, 27, 25, 68, 220,
+            52,
+        ];
+
+        let ethers_core_tx = EthersCoreEip1559TransactionRequest {
+            from: None,
+            to: Some(ethers_core::types::NameOrAddress::Address(H160::from(
+                address_bytes,
+            ))),
+            gas: Some(1.into()),
+            value: Some(2.into()),
+            data: Some(Bytes::new()),
+            nonce: Some(0.into()),
+            access_list: EthersCoreAccessList::from(vec![]),
+            max_priority_fee_per_gas: Some(3.into()),
+            max_fee_per_gas: Some(4.into()),
+            chain_id: Some(1.into()),
+        };
+        let minter_tx = Eip1559TransactionRequest {
+            chain_id: 1,
+            destination: Address::new(address_bytes),
+            nonce: 0_u64.into(),
+            gas_limit: 1_u32.into(),
+            max_fee_per_gas: 4_u64.into(),
+            amount: 2_u64.into(),
+            data: vec![],
+            access_list: AccessList::new(),
+            max_priority_fee_per_gas: 3_u64.into(),
+        };
+        assert_eq!(
+            minter_tx.rlp_bytes().to_vec(),
+            ethers_core_tx.rlp().to_vec()
+        );
+
+        let signature = Signature {
             v: 1,
             r: u256::from_str_radix(
                 "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
-                16
+                16,
             )
             .unwrap(),
             s: u256::from_str_radix(
                 "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
-                16
+                16,
             )
             .unwrap(),
-        }))[1..],
-        ethers_core_tx
-            .rlp_signed(&EthersCoreSignature {
-                v: 1,
-                r: U256::from_str_radix(
-                    "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
-                    16
-                )
-                .unwrap(),
-                s: U256::from_str_radix(
-                    "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
-                    16
-                )
-                .unwrap(),
-            })
-            .to_vec()
-    );
+        };
+
+        assert_eq!(
+            SignedEip1559TransactionRequest::from((minter_tx, signature))
+                .rlp_bytes()
+                .to_vec(),
+            ethers_core_tx
+                .rlp_signed(&EthersCoreSignature {
+                    v: 1,
+                    r: U256::from_str_radix(
+                        "b92224ecdb5295f3b889059621909c6b7a2308ccd0e5f13812409d80706b13cd",
+                        16
+                    )
+                    .unwrap(),
+                    s: U256::from_str_radix(
+                        "0bec9da278e6388a9d6934c911684234e16db1610c2227545c7b192db277c4b1",
+                        16
+                    )
+                    .unwrap(),
+                })
+                .to_vec()
+        );
+    }
+
+    #[test]
+    fn should_compute_correct_rlp_encoding_of_signed_transaction() {
+        // see https://sepolia.etherscan.io/getRawTx?tx=0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f
+        let signature = Signature {
+            v: 1,
+            r: u256::from_str_hex(
+                "0x7d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3",
+            )
+            .unwrap(),
+            s: u256::from_str_hex(
+                "0x4f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441",
+            )
+            .unwrap(),
+        };
+        let transaction = Eip1559TransactionRequest {
+            chain_id: SEPOLIA_TEST_CHAIN_ID,
+            nonce: TransactionNonce::from(6),
+            max_priority_fee_per_gas: Wei::new(0x59682f00),
+            max_fee_per_gas: Wei::new(0x598653cd),
+            gas_limit: Quantity::new(56_511),
+            destination: Address::from_str("0xb44B5e756A894775FC32EDdf3314Bb1B1944dC34").unwrap(),
+            amount: Wei::new(1_000_000_000_000_000),
+            data: hex::decode(
+                "b214faa51d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000",
+            )
+            .unwrap(),
+            access_list: AccessList::new(),
+        };
+        let tx_hash = transaction.hash();
+        assert_eq!(
+            tx_hash.to_string(),
+            "0x2d9e6453d9864cff7453ca35dcab86be744c641ba4891c2fe9aeaa2f767b9758"
+        );
+
+        let signed_transaction = SignedEip1559TransactionRequest::from((transaction, signature));
+        assert_eq!(signed_transaction.raw_transaction_hex(), "0x02f89883aa36a7068459682f0084598653cd82dcbf94b44b5e756a894775fc32eddf3314bb1b1944dc3487038d7ea4c68000a4b214faa51d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000c001a07d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3a04f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441");
+        assert_eq!(
+            signed_transaction.hash().to_string(),
+            "0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f"
+        );
+    }
 }
 
 mod eth_get_block_by_number {
