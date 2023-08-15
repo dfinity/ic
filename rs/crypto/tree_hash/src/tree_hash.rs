@@ -531,7 +531,31 @@ pub trait WitnessBuilder {
     /// Constructs a witness that only reveals a subtree hash.
     fn make_pruned(digest: Digest) -> Self::Tree;
 
-    /// Merges two witnesses for the same tree.
+    /// Merges two witnesses produced from the same tree.
+    ///
+    /// Precondition:
+    ///
+    /// ```text
+    ///     ∃ t : Ok(h) = recompute_digest(lhs, t)
+    ///         ∧ Ok(h) = recompute_digest(rhs, t)
+    /// ```
+    ///
+    /// Postcondition:
+    ///
+    /// ```text
+    ///     ∀ t : Ok(h) = recompute_digest(lhs, t)
+    ///         ∧ Ok(h) = recompute_digest(rhs, t)
+    ///         ⇒ recompute_digest(merge(lhs, rhs)) == Ok(h)
+    /// ```
+    ///
+    /// This function errors if the structure of the passed
+    /// [`WitnessBuilder::Tree`]s is inconsistent and produces
+    /// an invalid tree if the precondition is otherwise not met.
+    ///
+    /// # Errors
+    ///
+    /// * If the recursion depth is too large.
+    /// * If `lhs` and `rhs` do not match.
     fn merge_trees(lhs: Self::Tree, rhs: Self::Tree) -> Result<Self::Tree, Self::MergeError>;
 }
 
@@ -566,7 +590,61 @@ impl WitnessBuilder for Witness {
     }
 
     fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, Self::MergeError> {
-        Self::merge(lhs, rhs)
+        fn merge_trees_impl(
+            lhs: Witness,
+            rhs: Witness,
+            depth: usize,
+        ) -> Result<Witness, MergeError<Witness>> {
+            use Witness::*;
+
+            if depth > MAX_HASH_TREE_DEPTH {
+                return Err(MergeError::<Witness>::TooDeepRecursion(
+                    MAX_HASH_TREE_DEPTH as u32,
+                ));
+            }
+
+            let result = match (lhs, rhs) {
+                (Pruned { digest: l }, Pruned { digest: r }) if l != r => {
+                    return Err(MergeError::<Witness>::InconsistentWitnesses(
+                        Pruned { digest: l },
+                        Pruned { digest: r },
+                    ))
+                }
+                (Pruned { .. }, r) => r,
+                (l, Pruned { .. }) => l,
+                (Known(), Known()) => Known(),
+                (
+                    Fork {
+                        left_tree: ll,
+                        right_tree: lr,
+                    },
+                    Fork {
+                        left_tree: rl,
+                        right_tree: rr,
+                    },
+                ) => Fork {
+                    left_tree: Box::new(merge_trees_impl(*ll, *rl, depth + 1)?),
+                    right_tree: Box::new(merge_trees_impl(*lr, *rr, depth + 1)?),
+                },
+                (
+                    Node {
+                        label: ll,
+                        sub_witness: lw,
+                    },
+                    Node {
+                        label: rl,
+                        sub_witness: rw,
+                    },
+                ) if ll == rl => Node {
+                    label: ll,
+                    sub_witness: Box::new(merge_trees_impl(*lw, *rw, depth + 1)?),
+                },
+                (l, r) => return Err(MergeError::<Witness>::InconsistentWitnesses(l, r)),
+            };
+            Ok(result)
+        }
+
+        merge_trees_impl(lhs, rhs, 1)
     }
 }
 
@@ -595,7 +673,43 @@ impl WitnessBuilder for MixedHashTree {
     }
 
     fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, Self::MergeError> {
-        Self::merge(lhs, rhs)
+        fn merge_trees_impl(
+            lhs: MixedHashTree,
+            rhs: MixedHashTree,
+            depth: usize,
+        ) -> Result<MixedHashTree, MergeError<MixedHashTree>> {
+            use MixedHashTree::*;
+
+            if depth > MAX_HASH_TREE_DEPTH {
+                return Err(MergeError::<MixedHashTree>::TooDeepRecursion(
+                    MAX_HASH_TREE_DEPTH as u32,
+                ));
+            }
+
+            let result = match (lhs, rhs) {
+                (Pruned(l), Pruned(r)) if l != r => {
+                    return Err(MergeError::<MixedHashTree>::InconsistentWitnesses(
+                        Pruned(l),
+                        Pruned(r),
+                    ))
+                }
+                (Pruned(_), r) => r,
+                (l, Pruned(_)) => l,
+                (Empty, Empty) => Empty,
+                (Fork(l), Fork(r)) => Fork(Box::new((
+                    merge_trees_impl(l.0, r.0, depth + 1)?,
+                    merge_trees_impl(l.1, r.1, depth + 1)?,
+                ))),
+                (Labeled(label, l), Labeled(rlabel, r)) if label == rlabel => {
+                    Labeled(label, Box::new(merge_trees_impl(*l, *r, depth + 1)?))
+                }
+                (Leaf(l), Leaf(r)) if l == r => Leaf(l),
+                (l, r) => return Err(MergeError::<MixedHashTree>::InconsistentWitnesses(l, r)),
+            };
+
+            Ok(result)
+        }
+        merge_trees_impl(lhs, rhs, 1)
     }
 }
 
