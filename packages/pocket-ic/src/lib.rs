@@ -356,7 +356,7 @@ impl Default for PocketIc {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Request {
     RootKey,
     Time,
@@ -374,7 +374,7 @@ pub enum Request {
     VerifyCanisterSig(VerifyCanisterSigArg),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct VerifyCanisterSigArg {
     #[serde(with = "base64")]
     pub msg: Vec<u8>,
@@ -386,13 +386,13 @@ pub struct VerifyCanisterSigArg {
     pub root_pubkey: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RunUntilCompletionArg {
     // max_ticks until completion must be reached
     pub max_ticks: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct AddCyclesArg {
     // raw bytes of the principal
     #[serde(with = "base64")]
@@ -400,7 +400,7 @@ pub struct AddCyclesArg {
     pub amount: u128,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SetStableMemoryArg {
     // raw bytes of the principal
     #[serde(with = "base64")]
@@ -408,7 +408,7 @@ pub struct SetStableMemoryArg {
     pub data: ByteBuf,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct RawCanisterId {
     // raw bytes of the principal
     #[serde(with = "base64")]
@@ -423,7 +423,7 @@ impl From<Principal> for RawCanisterId {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct CanisterCall {
     #[serde(with = "base64")]
     pub sender: Vec<u8>,
