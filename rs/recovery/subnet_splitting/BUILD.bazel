@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/protobuf",
     "//rs/recovery",
     "//rs/registry/routing_table",
+    "//rs/registry/subnet_type",
     "//rs/replay",
     "//rs/state_manager",
     "//rs/types/base_types",

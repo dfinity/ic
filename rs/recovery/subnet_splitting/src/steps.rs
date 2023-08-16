@@ -3,23 +3,28 @@ use crate::{
     layout::Layout,
     state_tool_helper::StateToolHelper,
     target_subnet::TargetSubnet,
-    utils::{find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_state_hash},
+    utils::{
+        find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_cup, get_state_hash,
+    },
 };
 
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
+    cli::consent_given,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::rsync,
+    registry_helper::VersionedRecoveryResult,
     replay_helper,
     steps::Step,
     util::{block_on, parse_hex_str},
     Recovery, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::split::resolve_ranges_and_split;
 use ic_types::Height;
-use slog::{info, Logger};
+use slog::{error, info, Logger};
 use url::Url;
 
 use std::net::IpAddr;
@@ -148,6 +153,12 @@ impl Step for SplitStateStep {
         )?;
         let actual_state_hash = get_state_hash(&latest_checkpoint_dir)?;
 
+        info!(
+            self.logger,
+            "Checking if the state hash after split {} matches the expected state hash {}",
+            actual_state_hash,
+            expected_state_hash
+        );
         if actual_state_hash != expected_state_hash {
             return Err(RecoveryError::ValidationFailed(format!(
                 "State hash after split {} doesn't match the expected state hash {}",
@@ -173,6 +184,7 @@ pub(crate) struct ComputeExpectedManifestsStep {
     pub(crate) destination_subnet_id: SubnetId,
     pub(crate) canister_id_ranges_to_move: Vec<CanisterIdRange>,
     pub(crate) layout: Layout,
+    pub(crate) subnet_type: SubnetType,
 }
 
 impl Step for ComputeExpectedManifestsStep {
@@ -199,6 +211,7 @@ impl Step for ComputeExpectedManifestsStep {
             self.destination_subnet_id,
             get_batch_time_from_cup(&self.layout.pre_split_source_cup_file())?,
             &self.canister_id_ranges_to_move,
+            self.subnet_type,
             self.layout.expected_manifests_file(),
         )
     }
@@ -256,8 +269,35 @@ impl Step for ValidateCUPStep {
             )),
             work_dir.join("cup_validation_result.txt"),
         ))
-        .map(|_| ())
-        .map_err(|err| RecoveryError::validation_failed("Failed to validate CUP", err))
+        .map_err(|err| RecoveryError::validation_failed("Failed to validate CUP", err))?;
+
+        // 3. Check if the state hash in the CUP matches the hash of the downloaded state.
+        info!(
+            self.logger,
+            "Checking that the state hash in the CUP matches the hash of the downloaded state"
+        );
+
+        let downloaded_state_hash = self
+            .layout
+            .latest_checkpoint_dir(TargetSubnet::Source)
+            .and_then(get_state_hash)?;
+
+        let cup_state_hash = hex::encode(
+            get_cup(&self.layout.pre_split_source_cup_file())?
+                .content
+                .state_hash
+                .get()
+                .0,
+        );
+
+        if cup_state_hash != downloaded_state_hash {
+            return Err(RecoveryError::ValidationFailed(format!(
+                "State hash from the CUP {} doesn't match the downloaded state hash {}",
+                cup_state_hash, downloaded_state_hash,
+            )));
+        }
+
+        Ok(())
     }
 }
 
@@ -283,5 +323,36 @@ impl Step for WaitForCUPStep {
         let new_cup_height = Recovery::get_recovery_height(Height::from(state_height));
 
         Recovery::wait_for_recovery_cup(&self.logger, self.node_ip, new_cup_height, state_hash)
+    }
+}
+
+pub(crate) struct ReadRegistryStep<T: std::fmt::Debug, F: Fn() -> VersionedRecoveryResult<T>> {
+    pub(crate) logger: Logger,
+    pub(crate) label: String,
+    pub(crate) interactive: bool,
+    pub(crate) querier: F,
+}
+
+impl<T: std::fmt::Debug, F: Fn() -> VersionedRecoveryResult<T>> Step for ReadRegistryStep<T, F> {
+    fn descr(&self) -> String {
+        format!("Read Registry to get the most recent {}", self.label)
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        loop {
+            match (self.querier)() {
+                Ok((registry_version, value)) => info!(
+                    self.logger,
+                    "{} at registry version {}: {:#?}", self.label, registry_version, value,
+                ),
+                Err(err) => error!(self.logger, "Failed getting {}, error: {}", self.label, err),
+            }
+
+            if !self.interactive || !consent_given(&self.logger, "Read registry again?") {
+                break;
+            }
+        }
+
+        Ok(())
     }
 }
