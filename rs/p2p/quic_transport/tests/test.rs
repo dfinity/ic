@@ -1,11 +1,10 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::common::{
-    add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout, ConnectivityChecker,
-    PeerManagerAction, PeerRestrictedSevHandshake, PeerRestrictedTlsConfig,
-};
-
+use crate::common::{ConnectivityChecker, PeerRestrictedSevHandshake, PeerRestrictedTlsConfig};
 use ic_logger::info;
+use ic_p2p_test_utils::turmoil::{
+    add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout, PeerManagerAction,
+};
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::RegistryVersion;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
@@ -41,9 +40,11 @@ fn ping_pong() {
             node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -53,9 +54,11 @@ fn ping_pong() {
             node_2_port,
             registry_handle.clone(),
             topology_watcher,
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         peer_manager_cmd_sender
@@ -111,9 +114,11 @@ fn test_peer_restart() {
             node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -123,9 +128,11 @@ fn test_peer_restart() {
             node_2_port,
             registry_handle.clone(),
             topology_watcher,
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         peer_manager_cmd_sender
@@ -212,9 +219,11 @@ fn test_changing_subnet_membership() {
             node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -224,9 +233,11 @@ fn test_changing_subnet_membership() {
             node_2_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -236,9 +247,11 @@ fn test_changing_subnet_membership() {
             node_3_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -248,9 +261,11 @@ fn test_changing_subnet_membership() {
             node_4_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -260,9 +275,11 @@ fn test_changing_subnet_membership() {
             node_5_port,
             registry_handle.clone(),
             topology_watcher,
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         // Add two starting nodes 1 and 2.
@@ -450,9 +467,11 @@ fn test_transient_failing_sev() {
             node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             Some(sev.clone()),
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -462,9 +481,11 @@ fn test_transient_failing_sev() {
             node_2_port,
             registry_handle.clone(),
             topology_watcher,
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             Some(sev.clone()),
+            None,
+            conn_checker.check_fut(),
         );
 
         // Add two starting nodes 1 and 2.
@@ -564,9 +585,11 @@ fn test_transient_failing_tls() {
             node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         // Server.
@@ -577,9 +600,11 @@ fn test_transient_failing_tls() {
             node_2_port,
             registry_handle.clone(),
             topology_watcher,
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             Some(tls_2.clone()),
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         // Add two starting nodes 1 and 2.
@@ -653,9 +678,11 @@ fn test_bad_network() {
             node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -665,9 +692,11 @@ fn test_bad_network() {
             node_2_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -677,9 +706,11 @@ fn test_bad_network() {
             node_3_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -689,9 +720,11 @@ fn test_bad_network() {
             node_4_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -701,9 +734,11 @@ fn test_bad_network() {
             node_5_port,
             registry_handle.clone(),
             topology_watcher,
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         // Add all nodes
@@ -820,9 +855,11 @@ fn test_bad_network_and_membership_change() {
             node_1_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -832,9 +869,11 @@ fn test_bad_network_and_membership_change() {
             node_2_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -844,9 +883,11 @@ fn test_bad_network_and_membership_change() {
             node_3_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -856,9 +897,11 @@ fn test_bad_network_and_membership_change() {
             node_4_port,
             registry_handle.clone(),
             topology_watcher.clone(),
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         add_transport_to_sim(
@@ -868,9 +911,11 @@ fn test_bad_network_and_membership_change() {
             node_5_port,
             registry_handle.clone(),
             topology_watcher,
-            conn_checker.clone(),
+            Some(ConnectivityChecker::router()),
             None,
             None,
+            None,
+            conn_checker.check_fut(),
         );
 
         // Add all 5 nodes.

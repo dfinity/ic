@@ -351,67 +351,16 @@ pub(crate) enum DownloadChunkError {
 mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
-    use async_trait::async_trait;
-    use axum::http::{Request, Response, StatusCode};
+    use axum::http::{Response, StatusCode};
     use bytes::Bytes;
     use ic_metrics::MetricsRegistry;
-    use ic_quic_transport::TransportError;
+    use ic_p2p_test_utils::mocks::{MockChunkable, MockStateSync, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{chunkable::ArtifactChunk, crypto::CryptoHash, CryptoHashOfState, Height};
+    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
     use ic_types_test_utils::ids::{NODE_1, NODE_2};
-    use mockall::mock;
     use tokio::runtime::Runtime;
 
     use super::*;
-
-    mock! {
-        pub StateSync {}
-
-        impl StateSyncClient for StateSync {
-            fn available_states(&self) -> Vec<StateSyncArtifactId>;
-
-            fn start_state_sync(
-                &self,
-                id: &StateSyncArtifactId,
-            ) -> Option<Box<dyn Chunkable + Send + Sync>>;
-
-            fn should_cancel(&self, id: &StateSyncArtifactId) -> bool;
-
-            fn chunk(&self, id: &StateSyncArtifactId, chunk_id: ChunkId) -> Option<ArtifactChunk>;
-
-            fn deliver_state_sync(&self, msg: StateSyncMessage, peer_id: NodeId);
-        }
-    }
-
-    mock! {
-        pub Transport {}
-
-        #[async_trait]
-        impl Transport for Transport{
-            async fn rpc(
-                &self,
-                peer_id: &NodeId,
-                request: Request<Bytes>,
-            ) -> Result<Response<Bytes>, TransportError>;
-
-            async fn push(
-                &self,
-                peer_id: &NodeId,
-                request: Request<Bytes>,
-            ) -> Result<(), TransportError>;
-
-            fn peers(&self) -> Vec<NodeId>;
-        }
-    }
-
-    mock! {
-        pub Chunkable {}
-
-        impl Chunkable for Chunkable{
-            fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
-            fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode>;
-        }
-    }
 
     /// Verify that state sync gets aborted if state sync should be cancelled.
     #[test]

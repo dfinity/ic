@@ -9050,23 +9050,37 @@ dependencies = [
 name = "ic-p2p-test-utils"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "bytes",
+ "either",
+ "futures",
  "ic-base-types",
  "ic-crypto-temp-crypto",
  "ic-crypto-tls-interfaces",
+ "ic-icos-sev",
+ "ic-icos-sev-interfaces",
+ "ic-interfaces",
  "ic-logger",
  "ic-metrics",
  "ic-peer-manager",
  "ic-protobuf",
+ "ic-quic-transport",
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-local-registry",
  "ic-registry-local-store",
  "ic-registry-local-store-artifacts",
  "ic-registry-proto-data-provider",
+ "ic-state-sync-manager",
  "ic-test-utilities",
  "ic-test-utilities-registry",
+ "ic-types",
+ "mockall 0.11.4",
+ "quinn",
  "tempfile",
  "tokio",
+ "turmoil",
 ]
 
 [[package]]
@@ -9257,7 +9271,6 @@ dependencies = [
  "ic-async-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
- "ic-icos-sev",
  "ic-icos-sev-interfaces",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -10735,7 +10748,6 @@ dependencies = [
 name = "ic-state-sync-manager"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "axum",
  "base64 0.11.0",
  "bytes",
@@ -10745,12 +10757,12 @@ dependencies = [
  "ic-logger",
  "ic-memory-transport",
  "ic-metrics",
+ "ic-p2p-test-utils",
  "ic-protobuf",
  "ic-quic-transport",
  "ic-test-utilities-logger",
  "ic-types",
  "ic-types-test-utils",
- "mockall 0.11.4",
  "prometheus 0.12.0",
  "prost",
  "rand 0.8.5",
@@ -10760,6 +10772,7 @@ dependencies = [
  "strum_macros 0.23.1",
  "tokio",
  "tokio-metrics",
+ "turmoil",
 ]
 
 [[package]]
