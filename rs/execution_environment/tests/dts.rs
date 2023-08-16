@@ -371,7 +371,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
             - install_code_ingress_cost
             - normal_ingress_cost
             - actual_execution_cost
-            - config.dirty_page_overhead_cycles(0))
+            - config.dirty_page_overhead_cycles(1))
         .get()
     );
 }
@@ -425,7 +425,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         (initial_balance
             - install_code_ingress_cost
             - actual_execution_cost
-            - config.dirty_page_overhead_cycles(0))
+            - config.dirty_page_overhead_cycles(1))
         .get()
     );
 }
@@ -482,7 +482,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         (initial_balance
             - install_code_ingress_cost
             - actual_execution_cost
-            - config.dirty_page_overhead_cycles(0))
+            - config.dirty_page_overhead_cycles(1))
         .get()
     );
 }

@@ -2876,8 +2876,9 @@ fn install_code_calls_canister_init_and_start() {
             (start $start)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
+    let dirty_heap_cost = NumInstructions::from(2 * test.dirty_heap_page_overhead());
     assert_eq!(
-        NumInstructions::from(6) + wat_compilation_cost(wat),
+        NumInstructions::from(6) + wat_compilation_cost(wat) + dirty_heap_cost,
         test.executed_instructions()
     );
     let result = test.ingress(canister_id, "read", vec![]);
@@ -5436,6 +5437,80 @@ fn division_by_zero() {
         err.description(),
         format!("Canister {} trapped: integer division by 0", canister_id)
     );
+}
+
+#[test]
+fn charge_for_dirty_pages() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(100_000_000)
+        .with_metering_type(ic_config::embedders::MeteringType::New)
+        .build();
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $msg_reply_data_append (param i32 i32))
+            )
+            (func $test (export "canister_update test")
+                (i64.store (i32.const 0) (i64.const 17))
+                (i64.store (i32.const 8) (i64.const 117))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 8))
+                (call $msg_reply)
+            )
+            (func $test2 (export "canister_update test2")
+                (i64.store (i32.const 0) (i64.const 27))
+                (i64.store (i32.const 4096) (i64.const 227))
+                (call $msg_reply_data_append (i32.const 0) (i32.const 8))
+                (call $msg_reply)
+            )
+            (memory (export "memory") 10)
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let i0 = test.canister_executed_instructions(canister_id);
+    let res = test.ingress(canister_id, "test", vec![]).unwrap();
+
+    match res {
+        WasmResult::Reply(v) => {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&v);
+            let res = u64::from_le_bytes(bytes);
+            assert_eq!(res, 17);
+        }
+        WasmResult::Reject(_) => unreachable!("expected reply"),
+    }
+
+    let i1 = test.canister_executed_instructions(canister_id);
+
+    // we do the same as before, but touch one more page
+    test.ingress(canister_id, "test2", vec![]).unwrap();
+    let i2 = test.canister_executed_instructions(canister_id);
+
+    let cdi = ic_config::subnet_config::SchedulerConfig::application_subnet().dirty_page_overhead;
+
+    assert_eq!((i2 - i1) - (i1 - i0), cdi);
+
+    // Run again with low message instruction limit
+    // so that half of the dirty page cost gets rounded to zero
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(100_000_000)
+        .with_instruction_limit((i1 - i0 - cdi / 2).get())
+        .with_metering_type(ic_config::embedders::MeteringType::New)
+        .build();
+
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let res = test.ingress(canister_id, "test", vec![]).unwrap();
+    match res {
+        WasmResult::Reply(v) => {
+            let mut bytes = [0u8; 8];
+            bytes.copy_from_slice(&v);
+            let res = u64::from_le_bytes(bytes);
+            assert_eq!(res, 17);
+        }
+        WasmResult::Reject(_) => unreachable!("expected reply"),
+    }
+    let i1a = test.canister_executed_instructions(canister_id);
+
+    assert_eq!(i1a, i1 - cdi / 2);
 }
 
 #[test]

@@ -893,6 +893,13 @@ mod tests {
             let subnet_type = SubnetType::Application;
             let dst: u32 = 0;
 
+            let dirty_heap_cost = match EmbeddersConfig::default().metering_type {
+                ic_config::embedders::MeteringType::New => SchedulerConfig::application_subnet()
+                    .dirty_page_overhead
+                    .get(),
+                _ => 0,
+            };
+
             let mut payload: Vec<u8> = dst.to_le_bytes().to_vec();
             payload.extend(random_payload());
             let payload_size = payload.len() - 4;
@@ -900,7 +907,7 @@ mod tests {
             let mut double_size_payload: Vec<u8> = payload.clone();
             double_size_payload.extend(random_payload());
 
-            let instructions_consumed_without_data = get_num_instructions_consumed(
+            let (instructions_consumed_without_data, dry_run_stats) = run_and_get_stats(
                 log.clone(),
                 "write_bytes",
                 dst.to_le_bytes().to_vec(),
@@ -908,39 +915,46 @@ mod tests {
                 subnet_type,
             )
             .unwrap();
+            let dry_run_dirty_heap = dry_run_stats.dirty_pages.len() as u64;
 
             {
                 // Number of instructions consumed only for copying the payload.
-                let consumed_instructions = get_num_instructions_consumed(
+                let (consumed_instructions, run_stats) = run_and_get_stats(
                     log.clone(),
                     "write_bytes",
                     payload,
                     MAX_NUM_INSTRUCTIONS,
                     subnet_type,
                 )
-                .unwrap()
-                    - instructions_consumed_without_data;
+                .unwrap();
+                let dirty_heap = run_stats.dirty_pages.len() as u64;
+                let consumed_instructions =
+                    consumed_instructions - instructions_consumed_without_data;
                 assert_eq!(
-                    consumed_instructions.get(),
-                    (payload_size / BYTES_PER_INSTRUCTION) as u64
+                    (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
+                    (payload_size / BYTES_PER_INSTRUCTION)
+                        - (dry_run_dirty_heap * dirty_heap_cost) as usize,
                 );
             }
 
             {
                 // Number of instructions consumed increased with the size of the data.
-                let consumed_instructions = get_num_instructions_consumed(
+                let (consumed_instructions, run_stats) = run_and_get_stats(
                     log,
                     "write_bytes",
                     double_size_payload,
                     MAX_NUM_INSTRUCTIONS,
                     subnet_type,
                 )
-                .unwrap()
-                    - instructions_consumed_without_data;
+                .unwrap();
+                let dirty_heap = run_stats.dirty_pages.len() as u64;
+                let consumed_instructions =
+                    consumed_instructions - instructions_consumed_without_data;
 
                 assert_eq!(
-                    consumed_instructions.get(),
-                    (2 * payload_size / BYTES_PER_INSTRUCTION) as u64
+                    (consumed_instructions.get() - dirty_heap * dirty_heap_cost) as usize,
+                    (2 * payload_size / BYTES_PER_INSTRUCTION)
+                        - (dry_run_dirty_heap * dirty_heap_cost) as usize
                 );
             }
         })
@@ -997,13 +1011,13 @@ mod tests {
         })
     }
 
-    fn get_num_instructions_consumed(
+    fn run_and_get_stats(
         log: ReplicaLogger,
         method: &str,
         payload: Vec<u8>,
         max_num_instructions: NumInstructions,
         subnet_type: SubnetType,
-    ) -> Result<NumInstructions, HypervisorError> {
+    ) -> Result<(NumInstructions, ic_embedders::InstanceRunResult), HypervisorError> {
         let wat = make_module_wat(2 * TEST_NUM_PAGES);
         let wasm = wat2wasm(&wat).unwrap();
 
@@ -1036,7 +1050,7 @@ mod tests {
             .expect("Failed to create instance");
         inst.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
 
-        inst.run(FuncRef::Method(WasmMethod::Update(method.into())))?;
+        let res = inst.run(FuncRef::Method(WasmMethod::Update(method.into())))?;
 
         let instruction_counter = inst.instruction_counter();
         let instructions_executed = inst
@@ -1044,7 +1058,19 @@ mod tests {
             .system_api
             .slice_instructions_executed(instruction_counter);
 
-        Ok(instructions_executed)
+        Ok((instructions_executed, res))
+    }
+
+    fn get_num_instructions_consumed(
+        log: ReplicaLogger,
+        method: &str,
+        payload: Vec<u8>,
+        max_num_instructions: NumInstructions,
+        subnet_type: SubnetType,
+    ) -> Result<NumInstructions, HypervisorError> {
+        let (num_instructions, _) =
+            run_and_get_stats(log, method, payload, max_num_instructions, subnet_type)?;
+        Ok(num_instructions)
     }
 
     #[test]
