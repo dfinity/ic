@@ -4,6 +4,8 @@ use crate::eth_rpc::Hash;
 use crate::numeric::TransactionNonce;
 use crate::transactions::PendingEthTransactions;
 use candid::Principal;
+use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
+use ic_crypto_ecdsa_secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -15,6 +17,7 @@ thread_local! {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct State {
     pub ecdsa_key_name: String,
+    pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub last_seen_block_number: BlockNumber,
     pub minted_transactions: BTreeSet<Hash>,
     pub invalid_transactions: BTreeSet<Hash>,
@@ -32,6 +35,7 @@ impl Default for State {
         let initial_nonce = TransactionNonce::from(3);
         Self {
             ecdsa_key_name: "test_key_1".to_string(),
+            ecdsa_public_key: None,
             // Note that the default block to start from for logs scrapping
             // depends on the chain we are using:
             // Ethereum and Sepolia have for example different block heights at a given time.
@@ -87,4 +91,42 @@ where
             .as_mut()
             .expect("BUG: state is not initialized"))
     })
+}
+
+pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
+    use ic_cdk::api::management_canister::ecdsa::{
+        ecdsa_public_key, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument,
+    };
+
+    fn to_public_key(response: &EcdsaPublicKeyResponse) -> PublicKey {
+        PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
+            ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
+        })
+    }
+
+    if let Some(ecdsa_pk_response) = read_state(|s| s.ecdsa_public_key.clone()) {
+        return to_public_key(&ecdsa_pk_response);
+    }
+    let key_name = read_state(|s| s.ecdsa_key_name.clone());
+    ic_cdk::println!("Fetching the ECDSA public key {}", &key_name);
+    let (response,) = ecdsa_public_key(EcdsaPublicKeyArgument {
+        canister_id: None,
+        derivation_path: crate::MAIN_DERIVATION_PATH
+            .into_iter()
+            .map(|x| x.to_vec())
+            .collect(),
+        key_id: EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: key_name,
+        },
+    })
+    .await
+    .unwrap_or_else(|(error_code, message)| {
+        ic_cdk::trap(&format!(
+            "failed to get minter's public key: {} (error code = {:?})",
+            message, error_code,
+        ))
+    });
+    mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
+    to_public_key(&response)
 }

@@ -1,7 +1,7 @@
 use crate::address::Address;
 use crate::eth_rpc::Quantity;
 use crate::numeric::{TransactionNonce, Wei};
-use crate::tx::{AccessList, Eip1559TransactionRequest, Signature};
+use crate::tx::{AccessList, Eip1559Signature, Eip1559TransactionRequest};
 
 mod pending_eth_transactions_insert {
     use crate::numeric::{LedgerBurnIndex, TransactionNonce};
@@ -249,9 +249,9 @@ fn eip_1559_transaction_request_with_nonce(nonce: TransactionNonce) -> Eip1559Tr
     }
 }
 
-fn dummy_signature() -> Signature {
-    Signature {
-        v: 0,
+fn dummy_signature() -> Eip1559Signature {
+    Eip1559Signature {
+        signature_y_parity: false,
         r: Default::default(),
         s: Default::default(),
     }

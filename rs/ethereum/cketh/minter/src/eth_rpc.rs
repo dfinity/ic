@@ -439,8 +439,12 @@ impl<T> JsonRpcResult<T> {
 #[query]
 #[candid_method(query)]
 fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
-    ic_cdk::println!("RAW RESPONSE: {:?}", args.response);
     args.response.headers.clear();
+    ic_cdk::println!(
+        "RAW RESPONSE:\nstatus: {:?}\nbody:{:?}",
+        args.response.status,
+        String::from_utf8_lossy(&args.response.body).to_string()
+    );
     args.response
 }
 

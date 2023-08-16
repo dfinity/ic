@@ -19,7 +19,6 @@ use ic_cketh_minter::state::STATE;
 use ic_cketh_minter::transactions::PendingEthTransaction;
 use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
 use ic_cketh_minter::{eth_logs, eth_rpc, RPC_CLIENT};
-use ic_crypto_ecdsa_secp256k1::PublicKey;
 use std::cmp::{min, Ordering};
 use std::str::FromStr;
 
@@ -189,31 +188,8 @@ fn pre_upgrade() {
 #[update]
 #[candid_method(update)]
 async fn minter_address() -> String {
-    use ic_cdk::api::management_canister::ecdsa::{
-        ecdsa_public_key, EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgument,
-    };
-    let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    let (response,) = ecdsa_public_key(EcdsaPublicKeyArgument {
-        canister_id: None,
-        derivation_path: ic_cketh_minter::MAIN_DERIVATION_PATH
-            .into_iter()
-            .map(|x| x.to_vec())
-            .collect(),
-        key_id: EcdsaKeyId {
-            curve: EcdsaCurve::Secp256k1,
-            name: key_name,
-        },
-    })
-    .await
-    .unwrap_or_else(|(error_code, message)| {
-        ic_cdk::trap(&format!(
-            "failed to get minter's public key: {} (error code = {:?})",
-            message, error_code,
-        ))
-    });
-    let pubkey = PublicKey::deserialize_sec1(&response.public_key).unwrap_or_else(|e| {
-        ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
-    });
+    use ic_cketh_minter::state::lazy_call_ecdsa_public_key;
+    let pubkey = lazy_call_ecdsa_public_key().await;
     Address::from_pubkey(&pubkey).to_string()
 }
 

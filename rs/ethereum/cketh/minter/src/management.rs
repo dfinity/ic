@@ -119,7 +119,7 @@ pub async fn sign_with_ecdsa(
     key_name: String,
     derivation_path: DerivationPath,
     message_hash: [u8; 32],
-) -> Result<([u8; 32], [u8; 32]), CallError> {
+) -> Result<[u8; 64], CallError> {
     const CYCLES_PER_SIGNATURE: u64 = 25_000_000_000;
 
     let reply: SignWithECDSAReply = call(
@@ -135,10 +135,12 @@ pub async fn sign_with_ecdsa(
         },
     )
     .await?;
-    assert_eq!(reply.signature.len(), 64);
-    let mut r_bytes: [u8; 32] = [0; 32];
-    let mut s_bytes: [u8; 32] = [0; 32];
-    r_bytes.copy_from_slice(&reply.signature[0..32]);
-    s_bytes.copy_from_slice(&reply.signature[32..64]);
-    Ok((r_bytes, s_bytes))
+
+    let signature_length = reply.signature.len();
+    Ok(<[u8; 64]>::try_from(reply.signature).unwrap_or_else(|_| {
+        panic!(
+            "BUG: invalid signature from management canister. Expected 64 bytes but got {} bytes",
+            signature_length
+        )
+    }))
 }
