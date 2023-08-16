@@ -2000,6 +2000,7 @@ before_script:
     # enterprise logged in account has 5000 pulls / 24h
     if [ "$(uname)" == "Linux" ]; then
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+      docker-bin login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
 
       # set ownership to ic-build container's user,
       # but ignore errors that happen due to git gc:
