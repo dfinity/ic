@@ -4,8 +4,8 @@ version = "0.0.1"
 edition = "2021"
 
 [dependencies]
-candid = "^0.9"
 axum = "^0.6"
+candid = "^0.9"
 rand = "^0.8.5"
 itertools = "0.11"
 tokio = { version = "1", features = ["full"] }
