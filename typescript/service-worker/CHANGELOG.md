@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.8.5
+
+- Fix service worker upgrades that would try to load the new wasm module from the old service worker, the wasm is now inline loaded
+
 ## 1.8.4
 
 - upgrade response verification package to version 1.0.0
