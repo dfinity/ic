@@ -176,6 +176,12 @@ pub fn subnet_splitting_test(env: TestEnv) {
 
         if step_type == StepType::HaltSourceSubnetAtCupHeight {
             wait_until_halted_at_cup_height(&source_subnet, &logger);
+            info!(
+                logger,
+                "Wait 15 seconds to make sure that \
+                the Orchestrator on the `download_node_source` creates a new CUP"
+            );
+            std::thread::sleep(Duration::from_secs(15));
         }
     }
 

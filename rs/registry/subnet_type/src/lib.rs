@@ -2,7 +2,7 @@ use candid::CandidType;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::subnet::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use strum_macros::{EnumIter, EnumString};
+use strum_macros::{AsRefStr, EnumIter, EnumString};
 
 /// Defines the different types of subnets that can exist on the IC.
 #[derive(
@@ -12,6 +12,7 @@ use strum_macros::{EnumIter, EnumString};
     Deserialize,
     Debug,
     Eq,
+    AsRefStr,
     EnumIter,
     EnumString,
     PartialEq,

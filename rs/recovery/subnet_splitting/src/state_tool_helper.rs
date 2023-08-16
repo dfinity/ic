@@ -7,6 +7,7 @@ use ic_recovery::{
     util::block_on,
 };
 use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_subnet_type::SubnetType;
 use ic_types::{ReplicaVersion, Time};
 use slog::{info, Logger};
 
@@ -62,6 +63,7 @@ impl StateToolHelper {
         destination_subnet: SubnetId,
         batch_time: Time,
         canister_id_ranges: &[CanisterIdRange],
+        subnet_type: SubnetType,
         output_path: &Path,
     ) -> RecoveryResult<()> {
         self.execute("split_manifest", Some(output_path), |command| {
@@ -69,7 +71,7 @@ impl StateToolHelper {
                 .args(["--path", manifest_path.display().to_string().as_str()])
                 .args(["--from-subnet", source_subnet.to_string().as_str()])
                 .args(["--to-subnet", destination_subnet.to_string().as_str()])
-                .args(["--subnet-type", "application"])
+                .args(["--subnet-type", subnet_type.as_ref()])
                 .args([
                     "--batch-time-nanos",
                     batch_time.as_nanos_since_unix_epoch().to_string().as_str(),
