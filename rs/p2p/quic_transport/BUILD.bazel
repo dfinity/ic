@@ -5,6 +5,7 @@ package(default_visibility = [
     "//rs/p2p/memory_transport:__subpackages__",
     "//rs/p2p/quic_transport:__subpackages__",
     "//rs/p2p/state_sync_manager:__subpackages__",
+    "//rs/p2p/test_utils:__subpackages__",
     "//rs/replica:__subpackages__",
 ])
 
@@ -40,7 +41,6 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/ic_os/sev",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",

@@ -26,6 +26,9 @@ use std::{
 use tempfile::TempDir;
 use tokio::{runtime::Handle, sync::watch::Receiver, task::JoinHandle};
 
+pub mod mocks;
+pub mod turmoil;
+
 /// Creates a temp crypto component with TLS key and specified node id.
 /// It also adds the tls keys to the registry data provider.
 pub fn temp_crypto_component_with_tls_keys(

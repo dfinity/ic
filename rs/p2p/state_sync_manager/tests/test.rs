@@ -1,10 +1,28 @@
-use std::time::Duration;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use crate::common::{
     create_node, latency_30ms_throughput_1000mbits, latency_50ms_throughput_300mbits, State,
 };
 use ic_memory_transport::TransportRouter;
+use ic_p2p_test_utils::{
+    mocks::MockStateSync,
+    turmoil::{
+        add_peer_manager_to_sim, add_transport_to_sim, wait_for, waiter_fut, PeerManagerAction,
+    },
+};
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_types::{
+    artifact::StateSyncArtifactId, crypto::CryptoHash, CryptoHashOfState, Height, RegistryVersion,
+};
+use ic_types_test_utils::ids::{NODE_1, NODE_2};
+use tokio::sync::Notify;
+use turmoil::Builder;
 
 mod common;
 
@@ -283,5 +301,269 @@ fn test_full_subnet_syncing_from_one_node() {
                 .await
                 .unwrap();
         });
+    });
+}
+
+/// Test state sync advert ping pong between two nodes over quic transport.
+#[test]
+fn test_single_advert_between_two_nodes() {
+    with_test_replica_logger(|log| {
+        let mut sim = Builder::new()
+            .tick_duration(Duration::from_millis(100))
+            .simulation_duration(Duration::from_secs(20))
+            .build();
+        let exit_notify = Arc::new(Notify::new());
+
+        let node_1_port = 8888;
+        let node_2_port = 9999;
+
+        // Node 1 advertises height 1
+        // Node 2 advertises height 2
+        // n1_a1 = node1 advert1
+        let received_advert_n1_a2 = Arc::new(AtomicBool::new(false));
+        let received_advert_n2_a1 = Arc::new(AtomicBool::new(false));
+        let state_sync_id_1 = StateSyncArtifactId {
+            height: Height::from(1),
+            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+        };
+        let state_sync_id_2 = StateSyncArtifactId {
+            height: Height::from(2),
+            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+        };
+        let state_sync_id_2_clone = state_sync_id_2.clone();
+        let state_sync_id_1_clone = state_sync_id_1.clone();
+        let received_advert_n1_a2_clone = received_advert_n1_a2.clone();
+        let received_advert_n2_a1_clone = received_advert_n2_a1.clone();
+
+        // Mock state sync that expects advert from other peer
+        let mut state_sync_n1 = MockStateSync::new();
+        state_sync_n1
+            .expect_available_states()
+            .return_const(vec![state_sync_id_1]);
+        state_sync_n1
+            .expect_start_state_sync()
+            .withf(move |id| {
+                if id == &state_sync_id_2_clone {
+                    received_advert_n1_a2_clone.store(true, Ordering::SeqCst);
+                    true
+                } else {
+                    false
+                }
+            })
+            .returning(|_| None);
+
+        let mut state_sync_n2 = MockStateSync::new();
+        state_sync_n2
+            .expect_available_states()
+            .return_const(vec![state_sync_id_2]);
+        state_sync_n2
+            .expect_start_state_sync()
+            .withf(move |id| {
+                if id == &state_sync_id_1_clone {
+                    received_advert_n2_a1_clone.store(true, Ordering::SeqCst);
+                    true
+                } else {
+                    false
+                }
+            })
+            .returning(|_| None);
+
+        let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
+            add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            node_1_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            None,
+            None,
+            None,
+            Some(Arc::new(state_sync_n1)),
+            waiter_fut(),
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log,
+            NODE_2,
+            node_2_port,
+            registry_handle.clone(),
+            topology_watcher,
+            None,
+            None,
+            None,
+            Some(Arc::new(state_sync_n2)),
+            waiter_fut(),
+        );
+
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_1,
+                node_1_port,
+                RegistryVersion::from(2),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_2,
+                node_2_port,
+                RegistryVersion::from(3),
+            )))
+            .unwrap();
+        registry_handle.registry_client.reload();
+        registry_handle.registry_client.update_to_latest_version();
+
+        // Wait until both peers have receive one state advert
+        wait_for(&mut sim, || {
+            received_advert_n2_a1.load(Ordering::SeqCst)
+                && received_advert_n1_a2.load(Ordering::SeqCst)
+        })
+        .expect("Node did not receive advert from other peer");
+
+        exit_notify.notify_waiters();
+        sim.run().unwrap();
+    });
+}
+
+/// Test state sync advert ping pong with multiple adverts between two nodes over quic transport.
+/// Verifies that both adverts are advertised.
+#[test]
+fn test_multiple_advert_between_two_nodes() {
+    with_test_replica_logger(|log| {
+        let mut sim = Builder::new()
+            .tick_duration(Duration::from_millis(100))
+            .simulation_duration(Duration::from_secs(20))
+            .build();
+        let exit_notify = Arc::new(Notify::new());
+
+        let node_1_port = 8888;
+        let node_2_port = 9999;
+
+        // Both nodes advertise height 1 and 2.
+        // n1_a1 = node1 advert1
+        let received_advert_n1_a1 = Arc::new(AtomicBool::new(false));
+        let received_advert_n2_a1 = Arc::new(AtomicBool::new(false));
+        let received_advert_n1_a2 = Arc::new(AtomicBool::new(false));
+        let received_advert_n2_a2 = Arc::new(AtomicBool::new(false));
+        let state_sync_id_1 = StateSyncArtifactId {
+            height: Height::from(1),
+            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+        };
+        let state_sync_id_2 = StateSyncArtifactId {
+            height: Height::from(2),
+            hash: CryptoHashOfState::new(CryptoHash(vec![])),
+        };
+        let state_sync_id_2_clone = state_sync_id_2.clone();
+        let state_sync_id_1_clone = state_sync_id_1.clone();
+        let received_advert_n1_a1_clone = received_advert_n1_a1.clone();
+        let received_advert_n2_a1_clone = received_advert_n2_a1.clone();
+        let received_advert_n1_a2_clone = received_advert_n1_a2.clone();
+        let received_advert_n2_a2_clone = received_advert_n2_a2.clone();
+
+        // Mock state sync that expects both adverts.
+        let mut state_sync_n1 = MockStateSync::new();
+        state_sync_n1
+            .expect_available_states()
+            .return_const(vec![state_sync_id_1_clone, state_sync_id_2_clone]);
+        let state_sync_id_2_clone = state_sync_id_2.clone();
+        let state_sync_id_1_clone = state_sync_id_1.clone();
+        state_sync_n1
+            .expect_start_state_sync()
+            .withf(move |id| {
+                if id == &state_sync_id_1_clone {
+                    received_advert_n2_a1_clone.store(true, Ordering::SeqCst);
+                    true
+                } else if id == &state_sync_id_2_clone {
+                    received_advert_n2_a2_clone.store(true, Ordering::SeqCst);
+                    true
+                } else {
+                    false
+                }
+            })
+            .returning(|_| None);
+
+        let state_sync_id_2_clone = state_sync_id_2.clone();
+        let state_sync_id_1_clone = state_sync_id_1.clone();
+        let mut state_sync_n2 = MockStateSync::new();
+        state_sync_n2
+            .expect_available_states()
+            .return_const(vec![state_sync_id_1, state_sync_id_2]);
+        state_sync_n2
+            .expect_start_state_sync()
+            .withf(move |id| {
+                if id == &state_sync_id_1_clone {
+                    received_advert_n1_a1_clone.store(true, Ordering::SeqCst);
+                    true
+                } else if id == &state_sync_id_2_clone {
+                    received_advert_n1_a2_clone.store(true, Ordering::SeqCst);
+                    true
+                } else {
+                    false
+                }
+            })
+            .returning(|_| None);
+
+        let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
+            add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            node_1_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            None,
+            None,
+            None,
+            Some(Arc::new(state_sync_n1)),
+            waiter_fut(),
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log,
+            NODE_2,
+            node_2_port,
+            registry_handle.clone(),
+            topology_watcher,
+            None,
+            None,
+            None,
+            Some(Arc::new(state_sync_n2)),
+            waiter_fut(),
+        );
+
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_1,
+                node_1_port,
+                RegistryVersion::from(2),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_2,
+                node_2_port,
+                RegistryVersion::from(3),
+            )))
+            .unwrap();
+        registry_handle.registry_client.reload();
+        registry_handle.registry_client.update_to_latest_version();
+
+        // Wait until both peers have receive one state advert
+        wait_for(&mut sim, || {
+            received_advert_n1_a1.load(Ordering::SeqCst)
+                && received_advert_n2_a1.load(Ordering::SeqCst)
+                && received_advert_n2_a2.load(Ordering::SeqCst)
+                && received_advert_n1_a2.load(Ordering::SeqCst)
+        })
+        .expect("Node did not receive advert from other peer");
+
+        exit_notify.notify_waiters();
+        sim.run().unwrap();
     });
 }
