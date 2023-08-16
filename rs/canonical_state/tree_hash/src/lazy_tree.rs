@@ -5,7 +5,6 @@
 //! them; certified ingress history access in O(log N); and they make the
 //! algorithms on Canonical State easier to write and understand.
 
-pub mod conversion;
 pub mod materialize;
 
 use ic_crypto_tree_hash::Label;

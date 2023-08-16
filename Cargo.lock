@@ -5479,6 +5479,8 @@ dependencies = [
  "assert_matches",
  "hex",
  "ic-base-types",
+ "ic-canonical-state-tree-hash",
+ "ic-canonical-state-tree-hash-test-utils",
  "ic-certification-version",
  "ic-crypto-tree-hash",
  "ic-error-types",
@@ -5506,6 +5508,34 @@ dependencies = [
  "strum_macros 0.23.1",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "ic-canonical-state-tree-hash"
+version = "0.8.0"
+dependencies = [
+ "assert_matches",
+ "ic-canonical-state-tree-hash-test-utils",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-tree-hash",
+ "ic-crypto-tree-hash-test-utils",
+ "itertools 0.10.5",
+ "leb128",
+ "proptest",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "scoped_threadpool",
+ "thiserror",
+]
+
+[[package]]
+name = "ic-canonical-state-tree-hash-test-utils"
+version = "0.8.0"
+dependencies = [
+ "ic-canonical-state-tree-hash",
+ "ic-crypto-tree-hash",
+ "ic-crypto-tree-hash-test-utils",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -10698,6 +10728,8 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canonical-state",
+ "ic-canonical-state-tree-hash",
+ "ic-canonical-state-tree-hash-test-utils",
  "ic-certification-version",
  "ic-config",
  "ic-crypto-sha2",

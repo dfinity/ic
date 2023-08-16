@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/canonical_state/certification_version",
+    "//rs/canonical_state/tree_hash",
     "//rs/crypto/tree_hash",
     "//rs/phantom_newtype",
     "//rs/protobuf",
@@ -25,6 +26,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/canonical_state/tree_hash/test_utils",
     "//rs/registry/subnet_features",
     "//rs/sys",
     "//rs/test_utilities",
@@ -68,6 +70,13 @@ rust_test(
 rust_test(
     name = "size_limit_visitor_test",
     srcs = ["tests/size_limit_visitor.rs"],
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canonical_state"],
+)
+
+rust_test(
+    name = "hash_tree_test",
+    srcs = ["tests/hash_tree.rs"],
     proc_macro_deps = DEV_MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":canonical_state"],
 )

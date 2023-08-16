@@ -17,9 +17,10 @@ use crate::{
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
-use ic_canonical_state::{
+use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+use ic_canonical_state_tree_hash::{
     hash_tree::{hash_lazy_tree, HashTree, HashTreeError},
-    lazy_tree::{materialize::materialize_partial, LazyTree},
+    lazy_tree::materialize::materialize_partial,
 };
 use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
@@ -1717,7 +1718,7 @@ impl StateManagerImpl {
         state: &ReplicatedState,
     ) -> Result<CertificationMetadata, HashTreeError> {
         let started_hashing_at = Instant::now();
-        let hash_tree = hash_lazy_tree(&LazyTree::from(state))?;
+        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(state))?;
         let elapsed = started_hashing_at.elapsed();
         debug!(log, "Computed hash tree in {:?}", elapsed);
 
@@ -1929,7 +1930,7 @@ impl StateManagerImpl {
             }
         }
 
-        let hash_tree = hash_lazy_tree(&LazyTree::from(&state))
+        let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(&state))
             .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
         update_hash_tree_metrics(&hash_tree, &self.metrics);
         let certification_metadata = CertificationMetadata {
@@ -2520,7 +2521,7 @@ impl StateManager for StateManagerImpl {
             } else {
                 // This code is executed at most once per subnet, no need to
                 // optimize this.
-                let hash_tree = hash_lazy_tree(&LazyTree::from(
+                let hash_tree = hash_lazy_tree(&replicated_state_as_lazy_tree(
                     initial_state(self.own_subnet_id, self.own_subnet_type).get_ref(),
                 ))
                 .unwrap_or_else(|err| fatal!(self.log, "Failed to compute hash tree: {:?}", err));
@@ -3133,7 +3134,7 @@ impl CertifiedStateReader for CertifiedStateReaderImpl {
         let _timer = self.read_certified_state_duration_histogram.start_timer();
 
         let mixed_hash_tree = {
-            let lazy_tree = LazyTree::from(self.get_state());
+            let lazy_tree = replicated_state_as_lazy_tree(self.get_state());
             let partial_tree = materialize_partial(&lazy_tree, paths);
             self.hash_tree.witness::<MixedHashTree>(&partial_tree)
         }
