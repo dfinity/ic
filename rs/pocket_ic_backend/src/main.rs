@@ -52,7 +52,6 @@ async fn main_() {
     let args = Args::parse();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
-
     let mut new_port_file = match is_first_daemon(&port_file_path) {
         Ok(f) => f,
         Err(e) => {
@@ -60,14 +59,13 @@ async fn main_() {
             return;
         }
     };
-
     // This process is the one to start PocketIC.
     println!("New PocketIC will be started");
+
     // The shared, mutable state of the PocketIC process.
     let instance_map: InstanceMap = Arc::new(RwLock::new(HashMap::new()));
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while
-    // TODO: Implement ttl increase for every handler.
     let last_request = Arc::new(RwLock::new(Instant::now()));
     let mock_api_state = Default::default();
     let app_state = AppState {
@@ -99,7 +97,7 @@ async fn main_() {
         ))
         .with_state(app_state.clone());
 
-    // bind to port 0; the OS will give a specific port; communicate that to parent process via stdout
+    // bind to port 0; the OS will give a specific port; communicate that to parent process
     let server = Server::bind(&"127.0.0.1:0".parse().expect("Failed to parse address"))
         .serve(app.into_make_service());
     let real_port = server.local_addr().port();
@@ -121,7 +119,6 @@ async fn main_() {
     let shutdown_signal = async {
         loop {
             let guard = app_state.last_request.read().await;
-            // TODO: implement ttl increase for every handler.
             if guard.elapsed() > Duration::from_secs(TTL_SEC) {
                 break;
             }
@@ -137,7 +134,7 @@ async fn main_() {
     server.await.expect("Failed to launch PocketIC");
 }
 
-/// Returns the opened file if it was successfully created and is readable, writeable. Ohterwise,
+/// Returns the opened file if it was successfully created and is readable, writeable. Otherwise,
 /// returns an error. Used to determine if this is the first process creating this file.
 fn is_first_daemon<P: AsRef<std::path::Path>>(port_file_path: P) -> std::io::Result<File> {
     // .create_new(true) ensures atomically that this file was created newly, and gives an error otherwise.
