@@ -1,5 +1,5 @@
 use ic_crypto_internal_threshold_sig_ecdsa::*;
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_types::crypto::AlgorithmId;
 use ic_types::*;
 
@@ -402,4 +402,165 @@ fn wrong_curve_mul_share_rejected() -> Result<(), ThresholdEcdsaError> {
     );
 
     Ok(())
+}
+
+mod privately_verify {
+    use super::*;
+
+    #[test]
+    fn should_fail_on_private_key_curve_mismatch() {
+        let mut rng = reproducible_rng();
+        let setup = Setup::new_with_k256_keys_and_dealing(&mut rng);
+        let private_key = MEGaPrivateKey::generate(EccCurveType::P256, &mut rng);
+
+        assert_eq!(
+            setup.dealing_internal.privately_verify(
+                EccCurveType::K256,
+                &private_key,
+                &setup.public_key,
+                &setup.associated_data,
+                setup.dealer_index,
+                0
+            ),
+            Err(ThresholdEcdsaError::CurveMismatch)
+        );
+    }
+
+    #[test]
+    fn should_fail_on_public_key_curve_mismatch() {
+        let mut rng = reproducible_rng();
+        let setup = Setup::new_with_k256_keys_and_dealing(&mut rng);
+        let private_key = MEGaPrivateKey::generate(EccCurveType::P256, &mut rng);
+        let public_key = private_key
+            .public_key()
+            .expect("should compute public key from private key");
+
+        assert_eq!(
+            setup.dealing_internal.privately_verify(
+                EccCurveType::K256,
+                &setup.private_key,
+                &public_key,
+                &setup.associated_data,
+                setup.dealer_index,
+                0
+            ),
+            Err(ThresholdEcdsaError::CurveMismatch)
+        );
+    }
+
+    #[test]
+    fn should_fail_on_commitment_constant_curve_type_mismatch() {
+        let mut rng = reproducible_rng();
+        let setup = Setup::new_with_k256_keys_and_dealing(&mut rng);
+        let private_key = MEGaPrivateKey::generate(EccCurveType::P256, &mut rng);
+        let public_key = private_key
+            .public_key()
+            .expect("should compute public key from private key");
+
+        assert_eq!(
+            setup.dealing_internal.privately_verify(
+                EccCurveType::P256,
+                &private_key,
+                &public_key,
+                &setup.associated_data,
+                setup.dealer_index,
+                0
+            ),
+            Err(ThresholdEcdsaError::CurveMismatch)
+        );
+    }
+
+    #[test]
+    fn should_fail_if_decryption_and_check_of_internal_ciphertext_fails() {
+        let mut rng = reproducible_rng();
+        let setup = Setup::new_with_k256_keys_and_dealing(&mut rng);
+        let another_setup = Setup::new_with_k256_keys_and_dealing(&mut rng);
+
+        assert_eq!(
+            another_setup.dealing_internal.privately_verify(
+                EccCurveType::K256,
+                &setup.private_key,
+                &setup.public_key,
+                &setup.associated_data,
+                setup.dealer_index,
+                0
+            ),
+            Err(ThresholdEcdsaError::InvalidCommitment)
+        );
+    }
+}
+
+mod privately_verify_dealing {
+    use super::*;
+    use ic_crypto_internal_threshold_sig_ecdsa::privately_verify_dealing;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_types::crypto::AlgorithmId;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn should_fail_for_unsupported_algorithms() {
+        let mut rng = reproducible_rng();
+        let setup = Setup::new_with_k256_keys_and_dealing(&mut rng);
+        for algorithm_id in AlgorithmId::iter() {
+            if algorithm_id != AlgorithmId::ThresholdEcdsaSecp256k1 {
+                assert_eq!(
+                    privately_verify_dealing(
+                        algorithm_id,
+                        &setup.dealing_internal,
+                        &setup.private_key,
+                        &setup.public_key,
+                        &setup.associated_data,
+                        setup.dealer_index,
+                        0
+                    ),
+                    Err(IDkgVerifyDealingInternalError::UnsupportedAlgorithm)
+                );
+            }
+        }
+    }
+}
+
+struct Setup {
+    pub dealing_internal: IDkgDealingInternal,
+    pub private_key: MEGaPrivateKey,
+    pub public_key: MEGaPublicKey,
+    pub associated_data: Vec<u8>,
+    pub dealer_index: NodeIndex,
+}
+
+impl Setup {
+    fn new_with_k256_keys_and_dealing(rng: &mut ReproducibleRng) -> Self {
+        let curve = EccCurveType::K256;
+        let associated_data = vec![1, 2, 3];
+        let (private_keys, public_keys) =
+            gen_private_keys(curve, 5).expect("key generation should succeed");
+        let threshold = 2;
+        let dealer_index = 0;
+        let shares = SecretShares::Random;
+
+        let dealing_internal = create_dealing(
+            AlgorithmId::ThresholdEcdsaSecp256k1,
+            &associated_data,
+            dealer_index,
+            NumberOfNodes::from(threshold as u32),
+            &public_keys,
+            &shares,
+            Seed::from_rng(rng),
+        )
+        .expect("should create dealing from input");
+
+        Self {
+            dealing_internal,
+            private_key: private_keys
+                .first()
+                .expect("should have at least one private key")
+                .clone(),
+            public_key: public_keys
+                .first()
+                .expect("should have at least one public key")
+                .clone(),
+            associated_data,
+            dealer_index,
+        }
+    }
 }

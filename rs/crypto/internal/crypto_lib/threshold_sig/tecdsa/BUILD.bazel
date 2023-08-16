@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
+    "@crate_index//:strum",
     "@crate_index//:subtle",
     "@crate_index//:zeroize",
 ]
@@ -28,6 +29,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/fe-derive",
     "@crate_index//:paste",
+    "@crate_index//:strum_macros",
 ]
 
 DEV_DEPENDENCIES = [

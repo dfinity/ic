@@ -2744,8 +2744,19 @@ mod get_tecdsa_master_public_key {
 
 mod verify_dealing_private {
     use super::*;
+    use ic_crypto::CryptoComponentImpl;
+    use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_test_utils_canister_threshold_sigs::IntoBuilder;
+    use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+    use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
+    use ic_interfaces_registry_mocks::MockRegistryClient;
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_metrics::MetricsRegistry;
+    use ic_registry_keys::make_crypto_node_key;
     use ic_types::crypto::canister_threshold_sig::error::IDkgVerifyDealingPrivateError;
+    use ic_types::crypto::KeyPurpose::IDkgMEGaEncryption;
+    use ic_types::registry::RegistryClientError;
+    use prost::Message;
 
     #[test]
     fn should_verify_dealing_private() {
@@ -2892,6 +2903,45 @@ mod verify_dealing_private {
         assert_matches!( result, Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason)) if reason.starts_with("failed to deserialize internal dealing"));
     }
 
+    #[test]
+    fn should_panic_on_public_key_registry_error() {
+        let mut rng = reproducible_rng();
+        let registry_client_error = RegistryClientError::PollLockFailed {
+            error: "oh no!".to_string(),
+        };
+        let setup = Setup::new_with_registry_error(registry_client_error.clone(), &mut rng);
+
+        assert_matches!(
+            setup.crypto.verify_dealing_private(&setup.params, &setup.signed_dealing),
+            Err(IDkgVerifyDealingPrivateError::RegistryError(error))
+            if error == registry_client_error
+        );
+    }
+
+    #[test]
+    fn should_fail_on_csp_errors() {
+        let csp_errors = vec![
+            // if mega_keyset_from_sks fails on deserialization of private or public key
+            IDkgVerifyDealingPrivateError::InternalError("deserialization error".to_string()),
+            // if mega_keyset_from_sks fails because the private key cannot be found
+            IDkgVerifyDealingPrivateError::PrivateKeyNotFound,
+            // if privately_verify_dealing fails because the algorithm in the params is not supported
+            IDkgVerifyDealingPrivateError::InvalidArgument("algorithm not supported".to_string()),
+            // if privately_verify returns a ThresholdEcdsaError (only one as a smoke test here)
+            IDkgVerifyDealingPrivateError::InvalidDealing("invalid proof".to_string()),
+        ];
+        let mut rng = reproducible_rng();
+        for csp_error in csp_errors {
+            let setup = Setup::new_with_expected_csp_error(csp_error.clone(), &mut rng);
+
+            assert_matches!(
+                    setup.crypto.verify_dealing_private(&setup.params, &setup.signed_dealing),
+                    Err(error)
+                    if error == csp_error
+            );
+        }
+    }
+
     /// Call both [IDkgProtocol::verify_dealing_public] and [IDkgProtocol::verify_dealing_private]
     /// on the given dealing.
     /// Productive code should only call [IDkgProtocol::verify_dealing_private] if [IDkgProtocol::verify_dealing_public] was successful.
@@ -2909,6 +2959,106 @@ mod verify_dealing_private {
             receiver.verify_dealing_public(params, signed_dealing),
             receiver.verify_dealing_private(params, signed_dealing),
         )
+    }
+
+    struct Setup {
+        crypto: CryptoComponentImpl<MockAllCryptoServiceProvider>,
+        params: IDkgTranscriptParams,
+        signed_dealing: SignedIDkgDealing,
+    }
+
+    impl Setup {
+        fn new_with_registry_error(
+            expected_registry_error: RegistryClientError,
+            rng: &mut ReproducibleRng,
+        ) -> Setup {
+            Self::new_with_csp_and_optional_registry_client_error(
+                MockAllCryptoServiceProvider::new(),
+                Some(expected_registry_error),
+                rng,
+            )
+        }
+
+        fn new_with_expected_csp_error(
+            expected_csp_error: IDkgVerifyDealingPrivateError,
+            rng: &mut ReproducibleRng,
+        ) -> Setup {
+            let mut csp = MockAllCryptoServiceProvider::new();
+            csp.expect_idkg_verify_dealing_private()
+                .times(1)
+                .returning(move |_, _, _, _, _, _| Err(expected_csp_error.clone()));
+
+            Self::new_with_csp_and_optional_registry_client_error(csp, None, rng)
+        }
+
+        fn new_with_csp_and_optional_registry_client_error(
+            csp: MockAllCryptoServiceProvider,
+            registry_client_error: Option<RegistryClientError>,
+            rng: &mut ReproducibleRng,
+        ) -> Setup {
+            let subnet_size = rng.gen_range(1..10);
+            let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+            let (dealers, receivers) =
+                env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
+            let params = env.params_for_random_sharing(
+                &dealers,
+                &receivers,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                rng,
+            );
+            let dealer = env.nodes.random_dealer(&params, rng);
+            let signed_dealing = dealer.create_dealing_or_panic(&params);
+            let node_id = *receivers
+                .get()
+                .first()
+                .expect("should contain at least one receiver");
+
+            let mut mock_registry = MockRegistryClient::new();
+            match registry_client_error {
+                None => {
+                    let registry_key = make_crypto_node_key(node_id, IDkgMEGaEncryption);
+                    let registry_version = params.registry_version();
+                    let idkg_dealing_encryption_public_key_proto =
+                        valid_idkg_dealing_encryption_public_key();
+                    let mut idkg_dealing_encryption_public_key_bytes = Vec::new();
+                    idkg_dealing_encryption_public_key_proto
+                        .encode(&mut idkg_dealing_encryption_public_key_bytes)
+                        .expect("the public key should encode successfully");
+                    mock_registry
+                        .expect_get_value()
+                        .withf(move |key, version| {
+                            key == registry_key.as_str() && version == &registry_version
+                        })
+                        .return_const(Ok(Some(idkg_dealing_encryption_public_key_bytes)));
+                }
+                Some(registry_client_error) => {
+                    mock_registry
+                        .expect_get_value()
+                        .times(1)
+                        .returning(move |_, _| Err(registry_client_error.clone()));
+                }
+            }
+            let registry_client = Arc::new(mock_registry);
+
+            let logger = no_op_logger();
+            let metrics = MetricsRegistry::new();
+            let crypto_metrics = Arc::new(CryptoMetrics::new(Some(&metrics)));
+            let time_source = None;
+            let crypto = CryptoComponentImpl::new_with_csp_and_fake_node_id(
+                csp,
+                logger,
+                registry_client,
+                node_id,
+                crypto_metrics,
+                time_source,
+            );
+
+            Setup {
+                crypto,
+                params,
+                signed_dealing,
+            }
+        }
     }
 }
 

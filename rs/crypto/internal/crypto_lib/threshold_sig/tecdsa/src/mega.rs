@@ -6,10 +6,14 @@ use paste::paste;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
+use strum_macros::EnumIter;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+#[cfg(test)]
+mod tests;
+
 /// The type of MEGa ciphertext
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, EnumIter, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MEGaCiphertextType {
     Single,
     Pairs,
