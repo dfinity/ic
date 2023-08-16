@@ -115,7 +115,7 @@ use ic_interfaces::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
-use prometheus::{histogram_opts, labels, Histogram};
+use prometheus::{histogram_opts, labels, Histogram, IntCounter, Opts};
 use std::sync::{
     atomic::{AtomicBool, Ordering::SeqCst},
     Arc, RwLock,
@@ -129,6 +129,8 @@ struct ArtifactProcessorMetrics {
     processing_time: Histogram,
     /// The processing interval histogram.
     processing_interval: Histogram,
+    outbound_artifacts: IntCounter,
+    outbound_artifact_bytes: IntCounter,
     /// The last update time.
     last_update: std::time::Instant,
 }
@@ -136,6 +138,7 @@ struct ArtifactProcessorMetrics {
 impl ArtifactProcessorMetrics {
     /// The constructor creates a `ArtifactProcessorMetrics` instance.
     fn new(metrics_registry: MetricsRegistry, client: String) -> Self {
+        let const_labels = labels! {"client".to_string() => client.to_string()};
         let processing_time = metrics_registry.register(
             Histogram::with_opts(histogram_opts!(
                 "artifact_manager_client_processing_time_seconds",
@@ -144,7 +147,7 @@ impl ArtifactProcessorMetrics {
                     0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
                     10.0, 15.0, 20.0, 50.0,
                 ],
-                labels! {"client".to_string() => client.clone()}
+                const_labels.clone()
             ))
             .unwrap(),
         );
@@ -156,14 +159,38 @@ impl ArtifactProcessorMetrics {
                     0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
                     10.0, 15.0, 20.0, 50.0,
                 ],
-                labels! {"client".to_string() => client}
+                const_labels.clone()
             ))
             .unwrap(),
         );
+        let outbound_artifacts_opts = Opts {
+            name: "artifact_manager_outbound_artifacts_total".to_string(),
+            help: "Total number of artifacts that should be delivered to all peers.".to_string(),
+            const_labels: const_labels.clone(),
+            variable_labels: vec![],
+            subsystem: "".to_string(),
+            namespace: "".to_string(),
+        };
+        let outbound_artifacts =
+            metrics_registry.register(IntCounter::with_opts(outbound_artifacts_opts).unwrap());
+
+        let outbound_artifact_bytes_opts = Opts {
+            name: "artifact_manager_outbound_artifact_bytes_total".to_string(),
+            help: "Total number of bytes from artifacts that should be delivered to all peers."
+                .to_string(),
+            const_labels,
+            variable_labels: vec![],
+            subsystem: "".to_string(),
+            namespace: "".to_string(),
+        };
+        let outbound_artifact_bytes =
+            metrics_registry.register(IntCounter::with_opts(outbound_artifact_bytes_opts).unwrap());
 
         Self {
             processing_time,
             processing_interval,
+            outbound_artifacts,
+            outbound_artifact_bytes,
             last_update: std::time::Instant::now(),
         }
     }
@@ -284,7 +311,11 @@ fn process_messages<Artifact: ArtifactKind + 'static, S: Fn(Advert<Artifact>) + 
         time_source.update_time().ok();
         let (adverts, on_state_change_result) = metrics
             .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifacts));
-        adverts.into_iter().for_each(&send_advert);
+        for advert in adverts {
+            metrics.outbound_artifacts.inc();
+            metrics.outbound_artifact_bytes.inc_by(advert.size as u64);
+            send_advert(advert);
+        }
         last_on_state_change_result = on_state_change_result;
     }
 }
