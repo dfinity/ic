@@ -56,6 +56,7 @@ BINARIES = {
     "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
+    "drun": "//rs/drun:drun",
 }
 
 [release_nostrip_binary(
