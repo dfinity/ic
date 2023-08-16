@@ -453,6 +453,7 @@ impl ConnectionManager {
 
         // Reconnect to peers to which connection seems closed.
         let peer_map = self.peer_map.read().unwrap();
+        self.metrics.peer_map_size.set(peer_map.len() as i64);
         for (peer_id, conn) in peer_map.iter() {
             self.metrics
                 .collect_quic_connection_stats(&conn.connection, &conn.peer_id);
@@ -499,6 +500,7 @@ impl ConnectionManager {
         let transport_config = self.transport_config.clone();
         let earliest_registry_version = self.topology.earliest_registry_version();
         let last_registry_version = self.topology.latest_registry_version();
+        let metrics = self.metrics.clone();
         let conn_fut = async move {
             let mut quinn_client_config = quinn::ClientConfig::new(Arc::new(client_config?));
             quinn_client_config.transport_config(transport_config);
@@ -523,7 +525,7 @@ impl ConnectionManager {
             .await?;
             let connection = Self::gruezi(connection, Direction::Outbound).await?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionHandle::new(peer_id, connection))
+            Ok::<_, ConnectionEstablishError>(ConnectionHandle::new(peer_id, connection, metrics))
         };
 
         let timeout_conn_fut = async move {
@@ -581,7 +583,6 @@ impl ConnectionManager {
                     start_request_handler(
                         req_handler_connection,
                         self.log.clone(),
-                        self.metrics.clone(),
                         self.router.clone(),
                     ),
                     &self.rt,
@@ -607,6 +608,7 @@ impl ConnectionManager {
         let node_id = self.node_id;
         let earliest_registry_version = self.topology.earliest_registry_version();
         let last_registry_version = self.topology.latest_registry_version();
+        let metrics = self.metrics.clone();
         let conn_fut = async move {
             let established =
                 connecting
@@ -651,7 +653,7 @@ impl ConnectionManager {
             .await?;
             let connection = Self::gruezi(connection, Direction::Inbound).await?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionHandle::new(peer_id, connection))
+            Ok::<_, ConnectionEstablishError>(ConnectionHandle::new(peer_id, connection, metrics))
         };
 
         let timeout_conn_fut = async move {

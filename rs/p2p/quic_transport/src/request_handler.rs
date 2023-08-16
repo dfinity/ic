@@ -18,10 +18,8 @@ use tower::ServiceExt;
 use crate::{
     connection_handle::ConnectionHandle,
     metrics::{
-        QuicTransportMetrics, REQUEST_HANDLER_ERROR_TYPE_ACCEPT, REQUEST_HANDLER_ERROR_TYPE_APP,
-        REQUEST_HANDLER_ERROR_TYPE_FINISH, REQUEST_HANDLER_ERROR_TYPE_READ,
-        REQUEST_HANDLER_ERROR_TYPE_WRITE, REQUEST_HANDLER_STREAM_TYPE_BIDI,
-        REQUEST_HANDLER_STREAM_TYPE_UNI,
+        QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
+        ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
     },
     utils::{read_request, write_response},
 };
@@ -30,9 +28,9 @@ pub async fn start_request_handler(
     ConnectionHandle {
         peer_id,
         connection,
+        metrics,
     }: ConnectionHandle,
     log: ReplicaLogger,
-    metrics: QuicTransportMetrics,
     router: Router,
 ) {
     let mut inflight_requests = tokio::task::JoinSet::new();
@@ -58,8 +56,8 @@ pub async fn start_request_handler(
                         metrics
                             .request_handle_errors_total
                             .with_label_values(&[
-                                REQUEST_HANDLER_STREAM_TYPE_UNI,
-                                REQUEST_HANDLER_ERROR_TYPE_ACCEPT,
+                                STREAM_TYPE_UNI,
+                                ERROR_TYPE_ACCEPT,
                             ])
                             .inc();
                         break;
@@ -87,8 +85,8 @@ pub async fn start_request_handler(
                         metrics
                             .request_handle_errors_total
                             .with_label_values(&[
-                                REQUEST_HANDLER_STREAM_TYPE_BIDI,
-                                REQUEST_HANDLER_ERROR_TYPE_ACCEPT,
+                                STREAM_TYPE_BIDI,
+                                ERROR_TYPE_ACCEPT,
                             ])
                             .inc();
                         break;
@@ -132,10 +130,7 @@ async fn handle_bi_stream(
             );
             metrics
                 .request_handle_errors_total
-                .with_label_values(&[
-                    REQUEST_HANDLER_STREAM_TYPE_BIDI,
-                    REQUEST_HANDLER_ERROR_TYPE_READ,
-                ])
+                .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_READ])
                 .inc();
             return;
         }
@@ -156,10 +151,7 @@ async fn handle_bi_stream(
     if !response.status().is_success() {
         metrics
             .request_handle_errors_total
-            .with_label_values(&[
-                REQUEST_HANDLER_STREAM_TYPE_BIDI,
-                REQUEST_HANDLER_ERROR_TYPE_APP,
-            ])
+            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_APP])
             .inc();
     }
 
@@ -170,20 +162,14 @@ async fn handle_bi_stream(
         info!(log, "Failed to write response to stream: {}", e.to_string());
         metrics
             .request_handle_errors_total
-            .with_label_values(&[
-                REQUEST_HANDLER_STREAM_TYPE_BIDI,
-                REQUEST_HANDLER_ERROR_TYPE_WRITE,
-            ])
+            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
             .inc();
     }
     if let Err(e) = send_stream.get_mut().finish().await {
         info!(log, "Failed to finish stream: {}", e.to_string());
         metrics
             .request_handle_errors_total
-            .with_label_values(&[
-                REQUEST_HANDLER_STREAM_TYPE_BIDI,
-                REQUEST_HANDLER_ERROR_TYPE_FINISH,
-            ])
+            .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_FINISH])
             .inc();
     }
 }
@@ -207,10 +193,7 @@ async fn handle_uni_stream(
             );
             metrics
                 .request_handle_errors_total
-                .with_label_values(&[
-                    REQUEST_HANDLER_STREAM_TYPE_UNI,
-                    REQUEST_HANDLER_ERROR_TYPE_READ,
-                ])
+                .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])
                 .inc();
             return;
         }
@@ -223,10 +206,7 @@ async fn handle_uni_stream(
         let _ = recv_stream.get_mut().stop(0u8.into());
         metrics
             .request_handle_errors_total
-            .with_label_values(&[
-                REQUEST_HANDLER_STREAM_TYPE_UNI,
-                REQUEST_HANDLER_ERROR_TYPE_READ,
-            ])
+            .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])
             .inc();
         return;
     }
@@ -243,10 +223,7 @@ async fn handle_uni_stream(
     {
         metrics
             .request_handle_errors_total
-            .with_label_values(&[
-                REQUEST_HANDLER_STREAM_TYPE_UNI,
-                REQUEST_HANDLER_ERROR_TYPE_APP,
-            ])
+            .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_APP])
             .inc();
     }
 }

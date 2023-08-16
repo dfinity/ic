@@ -7,22 +7,27 @@ use tokio_metrics::TaskMonitor;
 const CONNECTION_RESULT_LABEL: &str = "status";
 const PEER_ID_LABEL: &str = "peer";
 const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
-const REQUEST_HANDLER_STREAM_TYPE_LABEL: &str = "stream";
-const REQUEST_HANDLER_ERROR_TYPE_LABEL: &str = "error";
+const STREAM_TYPE_LABEL: &str = "stream";
+const REQUEST_TYPE_LABEL: &str = "request";
+const ERROR_TYPE_LABEL: &str = "error";
 pub(crate) const CONNECTION_RESULT_SUCCESS_LABEL: &str = "success";
 pub(crate) const CONNECTION_RESULT_FAILED_LABEL: &str = "failed";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_ACCEPT: &str = "accept";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_APP: &str = "app";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_FINISH: &str = "finish";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_READ: &str = "read";
-pub(crate) const REQUEST_HANDLER_ERROR_TYPE_WRITE: &str = "write";
-pub(crate) const REQUEST_HANDLER_STREAM_TYPE_BIDI: &str = "bidi";
-pub(crate) const REQUEST_HANDLER_STREAM_TYPE_UNI: &str = "uni";
+pub(crate) const ERROR_TYPE_ACCEPT: &str = "accept";
+pub(crate) const ERROR_TYPE_OPEN: &str = "open";
+pub(crate) const ERROR_TYPE_APP: &str = "app";
+pub(crate) const ERROR_TYPE_FINISH: &str = "finish";
+pub(crate) const ERROR_TYPE_READ: &str = "read";
+pub(crate) const ERROR_TYPE_WRITE: &str = "write";
+pub(crate) const STREAM_TYPE_BIDI: &str = "bidi";
+pub(crate) const STREAM_TYPE_UNI: &str = "uni";
+pub(crate) const REQUEST_TYPE_PUSH: &str = "push";
+pub(crate) const REQUEST_TYPE_RPC: &str = "rpc";
 
 #[derive(Debug, Clone)]
 pub struct QuicTransportMetrics {
     // Connection manager
     pub active_connections: IntGauge,
+    pub peer_map_size: IntGauge,
     pub topology_size: IntGauge,
     pub topology_changes_total: IntCounter,
     pub peers_removed_total: IntCounter,
@@ -35,6 +40,9 @@ pub struct QuicTransportMetrics {
     // Request handler
     pub request_task_monitor: TaskMonitor,
     pub request_handle_errors_total: IntCounterVec,
+    // Connection handle
+    pub connection_handle_requests_total: IntCounterVec,
+    pub connection_handle_errors_total: IntCounterVec,
     // Quinn
     quinn_frame_rx_data_blocked_total: IntGaugeVec,
     quinn_frame_rx_stream_data_blocked_total: IntGaugeVec,
@@ -55,6 +63,10 @@ impl QuicTransportMetrics {
             active_connections: metrics_registry.int_gauge(
                 "quic_transport_active_connections",
                 "Number of active quic connections.",
+            ),
+            peer_map_size: metrics_registry.int_gauge(
+                "quic_transport_peer_map_size",
+                "Number of connections stored in the peer map.",
             ),
             topology_size: metrics_registry.int_gauge(
                 "quic_transport_toplogy_size",
@@ -96,11 +108,20 @@ impl QuicTransportMetrics {
             request_handle_errors_total: metrics_registry.int_counter_vec(
                 "quic_transport_request_handle_errors_total",
                 "Request handler errors by stream type and error type.",
-                &[
-                    REQUEST_HANDLER_STREAM_TYPE_LABEL,
-                    REQUEST_HANDLER_ERROR_TYPE_LABEL,
-                ],
+                &[STREAM_TYPE_LABEL, ERROR_TYPE_LABEL],
             ),
+            // Connection handler
+            connection_handle_requests_total: metrics_registry.int_counter_vec(
+                "quic_transport_connection_handle_requests_total",
+                "Request handler errors by stream type and error type.",
+                &[REQUEST_TYPE_LABEL],
+            ),
+            connection_handle_errors_total: metrics_registry.int_counter_vec(
+                "quic_transport_connection_handle_errors_total",
+                "Request handler errors by stream type and error type.",
+                &[REQUEST_TYPE_LABEL, ERROR_TYPE_LABEL],
+            ),
+
             // Quinn stats
             // Indicates that sending data is blocked due to connection level flow control.
             quinn_frame_rx_data_blocked_total: metrics_registry.int_gauge_vec(
