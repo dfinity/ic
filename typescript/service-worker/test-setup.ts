@@ -7,6 +7,8 @@ import 'compression-streams-polyfill';
 // We sometimes need to do this because our target browsers are expected to have
 // a feature that Node.js doesn't.
 import { mockBrowserCacheAPI } from './src/mocks/browser-cache';
+import path from 'path';
+import fs from 'fs';
 
 if (!process.env.DEBUG_LOGS) {
   jest.mock('./src/logger');
@@ -53,4 +55,15 @@ Object.defineProperty(global, 'Response', {
 Object.defineProperty(global.self, 'caches', {
   value: mockBrowserCacheAPI(),
   writable: true,
+});
+
+jest.mock('@dfinity/response-verification/dist/web/web_bg.wasm', () => {
+  const wasmFilePath = path.resolve(
+    __dirname,
+    'node_modules/@dfinity/response-verification/dist/web/web_bg.wasm'
+  );
+  const wasmBinary = fs.readFileSync(wasmFilePath);
+  const base64WasmBinary = Buffer.from(wasmBinary).toString('base64');
+
+  return `module.exports = '${base64WasmBinary}'`;
 });

@@ -6,6 +6,10 @@ import CopyPlugin from 'copy-webpack-plugin';
 
 const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
   const isDevelopment = Boolean(env.development);
+  const outputPath = path.join(
+    __dirname,
+    isDevelopment ? 'dist-dev' : 'dist-prod'
+  );
 
   return {
     entry: {
@@ -16,7 +20,7 @@ const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
     target: 'webworker',
     devtool: 'source-map',
     output: {
-      path: path.join(__dirname, isDevelopment ? 'dist-dev' : 'dist-prod'),
+      path: outputPath,
       filename: '[name].js',
       publicPath: '/',
       assetModuleFilename: (pathData) =>
@@ -33,6 +37,10 @@ const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
             { loader: 'minify-html-literals-loader' },
             { loader: 'ts-loader' },
           ],
+        },
+        {
+          test: /\.wasm$/,
+          type: 'asset/inline',
         },
       ],
     },
@@ -72,6 +80,13 @@ const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
             filter: (resourcePath) => {
               return !resourcePath.endsWith('.html');
             },
+          },
+          {
+            from: path.join(
+              __dirname,
+              'node_modules',
+              '@dfinity/response-verification/dist/web/web_bg.wasm'
+            ),
           },
         ],
       }),

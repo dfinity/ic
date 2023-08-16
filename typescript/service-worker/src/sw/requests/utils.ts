@@ -15,6 +15,7 @@ import initResponseVerification, {
   InitOutput,
   getMaxVerificationVersion,
 } from '@dfinity/response-verification';
+import responseVerificationWasmModule from '@dfinity/response-verification/dist/web/web_bg.wasm';
 import { HTTPHeaders } from './typings';
 
 export const shouldFetchRootKey = Boolean(process.env.FORCE_FETCH_ROOT_KEY);
@@ -137,7 +138,9 @@ let loadingResponseVerificationWasm: Promise<InitOutput> | null = null;
 
 export const loadResponseVerification = async (): Promise<void> => {
   if (!responseVerificationWasm && !loadingResponseVerificationWasm) {
-    loadingResponseVerificationWasm = initResponseVerification();
+    loadingResponseVerificationWasm = initResponseVerification(
+      responseVerificationWasmModule
+    );
     responseVerificationWasm = await loadingResponseVerificationWasm;
     loadingResponseVerificationWasm = null;
     return;
