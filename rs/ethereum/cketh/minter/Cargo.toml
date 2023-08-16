@@ -7,6 +7,10 @@ edition = "2021"
 name = "ic-cketh-minter"
 path = "src/main.rs"
 
+[[bin]]
+name = "cketh-principal-to-hex"
+path = "bin/principal_to_hex.rs"
+
 [dependencies]
 candid = { workspace = true }
 ciborium = { workspace = true }
