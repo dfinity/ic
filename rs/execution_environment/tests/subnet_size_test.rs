@@ -41,7 +41,16 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = match EmbeddersConfig:
 
 // instruction cost of executing inc method on the test canister
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
-    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+    use ic_config::embedders::MeteringType;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost as instruction_to_cost_old;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
+
+    let instruction_to_cost = match config.embedders_config.metering_type {
+        MeteringType::New => instruction_to_cost_new,
+        MeteringType::Old => instruction_to_cost_old,
+        MeteringType::None => |_op: &wasmparser::Operator| 0u64,
+    };
+
     let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
     let cs = instruction_to_cost(&wasmparser::Operator::I32Store {
         memarg: wasmparser::MemArg {
@@ -65,8 +74,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
         ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY_DATA_APPEND
             .get();
 
-    let cd = if let ic_config::embedders::MeteringType::New = config.embedders_config.metering_type
-    {
+    let cd = if let MeteringType::New = config.embedders_config.metering_type {
         ic_config::subnet_config::SchedulerConfig::application_subnet()
             .dirty_page_overhead
             .get()
