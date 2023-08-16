@@ -24,7 +24,7 @@ use ic_types::messages::{
     Response,
 };
 use ic_types::methods::{Callback, WasmMethod};
-use ic_types::{Cycles, MemoryAllocation, NumInstructions, Time, UserId};
+use ic_types::{Cycles, NumInstructions, Time, UserId};
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, ExecuteMessageResult, RoundLimits};
@@ -413,16 +413,13 @@ fn try_apply_canister_state_changes(
     subnet_id: SubnetId,
     log: &ReplicaLogger,
 ) -> HypervisorResult<()> {
-    match &system_state.memory_allocation {
-        MemoryAllocation::BestEffort => subnet_available_memory
-            .try_decrement(
-                output.allocated_bytes,
-                output.allocated_message_bytes,
-                NumBytes::from(0),
-            )
-            .map_err(|_| HypervisorError::OutOfMemory)?,
-        MemoryAllocation::Reserved(_) => (),
-    }
+    subnet_available_memory
+        .try_decrement(
+            output.allocated_bytes,
+            output.allocated_message_bytes,
+            NumBytes::from(0),
+        )
+        .map_err(|_| HypervisorError::OutOfMemory)?;
 
     system_state_changes.apply_changes(time, system_state, network_topology, subnet_id, log)
 }
