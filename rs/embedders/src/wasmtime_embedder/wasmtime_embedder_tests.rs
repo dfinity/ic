@@ -114,6 +114,7 @@ fn test_wasmtime_system_api() {
         config.feature_flags,
         config.stable_memory_dirty_page_limit,
         config.stable_memory_accessed_page_limit,
+        config.metering_type,
     );
     let instance = linker
         .instantiate(&mut store, &module)

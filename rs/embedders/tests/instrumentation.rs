@@ -727,11 +727,12 @@ fn charge_for_dirty_stable() {
     let cd = SchedulerConfig::application_subnet()
         .dirty_page_overhead
         .get();
-    let csw = system_api_complexity::overhead::STABLE64_WRITE.get()
+    let csg = system_api_complexity::overhead_native::new::STABLE_GROW.get();
+    let csw = system_api_complexity::overhead_native::new::STABLE64_WRITE.get()
         + system_api
             .get_num_instructions_from_bytes(NumBytes::from(1))
             .get();
-    let csr = system_api_complexity::overhead::STABLE64_READ.get()
+    let csr = system_api_complexity::overhead_native::new::STABLE64_READ.get()
         + system_api
             .get_num_instructions_from_bytes(NumBytes::from(1))
             .get();
@@ -740,7 +741,7 @@ fn charge_for_dirty_stable() {
     // 2 dirty stable pages and one heap
     assert_eq!(
         instructions_used,
-        cdrop + ccall * 4 + cc * 15 + cg + cs * 2 + cl + csw * 2 + csr + cd * 3
+        cdrop + ccall * 4 + csg + cc * 15 + cs * 2 + cd * 3 + csw * 2 + csr + cl + cg
     );
 
     // Now run the same with insufficient instructions

@@ -343,6 +343,7 @@ impl WasmtimeEmbedder {
             self.config.feature_flags,
             self.config.stable_memory_dirty_page_limit,
             self.config.stable_memory_accessed_page_limit,
+            self.config.metering_type,
         );
 
         let instance = match linker.instantiate(&mut store, module) {

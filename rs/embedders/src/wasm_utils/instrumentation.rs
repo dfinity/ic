@@ -485,6 +485,7 @@ pub(super) fn instrument(
             special_indices,
             subnet_type,
             dirty_page_overhead,
+            metering_type,
         )
     }
 
@@ -563,6 +564,7 @@ fn replace_system_api_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
+    metering_type: MeteringType,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -574,9 +576,12 @@ fn replace_system_api_functions(
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in
-        replacement_functions(special_indices, subnet_type, dirty_page_overhead)
-    {
+    for (api, (ty, body)) in replacement_functions(
+        special_indices,
+        subnet_type,
+        dirty_page_overhead,
+        metering_type,
+    ) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;

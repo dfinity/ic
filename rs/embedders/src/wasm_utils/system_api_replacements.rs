@@ -12,9 +12,10 @@
 //!
 
 use crate::{
-    wasm_utils::instrumentation::InjectedImports,
-    wasmtime_embedder::system_api_complexity::overhead, InternalErrorCode,
+    wasm_utils::instrumentation::InjectedImports, wasmtime_embedder::system_api_complexity,
+    InternalErrorCode,
 };
+use ic_config::embedders::MeteringType;
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
@@ -24,12 +25,15 @@ use wasmtime_environ::WASM_PAGE_SIZE;
 
 use super::{instrumentation::SpecialIndices, wasm_transform::Body, SystemApiFunc};
 
+use crate::wasmtime_embedder::system_api_complexity::system_api;
+
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
 
 pub(super) fn replacement_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
+    metering_type: MeteringType,
 ) -> Vec<(SystemApiFunc, (Type, Body<'static>))> {
     let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
     let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
@@ -241,7 +245,11 @@ pub(super) fn replacement_functions(
                             },
                             I64ExtendI32U,
                             I64Const {
-                                value: overhead::STABLE_READ.get() as i64,
+                                value: system_api::complexity_overhead_native!(
+                                    STABLE_READ,
+                                    metering_type
+                                )
+                                .get() as i64,
                             },
                             I64Add,
                             Call {
@@ -502,7 +510,11 @@ pub(super) fn replacement_functions(
                                 }
                             },
                             I64Const {
-                                value: overhead::STABLE64_READ.get() as i64,
+                                value: system_api::complexity_overhead_native!(
+                                    STABLE64_READ,
+                                    metering_type
+                                )
+                                .get() as i64,
                             },
                             I64Add,
                             Call {
@@ -791,7 +803,11 @@ pub(super) fn replacement_functions(
                             },
                             I64ExtendI32U,
                             I64Const {
-                                value: overhead::STABLE_WRITE.get() as i64,
+                                value: system_api::complexity_overhead_native!(
+                                    STABLE_WRITE,
+                                    metering_type
+                                )
+                                .get() as i64,
                             },
                             I64Add,
                             Call {
@@ -1021,7 +1037,11 @@ pub(super) fn replacement_functions(
                                 }
                             },
                             I64Const {
-                                value: overhead::STABLE64_WRITE.get() as i64,
+                                value: system_api::complexity_overhead_native!(
+                                    STABLE64_WRITE,
+                                    metering_type
+                                )
+                                .get() as i64,
                             },
                             I64Add,
                             Call {
