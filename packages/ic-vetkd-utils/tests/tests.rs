@@ -1,7 +1,61 @@
+use ic_bls12_381::*;
 use ic_vetkd_utils::*;
+use rand::{Rng, SeedableRng};
+
+mod test_utils;
 
 #[test]
-fn protocol_flow() {
+fn protocol_flow_with_emulated_server_side() {
+    use test_utils::*;
+
+    let seed = rand::thread_rng().gen::<u64>();
+    println!("seed {:?}", seed);
+
+    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(seed);
+
+    let derivation_path = DerivationPath::new(b"canister-id", &[b"1", b"2"]);
+    let did = rng.gen::<[u8; 32]>();
+
+    let tsk_seed = rng.gen::<[u8; 32]>().to_vec();
+    let tsk = TransportSecretKey::from_seed(tsk_seed).unwrap();
+
+    let tpk_bytes: [u8; 48] = tsk.public_key().try_into().unwrap();
+    let tpk = G1Affine::from_compressed(&tpk_bytes).unwrap();
+
+    // Ordinarily the master secret key would be held as shares by
+    // independent notes, with the encrypted key created by combining
+    // shares. Here we simply create the master secret key and create
+    // the combined encrypted key directly.
+
+    let master_sk = random_scalar(&mut rng);
+    let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
+
+    let derived_public_key =
+        G2Affine::from(master_pk + G2Affine::generator() * derivation_path.delta());
+
+    let ek = create_encrypted_key(
+        &mut rng,
+        &master_pk,
+        &master_sk,
+        &tpk,
+        &derivation_path,
+        &did,
+    );
+
+    let dpk_bytes = derived_public_key.to_compressed().to_vec();
+
+    let ibe_key = tsk.decrypt(&ek, &dpk_bytes, &did).unwrap();
+
+    let msg = rng.gen::<[u8; 32]>().to_vec();
+    let seed = rng.gen::<[u8; 32]>().to_vec();
+    let ctext = IBECiphertext::encrypt(&dpk_bytes, &did, &msg, &seed).unwrap();
+
+    let ptext = ctext.decrypt(&ibe_key).expect("IBE decryption failed");
+    assert_eq!(ptext, msg);
+}
+
+#[test]
+fn protocol_flow_with_fixed_rng_has_expected_outputs() {
     let tsk = TransportSecretKey::from_seed(vec![0x42; 32]).unwrap();
 
     let tpk = tsk.public_key();
