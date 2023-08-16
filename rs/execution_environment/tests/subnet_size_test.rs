@@ -62,7 +62,7 @@ fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
     let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
     let csys =
-        ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY_DATA_APPEND
+        ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::MSG_REPLY_DATA_APPEND
             .get();
 
     let cd = if let ic_config::embedders::MeteringType::New = config.embedders_config.metering_type

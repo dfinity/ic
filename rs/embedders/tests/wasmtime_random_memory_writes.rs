@@ -732,7 +732,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
                         .get()
             );
         }
@@ -752,7 +752,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
                         .get()
                     + STABLE_OP_BYTES
             );
@@ -773,7 +773,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE64_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE64_READ
                         .get()
                     + STABLE_OP_BYTES
             );
@@ -793,7 +793,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_READ
                         .get()
             );
         }
@@ -813,7 +813,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
                     + SchedulerConfig::application_subnet()
@@ -836,7 +836,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
@@ -857,7 +857,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
                     + STABLE_OP_BYTES
                     + SchedulerConfig::application_subnet()
@@ -880,7 +880,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
-                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::old::STABLE_WRITE
                         .get()
                     + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
