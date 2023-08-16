@@ -1336,11 +1336,10 @@ impl StateManagerImpl {
         // Create the file descriptor factory that is used to create files for PageMaps.
         let page_delta_path = state_layout.page_deltas();
         let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
-            Arc::new(PageAllocatorFileDescriptorImpl::new(
-                page_delta_path,
-                config.file_backed_memory_allocator,
-                own_subnet_type,
-            ));
+            Arc::new(PageAllocatorFileDescriptorImpl {
+                root: page_delta_path,
+                file_backed_memory_allocator: config.file_backed_memory_allocator,
+            });
 
         let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
             log.clone(),
@@ -3566,18 +3565,12 @@ fn maliciously_return_wrong_hash(
 pub struct PageAllocatorFileDescriptorImpl {
     root: PathBuf,
     file_backed_memory_allocator: FlagStatus,
-    subnet_type: SubnetType,
 }
 
 impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
     fn get_fd(&self) -> RawFd {
-        // Only use the file-backed allocator if the feature flag is enabled
-        // and exclude system and verified application subnets for now.
-        let is_excluded_subnet = matches!(
-            self.subnet_type,
-            SubnetType::System | SubnetType::VerifiedApplication
-        );
-        if self.file_backed_memory_allocator == FlagStatus::Enabled && !is_excluded_subnet {
+        // Only use the file-backed allocator if the feature flag is enabled.
+        if self.file_backed_memory_allocator == FlagStatus::Enabled {
             self.get_file_backed_fd()
         } else {
             self.get_memory_backed_fd()
@@ -3586,17 +3579,6 @@ impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
 }
 
 impl PageAllocatorFileDescriptorImpl {
-    pub fn new(
-        root: PathBuf,
-        file_backed_memory_allocator: FlagStatus,
-        subnet_type: SubnetType,
-    ) -> Self {
-        Self {
-            root,
-            file_backed_memory_allocator,
-            subnet_type,
-        }
-    }
     /// Create a file using an unique name to back memory pages
     fn get_file_backed_fd(&self) -> RawFd {
         // create a string uuid
