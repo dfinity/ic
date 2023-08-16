@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("@aspect_rules_sol//sol:defs.bzl", "sol_binary")
 load("//bazel:canisters.bzl", "rust_canister")
 
@@ -78,5 +78,14 @@ rust_canister(
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",
         "@crate_index//:ic-metrics-encoder",
+    ],
+)
+
+rust_binary(
+    name = "principal_to_hex",
+    srcs = ["bin/principal_to_hex.rs"],
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:hex",
     ],
 )
