@@ -1,8 +1,9 @@
 use crate::address::Address;
 use crate::eth_rpc::{FeeHistory, Hash, Quantity};
 use crate::numeric::{TransactionNonce, Wei};
-use crate::state::read_state;
+use crate::state::{lazy_call_ecdsa_public_key, read_state};
 use ethnum::u256;
+use ic_crypto_ecdsa_secp256k1::RecoveryId;
 use ic_ic00_types::DerivationPath;
 use rlp::RlpStream;
 use serde::{Deserialize, Serialize};
@@ -74,15 +75,15 @@ impl rlp::Encodable for Eip1559TransactionRequest {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
-pub struct Signature {
-    pub v: u64,
+pub struct Eip1559Signature {
+    pub signature_y_parity: bool,
     pub r: u256,
     pub s: u256,
 }
 
-impl rlp::Encodable for Signature {
+impl rlp::Encodable for Eip1559Signature {
     fn rlp_append(&self, s: &mut RlpStream) {
-        s.append(&self.v);
+        s.append(&self.signature_y_parity);
         encode_u256(s, self.r);
         encode_u256(s, self.s);
     }
@@ -91,11 +92,11 @@ impl rlp::Encodable for Signature {
 #[derive(Clone, Serialize, Deserialize, Debug, Eq, Hash, PartialEq)]
 pub struct SignedEip1559TransactionRequest {
     transaction: Eip1559TransactionRequest,
-    signature: Signature,
+    signature: Eip1559Signature,
 }
 
-impl From<(Eip1559TransactionRequest, Signature)> for SignedEip1559TransactionRequest {
-    fn from((transaction, signature): (Eip1559TransactionRequest, Signature)) -> Self {
+impl From<(Eip1559TransactionRequest, Eip1559Signature)> for SignedEip1559TransactionRequest {
+    fn from((transaction, signature): (Eip1559TransactionRequest, Eip1559Signature)) -> Self {
         Self {
             transaction,
             signature,
@@ -185,33 +186,51 @@ impl Eip1559TransactionRequest {
     /// where `||` denotes string concatenation.
     pub fn hash(&self) -> Hash {
         use rlp::Encodable;
-        let mut rlp = self.rlp_bytes().to_vec();
-        let mut bytes: Vec<u8> = Vec::with_capacity(rlp.len() + 1);
-        bytes.push(self.transaction_type());
-        bytes.append(&mut rlp);
+        let mut bytes = self.rlp_bytes().to_vec();
+        bytes.insert(0, self.transaction_type());
         Hash(ic_crypto_sha3::Keccak256::hash(bytes))
     }
 
     pub async fn sign(self) -> Result<SignedEip1559TransactionRequest, String> {
         let hash = self.hash();
         let key_name = read_state(|s| s.ecdsa_key_name.clone());
-        let (r_bytes, s_bytes) = crate::management::sign_with_ecdsa(
+        let signature = crate::management::sign_with_ecdsa(
             key_name,
             DerivationPath::new(crate::MAIN_DERIVATION_PATH),
             hash.0,
         )
         .await
         .map_err(|e| format!("failed to sign tx: {}", e))?;
-        let v = (s_bytes[31] % 2) as u64;
+        let recid = compute_recovery_id(&hash, &signature).await;
+        if recid.is_x_reduced() {
+            return Err("BUG: affine x-coordinate of r is reduced which is so unlikely to happen that it's probably a bug".to_string());
+        }
+        let (r_bytes, s_bytes) = split_in_two(signature);
         let r = u256::from_be_bytes(r_bytes);
         let s = u256::from_be_bytes(s_bytes);
-        let sig = Signature { v, r, s };
+        let sig = Eip1559Signature {
+            signature_y_parity: recid.is_y_odd(),
+            r,
+            s,
+        };
 
         Ok(SignedEip1559TransactionRequest {
             transaction: self,
             signature: sig,
         })
     }
+}
+
+async fn compute_recovery_id(digest: &Hash, signature: &[u8]) -> RecoveryId {
+    let ecdsa_public_key = lazy_call_ecdsa_public_key().await;
+    ecdsa_public_key
+        .try_recovery_from_digest(&digest.0, signature)
+        .unwrap_or_else(|e| {
+            panic!(
+                "BUG: failed to recover public key {:?} from digest {:?} and signature {:?}: {:?}",
+                ecdsa_public_key, digest, signature, e
+            )
+        })
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -266,4 +285,12 @@ fn median<T: Ord>(values: &mut [T]) -> Option<&T> {
     }
     let (_, item, _) = values.select_nth_unstable(values.len() / 2);
     Some(item)
+}
+
+fn split_in_two(array: [u8; 64]) -> ([u8; 32], [u8; 32]) {
+    let mut r = [0u8; 32];
+    let mut s = [0u8; 32];
+    r.copy_from_slice(&array[..32]);
+    s.copy_from_slice(&array[32..]);
+    (r, s)
 }

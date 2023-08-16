@@ -42,7 +42,7 @@ impl EthRpcClient {
     /// If none of the providers return an ok result, return the last error.
     /// This method is useful in case a provider is temporarily down but should only be for
     /// querying data that is **not** critical since the returned value comes from a single provider.
-    async fn sequential_call_until_ok<I: Serialize + Clone, O: DeserializeOwned>(
+    async fn sequential_call_until_ok<I: Serialize + Clone, O: DeserializeOwned + Debug>(
         &self,
         method: impl Into<String> + Clone,
         params: I,
@@ -52,10 +52,21 @@ impl EthRpcClient {
             ic_cdk::println!("Calling provider {:?}", provider);
             let result =
                 eth_rpc::call(provider.url().to_string(), method.clone(), params.clone()).await;
-            if result.is_ok() {
-                return result;
-            }
-            last_result = Some(result);
+            match result {
+                Ok(JsonRpcResult::Result(value)) => return Ok(JsonRpcResult::Result(value)),
+                Ok(json_rpc_error @ JsonRpcResult::Error { .. }) => {
+                    ic_cdk::println!(
+                        "Provider {:?} returned JSON-RPC error {:?}",
+                        provider,
+                        json_rpc_error
+                    );
+                    last_result = Some(Ok(json_rpc_error));
+                }
+                Err(e) => {
+                    ic_cdk::println!("Querying provider {:?} returned error {:?}", provider, e);
+                    last_result = Some(Err(e));
+                }
+            };
         }
         last_result.unwrap_or_else(|| panic!("BUG: No providers in RPC client {:?}", self))
     }
