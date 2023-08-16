@@ -2,9 +2,7 @@
 
 use anyhow::Result;
 
-use ic_tests::boundary_nodes_snp_tests::boundary_nodes_snp::{
-    config, snp_basic_test, snp_kernel_test,
-};
+use ic_tests::boundary_nodes::boundary_nodes_snp::{config, snp_basic_test, snp_kernel_test};
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::systest;
 

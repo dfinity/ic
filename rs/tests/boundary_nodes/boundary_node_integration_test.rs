@@ -3,12 +3,15 @@
 use anyhow::Result;
 
 use ic_tests::{
-    boundary_nodes_integration::boundary_nodes::{
-        canister_allowlist_test, canister_test, denylist_test, direct_to_replica_options_test,
-        direct_to_replica_rosetta_test, direct_to_replica_test, http_canister_test, icx_proxy_test,
-        mk_setup, nginx_valid_config_test, reboot_test, redirect_http_to_https_test,
-        redirect_to_dashboard_test, redirect_to_non_raw_test, seo_test, sw_test,
-        BoundaryNodeHttpsConfig,
+    boundary_nodes::{
+        boundary_nodes_integration::{
+            canister_allowlist_test, canister_test, denylist_test, direct_to_replica_options_test,
+            direct_to_replica_rosetta_test, direct_to_replica_test, http_canister_test,
+            icx_proxy_test, mk_setup, nginx_valid_config_test, reboot_test,
+            redirect_http_to_https_test, redirect_to_dashboard_test, redirect_to_non_raw_test,
+            seo_test, sw_test,
+        },
+        helpers::BoundaryNodeHttpsConfig,
     },
     driver::group::{SystemTestGroup, SystemTestSubGroup},
     systest,

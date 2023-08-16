@@ -1,8 +1,6 @@
-pub mod api_boundary_nodes_integration;
 pub mod api_test;
 pub mod basic_health_test;
-pub mod boundary_nodes_integration;
-pub mod boundary_nodes_snp_tests;
+pub mod boundary_nodes;
 pub mod btc_integration;
 pub mod canister_agent;
 pub mod canister_api;
