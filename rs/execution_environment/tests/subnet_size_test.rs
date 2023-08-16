@@ -40,7 +40,7 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = match EmbeddersConfig:
 };
 
 // instruction cost of executing inc method on the test canister
-fn inc_instruction_cost(_config: HypervisorConfig) -> u64 {
+fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
     let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
     let cs = instruction_to_cost(&wasmparser::Operator::I32Store {
@@ -65,7 +65,16 @@ fn inc_instruction_cost(_config: HypervisorConfig) -> u64 {
         ic_embedders::wasmtime_embedder::system_api_complexity::overhead::MSG_REPLY_DATA_APPEND
             .get();
 
-    5 * cc + cs + cl + ca + 2 * ccall + csys
+    let cd = if let ic_config::embedders::MeteringType::New = config.embedders_config.metering_type
+    {
+        ic_config::subnet_config::SchedulerConfig::application_subnet()
+            .dirty_page_overhead
+            .get()
+    } else {
+        0
+    };
+
+    5 * cc + cs + cl + ca + 2 * ccall + csys + cd
 }
 
 /// This is a canister that keeps a counter on the heap and exposes various test

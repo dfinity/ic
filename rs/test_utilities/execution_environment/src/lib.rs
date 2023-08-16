@@ -182,6 +182,7 @@ pub struct ExecutionTest {
     user_id: UserId,
 
     // Read-only fields.
+    dirty_heap_page_overhead: u64,
     instruction_limits: InstructionLimits,
     install_code_instruction_limits: InstructionLimits,
     instruction_limit_without_dts: NumInstructions,
@@ -211,6 +212,10 @@ impl ExecutionTest {
 
     pub fn execution_environment(&self) -> &ExecutionEnvironment {
         &self.exec_env
+    }
+
+    pub fn dirty_heap_page_overhead(&self) -> u64 {
+        self.dirty_heap_page_overhead
     }
 
     pub fn user_id(&self) -> UserId {
@@ -1815,6 +1820,19 @@ impl ExecutionTestBuilder {
         ));
         let config = self.execution_config.clone();
 
+        let dirty_page_overhead = match self.subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet().dirty_page_overhead,
+            SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
+            SubnetType::VerifiedApplication => {
+                SchedulerConfig::verified_application_subnet().dirty_page_overhead
+            }
+        };
+
+        let dirty_heap_page_overhead = match config.embedders_config.metering_type {
+            MeteringType::New => dirty_page_overhead.get(),
+            _ => 0,
+        };
+
         let hypervisor = Hypervisor::new(
             config.clone(),
             &metrics_registry,
@@ -1822,15 +1840,7 @@ impl ExecutionTestBuilder {
             self.subnet_type,
             self.log.clone(),
             Arc::clone(&cycles_account_manager),
-            match self.subnet_type {
-                SubnetType::Application => {
-                    SchedulerConfig::application_subnet().dirty_page_overhead
-                }
-                SubnetType::System => SchedulerConfig::system_subnet().dirty_page_overhead,
-                SubnetType::VerifiedApplication => {
-                    SchedulerConfig::verified_application_subnet().dirty_page_overhead
-                }
-            },
+            dirty_page_overhead,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let hypervisor = Arc::new(hypervisor);
@@ -1876,6 +1886,7 @@ impl ExecutionTestBuilder {
                     .get() as i64,
             ),
             time: self.time,
+            dirty_heap_page_overhead,
             instruction_limits: InstructionLimits::new(
                 self.execution_config.deterministic_time_slicing,
                 self.instruction_limit,
