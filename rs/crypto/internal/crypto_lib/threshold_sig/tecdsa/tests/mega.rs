@@ -240,3 +240,214 @@ fn mega_private_key_bytes_should_redact_logs() -> Result<(), ThresholdEcdsaError
 
     Ok(())
 }
+
+mod mega_cipher_text {
+    use super::*;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use strum::IntoEnumIterator;
+
+    #[test]
+    fn should_decrypt_to_different_plaintext_when_secret_key_wrong() {
+        let mut rng = reproducible_rng();
+        for ctext_type in MEGaCiphertextType::iter() {
+            let setup = Setup::new(&mut rng, ctext_type);
+
+            let ptext_a = decrypt(
+                setup.ctext,
+                setup.associated_data,
+                setup.dealer_index,
+                0,
+                &setup.b_sk,
+                &setup.b_pk,
+            )
+            .expect("should successfully decrypt");
+
+            assert_ne!(hex_encoded(ptext_a), hex_encoded(setup.ptext));
+        }
+    }
+
+    #[test]
+    fn should_fail_if_decrypt_of_ciphertext_fails_due_to_dealer_index_mismatch() {
+        let mut rng = reproducible_rng();
+        for ctext_type in MEGaCiphertextType::iter() {
+            let setup = Setup::new(&mut rng, ctext_type);
+            let invalid_dealer_index = 47;
+
+            assert_eq!(
+                decrypt(
+                    setup.ctext,
+                    setup.associated_data,
+                    invalid_dealer_index,
+                    0,
+                    &setup.a_sk,
+                    &setup.a_pk
+                ),
+                Err(ThresholdEcdsaError::InvalidProof)
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_decrypt_of_ciphertext_fails_due_to_recipient_index_out_of_bounds() {
+        let mut rng = reproducible_rng();
+        for ctext_type in MEGaCiphertextType::iter() {
+            let setup = Setup::new(&mut rng, ctext_type);
+            // only a single recipient, so any index > 0 is invalid
+            let invalid_recipient_index = 1;
+
+            assert_eq!(
+                decrypt(
+                    setup.ctext,
+                    setup.associated_data,
+                    setup.dealer_index,
+                    invalid_recipient_index,
+                    &setup.a_sk,
+                    &setup.a_pk
+                ),
+                Err(ThresholdEcdsaError::InvalidArguments(
+                    "Invalid index".to_string()
+                ))
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_if_decrypt_of_ciphertext_fails_due_to_secret_key_curve_mismatch() {
+        let mut rng = reproducible_rng();
+        for ctext_type in MEGaCiphertextType::iter() {
+            let setup = Setup::new(&mut rng, ctext_type);
+            let another_curve = EccCurveType::P256;
+            let b_sk = MEGaPrivateKey::generate(another_curve, &mut rng);
+
+            assert_eq!(
+                decrypt(
+                    setup.ctext,
+                    setup.associated_data,
+                    setup.dealer_index,
+                    0,
+                    &b_sk,
+                    &setup.a_pk
+                ),
+                Err(ThresholdEcdsaError::CurveMismatch)
+            );
+        }
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum MEGaPlaintext {
+        Single(EccScalar),
+        Pair((EccScalar, EccScalar)),
+    }
+
+    fn hex_encoded(ptext: MEGaPlaintext) -> String {
+        match ptext {
+            MEGaPlaintext::Single(ptext) => hex::encode(ptext.serialize()),
+            MEGaPlaintext::Pair((ptext_a, ptext_b)) => {
+                format!(
+                    "{}{}",
+                    hex::encode(ptext_a.serialize()),
+                    hex::encode(ptext_b.serialize())
+                )
+            }
+        }
+    }
+
+    fn decrypt(
+        ctext: MEGaCiphertext,
+        associated_data: &[u8],
+        dealer_index: NodeIndex,
+        recipient_index: NodeIndex,
+        our_private_key: &MEGaPrivateKey,
+        recipient_public_key: &MEGaPublicKey,
+    ) -> ThresholdEcdsaResult<MEGaPlaintext> {
+        match ctext {
+            MEGaCiphertext::Single(single) => single
+                .decrypt(
+                    associated_data,
+                    dealer_index,
+                    recipient_index,
+                    our_private_key,
+                    recipient_public_key,
+                )
+                .map(MEGaPlaintext::Single),
+            MEGaCiphertext::Pairs(pairs) => pairs
+                .decrypt(
+                    associated_data,
+                    dealer_index,
+                    recipient_index,
+                    our_private_key,
+                    recipient_public_key,
+                )
+                .map(MEGaPlaintext::Pair),
+        }
+    }
+
+    struct Setup {
+        a_sk: MEGaPrivateKey,
+        b_sk: MEGaPrivateKey,
+        a_pk: MEGaPublicKey,
+        b_pk: MEGaPublicKey,
+        associated_data: &'static [u8],
+        ptext: MEGaPlaintext,
+        dealer_index: NodeIndex,
+        ctext: MEGaCiphertext,
+    }
+
+    impl Setup {
+        fn new(rng: &mut ReproducibleRng, ctext_type: MEGaCiphertextType) -> Setup {
+            let curve = EccCurveType::K256;
+            let a_sk = MEGaPrivateKey::generate(curve, rng);
+            let b_sk = MEGaPrivateKey::generate(curve, rng);
+            let a_pk = a_sk
+                .public_key()
+                .expect("should produce public key from secret key");
+            let b_pk = b_sk
+                .public_key()
+                .expect("should produce public key from secret key");
+            let associated_data = b"assoc_data_test";
+            let dealer_index = 0;
+            let seed = Seed::from_rng(rng);
+            let (ptext, ctext) = match ctext_type {
+                MEGaCiphertextType::Single => {
+                    let ptext = EccScalar::random(curve, rng);
+                    let ctext = MEGaCiphertext::Single(
+                        MEGaCiphertextSingle::encrypt(
+                            seed,
+                            &[ptext.clone()],
+                            &[a_pk.clone()],
+                            dealer_index,
+                            associated_data,
+                        )
+                        .expect("should successfully encrypt"),
+                    );
+                    (MEGaPlaintext::Single(ptext), ctext)
+                }
+                MEGaCiphertextType::Pairs => {
+                    let ptext = (EccScalar::random(curve, rng), EccScalar::random(curve, rng));
+                    let ctext = MEGaCiphertext::Pairs(
+                        MEGaCiphertextPair::encrypt(
+                            seed,
+                            &[ptext.clone()],
+                            &[a_pk.clone()],
+                            dealer_index,
+                            associated_data,
+                        )
+                        .expect("should successfully encrypt"),
+                    );
+                    (MEGaPlaintext::Pair(ptext), ctext)
+                }
+            };
+
+            Setup {
+                a_sk,
+                b_sk,
+                a_pk,
+                b_pk,
+                associated_data,
+                ptext,
+                dealer_index,
+                ctext,
+            }
+        }
+    }
+}
