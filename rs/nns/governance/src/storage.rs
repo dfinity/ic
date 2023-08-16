@@ -54,9 +54,9 @@ thread_local! {
             )
         });
 
-    pub(crate) static NEURONS: neurons::Store<VM> =
+    pub(crate) static NEURONS: neurons::StableNeuronStore<VM> =
         MEMORY_MANAGER.with(|memory_manager| {
-            neurons::StoreBuilder {
+            neurons::StableNeuronStoreBuilder {
                 main: memory_manager.borrow().get(MAIN_NEURONS_MEMORY_ID),
 
                 // Collections
