@@ -642,12 +642,7 @@ impl MemoryUsage {
     ) -> HypervisorResult<()> {
         let bytes = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(pages))
             .map_err(|_| HypervisorError::OutOfMemory)?;
-        self.allocate_memory(
-            bytes,
-            NumBytes::from(0),
-            api_type,
-            sandbox_safe_system_state,
-        )
+        self.allocate_execution_memory(bytes, api_type, sandbox_safe_system_state)
     }
 
     /// Unconditionally deallocates the given number of Wasm pages. Should only
@@ -658,27 +653,24 @@ impl MemoryUsage {
         // was called and if it would have failed, we wouldn't call `decrease_usage`.
         let bytes = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(pages))
             .expect("could not convert wasm pages to bytes");
-        self.deallocate_memory(bytes, NumBytes::from(0))
+        self.deallocate_execution_memory(bytes)
     }
 
-    /// Tries to allocate the requested amount of memory (in bytes). `execution_bytes`
-    /// refers to the number of requested bytes for Wasm/stable memory; and
-    /// `message_bytes` refers to the bytes requested for messages.
+    /// Tries to allocate the requested amount of the Wasm or stable memory.
     ///
     /// If the canister has memory allocation, then this function doesn't allocate
     /// bytes, but only increases `current_usage`.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
-    /// if either the canister memory limit, the subnet memory limit, or the
-    /// message memory limit would be exceeded.
+    /// if either the canister memory limit or the subnet memory limit would be
+    /// exceeded.
     ///
     /// Returns `Err(HypervisorError::InsufficientCyclesInMemoryGrow)` and
     /// leaves `self` unchanged if freezing threshold check is needed for the
     /// given API type and canister would be frozen after the allocation.
-    fn allocate_memory(
+    fn allocate_execution_memory(
         &mut self,
         execution_bytes: NumBytes,
-        message_bytes: NumBytes,
         api_type: &ApiType,
         sandbox_safe_system_state: &SandboxSafeSystemState,
     ) -> HypervisorResult<()> {
@@ -703,13 +695,12 @@ impl MemoryUsage {
             MemoryAllocation::BestEffort => {
                 match self.subnet_available_memory.try_decrement(
                     execution_bytes,
-                    message_bytes,
+                    NumBytes::from(0),
                     NumBytes::from(0),
                 ) {
                     Ok(()) => {
                         self.current_usage = NumBytes::from(new_usage);
                         self.allocated_execution_memory += execution_bytes;
-                        self.allocated_message_memory += message_bytes;
                         Ok(())
                     }
                     Err(_err) => Err(HypervisorError::OutOfMemory),
@@ -729,13 +720,13 @@ impl MemoryUsage {
         }
     }
 
-    /// Deallocates the given number of execution bytes and message bytes.
-    /// Should only be called immediately after `allocate_memory()`, with the
+    /// Deallocates the given amount of the Wasm or stable memory.
+    /// Should only be called immediately after `allocate_execution_memory()`, with the
     /// same number of bytes, in case growing the heap failed or upon clean up.
     ///
     /// If the canister has memory allocation, then this function doesn't deallocate
     /// bytes, but only decreases `current_usage`.
-    fn deallocate_memory(&mut self, execution_bytes: NumBytes, message_bytes: NumBytes) {
+    fn deallocate_execution_memory(&mut self, execution_bytes: NumBytes) {
         debug_assert!(self.current_usage >= execution_bytes);
         self.current_usage -= execution_bytes;
 
@@ -743,19 +734,50 @@ impl MemoryUsage {
             MemoryAllocation::BestEffort => {
                 self.subnet_available_memory.increment(
                     execution_bytes,
-                    message_bytes,
+                    NumBytes::from(0),
                     NumBytes::from(0),
                 );
                 debug_assert!(self.allocated_execution_memory >= execution_bytes);
-                debug_assert!(self.allocated_message_memory >= message_bytes);
                 self.allocated_execution_memory -= execution_bytes;
-                self.allocated_message_memory -= message_bytes;
             }
             MemoryAllocation::Reserved(reserved_bytes) => {
                 debug_assert!(self.current_usage + execution_bytes <= reserved_bytes);
                 // Nothing to do since we didn't actually allocate new memory.
             }
         }
+    }
+
+    /// Tries to allocate the requested amount of message memory.
+    ///
+    /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
+    /// if the message memory limit would be exceeded.
+    fn allocate_message_memory(&mut self, message_bytes: NumBytes) -> HypervisorResult<()> {
+        match self.subnet_available_memory.try_decrement(
+            NumBytes::from(0),
+            message_bytes,
+            NumBytes::from(0),
+        ) {
+            Ok(()) => {
+                self.allocated_message_memory += message_bytes;
+                Ok(())
+            }
+            Err(_err) => Err(HypervisorError::OutOfMemory),
+        }
+    }
+
+    /// Deallocates the given number of message bytes.
+    /// Should only be called immediately after `allocate_message_memory()`, with the
+    /// same number of bytes, in case allocation failed.
+    fn deallocate_message_memory(&mut self, message_bytes: NumBytes) {
+        assert!(
+            self.allocated_message_memory >= message_bytes,
+            "Precondition of deallocate_message_memory failed: {} >= {}",
+            self.allocated_message_memory,
+            message_bytes
+        );
+        self.subnet_available_memory
+            .increment(NumBytes::from(0), message_bytes, NumBytes::from(0));
+        self.allocated_message_memory -= message_bytes;
     }
 }
 
@@ -846,10 +868,8 @@ impl SystemApiImpl {
         }
     }
 
-    /// Gets the result of execution, assuming there is no error from
-    /// running the canister. Returns any cycles used for an outgoing request
-    /// that doesn't get sent and returns allocated memory to the subnet if the
-    /// there is an error from running the canister.
+    /// Refunds any cycles used for an outgoing request that doesn't get sent
+    /// and returns the result of execution.
     pub fn take_execution_result(
         &mut self,
         wasm_run_error: Option<&HypervisorError>,
@@ -884,11 +904,8 @@ impl SystemApiImpl {
             .cloned()
             .or_else(|| self.execution_error.take())
         {
-            // Return allocated memory in case of failed message execution.
-            self.memory_usage.deallocate_memory(
-                self.memory_usage.allocated_execution_memory,
-                self.memory_usage.allocated_message_memory,
-            );
+            // There is no need to deallocate memory because all state changes
+            // are discarded for failed executions anyway.
             return Err(err);
         }
         match &mut self.api_type {
@@ -1252,12 +1269,7 @@ impl SystemApiImpl {
         };
         if self
             .memory_usage
-            .allocate_memory(
-                NumBytes::from(0),
-                reservation_bytes,
-                &self.api_type,
-                &self.sandbox_safe_system_state,
-            )
+            .allocate_message_memory(reservation_bytes)
             .is_err()
         {
             return abort(req, &mut self.sandbox_safe_system_state);
@@ -1272,7 +1284,7 @@ impl SystemApiImpl {
             Ok(()) => Ok(0),
             Err(request) => {
                 self.memory_usage
-                    .deallocate_memory(NumBytes::from(0), reservation_bytes);
+                    .deallocate_message_memory(reservation_bytes);
                 abort(request, &mut self.sandbox_safe_system_state)
             }
         }
@@ -2336,9 +2348,8 @@ impl SystemApi for SystemApiImpl {
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 
-            match self.memory_usage.allocate_memory(
+            match self.memory_usage.allocate_execution_memory(
                 bytes,
-                NumBytes::new(0),
                 &self.api_type,
                 &self.sandbox_safe_system_state,
             ) {
