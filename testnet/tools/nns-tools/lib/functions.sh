@@ -453,7 +453,7 @@ sns_w_latest_version() {
 ## List the neurons owned by the current dfx identity
 sns_list_my_neurons() {
 
-    local SNS_URL=$1 # ususally SUBNET_URL
+    local SNS_URL=$1 # usually SUBNET_URL
     local SNS_GOVERNANCE_CANISTER_ID=$2
 
     local IC=$(repo_root)
@@ -463,6 +463,24 @@ sns_list_my_neurons() {
         --candid $GOV_DID \
         $SNS_GOVERNANCE_CANISTER_ID list_neurons \
         "( record { of_principal = opt principal \"$(dfx -q identity get-principal)\"; limit = 100: nat32})"
+
+}
+
+##: sns_list_all_neurons
+## Usage: $1 <SUBNET_URL> <SNS_GOVERNANCE_CANISTER_ID>
+## List all neurons in an SNS
+sns_list_all_neurons() {
+
+    local SNS_URL=$1 # usually SUBNET_URL
+    local SNS_GOVERNANCE_CANISTER_ID=$2
+
+    local IC=$(repo_root)
+    local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
+
+    dfx -q canister --network "${SNS_URL}" call \
+        --candid "${GOV_DID}" \
+        "${SNS_GOVERNANCE_CANISTER_ID}" list_neurons \
+        "( record { of_principal = null; limit = 100: nat32})"
 
 }
 
@@ -568,4 +586,29 @@ sns_get_proposal() {
     dfx -q canister --network $SNS_URL \
         call --candid "$GOV_DID" \
         "$SNS_GOVERNANCE_CANISTER_ID" get_proposal "( record { proposal_id = opt record { id = $PROPOSAL_ID : nat64 }})"
+}
+
+##: wait_for_proposal_to_execute
+## Waits with a timeout for an NNS Proposal to successfully execute.
+## Usage: $1 <NNS_URL> <PROPOSAL_ID>
+##      NNS_URL: The url to the subnet running the NNS in your testnet.
+##      PROPOSAL_ID: The ID of the proposal
+wait_for_proposal_to_execute() {
+    ensure_variable_set IDL2JSON
+
+    local NNS_URL=$1
+    local PROPOSAL_ID=$2
+
+    for i in {1..20}; do
+        echo "Testing to see if NNS proposal ${PROPOSAL_ID} executed successfully (${i}/20)"
+        EXECUTED=$(nns_proposal_info "$NNS_URL" "$PROPOSAL_ID" | $IDL2JSON | jq -r '.[0].executed_timestamp_seconds')
+        if [[ "${EXECUTED}" != 0 ]]; then
+            print_green "NNS proposal ${PROPOSAL_ID} executed successfully"
+            return 0
+        fi
+        sleep 10
+    done
+
+    print_red "NNS proposal ${PROPOSAL_ID} did not execute successfully"
+    return 1
 }

@@ -41,7 +41,7 @@ for canister_name in "${NNS_CANISTERS[@]}"; do
     network=ic
     released_commit_id=$(nns_canister_git_version "$network" "$canister_name" 2>/dev/null)
     root=$(get_nns_canister_code_location "$canister_name")
-    git log --format="%C(auto) %h %s" "$released_commit_id".."$RELEASE_CANDIDATE_COMMIT_ID" -- $root
+    git --no-pager log --format="%C(auto) %h %s" "$released_commit_id".."$RELEASE_CANDIDATE_COMMIT_ID" -- $root
 done
 
 SNS_CANISTERS=(
@@ -60,5 +60,5 @@ for canister_name in "${SNS_CANISTERS[@]}"; do
     network=ic
     released_commit_id=$(sns_mainnet_git_commit_id "$canister_name")
     root=$(get_sns_canister_code_location "$canister_name")
-    git log --format="%C(auto) %h %s" "$released_commit_id".."$RELEASE_CANDIDATE_COMMIT_ID" -- $root
+    git --no-pager log --format="%C(auto) %h %s" "$released_commit_id".."$RELEASE_CANDIDATE_COMMIT_ID" -- $root
 done

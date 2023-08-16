@@ -121,6 +121,32 @@ deploy_new_sns() {
     set -e
 }
 
+propose_new_sns() {
+    ensure_variable_set SNS_CLI
+
+    local NNS_URL=$1
+    local NEURON_ID=$2
+    local CONFIG_FILE=${3:-}
+
+    if [ -z "$CONFIG_FILE" ]; then
+        CONFIG_FILE=$NNS_TOOLS_DIR/sns_default_test_init_params_v2.yml
+    fi
+
+    set +e
+
+    OUT=$($SNS_CLI propose --network "${NNS_URL}" \
+        --neuron-id "${NEURON_ID}" \
+        "${CONFIG_FILE}")
+    set -e
+
+    PROPOSAL_ID=$(echo "$OUT" | grep -o 'Proposal ID: [0-9]*' | cut -d' ' -f3)
+    if ! wait_for_proposal_to_execute "$NNS_URL" "$PROPOSAL_ID"; then
+        return 1
+    fi
+
+    return 0
+}
+
 add_sns_wasms_allowed_principal() {
     ensure_variable_set IC_ADMIN
 
