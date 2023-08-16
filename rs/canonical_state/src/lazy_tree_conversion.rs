@@ -1,6 +1,5 @@
 //! Conversion from `ReplicatedState` to `LazyTree`.
 
-use super::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
 use crate::{
     encoding::{
         encode_controllers, encode_message, encode_metadata, encode_stream_header,
@@ -8,6 +7,7 @@ use crate::{
     },
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION,
 };
+use ic_canonical_state_tree_hash::lazy_tree::{blob, fork, num, string, Lazy, LazyFork, LazyTree};
 use ic_crypto_tree_hash::Label;
 use ic_error_types::ErrorCode;
 use ic_error_types::RejectCode;
@@ -246,12 +246,6 @@ impl<'a, T: Send + Sync> LazyFork<'a> for StreamQueueFork<'a, T> {
     }
 }
 
-impl<'a> From<&'a ReplicatedState> for LazyTree<'a> {
-    fn from(state: &'a ReplicatedState) -> LazyTree<'a> {
-        state_as_tree(state)
-    }
-}
-
 fn invert_routing_table(
     routing_table: &RoutingTable,
 ) -> BTreeMap<SubnetId, Vec<(PrincipalId, PrincipalId)>> {
@@ -266,7 +260,7 @@ fn invert_routing_table(
 }
 
 /// Converts replicated state into a lazy tree.
-fn state_as_tree(state: &ReplicatedState) -> LazyTree<'_> {
+pub fn replicated_state_as_lazy_tree(state: &ReplicatedState) -> LazyTree<'_> {
     let certification_version = state.metadata.certification_version;
     assert!(
         certification_version <= MAX_SUPPORTED_CERTIFICATION_VERSION,

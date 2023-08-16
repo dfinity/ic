@@ -5,6 +5,7 @@
 // let $data: &mut [u8] = unsafe { std::slice::from_raw_parts_mut($data, len) };"
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
+use ic_canonical_state_tree_hash_test_utils::test_witness_equality_for_tree;
 use ic_crypto_tree_hash::{flatmap, LabeledTree};
 use ic_crypto_tree_hash_fuzz_check_witness_equality_utils::*;
 use ic_protobuf::messaging::xnet::v1::LabeledTree as ProtobufLabeledTree;
@@ -23,7 +24,7 @@ fuzz_target!(|data: &[u8]| {
         let seed: [u8; SEED_LEN] = data[..SEED_LEN]
             .try_into()
             .expect("failed to copy seed bytes");
-        test_tree(&tree, &mut ChaCha20Rng::from_seed(seed));
+        test_witness_equality_for_tree(&tree, &mut ChaCha20Rng::from_seed(seed));
     };
 });
 

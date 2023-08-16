@@ -3,7 +3,6 @@ use ic_crypto_tree_hash::{
     self as crypto, hasher::Hasher, Digest, Label, LabeledTree, WitnessBuilder,
 };
 use itertools::izip;
-use std::collections::VecDeque;
 use std::fmt;
 use std::iter::repeat_with;
 use std::ops::Range;
@@ -1012,76 +1011,3 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> Result<HashTree, HashTreeError> {
 
     Ok(ht)
 }
-
-/// TODO(CRP-2151) don't compile `crypto_hash_lazy_tree()` in prod.
-/// Constructs a hash tree corresponding to the specified lazy tree.
-/// This function is only used for benchmarks.
-pub fn crypto_hash_lazy_tree(t: &LazyTree<'_>) -> crypto::HashTree {
-    use crypto::HashTree;
-
-    fn go(t: &LazyTree<'_>) -> HashTree {
-        match t {
-            LazyTree::Blob(b, None) => {
-                let mut h = Hasher::for_domain("ic-hashtree-leaf");
-                h.update(b);
-                HashTree::Leaf {
-                    digest: h.finalize(),
-                }
-            }
-            LazyTree::Blob(_, Some(h)) => HashTree::Leaf { digest: Digest(*h) },
-            LazyTree::LazyBlob(f) => {
-                let b = f();
-                let mut h = Hasher::for_domain("ic-hashtree-leaf");
-                h.update(&b);
-                HashTree::Leaf {
-                    digest: h.finalize(),
-                }
-            }
-            LazyTree::LazyFork(f) => {
-                let mut children = VecDeque::new();
-                for label in f.labels() {
-                    let child = go(&f.edge(&label).expect("missing fork tree"));
-                    let mut h = Hasher::for_domain("ic-hashtree-labeled");
-                    h.update(label.as_bytes());
-                    h.update(child.digest().as_bytes());
-                    children.push_back(HashTree::Node {
-                        digest: h.finalize(),
-                        label,
-                        hash_tree: Box::new(child),
-                    });
-                }
-
-                if children.is_empty() {
-                    return HashTree::Leaf { digest: EMPTY_HASH };
-                }
-
-                let mut next = VecDeque::new();
-                loop {
-                    while let Some(l) = children.pop_front() {
-                        if let Some(r) = children.pop_front() {
-                            let mut h = Hasher::for_domain("ic-hashtree-fork");
-                            h.update(l.digest().as_bytes());
-                            h.update(r.digest().as_bytes());
-                            next.push_back(HashTree::Fork {
-                                digest: h.finalize(),
-                                left_tree: Box::new(l),
-                                right_tree: Box::new(r),
-                            });
-                        } else {
-                            next.push_back(l);
-                        }
-                    }
-
-                    if next.len() == 1 {
-                        return next.pop_front().unwrap();
-                    }
-                    std::mem::swap(&mut children, &mut next);
-                }
-            }
-        }
-    }
-    go(t)
-}
-
-#[cfg(test)]
-mod test;

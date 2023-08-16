@@ -1,0 +1,18 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/canonical_state/tree_hash",
+    "//rs/crypto/tree_hash",
+    "//rs/crypto/tree_hash/test_utils",
+    "@crate_index//:rand_0_8_4",
+]
+
+rust_library(
+    name = "test_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_canonical_state_tree_hash_test_utils",
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)

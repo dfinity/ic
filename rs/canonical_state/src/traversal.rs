@@ -1,5 +1,6 @@
-use crate::lazy_tree::LazyTree;
+use crate::lazy_tree_conversion::replicated_state_as_lazy_tree;
 use crate::visitor::{Control, Visitor};
+use ic_canonical_state_tree_hash::lazy_tree::LazyTree;
 use ic_replicated_state::ReplicatedState;
 
 /// Traverses lazy tree using specified visitor.
@@ -31,7 +32,7 @@ fn traverse_lazy_tree<V: Visitor>(t: &LazyTree<'_>, v: &mut V) -> Result<(), V::
 /// `state` for transmitting it over the network to another replica, compute a
 /// hash tree for certification or extract a specific value.
 pub fn traverse<V: Visitor>(state: &ReplicatedState, mut v: V) -> V::Output {
-    let t = LazyTree::from(state);
+    let t = replicated_state_as_lazy_tree(state);
     match traverse_lazy_tree(&t, &mut v) {
         Err(output) => output,
         _ => v.finish(),

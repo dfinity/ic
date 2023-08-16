@@ -14,6 +14,7 @@ rust_library(
     version = "0.8.0",
     deps = [
         "//rs/canonical_state",
+        "//rs/canonical_state/tree_hash",
         "//rs/config",
         "//rs/crypto/sha2",
         "//rs/crypto/tree_hash",
@@ -121,6 +122,8 @@ rust_bench(
         ":state_manager",
         "//rs/canonical_state",
         "//rs/canonical_state/certification_version",
+        "//rs/canonical_state/tree_hash",
+        "//rs/canonical_state/tree_hash/test_utils",
         "//rs/criterion_time",
         "//rs/crypto/tree_hash",
         "//rs/registry/subnet_type",

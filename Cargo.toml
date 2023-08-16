@@ -44,6 +44,8 @@ members = [
   "rs/canister_sandbox/replica_controller",
   "rs/canister_sandbox/sandbox_launcher",
   "rs/canonical_state",
+  "rs/canonical_state/tree_hash",
+  "rs/canonical_state/tree_hash/test_utils",
   "rs/certification",
   "rs/certification/test-utils",
   "rs/config",
