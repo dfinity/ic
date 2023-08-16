@@ -170,6 +170,292 @@ pub fn instruction_to_cost(i: &Operator) -> u64 {
     }
 }
 
+// Gets the cost of an instruction.
+pub fn instruction_to_cost_new(i: &Operator) -> u64 {
+    // This aims to be a complete list of all instructions that can be executed, with certain exceptions.
+    // The exceptions are: SIMD instructions, atomic instructions, and the dynamic cost of
+    // of operations such as table/memory fill, copy, init. This
+    // dynamic cost is treated separately. Here we only assign a static cost to these instructions.
+    match i {
+        // The following instructions are mostly signaling the start/end of code blocks,
+        // so we assign 0 cost to them.
+        Operator::Block { .. } => 0,
+        Operator::Else => 0,
+        Operator::End => 0,
+        Operator::Loop { .. } => 0,
+
+        // The following instructions generate register/immediate code most of the time,
+        // so we assign 1 cost to them because these are not very costly to execute,
+        // they simply take out resources (registers or instr cache).
+        Operator::I32Const { .. }
+        | Operator::I64Const { .. }
+        | Operator::F32Const { .. }
+        | Operator::F64Const { .. } => 1,
+
+        // All integer arithmetic instructions (32 bit and 64 bit) are of cost 1 with the
+        // exception of division and remainder instructions, which are of cost 10. Validated
+        // in benchmarks.
+        Operator::I32Add { .. }
+        | Operator::I32Sub { .. }
+        | Operator::I32Mul { .. }
+        | Operator::I32And { .. }
+        | Operator::I32Or { .. }
+        | Operator::I32Xor { .. }
+        | Operator::I32Shl { .. }
+        | Operator::I32ShrS { .. }
+        | Operator::I32ShrU { .. }
+        | Operator::I32Rotl { .. }
+        | Operator::I32Rotr { .. }
+        | Operator::I64Add { .. }
+        | Operator::I64Sub { .. }
+        | Operator::I64Mul { .. }
+        | Operator::I64And { .. }
+        | Operator::I64Or { .. }
+        | Operator::I64Xor { .. }
+        | Operator::I64Shl { .. }
+        | Operator::I64ShrS { .. }
+        | Operator::I64ShrU { .. }
+        | Operator::I64Rotl { .. }
+        | Operator::I64Rotr { .. } => 1,
+
+        Operator::I32DivS { .. }
+        | Operator::I32DivU { .. }
+        | Operator::I32RemS { .. }
+        | Operator::I32RemU { .. }
+        | Operator::I64DivS { .. }
+        | Operator::I64DivU { .. }
+        | Operator::I64RemS { .. }
+        | Operator::I64RemU { .. } => 10,
+
+        // All integer (32 and 64 bit) comparison operations are of cost 1.
+        // That is because they boil down to simple arithmetic operations, which are also
+        // of cost 1. Validated in Benchmarks.
+        Operator::I32Eqz { .. }
+        | Operator::I32Eq { .. }
+        | Operator::I32Ne { .. }
+        | Operator::I32LtS { .. }
+        | Operator::I32LtU { .. }
+        | Operator::I32GtS { .. }
+        | Operator::I32GtU { .. }
+        | Operator::I32LeS { .. }
+        | Operator::I32LeU { .. }
+        | Operator::I32GeS { .. }
+        | Operator::I32GeU { .. }
+        | Operator::I64Eqz { .. }
+        | Operator::I64Eq { .. }
+        | Operator::I64Ne { .. }
+        | Operator::I64LtS { .. }
+        | Operator::I64LtU { .. }
+        | Operator::I64GtS { .. }
+        | Operator::I64GtU { .. }
+        | Operator::I64LeS { .. }
+        | Operator::I64LeU { .. }
+        | Operator::I64GeS { .. }
+        | Operator::I64GeU { .. } => 1,
+
+        // All floating point instructions (32 and 64 bit) are of cost 50 because they are expensive CPU operations.
+        //The exception is neg, abs, and copysign, which are cost 2, as they are more efficient.
+        // Comparing floats is cost 1. Validated in Benchmarks.
+        // The cost is adjusted to 20 after benchmarking with real canisters.
+        Operator::F32Add { .. }
+        | Operator::F32Sub { .. }
+        | Operator::F32Mul { .. }
+        | Operator::F32Div { .. }
+        | Operator::F32Min { .. }
+        | Operator::F32Max { .. }
+        | Operator::F32Ceil { .. }
+        | Operator::F32Floor { .. }
+        | Operator::F32Trunc { .. }
+        | Operator::F32Nearest { .. }
+        | Operator::F32Sqrt { .. }
+        | Operator::F64Add { .. }
+        | Operator::F64Sub { .. }
+        | Operator::F64Mul { .. }
+        | Operator::F64Div { .. }
+        | Operator::F64Min { .. }
+        | Operator::F64Max { .. }
+        | Operator::F64Ceil { .. }
+        | Operator::F64Floor { .. }
+        | Operator::F64Trunc { .. }
+        | Operator::F64Nearest { .. }
+        | Operator::F64Sqrt { .. } => 20,
+
+        Operator::F32Abs { .. }
+        | Operator::F32Neg { .. }
+        | Operator::F32Copysign { .. }
+        | Operator::F64Abs { .. }
+        | Operator::F64Neg { .. }
+        | Operator::F64Copysign { .. } => 2,
+
+        // Comparison operations for floats are of cost 3 because they are usually implemented
+        // as arithmetic operations on integers (the individual components, sign, exp, mantissa,
+        // see https://en.wikipedia.org/wiki/Floating-point_arithmetic#Comparison).
+        // Validated in benchmarks.
+        Operator::F32Eq { .. }
+        | Operator::F32Ne { .. }
+        | Operator::F32Lt { .. }
+        | Operator::F32Gt { .. }
+        | Operator::F32Le { .. }
+        | Operator::F32Ge { .. }
+        | Operator::F64Eq { .. }
+        | Operator::F64Ne { .. }
+        | Operator::F64Lt { .. }
+        | Operator::F64Gt { .. }
+        | Operator::F64Le { .. }
+        | Operator::F64Ge { .. } => 3,
+
+        // All Extend instructions are of cost 1.
+        Operator::I32WrapI64 { .. }
+        | Operator::I32Extend8S { .. }
+        | Operator::I32Extend16S { .. }
+        | Operator::I64Extend8S { .. }
+        | Operator::I64Extend16S { .. }
+        | Operator::I64Extend32S { .. }
+        | Operator::F64ReinterpretI64 { .. }
+        | Operator::I64ReinterpretF64 { .. }
+        | Operator::I32ReinterpretF32 { .. }
+        | Operator::F32ReinterpretI32 { .. }
+        | Operator::I64ExtendI32S { .. }
+        | Operator::I64ExtendI32U { .. } => 1,
+
+        // Convert to signed is cheaper than converting to unsigned, validated in benchmarks.
+        Operator::F32ConvertI32S { .. }
+        | Operator::F64ConvertI64S { .. }
+        | Operator::F32ConvertI64S { .. }
+        | Operator::F64ConvertI32S { .. } => 3,
+
+        Operator::F64ConvertI32U { .. }
+        | Operator::F32ConvertI64U { .. }
+        | Operator::F32ConvertI32U { .. }
+        | Operator::F64ConvertI64U { .. } => 16,
+
+        // TruncSat ops are expensive because of floating point manipulation. Cost is 50,
+        // validated in benchmarks.
+        // The cost is adjusted to 20 after benchmarking with real canisters.
+        Operator::I64TruncSatF32S { .. }
+        | Operator::I64TruncSatF32U { .. }
+        | Operator::I64TruncSatF64S { .. }
+        | Operator::I64TruncSatF64U { .. }
+        | Operator::I32TruncSatF32S { .. }
+        | Operator::I32TruncSatF32U { .. }
+        | Operator::I32TruncSatF64S { .. }
+        | Operator::I32TruncSatF64U { .. } => 20,
+
+        // Promote and demote are of cost 1.
+        Operator::F32DemoteF64 { .. } | Operator::F64PromoteF32 { .. } => 1,
+
+        // Trunc ops are expensive because of floating point manipulation. Cost is 30, validated in benchmarks.
+        // The cost is adjusted to 20 after benchmarking with real canisters.
+        Operator::I32TruncF32S { .. }
+        | Operator::I32TruncF32U { .. }
+        | Operator::I32TruncF64S { .. }
+        | Operator::I32TruncF64U { .. }
+        | Operator::I64TruncF32S { .. }
+        | Operator::I64TruncF32U { .. }
+        | Operator::I64TruncF64S { .. }
+        | Operator::I64TruncF64U { .. } => 20,
+
+        // All load/store instructions are of cost 2.
+        // Validated in benchmarks.
+        // The cost is adjusted to 1 after benchmarking with real canisters.
+        Operator::I32Load { .. }
+        | Operator::I64Load { .. }
+        | Operator::F32Load { .. }
+        | Operator::F64Load { .. }
+        | Operator::I32Load8S { .. }
+        | Operator::I32Load8U { .. }
+        | Operator::I32Load16S { .. }
+        | Operator::I32Load16U { .. }
+        | Operator::I64Load8S { .. }
+        | Operator::I64Load8U { .. }
+        | Operator::I64Load16S { .. }
+        | Operator::I64Load16U { .. }
+        | Operator::I64Load32S { .. }
+        | Operator::I64Load32U { .. }
+        | Operator::I32Store { .. }
+        | Operator::I64Store { .. }
+        | Operator::F32Store { .. }
+        | Operator::F64Store { .. }
+        | Operator::I32Store8 { .. }
+        | Operator::I32Store16 { .. }
+        | Operator::I64Store8 { .. }
+        | Operator::I64Store16 { .. }
+        | Operator::I64Store32 { .. } => 1,
+
+        // Global get/set operations are similarly expensive to loads/stores.
+        Operator::GlobalGet { .. } | Operator::GlobalSet { .. } => 2,
+
+        // TableGet and TableSet are expensive operations because they
+        // are translated into memory manipulation oprations.
+        // Results based on benchmarks.
+        Operator::TableGet { .. } => 5,
+        Operator::TableSet { .. } => 5,
+
+        // LocalGet and LocalSet, LocalTee and Select are of cost 1.
+        // In principle, they should be equivalent to load/store (cost 2), but they perform load/store
+        // from the stack, which is "nearby" memory, which is likely to be in the cache.
+        Operator::LocalGet { .. }
+        | Operator::LocalSet { .. }
+        | Operator::LocalTee { .. }
+        | Operator::Select { .. } => 1,
+
+        // Memory Grow and Table Grow Size expensive operations because they call
+        // into the system, hence their cost is 300. Memory Size and Table Size are
+        // cheaper, their cost is 20. Results validated in benchmarks.
+        Operator::TableGrow { .. } | Operator::MemoryGrow { .. } => 300,
+        Operator::TableSize { .. } | Operator::MemorySize { .. } => 20,
+
+        // Bulk memory ops are of cost 100. They are heavy operations because
+        // they are translated into function calls in the x86 dissasembly. Validated
+        // in benchmarks.
+        Operator::MemoryFill { .. }
+        | Operator::MemoryCopy { .. }
+        | Operator::TableFill { .. }
+        | Operator::TableCopy { .. }
+        | Operator::MemoryInit { .. }
+        | Operator::TableInit { .. } => 100,
+
+        // Data and Elem drop are of cost 300.
+        Operator::DataDrop { .. } | Operator::ElemDrop { .. } => 300,
+
+        // Call instructions are of cost 20. Validated in benchmarks.
+        // The cost is adjusted to 10 after benchmarking with real canisters.
+        Operator::Call { .. }
+        | Operator::CallIndirect { .. }
+        | Operator::ReturnCall { .. }
+        | Operator::ReturnCallIndirect { .. } => 10,
+
+        // Return, drop, unreachable and nop instructions are of cost 1.
+        Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,
+
+        // Branching instructions should be of cost 2.
+        Operator::If { .. }
+        | Operator::Br { .. }
+        | Operator::BrIf { .. }
+        | Operator::BrTable { .. } => 2,
+
+        // Popcnt and Clz instructions are cost 1. Validated in benchmarks.
+        Operator::I32Popcnt { .. }
+        | Operator::I64Popcnt { .. }
+        | Operator::I32Clz { .. }
+        | Operator::I32Ctz { .. }
+        | Operator::I64Clz { .. }
+        | Operator::I64Ctz { .. } => 1,
+
+        // Null references are cheap, validated in benchmarks.
+        Operator::RefNull { .. } => 1,
+        // Checking for null references is the same as branching
+        //but with an added complexity of memory manipulation. Validated in benchmarks.
+        Operator::RefIsNull { .. } => 5,
+        // Function pointers are heavy because they get
+        // translated to memory manipulation. Validated in benchmarks.
+        Operator::RefFunc { .. } => 130,
+
+        // Default cost of an instruction is 1.
+        _ => 1,
+    }
+}
+
 const INSTRUMENTED_FUN_MODULE: &str = "__";
 const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
 const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
@@ -1298,7 +1584,7 @@ fn injections_new(code: &[Operator]) -> Vec<InjectionPoint> {
     // The function itself is a re-entrant code block.
     let mut curr = InjectionPoint::new_static_cost(0, Scope::ReentrantBlockStart);
     for (position, i) in code.iter().enumerate() {
-        curr.cost_detail.increment_cost(instruction_to_cost(i));
+        curr.cost_detail.increment_cost(instruction_to_cost_new(i));
         match i {
             // Start of a re-entrant code block.
             Loop { .. } => {

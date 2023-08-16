@@ -13,7 +13,7 @@ use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
 
-use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
+use ic_embedders::wasm_utils::instrumentation::instruction_to_cost_new;
 use ic_embedders::wasmtime_embedder::{system_api_complexity, WasmtimeInstance};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_interfaces::execution_environment::SystemApi;
@@ -251,10 +251,10 @@ fn add_one() -> String {
 
 // cost of the addition group (get glob, do adds, set glob)
 fn cost_a(n: u64) -> u64 {
-    let ca = instruction_to_cost(&wasmparser::Operator::I64Add);
-    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 })
-        + instruction_to_cost(&wasmparser::Operator::GlobalGet { global_index: 0 });
+    let ca = instruction_to_cost_new(&wasmparser::Operator::I64Add);
+    let cc = instruction_to_cost_new(&wasmparser::Operator::I64Const { value: 1 });
+    let cg = instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 })
+        + instruction_to_cost_new(&wasmparser::Operator::GlobalGet { global_index: 0 });
 
     (ca + cc) * n + cg
 }
@@ -312,7 +312,7 @@ fn metering_plain() {
     assert_eq!(g[0], Global::I64(10));
 
     let instructions_used = instr_used(&mut instance);
-    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
     assert_eq!(instructions_used, cost_a(10) + cret);
 
     // Now run the same with insufficient instructions
@@ -342,7 +342,7 @@ fn metering_plain() {
     instance.run(func_ref("test")).unwrap_err();
 
     let instructions_used = instr_used(&mut instance);
-    let ctrap = instruction_to_cost(&wasmparser::Operator::Unreachable);
+    let ctrap = instruction_to_cost_new(&wasmparser::Operator::Unreachable);
     assert_eq!(instructions_used, cost_a(10) + ctrap);
 }
 
@@ -412,7 +412,7 @@ fn metering_block() {
     assert_eq!(g[0], Global::I64(120));
 
     let instructions_used = instr_used(&mut instance);
-    let cbr = instruction_to_cost(&wasmparser::Operator::Br { relative_depth: 1 });
+    let cbr = instruction_to_cost_new(&wasmparser::Operator::Br { relative_depth: 1 });
     assert_eq!(instructions_used, cost_a(100) + cost_a(10) * 2 + cbr);
 
     // another one, with return
@@ -455,7 +455,7 @@ fn metering_block() {
     assert_eq!(g[0], Global::I64(110));
 
     let instructions_used = instr_used(&mut instance);
-    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
     assert_eq!(instructions_used, cost_a(100) + cost_a(10) + cret);
 }
 
@@ -499,8 +499,8 @@ fn metering_if() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(55));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-    let cif = instruction_to_cost(&wasmparser::Operator::If {
+    let cc = instruction_to_cost_new(&wasmparser::Operator::I64Const { value: 1 });
+    let cif = instruction_to_cost_new(&wasmparser::Operator::If {
         blockty: wasmparser::BlockType::Empty,
     });
 
@@ -549,7 +549,7 @@ fn metering_if() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(15));
 
-    let cret = instruction_to_cost(&wasmparser::Operator::Return);
+    let cret = instruction_to_cost_new(&wasmparser::Operator::Return);
 
     let instructions_used = instr_used(&mut instance);
     assert_eq!(instructions_used, cost_a(5) + cost_a(10) + cc + cif + cret);
@@ -602,13 +602,13 @@ fn metering_loop() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(105));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I32Const { value: 1 });
-    let cbrif = instruction_to_cost(&wasmparser::Operator::BrIf { relative_depth: 0 });
+    let cc = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 1 });
+    let cbrif = instruction_to_cost_new(&wasmparser::Operator::BrIf { relative_depth: 0 });
 
-    let ca = instruction_to_cost(&wasmparser::Operator::I32Add);
-    let clts = instruction_to_cost(&wasmparser::Operator::I32LtS);
-    let cset = instruction_to_cost(&wasmparser::Operator::LocalSet { local_index: 0 });
-    let cget = instruction_to_cost(&wasmparser::Operator::LocalGet { local_index: 0 });
+    let ca = instruction_to_cost_new(&wasmparser::Operator::I32Add);
+    let clts = instruction_to_cost_new(&wasmparser::Operator::I32LtS);
+    let cset = instruction_to_cost_new(&wasmparser::Operator::LocalSet { local_index: 0 });
+    let cget = instruction_to_cost_new(&wasmparser::Operator::LocalGet { local_index: 0 });
 
     let c_loop = cost_a(10) + cc * 2 + ca + cget + cset * 2 + clts + cbrif;
 
@@ -638,9 +638,9 @@ fn charge_for_dirty_heap() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(17));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
-    let cs = instruction_to_cost(&wasmparser::Operator::I64Store {
+    let cc = instruction_to_cost_new(&wasmparser::Operator::I64Const { value: 1 });
+    let cg = instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let cs = instruction_to_cost_new(&wasmparser::Operator::I64Store {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -648,7 +648,7 @@ fn charge_for_dirty_heap() {
             memory: 0,
         },
     });
-    let cl = instruction_to_cost(&wasmparser::Operator::I64Load {
+    let cl = instruction_to_cost_new(&wasmparser::Operator::I64Load {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -700,12 +700,12 @@ fn charge_for_dirty_stable() {
     let g = &res.exported_globals;
     assert_eq!(g[0], Global::I64(17));
 
-    let cc = instruction_to_cost(&wasmparser::Operator::I64Const { value: 1 });
-    let cg = instruction_to_cost(&wasmparser::Operator::GlobalSet { global_index: 0 });
-    let ccall = instruction_to_cost(&wasmparser::Operator::Call { function_index: 0 });
-    let cdrop = instruction_to_cost(&wasmparser::Operator::Drop);
+    let cc = instruction_to_cost_new(&wasmparser::Operator::I64Const { value: 1 });
+    let cg = instruction_to_cost_new(&wasmparser::Operator::GlobalSet { global_index: 0 });
+    let ccall = instruction_to_cost_new(&wasmparser::Operator::Call { function_index: 0 });
+    let cdrop = instruction_to_cost_new(&wasmparser::Operator::Drop);
 
-    let cs = instruction_to_cost(&wasmparser::Operator::I64Store {
+    let cs = instruction_to_cost_new(&wasmparser::Operator::I64Store {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -713,7 +713,7 @@ fn charge_for_dirty_stable() {
             memory: 0,
         },
     });
-    let cl = instruction_to_cost(&wasmparser::Operator::I64Load {
+    let cl = instruction_to_cost_new(&wasmparser::Operator::I64Load {
         memarg: wasmparser::MemArg {
             align: 0,
             max_align: 0,
@@ -765,10 +765,10 @@ fn test_metering_for_table_fill() {
     let mut instance = new_instance(wat, 1000000);
     let _res = instance.run(func_ref("test")).unwrap();
 
-    let param1 = instruction_to_cost(&wasmparser::Operator::I32Const { value: 0 });
-    let param2 = instruction_to_cost(&wasmparser::Operator::RefFunc { function_index: 0 });
-    let param3 = instruction_to_cost(&wasmparser::Operator::I32Const { value: 50 });
-    let table_fill = instruction_to_cost(&wasmparser::Operator::TableFill { table: 0 });
+    let param1 = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 0 });
+    let param2 = instruction_to_cost_new(&wasmparser::Operator::RefFunc { function_index: 0 });
+    let param3 = instruction_to_cost_new(&wasmparser::Operator::I32Const { value: 50 });
+    let table_fill = instruction_to_cost_new(&wasmparser::Operator::TableFill { table: 0 });
     // The third parameter of table.fill is the number of elements to fill
     // and we charge dynamically 1 for each byte written.
     let dynamic_cost_table_fill = 50;
