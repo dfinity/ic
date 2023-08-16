@@ -1,10 +1,13 @@
 use anyhow::Result;
 
 use ic_tests::{
-    api_boundary_nodes_integration::api_bn::{
-        canister_routing_test, canister_test, direct_to_replica_options_test,
-        direct_to_replica_test, mk_setup, nginx_valid_config_test, reboot_test,
-        redirect_http_to_https_test, ApiBoundaryNodeHttpsConfig,
+    boundary_nodes::{
+        api_boundary_nodes::{
+            canister_routing_test, canister_test, direct_to_replica_options_test,
+            direct_to_replica_test, mk_setup, nginx_valid_config_test, reboot_test,
+            redirect_http_to_https_test,
+        },
+        helpers::ApiBoundaryNodeHttpsConfig,
     },
     driver::group::{SystemTestGroup, SystemTestSubGroup},
     systest,

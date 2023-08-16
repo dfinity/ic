@@ -23,32 +23,30 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            NnsInstallationBuilder, RetrieveIpv4Addr, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::assert_create_agent,
 };
 
-use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
+use crate::boundary_nodes::{
+    constants::{BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
+    helpers::{create_canister, exec_ssh_command, get_install_url, BoundaryNodeHttpsConfig},
+};
+use std::{convert::TryFrom, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
 use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
-use ic_base_types::PrincipalId;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
-use ic_utils::interfaces::ManagementCanister;
 use serde::Deserialize;
 use slog::{error, info, Logger};
 use tokio::runtime::Runtime;
-
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
-const COUNTER_CANISTER_WAT: &str = include_str!("../counter.wat");
 
 struct PanicHandler {
     env: TestEnv,
@@ -96,95 +94,6 @@ impl Drop for PanicHandler {
             "systemctl {BOUNDARY_NODE_NAME} = '{list_dependencies}'. Exit status = {}", exit_status,
         );
     }
-}
-
-pub fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
-    let mut channel = vm.block_on_ssh_session()?.channel_session()?;
-
-    channel.exec(command)?;
-
-    let mut output = String::new();
-    channel.read_to_string(&mut output)?;
-    channel.wait_close()?;
-
-    Ok((output, channel.exit_status()?))
-}
-
-fn get_install_url(env: &TestEnv) -> Result<(url::Url, PrincipalId), Error> {
-    let subnet = env
-        .topology_snapshot()
-        .subnets()
-        .next()
-        .ok_or_else(|| anyhow!("missing subnet"))?;
-
-    let node = subnet
-        .nodes()
-        .next()
-        .ok_or_else(|| anyhow!("missing node"))?;
-
-    Ok((node.get_public_url(), node.effective_canister_id()))
-}
-
-async fn create_canister(
-    agent: &Agent,
-    effective_canister_id: PrincipalId,
-    canister_bytes: &[u8],
-    arg: Option<Vec<u8>>,
-) -> Result<Principal, String> {
-    // Create a canister.
-    let mgr = ManagementCanister::create(agent);
-    let canister_id = mgr
-        .create_canister()
-        .as_provisional_create_with_amount(None)
-        .with_effective_canister_id(effective_canister_id)
-        .call_and_wait()
-        .await
-        .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
-        .0;
-
-    let mut install_code = mgr.install_code(&canister_id, canister_bytes);
-    if let Some(arg) = arg {
-        install_code = install_code.with_raw_arg(arg)
-    }
-
-    install_code
-        .call_and_wait()
-        .await
-        .map_err(|err| format!("Couldn't install canister: {}", err))?;
-
-    Ok::<_, String>(canister_id)
-}
-
-#[derive(Copy, Clone)]
-pub enum BoundaryNodeHttpsConfig {
-    /// Acquire a playnet certificate (or fail if all have been acquired already)
-    /// for the domain `ic{ix}.farm.dfinity.systems`
-    /// where `ix` is the index of the acquired playnet.
-    ///
-    /// Then create an AAAA record pointing
-    /// `ic{ix}.farm.dfinity.systems` to the IPv6 address of the BN.
-    ///
-    /// Also add CNAME records for
-    /// `*.ic{ix}.farm.dfinity.systems` and
-    /// `*.raw.ic{ix}.farm.dfinity.systems`
-    /// pointing to `ic{ix}.farm.dfinity.systems`.
-    ///
-    /// If IPv4 has been enabled for the BN (`has_ipv4`),
-    /// also add a corresponding A record pointing to the IPv4 address of the BN.
-    ///
-    /// Finally configure the BN with the playnet certificate.
-    ///
-    /// Note that if multiple BNs are created within the same
-    /// farm-group, they will share the same certificate and
-    /// domain name.
-    /// Also all their IPv6 addresses will be added to the AAAA record
-    /// and all their IPv4 addresses will be added to the A record.
-    UseRealCertsAndDns,
-
-    /// Don't create real certificates and DNS records,
-    /// instead dangerously accept self-signed certificates and
-    /// resolve domains on the client-side without quering DNS.
-    AcceptInvalidCertsAndResolveClientSide,
 }
 
 pub fn mk_setup(bn_https_config: BoundaryNodeHttpsConfig) -> impl Fn(TestEnv) {

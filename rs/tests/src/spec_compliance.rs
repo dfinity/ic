@@ -1,11 +1,10 @@
-use crate::boundary_nodes_integration::boundary_nodes::exec_ssh_command;
 use crate::canister_http::lib::get_universal_vm_address;
 use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasDependencies, HasPublicApiUrl, HasRegistryLocalStore, HasTopologySnapshot, IcNodeContainer,
-    SubnetSnapshot, TopologySnapshot,
+    SshSession, SubnetSnapshot, TopologySnapshot,
 };
 use crate::driver::test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF};
 use crate::driver::universal_vm::UniversalVm;
@@ -133,11 +132,9 @@ pub fn config_impl(env: TestEnv) {
         if let Ok(true) = boundary_node.status_is_healthy() {
             Ok(())
         } else {
-            exec_ssh_command(
-                &boundary_node,
-                "sudo systemctl restart control-plane.service",
-            )
-            .expect("Could not restart control-plane.service");
+            boundary_node
+                .block_on_bash_script("sudo systemctl restart control-plane.service")
+                .expect("Could not restart control-plane.service");
             bail!("BN didn't report healthy, control-plane.service restarted")
         }
     })

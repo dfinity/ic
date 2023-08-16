@@ -2,21 +2,24 @@
 Title:: Boundary nodes SNP system tests
 end::catalog[] */
 
-use crate::driver::{
-    boundary_node::{BoundaryNode, BoundaryNodeVm},
-    // TODO: Uncomment this once spm41 is fixed for virsh
-    //farm::HostFeature,
-    ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResources},
-    test_env::TestEnv,
-    test_env_api::{
-        retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationBuilder,
-        RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+use crate::{
+    boundary_nodes::helpers::exec_ssh_command,
+    driver::{
+        boundary_node::{BoundaryNode, BoundaryNodeVm},
+        // TODO: Uncomment this once spm41 is fixed for virsh
+        //farm::HostFeature,
+        ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResources},
+        test_env::TestEnv,
+        test_env_api::{
+            retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            NnsInstallationBuilder, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+        },
     },
 };
 
-use std::io::Read;
-
-use anyhow::{Context, Error};
+use crate::boundary_nodes::constants::BOUNDARY_NODE_SNP_NAME;
+use anyhow::Context;
 use ic_interfaces_registry::RegistryValue;
 use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
 use ic_registry_keys::make_routing_table_record_key;
@@ -24,20 +27,6 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
-
-const BOUNDARY_NODE_SNP_NAME: &str = "boundary-node-snp-1";
-
-fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
-    let mut channel = vm.block_on_ssh_session()?.channel_session()?;
-
-    channel.exec(command)?;
-
-    let mut output = String::new();
-    channel.read_to_string(&mut output)?;
-    channel.wait_close()?;
-
-    Ok((output, channel.exit_status()?))
-}
 
 pub fn config(env: TestEnv) {
     let logger = env.logger();

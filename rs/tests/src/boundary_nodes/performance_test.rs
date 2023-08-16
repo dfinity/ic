@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::boundary_nodes_integration::boundary_nodes::BoundaryNodeHttpsConfig;
+use crate::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
 use crate::driver::farm::HostFeature;
 use crate::util::block_on;
 use crate::{
@@ -27,7 +27,6 @@ use ic_registry_subnet_type::SubnetType;
 use prost::Message;
 use slog::info;
 
-const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 // Size of the payload sent to the counter canister in update("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
