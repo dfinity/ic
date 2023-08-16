@@ -1085,6 +1085,29 @@ impl CanisterThresholdSigTestEnvironment {
         env
     }
 
+    /// Creates a new test environment with the given number of nodes,
+    /// but the same registry as an existing environment.
+    pub fn new_with_existing_registry<R: RngCore + CryptoRng>(
+        existing: &CanisterThresholdSigTestEnvironment,
+        num_of_nodes: usize,
+        rng: &mut R,
+    ) -> Self {
+        let mut env = Self {
+            nodes: Nodes::new(),
+            registry_data: Arc::clone(&existing.registry_data),
+            registry: Arc::clone(&existing.registry),
+            newest_registry_version: existing.newest_registry_version,
+        };
+
+        for node_id in n_random_node_ids(num_of_nodes, rng) {
+            let node = Node::new(node_id, Arc::clone(&existing.registry), rng);
+            env.add_node(node);
+        }
+        env.registry.update_to_latest_version();
+
+        env
+    }
+
     /// Returns an `IDkgTranscriptParams` appropriate for creating a random
     /// sharing in this environment.
     pub fn params_for_random_sharing<R: RngCore + CryptoRng>(
