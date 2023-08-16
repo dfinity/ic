@@ -17,21 +17,26 @@ use maplit::btreeset;
 ////////////////////////////////////////////////////////////////////////
 // Constants and templates
 
-/// Slice size used across tests is 1K instructions
-const MAX_INSTRUCTIONS_PER_SLICE: u64 = 1_000;
+/// Slice size used across tests is 10K instructions
+const MAX_INSTRUCTIONS_PER_SLICE: u64 = 10_000;
 /// Declare local variables for a loop in WAT
 const LOOP_LOCALS_WAT: &str = r#"
-                (local $i i32)
+                (local $limit i64)
 "#;
-/// Declare loop which takes 996 instructions (roughly 1K)
-const LOOP_1K_WAT: &str = r#"
-                (set_local $i (i32.const 0))
+/// Declare loop which takes a bit less than 10K instructions (8K)
+const LOOP_10K_WAT: &str = r#"
+                (local.set $limit
+                    (i64.add (call $performance_counter (i32.const 0)) (i64.const 8000))
+                )
                 (loop $loop
-                    ;; Each iteration loop takes `9 + 6` instructions,
-                    ;; so 110 iterations is 996 instructions.
-                    (if (i32.lt_s (get_local $i) (i32.const 110))
+                    (if (i64.lt_s
+                            (call $performance_counter (i32.const 0))
+                            (local.get $limit))
                         (then
-                            (set_local $i (i32.add (get_local $i) (i32.const 1)))
+                            ;; Too tight loop leads to a complexity limit being reached,
+                            ;; so the following instruction is just to make less performance
+                            ;; counter calls.
+                            (memory.fill (i32.const 0) (i32.const 0) (i32.const 100))
                             (br $loop)
                         )
                     )
@@ -105,7 +110,10 @@ fn module<D: std::fmt::Display>(functions: D) -> String {
     format!(
         r#"
         (module
+            (import "ic0" "performance_counter"
+                (func $performance_counter (param i32) (result i64)))
             {functions}
+            (memory 1)
         )"#
     )
 }
@@ -126,39 +134,39 @@ fn func(function: Function, execution: Execution) -> String {
         Execution::Short => format!(
             r#"({func}
                 {LOOP_LOCALS_WAT}
-                ;; With `slice_instructions_limit` set to 1K, this should
+                ;; With `slice_instructions_limit` set to 10K, this should
                 ;; take 1 round to complete.
-                {LOOP_1K_WAT}
+                {LOOP_10K_WAT}
                 )"#
         ),
         Execution::Long => format!(
             r#"({func}
                 {LOOP_LOCALS_WAT}
-                ;; With `slice_instructions_limit` set to 1K, this should
+                ;; With `slice_instructions_limit` set to 10K, this should
                 ;; take 2 rounds to complete.
-                {LOOP_1K_WAT}
-                {LOOP_1K_WAT}
+                {LOOP_10K_WAT}
+                {LOOP_10K_WAT}
                 )"#
         ),
         Execution::ShortTrap => format!("({func} (unreachable))"),
         Execution::LongTrap => format!(
             r#"({func}
                 {LOOP_LOCALS_WAT}
-                ;; With `slice_instructions_limit` set to 1K, this should
+                ;; With `slice_instructions_limit` set to 10K, this should
                 ;; take 2 rounds to fail.
-                {LOOP_1K_WAT}
-                {LOOP_1K_WAT}
+                {LOOP_10K_WAT}
+                {LOOP_10K_WAT}
                 (unreachable)
                 )"#
         ),
         Execution::VeryLong | Execution::InstructionsLimit => format!(
             r#"({func}
                 {LOOP_LOCALS_WAT}
-                ;; With `slice_instructions_limit` set to 1K, this should
+                ;; With `slice_instructions_limit` set to 10K, this should
                 ;; take 3 rounds to complete.
-                {LOOP_1K_WAT}
-                {LOOP_1K_WAT}
-                {LOOP_1K_WAT}
+                {LOOP_10K_WAT}
+                {LOOP_10K_WAT}
+                {LOOP_10K_WAT}
                 )"#
         ),
     }
