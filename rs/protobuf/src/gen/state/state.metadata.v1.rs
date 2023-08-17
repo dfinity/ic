@@ -213,6 +213,7 @@ pub struct BitcoinSendTransactionInternalContextTree {
     #[prost(message, optional, tag = "2")]
     pub context: ::core::option::Option<BitcoinSendTransactionInternalContext>,
 }
+/// TODO(EXC-1454): Deprecated.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InstallCodeRequest {
@@ -225,11 +226,41 @@ pub struct InstallCodeRequest {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCodeCall {
+    #[prost(message, optional, tag = "3")]
+    pub time: ::core::option::Option<Time>,
+    #[prost(message, optional, tag = "4")]
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(oneof = "install_code_call::CanisterCall", tags = "1, 2")]
+    pub canister_call: ::core::option::Option<install_code_call::CanisterCall>,
+}
+/// Nested message and enum types in `InstallCodeCall`.
+pub mod install_code_call {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum CanisterCall {
+        #[prost(message, tag = "1")]
+        Request(super::super::super::queues::v1::Request),
+        #[prost(message, tag = "2")]
+        Ingress(super::super::super::ingress::v1::Ingress),
+    }
+}
+/// TODO(EXC-1454): Deprecated.
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct InstallCodeRequestTree {
     #[prost(uint64, tag = "1")]
     pub request_id: u64,
     #[prost(message, optional, tag = "2")]
     pub request: ::core::option::Option<InstallCodeRequest>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct InstallCodeCallTree {
+    #[prost(uint64, tag = "1")]
+    pub call_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub call: ::core::option::Option<InstallCodeCall>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -249,10 +280,13 @@ pub struct SubnetCallContextManager {
     #[prost(message, repeated, tag = "9")]
     pub bitcoin_send_transaction_internal_contexts:
         ::prost::alloc::vec::Vec<BitcoinSendTransactionInternalContextTree>,
+    /// TODO(EXC-1454): Deprecated.
     #[prost(message, repeated, tag = "11")]
     pub install_code_requests: ::prost::alloc::vec::Vec<InstallCodeRequestTree>,
     #[prost(uint64, tag = "12")]
-    pub next_install_code_request_id: u64,
+    pub next_install_code_call_id: u64,
+    #[prost(message, repeated, tag = "13")]
+    pub install_code_calls: ::prost::alloc::vec::Vec<InstallCodeCallTree>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

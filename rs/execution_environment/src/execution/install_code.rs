@@ -11,7 +11,7 @@ use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemoryError, WasmExecutionOutput,
 };
 use ic_logger::{error, fatal, info, warn};
-use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeRequestId;
+use ic_replicated_state::metadata_state::subnet_call_context_manager::InstallCodeCallId;
 use ic_replicated_state::{CanisterState, ExecutionState};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
@@ -333,7 +333,7 @@ impl InstallCodeHelper {
         DtsInstallCodeResult::Finished {
             canister: self.canister,
             message: original.message,
-            request_id: original.request_id,
+            call_id: original.call_id,
             instructions_used,
             result: Ok(InstallCodeResult {
                 heap_delta: self.total_heap_delta,
@@ -648,7 +648,8 @@ pub(crate) struct OriginalContext {
     pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
     pub message: CanisterCall,
-    pub request_id: Option<InstallCodeRequestId>,
+    // TODO(EXC-1454): Make call_id non-optional.
+    pub call_id: Option<InstallCodeCallId>,
     pub prepaid_execution_cycles: Cycles,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,
@@ -732,7 +733,7 @@ pub(crate) fn finish_err(
     DtsInstallCodeResult::Finished {
         canister: new_canister,
         message: original.message,
-        request_id: original.request_id,
+        call_id: original.call_id,
         instructions_used,
         result: Err(err),
     }
