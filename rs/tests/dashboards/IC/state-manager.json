@@ -41,8 +41,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 249,
-  "iteration": 1687438763258,
+  "id": 30,
   "links": [
     {
       "asDropdown": true,
@@ -97,7 +96,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.5.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -187,7 +186,7 @@
         "alertThreshold": false
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.5.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -271,7 +270,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.5.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -356,7 +355,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.5.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -456,7 +455,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.5.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -516,6 +515,8 @@
             "mode": "palette-classic"
           },
           "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
@@ -571,7 +572,8 @@
         "legend": {
           "calcs": [],
           "displayMode": "list",
-          "placement": "bottom"
+          "placement": "bottom",
+          "showLegend": true
         },
         "tooltip": {
           "mode": "single",
@@ -626,7 +628,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.5.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -710,7 +712,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.5.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -794,7 +796,7 @@
         "alertThreshold": true
       },
       "percentage": false,
-      "pluginVersion": "8.5.11",
+      "pluginVersion": "9.5.5",
       "pointradius": 2,
       "points": false,
       "renderer": "flot",
@@ -846,10 +848,103 @@
       "yaxis": {
         "align": false
       }
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "000000001"
+      },
+      "description": "Page Flush Skips Fraction",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "000000001"
+          },
+          "editorMode": "code",
+          "expr": "rate(state_manager_page_map_flush_skips{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period])\n/\n(rate(state_manager_page_map_flush_skips{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period]) +\n    rate(state_manager_page_map_flushes{job=\"replica\",ic=\"$ic\",ic_subnet=~\"$ic_subnet\",instance=~\"$instance\"}[$period]))",
+          "legendFormat": "{{ic_node}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Panel Title",
+      "type": "timeseries"
     }
   ],
   "refresh": "10s",
-  "schemaVersion": 36,
+  "schemaVersion": 38,
   "style": "dark",
   "tags": [
     "production"
@@ -859,8 +954,8 @@
       {
         "current": {
           "selected": false,
-          "text": "mercury",
-          "value": "mercury"
+          "text": "single_app_large_node--1692193424446",
+          "value": "single_app_large_node--1692193424446"
         },
         "datasource": {
           "type": "prometheus",
@@ -890,8 +985,8 @@
         "allValue": ".*",
         "current": {
           "selected": false,
-          "text": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
-          "value": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+          "text": "bxpit-imsin-d2jwq-soiam-ffh5n-pryiu-kswve-zn5ef-exsh4-aosnf-2ae",
+          "value": "bxpit-imsin-d2jwq-soiam-ffh5n-pryiu-kswve-zn5ef-exsh4-aosnf-2ae"
         },
         "datasource": {
           "type": "prometheus",
@@ -1027,6 +1122,6 @@
   "timezone": "utc",
   "title": "State Manager",
   "uid": "state-manager",
-  "version": 19,
+  "version": 1,
   "weekStart": ""
 }
