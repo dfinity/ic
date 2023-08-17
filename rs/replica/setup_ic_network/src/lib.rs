@@ -22,18 +22,16 @@ use ic_consensus::{
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
 };
-use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
+use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
     pool_manager::CanisterHttpPoolManagerImpl,
 };
-use ic_icos_sev_interfaces::ValidateAttestedStream;
+use ic_icos_sev::Sev;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_manager::{
-        AdvertBroadcaster, ArtifactClient, ArtifactManager, ArtifactProcessor, JoinGuard,
-    },
+    artifact_manager::{ArtifactClient, ArtifactManager, ArtifactProcessor, JoinGuard},
     artifact_pool::UnvalidatedArtifact,
     batch_payload::BatchPayloadBuilder,
     crypto::IngressSigVerifier,
@@ -48,7 +46,7 @@ use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::{start_p2p, AdvertBroadcasterImpl, MAX_ADVERT_BUFFER};
+use ic_p2p::{start_p2p, MAX_ADVERT_BUFFER};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::{StateSync, StateSyncArtifact};
@@ -66,6 +64,7 @@ use ic_types::{
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
+    p2p::GossipAdvert,
     replica_config::ReplicaConfig,
     NodeId, SubnetId,
 };
@@ -89,7 +88,7 @@ pub enum P2PStateSyncClient {
 }
 
 /// The collection of all artifact pools.
-pub struct ArtifactPools {
+struct ArtifactPools {
     ingress_pool: Arc<RwLock<IngressPoolImpl>>,
     certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     dkg_pool: Arc<RwLock<DkgPoolImpl>>,
@@ -109,9 +108,9 @@ pub type CanisterHttpAdapterClient =
     clippy::new_ret_no_self
 )]
 pub fn setup_consensus_and_p2p(
+    log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
-    log: ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
+    rt_handle: &tokio::runtime::Handle,
     artifact_pool_config: ArtifactPoolConfig,
     transport_config: TransportConfig,
     malicious_flags: MaliciousFlags,
@@ -121,7 +120,6 @@ pub fn setup_consensus_and_p2p(
     // constructs it from the 'transport_config'.
     transport: Option<Arc<dyn Transport>>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
-    sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
@@ -153,18 +151,10 @@ pub fn setup_consensus_and_p2p(
         log.clone(),
         catch_up_package,
     );
-    let (advert_tx, advert_rx) = channel(MAX_ADVERT_BUFFER);
-    let advert_subscriber = Arc::new(AdvertBroadcasterImpl::new(
-        log.clone(),
-        metrics_registry,
-        advert_tx,
-    ));
     let ingress_pool = artifact_pools.ingress_pool.clone();
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-    let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
-    // Initialize the time source.
 
-    // Now we setup the Artifact Pools and the manager.
+    let (advert_tx, advert_rx) = channel(MAX_ADVERT_BUFFER);
     let (artifact_manager, join_handles, ingress_sender) = setup_artifact_manager(
         node_id,
         Arc::clone(&consensus_crypto) as Arc<_>,
@@ -188,11 +178,13 @@ pub fn setup_consensus_and_p2p(
         cycles_account_manager,
         local_store_time_reader,
         registry_poll_delay_duration_ms,
-        advert_subscriber,
+        advert_tx,
         canister_http_adapter_client,
         time_source,
     );
 
+    let sev_handshake = Arc::new(Sev::new(node_id, registry_client.clone()));
+    let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
     let transport = transport.unwrap_or_else(|| {
         create_transport(
             node_id,
@@ -209,8 +201,8 @@ pub fn setup_consensus_and_p2p(
     });
 
     start_p2p(
-        metrics_registry.clone(),
         log,
+        metrics_registry,
         rt_handle,
         node_id,
         subnet_id,
@@ -253,7 +245,7 @@ fn setup_artifact_manager(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     registry_poll_delay_duration_ms: u64,
-    advert_broadcaster: Arc<dyn AdvertBroadcaster + Send + Sync>,
+    advert_tx: tokio::sync::mpsc::Sender<GossipAdvert>,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     time_source: Arc<SysTimeSource>,
 ) -> (
@@ -268,12 +260,13 @@ fn setup_artifact_manager(
     if let P2PStateSyncClient::TestChunkingPool(pool_reader, client_on_state_change) =
         state_sync_client
     {
-        let advert_broadcaster = advert_broadcaster;
         let (jh, sender) = run_artifact_processor(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             client_on_state_change,
-            move |req| advert_broadcaster.process_delta(req.into()),
+            move |req| {
+                advert_tx.blocking_send(req.into()).unwrap();
+            },
         );
         join_handles.push(jh);
         backends.insert(
@@ -295,12 +288,14 @@ fn setup_artifact_manager(
         );
     }
     if let P2PStateSyncClient::Client(client) = state_sync_client {
-        let advert_broadcaster = advert_broadcaster.clone();
+        let advert_tx = advert_tx.clone();
         let (jh, sender) = run_artifact_processor(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             Box::new(client.clone()) as Box<_>,
-            move |req| advert_broadcaster.process_delta(req.into()),
+            move |req| {
+                advert_tx.blocking_send(req.into()).unwrap();
+            },
         );
         join_handles.push(jh);
         backends.insert(
@@ -355,10 +350,12 @@ fn setup_artifact_manager(
     )));
 
     {
+        let advert_tx = advert_tx.clone();
         // Create the consensus client.
-        let advert_broadcaster = advert_broadcaster.clone();
         let (client, jh) = create_consensus_handlers(
-            move |req| advert_broadcaster.process_delta(req.into()),
+            move |req| {
+                advert_tx.blocking_send(req.into()).unwrap();
+            },
             consensus_setup(
                 replica_config.clone(),
                 Arc::clone(&registry_client),
@@ -390,11 +387,13 @@ fn setup_artifact_manager(
     }
 
     let ingress_sender = {
+        let advert_tx = advert_tx.clone();
         // Create the ingress client.
-        let advert_broadcaster = advert_broadcaster.clone();
         let ingress_prioritizer = IngressPrioritizer::new(time_source.clone());
         let (client, jh) = create_ingress_handlers(
-            move |req| advert_broadcaster.process_delta(req.into()),
+            move |req| {
+                advert_tx.blocking_send(req.into()).unwrap();
+            },
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
             ingress_prioritizer,
@@ -409,10 +408,12 @@ fn setup_artifact_manager(
     };
 
     {
+        let advert_tx = advert_tx.clone();
         // Create the certification client.
-        let advert_broadcaster = advert_broadcaster.clone();
         let (client, jh) = create_certification_handlers(
-            move |req| advert_broadcaster.process_delta(req.into()),
+            move |req| {
+                advert_tx.blocking_send(req.into()).unwrap();
+            },
             certification_setup(
                 replica_config,
                 Arc::clone(&membership) as Arc<_>,
@@ -431,10 +432,12 @@ fn setup_artifact_manager(
     }
 
     {
+        let advert_tx = advert_tx.clone();
         // Create the DKG client.
-        let advert_broadcaster = advert_broadcaster.clone();
         let (client, jh) = create_dkg_handlers(
-            move |req| advert_broadcaster.process_delta(req.into()),
+            move |req| {
+                advert_tx.blocking_send(req.into()).unwrap();
+            },
             (
                 dkg::DkgImpl::new(
                     node_id,
@@ -455,7 +458,6 @@ fn setup_artifact_manager(
     }
 
     {
-        let advert_broadcaster = advert_broadcaster.clone();
         let finalized = consensus_pool_cache.finalized_block();
         let ecdsa_config =
             registry_client.get_ecdsa_config(subnet_id, registry_client.get_latest_version());
@@ -469,8 +471,11 @@ fn setup_artifact_manager(
             finalized.payload.as_ref().is_summary(),
             finalized.payload.as_ref().as_ecdsa().is_some(),
         );
+        let advert_tx = advert_tx.clone();
         let (client, jh) = create_ecdsa_handlers(
-            move |req| advert_broadcaster.process_delta(req.into()),
+            move |req| {
+                advert_tx.blocking_send(req.into()).unwrap();
+            },
             (
                 ecdsa::EcdsaImpl::new(
                     node_id,
@@ -496,8 +501,11 @@ fn setup_artifact_manager(
     }
 
     {
+        let advert_tx = advert_tx.clone();
         let (client, jh) = create_https_outcalls_handlers(
-            move |req| advert_broadcaster.process_delta(req.into()),
+            move |req| {
+                advert_tx.blocking_send(req.into()).unwrap();
+            },
             (
                 CanisterHttpPoolManagerImpl::new(
                     Arc::clone(&state_reader),
