@@ -121,7 +121,6 @@ mod gossip_types;
 mod metrics;
 mod peer_context;
 
-pub use advert_broadcaster::AdvertBroadcasterImpl;
 pub use event_handler::MAX_ADVERT_BUFFER;
 
 /// Custom P2P result type returning a P2P error in case of error.
@@ -155,9 +154,9 @@ pub(crate) mod utils {
 /// Starts the P2P stack and returns the objects that interact with P2P.
 #[allow(clippy::too_many_arguments)]
 pub fn start_p2p(
-    metrics_registry: MetricsRegistry,
-    log: ReplicaLogger,
-    rt_handle: tokio::runtime::Handle,
+    log: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    rt_handle: &tokio::runtime::Handle,
     node_id: NodeId,
     subnet_id: SubnetId,
     _transport_config: TransportConfig,
@@ -177,13 +176,13 @@ pub fn start_p2p(
         transport.clone(),
         p2p_transport_channels,
         log.clone(),
-        &metrics_registry,
+        metrics_registry,
     ));
 
     let event_handler = event_handler::AsyncTransportEventHandlerImpl::new(
         node_id,
         log.clone(),
-        &metrics_registry,
+        metrics_registry,
         event_handler::ChannelConfig::default(),
         gossip.clone(),
     );
@@ -191,12 +190,12 @@ pub fn start_p2p(
 
     crate::advert_broadcaster::start_advert_broadcast_task(
         rt_handle.clone(),
-        log,
+        log.clone(),
         advert_receiver,
         gossip.clone(),
     );
 
-    crate::event_handler::start_ticker_task(rt_handle, gossip);
+    crate::event_handler::start_ticker_task(rt_handle.clone(), gossip);
 }
 
 /// Generic P2P Error codes.

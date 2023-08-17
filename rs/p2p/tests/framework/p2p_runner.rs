@@ -3,7 +3,6 @@ use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
-use ic_icos_sev::Sev;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::Transport;
@@ -72,7 +71,6 @@ fn execute_test(
         info!(log, "Spawning Replica with config {:?}", transport_config);
         let message_router =
             FakeMessageRouting::with_state_manager(Arc::clone(&state_manager) as Arc<_>);
-        let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
         let message_router = Arc::new(message_router);
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
@@ -109,9 +107,9 @@ fn execute_test(
         )));
 
         let (_, _, p2p_runner) = setup_consensus_and_p2p(
+            &log,
             &metrics_registry,
-            log.clone(),
-            rt_handle,
+            &rt_handle,
             artifact_pool_config,
             transport_config,
             Default::default(),
@@ -119,7 +117,6 @@ fn execute_test(
             subnet_id,
             Some(transport),
             Arc::new(FakeTlsHandshake::new()),
-            sev_handshake,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             consensus_pool,
@@ -241,7 +238,6 @@ fn execute_test_chunking_pool(
             Arc::clone(&state_manager) as Arc<_>,
         ));
 
-        let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
         let message_router =
             FakeMessageRouting::with_state_manager(Arc::clone(&state_manager) as Arc<_>);
         let message_router = Arc::new(message_router);
@@ -278,9 +274,9 @@ fn execute_test_chunking_pool(
         )));
 
         let (_, _, p2p_runner) = setup_consensus_and_p2p(
+            &log,
             &metrics_registry,
-            log.clone(),
-            rt_handle,
+            &rt_handle,
             artifact_pool_config,
             transport_config,
             Default::default(),
@@ -288,7 +284,6 @@ fn execute_test_chunking_pool(
             subnet_id,
             Some(transport),
             Arc::new(FakeTlsHandshake::new()),
-            sev_handshake,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             consensus_pool,

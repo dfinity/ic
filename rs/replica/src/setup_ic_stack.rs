@@ -11,7 +11,6 @@ use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
-use ic_icos_sev::Sev;
 use ic_interfaces::{
     artifact_manager::JoinGuard, artifact_pool::UnvalidatedArtifact,
     execution_environment::QueryHandler, time_source::SysTimeSource,
@@ -250,14 +249,13 @@ pub fn construct_ic_stack(
     );
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
-    let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
     let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
         LocalStoreImpl::new(config.registry_client.local_store.clone()),
     );
     let (ingress_throttler, ingress_tx, p2p_runner) = setup_consensus_and_p2p(
+        log,
         metrics_registry,
-        log.clone(),
-        rt_handle,
+        &rt_handle,
         artifact_pool_config,
         config.transport,
         config.malicious_behaviour.malicious_flags.clone(),
@@ -265,7 +263,6 @@ pub fn construct_ic_stack(
         subnet_id,
         None,
         Arc::clone(&crypto) as Arc<_>,
-        sev_handshake,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         consensus_pool,

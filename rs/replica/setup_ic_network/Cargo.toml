@@ -14,6 +14,7 @@ ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-execution-environment = { path = "../../execution_environment" }
 ic-https-outcalls-consensus = { path = "../../https_outcalls/consensus" }
+ic-icos-sev = { path = "../../ic_os/sev" }
 ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }
 ic-ingress-manager = { path = "../../ingress_manager" }
 ic-interfaces = { path = "../../interfaces" }

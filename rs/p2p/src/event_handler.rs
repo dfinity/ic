@@ -406,8 +406,6 @@ pub mod tests {
     use super::*;
     use crate::advert_broadcaster::start_advert_broadcast_task;
     use crate::download_prioritization::test::make_gossip_advert;
-    use crate::AdvertBroadcasterImpl;
-    use ic_interfaces::artifact_manager::AdvertBroadcaster;
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_interfaces_transport::TransportPayload;
     use ic_logger::replica_logger::no_op_logger;
@@ -531,7 +529,7 @@ pub mod tests {
         gossip: GossipArc,
     ) -> (
         AsyncTransportEventHandlerImpl,
-        AdvertBroadcasterImpl,
+        tokio::sync::mpsc::Sender<GossipAdvert>,
         Receiver<GossipAdvert>,
     ) {
         let mut channel_config = ChannelConfig::default();
@@ -548,13 +546,7 @@ pub mod tests {
         );
 
         let (tx, rx) = channel(MAX_ADVERT_BUFFER);
-        let advert_subscriber = AdvertBroadcasterImpl::new(
-            p2p_test_setup_logger().root.clone().into(),
-            &MetricsRegistry::new(),
-            tx,
-        );
-
-        (handler, advert_subscriber, rx)
+        (handler, tx, rx)
     }
 
     /// The function sends the given number of messages to the peer with the
@@ -577,10 +569,10 @@ pub mod tests {
     }
 
     /// The function broadcasts the given number of adverts.
-    async fn broadcast_advert(count: usize, handler: &AdvertBroadcasterImpl) {
+    async fn broadcast_advert(count: usize, handler: &tokio::sync::mpsc::Sender<GossipAdvert>) {
         for i in 0..count {
             let message = make_gossip_advert(i as u64);
-            handler.process_delta(message);
+            handler.send(message).await.unwrap();
         }
     }
 
