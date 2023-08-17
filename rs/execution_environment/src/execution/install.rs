@@ -15,7 +15,7 @@ use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, Was
 use ic_interfaces::execution_environment::WasmExecutionOutput;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_replicated_state::{
-    metadata_state::subnet_call_context_manager::InstallCodeRequestId, CanisterState, SystemState,
+    metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
 };
 use ic_system_api::ApiType;
 use ic_types::funds::Cycles;
@@ -394,7 +394,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
     fn abort(
         self: Box<Self>,
         log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeRequestId>, Cycles) {
+    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_init) execution of canister {}.", self.original.canister_id
@@ -402,7 +402,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         self.paused_wasm_execution.abort();
         (
             self.original.message,
-            self.original.request_id,
+            self.original.call_id,
             self.original.prepaid_execution_cycles,
         )
     }
@@ -494,7 +494,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
     fn abort(
         self: Box<Self>,
         log: &ReplicaLogger,
-    ) -> (CanisterCall, Option<InstallCodeRequestId>, Cycles) {
+    ) -> (CanisterCall, Option<InstallCodeCallId>, Cycles) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id,
@@ -502,7 +502,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         self.paused_wasm_execution.abort();
         (
             self.original.message,
-            self.original.request_id,
+            self.original.call_id,
             self.original.prepaid_execution_cycles,
         )
     }

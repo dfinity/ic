@@ -926,12 +926,12 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
     test.canister_update_controller(canister_id, controllers)
         .unwrap();
 
-    // SubnetCallContextManager does not contain any install code contexts before executing the message.
+    // SubnetCallContextManager does not contain any install code calls before executing the message.
     assert_eq!(
         test.state()
             .metadata
             .subnet_call_context_manager
-            .install_code_contexts_len(),
+            .install_code_calls_len(),
         0
     );
 
@@ -958,12 +958,12 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
         );
-        // Check that the SubnetCallContextManager contains the request after paused execution.
+        // Check that the SubnetCallContextManager contains the call after paused execution.
         assert_eq!(
             test.state()
                 .metadata
                 .subnet_call_context_manager
-                .install_code_contexts_len(),
+                .install_code_calls_len(),
             1
         );
         test.execute_slice(canister_id);
@@ -975,12 +975,12 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
     );
 
     // Finished the execution of install code.
-    // Check that the SubnetCallContextManager does not contain the request anymore.
+    // Check that the SubnetCallContextManager does not contain the call anymore.
     assert_eq!(
         test.state()
             .metadata
             .subnet_call_context_manager
-            .install_code_contexts_len(),
+            .install_code_calls_len(),
         0
     );
 }
@@ -1007,12 +1007,12 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
     test.canister_update_controller(canister_id, controllers)
         .unwrap();
 
-    // SubnetCallContextManager does not contain any install code contexts before executing the message.
+    // SubnetCallContextManager does not contain any install code calls before executing the message.
     assert_eq!(
         test.state()
             .metadata
             .subnet_call_context_manager
-            .install_code_contexts_len(),
+            .install_code_calls_len(),
         0
     );
 
@@ -1039,12 +1039,12 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
         );
-        // Check that the SubnetCallContextManager contains the request after paused execution.
+        // Check that the SubnetCallContextManager contains the call after paused execution.
         assert_eq!(
             test.state()
                 .metadata
                 .subnet_call_context_manager
-                .install_code_contexts_len(),
+                .install_code_calls_len(),
             1
         );
         test.execute_slice(canister_id);
@@ -1057,12 +1057,12 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
             test.canister_state(canister_id).next_execution(),
             NextExecution::ContinueInstallCode
         );
-        // Check that the SubnetCallContextManager contains the request.
+        // Check that the SubnetCallContextManager contains the call.
         assert_eq!(
             test.state()
                 .metadata
                 .subnet_call_context_manager
-                .install_code_contexts_len(),
+                .install_code_calls_len(),
             1
         );
         test.execute_slice(canister_id);
@@ -1074,12 +1074,12 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
     );
 
     // Finished the execution of install code.
-    // Check that the SubnetCallContextManager does not contain the request anymore.
+    // Check that the SubnetCallContextManager does not contain the call anymore.
     assert_eq!(
         test.state()
             .metadata
             .subnet_call_context_manager
-            .install_code_contexts_len(),
+            .install_code_calls_len(),
         0
     );
 }

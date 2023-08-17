@@ -8,13 +8,14 @@ use ic_protobuf::{
 use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
-    messages::{CallbackId, Request},
+    messages::{CallbackId, CanisterCall, Request},
     node_id_into_protobuf, node_id_try_from_option, CanisterId, NodeId, RegistryVersion, Time,
 };
 use phantom_newtype::Id;
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::{From, TryFrom},
+    sync::Arc,
 };
 
 pub enum SubnetCallContext {
@@ -50,8 +51,8 @@ impl SubnetCallContext {
     }
 }
 
-pub struct InstallCodeRequestIdTag;
-pub type InstallCodeRequestId = Id<InstallCodeRequestIdTag, u64>;
+pub struct InstallCodeCallIdTag;
+pub type InstallCodeCallId = Id<InstallCodeCallIdTag, u64>;
 
 /// It is responsible for keeping track of all install code messages that
 /// cannot complete execution in a single round.
@@ -59,26 +60,26 @@ pub type InstallCodeRequestId = Id<InstallCodeRequestIdTag, u64>;
 /// During a subnet split, these messages will be autmatically rejected if
 /// the targeted canister is moved to a new subnet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct InstallCodeRequestManager {
-    next_request_id: u64,
-    install_code_requests: BTreeMap<InstallCodeRequestId, InstallCodeRequest>,
+struct InstallCodeCallManager {
+    next_call_id: u64,
+    install_code_calls: BTreeMap<InstallCodeCallId, InstallCodeCall>,
 }
 
-impl InstallCodeRequestManager {
-    fn push_request(&mut self, request: InstallCodeRequest) -> InstallCodeRequestId {
-        let request_id = InstallCodeRequestId::new(self.next_request_id);
-        self.next_request_id += 1;
-        self.install_code_requests.insert(request_id, request);
+impl InstallCodeCallManager {
+    fn push_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
+        let call_id = InstallCodeCallId::new(self.next_call_id);
+        self.next_call_id += 1;
+        self.install_code_calls.insert(call_id, call);
 
-        request_id
+        call_id
     }
 
-    fn retrieve_request(&mut self, request_id: InstallCodeRequestId) -> Option<InstallCodeRequest> {
-        self.install_code_requests.remove(&request_id)
+    fn retrieve_call(&mut self, call_id: InstallCodeCallId) -> Option<InstallCodeCall> {
+        self.install_code_calls.remove(&call_id)
     }
 
-    fn install_code_requests_len(&self) -> usize {
-        self.install_code_requests.len()
+    fn install_code_calls_len(&self) -> usize {
+        self.install_code_calls.len()
     }
 }
 
@@ -86,23 +87,21 @@ impl InstallCodeRequestManager {
 /// do not require work to be done by another IC layer and
 /// cannot finalize the execution in a single round.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct CanisterManagementRequests {
-    install_code_request_manager: InstallCodeRequestManager,
+struct CanisterManagementCalls {
+    install_code_call_manager: InstallCodeCallManager,
 }
 
-impl CanisterManagementRequests {
-    fn push_request(&mut self, request: InstallCodeRequest) -> InstallCodeRequestId {
-        self.install_code_request_manager.push_request(request)
+impl CanisterManagementCalls {
+    fn push_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
+        self.install_code_call_manager.push_call(call)
     }
 
-    fn retrieve_request(&mut self, request_id: InstallCodeRequestId) -> Option<InstallCodeRequest> {
-        self.install_code_request_manager
-            .retrieve_request(request_id)
+    fn retrieve_call(&mut self, call_id: InstallCodeCallId) -> Option<InstallCodeCall> {
+        self.install_code_call_manager.retrieve_call(call_id)
     }
 
-    pub fn install_code_requests_len(&self) -> usize {
-        self.install_code_request_manager
-            .install_code_requests_len()
+    pub fn install_code_calls_len(&self) -> usize {
+        self.install_code_call_manager.install_code_calls_len()
     }
 }
 
@@ -116,7 +115,7 @@ pub struct SubnetCallContextManager {
     pub bitcoin_get_successors_contexts: BTreeMap<CallbackId, BitcoinGetSuccessorsContext>,
     pub bitcoin_send_transaction_internal_contexts:
         BTreeMap<CallbackId, BitcoinSendTransactionInternalContext>,
-    canister_management_requests: CanisterManagementRequests,
+    canister_management_calls: CanisterManagementCalls,
 }
 
 impl SubnetCallContextManager {
@@ -233,24 +232,19 @@ impl SubnetCallContextManager {
             })
     }
 
-    pub fn push_install_code_request(
-        &mut self,
-        request: InstallCodeRequest,
-    ) -> InstallCodeRequestId {
-        self.canister_management_requests.push_request(request)
+    pub fn push_install_code_call(&mut self, call: InstallCodeCall) -> InstallCodeCallId {
+        self.canister_management_calls.push_call(call)
     }
 
-    pub fn retrieve_install_code_request(
+    pub fn retrieve_install_code_call(
         &mut self,
-        request_id: InstallCodeRequestId,
-    ) -> Option<InstallCodeRequest> {
-        self.canister_management_requests
-            .retrieve_request(request_id)
+        call_id: InstallCodeCallId,
+    ) -> Option<InstallCodeCall> {
+        self.canister_management_calls.retrieve_call(call_id)
     }
 
-    pub fn install_code_contexts_len(&self) -> usize {
-        self.canister_management_requests
-            .install_code_requests_len()
+    pub fn install_code_calls_len(&self) -> usize {
+        self.canister_management_calls.install_code_calls_len()
     }
 }
 
@@ -318,22 +312,21 @@ impl From<&SubnetCallContextManager> for pb_metadata::SubnetCallContextManager {
                     }
                 })
                 .collect(),
-            install_code_requests: item
-                .canister_management_requests
-                .install_code_request_manager
-                .install_code_requests
+            install_code_calls: item
+                .canister_management_calls
+                .install_code_call_manager
+                .install_code_calls
                 .iter()
-                .map(
-                    |(request_id, request)| pb_metadata::InstallCodeRequestTree {
-                        request_id: request_id.get(),
-                        request: Some(request.into()),
-                    },
-                )
+                .map(|(call_id, call)| pb_metadata::InstallCodeCallTree {
+                    call_id: call_id.get(),
+                    call: Some(call.into()),
+                })
                 .collect(),
-            next_install_code_request_id: item
-                .canister_management_requests
-                .install_code_request_manager
-                .next_request_id,
+            install_code_requests: vec![],
+            next_install_code_call_id: item
+                .canister_management_calls
+                .install_code_call_manager
+                .next_call_id,
         }
     }
 }
@@ -397,16 +390,25 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
                 .insert(CallbackId::new(entry.callback_id), context);
         }
 
-        let mut install_code_requests = BTreeMap::<InstallCodeRequestId, InstallCodeRequest>::new();
+        let mut install_code_calls = BTreeMap::<InstallCodeCallId, InstallCodeCall>::new();
+        // TODO(EXC-1454): Remove when `install_code_requests` field is not needed.
         for entry in item.install_code_requests {
-            let pb_request =
-                try_from_option_field(entry.request, "SystemMetadata::InstallCodeRequest")?;
-            let request = InstallCodeRequest::try_from((time, pb_request))?;
-            install_code_requests.insert(InstallCodeRequestId::new(entry.request_id), request);
+            let pb_request = entry.request.ok_or(ProxyDecodeError::MissingField(
+                "InstallCodeRequest::request",
+            ))?;
+            let call = InstallCodeCall::try_from((time, pb_request))?;
+            install_code_calls.insert(InstallCodeCallId::new(entry.request_id), call);
         }
-        let install_code_request_manager = InstallCodeRequestManager {
-            next_request_id: item.next_install_code_request_id,
-            install_code_requests,
+        for entry in item.install_code_calls {
+            let pb_call = entry.call.ok_or(ProxyDecodeError::MissingField(
+                "SystemMetadata::InstallCodeCall",
+            ))?;
+            let call = InstallCodeCall::try_from((time, pb_call))?;
+            install_code_calls.insert(InstallCodeCallId::new(entry.call_id), call);
+        }
+        let install_code_call_manager: InstallCodeCallManager = InstallCodeCallManager {
+            next_call_id: item.next_install_code_call_id,
+            install_code_calls,
         };
 
         Ok(Self {
@@ -417,8 +419,8 @@ impl TryFrom<(Time, pb_metadata::SubnetCallContextManager)> for SubnetCallContex
             ecdsa_dealings_contexts,
             bitcoin_get_successors_contexts,
             bitcoin_send_transaction_internal_contexts,
-            canister_management_requests: CanisterManagementRequests {
-                install_code_request_manager,
+            canister_management_calls: CanisterManagementCalls {
+                install_code_call_manager,
             },
         })
     }
@@ -666,39 +668,82 @@ impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct InstallCodeRequest {
-    pub request: Request,
+pub struct InstallCodeCall {
+    pub call: CanisterCall,
     pub time: Time,
     pub effective_canister_id: CanisterId,
 }
 
-impl From<&InstallCodeRequest> for pb_metadata::InstallCodeRequest {
-    fn from(install_code_request: &InstallCodeRequest) -> Self {
-        pb_metadata::InstallCodeRequest {
-            request: Some((&install_code_request.request).into()),
-            effective_canister_id: Some((install_code_request.effective_canister_id).into()),
+impl From<&InstallCodeCall> for pb_metadata::InstallCodeCall {
+    fn from(install_code_call: &InstallCodeCall) -> Self {
+        use pb_metadata::install_code_call::CanisterCall as PbCanisterCall;
+        let call = match &install_code_call.call {
+            CanisterCall::Request(request) => PbCanisterCall::Request(request.as_ref().into()),
+            CanisterCall::Ingress(ingress) => PbCanisterCall::Ingress(ingress.as_ref().into()),
+        };
+        pb_metadata::InstallCodeCall {
+            canister_call: Some(call),
+            effective_canister_id: Some((install_code_call.effective_canister_id).into()),
             time: Some(pb_metadata::Time {
-                time_nanos: install_code_request.time.as_nanos_since_unix_epoch(),
+                time_nanos: install_code_call.time.as_nanos_since_unix_epoch(),
             }),
         }
     }
 }
 
-impl TryFrom<(Time, pb_metadata::InstallCodeRequest)> for InstallCodeRequest {
+impl TryFrom<(Time, pb_metadata::InstallCodeRequest)> for InstallCodeCall {
     type Error = ProxyDecodeError;
     fn try_from(
         (time, install_code_request): (Time, pb_metadata::InstallCodeRequest),
     ) -> Result<Self, Self::Error> {
-        let request: Request =
-            try_from_option_field(install_code_request.request, "InstallCodeRequest::request")?;
+        let pb_call = install_code_request
+            .request
+            .ok_or(ProxyDecodeError::MissingField(
+                "InstallCodeRequest::request",
+            ))?;
         let effective_canister_id: CanisterId = try_from_option_field(
             install_code_request.effective_canister_id,
             "InstallCodeRequest::effective_canister_id",
         )?;
-        Ok(InstallCodeRequest {
-            request,
+        Ok(InstallCodeCall {
+            call: CanisterCall::Request(Arc::new(pb_call.try_into()?)),
             effective_canister_id,
             time: install_code_request
+                .time
+                .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
+        })
+    }
+}
+
+impl TryFrom<(Time, pb_metadata::InstallCodeCall)> for InstallCodeCall {
+    type Error = ProxyDecodeError;
+    fn try_from(
+        (time, install_code_call): (Time, pb_metadata::InstallCodeCall),
+    ) -> Result<Self, Self::Error> {
+        use pb_metadata::install_code_call::CanisterCall as PbCanisterCall;
+        let pb_call = install_code_call
+            .canister_call
+            .ok_or(ProxyDecodeError::MissingField(
+                "InstallCodeCall::canister_call",
+            ))?;
+
+        let call = match pb_call {
+            PbCanisterCall::Request(request) => {
+                CanisterCall::Request(Arc::new(request.try_into()?))
+            }
+            PbCanisterCall::Ingress(ingress) => {
+                CanisterCall::Ingress(Arc::new(ingress.try_into()?))
+            }
+        };
+
+        let effective_canister_id: CanisterId = try_from_option_field(
+            install_code_call.effective_canister_id,
+            "InstallCodeCall::effective_canister_id",
+        )?;
+        Ok(InstallCodeCall {
+            call,
+            effective_canister_id,
+            time: install_code_call
                 .time
                 .map_or(time, |t| Time::from_nanos_since_unix_epoch(t.time_nanos)),
         })

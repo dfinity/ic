@@ -45,7 +45,7 @@ use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     metadata_state::subnet_call_context_manager::{
-        EcdsaDealingsContext, InstallCodeRequest, InstallCodeRequestId, SetupInitialDkgContext,
+        EcdsaDealingsContext, InstallCodeCall, InstallCodeCallId, SetupInitialDkgContext,
         SignWithEcdsaContext, SubnetCallContext,
     },
     CanisterState, NetworkTopology, ReplicatedState,
@@ -1892,9 +1892,9 @@ impl ExecutionEnvironment {
     /// Precondition:
     /// - The given message is an `install_code` message.
     /// - The canister does not have any paused execution in its task queue.
-    /// - A request id will be present for a canister request to ensure that
-    ///     potentially long-running install code messages are exposed to the
-    ///     subnet. During a subnet split, the original subnet knows which
+    /// - A call id will be present for an install code message to ensure that
+    ///     potentially long-running messages are exposed to the subnet.
+    ///     During a subnet split, the original subnet knows which
     ///     aborted install code message must be rejected if the targeted
     ///     canister has been moved to another subnet.
     ///
@@ -1905,7 +1905,7 @@ impl ExecutionEnvironment {
     pub fn execute_install_code(
         &self,
         mut msg: CanisterCall,
-        request_id: Option<InstallCodeRequestId>,
+        call_id: Option<InstallCodeCallId>,
         prepaid_execution_cycles: Option<Cycles>,
         dts_status: DtsInstallCodeStatus,
         mut state: ReplicatedState,
@@ -1946,29 +1946,21 @@ impl ExecutionEnvironment {
             }
         };
 
-        let request_id = match dts_status {
+        let call_id = match dts_status {
             DtsInstallCodeStatus::StartingFirstExecution => {
-                // Keep track of all existing long running install code requests.
-                // During a subnet split, the inter-canister requests are rejected if the targeted canister moved to a new subnet.
-                // Ingress messages are handled differently. Tracking is not required as an ingress can eventually
-                // transition to one of the terminal states.
-                match &msg {
-                    CanisterCall::Request(request) => {
-                        // Keep track of all existing long running subnet messages.
-                        let request_id = state
-                            .metadata
-                            .subnet_call_context_manager
-                            .push_install_code_request(InstallCodeRequest {
-                                request: request.as_ref().clone(),
-                                time: state.time(),
-                                effective_canister_id: install_context.canister_id,
-                            });
-                        Some(request_id)
-                    }
-                    CanisterCall::Ingress(_) => None,
-                }
+                // Keep track of all existing long running install code messages.
+                // During a subnet split, the requests are rejected if the target canister moved to a new subnet.
+                let call_id = state
+                    .metadata
+                    .subnet_call_context_manager
+                    .push_install_code_call(InstallCodeCall {
+                        call: msg.clone(),
+                        time: state.time(),
+                        effective_canister_id: install_context.canister_id,
+                    });
+                Some(call_id)
             }
-            DtsInstallCodeStatus::ResumingPausedOrAbortedExecution => request_id,
+            DtsInstallCodeStatus::ResumingPausedOrAbortedExecution => call_id,
         };
 
         // Check the precondition.
@@ -2003,7 +1995,7 @@ impl ExecutionEnvironment {
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
             msg,
-            request_id,
+            call_id,
             prepaid_execution_cycles,
             old_canister,
             state.time(),
@@ -2037,7 +2029,7 @@ impl ExecutionEnvironment {
             DtsInstallCodeResult::Finished {
                 canister,
                 mut message,
-                request_id,
+                call_id,
                 instructions_used,
                 result,
             } => {
@@ -2075,35 +2067,28 @@ impl ExecutionEnvironment {
                 };
                 state.put_canister_state(canister);
                 let refund = message.take_cycles();
-                match message {
-                    CanisterCall::Request(_) => {
-                        // The request can be removed because a response was produced.
-                        match request_id {
-                            Some(request_id) => {
-                                let install_code_request = state
-                                    .metadata
-                                    .subnet_call_context_manager
-                                    .retrieve_install_code_request(request_id);
-                                if install_code_request.is_none() {
-                                    info!(
+                // The message can be removed because a response was produced.
+                match call_id {
+                    Some(call_id) => {
+                        let install_code_call = state
+                            .metadata
+                            .subnet_call_context_manager
+                            .retrieve_install_code_call(call_id);
+                        if install_code_call.is_none() {
+                            info!(
                                         self.log,
-                                        "Could not retrieve install code request for request id {} for canister {}  ",
-                                        request_id,
+                                        "Could not remove call id {} for canister {} after execution of install_code",
+                                        call_id,
                                         canister_id
                                         );
-                                }
-                            }
-                            None => {
-                                info!(
-                                    self.log,
-                                    "Request id not found after executing install_code on canister {}  ",
-                                    canister_id
-                                );
-                            }
                         }
                     }
-                    CanisterCall::Ingress(_) => {
-                        // The original message is not a inter-canister request.
+                    None => {
+                        info!(
+                            self.log,
+                            "Call ID not found after executing install_code on canister {}  ",
+                            canister_id
+                        );
                     }
                 }
                 let state =
@@ -2195,11 +2180,11 @@ impl ExecutionEnvironment {
             }
             ExecutionTask::AbortedInstallCode {
                 message,
-                request_id,
+                call_id,
                 prepaid_execution_cycles,
             } => self.execute_install_code(
                 message,
-                request_id,
+                call_id,
                 Some(prepaid_execution_cycles),
                 DtsInstallCodeStatus::ResumingPausedOrAbortedExecution,
                 state,
@@ -2268,11 +2253,11 @@ impl ExecutionEnvironment {
                     }
                     ExecutionTask::PausedInstallCode(id) => {
                         let paused = self.take_paused_install_code(id).unwrap();
-                        let (message, request_id, prepaid_execution_cycles) = paused.abort(log);
+                        let (message, call_id, prepaid_execution_cycles) = paused.abort(log);
                         self.metrics.executions_aborted.inc();
                         ExecutionTask::AbortedInstallCode {
                             message,
-                            request_id,
+                            call_id,
                             prepaid_execution_cycles,
                         }
                     }

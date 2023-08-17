@@ -1,6 +1,6 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::{
-    InstallCodeRequest, SubnetCallContext, SubnetCallContextManager,
+    InstallCodeCall, SubnetCallContext, SubnetCallContextManager,
 };
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
@@ -22,10 +22,11 @@ use ic_types::{canister_http::Transform, time::current_time};
 use ic_types::{
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext},
     ingress::WasmResult,
-    messages::{CallbackId, Payload},
+    messages::{CallbackId, CanisterCall, Payload},
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
+use std::sync::Arc;
 
 lazy_static! {
     static ref LOCAL_CANISTER: CanisterId = CanisterId::from(0x34);
@@ -655,13 +656,12 @@ fn subnet_call_contexts_deserialization() {
         .sender(canister_test_id(1))
         .receiver(canister_test_id(2))
         .build();
-    let install_code_request = InstallCodeRequest {
-        request,
+    let install_code_call = InstallCodeCall {
+        call: CanisterCall::Request(Arc::new(request)),
         effective_canister_id: canister_test_id(3),
         time: mock_time(),
     };
-    let request_id =
-        system_call_context_manager.push_install_code_request(install_code_request.clone());
+    let call_id = system_call_context_manager.push_install_code_call(install_code_call.clone());
 
     // Encode and decode.
     let system_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&system_call_context_manager).into();
@@ -687,15 +687,15 @@ fn subnet_call_contexts_deserialization() {
     );
     assert_eq!(deserialized_http_request_context.transform, Some(transform));
 
-    // Check install code request deserialization.
+    // Check install code call deserialization.
     assert_eq!(
-        deserialized_system_call_context_manager.install_code_contexts_len(),
+        deserialized_system_call_context_manager.install_code_calls_len(),
         1
     );
-    let deserialized_install_code_request = deserialized_system_call_context_manager
-        .retrieve_install_code_request(request_id)
-        .expect("Did not find the install code request");
-    assert_eq!(deserialized_install_code_request, install_code_request);
+    let deserialized_install_code_call = deserialized_system_call_context_manager
+        .retrieve_install_code_call(call_id)
+        .expect("Did not find the install code call");
+    assert_eq!(deserialized_install_code_call, install_code_call);
 }
 
 #[test]
