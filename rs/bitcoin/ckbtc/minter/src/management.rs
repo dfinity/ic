@@ -140,8 +140,9 @@ pub async fn get_utxos(
     min_confirmations: u32,
     source: CallSource,
 ) -> Result<GetUtxosResponse, CallError> {
-    // NB. The prices are 10B on the mainnet and 4B on the testnet:
-    // https://internetcomputer.org/docs/current/developer-docs/deploy/computation-and-storage-costs
+    // NB. The minimum number of cycles that need to be sent with the call is 10B (4B) for
+    // Bitcoin mainnet (Bitcoin testnet):
+    // https://internetcomputer.org/docs/current/developer-docs/integrations/bitcoin/bitcoin-how-it-works#api-fees--pricing
     let get_utxos_cost_cycles = match network {
         Network::Mainnet => 10_000_000_000,
         Network::Testnet | Network::Regtest => 4_000_000_000,
