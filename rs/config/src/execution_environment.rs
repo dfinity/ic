@@ -74,7 +74,7 @@ pub const INSTRUCTION_OVERHEAD_PER_QUERY_CALL: u64 = 50_000_000;
 
 /// The number of query execution threads overall for all canisters.
 /// See also `QUERY_EXECUTION_THREADS_PER_CANISTER`.
-pub(crate) const QUERY_EXECUTION_THREADS_TOTAL: usize = 2;
+pub(crate) const QUERY_EXECUTION_THREADS_TOTAL: usize = 4;
 
 /// When a canister is scheduled for query execution, it is allowed to run for
 /// this amount of time. This limit controls how many queries the canister
