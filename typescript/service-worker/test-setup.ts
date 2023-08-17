@@ -1,6 +1,3 @@
-import 'web-streams-polyfill';
-import 'compression-streams-polyfill';
-
 // This file may be used to polyfill features that aren't available in the test
 // environment.
 //
@@ -37,20 +34,6 @@ Object.defineProperty(global.self, 'crypto', {
 });
 
 require('jest-fetch-mock').enableMocks();
-// Allow for fetch() mock to handle streams
-// https://github.com/jefflau/jest-fetch-mock/issues/113#issuecomment-1418504168
-import { Readable } from 'stream';
-class TempResponse extends Response {
-  constructor(...args: any[]) {
-    if (args[0] instanceof ReadableStream) {
-      args[0] = Readable.from(args[0] as any);
-    }
-    super(...args);
-  }
-}
-Object.defineProperty(global, 'Response', {
-  value: TempResponse,
-});
 
 Object.defineProperty(global.self, 'caches', {
   value: mockBrowserCacheAPI(),
