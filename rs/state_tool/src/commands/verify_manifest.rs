@@ -1,4 +1,3 @@
-use ic_crypto_sha2::Sha256;
 use ic_state_manager::manifest::validate_manifest;
 use ic_types::crypto::CryptoHash;
 use ic_types::state_sync::{
@@ -6,7 +5,6 @@ use ic_types::state_sync::{
 };
 use ic_types::CryptoHashOfState;
 use std::{
-    collections::BTreeMap,
     convert::TryInto,
     fs::File,
     io::{BufRead, BufReader},
@@ -18,117 +16,6 @@ fn parse_hash(hash: &str) -> [u8; 32] {
     let hash = hex::decode(hash).unwrap();
     assert_eq!(hash.len(), 32);
     hash.try_into().unwrap()
-}
-
-/// A canister hash enables comparing canisters across states.
-/// We compute the hash following the general rules for manifests:
-///   * We use SHA-256 for collision resistance.
-///   * We use a domain separator, "ic-canister-hash" in this case.
-///   * We prefix variable-sized collection with the collection size.
-/// See note [Manifest Hash] for more detail.
-///
-/// ```text
-///   canister_hash := hash(dsep("ic-canister-hash")
-///                         · file_count as u32
-///                         · file*)
-/// ```
-///
-/// The data written to the hash for each file is similar to whats written
-/// for a `file_entry` in the conventional manifest, but the file hashes are
-/// skipped. The rest of the content of the file hashes is directly inlined
-/// (modulo whats described for chunks below).
-///
-/// ```text
-///   file          := len(relative_path) as u32
-///                    · relative_path
-///                    · size_bytes as u64
-///                    · chunk_count as u32
-///                    · chunk*
-/// ```
-///
-/// The data written to the hash for chunks is the same as for `chunk_entry`
-/// in regular manifests except that the file index is skipped.
-///
-/// ```test
-///   chunk         := size_bytes as u32
-///                    · offset as u64
-///                    · chunk_hash
-/// ```
-fn canister_hash(file_table: Vec<FileInfo>, chunk_table: Vec<ChunkInfo>, canister: &str) -> String {
-    fn canister_hasher() -> Sha256 {
-        let mut h = Sha256::new();
-        let sep = "ic-canister-hash";
-        h.write(&[sep.len() as u8][..]);
-        h.write(sep.as_bytes());
-        h
-    }
-    fn path(file_info: &FileInfo) -> &str {
-        file_info.relative_path.to_str().unwrap()
-    }
-
-    let mut hasher = canister_hasher();
-
-    let mut chunk_count = 0;
-
-    let file_table = file_table
-        .into_iter()
-        .enumerate()
-        .filter(|(_, f)| path(f).contains(&format!("canister_states/{}/", canister)))
-        .collect::<BTreeMap<_, _>>();
-
-    assert!(
-        !file_table.is_empty(),
-        "The provided canister ({}) does not match any files.",
-        canister
-    );
-
-    hasher.write(&(file_table.len() as u32).to_be_bytes());
-    for (idx, f) in file_table.iter() {
-        const MIB: u64 = 1024 * 1024;
-        let expected_chunks = (f.size_bytes + MIB - 1) / MIB;
-
-        println!(
-            "Processing file {}, size {}, expected chunks {}.",
-            path(f),
-            f.size_bytes,
-            expected_chunks
-        );
-
-        hasher.write(&(path(f).len() as u32).to_be_bytes());
-        hasher.write(path(f).as_bytes());
-        hasher.write(&f.size_bytes.to_be_bytes());
-
-        let chunks = chunk_table
-            .iter()
-            .filter(|chunk| chunk.file_index == *idx as u32)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            expected_chunks,
-            chunks.len() as u64,
-            "Expected chunk count (assuming 1MiB chunks) {} does not match actual chunk count {}",
-            expected_chunks,
-            chunks.len()
-        );
-        chunk_count += chunks.len();
-
-        hasher.write(&(chunks.len() as u32).to_be_bytes());
-
-        for chunk in chunks {
-            hasher.write(&chunk.size_bytes.to_be_bytes());
-            hasher.write(&chunk.offset.to_be_bytes());
-            hasher.write(&chunk.hash);
-        }
-    }
-
-    let canister_hash = hex::encode(hasher.finish());
-    println!(
-        "Processed {} files and {} chunks. Canister hash: {}",
-        file_table.len(),
-        chunk_count,
-        canister_hash,
-    );
-
-    canister_hash
 }
 
 fn extract_manifest_version(lines: &[String]) -> StateSyncVersion {
@@ -244,18 +131,6 @@ fn verify_manifest(file: File) -> Result<(), String> {
     Ok(())
 }
 
-/// Parses a manifest in its textual representation as output by manifest
-/// and computes a hash similar to the manifest root hash. The goal of
-/// the canister hash is to provide a tool that allows to compare
-/// canisters that are part of different states, i.e., so that a
-/// canister hash of the same canister in two different states is the
-/// same.
-pub fn do_canister_hash(file: &Path, canister: &str) -> Result<(), String> {
-    let (_, file_table, chunk_table, _) = parse_manifest(File::open(file).unwrap());
-    canister_hash(file_table, chunk_table, canister);
-    Ok(())
-}
-
 // Parses a manifest in its textual representation as output by manifest
 // and recomputes the root hash using the information contained in it.
 //
@@ -277,7 +152,7 @@ mod tests {
         ChunkInfo, FileInfo, Manifest, StateSyncVersion, CURRENT_STATE_SYNC_VERSION,
     };
 
-    use super::{canister_hash, verify_manifest};
+    use super::verify_manifest;
 
     fn test_manifest_entry(
         version: StateSyncVersion,
@@ -338,19 +213,6 @@ mod tests {
         )
     }
 
-    fn test_manifest_2_current_version() -> (Manifest, String) {
-        let version = CURRENT_STATE_SYNC_VERSION;
-        test_manifest(
-            version,
-            &[test_manifest_entry(
-                version,
-                0,
-                "canister_states/canister_0/test.bin",
-                0,
-            )],
-        )
-    }
-
     fn test_manifest_v2() -> (Manifest, String) {
         let version = StateSyncVersion::V2;
         test_manifest(
@@ -383,25 +245,5 @@ mod tests {
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
         verify_manifest(tmp_file).unwrap();
-    }
-
-    #[test]
-    fn canister_hashes_in_different_states_match() {
-        fn compute_canister_hash(manifest: Manifest, canister: &str) -> String {
-            canister_hash(
-                manifest.file_table.clone(),
-                manifest.chunk_table.clone(),
-                canister,
-            )
-        }
-
-        let (manifest_0, root_hash_0) = test_manifest_current_version();
-        let canister_hash_0 = compute_canister_hash(manifest_0, "canister_0");
-
-        let (manifest_1, root_hash_1) = test_manifest_2_current_version();
-        let canister_hash_1 = compute_canister_hash(manifest_1, "canister_0");
-
-        assert_eq!(canister_hash_0, canister_hash_1);
-        assert_ne!(root_hash_0, root_hash_1);
     }
 }
