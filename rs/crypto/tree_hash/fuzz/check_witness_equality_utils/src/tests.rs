@@ -467,3 +467,81 @@ fn modify_label_modifies_correct_label() {
         );
     }
 }
+
+#[test]
+fn cmp_paths_works_correctly_for_1_depth_trees() {
+    let equal_trees_in_root = vec![
+        subtree!(),
+        LabeledTree::Leaf(vec![]),
+        LabeledTree::Leaf(vec![0u8]),
+    ];
+
+    for t1 in equal_trees_in_root.iter() {
+        for t2 in equal_trees_in_root.iter() {
+            assert_eq!(cmp_paths(t1, t2), Ordering::Equal);
+        }
+    }
+}
+
+#[test]
+fn cmp_paths_works_correctly() {
+    let tree = subtree!(b"a" => subtree_empty_values!(b"b"));
+    assert_eq!(cmp_paths(&tree, &tree), Ordering::Equal);
+    assert_eq!(
+        cmp_paths(&subtree_empty_values!(b"a"), &tree),
+        Ordering::Less
+    );
+    assert_eq!(
+        cmp_paths(&tree, &subtree_empty_values!(b"a")),
+        Ordering::Greater
+    );
+
+    assert_eq!(
+        cmp_paths(&subtree!(b"a" => subtree!()), &tree),
+        Ordering::Less
+    );
+    assert_eq!(
+        cmp_paths(&tree, &subtree!(b"a" => subtree!())),
+        Ordering::Greater
+    );
+
+    assert_eq!(
+        cmp_paths(
+            &tree,
+            &subtree!(b"a" => subtree!(b"b" => subtree_empty_values!(b"c")))
+        ),
+        Ordering::Less
+    );
+    assert_eq!(
+        cmp_paths(
+            &subtree!(b"a" => subtree!(b"b" => subtree_empty_values!(b"c"))),
+            &tree
+        ),
+        Ordering::Greater
+    );
+
+    assert_eq!(
+        cmp_paths(&tree, &subtree!(b"a" => subtree_empty_values!(b"c"))),
+        Ordering::Less
+    );
+    assert_eq!(
+        cmp_paths(&subtree!(b"a" => subtree_empty_values!(b"c")), &tree),
+        Ordering::Greater
+    );
+}
+
+#[test]
+#[should_panic = "bug: path with >1 argument lhs=FlatMap { keys: [a], values: [Leaf([])] } rhs=FlatMap { keys: [a, b], values: [Leaf([]), Leaf([])] }"]
+fn cmp_paths_panics_if_first_argument_is_not_a_path() {
+    let path = subtree_empty_values!(b"a");
+    let not_path = subtree_empty_values!(b"a", b"b");
+    cmp_paths(&path, &not_path);
+}
+
+#[test]
+#[should_panic = "bug: path with >1 argument lhs=FlatMap { keys: [a, b], values: [Leaf([]), Leaf([])] } rhs=FlatMap { keys: [a], values: [Leaf([])] }"]
+fn cmp_paths_panics_if_second_argument_is_not_a_path() {
+    let path = subtree_empty_values!(b"a");
+    let not_path = subtree_empty_values!(b"a", b"b");
+    cmp_paths(&not_path, &path);
+}

@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use ic_canonical_state_tree_hash::hash_tree::{hash_lazy_tree, HashTreeError};
-use ic_canonical_state_tree_hash_test_utils::{as_lazy, test_witness_equality_for_tree};
+use ic_canonical_state_tree_hash_test_utils::{as_lazy, test_membership_witness};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree, MixedHashTree};
 use ic_crypto_tree_hash_test_utils::arbitrary::arbitrary_labeled_tree;
@@ -18,7 +18,7 @@ fn test_empty_subtree() {
     let rng = &mut reproducible_rng();
     let t = LabeledTree::SubTree(flatmap! {});
 
-    test_witness_equality_for_tree(&t, rng);
+    test_membership_witness(&t, rng);
 }
 
 #[test]
@@ -30,7 +30,7 @@ fn test_one_level_tree() {
         })
     });
 
-    test_witness_equality_for_tree(&t, rng);
+    test_membership_witness(&t, rng);
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn test_simple_tree() {
         }),
     });
 
-    test_witness_equality_for_tree(&t, rng);
+    test_membership_witness(&t, rng);
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn test_many_children() {
         Label::from("c") => LabeledTree::SubTree(large_flatmap),
     });
 
-    test_witness_equality_for_tree(&t, rng);
+    test_membership_witness(&t, rng);
 }
 
 #[test]
@@ -178,6 +178,6 @@ proptest! {
     #[test]
     fn same_witness(t in arbitrary_labeled_tree(), seed in prop::array::uniform32(any::<u8>())) {
         let rng = &mut ChaCha20Rng::from_seed(seed);
-        test_witness_equality_for_tree(&t, rng);
+        test_membership_witness(&t, rng);
     }
 }

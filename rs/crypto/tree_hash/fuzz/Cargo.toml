@@ -21,7 +21,13 @@ rand_chacha = "0.3"
 members = [".", "check_witness_equality_utils"]
 
 [[bin]]
-name = "check_witness_equality"
-path = "fuzz_targets/check_witness_equality.rs"
+name = "check_membership_witness_equality"
+path = "fuzz_targets/check_membership_witness_equality.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "check_absence_witness_equality"
+path = "fuzz_targets/check_absence_witness_equality.rs"
 test = false
 doc = false

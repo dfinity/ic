@@ -365,9 +365,9 @@ fn partial_trees_to_leaves_and_empty_subtrees_impl<'a>(
     }
 }
 
-/// Merges a path (i.e., a one node wide [`LabeledTree`]  containing exactly one
-/// [`LabeledTree::Leaf`]) into the `agg` by appending the missing node/subtree
-/// from `path`.
+/// Merges a path (i.e., a one node wide [`LabeledTree`] ending with a
+/// [`LabeledTree::Leaf`] or empty [`LabeledTree::SubTree`]) into the `agg` by
+/// appending the missing node/subtree from `path`.
 ///
 /// Panics if the appended label from `path` is not larger than the largest
 /// label in the respective subtree.
@@ -377,10 +377,14 @@ pub fn merge_path_into_labeled_tree<T: core::fmt::Debug + std::cmp::PartialEq + 
 ) {
     match (agg, path) {
         (LabeledTree::SubTree(subtree_agg), LabeledTree::SubTree(subtree_path)) => {
+            if subtree_path.is_empty() {
+                // path with an empty subtree at the end
+                return;
+            }
             assert_eq!(
                 subtree_path.len(),
                 1,
-                "`path` should always contain only exactly one label/tree pair in each subtree"
+                "`path` should always contain only exactly one label/tree pair in each subtree but got {subtree_path:?}"
             );
             let (path_label, subpath) = subtree_path
                 .iter()

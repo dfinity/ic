@@ -12,11 +12,20 @@ DEPENDENCIES = [
     "@crate_index//:rand_chacha_0_3_1",
 ]
 
-MACRO_DEPENDENCIES = []
+rust_fuzz_test_binary(
+    name = "check_membership_witness_equality",
+    srcs = [
+        "fuzz_targets/check_membership_witness_equality.rs",
+        "fuzz_targets/common/mod.rs",
+    ],
+    deps = DEPENDENCIES,
+)
 
 rust_fuzz_test_binary(
-    name = "check_witness_equality",
-    srcs = ["fuzz_targets/check_witness_equality.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    name = "check_absence_witness_equality",
+    srcs = [
+        "fuzz_targets/check_absence_witness_equality.rs",
+        "fuzz_targets/common/mod.rs",
+    ],
     deps = DEPENDENCIES,
 )
