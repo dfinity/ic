@@ -6,7 +6,14 @@ use ic_crypto_tree_hash::{
 use ic_crypto_tree_hash_test_utils::{
     hash_tree_builder_from_labeled_tree, mixed_hash_tree_digest_recursive,
 };
-use ic_types_test_utils::ids::message_test_id;
+
+// Do something similar to what ic_types_test_utils::ids::message_test_id() does
+// because it compiles *much* faster than importing the function.
+fn message_test_id(v: u64) -> Vec<u8> {
+    let mut id = vec![0; 32];
+    id[0..8].copy_from_slice(&v.to_be_bytes());
+    id
+}
 
 fn new_request_status_tree(num_subtrees: usize) -> LabeledTree<Vec<u8>> {
     let replied_tree = LabeledTree::SubTree(flatmap! {
@@ -142,7 +149,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         {
             let mut g = c.benchmark_group("lookup");
 
-            let path = [message_test_id(121).as_bytes().to_vec(), b"reply".to_vec()];
+            let path = [message_test_id(121), b"reply".to_vec()];
 
             g.bench_function(BenchmarkId::new("mixed_hash_tree", num_subtrees), |b| {
                 b.iter(|| black_box(mixed_hash_tree.lookup(&path)));

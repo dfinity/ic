@@ -3,8 +3,9 @@ use ic_canonical_state_tree_hash::{
     lazy_tree::{LazyFork, LazyTree},
 };
 use ic_crypto_tree_hash::{
-    hasher::Hasher, recompute_digest, Digest, FlatMap, HashTree as CryptoHashTree, HashTreeBuilder,
-    HashTreeBuilderImpl, Label, LabeledTree, Witness, WitnessGenerator, WitnessGeneratorImpl,
+    hasher::Hasher, Digest, FlatMap, HashTree as CryptoHashTree, HashTreeBuilder,
+    HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree, Witness, WitnessGenerator,
+    WitnessGeneratorImpl,
 };
 use ic_crypto_tree_hash_test_utils::{
     merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
@@ -24,10 +25,7 @@ const EMPTY_HASH: Digest = Digest([
 /// with the old way of generating witnesses.
 ///
 /// Also check that the new and old way of computing hash trees are equivalent.
-pub fn test_witness_equality_for_tree<R: Rng + CryptoRng>(
-    full_tree: &LabeledTree<Vec<u8>>,
-    rng: &mut R,
-) {
+pub fn test_membership_witness<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut R) {
     let hash_tree = hash_lazy_tree(&as_lazy(full_tree)).unwrap();
     let witness_gen = build_witness_gen(full_tree);
 
@@ -61,25 +59,35 @@ pub fn test_witness_equality_for_tree<R: Rng + CryptoRng>(
     assert_eq!(hash_tree, crypto_tree);
 }
 
-fn assert_same_witness(ht: &HashTree, wg: &WitnessGeneratorImpl, data: &LabeledTree<Vec<u8>>) {
-    let ht_witness = ht
-        .witness::<Witness>(data)
-        .expect("Failed to construct a witness.");
-    let wg_witness = wg.witness(data).expect("failed to construct a witness");
+/// Computes [`Witness`] and [`MixedHashTree`] for the given `data` (partial
+/// tree) using both implementation: 1) in `canonical_state` and 2) in `crypto`.
+/// Then, asserts that the results are the same for both implementations.
+pub fn assert_same_witness(ht: &HashTree, wg: &WitnessGeneratorImpl, data: &LabeledTree<Vec<u8>>) {
+    let crypto_witness = wg
+        .mixed_hash_tree(data)
+        .expect("failed to construct a MixedHashTree");
+    let canonical_state_witness = ht
+        .witness::<MixedHashTree>(data)
+        .expect("failed to construct a MixedHashTree");
 
     assert_eq!(
-        wg_witness, ht_witness,
-        "labeled tree: {:?}, hash_tree: {:?}",
-        data, ht
+        crypto_witness, canonical_state_witness,
+        "labeled tree: {data:?}, hash_tree: {ht:?}, wg: {wg:?}",
     );
 
+    let crypto_witness = wg.witness(data).expect("failed to construct a witness");
+    let canonical_state_witness = ht
+        .witness::<Witness>(data)
+        .expect("failed to construct a witness");
+
     assert_eq!(
-        recompute_digest(data, &wg_witness).unwrap(),
-        recompute_digest(data, &ht_witness).unwrap()
+        crypto_witness, canonical_state_witness,
+        "labeled tree: {data:?}, hash_tree: {ht:?}, wg: {wg:?}",
     );
 }
 
-fn build_witness_gen(t: &LabeledTree<Vec<u8>>) -> WitnessGeneratorImpl {
+/// Builds [`WitnessGeneratorImpl`] for the given [`LabeledTree`].
+pub fn build_witness_gen(t: &LabeledTree<Vec<u8>>) -> WitnessGeneratorImpl {
     fn go(t: &LabeledTree<Vec<u8>>, b: &mut HashTreeBuilderImpl) {
         match t {
             LabeledTree::Leaf(bytes) => {

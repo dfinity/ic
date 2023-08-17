@@ -7023,7 +7023,6 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash-test-utils",
  "ic-protobuf",
- "ic-types-test-utils",
  "maplit",
  "proptest",
  "prost",

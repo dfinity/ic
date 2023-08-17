@@ -108,7 +108,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/canister_client/                                    @dfinity-lab/teams/networking-team
 /rs/canister_sandbox/                                   @dfinity-lab/teams/runtime-owners
 /rs/canonical_state/                                    @dfinity-lab/teams/message-routing-owners
-/rs/canonical_state/hash_tree/                          @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/crypto-owners
+/rs/canonical_state/tree_hash/                          @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/crypto-owners
 /rs/certification/                                      @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/crypto-owners
 /rs/config/                                             @dfinity-lab/teams/interface-owners
 /rs/config/src/embedders.rs                             @dfinity-lab/teams/runtime-owners

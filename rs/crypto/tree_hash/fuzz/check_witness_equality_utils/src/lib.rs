@@ -1,9 +1,322 @@
+use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
+use ic_canonical_state_tree_hash_test_utils::{
+    as_lazy, assert_same_witness, build_witness_gen, crypto_hash_lazy_tree,
+};
 use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree};
+use ic_crypto_tree_hash_test_utils::{
+    merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
+};
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use std::cmp::Ordering;
 
 #[cfg(test)]
 mod tests;
+
+/// Check that
+/// - for each path to an absent range
+/// - multiple combinations of such paths
+/// - and combinations of the former with existing paths in the tree
+/// the witness looks the same for both implementations.
+pub fn test_absence_witness<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut R) {
+    let hash_tree = hash_lazy_tree(&as_lazy(full_tree)).expect("failed to create hash tree");
+    let witness_gen = build_witness_gen(full_tree);
+
+    // Traverse the tree and produce a list of paths and absent ranges,
+    // e.g., for a tree `[label_a -> leaf, label_b -> leaf]`, we would
+    // produce the following ranges (all in the root):
+    // [] -> Lt("label_a"), [] -> Between("label_a", "label_b"), [] -> Gt("label_b").
+    let paths_to_absent_ranges = paths_to_absent_ranges(full_tree);
+    let existing_paths = partial_trees_to_leaves_and_empty_subtrees(full_tree);
+
+    // assert same witness for each path and absent range in the tree
+    for (path, range) in paths_to_absent_ranges.iter() {
+        assert_same_witness(
+            &hash_tree,
+            &witness_gen,
+            &new_subtree_in_range(&path[..], range, rng),
+        );
+    }
+
+    // assert same witness for combinations of paths and absent ranges in the
+    // tree, probabilistically also include existing paths
+    const MAX_COMBINED_PATHS: usize = 10;
+    for num_paths in 2..MAX_COMBINED_PATHS.min(existing_paths.len()) {
+        let num_absent_paths = rng.gen_range(1..=num_paths.min(paths_to_absent_ranges.len()));
+        let num_existing_paths = num_paths - num_absent_paths;
+
+        assert!(num_existing_paths <= existing_paths.len(),
+        "amount={num_existing_paths} length={}, num_absent_paths={num_absent_paths}, num_paths=num_paths", existing_paths.len());
+
+        let indices =
+            rand::seq::index::sample(rng, existing_paths.len(), num_existing_paths).into_vec();
+        let selected_existing_paths = indices.into_iter().map(|i| &existing_paths[i]);
+
+        let indices = rand::seq::index::sample(rng, paths_to_absent_ranges.len(), num_absent_paths)
+            .into_vec();
+        let selected_absent_paths: Vec<LabeledTree<_>> = indices
+            .into_iter()
+            .map(|i| {
+                let (path, range) = &paths_to_absent_ranges[i];
+                new_subtree_in_range(&path[..], range, rng)
+            })
+            .collect();
+
+        let mut paths: Vec<_> = selected_existing_paths
+            .chain(selected_absent_paths.iter())
+            .collect();
+        paths.sort_unstable_by(|&lhs, &rhs| cmp_paths(lhs, rhs));
+
+        let mut partial_tree = paths[0].clone();
+
+        for &path in paths[1..].iter() {
+            merge_path_into_labeled_tree(&mut partial_tree, path);
+        }
+        assert_same_witness(&hash_tree, &witness_gen, &partial_tree);
+    }
+
+    // create a hash tree for the full tree
+    let crypto_tree = crypto_hash_lazy_tree(&as_lazy(full_tree));
+    assert_eq!(hash_tree, crypto_tree);
+}
+
+/// Compares two paths represented as [`LabeledTree`]s. A path is defined as a
+/// sequence of subtrees with exactly one child, ending with a leaf or an empty
+/// subtree. The sequence is allowed to be empty, i.e., the path only contains a
+/// child.
+///
+/// # Returns
+/// Paths are compared by comparing their labels, starting from the root until
+/// the first label mismatch is found, or one path is exhausted. Longer path is
+/// defined to be greater. If the labels in both trees are equal, `lhs` and
+/// `rhs` are defined to be equal. Empty subtrees and any leaf values are equal.
+///
+/// # Panics
+/// If either subtree is not a path, i.e., contains more than one child in any
+/// subtree.
+fn cmp_paths(lhs: &LabeledTree<Vec<u8>>, rhs: &LabeledTree<Vec<u8>>) -> Ordering {
+    use LabeledTree::*;
+    use Ordering::*;
+    match (lhs, rhs) {
+        (SubTree(lhs), SubTree(rhs)) if lhs.is_empty() && rhs.is_empty() => Equal,
+        (SubTree(lhs), SubTree(rhs)) if lhs.is_empty() && rhs.len() == 1 => Less,
+        (SubTree(lhs), SubTree(rhs)) if lhs.len() == 1 && rhs.is_empty() => Greater,
+        (SubTree(lhs), Leaf(_)) if lhs.len() == 1 => Greater,
+        (SubTree(lhs), Leaf(_)) if lhs.is_empty() => Equal,
+        (Leaf(_), SubTree(rhs)) if rhs.len() == 1 => Less,
+        (Leaf(_), SubTree(rhs)) if rhs.is_empty() => Equal,
+        (Leaf(_), Leaf(_)) => Equal,
+        (SubTree(lhs_children), SubTree(rhs_children))
+            if lhs_children.len() == 1 && rhs_children.len() == 1 =>
+        {
+            let lhs_label = &lhs_children.keys()[0];
+            let rhs_label = &rhs_children.keys()[0];
+
+            let cmp = lhs_label.cmp(rhs_label);
+            if cmp != Equal {
+                return cmp;
+            }
+
+            let lhs_subtree = &lhs_children.values()[0];
+            let rhs_subtree = &rhs_children.values()[0];
+            cmp_paths(lhs_subtree, rhs_subtree)
+        }
+        (SubTree(lhs), SubTree(rhs)) if lhs.len() > 1 || rhs.len() > 1 => {
+            panic!("bug: path with >1 argument lhs={lhs:?} rhs={rhs:?}")
+        }
+        (lhs, rhs) => unreachable!("lhs={lhs:?} rhs={rhs:?}"),
+    }
+}
+
+/// Label range that is not present in the [`SubTree`].
+pub enum AbsentLabelRange<'a> {
+    /// The [`SubTree`] is empty, so any label is not in the range.
+    Any,
+    /// Range that is smaller than any label in the [`SubTree`].
+    Lt(&'a Label),
+    /// Range that is larger than any label in the [`SubTree`].
+    Gt(&'a Label),
+    /// Exclusive range between two consecutive labels in the [`SubTree`].
+    Between(&'a Label, &'a Label),
+}
+
+fn paths_to_absent_ranges(tree: &LabeledTree<Vec<u8>>) -> Vec<(Vec<&Label>, AbsentLabelRange)> {
+    fn paths_to_ranges_impl<'a>(
+        tree: &'a LabeledTree<Vec<u8>>,
+        path: &mut Vec<&'a Label>,
+        result: &mut Vec<(Vec<&'a Label>, AbsentLabelRange<'a>)>,
+    ) {
+        match tree {
+            LabeledTree::SubTree(children) if children.is_empty() => {
+                result.push((path.clone(), AbsentLabelRange::Any));
+            }
+            LabeledTree::SubTree(children) /*if !children.is_empty()*/
+            => {
+                // Collect ranges
+                let first = children.keys().first().unwrap();
+                if !first.as_bytes().is_empty(){
+                    // generate a `Lt` only if there exists a label that is
+                    // small (only excludes the empty label)
+                    result.push((path.clone(), AbsentLabelRange::Lt(first)));
+                }
+                for w in children.keys()[..].windows(2){
+                    assert!(w[0] < w[1]);
+                    // generate a `Between` only if there exists a label that
+                    // can be generated between both labels
+                    if is_not_minimally_larger(&w[0], &w[1]){
+                        result.push((path.clone(), AbsentLabelRange::Between(&w[0], &w[1])));}
+                    }
+                result.push((path.clone(), AbsentLabelRange::Gt(children.keys().last().unwrap())));
+
+                // Descend into children
+                for (label, child) in children.iter() {
+                    path.push(label);
+                    paths_to_ranges_impl(child, path, result);
+                    path.pop();
+                }
+            }
+            LabeledTree::Leaf(_) => {}
+        }
+    }
+
+    let mut result = vec![];
+    paths_to_ranges_impl(tree, &mut vec![], &mut result);
+    result
+}
+
+/// For any label `l` the minimally larger label is `l` concatenated with the
+/// lexicographically minimal symbol, i.e., `0u8`. See
+/// https://doc.rust-lang.org/std/cmp/trait.Ord.html#lexicographical-comparison
+/// for more details.
+fn is_not_minimally_larger(small: &Label, large: &Label) -> bool {
+    let sb = small.as_bytes();
+    let lb = large.as_bytes();
+    sb.len() + 1 != lb.len() || sb[..] != lb[..sb.len()] || *lb.last().unwrap() != u8::MIN
+}
+
+/// Generates a [`SubTree`] for `path` and adds a random label in `range` at its
+/// end and probabilistically appends a random (small) [`SubTree`].
+fn new_subtree_in_range<R: Rng + CryptoRng>(
+    path: &[&Label],
+    range: &AbsentLabelRange,
+    rng: &mut R,
+) -> LabeledTree<Vec<u8>> {
+    let absent_label = random_label_in_range(range, rng);
+    let with_random_subtree = rng.gen_bool(0.5);
+    let mut tree = if with_random_subtree {
+        random_subtree_maybe_with_leaf(rng)
+    } else {
+        LabeledTree::<Vec<u8>>::Leaf(random_bytes(0..10, rng))
+    };
+    tree = LabeledTree::SubTree(flatmap!(absent_label => tree));
+
+    for &l in path.iter().rev() {
+        tree = LabeledTree::SubTree(flatmap!(l.clone() => tree));
+    }
+    tree
+}
+
+/// Generates a random label in the given range. Assumes that generating the
+/// label is possible given the range (for `AbsentLabelRange::Lt(l)`, `l` is
+/// not an empty label, and for `AbsentLabelRange::Between(small, large)`
+/// `large` is not minimally larger than `small`) and is thus infallible.
+fn random_label_in_range<R: Rng + CryptoRng>(range: &AbsentLabelRange, rng: &mut R) -> Label {
+    let label_bytes = match range {
+        AbsentLabelRange::Any => random_bytes(0..20, rng),
+        AbsentLabelRange::Lt(l) => {
+            assert!(!l.as_bytes().is_empty());
+            if l.as_bytes().iter().any(|b| *b != 0) {
+                let mut result = l
+                    .as_bytes()
+                    .iter()
+                    .map(|b| if *b != 0 { rng.gen_range(0..*b) } else { 0 })
+                    .collect();
+                append_bytes(&mut result, 0..5, rng);
+                assert!(
+                    l.as_bytes() > &result[..],
+                    "l={l} should be greater than result={result:?}, but it is not"
+                );
+                result
+            } else {
+                // `split_last()` strips the last byte from the label; doesn't
+                // panic if the label contains only one byte
+                l.as_bytes().split_last().unwrap().1.to_vec()
+            }
+        }
+        AbsentLabelRange::Gt(l) => {
+            if !l.as_bytes().is_empty() {
+                let mut result = l
+                    .as_bytes()
+                    .iter()
+                    .map(|b| rng.gen_range((*b).saturating_add(1)..=u8::MAX))
+                    .collect();
+                append_bytes(&mut result, 0..5, rng);
+                // if we accidentially generated `l`, create a label that is
+                // minimally larger
+                if l.as_bytes() == &result[..] {
+                    result.push(0);
+                }
+                assert!(l.as_bytes() < &result[..]);
+                result
+            } else {
+                random_bytes(1..20, rng)
+            }
+        }
+        AbsentLabelRange::Between(small, large) => {
+            let sb = small.as_bytes();
+            let lb = large.as_bytes();
+            assert!(
+                is_not_minimally_larger(small, large),
+                "small={small}, large={large}"
+            );
+            let mut result = Vec::with_capacity(sb.len());
+            for i in 0..std::cmp::max(sb.len(), lb.len()) {
+                let s = if i < sb.len() { sb[i] } else { 0 };
+                let l = if i < lb.len() { lb[i] } else { u8::MAX };
+                if s <= l {
+                    result.push(rng.gen_range(s..=l));
+                } else {
+                    result.push(rng.gen::<u8>());
+                }
+            }
+            // if we accidentially generated out of bounds, create a label
+            // that is minimally larger than small
+            if &result[..] <= sb || &result[..] >= lb {
+                result = sb.iter().chain([0].iter()).cloned().collect();
+            }
+
+            assert!(
+                sb < &result[..] && lb > &result[..],
+                "small={sb:?}, large={lb:?}, result={result:?}"
+            );
+            result
+        }
+    };
+
+    Label::from(label_bytes)
+}
+
+fn random_subtree_maybe_with_leaf<R: Rng + CryptoRng>(rng: &mut R) -> LabeledTree<Vec<u8>> {
+    let with_leaf = rng.gen_bool(0.5);
+    if with_leaf {
+        LabeledTree::SubTree(
+            flatmap!(Label::from(random_bytes(0..10, rng)) => LabeledTree::Leaf(random_bytes(0..10, rng))),
+        )
+    } else {
+        LabeledTree::SubTree(flatmap!())
+    }
+}
+
+fn append_bytes<Range: rand::distributions::uniform::SampleRange<usize>, R: Rng + CryptoRng>(
+    vec: &mut Vec<u8>,
+    range: Range,
+    rng: &mut R,
+) {
+    let num_bytes = rng.gen_range(range);
+    for _ in 0..num_bytes {
+        vec.push(rng.gen::<u8>());
+    }
+}
 
 pub fn rng_from_u32(seed: u32) -> ChaCha20Rng {
     const CHACHA_SEED_LEN: usize = 32;
