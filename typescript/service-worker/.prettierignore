@@ -1,3 +1,13 @@
+/.vscode
+/certs
+/dist-dev
+/dist-prod
+/node_modules
+
+tmp
+.dfx
+.env
+target
+
+/e2e/certs
 /e2e/dist
-/e2e/canister/.dfx
-/e2e/canister/target

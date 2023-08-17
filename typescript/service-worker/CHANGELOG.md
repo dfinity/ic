@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.8.6
+
+- Revert usage of DecompressionStreams API, it is not yet widely supported by Safari or Firefox
+
 ## 1.8.5
 
 - Fix service worker upgrades that would try to load the new wasm module from the old service worker, the wasm is now inline loaded
