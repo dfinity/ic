@@ -44,20 +44,31 @@ impl StableMemory {
         Ok(size.try_into().unwrap())
     }
 
-    /// Grows stable memory by specified amount.
-    pub(super) fn stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
+    /// Performs the checks for the `ic0.stable_grow()` system API call.
+    /// If the checks pass, then it returns the result of the system API call and
+    /// the new stable memory size without modifying the state.
+    ///
+    /// Note that it may return `Ok((-1, None))` in case of a failure that
+    /// doesn't trap.
+    pub(super) fn prepare_for_stable_grow(
+        &self,
+        additional_pages: u32,
+    ) -> HypervisorResult<(i32, Option<NumWasmPages>)> {
         let initial_page_count = self.stable_size()? as usize;
         let additional_pages = additional_pages as usize;
 
         if additional_pages + initial_page_count > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
-            return Ok(-1);
+            return Ok((-1, None));
         }
 
-        self.stable_memory_size = NumWasmPages::from(initial_page_count + additional_pages);
-
-        Ok(initial_page_count
+        let result: i32 = initial_page_count
             .try_into()
-            .expect("could not fit initial page count in 32 bits, although 32-bit api is used"))
+            .expect("could not fit initial page count in 32 bits, although 32-bit api is used");
+
+        Ok((
+            result,
+            Some(NumWasmPages::from(initial_page_count + additional_pages)),
+        ))
     }
 
     /// Reads from stable memory back to heap.
@@ -111,19 +122,27 @@ impl StableMemory {
         Ok(self.stable_memory_size.get() as u64)
     }
 
-    /// Grows stable memory by specified amount.
-    pub(super) fn stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
+    /// Performs the checks for the `ic0.stable64_grow()` system API call.
+    /// If the checks pass, then it returns the result of the system API call and
+    /// the new stable memory size without modifying the state.
+    ///
+    /// Note that it may return `Ok((-1, None))` in case of a failure that
+    /// doesn't trap.
+    pub(super) fn prepare_for_stable64_grow(
+        &self,
+        additional_pages: u64,
+    ) -> HypervisorResult<(i64, Option<NumWasmPages>)> {
         let initial_page_count = self.stable64_size()?;
-
         let (page_count, overflow) = additional_pages.overflowing_add(initial_page_count);
         if overflow || page_count > MAX_64_BIT_STABLE_MEMORY_IN_PAGES as u64 {
-            return Ok(-1);
+            return Ok((-1, None));
         }
-
-        self.stable_memory_size =
-            NumWasmPages::from(initial_page_count as usize + additional_pages as usize);
-
-        Ok(initial_page_count as i64)
+        Ok((
+            initial_page_count as i64,
+            Some(NumWasmPages::from(
+                initial_page_count as usize + additional_pages as usize,
+            )),
+        ))
     }
 
     /// Same as `stable64_read`, but doesn't do any bounds checks on the stable

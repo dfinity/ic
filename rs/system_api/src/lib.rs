@@ -645,17 +645,6 @@ impl MemoryUsage {
         self.allocate_execution_memory(bytes, api_type, sandbox_safe_system_state)
     }
 
-    /// Unconditionally deallocates the given number of Wasm pages. Should only
-    /// be called immediately after `allocate_pages()`, with the same number of
-    /// pages, in case growing the heap failed.
-    fn deallocate_pages(&mut self, pages: usize) {
-        // Expected to work as we have converted `pages` to bytes when `increase_usage`
-        // was called and if it would have failed, we wouldn't call `decrease_usage`.
-        let bytes = ic_replicated_state::num_bytes_try_from(NumWasmPages::from(pages))
-            .expect("could not convert wasm pages to bytes");
-        self.deallocate_execution_memory(bytes)
-    }
-
     /// Tries to allocate the requested amount of the Wasm or stable memory.
     ///
     /// If the canister has memory allocation, then this function doesn't allocate
@@ -716,33 +705,6 @@ impl MemoryUsage {
                 }
                 self.current_usage = NumBytes::from(new_usage);
                 Ok(())
-            }
-        }
-    }
-
-    /// Deallocates the given amount of the Wasm or stable memory.
-    /// Should only be called immediately after `allocate_execution_memory()`, with the
-    /// same number of bytes, in case growing the heap failed or upon clean up.
-    ///
-    /// If the canister has memory allocation, then this function doesn't deallocate
-    /// bytes, but only decreases `current_usage`.
-    fn deallocate_execution_memory(&mut self, execution_bytes: NumBytes) {
-        debug_assert!(self.current_usage >= execution_bytes);
-        self.current_usage -= execution_bytes;
-
-        match self.memory_allocation {
-            MemoryAllocation::BestEffort => {
-                self.subnet_available_memory.increment(
-                    execution_bytes,
-                    NumBytes::from(0),
-                    NumBytes::from(0),
-                );
-                debug_assert!(self.allocated_execution_memory >= execution_bytes);
-                self.allocated_execution_memory -= execution_bytes;
-            }
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                debug_assert!(self.current_usage + execution_bytes <= reserved_bytes);
-                // Nothing to do since we didn't actually allocate new memory.
             }
         }
     }
@@ -2067,28 +2029,32 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
-        let result = match self.memory_usage.allocate_pages(
-            additional_pages as usize,
-            &self.api_type,
-            &self.sandbox_safe_system_state,
-        ) {
-            Ok(()) => {
-                let res = self.stable_memory_mut().stable_grow(additional_pages);
-                match &res {
-                    Err(_) | Ok(-1) => self
-                        .memory_usage
-                        .deallocate_pages(additional_pages as usize),
-                    _ => {}
+        let result = match self
+            .stable_memory()
+            .prepare_for_stable_grow(additional_pages)
+        {
+            Ok((result, Some(new_memory_size))) => {
+                assert_ne!(result, -1);
+                match self.memory_usage.allocate_pages(
+                    additional_pages as usize,
+                    &self.api_type,
+                    &self.sandbox_safe_system_state,
+                ) {
+                    Ok(()) => {
+                        self.stable_memory_mut().stable_memory_size = new_memory_size;
+                        Ok(result)
+                    }
+                    Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
+                        // Trap instead of returning -1 in order to give the developer
+                        // more actionable error message. Otherwise, they cannot
+                        // distinguish between out-of-memory and out-of-cycles.
+                        Err(err)
+                    }
+                    Err(_err) => Ok(-1),
                 }
-                res
             }
-            Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
-                // Trap instead of returning -1 in order to give the developer
-                // more actionable error message. Otherwise, they cannot
-                // distinguish between out-of-memory and out-of-cycles.
-                Err(err)
-            }
-            Err(_err) => Ok(-1),
+            Ok((_, None)) => Ok(-1),
+            Err(err) => Err(err),
         };
         trace_syscall!(self, ic0_stable_grow, result, additional_pages);
         result
@@ -2143,28 +2109,32 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
-        let result = match self.memory_usage.allocate_pages(
-            additional_pages as usize,
-            &self.api_type,
-            &self.sandbox_safe_system_state,
-        ) {
-            Ok(()) => {
-                let res = self.stable_memory_mut().stable64_grow(additional_pages);
-                match &res {
-                    Err(_) | Ok(-1) => self
-                        .memory_usage
-                        .deallocate_pages(additional_pages as usize),
-                    _ => {}
+        let result = match self
+            .stable_memory()
+            .prepare_for_stable64_grow(additional_pages)
+        {
+            Ok((result, Some(new_memory_size))) => {
+                assert_ne!(result, -1);
+                match self.memory_usage.allocate_pages(
+                    additional_pages as usize,
+                    &self.api_type,
+                    &self.sandbox_safe_system_state,
+                ) {
+                    Ok(()) => {
+                        self.stable_memory_mut().stable_memory_size = new_memory_size;
+                        Ok(result)
+                    }
+                    Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
+                        // Trap instead of returning -1 in order to give the developer
+                        // more actionable error message. Otherwise, they cannot
+                        // distinguish between out-of-memory and out-of-cycles.
+                        Err(err)
+                    }
+                    Err(_err) => Ok(-1),
                 }
-                res
             }
-            Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
-                // Trap instead of returning -1 in order to give the developer
-                // more actionable error message. Otherwise, they cannot
-                // distinguish between out-of-memory and out-of-cycles.
-                Err(err)
-            }
-            Err(_err) => Ok(-1),
+            Ok((_, None)) => Ok(-1),
+            Err(err) => Err(err),
         };
         trace_syscall!(self, ic0_stable64_grow, result, additional_pages);
         result
