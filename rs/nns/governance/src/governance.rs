@@ -3,6 +3,9 @@ use crate::{
     governance::manage_neuron_request::{
         execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
     },
+    heap_governance_data::{
+        reassemble_governance_proto, split_governance_proto, HeapGovernanceData,
+    },
     pb::v1::{
         add_or_remove_node_provider::Change,
         governance::{
@@ -1387,13 +1390,40 @@ fn log_already_absent_topic_followee_pairs(
     }
 }
 
+/// This struct stores and provides access to all neurons within NNS Governance, which can live
+/// in either heap memory or stable memory.
+pub struct NeuronStore {
+    pub heap_neurons: BTreeMap<u64, Neuron>,
+}
+
+impl NeuronStore {
+    pub fn new(heap_neurons: BTreeMap<u64, Neuron>) -> Self {
+        Self { heap_neurons }
+    }
+
+    /// Takes the heap neurons for serialization. The `self.heap_neurons` will become empty, so
+    /// it should only be called once at pre_upgrade.
+    pub fn take_heap_neurons(&mut self) -> BTreeMap<u64, Neuron> {
+        std::mem::take(&mut self.heap_neurons)
+    }
+
+    /// Clones all the neurons. This is only used for testing.
+    /// TODO(NNS-2474) clean it up after NNSState stop using GovernanceProto.
+    pub fn clone_neurons(&self) -> BTreeMap<u64, Neuron> {
+        self.heap_neurons.clone()
+    }
+}
+
 /// The `Governance` canister implements the full public interface of the
 /// IC's governance system.
 pub struct Governance {
     /// The Governance Protobuf which contains all persistent state of
-    /// the IC's governance system. Needs to be stored and retrieved
-    /// on upgrades.
-    pub proto: GovernanceProto,
+    /// the IC's governance system except for neurons. Needs to be stored and
+    /// retrieved on upgrades after being reassembled along with neurons.
+    pub heap_data: HeapGovernanceData,
+
+    /// Stores all neurons and related data.
+    pub neuron_store: NeuronStore,
 
     /// Implementation of Environment to make unit testing easier.
     pub env: Box<dyn Environment>,
@@ -1447,19 +1477,19 @@ pub fn neuron_subaccount(subaccount: Subaccount) -> AccountIdentifier {
 
 impl Governance {
     pub fn new(
-        mut proto: GovernanceProto,
+        mut governance_proto: GovernanceProto,
         env: Box<dyn Environment>,
         ledger: Box<dyn IcpLedger>,
         cmc: Box<dyn CMC>,
     ) -> Self {
-        if proto.genesis_timestamp_seconds == 0 {
-            proto.genesis_timestamp_seconds = env.now();
+        if governance_proto.genesis_timestamp_seconds == 0 {
+            governance_proto.genesis_timestamp_seconds = env.now();
         }
-        if proto.latest_reward_event.is_none() {
+        if governance_proto.latest_reward_event.is_none() {
             // Introduce a dummy reward event to mark the origin of the IC era.
             // This is required to be able to compute accurately the rewards for the
             // very first reward distribution.
-            proto.latest_reward_event = Some(RewardEvent {
+            governance_proto.latest_reward_event = Some(RewardEvent {
                 actual_timestamp_seconds: env.now(),
                 day_after_genesis: 0,
                 settled_proposals: vec![],
@@ -1470,8 +1500,11 @@ impl Governance {
             })
         }
 
+        let (heap_neurons, heap_governance_proto) = split_governance_proto(governance_proto);
+
         let mut gov = Self {
-            proto,
+            heap_data: heap_governance_proto,
+            neuron_store: NeuronStore::new(heap_neurons),
             env,
             ledger,
             cmc,
@@ -1488,9 +1521,23 @@ impl Governance {
         gov
     }
 
+    /// After calling this method, the proto and neuron_store (the heap neurons at least)
+    /// becomes unusable, so it should only be called in pre_upgrade once.
+    pub fn take_heap_proto(&mut self) -> GovernanceProto {
+        let neurons = self.neuron_store.take_heap_neurons();
+        let heap_governance_proto = std::mem::take(&mut self.heap_data);
+        reassemble_governance_proto(neurons, heap_governance_proto)
+    }
+
+    pub fn clone_proto(&self) -> GovernanceProto {
+        let neurons = self.neuron_store.clone_neurons();
+        let heap_governance_proto = self.heap_data.clone();
+        reassemble_governance_proto(neurons, heap_governance_proto)
+    }
+
     /// Validates that the underlying protobuf is well formed.
     pub fn validate(&self) -> Result<(), GovernanceError> {
-        if self.proto.economics.is_none() {
+        if self.heap_data.economics.is_none() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
                 "Network economics was not found",
@@ -1515,7 +1562,7 @@ impl Governance {
             }
         }
 
-        self.validate_default_followees(&self.proto.default_followees)?;
+        self.validate_default_followees(&self.heap_data.default_followees)?;
 
         Ok(())
     }
@@ -1550,7 +1597,7 @@ impl Governance {
     }
 
     fn build_principal_to_neuron_ids_index(&mut self) {
-        for neuron in self.proto.neurons.values() {
+        for neuron in self.neuron_store.heap_neurons.values() {
             let already_present_principal_ids = add_neuron_id_principal_ids(
                 &mut self.principal_to_neuron_ids_index,
                 &neuron.id.unwrap(),
@@ -1570,7 +1617,7 @@ impl Governance {
     /// neurons themselves map followers (the neuron ID) to a set of
     /// followees (per topic).
     fn build_topic_followee_index(&mut self) {
-        for neuron in self.proto.neurons.values() {
+        for neuron in self.neuron_store.heap_neurons.values() {
             let neuron_id = neuron.id.expect("Neuron must have an id");
             let already_present_topic_followee_pairs = add_neuron_followees(
                 &mut self.topic_followee_index,
@@ -1585,7 +1632,7 @@ impl Governance {
     }
 
     fn build_known_neuron_name_index(&mut self) {
-        for neuron in self.proto.neurons.values() {
+        for neuron in self.neuron_store.heap_neurons.values() {
             if let Some(known_neuron_data) = &neuron.known_neuron_data {
                 self.known_neuron_name_set
                     .insert(known_neuron_data.name.clone());
@@ -1758,8 +1805,8 @@ impl Governance {
     }
 
     pub fn get_neuron(&self, nid: &NeuronId) -> Result<&Neuron, GovernanceError> {
-        self.proto
-            .neurons
+        self.neuron_store
+            .heap_neurons
             .get(&nid.id)
             .ok_or_else(|| Self::neuron_not_found_error(nid))
     }
@@ -1782,21 +1829,21 @@ impl Governance {
     // The following methods should be aware of both heap storage and stable storage
     // during the migration (https://docs.google.com/document/d/10r-hZ5yMJbAgle5jsuH9VrRtQ2H8csd4nfry9LOe7cc/edit)
     pub fn contains_neuron(&self, neuron_id: NeuronId) -> bool {
-        self.proto.neurons.contains_key(&neuron_id.id)
+        self.neuron_store.heap_neurons.contains_key(&neuron_id.id)
     }
 
     pub fn neurons_len(&self) -> usize {
-        self.proto.neurons.len()
+        self.neuron_store.heap_neurons.len()
     }
 
     pub fn add_neuron_to_storage(&mut self, neuron: Neuron) {
-        self.proto
-            .neurons
+        self.neuron_store
+            .heap_neurons
             .insert(neuron.id.expect("Neuron must have an id").id, neuron);
     }
 
     pub fn remove_neuron_from_storage(&mut self, neuron_id: &NeuronId) {
-        self.proto.neurons.remove(&neuron_id.id);
+        self.neuron_store.heap_neurons.remove(&neuron_id.id);
     }
 
     pub fn with_neuron<R>(
@@ -1805,8 +1852,8 @@ impl Governance {
         map: impl FnOnce(&Neuron) -> R,
     ) -> Result<R, GovernanceError> {
         let neuron = self
-            .proto
-            .neurons
+            .neuron_store
+            .heap_neurons
             .get(&nid.id)
             .ok_or_else(|| Self::neuron_not_found_error(nid))?;
         Ok(map(neuron))
@@ -1827,25 +1874,25 @@ impl Governance {
         modifier: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, GovernanceError> {
         let neuron = self
-            .proto
-            .neurons
+            .neuron_store
+            .heap_neurons
             .get_mut(&nid.id)
             .ok_or_else(|| Self::neuron_not_found_error(nid))?;
         Ok(modifier(neuron))
     }
 
     pub fn list_heap_neurons(&self) -> impl Iterator<Item = &Neuron> {
-        self.proto.neurons.values()
+        self.neuron_store.heap_neurons.values()
     }
 
     pub fn list_heap_neurons_mut(&mut self) -> impl Iterator<Item = &mut Neuron> {
-        self.proto.neurons.values_mut()
+        self.neuron_store.heap_neurons.values_mut()
     }
 
     // The following functions should be deprecated before migrating any neuron to stable storage
     pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
-        self.proto
-            .neurons
+        self.neuron_store
+            .heap_neurons
             .values()
             .any(|neuron| neuron.account == subaccount.0)
     }
@@ -1884,7 +1931,7 @@ impl Governance {
         let is_locked = neuron
             .id
             .as_ref()
-            .map(|id| self.proto.in_flight_commands.contains_key(&id.id))
+            .map(|id| self.heap_data.in_flight_commands.contains_key(&id.id))
             .unwrap_or_default();
 
         let has_stake = neuron.stake_e8s() != 0;
@@ -1894,7 +1941,7 @@ impl Governance {
         !has_maturity
             && !has_stake
             && !is_locked
-            && !involved_with_open_proposal(&self.proto.proposals, neuron)
+            && !involved_with_open_proposal(&self.heap_data.proposals, neuron)
     }
 
     /// Locks a given neuron for a specific, signaling there is an ongoing
@@ -1939,14 +1986,14 @@ impl Governance {
         id: u64,
         command: NeuronInFlightCommand,
     ) -> Result<LedgerUpdateLock, GovernanceError> {
-        if self.proto.in_flight_commands.contains_key(&id) {
+        if self.heap_data.in_flight_commands.contains_key(&id) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::LedgerUpdateOngoing,
                 "Neuron has an ongoing ledger update.",
             ));
         }
 
-        self.proto.in_flight_commands.insert(id, command);
+        self.heap_data.in_flight_commands.insert(id, command);
 
         Ok(LedgerUpdateLock {
             nid: id,
@@ -1957,7 +2004,7 @@ impl Governance {
 
     /// Unlocks a given neuron.
     fn unlock_neuron(&mut self, id: u64) {
-        match self.proto.in_flight_commands.remove(&id) {
+        match self.heap_data.in_flight_commands.remove(&id) {
             None => {
                 println!(
                     "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
@@ -1972,7 +2019,7 @@ impl Governance {
     /// Updates a neuron in the list of neurons.
     ///
     /// Preconditions:
-    /// - the given `neuron` already exists in `self.proto.neurons`
+    /// - the given `neuron` already exists in `self.neuron_store.neurons`
     /// - the controller principal is self-authenticating
     /// - the hot keys are not changed (it's easy to update hot keys
     ///   via `manage_neuron` and doing it here would require updating
@@ -2022,7 +2069,7 @@ impl Governance {
     ///
     /// Fails under the following conditions:
     /// - the maximum number of neurons has been reached, or
-    /// - the given `neuron_id` already exists in `self.proto.neurons`, or
+    /// - the given `neuron_id` already exists in `self.neuron_store.neurons`, or
     /// - the neuron's controller `PrincipalId` is not self-authenticating.
     fn add_neuron(&mut self, neuron_id: u64, neuron: Neuron) -> Result<(), GovernanceError> {
         if neuron_id == 0 {
@@ -2087,7 +2134,7 @@ impl Governance {
     /// Remove a neuron from the list of neurons and update
     /// `principal_to_neuron_ids_index`
     ///
-    /// Fail if the given `neuron_id` doesn't exist in `self.proto.neurons`.
+    /// Fail if the given `neuron_id` doesn't exist in `self.neuron_store.neurons`.
     /// Caller should make sure neuron.id = Some(NeuronId {id: neuron_id}).
     fn remove_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = neuron.id.expect("Neuron must have an id");
@@ -2209,7 +2256,7 @@ impl Governance {
     /// Claim the neurons supplied by the GTC on behalf of `new_controller`
     ///
     /// For each neuron ID in `neuron_ids`, check that the corresponding neuron
-    /// exists in `self.proto.neurons` and the neuron's controller is the GTC.
+    /// exists in `self.neuron_store.neurons` and the neuron's controller is the GTC.
     /// If the neuron is in the expected state, set the neuron's controller to
     /// `new_controller` and set other fields (e.g.
     /// `created_timestamp_seconds`).
@@ -2538,7 +2585,7 @@ impl Governance {
         self.check_heap_can_grow()?;
 
         let min_stake = self
-            .proto
+            .heap_data
             .economics
             .as_ref()
             .expect("Governance must have economics.")
@@ -2862,7 +2909,7 @@ impl Governance {
         };
 
         let economics = self
-            .proto
+            .heap_data
             .economics
             .as_ref()
             .expect("Governance does not have NetworkEconomics")
@@ -3084,7 +3131,7 @@ impl Governance {
         disburse_to_neuron: &manage_neuron::DisburseToNeuron,
     ) -> Result<NeuronId, GovernanceError> {
         let economics = self
-            .proto
+            .heap_data
             .economics
             .as_ref()
             .expect("Governance must have economics.")
@@ -3235,7 +3282,7 @@ impl Governance {
             created_timestamp_seconds: creation_timestamp_seconds,
             aging_since_timestamp_seconds: creation_timestamp_seconds,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
-            followees: self.proto.default_followees.clone(),
+            followees: self.heap_data.default_followees.clone(),
             recent_ballots: Vec::new(),
             kyc_verified: disburse_to_neuron.kyc_verified,
             transfer: None,
@@ -3304,7 +3351,7 @@ impl Governance {
     /// The proposal ID 'pid' is taken as a raw integer to avoid
     /// lifetime issues.
     pub fn set_proposal_execution_status(&mut self, pid: u64, result: Result<(), GovernanceError>) {
-        match self.proto.proposals.get_mut(&pid) {
+        match self.heap_data.proposals.get_mut(&pid) {
             Some(proposal_data) => {
                 // The proposal has to be adopted before it is executed.
                 assert!(proposal_data.status() == ProposalStatus::Adopted);
@@ -3427,11 +3474,11 @@ impl Governance {
 
     // Returns the set of currently registered node providers.
     pub fn get_node_providers(&self) -> &[NodeProvider] {
-        &self.proto.node_providers
+        &self.heap_data.node_providers
     }
 
     pub fn latest_reward_event(&self) -> &RewardEvent {
-        self.proto
+        self.heap_data
             .latest_reward_event
             .as_ref()
             .expect("Invariant violation! There should always be a latest_reward_event.")
@@ -3446,7 +3493,7 @@ impl Governance {
         caller: &PrincipalId,
         pid: impl Into<ProposalId>,
     ) -> Option<ProposalInfo> {
-        let proposal_data = self.proto.proposals.get(&pid.into().id);
+        let proposal_data = self.heap_data.proposals.get(&pid.into().id);
         match proposal_data {
             None => None,
             Some(pd) => {
@@ -3479,7 +3526,7 @@ impl Governance {
 
     /// Iterator over proposals info of pending proposals.
     pub fn get_pending_proposals_data(&self) -> impl Iterator<Item = &ProposalData> {
-        self.proto
+        self.heap_data
             .proposals
             .values()
             .filter(|data| data.status() == ProposalStatus::Open)
@@ -3487,11 +3534,11 @@ impl Governance {
 
     // Gets the raw proposal data
     pub fn get_proposal_data(&self, pid: impl Into<ProposalId>) -> Option<&ProposalData> {
-        self.proto.proposals.get(&pid.into().id)
+        self.heap_data.proposals.get(&pid.into().id)
     }
 
     fn mut_proposal_data(&mut self, pid: impl Into<ProposalId>) -> Option<&mut ProposalData> {
-        self.proto.proposals.get_mut(&pid.into().id)
+        self.heap_data.proposals.get_mut(&pid.into().id)
     }
 
     fn proposal_data_to_info(
@@ -3664,7 +3711,7 @@ impl Governance {
         } else {
             req.limit
         } as usize;
-        let props = &self.proto.proposals;
+        let props = &self.heap_data.proposals;
         // Proposals are stored in a sorted map. If 'before_proposal'
         // is provided, grab all proposals before that, else grab the
         // whole range.
@@ -3689,7 +3736,7 @@ impl Governance {
         &self,
         as_of_timestamp_seconds: u64,
     ) -> impl Iterator<Item = ProposalId> + '_ {
-        self.proto
+        self.heap_data
             .proposals
             .iter()
             .filter(move |(_, proposal)| {
@@ -3706,7 +3753,7 @@ impl Governance {
     /// Rounds now downwards to nearest multiple of REWARD_DISTRIBUTION_PERIOD_SECONDS after genesis
     fn most_recent_fully_elapsed_reward_round_end_timestamp_seconds(&self) -> u64 {
         let now = self.env.now();
-        let genesis_timestamp_seconds = self.proto.genesis_timestamp_seconds;
+        let genesis_timestamp_seconds = self.heap_data.genesis_timestamp_seconds;
 
         if genesis_timestamp_seconds > now {
             println!(
@@ -3719,7 +3766,7 @@ impl Governance {
         (now - genesis_timestamp_seconds) // Duration since genesis (in seconds).
             / REWARD_DISTRIBUTION_PERIOD_SECONDS // This is where the truncation happens. Whole number of rounds.
             * REWARD_DISTRIBUTION_PERIOD_SECONDS // Convert back into seconds.
-            + self.proto.genesis_timestamp_seconds // Convert from duration to back to instant.
+            + self.heap_data.genesis_timestamp_seconds // Convert from duration to back to instant.
     }
 
     pub fn num_ready_to_be_settled_proposals(&self) -> usize {
@@ -3742,10 +3789,10 @@ impl Governance {
         let now_seconds = self.env.now();
         // Due to Rust lifetime issues, we must extract a closure that
         // computes the voting period from a topic before we borrow
-        // `self.proto` mutably.
+        // `self.heap_data` mutably.
         let voting_period_seconds_fn = self.voting_period_seconds();
 
-        let proposal = match self.proto.proposals.get_mut(&proposal_id) {
+        let proposal = match self.heap_data.proposals.get_mut(&proposal_id) {
             Some(p) => p,
             None => {
                 println!(
@@ -3832,7 +3879,7 @@ impl Governance {
         }
 
         let pids = self
-            .proto
+            .heap_data
             .proposals
             .iter()
             .filter(|(_, info)| info.status() == ProposalStatus::Open)
@@ -3844,7 +3891,7 @@ impl Governance {
         }
 
         self.closest_proposal_deadline_timestamp_seconds = self
-            .proto
+            .heap_data
             .proposals
             .values()
             .filter(|data| data.status() == ProposalStatus::Open)
@@ -3878,7 +3925,7 @@ impl Governance {
     }
 
     async fn process_rejected_proposal(&mut self, pid: u64) {
-        let proposal_data = match self.proto.proposals.get(&pid) {
+        let proposal_data = match self.heap_data.proposals.get(&pid) {
             None => {
                 println!(".");
                 return;
@@ -3990,7 +4037,7 @@ impl Governance {
                     dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                         dissolve_delay_seconds,
                     )),
-                    followees: self.proto.default_followees.clone(),
+                    followees: self.heap_data.default_followees.clone(),
                     recent_ballots: vec![],
                     kyc_verified: true,
                     maturity_e8s_equivalent: 0,
@@ -4046,7 +4093,7 @@ impl Governance {
         if let Some(node_provider) = &reward.node_provider {
             if let Some(np_principal) = &node_provider.id {
                 if !self
-                    .proto
+                    .heap_data
                     .node_providers
                     .iter()
                     .any(|np| np.id == node_provider.id)
@@ -4133,7 +4180,7 @@ impl Governance {
     /// Return `true` if `NODE_PROVIDER_REWARD_PERIOD_SECONDS` has passed since the last monthly
     /// node provider reward event
     fn is_time_to_mint_monthly_node_provider_rewards(&self) -> bool {
-        match &self.proto.most_recent_monthly_node_provider_rewards {
+        match &self.heap_data.most_recent_monthly_node_provider_rewards {
             None => false,
             Some(recent_rewards) => {
                 self.env.now().saturating_sub(recent_rewards.timestamp)
@@ -4160,7 +4207,7 @@ impl Governance {
             rewards,
         };
 
-        self.proto.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
+        self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 
     async fn perform_action(
@@ -4216,7 +4263,7 @@ impl Governance {
                 }
             }
             Action::ManageNetworkEconomics(ne) => {
-                if let Some(economics) = &mut self.proto.economics {
+                if let Some(economics) = &mut self.heap_data.economics {
                     // The semantics of the proposal is to modify all values specified with a
                     // non-default value in the proposed new `NetworkEconomics`.
                     if ne.reject_cost_e8s != 0 {
@@ -4250,7 +4297,7 @@ impl Governance {
                 } else {
                     // If for some reason, we don't have an
                     // 'economics' proto, use the proposed one.
-                    self.proto.economics = Some(ne)
+                    self.heap_data.economics = Some(ne)
                 }
                 self.set_proposal_execution_status(pid, Ok(()));
             }
@@ -4298,7 +4345,7 @@ impl Governance {
 
                             // Check if the node provider already exists
                             if self
-                                .proto
+                                .heap_data
                                 .node_providers
                                 .iter()
                                 .any(|np| np.id == node_provider.id)
@@ -4312,7 +4359,7 @@ impl Governance {
                                 );
                                 return;
                             }
-                            self.proto.node_providers.push(node_provider.clone());
+                            self.heap_data.node_providers.push(node_provider.clone());
                             self.set_proposal_execution_status(pid, Ok(()));
                         }
                         Change::ToRemove(node_provider) => {
@@ -4328,12 +4375,12 @@ impl Governance {
                             }
 
                             if let Some(pos) = self
-                                .proto
+                                .heap_data
                                 .node_providers
                                 .iter()
                                 .position(|np| np.id == node_provider.id)
                             {
-                                self.proto.node_providers.remove(pos);
+                                self.heap_data.node_providers.remove(pos);
                                 self.set_proposal_execution_status(pid, Ok(()));
                             } else {
                                 self.set_proposal_execution_status(
@@ -4365,7 +4412,7 @@ impl Governance {
                     self.set_proposal_execution_status(pid, validate_result);
                     return;
                 }
-                self.proto.default_followees = proposal.default_followees.clone();
+                self.heap_data.default_followees = proposal.default_followees.clone();
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             Action::RewardNodeProviders(proposal) => {
@@ -4431,7 +4478,7 @@ impl Governance {
             .clone();
 
         let cf_participants = draw_funds_from_the_community_fund(
-            &mut self.proto.neurons,
+            &mut self.neuron_store.heap_neurons,
             original_total_community_fund_maturity_e8s_equivalent,
             open_sns_token_swap
                 .community_fund_investment_e8s
@@ -4440,13 +4487,15 @@ impl Governance {
         );
 
         // Record the maturity deductions that we just made.
-        match self.proto.proposals.get_mut(&proposal_id) {
+        match self.heap_data.proposals.get_mut(&proposal_id) {
             Some(proposal_data) => {
                 proposal_data.cf_participants = cf_participants.clone();
             }
             None => {
-                let failed_refunds =
-                    refund_community_fund_maturity(&mut self.proto.neurons, &cf_participants);
+                let failed_refunds = refund_community_fund_maturity(
+                    &mut self.neuron_store.heap_neurons,
+                    &cf_participants,
+                );
                 self.set_proposal_execution_status(
                     proposal_id,
                     Err(GovernanceError::new_with_message(
@@ -4485,8 +4534,10 @@ impl Governance {
             .await;
 
         if let Err(err) = result {
-            let failed_refunds =
-                refund_community_fund_maturity(&mut self.proto.neurons, &cf_participants);
+            let failed_refunds = refund_community_fund_maturity(
+                &mut self.neuron_store.heap_neurons,
+                &cf_participants,
+            );
 
             self.set_proposal_execution_status(proposal_id, Err(GovernanceError::new_with_message(
                 ErrorType::External,
@@ -4501,7 +4552,7 @@ impl Governance {
         }
 
         // Call to the swap canister was a success. Record this fact, and return.
-        if let Some(proposal_data) = self.proto.proposals.get_mut(&proposal_id) {
+        if let Some(proposal_data) = self.heap_data.proposals.get_mut(&proposal_id) {
             Self::set_sns_token_swap_lifecycle_to_open(proposal_data);
             self.set_proposal_execution_status(proposal_id, Ok(()));
             return;
@@ -4513,7 +4564,7 @@ impl Governance {
             LOG_PREFIX, proposal_id,
         );
         let failed_refunds =
-            refund_community_fund_maturity(&mut self.proto.neurons, &cf_participants);
+            refund_community_fund_maturity(&mut self.neuron_store.heap_neurons, &cf_participants);
         let result = Err(GovernanceError::new_with_message(
             ErrorType::NotFound,
             format!(
@@ -4622,7 +4673,7 @@ impl Governance {
             ))?;
 
         let neurons_fund_participants = draw_funds_from_the_community_fund(
-            &mut self.proto.neurons,
+            &mut self.neuron_store.heap_neurons,
             original_total_community_fund_maturity_e8s_equivalent,
             withdrawal_amount_e8s,
             &sns_swap_pb::Params {
@@ -4634,13 +4685,13 @@ impl Governance {
         );
 
         // Record the maturity deductions that we just made.
-        match self.proto.proposals.get_mut(&proposal_id) {
+        match self.heap_data.proposals.get_mut(&proposal_id) {
             Some(proposal_data) => {
                 proposal_data.cf_participants = neurons_fund_participants.clone();
             }
             None => {
                 let failed_refunds = refund_community_fund_maturity(
-                    &mut self.proto.neurons,
+                    &mut self.neuron_store.heap_neurons,
                     &neurons_fund_participants,
                 );
                 return Err(GovernanceError::new_with_message(
@@ -4784,7 +4835,7 @@ impl Governance {
 
         if deploy_new_sns_response.error.is_some() {
             let failed_refunds = refund_community_fund_maturity(
-                &mut self.proto.neurons,
+                &mut self.neuron_store.heap_neurons,
                 &executed_create_service_nervous_system_proposal.neurons_fund_participants,
             );
 
@@ -4798,7 +4849,7 @@ impl Governance {
         }
         //Creation of an SNS was a success. Record this fact for latter settlement.
         if let Some(proposal_data) = self
-            .proto
+            .heap_data
             .proposals
             .get_mut(&executed_create_service_nervous_system_proposal.proposal_id)
         {
@@ -4943,7 +4994,7 @@ impl Governance {
         // Check that there are not too many open manage neuron
         // proposals already.
         if self
-            .proto
+            .heap_data
             .proposals
             .values()
             .filter(|info| info.is_manage_neuron() && info.status() == ProposalStatus::Open)
@@ -5031,7 +5082,7 @@ impl Governance {
     }
 
     fn economics(&self) -> &NetworkEconomics {
-        self.proto
+        self.heap_data
             .economics
             .as_ref()
             .expect("NetworkEconomics not present")
@@ -5046,7 +5097,7 @@ impl Governance {
             data.proposal_timestamp_seconds + voting_period_seconds,
             self.closest_proposal_deadline_timestamp_seconds,
         );
-        self.proto.proposals.insert(pid, data);
+        self.heap_data.proposals.insert(pid, data);
         self.process_proposal(pid);
     }
 
@@ -5055,7 +5106,7 @@ impl Governance {
         // Correctness is based on the following observations:
         // * Proposal GC never removes the proposal with highest ID.
         // * The proposal map is a BTreeMap, so the proposals are ordered by id.
-        self.proto
+        self.heap_data
             .proposals
             .iter()
             .next_back()
@@ -5137,8 +5188,7 @@ impl Governance {
                 match Decode!(&update.payload, UpdateIcpXdrConversionRatePayload) {
                     Ok(payload) => {
                         if payload.xdr_permyriad_per_icp
-                            < self
-                                .proto
+                            < self.heap_data
                                 .economics
                                 .as_ref()
                                 .ok_or_else(|| GovernanceError::new(ErrorType::Unavailable))?
@@ -5287,7 +5337,7 @@ impl Governance {
     }
 
     fn select_open_proposal_ids(&self, action_predicate: impl Fn(&Action) -> bool) -> Vec<u64> {
-        self.proto
+        self.heap_data
             .proposals
             .values()
             .filter_map(|proposal_data| {
@@ -5367,7 +5417,7 @@ impl Governance {
         }
 
         // Return Err if another OpenSnsTokenSwap or CreateServiceNervousSystem proposal is being made.
-        match &self.proto.making_sns_proposal {
+        match &self.heap_data.making_sns_proposal {
             None => (),
             Some(making_sns_proposal) => {
                 // Someone else is already making a proposal right now.
@@ -5387,7 +5437,7 @@ impl Governance {
         let proposer_id = Some(*proposer_id);
         let caller = Some(*caller);
         let proposal = Some(proposal.clone());
-        self.proto.making_sns_proposal = Some(MakingSnsProposal {
+        self.heap_data.making_sns_proposal = Some(MakingSnsProposal {
             proposer_id,
             caller,
             proposal,
@@ -5400,7 +5450,7 @@ impl Governance {
     }
 
     fn unlock_make_sns_proposal(&mut self) {
-        let field = &mut self.proto.making_sns_proposal;
+        let field = &mut self.heap_data.making_sns_proposal;
 
         // Log an error if we were not already locked.
         match field {
@@ -5532,7 +5582,7 @@ impl Governance {
         // neuron proposals are not counted as they have a smaller
         // electoral roll and use their own limit.
         if self
-            .proto
+            .heap_data
             .proposals
             .values()
             .filter(|info| !info.ballots.is_empty() && !info.is_manage_neuron())
@@ -5610,7 +5660,7 @@ impl Governance {
         let original_total_community_fund_maturity_e8s_equivalent = match proposal.action {
             Some(Action::OpenSnsTokenSwap(_)) | Some(Action::CreateServiceNervousSystem(_)) => {
                 Some(total_community_fund_maturity_e8s_equivalent(
-                    &self.proto.neurons,
+                    &self.neuron_store.heap_neurons,
                 ))
             }
             _ => None,
@@ -5659,7 +5709,7 @@ impl Governance {
             Vote::Yes,
             topic,
             &self.topic_followee_index,
-            &mut self.proto.neurons,
+            &mut self.neuron_store.heap_neurons,
         );
         // Finally, add this proposal as an open proposal.
         self.insert_proposal(proposal_num, info);
@@ -5827,7 +5877,11 @@ impl Governance {
         let proposal_id = pb.proposal.as_ref().ok_or_else(||
             // Proposal not specified.
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Vote must include a proposal id."))?;
-        let proposal = self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
+        let proposal = self
+            .heap_data
+            .proposals
+            .get_mut(&proposal_id.id)
+            .ok_or_else(||
             // Proposal not found.
             GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
         let topic = proposal
@@ -5883,7 +5937,7 @@ impl Governance {
                 vote,
                 topic,
                 &self.topic_followee_index,
-                &mut self.proto.neurons,
+                &mut self.neuron_store.heap_neurons,
             );
         }
 
@@ -6198,7 +6252,7 @@ impl Governance {
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
             transfer: None,
             kyc_verified: true,
-            followees: self.proto.default_followees.clone(),
+            followees: self.heap_data.default_followees.clone(),
             hot_keys: vec![],
             maturity_e8s_equivalent: 0,
             staked_maturity_e8s_equivalent: None,
@@ -6476,7 +6530,7 @@ impl Governance {
         // was run last, or (b) more than 100 proposals have been
         // added since it was run last.
         if !(now_seconds > self.latest_gc_timestamp_seconds + 60 * 60 * 24
-            || self.proto.proposals.len() > self.latest_gc_num_proposals + 100)
+            || self.heap_data.proposals.len() > self.latest_gc_num_proposals + 100)
         {
             // Condition to run was not met. Return false.
             return false;
@@ -6495,7 +6549,7 @@ impl Governance {
         // This data structure contains proposals grouped by topic.
         let proposals_by_topic = {
             let mut tmp: HashMap<Topic, Vec<u64>> = HashMap::new();
-            for (id, prop) in self.proto.proposals.iter() {
+            for (id, prop) in self.heap_data.proposals.iter() {
                 tmp.entry(prop.topic()).or_insert_with(Vec::new).push(*id);
             }
             tmp
@@ -6513,15 +6567,15 @@ impl Governance {
             if props.len() > max_proposals {
                 for prop_id in props.iter().take(props.len() - max_proposals) {
                     // Check that this proposal can be purged.
-                    if let Some(prop) = self.proto.proposals.get(prop_id) {
+                    if let Some(prop) = self.heap_data.proposals.get(prop_id) {
                         if prop.can_be_purged(now_seconds, voting_period_seconds) {
-                            self.proto.proposals.remove(prop_id);
+                            self.heap_data.proposals.remove(prop_id);
                         }
                     }
                 }
             }
         }
-        self.latest_gc_num_proposals = self.proto.proposals.len();
+        self.latest_gc_num_proposals = self.heap_data.proposals.len();
         true
     }
 
@@ -6564,7 +6618,7 @@ impl Governance {
                     if self.should_compute_cached_metrics() {
                         let now = self.env.now();
                         let metrics = self.compute_cached_metrics(now, supply);
-                        self.proto.metrics = Some(metrics);
+                        self.heap_data.metrics = Some(metrics);
                     }
                 }
                 Err(e) => println!(
@@ -6589,7 +6643,7 @@ impl Governance {
         // Check if we're already updating the neuron maturity modulation.
         let now_seconds = self.env.now();
         let last_updated = self
-            .proto
+            .heap_data
             .maturity_modulation_last_updated_at_timestamp_seconds;
         last_updated.is_none() || last_updated.unwrap() + ONE_DAY_SECONDS <= now_seconds
     }
@@ -6612,10 +6666,10 @@ impl Governance {
         let maturity_modulation = maturity_modulation.unwrap();
         println!(
             "{}Updated daily maturity modulation rate to (in basis points): {}, at: {}. Last updated: {:?}",
-            LOG_PREFIX, maturity_modulation, now_seconds, self.proto.maturity_modulation_last_updated_at_timestamp_seconds,
+            LOG_PREFIX, maturity_modulation, now_seconds, self.heap_data.maturity_modulation_last_updated_at_timestamp_seconds,
         );
-        self.proto.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
-        self.proto
+        self.heap_data.cached_daily_maturity_modulation_basis_points = Some(maturity_modulation);
+        self.heap_data
             .maturity_modulation_last_updated_at_timestamp_seconds = Some(now_seconds);
     }
 
@@ -6637,7 +6691,7 @@ impl Governance {
     }
 
     fn can_spawn_neurons(&self) -> bool {
-        let spawning = self.proto.spawning_neurons;
+        let spawning = self.heap_data.spawning_neurons;
         spawning.is_none() || !spawning.unwrap()
     }
 
@@ -6652,7 +6706,8 @@ impl Governance {
         }
 
         let now_seconds = self.env.now();
-        let maturity_modulation = match self.proto.cached_daily_maturity_modulation_basis_points {
+        let maturity_modulation = match self.heap_data.cached_daily_maturity_modulation_basis_points
+        {
             None => return,
             Some(value) => value,
         };
@@ -6667,7 +6722,7 @@ impl Governance {
         }
 
         // Acquire the global "spawning" lock.
-        self.proto.spawning_neurons = Some(true);
+        self.heap_data.spawning_neurons = Some(true);
 
         // Filter all the neurons that are currently in "spawning" state.
         // Do this here to avoid having to borrow *self while we perform changes below.
@@ -6776,14 +6831,14 @@ impl Governance {
         }
 
         // Release the global spawning lock
-        self.proto.spawning_neurons = Some(false);
+        self.heap_data.spawning_neurons = Some(false);
     }
 
     /// Return `true` if rewards should be distributed, `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
         let latest_distribution_nominal_end_timestamp_seconds =
             self.latest_reward_event().day_after_genesis * REWARD_DISTRIBUTION_PERIOD_SECONDS
-                + self.proto.genesis_timestamp_seconds;
+                + self.heap_data.genesis_timestamp_seconds;
 
         self.most_recent_fully_elapsed_reward_round_end_timestamp_seconds()
             > latest_distribution_nominal_end_timestamp_seconds
@@ -6805,7 +6860,7 @@ impl Governance {
         // Which reward rounds (i.e. days) require rewards? (Usually, there is
         // just one of these, but we support rewarding many consecutive rounds.)
         let day_after_genesis =
-            (now - self.proto.genesis_timestamp_seconds) / REWARD_DISTRIBUTION_PERIOD_SECONDS;
+            (now - self.heap_data.genesis_timestamp_seconds) / REWARD_DISTRIBUTION_PERIOD_SECONDS;
         let last_event_day_after_genesis = latest_reward_event.day_after_genesis;
         let days = last_event_day_after_genesis..day_after_genesis;
         let new_rounds_count = days.clone().count();
@@ -6993,7 +7048,7 @@ impl Governance {
             );
         };
 
-        self.proto.latest_reward_event = Some(RewardEvent {
+        self.heap_data.latest_reward_event = Some(RewardEvent {
             day_after_genesis,
             actual_timestamp_seconds: now,
             settled_proposals: considered_proposals,
@@ -7008,7 +7063,7 @@ impl Governance {
 
     /// Recompute cached metrics once per day
     pub fn should_compute_cached_metrics(&self) -> bool {
-        if let Some(metrics) = self.proto.metrics.as_ref() {
+        if let Some(metrics) = self.heap_data.metrics.as_ref() {
             let metrics_age_s = self.env.now() - metrics.timestamp_seconds;
             metrics_age_s > ONE_DAY_SECONDS
         } else {
@@ -7021,8 +7076,8 @@ impl Governance {
     /// This function is "curried" to alleviate lifetime issues on the
     /// `self` parameter.
     pub fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 {
-        let short = self.proto.short_voting_period_seconds;
-        let normal = self.proto.wait_for_quiet_threshold_seconds;
+        let short = self.heap_data.short_voting_period_seconds;
+        let normal = self.heap_data.wait_for_quiet_threshold_seconds;
         move |topic| {
             if topic == Topic::NeuronManagement || topic == Topic::ExchangeRate {
                 short
@@ -7049,7 +7104,7 @@ impl Governance {
         update: UpdateNodeProvider,
     ) -> Result<(), GovernanceError> {
         let node_provider = self
-            .proto
+            .heap_data
             .node_providers
             .iter_mut()
             .find(|np| np.id.as_ref() == Some(node_provider_id))
@@ -7092,7 +7147,7 @@ impl Governance {
         let proposal_id = request
             .open_sns_token_swap_proposal_id
             .expect("The open_sns_token_swap_proposal_id field is not populated.");
-        let proposal_data = match self.proto.proposals.get(&proposal_id) {
+        let proposal_data = match self.heap_data.proposals.get(&proposal_id) {
             Some(pd) => pd,
             None => {
                 return Err(GovernanceError::new_with_message(
@@ -7114,7 +7169,7 @@ impl Governance {
         .await?;
 
         // Re-acquire the proposal_data mutably after the await
-        let proposal_data = match self.proto.proposals.get_mut(&proposal_id) {
+        let proposal_data = match self.heap_data.proposals.get_mut(&proposal_id) {
             Some(pd) => pd,
             None => {
                 return Err(GovernanceError::new_with_message(
@@ -7178,7 +7233,7 @@ impl Governance {
 
             settle_community_fund_participation::Result::Aborted(_aborted) => {
                 let missing_neurons = refund_community_fund_maturity(
-                    &mut self.proto.neurons,
+                    &mut self.neuron_store.heap_neurons,
                     &proposal_data.cf_participants,
                 );
                 if !missing_neurons.is_empty() {
@@ -7209,7 +7264,7 @@ impl Governance {
         node_provider_id: &PrincipalId,
     ) -> Result<NodeProvider, GovernanceError> {
         // TODO(NNS1-1168): More efficient Node Provider lookup
-        self.proto
+        self.heap_data
             .node_providers
             .iter()
             .find(|np| np.id.as_ref() == Some(node_provider_id))
@@ -7244,7 +7299,7 @@ impl Governance {
 
         // Iterate over all node providers, calculate their rewards, and append them to
         // `rewards`
-        for np in &self.proto.node_providers {
+        for np in &self.heap_data.node_providers {
             if let Some(np_id) = &np.id {
                 let np_id_str = np_id.to_string();
                 let xdr_permyriad_reward =
@@ -7264,7 +7319,7 @@ impl Governance {
     /// Return the cached governance metrics.
     /// Governance metrics are updated once a day.
     pub fn get_metrics(&self) -> Result<GovernanceCachedMetrics, GovernanceError> {
-        let metrics = &self.proto.metrics;
+        let metrics = &self.heap_data.metrics;
         match metrics {
             None => Err(GovernanceError::new_with_message(
                 ErrorType::Unavailable,
@@ -7312,7 +7367,7 @@ impl Governance {
             ..Default::default()
         };
 
-        let minimum_stake_e8s = if let Some(economics) = self.proto.economics.as_ref() {
+        let minimum_stake_e8s = if let Some(economics) = self.heap_data.economics.as_ref() {
             economics.neuron_minimum_stake_e8s
         } else {
             0

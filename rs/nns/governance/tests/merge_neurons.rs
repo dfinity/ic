@@ -769,7 +769,7 @@ fn do_test_merge_neurons(
     #[cfg(feature = "test")]
     let fee = nns
         .governance
-        .proto
+        .heap_data
         .economics
         .as_ref()
         .unwrap()
@@ -1060,7 +1060,7 @@ fn test_neuron_merge_follow() {
     #[cfg(feature = "test")]
     let fee = nns
         .governance
-        .proto
+        .heap_data
         .economics
         .as_ref()
         .unwrap()

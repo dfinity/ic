@@ -7,12 +7,12 @@ use crate::{
             },
             ManageNeuronRequest, ManageNeuronRequestHandler,
         },
-        Governance, LOG_PREFIX,
+        Governance, HeapGovernanceData, LOG_PREFIX,
     },
     pb::v1::{
         governance_error::ErrorType, manage_neuron, manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron_response::MergeResponse, Governance as GovernanceProto, GovernanceError,
-        ManageNeuronResponse, NeuronState, ProposalStatus,
+        manage_neuron_response::MergeResponse, GovernanceError, ManageNeuronResponse, NeuronState,
+        ProposalStatus,
     },
 };
 use async_trait::async_trait;
@@ -136,7 +136,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
 
         // Do not allow this command to be called for any neuron that is the
         // involved in an open proposal.
-        fn involved_with_proposal(proto: &GovernanceProto, id: &NeuronId) -> bool {
+        fn involved_with_proposal(proto: &HeapGovernanceData, id: &NeuronId) -> bool {
             proto.proposals.values().any(|p| {
                 p.status() == ProposalStatus::Open
                     && (p.proposer.as_ref() == Some(id)
@@ -167,8 +167,8 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
             ));
         }
 
-        if involved_with_proposal(&gov.proto, &target_id)
-            || involved_with_proposal(&gov.proto, &source_id)
+        if involved_with_proposal(&gov.heap_data, &target_id)
+            || involved_with_proposal(&gov.heap_data, &source_id)
         {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,

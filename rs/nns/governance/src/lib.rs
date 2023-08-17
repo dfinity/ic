@@ -131,6 +131,7 @@ mod audit_event;
 /// distribute configuration information to all nodes of all
 /// subnetworks that participate in the Internet Computer (IC).
 pub mod governance;
+mod heap_governance_data;
 pub mod init;
 mod known_neuron_index;
 mod neuron;
@@ -204,7 +205,7 @@ pub fn encode_metrics(
     )?;
     w.encode_gauge(
         "governance_proposals_total",
-        governance.proto.proposals.len() as f64,
+        governance.heap_data.proposals.len() as f64,
         "Total number of proposals that haven't been gc'd.",
     )?;
     w.encode_gauge(
@@ -224,7 +225,7 @@ pub fn encode_metrics(
     )?;
     w.encode_gauge(
         "governance_locked_neurons_total",
-        governance.proto.in_flight_commands.len() as f64,
+        governance.heap_data.in_flight_commands.len() as f64,
         "Total number of neurons that have been locked for disburse operations.",
     )?;
     w.encode_gauge(
@@ -268,7 +269,7 @@ pub fn encode_metrics(
     w.encode_gauge(
         "governance_total_locked_e8s",
         governance
-            .proto
+            .heap_data
             .metrics
             .as_ref()
             .map(|m| m.total_locked_e8s)
@@ -277,7 +278,7 @@ pub fn encode_metrics(
     )?;
 
     let total_voting_power = match governance
-        .proto
+        .heap_data
         .proposals
         .iter()
         .filter(|(_, proposal_data)| {
@@ -302,7 +303,7 @@ pub fn encode_metrics(
         "The total voting power, according to the most recent proposal.",
     )?;
 
-    if let Some(metrics) = &governance.proto.metrics {
+    if let Some(metrics) = &governance.heap_data.metrics {
         w.encode_gauge(
             "governance_total_supply_icp",
             metrics.total_supply_icp as f64,

@@ -328,7 +328,8 @@ fn canister_pre_upgrade() {
     UPGRADES_MEMORY.with(|um| {
         let memory = um.borrow();
 
-        store_protobuf(memory.deref(), &governance().proto)
+        let governance_proto = governance_mut().take_heap_proto();
+        store_protobuf(memory.deref(), &governance_proto)
             .expect("Failed to encode protobuf pre_upgrade");
     });
 }
@@ -781,7 +782,7 @@ fn get_network_economics_parameters() {
 #[candid_method(query, rename = "get_network_economics_parameters")]
 fn get_network_economics_parameters_() -> NetworkEconomics {
     governance()
-        .proto
+        .heap_data
         .economics
         .as_ref()
         .expect("Governance must have network economics.")
@@ -887,7 +888,7 @@ fn get_most_recent_monthly_node_provider_rewards() {
 fn get_most_recent_monthly_node_provider_rewards_() -> Option<MostRecentMonthlyNodeProviderRewards>
 {
     governance()
-        .proto
+        .heap_data
         .most_recent_monthly_node_provider_rewards
         .clone()
 }
