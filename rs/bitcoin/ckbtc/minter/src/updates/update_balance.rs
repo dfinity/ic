@@ -35,7 +35,7 @@ pub struct UpdateBalanceArgs {
 /// The outcome of UTXO processing.
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum UtxoStatus {
-    /// The utxo value does not cover the KYT check cost.
+    /// The UTXO value does not cover the KYT check cost.
     ValueTooSmall(Utxo),
     /// The KYT check found issues with the deposited UTXO.
     Tainted(Utxo),

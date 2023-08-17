@@ -18,6 +18,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::cast::ToPrimitive;
+use std::cmp::max;
 
 const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
 
@@ -122,10 +123,14 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     }
 
     let _guard = retrieve_btc_guard(caller)?;
-    let (min_amount, btc_network) = read_state(|s| (s.retrieve_btc_min_amount, s.btc_network));
+    let (min_retrieve_amount, btc_network, kyt_fee) =
+        read_state(|s| (s.retrieve_btc_min_amount, s.btc_network, s.kyt_fee));
+
+    let min_amount = max(min_retrieve_amount, kyt_fee);
     if args.amount < min_amount {
         return Err(RetrieveBtcError::AmountTooLow(min_amount));
     }
+
     let parsed_address = BitcoinAddress::parse(&args.address, btc_network)?;
     if read_state(|s| s.count_incomplete_retrieve_btc_requests() >= MAX_CONCURRENT_PENDING_REQUESTS)
     {
@@ -141,8 +146,6 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
 
     let (uuid, status, kyt_provider) =
         kyt_check_address(caller, args.address.clone(), args.amount).await?;
-
-    let kyt_fee = read_state(|s| s.kyt_fee);
 
     match status {
         BtcAddressCheckStatus::Tainted => {
@@ -191,7 +194,10 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         burn_ckbtcs(caller, args.amount, crate::memo::encode(&burn_memo).into()).await?;
     let request = RetrieveBtcRequest {
         // NB. We charge the KYT fee from the retrieve amount.
-        amount: args.amount - kyt_fee,
+        amount: args
+            .amount
+            .checked_sub(kyt_fee)
+            .expect("BUG: withdrawal amount must be greater than the KYT fee"),
         address: parsed_address,
         block_index,
         received_at: ic_cdk::api::time(),
