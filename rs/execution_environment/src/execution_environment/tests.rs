@@ -844,6 +844,96 @@ fn stop_canister_from_another_canister() {
 }
 
 #[test]
+fn stop_canister_creates_entry_in_subnet_call_context_manager() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id, controllers)
+        .unwrap();
+
+    // SubnetCallContextManager does not contain any stop canister requests before executing the message.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    // Inject a stop canister request.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    assert_eq!(
+        CanisterStatusType::Running,
+        test.canister_state(canister_id).status()
+    );
+
+    test.execute_subnet_message();
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id).status()
+    );
+    assert!(test
+        .canister_state(canister_id)
+        .system_state
+        .ready_to_stop());
+    // SubnetCallContextManager contains a stop canister requests after executing the message.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    // Inject another stop canister request.
+    // Executing this request will add another entry in the SubnetCallContextManager.
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id).status()
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        2
+    );
+
+    // Stops canister and removes all the stop canister requests from SubnetCallContextManager.
+    test.process_stopping_canisters();
+
+    // SubnetCallContextManager does not contain any stop canister requests after processing the requests.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+}
+
+#[test]
 fn starting_a_stopping_canister_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();

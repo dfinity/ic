@@ -19,9 +19,8 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId, CanisterState, SystemState,
 };
 use ic_system_api::ApiType;
-use ic_types::funds::Cycles;
-use ic_types::messages::CanisterCall;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
+use ic_types::{funds::Cycles, messages::CanisterCall};
 
 #[cfg(test)]
 mod tests;

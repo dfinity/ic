@@ -31,6 +31,7 @@ pub use inter_canister::{
     CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
+use phantom_newtype::Id;
 pub use query::{AnonymousQuery, AnonymousQueryResponse, AnonymousQueryResponseReply, UserQuery};
 pub use read_state::ReadState;
 use serde::{Deserialize, Serialize};
@@ -84,6 +85,9 @@ pub struct UserSignature {
     pub sender_delegation: Option<Vec<SignedDelegation>>,
 }
 
+pub struct StopCanisterCallIdTag;
+pub type StopCanisterCallId = Id<StopCanisterCallIdTag, u64>;
+
 /// Stores info needed for processing and tracking requests to
 /// stop canisters.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,10 +95,13 @@ pub enum StopCanisterContext {
     Ingress {
         sender: UserId,
         message_id: MessageId,
+        call_id: Option<StopCanisterCallId>,
     },
     Canister {
         sender: CanisterId,
         reply_callback: CallbackId,
+        // TODO(EXC-1450): Make call_id non-optional.
+        call_id: Option<StopCanisterCallId>,
         /// The cycles that the request to stop the canister contained.  Stored
         /// here so that they can be returned to the caller in the eventual
         /// reply.
@@ -118,18 +125,21 @@ impl StopCanisterContext {
     }
 }
 
-impl From<CanisterCall> for StopCanisterContext {
-    fn from(msg: CanisterCall) -> Self {
-        assert_eq!(msg.method_name(), "stop_canister", "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister requests.");
+impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {
+    fn from(input: (CanisterCall, StopCanisterCallId)) -> Self {
+        let (msg, call_id) = input;
+        assert_eq!(msg.method_name(), "stop_canister", "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister calls.");
         match msg {
             CanisterCall::Request(mut req) => StopCanisterContext::Canister {
                 sender: req.sender,
                 reply_callback: req.sender_reply_callback,
+                call_id: Some(call_id),
                 cycles: Arc::make_mut(&mut req).payment.take(),
             },
             CanisterCall::Ingress(ingress) => StopCanisterContext::Ingress {
                 sender: ingress.source,
                 message_id: ingress.message_id.clone(),
+                call_id: Some(call_id),
             },
         }
     }
@@ -138,23 +148,30 @@ impl From<CanisterCall> for StopCanisterContext {
 impl From<&StopCanisterContext> for pb::StopCanisterContext {
     fn from(item: &StopCanisterContext) -> Self {
         match item {
-            StopCanisterContext::Ingress { sender, message_id } => Self {
+            StopCanisterContext::Ingress {
+                sender,
+                message_id,
+                call_id,
+            } => Self {
                 context: Some(pb::stop_canister_context::Context::Ingress(
                     pb::stop_canister_context::Ingress {
                         sender: Some(user_id_into_protobuf(*sender)),
                         message_id: message_id.as_bytes().to_vec(),
+                        call_id: call_id.map(|id| id.get()),
                     },
                 )),
             },
             StopCanisterContext::Canister {
                 sender,
                 reply_callback,
+                call_id,
                 cycles,
             } => Self {
                 context: Some(pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
                         sender: Some(pb_types::CanisterId::from(*sender)),
                         reply_callback: reply_callback.get(),
+                        call_id: call_id.map(|id| id.get()),
                         funds: Some((&Funds::new(*cycles)).into()),
                         cycles: Some((*cycles).into()),
                     },
@@ -170,18 +187,24 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
         let stop_canister_context =
             match try_from_option_field(value.context, "StopCanisterContext::context")? {
                 pb::stop_canister_context::Context::Ingress(
-                    pb::stop_canister_context::Ingress { sender, message_id },
+                    pb::stop_canister_context::Ingress {
+                        sender,
+                        message_id,
+                        call_id,
+                    },
                 ) => StopCanisterContext::Ingress {
                     sender: user_id_try_from_protobuf(try_from_option_field(
                         sender,
                         "StopCanisterContext::Ingress::sender",
                     )?)?,
                     message_id: MessageId::try_from(message_id.as_slice())?,
+                    call_id: call_id.map(|id| StopCanisterCallId::from(id)),
                 },
                 pb::stop_canister_context::Context::Canister(
                     pb::stop_canister_context::Canister {
                         sender,
                         reply_callback,
+                        call_id,
                         funds,
                         cycles,
                     },
@@ -208,6 +231,7 @@ impl TryFrom<pb::StopCanisterContext> for StopCanisterContext {
                             "StopCanisterContext::Canister::sender",
                         )?,
                         reply_callback: CallbackId::from(reply_callback),
+                        call_id: call_id.map(|id| StopCanisterCallId::from(id)),
                         cycles,
                     }
                 }

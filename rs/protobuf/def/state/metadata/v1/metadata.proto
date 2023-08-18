@@ -175,6 +175,20 @@ message InstallCodeCallTree {
   InstallCodeCall call = 2;
 }
 
+message StopCanisterCall {
+  oneof canister_call {
+    state.queues.v1.Request request = 1;
+    ingress.v1.Ingress ingress = 2;
+  }
+  Time time = 3;
+  types.v1.CanisterId effective_canister_id = 4;
+}
+
+message StopCanisterCallTree {
+  uint64 call_id = 1;
+  StopCanisterCall call = 2;
+}
+
 message SubnetCallContextManager {
   uint64 next_callback_id = 1;
   reserved 2;
@@ -193,6 +207,8 @@ message SubnetCallContextManager {
   uint64 next_install_code_call_id = 12;
   reserved "next_install_code_request_id";
   repeated InstallCodeCallTree install_code_calls = 13;
+  uint64 next_stop_canister_call_id = 14;
+  repeated StopCanisterCallTree stop_canister_calls = 15;
 }
 
 message SubnetMetrics {

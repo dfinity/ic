@@ -14,7 +14,7 @@ use crate::{
     },
     hypervisor::Hypervisor,
     ic00_permissions::Ic00MethodPermissions,
-    NonReplicatedQueryKind,
+    util, NonReplicatedQueryKind,
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
@@ -46,7 +46,7 @@ use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
     metadata_state::subnet_call_context_manager::{
         EcdsaDealingsContext, InstallCodeCall, InstallCodeCallId, SetupInitialDkgContext,
-        SignWithEcdsaContext, SubnetCallContext,
+        SignWithEcdsaContext, StopCanisterCall, SubnetCallContext,
     },
     CanisterState, NetworkTopology, ReplicatedState,
 };
@@ -1383,9 +1383,17 @@ impl ExecutionEnvironment {
         msg: &CanisterCall,
         state: &mut ReplicatedState,
     ) -> Option<(Result<Vec<u8>, UserError>, Cycles)> {
+        let call_id = state
+            .metadata
+            .subnet_call_context_manager
+            .push_stop_canister_call(StopCanisterCall {
+                call: msg.clone(),
+                effective_canister_id: canister_id,
+                time: state.time(),
+            });
         match self.canister_manager.stop_canister(
             canister_id,
-            StopCanisterContext::from(msg.clone()),
+            StopCanisterContext::from((msg.clone(), call_id)),
             state,
         ) {
             StopCanisterResult::RequestAccepted => None,
@@ -1681,9 +1689,14 @@ impl ExecutionEnvironment {
     ) {
         for stop_context in stop_contexts {
             match stop_context {
-                StopCanisterContext::Ingress { sender, message_id } => {
+                StopCanisterContext::Ingress {
+                    sender,
+                    message_id,
+                    call_id,
+                } => {
                     let time = state.time();
                     // Rejecting a stop_canister request from a user.
+                    util::remove_stop_canister_call(state, canister_id, call_id, &self.log);
                     self.ingress_history_writer.set_status(
                         state,
                         message_id,
@@ -1701,10 +1714,13 @@ impl ExecutionEnvironment {
                 StopCanisterContext::Canister {
                     sender,
                     reply_callback,
+                    call_id,
                     cycles,
                 } => {
                     // Rejecting a stop_canister request from a canister.
                     let subnet_id_as_canister_id = CanisterId::from(self.own_subnet_id);
+                    util::remove_stop_canister_call(state, canister_id, call_id, &self.log);
+
                     let response = Response {
                         originator: sender,
                         respondent: subnet_id_as_canister_id,
@@ -2068,27 +2084,18 @@ impl ExecutionEnvironment {
                 state.put_canister_state(canister);
                 let refund = message.take_cycles();
                 // The message can be removed because a response was produced.
-                match call_id {
-                    Some(call_id) => {
-                        let install_code_call = state
-                            .metadata
-                            .subnet_call_context_manager
-                            .retrieve_install_code_call(call_id);
-                        if install_code_call.is_none() {
-                            info!(
-                                        self.log,
-                                        "Could not remove call id {} for canister {} after execution of install_code",
-                                        call_id,
-                                        canister_id
-                                        );
-                        }
-                    }
-                    None => {
+                if let Some(call_id) = call_id {
+                    let install_code_call = state
+                        .metadata
+                        .subnet_call_context_manager
+                        .remove_install_code_call(call_id);
+                    if install_code_call.is_none() {
                         info!(
-                            self.log,
-                            "Call ID not found after executing install_code on canister {}  ",
-                            canister_id
-                        );
+                                    self.log,
+                                    "Could not remove call id {} for canister {} after execution of install_code",
+                                    call_id,
+                                    canister_id
+                                    );
                     }
                 }
                 let state =

@@ -28,17 +28,16 @@ use ic_replicated_state::{
     CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_system_api::ExecutionParameters;
-use ic_types::messages::{MessageId, SignedIngressContent};
-use ic_types::nominal_cycles::NominalCycles;
-use ic_types::NumInstructions;
 use ic_types::{
     ingress::{IngressState, IngressStatus},
     messages::{
-        CanisterCall, Payload, RejectContext, Response as CanisterResponse, StopCanisterContext,
+        CanisterCall, MessageId, Payload, RejectContext, Response as CanisterResponse,
+        SignedIngressContent, StopCanisterContext,
     },
+    nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, InvalidComputeAllocationError,
     InvalidMemoryAllocationError, InvalidQueryAllocationError, MemoryAllocation, NumBytes,
-    PrincipalId, QueryAllocation, SubnetId, Time,
+    NumInstructions, PrincipalId, QueryAllocation, SubnetId, Time,
 };
 use ic_wasm_types::CanisterModule;
 use num_traits::cast::ToPrimitive;

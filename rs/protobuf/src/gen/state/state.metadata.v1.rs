@@ -264,6 +264,35 @@ pub struct InstallCodeCallTree {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StopCanisterCall {
+    #[prost(message, optional, tag = "3")]
+    pub time: ::core::option::Option<Time>,
+    #[prost(message, optional, tag = "4")]
+    pub effective_canister_id: ::core::option::Option<super::super::super::types::v1::CanisterId>,
+    #[prost(oneof = "stop_canister_call::CanisterCall", tags = "1, 2")]
+    pub canister_call: ::core::option::Option<stop_canister_call::CanisterCall>,
+}
+/// Nested message and enum types in `StopCanisterCall`.
+pub mod stop_canister_call {
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum CanisterCall {
+        #[prost(message, tag = "1")]
+        Request(super::super::super::queues::v1::Request),
+        #[prost(message, tag = "2")]
+        Ingress(super::super::super::ingress::v1::Ingress),
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct StopCanisterCallTree {
+    #[prost(uint64, tag = "1")]
+    pub call_id: u64,
+    #[prost(message, optional, tag = "2")]
+    pub call: ::core::option::Option<StopCanisterCall>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetCallContextManager {
     #[prost(uint64, tag = "1")]
     pub next_callback_id: u64,
@@ -287,6 +316,10 @@ pub struct SubnetCallContextManager {
     pub next_install_code_call_id: u64,
     #[prost(message, repeated, tag = "13")]
     pub install_code_calls: ::prost::alloc::vec::Vec<InstallCodeCallTree>,
+    #[prost(uint64, tag = "14")]
+    pub next_stop_canister_call_id: u64,
+    #[prost(message, repeated, tag = "15")]
+    pub stop_canister_calls: ::prost::alloc::vec::Vec<StopCanisterCallTree>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
