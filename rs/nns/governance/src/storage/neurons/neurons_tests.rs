@@ -1,5 +1,12 @@
 use super::*;
 
+use crate::pb::v1::Vote;
+use ic_nns_common::pb::v1::ProposalId;
+use pretty_assertions::assert_eq;
+
+// TODO(NNS1-2497): Add tests that fail if our BoundedStorage types grow. This
+// way, people are very aware of how they might be eating into our headroom.
+
 /// Summary:
 ///
 ///   1. create
@@ -20,14 +27,44 @@ fn test_store_simplest_nontrivial_case() {
     let mut store = new_heap_based();
 
     // 1. Create a Neuron.
-    assert_eq!(
-        store.create(Neuron {
-            id: Some(NeuronId { id: 42 }),
-            cached_neuron_stake_e8s: 0xCAFE, // Yummy.
-            ..Default::default()
-        }),
-        Ok(())
-    );
+    let neuron_1 = Neuron {
+        id: Some(NeuronId { id: 42 }),
+        cached_neuron_stake_e8s: 0xCAFE, // Yummy.
+
+        hot_keys: vec![
+            PrincipalId::new_user_test_id(100),
+            PrincipalId::new_user_test_id(101),
+        ],
+
+        followees: hashmap! {
+            0 => Followees {
+                followees: vec![
+                    NeuronId { id: 200 },
+                    NeuronId { id: 201 },
+                ],
+            },
+            1 => Followees {
+                followees: vec![
+                    NeuronId { id: 210 },
+                    NeuronId { id: 211 },
+                ],
+            },
+        },
+
+        recent_ballots: vec![
+            BallotInfo {
+                proposal_id: Some(ProposalId { id: 301 }),
+                vote: Vote::Yes as i32,
+            },
+            BallotInfo {
+                proposal_id: Some(ProposalId { id: 302 }),
+                vote: Vote::No as i32,
+            },
+        ],
+
+        ..Default::default()
+    };
+    assert_eq!(store.create(neuron_1.clone()), Ok(()));
 
     // 2. Bad create: use an existing NeuronId. This should result in an
     // InvalidCommand Err.
@@ -62,14 +99,7 @@ fn test_store_simplest_nontrivial_case() {
     }
 
     // 3. Read back the first neuron (the second one should have no effect).
-    assert_eq!(
-        store.read(NeuronId { id: 42 }),
-        Ok(Neuron {
-            id: Some(NeuronId { id: 42 }),
-            cached_neuron_stake_e8s: 0xCAFE,
-            ..Default::default()
-        }),
-    );
+    assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_1.clone()),);
 
     // 4. Bad read: Unknown NeuronId. This should result in a NotFound Err.
     let bad_read_result = store.read(NeuronId { id: 0xDEAD_BEEF });
@@ -99,23 +129,40 @@ fn test_store_simplest_nontrivial_case() {
     }
 
     // 5. Update existing neuron.
-    let update_result = store.update(Neuron {
-        id: Some(NeuronId { id: 42 }),
-        cached_neuron_stake_e8s: 0xFEED, // After drink, we eat.
-        ..Default::default()
-    });
+
+    // Derive neuron_5 from neuron_1 by adding entries to collections (to make
+    // sure the updating collections works).
+    let neuron_5 = {
+        /* TODO(NNS1-2503): Uncomment.
+        let mut hot_keys = neuron_1.hot_keys;
+        hot_keys.push(PrincipalId::new_user_test_id(102));
+
+        let mut followees = neuron_1.followees;
+        assert_eq!(
+            followees.insert(7, Followees { followees: vec![NeuronId { id: 220 }] }),
+            None,
+        );
+
+        let mut recent_ballots = neuron_1.recent_ballots;
+        recent_ballots.push(BallotInfo {
+            proposal_id: Some(ProposalId { id: 303 }),
+            vote: Vote::Yes as i32,
+        });
+        */
+
+        Neuron {
+            cached_neuron_stake_e8s: 0xFEED, // After drink, we eat.
+            // TODO(NNS1-2503): hot_keys,
+            // TODO(NNS1-2503): followees,
+            // TODO(NNS1-2503): recent_ballots,
+            ..neuron_1
+        }
+    };
+    let update_result = store.update(neuron_5.clone());
     assert_eq!(update_result, Ok(()));
 
     // 6. Read to verify update.
-    assert_eq!(
-        store.read(NeuronId { id: 42 }),
-        Ok(Neuron {
-            id: Some(NeuronId { id: 42 }),
-            // The most important part: entry actually changed.
-            cached_neuron_stake_e8s: 0xFEED,
-            ..Default::default()
-        }),
-    );
+    assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_5));
 
     // 7. Bad update: Neuron not found (unknown ID).
     let update_result = store.update(Neuron {
