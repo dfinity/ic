@@ -5,10 +5,8 @@ use ic_interfaces::execution_environment::{
     TrapCode::{HeapOutOfBounds, StableMemoryOutOfBounds, StableMemoryTooBigFor32Bit},
 };
 use ic_replicated_state::{canister_state::WASM_PAGE_SIZE_IN_BYTES, page_map, NumWasmPages};
-use ic_types::{NumPages, MAX_STABLE_MEMORY_IN_BYTES};
+use ic_types::NumPages;
 
-const MAX_64_BIT_STABLE_MEMORY_IN_PAGES: usize =
-    (MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64) as usize;
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: usize = 64 * 1024; // 4GiB
 
 /// Essentially the same as a `page_map::Memory`, but we use a `Buffer` instead
@@ -33,7 +31,8 @@ impl StableMemory {
         }
     }
 
-    /// Determines size of stable memory in Web assembly pages.
+    /// Returns the stable memory size in Wasm pages after checking that it fits
+    /// into an unsigned 32-bit integer.
     pub(super) fn stable_size(&self) -> HypervisorResult<u32> {
         let size = self.stable_memory_size.get();
         if size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
@@ -42,33 +41,6 @@ impl StableMemory {
 
         // Safe as we confirmed above the value is small enough to fit into 32-bits.
         Ok(size.try_into().unwrap())
-    }
-
-    /// Performs the checks for the `ic0.stable_grow()` system API call.
-    /// If the checks pass, then it returns the result of the system API call and
-    /// the new stable memory size without modifying the state.
-    ///
-    /// Note that it may return `Ok((-1, None))` in case of a failure that
-    /// doesn't trap.
-    pub(super) fn prepare_for_stable_grow(
-        &self,
-        additional_pages: u32,
-    ) -> HypervisorResult<(i32, Option<NumWasmPages>)> {
-        let initial_page_count = self.stable_size()? as usize;
-        let additional_pages = additional_pages as usize;
-
-        if additional_pages + initial_page_count > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
-            return Ok((-1, None));
-        }
-
-        let result: i32 = initial_page_count
-            .try_into()
-            .expect("could not fit initial page count in 32 bits, although 32-bit api is used");
-
-        Ok((
-            result,
-            Some(NumWasmPages::from(initial_page_count + additional_pages)),
-        ))
     }
 
     /// Reads from stable memory back to heap.
@@ -117,34 +89,6 @@ impl StableMemory {
         Ok(())
     }
 
-    /// Determines size of stable memory in Web assembly pages.
-    pub(super) fn stable64_size(&self) -> HypervisorResult<u64> {
-        Ok(self.stable_memory_size.get() as u64)
-    }
-
-    /// Performs the checks for the `ic0.stable64_grow()` system API call.
-    /// If the checks pass, then it returns the result of the system API call and
-    /// the new stable memory size without modifying the state.
-    ///
-    /// Note that it may return `Ok((-1, None))` in case of a failure that
-    /// doesn't trap.
-    pub(super) fn prepare_for_stable64_grow(
-        &self,
-        additional_pages: u64,
-    ) -> HypervisorResult<(i64, Option<NumWasmPages>)> {
-        let initial_page_count = self.stable64_size()?;
-        let (page_count, overflow) = additional_pages.overflowing_add(initial_page_count);
-        if overflow || page_count > MAX_64_BIT_STABLE_MEMORY_IN_PAGES as u64 {
-            return Ok((-1, None));
-        }
-        Ok((
-            initial_page_count as i64,
-            Some(NumWasmPages::from(
-                initial_page_count as usize + additional_pages as usize,
-            )),
-        ))
-    }
-
     /// Same as `stable64_read`, but doesn't do any bounds checks on the stable
     /// memory. This should only be called through instrumented code that does
     /// its own bounds checking (although it is still safe to call without
@@ -179,14 +123,15 @@ impl StableMemory {
         let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
 
         let (stable_memory_size_in_bytes, overflow) = self
-            .stable64_size()?
-            .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES as u64);
+            .stable_memory_size
+            .get()
+            .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
         if overflow {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
 
         let (stable_memory_end, overflow) = offset.overflowing_add(size);
-        if overflow || stable_memory_end > stable_memory_size_in_bytes as usize {
+        if overflow || stable_memory_end > stable_memory_size_in_bytes {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
 
@@ -213,14 +158,15 @@ impl StableMemory {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
         let (stable_memory_size_in_bytes, overflow) = self
-            .stable64_size()?
-            .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES as u64);
+            .stable_memory_size
+            .get()
+            .overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
         if overflow {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
 
         let (stable_memory_end, overflow) = offset.overflowing_add(size);
-        if overflow || stable_memory_end > stable_memory_size_in_bytes as usize {
+        if overflow || stable_memory_end > stable_memory_size_in_bytes {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
 
