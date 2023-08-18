@@ -240,6 +240,8 @@ pub mod stop_canister_context {
         pub sender: ::core::option::Option<super::super::super::super::types::v1::UserId>,
         #[prost(bytes = "vec", tag = "2")]
         pub message_id: ::prost::alloc::vec::Vec<u8>,
+        #[prost(uint64, optional, tag = "5")]
+        pub call_id: ::core::option::Option<u64>,
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
@@ -252,6 +254,8 @@ pub mod stop_canister_context {
         pub funds: ::core::option::Option<super::super::super::queues::v1::Funds>,
         #[prost(message, optional, tag = "4")]
         pub cycles: ::core::option::Option<super::super::super::queues::v1::Cycles>,
+        #[prost(uint64, optional, tag = "5")]
+        pub call_id: ::core::option::Option<u64>,
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]

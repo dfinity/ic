@@ -1,6 +1,6 @@
 use super::*;
 use crate::metadata_state::subnet_call_context_manager::{
-    InstallCodeCall, SubnetCallContext, SubnetCallContextManager,
+    InstallCodeCall, StopCanisterCall, SubnetCallContext, SubnetCallContextManager,
 };
 use assert_matches::assert_matches;
 use ic_constants::MAX_INGRESS_TTL;
@@ -663,6 +663,19 @@ fn subnet_call_contexts_deserialization() {
     };
     let call_id = system_call_context_manager.push_install_code_call(install_code_call.clone());
 
+    // Define stop canister request.
+    let request = RequestBuilder::default()
+        .sender(canister_test_id(1))
+        .receiver(canister_test_id(2))
+        .build();
+    let stop_canister_call = StopCanisterCall {
+        call: CanisterCall::Request(Arc::new(request)),
+        effective_canister_id: canister_test_id(3),
+        time: mock_time(),
+    };
+    let stop_canister_call_id =
+        system_call_context_manager.push_stop_canister_call(stop_canister_call.clone());
+
     // Encode and decode.
     let system_call_context_manager_proto: ic_protobuf::state::system_metadata::v1::SubnetCallContextManager = (&system_call_context_manager).into();
     let mut deserialized_system_call_context_manager: SubnetCallContextManager =
@@ -693,9 +706,19 @@ fn subnet_call_contexts_deserialization() {
         1
     );
     let deserialized_install_code_call = deserialized_system_call_context_manager
-        .retrieve_install_code_call(call_id)
-        .expect("Did not find the install code call");
+        .remove_install_code_call(call_id)
+        .expect("Did not find the install code call.");
     assert_eq!(deserialized_install_code_call, install_code_call);
+
+    // Check stop canister request deserialization.
+    assert_eq!(
+        deserialized_system_call_context_manager.stop_canister_calls_len(),
+        1
+    );
+    let deserialized_stop_canister_call = deserialized_system_call_context_manager
+        .remove_stop_canister_call(stop_canister_call_id)
+        .expect("Did not find the stop canister call.");
+    assert_eq!(deserialized_stop_canister_call, stop_canister_call);
 }
 
 #[test]

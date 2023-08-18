@@ -885,11 +885,16 @@ impl SchedulerImpl {
         (canisters, ingress_results, heap_delta)
     }
 
-    fn process_stopping_canisters(&self, state: ReplicatedState) -> ReplicatedState {
+    fn process_stopping_canisters(
+        &self,
+        state: ReplicatedState,
+        log: &ReplicaLogger,
+    ) -> ReplicatedState {
         util::process_stopping_canisters(
             state,
             self.ingress_history_writer.as_ref(),
             self.own_subnet_id,
+            log,
         )
     }
 
@@ -1617,7 +1622,7 @@ impl Scheduler for SchedulerImpl {
                 // beginning of the round), then canister deletion logic should be revised.
                 {
                     let _timer = self.metrics.round_finalization_stop_canisters.start_timer();
-                    final_state = self.process_stopping_canisters(state);
+                    final_state = self.process_stopping_canisters(state, &round_log);
                 }
                 {
                     let _timer = self.metrics.round_finalization_ingress.start_timer();

@@ -61,7 +61,7 @@ use ic_test_utilities_execution_environment::{
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{CallbackId, CanisterCall, StopCanisterContext},
+    messages::{CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext},
     nominal_cycles::NominalCycles,
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
     NumInstructions, QueryAllocation, SubnetId, Time, UserId,
@@ -1661,6 +1661,7 @@ fn stop_a_running_canister() {
         let stop_context = StopCanisterContext::Canister {
             sender,
             reply_callback: CallbackId::new(0),
+            call_id: Some(StopCanisterCallId::new(0)),
             cycles: Cycles::zero(),
         };
         assert_eq!(
@@ -1707,6 +1708,7 @@ fn stop_a_stopped_canister() {
         let stop_context = StopCanisterContext::Ingress {
             sender,
             message_id: message_test_id(0),
+            call_id: Some(StopCanisterCallId::new(0)),
         };
         assert_eq!(
             canister_manager.stop_canister(canister_id, stop_context, &mut state),
@@ -1741,6 +1743,7 @@ fn stop_a_stopped_canister_from_another_canister() {
         let stop_context = StopCanisterContext::Canister {
             sender: controller,
             reply_callback: CallbackId::from(0),
+            call_id: Some(StopCanisterCallId::new(0)),
             cycles: Cycles::from(cycles),
         };
         assert_eq!(
@@ -1795,6 +1798,7 @@ fn stop_a_canister_with_incorrect_controller() {
         let stop_context = StopCanisterContext::Ingress {
             sender: other_sender,
             message_id: msg_id,
+            call_id: Some(StopCanisterCallId::new(0)),
         };
 
         assert_eq!(
@@ -1822,6 +1826,7 @@ fn stop_a_non_existing_canister() {
                 StopCanisterContext::Ingress {
                     sender: user_test_id(1),
                     message_id: message_test_id(0),
+                    call_id: Some(StopCanisterCallId::new(0)),
                 },
                 &mut state
             ),
@@ -1967,6 +1972,7 @@ fn start_a_stopping_canister_with_stop_contexts() {
         let stop_context = StopCanisterContext::Ingress {
             sender: user_test_id(1),
             message_id: message_test_id(0),
+            call_id: Some(StopCanisterCallId::new(0)),
         };
         canister.system_state.add_stop_context(stop_context.clone());
 

@@ -140,6 +140,7 @@ message StopCanisterContext {
   message Ingress {
     types.v1.UserId sender = 1;
     bytes message_id = 2;
+    optional uint64 call_id = 5;
   }
 
   message Canister {
@@ -147,6 +148,7 @@ message StopCanisterContext {
     uint64 reply_callback = 2;
     state.queues.v1.Funds funds = 3;
     state.queues.v1.Cycles cycles = 4;
+    optional uint64 call_id = 5;
   }
 
   oneof context {

@@ -559,8 +559,12 @@ impl ExecutionTest {
     pub fn process_stopping_canisters(&mut self) {
         let state = self.state.take().unwrap();
         let own_subnet_id = state.metadata.own_subnet_id;
-        let state =
-            process_stopping_canisters(state, self.ingress_history_writer.as_ref(), own_subnet_id);
+        let state = process_stopping_canisters(
+            state,
+            self.ingress_history_writer.as_ref(),
+            own_subnet_id,
+            &no_op_logger(),
+        );
         self.state = Some(state);
     }
 
