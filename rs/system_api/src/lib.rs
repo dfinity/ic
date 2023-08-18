@@ -801,6 +801,10 @@ pub struct SystemApiImpl {
     /// still be read through the hidden read API for speed on the first access.
     wasm_native_stable_memory: FlagStatus,
 
+    /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
+    /// `canister_query <name>`, or `canister_composite_query <name>`.
+    max_sum_exported_function_name_lengths: usize,
+
     /// Should not be accessed directly from public APIs. Instead read through
     /// [`Self::stable_memory`] or [`Self::stable_memory_mut`].
     stable_memory: StableMemory,
@@ -838,6 +842,7 @@ impl SystemApiImpl {
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
         wasm_native_stable_memory: FlagStatus,
+        max_sum_exported_function_name_lengths: usize,
         stable_memory: Memory,
         out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
@@ -858,6 +863,7 @@ impl SystemApiImpl {
             memory_usage,
             execution_parameters,
             wasm_native_stable_memory,
+            max_sum_exported_function_name_lengths,
             stable_memory,
             sandbox_safe_system_state,
             out_of_instructions_handler,
@@ -1853,6 +1859,7 @@ impl SystemApi for SystemApiImpl {
                     WasmClosure::new(reject_fun, reject_env),
                     MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
                     MULTIPLIER_MAX_SIZE_LOCAL_SUBNET,
+                    self.max_sum_exported_function_name_lengths,
                 )?;
                 *outgoing_request = Some(req);
                 Ok(())
