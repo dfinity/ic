@@ -85,6 +85,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /testnet/tests/tools/nns_state_deployment.sh               @dfinity-lab/teams/consensus-owners
 /testnet/tests/scripts/nns_state_deployment_test.sh        @dfinity-lab/teams/consensus-owners
 /testnet/tests/scripts/rejoin_test.sh                      @dfinity-lab/teams/message-routing-owners
+/testnet/tests/scripts/subnet_update_workload.sh           @dfinity-lab/teams/networking-team
 
 /testnet/tools/nns_state_deployment.sh                     @dfinity-lab/teams/consensus-owners
 /testnet/tools/nns-tools/                                  @dfinity-lab/teams/nns-team
