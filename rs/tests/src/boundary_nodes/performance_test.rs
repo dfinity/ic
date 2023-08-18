@@ -117,6 +117,9 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
     env.sync_prometheus_config_with_topology();
 }
 
+// Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.
+// At the moment 300 req/s is the maximum defined by the rate limiter in /ic-os/boundary-guestos/rootfs/etc/nginx/conf.d/000-nginx-global.conf
+
 pub fn update_calls_test(env: TestEnv) {
     let rps_min = 10;
     let rps_max = 400;
@@ -151,6 +154,59 @@ pub fn update_calls_test(env: TestEnv) {
                 "write".to_string(),
                 payload.clone(),
                 CallMode::UpdateNoPolling,
+            )];
+            spawn_round_robin_workload_engine(
+                log.clone(),
+                requests,
+                vec![agent.clone()],
+                rps,
+                workload_per_step_duration,
+                REQUESTS_DISPATCH_EXTRA_TIMEOUT,
+                vec![],
+            )
+        };
+        let _load_metrics_nns = handle_workload.join().expect("Workload execution failed.");
+        info!(log, "Workload execution finished");
+    }
+}
+
+// Execute query calls with an increasing req/s rate, against a counter canister via the boundary node agent.
+// In order to observe rates>1 req/s on the replica, caching should be disabled in /ic-os/boundary-guestos/rootfs/etc/nginx/conf.d/002-mainnet-nginx.conf
+
+pub fn query_calls_test(env: TestEnv) {
+    let rps_min = 100;
+    let rps_max = 8000;
+    let rps_step = 500;
+    let workload_per_step_duration = Duration::from_secs(100);
+    let log: slog::Logger = env.logger();
+    let subnet_app = env
+        .topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let canister_app = subnet_app
+        .nodes()
+        .next()
+        .unwrap()
+        .create_and_install_canister_with_arg(COUNTER_CANISTER_WAT, None);
+    let bn_agent = {
+        let boundary_node = env
+            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+        boundary_node.build_default_agent()
+    };
+    let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
+    for rps in (rps_min..rps_max).step_by(rps_step) {
+        let agent = bn_agent.clone();
+        info!(log, "Starting the workload with rps={rps}");
+        let handle_workload = {
+            let requests = vec![GenericRequest::new(
+                canister_app,
+                "read".to_string(),
+                payload.clone(),
+                CallMode::Query,
             )];
             spawn_round_robin_workload_engine(
                 log.clone(),
