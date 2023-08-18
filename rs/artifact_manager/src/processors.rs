@@ -40,10 +40,9 @@ impl<A: ArtifactKind, C, P: MutablePool<A, C> + Send + Sync + 'static> ArtifactP
                 pool.insert(artifact)
             }
         }
-        let change_set = {
-            let pool = self.pool.read().unwrap();
-            self.change_set_producer.on_state_change(&*pool)
-        };
+        let change_set = self
+            .change_set_producer
+            .on_state_change(&self.pool.read().unwrap());
         let result = self
             .pool
             .write()
@@ -90,10 +89,9 @@ impl<C, P: MutablePool<IngressArtifact, C> + Send + Sync + 'static>
                 ingress_pool.insert(artifact)
             }
         }
-        let change_set = {
-            let pool = self.ingress_pool.read().unwrap();
-            self.client.on_state_change(&*pool)
-        };
+        let change_set = self
+            .client
+            .on_state_change(&self.ingress_pool.read().unwrap());
         let result = self
             .ingress_pool
             .write()
