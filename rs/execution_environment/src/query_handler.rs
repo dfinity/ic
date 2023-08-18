@@ -19,7 +19,9 @@ use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{QueryExecutionService, QueryHandler};
+use ic_interfaces::execution_environment::{
+    QueryExecutionError, QueryExecutionResponse, QueryExecutionService, QueryHandler,
+};
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -34,8 +36,8 @@ use ic_types::{
     CanisterId, NumInstructions,
 };
 use serde::Serialize;
+use std::convert::Infallible;
 use std::{
-    convert::Infallible,
     future::Future,
     pin::Pin,
     sync::Arc,
@@ -254,7 +256,7 @@ impl QueryHandler for HttpQueryHandler {
 }
 
 impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
-    type Response = HttpQueryResponse;
+    type Response = QueryExecutionResponse;
     type Error = Infallible;
     #[allow(clippy::type_complexity)]
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -277,38 +279,43 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
                 // We managed to upgrade the weak pointer, so the query was not cancelled.
                 // Canceling the query after this point will have no effect: the query will
                 // be executed anyway. That is fine because the execution will take O(ms).
+
+                // Retrieving the state must be done here in the query handler, and should be immediately used.
+                // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
+                // with a reference to older states which can cause out-of-memory crashes.
                 let result = match get_latest_certified_state_and_data_certificate(
                     state_reader,
                     certificate_delegation,
                     query.receiver,
                 ) {
-                    Some((state, cert)) => internal.query(query, state, cert),
-                    None => Err(UserError::new(
-                        ErrorCode::CertifiedStateUnavailable,
-                        "Certified state is not available yet. Please try again...",
-                    )),
+                    Some((state, cert)) => {
+                        let result = internal.query(query, state, cert);
+
+                        let http_query_response = match result {
+                            Ok(res) => match res {
+                                WasmResult::Reply(vec) => HttpQueryResponse::Replied {
+                                    reply: HttpQueryResponseReply { arg: Blob(vec) },
+                                },
+                                WasmResult::Reject(message) => HttpQueryResponse::Rejected {
+                                    error_code: ErrorCode::CanisterRejectedMessage.to_string(),
+                                    reject_code: RejectCode::CanisterReject as u64,
+                                    reject_message: message,
+                                },
+                            },
+
+                            Err(user_error) => HttpQueryResponse::Rejected {
+                                error_code: user_error.code().to_string(),
+                                reject_code: user_error.reject_code() as u64,
+                                reject_message: user_error.to_string(),
+                            },
+                        };
+
+                        Ok(http_query_response)
+                    }
+                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
                 };
 
-                let http_query_response = match result {
-                    Ok(res) => match res {
-                        WasmResult::Reply(vec) => HttpQueryResponse::Replied {
-                            reply: HttpQueryResponseReply { arg: Blob(vec) },
-                        },
-                        WasmResult::Reject(message) => HttpQueryResponse::Rejected {
-                            error_code: ErrorCode::CanisterRejectedMessage.to_string(),
-                            reject_code: RejectCode::CanisterReject as u64,
-                            reject_message: message,
-                        },
-                    },
-
-                    Err(user_error) => HttpQueryResponse::Rejected {
-                        error_code: user_error.code().to_string(),
-                        reject_code: user_error.reject_code() as u64,
-                        reject_message: user_error.to_string(),
-                    },
-                };
-
-                let _ = tx.send(Ok(http_query_response));
+                let _ = tx.send(Ok(result));
             }
             start.elapsed()
         });

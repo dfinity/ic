@@ -12,7 +12,7 @@ use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::ConsensusPoolCache,
-    execution_environment::{IngressFilterService, QueryExecutionService},
+    execution_environment::{IngressFilterService, QueryExecutionResponse, QueryExecutionService},
     ingress_pool::IngressPoolThrottler,
     time_source::SysTimeSource,
 };
@@ -66,7 +66,10 @@ use ic_types::{
 };
 use mockall::{mock, predicate::*};
 use prost::Message;
-use std::{collections::BTreeMap, net::SocketAddr, sync::Arc, sync::RwLock, time::Duration};
+use std::{
+    collections::BTreeMap, convert::Infallible, net::SocketAddr, sync::Arc, sync::RwLock,
+    time::Duration,
+};
 use tokio::net::{TcpSocket, TcpStream};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
@@ -84,7 +87,7 @@ fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle)
         tower::service_fn(move |request: (UserQuery, Option<CertificateDelegation>)| {
             let mut service_clone = service.clone();
             async move {
-                Ok::<HttpQueryResponse, std::convert::Infallible>({
+                Ok::<QueryExecutionResponse, Infallible>(Ok({
                     service_clone
                         .ready()
                         .await
@@ -92,7 +95,7 @@ fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle)
                         .call(request)
                         .await
                         .expect("Mocking Infallible service and can therefore not return an error.")
-                })
+                }))
             }
         });
     (BoxCloneService::new(infallible_service), handle)
