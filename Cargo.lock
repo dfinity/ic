@@ -6720,7 +6720,6 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
- "ic-crypto-internal-csp",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-canister-sigs",

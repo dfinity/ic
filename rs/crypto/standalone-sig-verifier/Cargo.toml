@@ -6,7 +6,6 @@ description = "Standalone crypto library to verify cryptographic signatures for 
 
 [dependencies]
 ic-crypto-iccsa = { path = "../iccsa" }
-ic-crypto-internal-csp = { path = "../internal/crypto_service_provider" }
 ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../internal/crypto_lib/basic_sig/ecdsa_secp256k1" }
 ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../internal/crypto_lib/basic_sig/ecdsa_secp256r1" }
 ic-crypto-internal-basic-sig-ed25519 = { path = "../internal/crypto_lib/basic_sig/ed25519" }
