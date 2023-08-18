@@ -2036,32 +2036,21 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
-        let result = match self
-            .stable_memory()
-            .prepare_for_stable_grow(additional_pages)
-        {
-            Ok((result, Some(new_memory_size))) => {
-                assert_ne!(result, -1);
-                match self.memory_usage.allocate_pages(
-                    additional_pages as usize,
-                    &self.api_type,
-                    &self.sandbox_safe_system_state,
-                ) {
-                    Ok(()) => {
-                        self.stable_memory_mut().stable_memory_size = new_memory_size;
-                        Ok(result)
-                    }
-                    Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
-                        // Trap instead of returning -1 in order to give the developer
-                        // more actionable error message. Otherwise, they cannot
-                        // distinguish between out-of-memory and out-of-cycles.
-                        Err(err)
-                    }
-                    Err(_err) => Ok(-1),
-                }
-            }
-            Ok((_, None)) => Ok(-1),
+        let old_size = self.stable_memory().stable_memory_size;
+        let result = match self.try_grow_stable_memory(
+            old_size.get() as u64,
+            additional_pages as u64,
+            StableMemoryApi::Stable32,
+        ) {
             Err(err) => Err(err),
+            Ok(StableGrowOutcome::Failure) => Ok(-1),
+            Ok(StableGrowOutcome::Success) => {
+                self.stable_memory_mut().stable_memory_size =
+                    old_size + NumWasmPages::new(additional_pages as usize);
+                // This conversion must succeed due to the checks performed in
+                // `try_grow_stable_memory()`.
+                Ok(old_size.get().try_into().unwrap())
+            }
         };
         trace_syscall!(self, ic0_stable_grow, result, additional_pages);
         result
@@ -2110,38 +2099,27 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
-        let result = self.stable_memory().stable64_size();
+        let result = self.stable_memory().stable_memory_size.get() as u64;
         trace_syscall!(self, ic0_stable64_size, result);
-        result
+        Ok(result)
     }
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
-        let result = match self
-            .stable_memory()
-            .prepare_for_stable64_grow(additional_pages)
-        {
-            Ok((result, Some(new_memory_size))) => {
-                assert_ne!(result, -1);
-                match self.memory_usage.allocate_pages(
-                    additional_pages as usize,
-                    &self.api_type,
-                    &self.sandbox_safe_system_state,
-                ) {
-                    Ok(()) => {
-                        self.stable_memory_mut().stable_memory_size = new_memory_size;
-                        Ok(result)
-                    }
-                    Err(err @ HypervisorError::InsufficientCyclesInMemoryGrow { .. }) => {
-                        // Trap instead of returning -1 in order to give the developer
-                        // more actionable error message. Otherwise, they cannot
-                        // distinguish between out-of-memory and out-of-cycles.
-                        Err(err)
-                    }
-                    Err(_err) => Ok(-1),
-                }
-            }
-            Ok((_, None)) => Ok(-1),
+        let old_size = self.stable_memory().stable_memory_size;
+        let result = match self.try_grow_stable_memory(
+            old_size.get() as u64,
+            additional_pages,
+            StableMemoryApi::Stable64,
+        ) {
             Err(err) => Err(err),
+            Ok(StableGrowOutcome::Failure) => Ok(-1),
+            Ok(StableGrowOutcome::Success) => {
+                self.stable_memory_mut().stable_memory_size =
+                    old_size + NumWasmPages::new(additional_pages as usize);
+                // This conversion must succeed due to the checks performed in
+                // `try_grow_stable_memory()`.
+                Ok(old_size.get().try_into().unwrap())
+            }
         };
         trace_syscall!(self, ic0_stable64_grow, result, additional_pages);
         result
