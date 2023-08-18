@@ -1574,7 +1574,7 @@ impl Governance {
     }
 
     fn build_principal_to_neuron_ids_index(&mut self) {
-        for neuron in self.neuron_store.heap_neurons.values() {
+        for neuron in self.neuron_store.heap_neurons().values() {
             let already_present_principal_ids = add_neuron_id_principal_ids(
                 &mut self.principal_to_neuron_ids_index,
                 &neuron.id.unwrap(),
@@ -1594,7 +1594,7 @@ impl Governance {
     /// neurons themselves map followers (the neuron ID) to a set of
     /// followees (per topic).
     fn build_topic_followee_index(&mut self) {
-        for neuron in self.neuron_store.heap_neurons.values() {
+        for neuron in self.neuron_store.heap_neurons().values() {
             let neuron_id = neuron.id.expect("Neuron must have an id");
             let already_present_topic_followee_pairs = add_neuron_followees(
                 &mut self.topic_followee_index,
@@ -1609,7 +1609,7 @@ impl Governance {
     }
 
     fn build_known_neuron_name_index(&mut self) {
-        for neuron in self.neuron_store.heap_neurons.values() {
+        for neuron in self.neuron_store.heap_neurons().values() {
             if let Some(known_neuron_data) = &neuron.known_neuron_data {
                 self.known_neuron_name_set
                     .insert(known_neuron_data.name.clone());
@@ -1783,7 +1783,7 @@ impl Governance {
 
     pub fn get_neuron(&self, nid: &NeuronId) -> Result<&Neuron, GovernanceError> {
         self.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&nid.id)
             .ok_or_else(|| Self::neuron_not_found_error(nid))
     }
@@ -1806,21 +1806,19 @@ impl Governance {
     // The following methods should be aware of both heap storage and stable storage
     // during the migration (https://docs.google.com/document/d/10r-hZ5yMJbAgle5jsuH9VrRtQ2H8csd4nfry9LOe7cc/edit)
     pub fn contains_neuron(&self, neuron_id: NeuronId) -> bool {
-        self.neuron_store.heap_neurons.contains_key(&neuron_id.id)
+        self.neuron_store.contains(neuron_id)
     }
 
     pub fn neurons_len(&self) -> usize {
-        self.neuron_store.heap_neurons.len()
+        self.neuron_store.len()
     }
 
     pub fn add_neuron_to_storage(&mut self, neuron: Neuron) {
-        self.neuron_store
-            .heap_neurons
-            .insert(neuron.id.expect("Neuron must have an id").id, neuron);
+        self.neuron_store.upsert(neuron);
     }
 
     pub fn remove_neuron_from_storage(&mut self, neuron_id: &NeuronId) {
-        self.neuron_store.heap_neurons.remove(&neuron_id.id);
+        self.neuron_store.remove(neuron_id);
     }
 
     pub fn with_neuron<R>(
@@ -1830,7 +1828,7 @@ impl Governance {
     ) -> Result<R, GovernanceError> {
         let neuron = self
             .neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&nid.id)
             .ok_or_else(|| Self::neuron_not_found_error(nid))?;
         Ok(map(neuron))
@@ -1852,24 +1850,25 @@ impl Governance {
     ) -> Result<R, GovernanceError> {
         let neuron = self
             .neuron_store
-            .heap_neurons
+            .heap_neurons_mut()
             .get_mut(&nid.id)
             .ok_or_else(|| Self::neuron_not_found_error(nid))?;
         Ok(modifier(neuron))
     }
 
     pub fn list_heap_neurons(&self) -> impl Iterator<Item = &Neuron> {
-        self.neuron_store.heap_neurons.values()
+        self.neuron_store.heap_neurons().values()
     }
 
+    // TODO remove this function once we add pattern for this in NeuronStore
     pub fn list_heap_neurons_mut(&mut self) -> impl Iterator<Item = &mut Neuron> {
-        self.neuron_store.heap_neurons.values_mut()
+        self.neuron_store.heap_neurons_mut().values_mut()
     }
 
     // The following functions should be deprecated before migrating any neuron to stable storage
     pub fn has_neuron_with_subaccount(&self, subaccount: Subaccount) -> bool {
         self.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .values()
             .any(|neuron| neuron.account == subaccount.0)
     }
@@ -4455,7 +4454,7 @@ impl Governance {
             .clone();
 
         let cf_participants = draw_funds_from_the_community_fund(
-            &mut self.neuron_store.heap_neurons,
+            self.neuron_store.heap_neurons_mut(),
             original_total_community_fund_maturity_e8s_equivalent,
             open_sns_token_swap
                 .community_fund_investment_e8s
@@ -4470,7 +4469,7 @@ impl Governance {
             }
             None => {
                 let failed_refunds = refund_community_fund_maturity(
-                    &mut self.neuron_store.heap_neurons,
+                    self.neuron_store.heap_neurons_mut(),
                     &cf_participants,
                 );
                 self.set_proposal_execution_status(
@@ -4512,7 +4511,7 @@ impl Governance {
 
         if let Err(err) = result {
             let failed_refunds = refund_community_fund_maturity(
-                &mut self.neuron_store.heap_neurons,
+                self.neuron_store.heap_neurons_mut(),
                 &cf_participants,
             );
 
@@ -4541,7 +4540,7 @@ impl Governance {
             LOG_PREFIX, proposal_id,
         );
         let failed_refunds =
-            refund_community_fund_maturity(&mut self.neuron_store.heap_neurons, &cf_participants);
+            refund_community_fund_maturity(self.neuron_store.heap_neurons_mut(), &cf_participants);
         let result = Err(GovernanceError::new_with_message(
             ErrorType::NotFound,
             format!(
@@ -4650,7 +4649,7 @@ impl Governance {
             ))?;
 
         let neurons_fund_participants = draw_funds_from_the_community_fund(
-            &mut self.neuron_store.heap_neurons,
+            self.neuron_store.heap_neurons_mut(),
             original_total_community_fund_maturity_e8s_equivalent,
             withdrawal_amount_e8s,
             &sns_swap_pb::Params {
@@ -4668,7 +4667,7 @@ impl Governance {
             }
             None => {
                 let failed_refunds = refund_community_fund_maturity(
-                    &mut self.neuron_store.heap_neurons,
+                    self.neuron_store.heap_neurons_mut(),
                     &neurons_fund_participants,
                 );
                 return Err(GovernanceError::new_with_message(
@@ -4812,7 +4811,7 @@ impl Governance {
 
         if deploy_new_sns_response.error.is_some() {
             let failed_refunds = refund_community_fund_maturity(
-                &mut self.neuron_store.heap_neurons,
+                self.neuron_store.heap_neurons_mut(),
                 &executed_create_service_nervous_system_proposal.neurons_fund_participants,
             );
 
@@ -5637,7 +5636,7 @@ impl Governance {
         let original_total_community_fund_maturity_e8s_equivalent = match proposal.action {
             Some(Action::OpenSnsTokenSwap(_)) | Some(Action::CreateServiceNervousSystem(_)) => {
                 Some(total_community_fund_maturity_e8s_equivalent(
-                    &self.neuron_store.heap_neurons,
+                    self.neuron_store.heap_neurons(),
                 ))
             }
             _ => None,
@@ -5686,7 +5685,7 @@ impl Governance {
             Vote::Yes,
             topic,
             &self.topic_followee_index,
-            &mut self.neuron_store.heap_neurons,
+            self.neuron_store.heap_neurons_mut(),
         );
         // Finally, add this proposal as an open proposal.
         self.insert_proposal(proposal_num, info);
@@ -5914,7 +5913,7 @@ impl Governance {
                 vote,
                 topic,
                 &self.topic_followee_index,
-                &mut self.neuron_store.heap_neurons,
+                self.neuron_store.heap_neurons_mut(),
             );
         }
 
@@ -7210,7 +7209,7 @@ impl Governance {
 
             settle_community_fund_participation::Result::Aborted(_aborted) => {
                 let missing_neurons = refund_community_fund_maturity(
-                    &mut self.neuron_store.heap_neurons,
+                    self.neuron_store.heap_neurons_mut(),
                     &proposal_data.cf_participants,
                 );
                 if !missing_neurons.is_empty() {
