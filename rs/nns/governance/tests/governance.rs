@@ -1192,7 +1192,7 @@ async fn test_cascade_following() {
     // The fee should now be 1 ICP since the fees are charged upfront.
     assert_eq!(
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&1)
             .unwrap()
             .neuron_fees_e8s,
@@ -1207,7 +1207,7 @@ async fn test_cascade_following() {
             vote: Vote::Yes as i32
         },
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&1)
             .unwrap()
             .recent_ballots
@@ -1257,7 +1257,7 @@ async fn test_cascade_following() {
             vote: Vote::Yes as i32
         },
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&2)
             .unwrap()
             .recent_ballots
@@ -1275,7 +1275,7 @@ async fn test_cascade_following() {
     // After the proposal is accepted the Neuron 1 should have 0 fees again
     assert_eq!(
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&1)
             .unwrap()
             .neuron_fees_e8s,
@@ -1426,7 +1426,7 @@ async fn test_sufficient_stake() {
     );
     // Set stake to 0.5 ICP.
     gov.neuron_store
-        .heap_neurons
+        .heap_neurons_mut()
         .get_mut(&1)
         .unwrap()
         .cached_neuron_stake_e8s = 50_000_000;
@@ -1452,7 +1452,7 @@ async fn test_sufficient_stake() {
     );
     // Set stake to 1 ICP.
     gov.neuron_store
-        .heap_neurons
+        .heap_neurons_mut()
         .get_mut(&1)
         .unwrap()
         .cached_neuron_stake_e8s = 100_000_000;
@@ -1592,7 +1592,7 @@ async fn test_follow_negative() {
             if err.error_type == ErrorType::NotAuthorized as i32
     );
     gov.neuron_store
-        .heap_neurons
+        .heap_neurons_mut()
         .get_mut(&4)
         .unwrap()
         .controller = Some(principal(4));
@@ -1630,7 +1630,7 @@ async fn test_follow_negative() {
     // Make sure that the neuron has been changed the reject fee.
     assert_eq!(
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&1)
             .unwrap()
             .neuron_fees_e8s,
@@ -2055,7 +2055,7 @@ async fn test_manage_neuron() {
     // neuron proposals.
     assert_eq!(
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&2)
             .unwrap()
             .neuron_fees_e8s,
@@ -2069,7 +2069,7 @@ async fn test_manage_neuron() {
     assert_eq!(
         1,
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons_mut()
             .get_mut(&1)
             .unwrap()
             .followees
@@ -2082,7 +2082,7 @@ async fn test_manage_neuron() {
     assert_eq!(
         2,
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons_mut()
             .get_mut(&1)
             .unwrap()
             .followees
@@ -2128,7 +2128,7 @@ async fn test_manage_neuron() {
     assert_eq!(
         3,
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons_mut()
             .get_mut(&1)
             .unwrap()
             .followees
@@ -2141,7 +2141,7 @@ async fn test_manage_neuron() {
     // for manage neuron proposals.
     assert_eq!(
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&2)
             .unwrap()
             .neuron_fees_e8s,
@@ -2168,7 +2168,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
     // Set stake to less than 0.01 ICP (same as
     // neuron_management_fee_per_proposal_e8s).
     gov.neuron_store
-        .heap_neurons
+        .heap_neurons_mut()
         .get_mut(&2)
         .unwrap()
         .cached_neuron_stake_e8s = 999_999;
@@ -2201,7 +2201,7 @@ async fn test_sufficient_stake_for_manage_neuron() {
     );
     // Set stake to 2 ICP.
     gov.neuron_store
-        .heap_neurons
+        .heap_neurons_mut()
         .get_mut(&2)
         .unwrap()
         .cached_neuron_stake_e8s = 200_000_000;
@@ -2601,13 +2601,13 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         fully_elapsed_reward_rounds * INITIAL_REWARD_POT_PER_ROUND_E8S - 3;
     let neuron_share = gov
         .neuron_store
-        .heap_neurons
+        .heap_neurons()
         .get(&1)
         .unwrap()
         .voting_power(fake_driver.now()) as f64
         / gov
             .neuron_store
-            .heap_neurons
+            .heap_neurons()
             .values()
             .map(|neuron| neuron.voting_power(fake_driver.now()))
             .sum::<u64>() as f64;
@@ -2635,7 +2635,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             .maturity_e8s_equivalent,
         expected_distributed_e8s_equivalent,
     );
-    for neuron in gov.neuron_store.heap_neurons.values() {
+    for neuron in gov.neuron_store.heap_neurons().values() {
         if neuron.id == Some(proposer_neuron_id) {
             continue;
         }
@@ -3665,8 +3665,8 @@ fn test_approve_kyc() {
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
     );
-    let neuron_a = gov.neuron_store.heap_neurons.get(&1).unwrap().clone();
-    let neuron_b = gov.neuron_store.heap_neurons.get(&2).unwrap().clone();
+    let neuron_a = gov.neuron_store.heap_neurons().get(&1).unwrap().clone();
+    let neuron_b = gov.neuron_store.heap_neurons().get(&2).unwrap().clone();
 
     let principal1 = *neuron_a.controller.as_ref().unwrap();
     let principal2 = *neuron_b.controller.as_ref().unwrap();
@@ -3708,17 +3708,65 @@ fn test_approve_kyc() {
         "Neuron is not kyc verified: 2"
     );
 
-    assert!(!gov.neuron_store.heap_neurons.get(&1).unwrap().kyc_verified);
-    assert!(!gov.neuron_store.heap_neurons.get(&2).unwrap().kyc_verified);
-    assert!(!gov.neuron_store.heap_neurons.get(&3).unwrap().kyc_verified);
-    assert!(!gov.neuron_store.heap_neurons.get(&4).unwrap().kyc_verified);
+    assert!(
+        !gov.neuron_store
+            .heap_neurons()
+            .get(&1)
+            .unwrap()
+            .kyc_verified
+    );
+    assert!(
+        !gov.neuron_store
+            .heap_neurons()
+            .get(&2)
+            .unwrap()
+            .kyc_verified
+    );
+    assert!(
+        !gov.neuron_store
+            .heap_neurons()
+            .get(&3)
+            .unwrap()
+            .kyc_verified
+    );
+    assert!(
+        !gov.neuron_store
+            .heap_neurons()
+            .get(&4)
+            .unwrap()
+            .kyc_verified
+    );
 
     gov.approve_genesis_kyc(&[principal1, principal2]);
 
-    assert!(gov.neuron_store.heap_neurons.get(&1).unwrap().kyc_verified);
-    assert!(gov.neuron_store.heap_neurons.get(&2).unwrap().kyc_verified);
-    assert!(gov.neuron_store.heap_neurons.get(&3).unwrap().kyc_verified);
-    assert!(!gov.neuron_store.heap_neurons.get(&4).unwrap().kyc_verified);
+    assert!(
+        gov.neuron_store
+            .heap_neurons()
+            .get(&1)
+            .unwrap()
+            .kyc_verified
+    );
+    assert!(
+        gov.neuron_store
+            .heap_neurons()
+            .get(&2)
+            .unwrap()
+            .kyc_verified
+    );
+    assert!(
+        gov.neuron_store
+            .heap_neurons()
+            .get(&3)
+            .unwrap()
+            .kyc_verified
+    );
+    assert!(
+        !gov.neuron_store
+            .heap_neurons()
+            .get(&4)
+            .unwrap()
+            .kyc_verified
+    );
 
     // Disbursing should now work.
     let _ = gov
@@ -3903,9 +3951,13 @@ fn governance_with_staked_neuron(
         claim_or_refresh_neuron_by_memo(&mut gov, &from, None, to_subaccount, Memo(nonce), None)
             .unwrap();
 
-    assert_eq!(gov.neuron_store.heap_neurons.len(), 1);
+    assert_eq!(gov.neuron_store.heap_neurons().len(), 1);
 
-    let neuron = gov.neuron_store.heap_neurons.get_mut(&nid.id).unwrap();
+    let neuron = gov
+        .neuron_store
+        .heap_neurons_mut()
+        .get_mut(&nid.id)
+        .unwrap();
     neuron
         .configure(
             &from,
@@ -3944,7 +3996,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
 
     // Make sure the neuron was created with the right details.
     assert_eq!(
-        gov.neuron_store.heap_neurons.get(&id.id).unwrap(),
+        gov.neuron_store.heap_neurons().get(&id.id).unwrap(),
         &Neuron {
             id: Some(id),
             account: to_subaccount.to_vec(),
@@ -3959,7 +4011,7 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     );
     assert_eq!(gov.get_neuron_ids_by_principal(&from), vec![id]);
 
-    let neuron = gov.neuron_store.heap_neurons.get_mut(&id.id).unwrap();
+    let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
 
     // Dissolve the neuron if `dissolved` is true
     if dissolved {
@@ -4121,7 +4173,7 @@ fn test_nns1_520() {
 
     assert_eq!(
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&id.id)
             .unwrap()
             .cached_neuron_stake_e8s,
@@ -4732,7 +4784,7 @@ fn test_cant_disburse_without_paying_fees() {
     assert_eq!(
         0,
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&id.id)
             .unwrap()
             .neuron_fees_e8s
@@ -4825,7 +4877,7 @@ fn test_neuron_split_fails() {
         nonce,
     );
 
-    let neuron = gov.neuron_store.heap_neurons.get_mut(&id.id).unwrap();
+    let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
     let transaction_fee = gov
         .heap_data
         .economics
@@ -4918,7 +4970,7 @@ fn test_neuron_split_fails() {
     // Parent neuron did not change
     assert_eq!(*gov.get_neuron(&id).unwrap(), neuron_before);
     // There is still only one neuron
-    assert_eq!(gov.neuron_store.heap_neurons.len(), 1);
+    assert_eq!(gov.neuron_store.heap_neurons().len(), 1);
     //  There is still only one ledger account.
     driver.assert_num_neuron_accounts_exist(1);
 }
@@ -4941,7 +4993,7 @@ fn test_neuron_split() {
         nonce,
     );
 
-    let neuron = gov.neuron_store.heap_neurons.get_mut(&id.id).unwrap();
+    let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
     let transaction_fee = gov
         .heap_data
         .economics
@@ -4967,7 +5019,7 @@ fn test_neuron_split() {
         .unwrap();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons.len(), 2);
+    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
     // And we should have two ledger accounts.
     driver.assert_num_neuron_accounts_exist(2);
 
@@ -5113,7 +5165,7 @@ fn test_neuron_spawn() {
         .unwrap();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons.len(), 2);
+    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
     // .. but only one ledger account since the neuron's maturity hasn't been minted yet.
     driver.assert_num_neuron_accounts_exist(1);
 
@@ -5293,7 +5345,7 @@ fn test_neuron_spawn_with_subaccount() {
     let creation_timestamp = driver.now();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons.len(), 2);
+    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
     // And we should have one ledger accounts.
     driver.assert_num_neuron_accounts_exist(1);
 
@@ -5448,7 +5500,7 @@ fn assert_neuron_spawn_partial(
     let creation_timestamp = driver.now();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons.len(), 2);
+    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
     // And we should have 1 ledger accounts.
     driver.assert_num_neuron_accounts_exist(1);
 
@@ -5573,7 +5625,7 @@ fn test_staked_maturity() {
     );
 
     {
-        let neuron = gov.neuron_store.heap_neurons.get_mut(&id.id).unwrap();
+        let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
         assert_eq!(neuron.maturity_e8s_equivalent, 0);
         assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
 
@@ -5626,7 +5678,7 @@ fn test_staked_maturity() {
 
     let neuron = gov
         .neuron_store
-        .heap_neurons
+        .heap_neurons_mut()
         .get_mut(&id.id)
         .unwrap()
         .clone();
@@ -5665,7 +5717,7 @@ fn test_staked_maturity() {
 
     // Nowset the neuron to dissolve and advance time
     {
-        let neuron = gov.neuron_store.heap_neurons.get_mut(&id.id).unwrap();
+        let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
         assert_eq!(neuron.maturity_e8s_equivalent, 0);
         assert_eq!(
             neuron.staked_maturity_e8s_equivalent,
@@ -5688,7 +5740,7 @@ fn test_staked_maturity() {
     gov.run_periodic_tasks().now_or_never();
 
     // All the maturity should now be regular maturity
-    let neuron = gov.neuron_store.heap_neurons.get_mut(&id.id).unwrap();
+    let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
     assert_eq!(neuron.maturity_e8s_equivalent, 54719555847781u64);
     assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
 }
@@ -5711,7 +5763,7 @@ fn test_disburse_to_neuron() {
         nonce,
     );
 
-    let parent_neuron = gov.neuron_store.heap_neurons.get_mut(&id.id).unwrap();
+    let parent_neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
     let transaction_fee = gov
         .heap_data
         .economics
@@ -5773,7 +5825,7 @@ fn test_disburse_to_neuron() {
         .unwrap();
 
     // We should now have 2 neurons.
-    assert_eq!(gov.neuron_store.heap_neurons.len(), 2);
+    assert_eq!(gov.neuron_store.heap_neurons().len(), 2);
     // And we should have two ledger accounts.
     driver.assert_num_neuron_accounts_exist(2);
 
@@ -5849,7 +5901,7 @@ fn governance_with_neurons(neurons: &[Neuron]) -> (fake::FakeDriver, Governance)
         driver.get_fake_ledger(),
         driver.get_fake_cmc(),
     );
-    assert_eq!(gov.neuron_store.heap_neurons.len(), 3);
+    assert_eq!(gov.neuron_store.heap_neurons().len(), 3);
     (driver, gov)
 }
 
@@ -6375,7 +6427,7 @@ fn test_manage_and_reward_node_providers() {
     // Find the neuron...
     let (_, neuron) = gov
         .neuron_store
-        .heap_neurons
+        .heap_neurons()
         .iter()
         .find(|(_, x)| x.controller == Some(np_pid))
         .unwrap();
@@ -6685,7 +6737,7 @@ fn test_manage_and_reward_multiple_node_providers() {
     // Find the neuron...
     let (_, neuron) = gov
         .neuron_store
-        .heap_neurons
+        .heap_neurons()
         .iter()
         .find(|(_, x)| x.controller == Some(np_pid_2))
         .unwrap();
@@ -9475,7 +9527,7 @@ fn test_join_community_fund() {
         assert_eq!(
             60 * 60 * 24 * 30,
             gov.neuron_store
-                .heap_neurons
+                .heap_neurons()
                 .get(&3)
                 .unwrap()
                 .joined_community_fund_timestamp_seconds
@@ -9523,7 +9575,7 @@ fn test_join_community_fund() {
         assert_eq!(
             60 * 60 * 24 * 32,
             gov.neuron_store
-                .heap_neurons
+                .heap_neurons()
                 .get(&1)
                 .unwrap()
                 .joined_community_fund_timestamp_seconds
@@ -9617,7 +9669,7 @@ fn test_join_community_fund() {
     assert_eq!(
         0,
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .get(&2)
             .unwrap()
             .joined_community_fund_timestamp_seconds
@@ -11376,7 +11428,7 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
 
     // Step 3.3: Assert that neurons were restored. In particular, their
     // maturity is back to what it was originally.
-    let mut observed_neurons = gov.neuron_store.heap_neurons.clone();
+    let mut observed_neurons = gov.neuron_store.heap_neurons().clone();
     // Clear recent ballots. This is an expected difference when compared with
     // the original ID -> neuron map.
     observed_neurons
@@ -12356,7 +12408,7 @@ async fn distribute_rewards_load_test() {
     );
 
     // Step 3.1: Inspect neurons to make sure they have been rewarded for voting.
-    for (_, neuron) in governance.neuron_store.heap_neurons {
+    for neuron in governance.neuron_store.heap_neurons().values() {
         assert_ne!(
             neuron.maturity_e8s_equivalent, maturity_e8s_equivalent,
             "neuron: {:#?}",
@@ -13005,7 +13057,7 @@ fn test_maybe_reset_aging_timestamps() {
 
     assert_eq!(
         gov.neuron_store
-            .heap_neurons
+            .heap_neurons()
             .iter()
             .map(|(id, neuron)| (*id, neuron.aging_since_timestamp_seconds))
             .collect::<HashMap<u64, u64>>(),
