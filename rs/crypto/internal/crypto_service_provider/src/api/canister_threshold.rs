@@ -106,7 +106,6 @@ pub trait CspIDkgProtocol {
     /// Generated public key.
     ///
     /// # Errors
-    /// * [`CspCreateMEGaKeyError::FailedKeyGeneration`] if key generation failed.
     /// * [`CspCreateMEGaKeyError::SerializationError`] if serialization of public or private key
     ///   before storing it in their respective key store failed.
     /// * [`CspCreateMEGaKeyError::TransientInternalError`] if there is a

@@ -43,7 +43,7 @@ impl ProtocolSetup {
 
         for _i in 0..receivers {
             let k = MEGaPrivateKey::generate(curve, &mut rng);
-            pk.push(k.public_key()?);
+            pk.push(k.public_key());
             sk.push(k);
         }
 
@@ -320,7 +320,7 @@ impl ProtocolRound {
 
                 let coefficients = LagrangeCoefficients::at_zero(curve_type, &indexes)?;
                 let dlog = coefficients.interpolate_scalar(&g_openings)?;
-                let pt = EccPoint::mul_by_g(&dlog)?;
+                let pt = EccPoint::mul_by_g(&dlog);
                 assert_eq!(pt, constant_term);
             }
 

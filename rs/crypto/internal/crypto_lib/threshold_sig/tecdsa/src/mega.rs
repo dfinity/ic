@@ -95,8 +95,8 @@ impl MEGaPrivateKey {
         self.secret.curve_type()
     }
 
-    pub fn public_key(&self) -> ThresholdEcdsaResult<MEGaPublicKey> {
-        Ok(MEGaPublicKey::new(EccPoint::mul_by_g(&self.secret)?))
+    pub fn public_key(&self) -> MEGaPublicKey {
+        MEGaPublicKey::new(EccPoint::mul_by_g(&self.secret))
     }
 
     pub fn generate<R: RngCore + CryptoRng>(curve: EccCurveType, rng: &mut R) -> Self {
@@ -474,7 +474,7 @@ fn compute_eph_key_and_pop(
     dealer_index: NodeIndex,
 ) -> ThresholdEcdsaResult<(EccScalar, EccPoint, EccPoint, zk::ProofOfDLogEquivalence)> {
     let beta = EccScalar::from_seed(curve_type, seed.derive(ctype.ephemeral_key_domain_sep()));
-    let v = EccPoint::mul_by_g(&beta)?;
+    let v = EccPoint::mul_by_g(&beta);
 
     let pop_base = compute_pop_base(ctype, curve_type, associated_data, dealer_index, &v)?;
     let pop_public_key = pop_base.scalar_mul(&beta)?;

@@ -10,14 +10,10 @@ fn should_fail_if_commitment_check_opening_fails() {
     let mut rng = reproducible_rng();
 
     let sk0 = MEGaPrivateKey::generate(curve, &mut rng);
-    let pk0 = sk0
-        .public_key()
-        .expect("should produce public key from secret key");
+    let pk0 = sk0.public_key();
 
     let sk1 = MEGaPrivateKey::generate(curve, &mut rng);
-    let pk1 = sk1
-        .public_key()
-        .expect("should produce public key from secret key");
+    let pk1 = sk1.public_key();
 
     let dealer_index = 0;
     let receiver_index = 1;

@@ -12,16 +12,14 @@ fn create_random_dealing(
     let associated_data = vec![1, 2, 3];
     let dealer_index = 0;
 
+    let mut public_keys = Vec::with_capacity(recipients);
     let mut private_keys = Vec::with_capacity(recipients);
 
     for _i in 0..recipients {
-        private_keys.push(MEGaPrivateKey::generate(curve, &mut rng));
+        let sk = MEGaPrivateKey::generate(curve, &mut rng);
+        public_keys.push(sk.public_key());
+        private_keys.push(sk);
     }
-
-    let public_keys = private_keys
-        .iter()
-        .map(|k| k.public_key())
-        .collect::<Result<Vec<_>, _>>()?;
 
     let shares = SecretShares::Random;
 
