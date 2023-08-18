@@ -28,8 +28,7 @@ type AllPublicKeys = BTreeMap<(NodeId, KeyPurpose), PublicKey>;
 // All TLS certificates found for the nodes in the registry.
 type AllTlsCertificates = BTreeMap<NodeId, X509PublicKeyCert>;
 
-// Functions `check_node_crypto_keys_invariants` and `check_node_crypto_keys_soft_invariants`
-// check node invariants related to crypto keys:
+// Function `check_node_crypto_keys_invariants` checks node invariants related to crypto keys:
 //  * every node has the required public keys, i.e.:
 //     - node signing public key
 //     - committee signing public key
@@ -48,14 +47,18 @@ type AllTlsCertificates = BTreeMap<NodeId, X509PublicKeyCert>;
 // checks are expensive in terms of computation (about 200 times more expensive then just parsing,
 // 400M instructions per node vs. 2M instructions), so for the mainnet state with 1K+ nodes
 // the full validation would go over the instruction limit per message.
-//
-// The "soft invariants" log the results of the checks, and report an error if one occurs,
-// but are meant as a non-blocking check, whose result is ignored by the caller.
-// The corresponding checks will eventually migrate to the regular, blocking version.
-pub(crate) fn check_node_crypto_keys_soft_invariants(
+pub(crate) fn check_node_crypto_keys_invariants(
     snapshot: &RegistrySnapshot,
 ) -> Result<(), InvariantCheckError> {
-    println!("{}crypto_soft_invariants_check_start", LOG_PREFIX);
+    check_node_crypto_keys_exist_and_are_unique(snapshot)?;
+    check_no_orphaned_node_crypto_records(snapshot)?;
+    check_ecdsa_signing_subnet_lists(snapshot)
+}
+
+fn check_node_crypto_keys_exist_and_are_unique(
+    snapshot: &RegistrySnapshot,
+) -> Result<(), InvariantCheckError> {
+    println!("{}node_crypto_keys_invariants_check_start", LOG_PREFIX);
     let nodes = get_node_records_from_snapshot(snapshot);
     let (pks, certs) = get_all_nodes_public_keys_and_certs(snapshot)?;
 
@@ -80,23 +83,15 @@ pub(crate) fn check_node_crypto_keys_soft_invariants(
 
     let result = maybe_error.unwrap_or(Ok(()));
     let label = if result.is_ok() {
-        "crypto_soft_invariants_check_success"
+        "node_crypto_keys_invariants_check_success"
     } else {
-        "crypto_soft_invariants_check_failure"
+        "node_crypto_keys_invariants_check_failure"
     };
     println!(
         "{}{}: # of ok nodes: {}, # of bad nodes: {}, result: {:?}",
         LOG_PREFIX, label, ok_node_count, bad_node_count, result
     );
     result
-}
-
-// See documentation of `check_node_crypto_keys_soft_invariants` above.
-pub(crate) fn check_node_crypto_keys_invariants(
-    snapshot: &RegistrySnapshot,
-) -> Result<(), InvariantCheckError> {
-    check_no_orphaned_node_crypto_records(snapshot)?;
-    check_ecdsa_signing_subnet_lists(snapshot)
 }
 
 fn node_has_all_keys_and_cert_and_valid_node_id(
@@ -421,7 +416,6 @@ mod tests {
         insert_node_crypto_keys(&node_id_1, node_pks_1, &mut snapshot);
         insert_node_crypto_keys(&node_id_2, node_pks_2, &mut snapshot);
         assert!(check_node_crypto_keys_invariants(&snapshot).is_ok());
-        assert!(check_node_crypto_keys_soft_invariants(&snapshot).is_ok());
     }
 
     // TODO(CRP-1450): add tests for "missing" "invalid", and "duplicated" scenarios, so that
@@ -443,7 +437,7 @@ mod tests {
             ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, incomplete_node_public_keys, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
+        let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains(&node_id_2.to_string()));
@@ -468,7 +462,7 @@ mod tests {
             ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, incomplete_node_public_keys, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
+        let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains(&node_id_2.to_string()));
@@ -493,7 +487,7 @@ mod tests {
             ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, incomplete_node_public_keys, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
+        let result = check_node_crypto_keys_invariants(&snapshot);
 
         assert_matches!(result,
                     Err(InvariantCheckError{msg: error_message, source: _})
@@ -517,7 +511,7 @@ mod tests {
             ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, incomplete_node_public_keys, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
+        let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains(&node_id_2.to_string()));
@@ -541,7 +535,7 @@ mod tests {
             ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, duplicated_key_node_pks, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
+        let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains(&node_id_1.to_string()));
@@ -566,7 +560,7 @@ mod tests {
             ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, duplicated_key_node_pks, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
+        let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains(&node_id_1.to_string()));
@@ -591,7 +585,7 @@ mod tests {
             ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, duplicated_cert_node_pks, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
+        let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains(&node_id_1.to_string()));
@@ -617,7 +611,7 @@ mod tests {
             ..node_pks_2
         };
         insert_node_crypto_keys(&node_id_2, inconsistent_signing_key_node_pks, &mut snapshot);
-        let result = check_node_crypto_keys_soft_invariants(&snapshot);
+        let result = check_node_crypto_keys_invariants(&snapshot);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains(&node_id_2.to_string()));
