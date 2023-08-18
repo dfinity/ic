@@ -21,7 +21,7 @@ impl From<(&Parts, Vec<u8>)> for HttpRequest {
             .iter()
             .filter_map(|(name, value)| Some((name.as_str().into(), value.to_str().ok()?.into())))
             .inspect(|(name, value)| {
-                trace!("<< {}: {}", name, value);
+                trace!("<< {name}: {value}");
             })
             .collect::<Vec<(String, String)>>();
 
