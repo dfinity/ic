@@ -62,13 +62,27 @@ impl RequestInPrep {
         on_reject: WasmClosure,
         max_size_remote_subnet: NumBytes,
         multiplier_max_size_local_subnet: u64,
+        max_sum_exported_function_name_lengths: usize,
     ) -> HypervisorResult<Self> {
         let method_name = {
+            // Check the conditions for method_name length separately to provide
+            // a more specific error message instead of combining both based on
+            // the minimum of the limits.
+
+            // method_name checked against sum of exported function names.
+            if method_name_len as usize > max_sum_exported_function_name_lengths {
+                return Err(HypervisorError::ContractViolation(format!(
+                    "Size of method_name {} exceeds the allowed sum of exported function name lengths {}",
+                    method_name_len, max_sum_exported_function_name_lengths
+                )));
+            }
+
+            // method_name checked against payload on the call.
             let max_size_local_subnet = max_size_remote_subnet * multiplier_max_size_local_subnet;
             if method_name_len as u64 > max_size_local_subnet.get() {
                 return Err(HypervisorError::ContractViolation(format!(
                     "Size of method_name {} exceeds the allowed limit local-subnet {}",
-                    callee_size, max_size_local_subnet
+                    method_name_len, max_size_local_subnet
                 )));
             }
             let method_name = valid_subslice(
