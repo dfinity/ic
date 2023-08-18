@@ -32,7 +32,7 @@ pub async fn finalize_committed_swap_and_check_success(
 
     info!(log, "Waiting for the swap to be finalized");
 
-    wait_for_swap_to_finalize(&env, Duration::from_secs(120)).await;
+    wait_for_swap_to_finalize(&env, Duration::from_secs(200)).await;
 
     sns_client
         .assert_state(&env, Lifecycle::Committed, Mode::Normal)
@@ -119,7 +119,7 @@ pub async fn finalize_aborted_swap_and_check_success(
 
     info!(log, "Waiting for the swap to be finalized");
 
-    wait_for_swap_to_finalize(&env, Duration::from_secs(120)).await;
+    wait_for_swap_to_finalize(&env, Duration::from_secs(200)).await;
 
     sns_client
         .assert_state(&env, Lifecycle::Aborted, Mode::PreInitializationSwap)
@@ -187,6 +187,33 @@ async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
 
     let start_time = std::time::SystemTime::now();
 
+    let GetLifecycleResponse {
+        lifecycle,
+        decentralization_sale_open_timestamp_seconds: _,
+    } = {
+        let request = sns_request_provider.get_lifecycle(CallMode::Update);
+        canister_agent
+            .call_and_parse(&request)
+            .await
+            .result()
+            .unwrap()
+    };
+    let lifecycle = lifecycle.and_then(Lifecycle::from_i32).unwrap();
+    if !lifecycle.is_terminal() {
+        let derived_swap_state = {
+            let request = sns_request_provider.get_derived_swap_state(CallMode::Query);
+            canister_agent
+                .call_and_parse(&request)
+                .await
+                .result()
+                .unwrap()
+        };
+        panic!(
+            "The swap must be in a terminal state to finalize, was {:?}. Swap state: {:?}",
+            lifecycle, derived_swap_state
+        );
+    }
+
     loop {
         let time_spend_waiting = std::time::SystemTime::now()
             .duration_since(start_time)
@@ -194,24 +221,6 @@ async fn wait_for_swap_to_finalize(env: &TestEnv, max_duration: Duration) {
         if time_spend_waiting > max_duration {
             panic!("The swap did not finalize within {:?}!", max_duration);
         }
-
-        let GetLifecycleResponse {
-            lifecycle,
-            decentralization_sale_open_timestamp_seconds: _,
-        } = {
-            let request = sns_request_provider.get_lifecycle(CallMode::Update);
-            canister_agent
-                .call_and_parse(&request)
-                .await
-                .result()
-                .unwrap()
-        };
-        let lifecycle = lifecycle.and_then(Lifecycle::from_i32).unwrap();
-        assert!(
-            lifecycle.is_terminal(),
-            "The swap must be in a terminal state to finalize, was {:?}",
-            lifecycle
-        );
 
         let auto_finalization_status = {
             let request = sns_request_provider.get_auto_finalization_status(CallMode::Update);

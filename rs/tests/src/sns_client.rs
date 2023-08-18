@@ -377,6 +377,35 @@ pub fn openchat_create_service_nervous_system_proposal() -> CreateServiceNervous
     }
 }
 
+/// A reasonable starting point for create_service_nervous_system proposals,
+/// based on the openchat SNS parameters.
+pub fn test_create_service_nervous_system_proposal(
+    min_participants: u64,
+) -> CreateServiceNervousSystem {
+    let openchat_parameters = openchat_create_service_nervous_system_proposal();
+    CreateServiceNervousSystem {
+        swap_parameters: Some(
+            ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
+                minimum_participants: Some(min_participants),
+                minimum_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S)),
+                maximum_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S)),
+                minimum_participant_icp: Some(Tokens::from_e8s(
+                    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+                )),
+                maximum_participant_icp: Some(Tokens::from_e8s(
+                    SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
+                )),
+                ..openchat_parameters
+                    .swap_parameters
+                    .as_ref()
+                    .unwrap()
+                    .clone()
+            },
+        ),
+        ..openchat_parameters
+    }
+}
+
 /// Send and execute 6 proposals to add all SNS canister WASMs to the SNS WASM canister
 pub fn add_all_wasms_to_sns_wasm(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
     let logger = env.logger();

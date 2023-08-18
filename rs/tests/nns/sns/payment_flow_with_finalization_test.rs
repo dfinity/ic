@@ -1,22 +1,18 @@
 use anyhow::Result;
 use ic_nervous_system_common::i2d;
-use ic_nervous_system_proto::pb::v1::Tokens;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
-use ic_nns_governance::pb::v1::Neuron;
 use ic_sns_swap::pb::v1::GetDerivedStateResponse;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
 use ic_tests::nns_tests::neurons_fund;
+use ic_tests::nns_tests::neurons_fund::NnsNfNeuron;
 use ic_tests::nns_tests::sns_deployment;
 use ic_tests::nns_tests::{
     sns_deployment::{generate_ticket_participants_workload, initiate_token_swap},
     swap_finalization::finalize_committed_swap_and_check_success,
 };
-use ic_tests::sns_client::{
-    openchat_create_service_nervous_system_proposal, SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
-    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
-};
+use ic_tests::sns_client::test_create_service_nervous_system_proposal;
 use ic_tests::systest;
 use ic_tests::util::block_on;
 use rust_decimal::prelude::ToPrimitive;
@@ -28,31 +24,10 @@ fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
     // load test that uses a high value for MIN_PARTICIPANTS, but 4 is high enough
     // to still discover many potential problems.
     const MIN_PARTICIPANTS: u64 = 4;
-    let openchat_parameters = openchat_create_service_nervous_system_proposal();
-    CreateServiceNervousSystem {
-        swap_parameters: Some(
-            ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
-                minimum_participants: Some(MIN_PARTICIPANTS),
-                minimum_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S)),
-                maximum_icp: Some(Tokens::from_e8s(SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S)),
-                minimum_participant_icp: Some(Tokens::from_e8s(
-                    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
-                )),
-                maximum_participant_icp: Some(Tokens::from_e8s(
-                    SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
-                )),
-                ..openchat_parameters
-                    .swap_parameters
-                    .as_ref()
-                    .unwrap()
-                    .clone()
-            },
-        ),
-        ..openchat_parameters
-    }
+    test_create_service_nervous_system_proposal(MIN_PARTICIPANTS)
 }
 
-fn nns_cf_neuron() -> Neuron {
+fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
     let cf_contribution = create_service_nervous_system_proposal()
         .swap_parameters
         .unwrap()
@@ -61,14 +36,14 @@ fn nns_cf_neuron() -> Neuron {
         .e8s
         .unwrap();
 
-    neurons_fund::initial_nns_neuron(cf_contribution * 100).neuron
+    neurons_fund::initial_nns_neurons(cf_contribution * 100, 1)
 }
 
 fn sns_setup_legacy(env: TestEnv) {
     sns_deployment::setup_legacy(
         env,
         vec![],
-        vec![nns_cf_neuron()],
+        nns_nf_neurons(),
         create_service_nervous_system_proposal(),
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         true,
@@ -142,8 +117,8 @@ fn finalize_swap(env: TestEnv) {
 
     let expected_derived_swap_state = GetDerivedStateResponse {
         direct_participant_count: swap_params.minimum_participants,
-        cf_participant_count: Some(1),
-        cf_neuron_count: Some(1),
+        cf_participant_count: Some(nns_nf_neurons().len() as u64),
+        cf_neuron_count: Some(nns_nf_neurons().len() as u64),
         buyer_total_icp_e8s: swap_params.maximum_icp.unwrap().e8s,
         sns_tokens_per_icp: Some(sns_tokens_per_icp),
     };

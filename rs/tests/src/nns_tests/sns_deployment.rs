@@ -4,6 +4,7 @@ use std::time::Duration;
 use std::time::Instant;
 
 use crate::canister_agent::{CanisterAgent, HasCanisterAgentCapability};
+use crate::canister_api::NnsRequestProvider;
 use crate::canister_api::{
     CallMode, CanisterHttpRequestProvider, Icrc1RequestProvider, Icrc1TransferRequest,
     NnsDappRequestProvider, Request, Response, SnsRequestProvider,
@@ -65,8 +66,8 @@ use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPA
 use ic_nns_constants::{LEDGER_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 
-use super::neurons_fund::get_current_nns_neuron_info;
-use super::sns_aggregator::AggregatorClient;
+use crate::nns_tests::neurons_fund::NnsNfNeuron;
+use crate::nns_tests::sns_aggregator::AggregatorClient;
 
 const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
 
@@ -294,14 +295,21 @@ pub fn setup_with_oc_parameters_legacy(
 pub fn setup(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
-    neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
+    nf_neurons: Vec<NnsNfNeuron>,
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
     setup_ic(&env, fast_test_setup);
 
-    install_nns(&env, canister_wasm_strategy, sale_participants, neurons);
+    install_nns(
+        &env,
+        canister_wasm_strategy,
+        sale_participants,
+        nf_neurons.clone(),
+    );
+    let nns_request_provider = NnsRequestProvider::default();
+    let nns_node = env.get_first_healthy_system_node_snapshot();
 
     // get the first application node from the second subnet, which should be the dapp subnet
     let dapp_node = env.get_first_healthy_node_snapshot_from_nth_subnet_where(
@@ -319,7 +327,18 @@ pub fn setup(
         ..create_service_nervous_system_proposal
     };
 
-    let starting_nf_neuron_info = block_on(get_current_nns_neuron_info(&env)).unwrap();
+    let starting_nf_neuron_maturity = {
+        let mut neurons = Vec::new();
+        for neuron in nf_neurons.iter() {
+            let updated_neuron =
+                block_on(neuron.get_current_info(&nns_node, &nns_request_provider)).unwrap();
+            neurons.push(updated_neuron);
+        }
+        neurons
+            .iter()
+            .map(|n| n.maturity_e8s_equivalent)
+            .sum::<u64>()
+    };
 
     // Install the SNS with an "OC-ish" CreateServiceNervousSystem proposal
     install_sns(
@@ -328,10 +347,8 @@ pub fn setup(
         create_service_nervous_system_proposal.clone(),
     );
 
-    let post_sns_creation_nf_neuron_info = block_on(get_current_nns_neuron_info(&env)).unwrap();
-
     // Assert that the NF NNS neuron's maturity has decreased by the same amount
-    // as the neuron fund's investment in the SNS.
+    // as the neurons' fund's investment in the SNS.
     let neurons_fund_investment_icp = create_service_nervous_system_proposal
         .swap_parameters
         .unwrap()
@@ -339,11 +356,22 @@ pub fn setup(
         .unwrap()
         .e8s
         .unwrap();
+    let final_nf_neuron_maturity = {
+        let mut neurons = Vec::new();
+        for neuron in nf_neurons.iter() {
+            let updated_neuron =
+                block_on(neuron.get_current_info(&nns_node, &nns_request_provider)).unwrap();
+            neurons.push(updated_neuron);
+        }
+        neurons
+            .iter()
+            .map(|n| n.maturity_e8s_equivalent)
+            .sum::<u64>()
+    };
     assert_eq!(
-        starting_nf_neuron_info.maturity_e8s_equivalent
-            - post_sns_creation_nf_neuron_info.maturity_e8s_equivalent,
+        starting_nf_neuron_maturity - final_nf_neuron_maturity,
         neurons_fund_investment_icp,
-        "NNS neuron ID did not increase after SNS creation"
+        "NF maturity did not decrease after SNS creation"
     );
 
     block_on(dapp_canister.check_exclusively_owned_by_sns_root(&env));
@@ -353,7 +381,7 @@ pub fn setup(
 pub fn setup_legacy(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
-    neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
+    neurons: Vec<NnsNfNeuron>, // NNS Neurons to add in addition to the "test" neurons
     create_service_nervous_system_proposal: CreateServiceNervousSystem,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
@@ -599,7 +627,7 @@ pub fn install_nns(
     env: &TestEnv,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     sale_participants: Vec<SaleParticipant>,
-    neurons: Vec<ic_nns_governance::pb::v1::Neuron>,
+    neurons: Vec<NnsNfNeuron>,
 ) {
     let log = env.logger();
     let start_time = Instant::now();
@@ -620,7 +648,12 @@ pub fn install_nns(
     };
     let nns_customizations = NnsCustomizations {
         ledger_balances: Some(ledger_balances),
-        neurons: Some(neurons),
+        neurons: Some(
+            neurons
+                .into_iter()
+                .map(|nns_nf_neuron| nns_nf_neuron.neuron)
+                .collect(),
+        ),
         install_at_ids: false,
     };
 

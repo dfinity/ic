@@ -1,5 +1,6 @@
 use anyhow::Result;
 use ic_nervous_system_common::i2d;
+use ic_nervous_system_proto::pb::v1::Tokens;
 use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_sns_swap::pb::v1::GetDerivedStateResponse;
 use ic_tests::driver::group::SystemTestGroup;
@@ -17,13 +18,39 @@ use ic_tests::util::block_on;
 use rust_decimal::prelude::ToPrimitive;
 use std::time::Duration;
 
+// At the time of this writing, the empirically-determined maximum is that 2,084
+// neurons' fund neurons can be sent in the init payload to the Swap canister,
+// along with its other init field and gzipped wasm. If this limit is exceeded,
+// SNS deployment will fail, with an error along the lines of:
+// ```
+// Failed to install WASM on canister 53zcu-tiaaa-aaaaa-qaaba-cai: error code 5: Canister qaa6y-5yaaa-aaaaa-aaafa-cai violated contract: attempted to send a message of size 2097171 exceeding the limit 2097152
+// ```
+// This test guarantees that no code change reduce the maximum to below 1,500.
+// If there are above 1,000 NF neurons in production, that means we are in the
+// "danger zone" and should modify the SNS to be robust to many more NF neurons.
+const NEURONS_FUND_NUM_PARTICIPANTS: u64 = 1500;
+
 fn create_service_nervous_system_proposal() -> CreateServiceNervousSystem {
-    // The higher the value for MIN_PARTICIPANTS, the longer the test will take.
-    // But lower values are less realistic. In the long term, we should have a
-    // load test that uses a high value for MIN_PARTICIPANTS, but 4 is high enough
-    // to still discover many potential problems.
     const MIN_PARTICIPANTS: u64 = 4;
-    test_create_service_nervous_system_proposal(MIN_PARTICIPANTS)
+    let test_parameters = test_create_service_nervous_system_proposal(MIN_PARTICIPANTS);
+    let test_swap_parameters = test_parameters.swap_parameters.as_ref().unwrap().clone();
+    CreateServiceNervousSystem {
+        swap_parameters: Some(
+            ic_nns_governance::pb::v1::create_service_nervous_system::SwapParameters {
+                neurons_fund_investment_icp: Some(Tokens::from_e8s(
+                    NEURONS_FUND_NUM_PARTICIPANTS
+                        * test_swap_parameters
+                            .minimum_participant_icp
+                            .as_ref()
+                            .unwrap()
+                            .e8s
+                            .unwrap(),
+                )),
+                ..test_swap_parameters
+            },
+        ),
+        ..test_parameters
+    }
 }
 
 fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
@@ -35,7 +62,7 @@ fn nns_nf_neurons() -> Vec<NnsNfNeuron> {
         .e8s
         .unwrap();
 
-    neurons_fund::initial_nns_neurons(cf_contribution * 100, 1)
+    neurons_fund::initial_nns_neurons(cf_contribution, NEURONS_FUND_NUM_PARTICIPANTS)
 }
 
 fn sns_setup_with_one_proposal(env: TestEnv) {
@@ -131,7 +158,7 @@ fn finalize_swap(env: TestEnv) {
 /// one-proposal, so a load test will be added then.
 ///
 /// Runbook:
-/// 1. Install NNS (with N users, each with X ICP) and SNS
+/// 1. Install NNS (with N users, each with X ICP, and NEURONS_FUND_NUM_PARTICIPANTS NF neurons) and SNS
 ///     * N = NUM_SNS_SALE_PARTICIPANTS
 ///     * SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S <= X <= SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S
 /// 2. Initiate Token Swap
@@ -146,7 +173,8 @@ fn finalize_swap(env: TestEnv) {
 /// swap has already closed.
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_overall_timeout(Duration::from_secs(15 * 60)) // 15 min
+        .with_overall_timeout(Duration::from_secs(150 * 60)) // 15 min
+        .with_timeout_per_test(Duration::from_secs(600 * 60)) // 5 min
         .with_setup(sns_setup_with_one_proposal)
         .add_test(systest!(wait_for_swap_to_start))
         .add_test(systest!(
