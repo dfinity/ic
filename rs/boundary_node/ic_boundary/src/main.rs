@@ -22,7 +22,7 @@ use axum::{
     Extension, Router,
 };
 use axum_server::{accept::DefaultAcceptor, Server};
-use clap::Parser;
+use clap::{Args, Parser};
 use configuration::{Configure, ServiceConfiguration};
 use futures::TryFutureExt;
 use http::{header::HeaderName, Request, Response};
@@ -60,6 +60,7 @@ use url::Url;
 use crate::{
     acme::Acme,
     check::{Checker, Runner as CheckRunner},
+    cli::Cli,
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
     metrics::{MetricParams, WithMetrics},
     nns::Loader,
@@ -72,6 +73,7 @@ use crate::tls::{CustomAcceptor, Provisioner, TokenSetter, WithLoad, WithStore};
 
 mod acme;
 mod check;
+mod cli;
 mod configuration;
 mod firewall;
 mod metrics;
@@ -82,101 +84,12 @@ mod snapshot;
 #[cfg(feature = "tls")]
 mod tls;
 
-const SERVICE_NAME: &str = "ic-boundary";
+pub const SERVICE_NAME: &str = "ic-boundary";
+pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
 
 const SECOND: Duration = Duration::from_secs(1);
 const MINUTE: Duration = Duration::from_secs(60);
 const DAY: Duration = Duration::from_secs(24 * 3600);
-
-#[derive(Parser)]
-#[clap(name = SERVICE_NAME)]
-#[clap(author = "Boundary Node Team <boundary-nodes@dfinity.org>")]
-struct Cli {
-    /// Comma separated list of NNS URLs to bootstrap the registry
-    #[clap(long, value_delimiter = ',', default_value = "https://ic0.app")]
-    pub nns_urls: Vec<Url>,
-
-    /// The path to the NNS public key file
-    #[clap(long)]
-    pub nns_pub_key_pem: PathBuf,
-
-    /// The delay between NNS polls in milliseconds
-    #[clap(long, default_value = "5000")]
-    pub nns_poll_interval_ms: u64,
-
-    /// The registry local store path to be populated
-    #[clap(long)]
-    pub local_store_path: PathBuf,
-
-    // Port to listen for HTTP
-    #[clap(long, default_value = "80")]
-    http_port: u16,
-
-    // Port to listen for HTTPS
-    #[cfg(feature = "tls")]
-    #[clap(long, default_value = "443")]
-    https_port: u16,
-
-    // Timeout for the whole HTTP request in seconds
-    #[clap(long, default_value = "4")]
-    http_timeout: u64,
-
-    // Timeout for the HTTP connect phase in seconds
-    #[clap(long, default_value = "2")]
-    http_timeout_connect: u64,
-
-    // How frequently to run node checks in seconds
-    #[clap(long, default_value = "10")]
-    check_interval: u64,
-
-    // How many attempts to do when checking a node
-    #[clap(long, default_value = "3")]
-    check_retries: u32,
-
-    // How long to wait between retries in seconds
-    #[clap(long, default_value = "1")]
-    check_retry_interval: u64,
-
-    /// Minimum registry version snapshot to process
-    #[clap(long, default_value = "0")]
-    min_registry_version: u64,
-
-    /// Minimum required OK health checks
-    /// for a replica to be included in the routing table
-    #[clap(long, default_value = "1")]
-    min_ok_count: u8,
-
-    /// Maximum block height lag for a replica to be included in the routing table
-    #[clap(long, default_value = "1000")]
-    max_height_lag: u64,
-
-    /// The path to the nftables replica ruleset file to update
-    #[clap(long, default_value = "system_replicas.ruleset")]
-    nftables_system_replicas_path: PathBuf,
-
-    /// The name of the nftables variable to export
-    #[clap(long, default_value = "system_replica_ips")]
-    nftables_system_replicas_var: String,
-
-    /// The path to the ACME credentials file
-    #[cfg(feature = "tls")]
-    #[clap(long, default_value = "acme.json")]
-    acme_credentials_path: PathBuf,
-
-    /// The path to the ingress TLS cert
-    #[cfg(feature = "tls")]
-    #[clap(long, default_value = "cert.pem")]
-    tls_cert_path: PathBuf,
-
-    /// The path to the ingress TLS private-key
-    #[cfg(feature = "tls")]
-    #[clap(long, default_value = "pkey.pem")]
-    tls_pkey_path: PathBuf,
-
-    /// The socket used to export metrics.
-    #[clap(long, default_value = "127.0.0.1:9090")]
-    metrics_addr: SocketAddr,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -212,7 +125,7 @@ async fn main() -> Result<(), Error> {
 
     info!(
         msg = format!("Starting {SERVICE_NAME}"),
-        metrics_addr = cli.metrics_addr.to_string().as_str(),
+        metrics_addr = cli.monitoring.metrics_addr.to_string().as_str(),
     );
 
     let lookup_table = Arc::new(ArcSwapOption::empty());
@@ -232,8 +145,8 @@ async fn main() -> Result<(), Error> {
 
     let http_client = Arc::new(
         reqwest::Client::builder()
-            .timeout(Duration::from_secs(cli.http_timeout))
-            .connect_timeout(Duration::from_secs(cli.http_timeout_connect))
+            .timeout(Duration::from_secs(cli.listen.http_timeout))
+            .connect_timeout(Duration::from_secs(cli.listen.http_timeout_connect))
             .use_preconfigured_tls(rustls_config)
             .dns_resolver(Arc::new(dns_resolver))
             .build()
@@ -241,7 +154,7 @@ async fn main() -> Result<(), Error> {
     );
 
     // Registry Client
-    let local_store = Arc::new(LocalStoreImpl::new(&cli.local_store_path));
+    let local_store = Arc::new(LocalStoreImpl::new(&cli.registry.local_store_path));
 
     let registry_client = Arc::new(RegistryClientImpl::new(
         local_store.clone(), // data_provider
@@ -253,7 +166,7 @@ async fn main() -> Result<(), Error> {
         .context("failed to start registry client")?;
 
     let nns_pub_key =
-        ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&cli.nns_pub_key_pem)
+        ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(&cli.registry.nns_pub_key_pem)
             .context("failed to parse nns public key")?;
 
     // Registry Replicator
@@ -268,7 +181,7 @@ async fn main() -> Result<(), Error> {
             logger,
             local_store,
             registry_client.clone(), // registry_client
-            Duration::from_millis(cli.nns_poll_interval_ms), // poll_delay
+            Duration::from_millis(cli.registry.nns_poll_interval_ms), // poll_delay
         )
     };
 
@@ -358,7 +271,7 @@ async fn main() -> Result<(), Error> {
     let srvs_http = [Ipv4Addr::UNSPECIFIED.into(), Ipv6Addr::UNSPECIFIED.into()]
         .into_iter()
         .map(|ip| {
-            Server::bind(SocketAddr::new(ip, cli.http_port))
+            Server::bind(SocketAddr::new(ip, cli.listen.http_port))
                 .acceptor(DefaultAcceptor)
                 .serve(routers_http.clone().into_make_service()) // TODO change back to routers_http - for now routing http==https
         });
@@ -368,7 +281,7 @@ async fn main() -> Result<(), Error> {
     let srvs_https = [Ipv4Addr::UNSPECIFIED.into(), Ipv6Addr::UNSPECIFIED.into()]
         .into_iter()
         .map(|ip| {
-            Server::bind(SocketAddr::new(ip, cli.https_port))
+            Server::bind(SocketAddr::new(ip, cli.listen.https_port))
                 .acceptor(tls_acceptor.clone())
                 .serve(routers_https.clone().into_make_service())
         });
@@ -392,14 +305,14 @@ async fn main() -> Result<(), Error> {
     let checker = WithMetrics(checker, MetricParams::new(&meter, SERVICE_NAME, "check"));
     let checker = WithRetryLimited(
         checker,
-        cli.check_retries,
-        Duration::from_secs(cli.check_retry_interval),
+        cli.health.check_retries,
+        Duration::from_secs(cli.health.check_retry_interval),
     );
 
     let check_runner = CheckRunner::new(
         Arc::clone(&routing_table),
-        cli.min_ok_count,
-        cli.max_height_lag,
+        cli.health.min_ok_count,
+        cli.health.max_height_lag,
         persister,
         checker,
     );
@@ -409,7 +322,7 @@ async fn main() -> Result<(), Error> {
     );
     let check_runner = WithThrottle(
         check_runner,
-        ThrottleParams::new(Duration::from_secs(cli.check_interval)),
+        ThrottleParams::new(Duration::from_secs(cli.health.check_interval)),
     );
     let mut check_runner = check_runner;
 
@@ -422,14 +335,14 @@ async fn main() -> Result<(), Error> {
 
     TokioScope::scope_and_block(|s| {
         s.spawn(
-            axum::Server::bind(&cli.metrics_addr)
+            axum::Server::bind(&cli.monitoring.metrics_addr)
                 .serve(metrics_router.into_make_service())
                 .map_err(|err| anyhow!("server failed: {:?}", err)),
         );
 
         s.spawn(async move {
             registry_replicator
-                .start_polling(cli.nns_urls, Some(nns_pub_key))
+                .start_polling(cli.registry.nns_urls, Some(nns_pub_key))
                 .await
                 .context("failed to start registry replicator")?
                 .await
@@ -467,8 +380,8 @@ async fn prepare_tls(
 ) -> Result<(impl Configure, CustomAcceptor, Arc<RwLock<Option<String>>>), Error> {
     // TLS Certificates (Ingress)
     let tls_loader = tls::Loader {
-        cert_path: cli.tls_cert_path.clone(),
-        pkey_path: cli.tls_pkey_path.clone(),
+        cert_path: cli.tls.tls_cert_path.clone(),
+        pkey_path: cli.tls.tls_pkey_path.clone(),
     };
     let tls_loader = Arc::new(tls_loader);
 
@@ -482,9 +395,9 @@ async fn prepare_tls(
     );
 
     let acme_account = load_or_create_acme_account(
-        &cli.acme_credentials_path,    // path
-        LetsEncrypt::Production.url(), // acme_provider_url
-        Box::new(acme_http_client),    // http_client
+        &cli.tls.acme_credentials_path, // path
+        LetsEncrypt::Production.url(),  // acme_provider_url
+        Box::new(acme_http_client),     // http_client
     )
     .await
     .context("failed to load acme credentials")?;
