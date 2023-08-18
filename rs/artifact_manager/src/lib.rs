@@ -328,6 +328,8 @@ pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
     /// To send the process requests
     pub sender: Sender<UnvalidatedArtifact<Artifact::Message>>,
     /// Reference to the artifact client.
+    /// TODO: long term we can remove the 'ArtifactClient' and directly use
+    /// 'ValidatedPoolReader' and ' PriorityFnAndFilterProducer' traits.
     pub pool_reader: Box<dyn ArtifactClient<Artifact>>,
     pub time_source: Arc<dyn TimeSource>,
 }
