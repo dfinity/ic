@@ -2,7 +2,6 @@ use candid::Principal;
 use ic_agent::{Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
-use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
@@ -14,18 +13,24 @@ use rand_chacha::ChaChaRng;
 use crate::{
     canister_agent::HasCanisterAgentCapability,
     canister_api::{CallMode, NnsRequestProvider},
-    driver::{test_env::TestEnv, test_env_api::GetFirstHealthyNodeSnapshot},
 };
 
-/// Deterministically generates an NNS neuron that's joined the community fund (CF).
-/// As long as at least one neuron is in the CF, the CF will contribute to the SNS.
+/// Deterministically generates NNS neurons that have joined the Neurons' Fund (NF).
+/// As long as at least one neuron is in the NF, the NF will contribute to the SNS.
 ///
-/// This neuron is suitable to inject into the NNS at NNS creation time, to test
+/// These neurons are suitable to inject into the NNS at NNS creation time, to test
 /// that the NF works properly
-pub fn initial_nns_neuron(contribution: u64) -> NnsNfNeuron {
+pub fn initial_nns_neurons(maturity_e8s: u64, amount: u64) -> Vec<NnsNfNeuron> {
+    let mut rng = ChaChaRng::seed_from_u64(2000_u64);
+    (0..amount)
+        .map(|_| initial_nns_neuron(maturity_e8s, &mut rng))
+        .collect()
+}
+
+fn initial_nns_neuron(maturity_e8s: u64, rng: &mut ChaChaRng) -> NnsNfNeuron {
     const TWELVE_MONTHS_SECONDS: u64 = 12 * 30 * 24 * 60 * 60;
 
-    let (key_pair, principal, id, account) = nns_neuron_info();
+    let (key_pair, principal, id, account) = nns_neuron_info(rng);
 
     let id = Some(id);
 
@@ -33,12 +38,12 @@ pub fn initial_nns_neuron(contribution: u64) -> NnsNfNeuron {
         neuron: Neuron {
             id,
             account: account.into(),
-            maturity_e8s_equivalent: contribution,
-            cached_neuron_stake_e8s: E8,
+            maturity_e8s_equivalent: maturity_e8s,
+            cached_neuron_stake_e8s: 0,
             controller: Some(principal),
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
             not_for_profit: false,
-            // Join the community fund some time in the past.
+            // Join the neurons' fund some time in the past.
             // (It's unclear what the semantics should be if the neuron joins in the
             // future.)
             joined_community_fund_timestamp_seconds: Some(1000),
@@ -48,11 +53,10 @@ pub fn initial_nns_neuron(contribution: u64) -> NnsNfNeuron {
     }
 }
 
-fn nns_neuron_info() -> (EdKeypair, PrincipalId, NeuronId, Subaccount) {
-    let key_pair: EdKeypair = EdKeypair::generate_from_u64(2000);
+fn nns_neuron_info(rng: &mut ChaChaRng) -> (EdKeypair, PrincipalId, NeuronId, Subaccount) {
+    let seed = rng.next_u64();
+    let key_pair: EdKeypair = EdKeypair::generate_from_u64(seed);
     let principal_id = key_pair.generate_principal_id().unwrap();
-
-    let mut rng = ChaChaRng::seed_from_u64(2000_u64);
 
     let id = NeuronId { id: rng.next_u64() };
     let account = {
@@ -61,30 +65,6 @@ fn nns_neuron_info() -> (EdKeypair, PrincipalId, NeuronId, Subaccount) {
         Subaccount(bytes)
     };
     (key_pair, principal_id, id, account)
-}
-
-pub async fn get_current_nns_neuron_info(env: &TestEnv) -> Result<Neuron, String> {
-    let nns_neuron = initial_nns_neuron(
-        0, // The contribution doesn't matter for our purposes
-    );
-    let neuron_id = nns_neuron.neuron.id.as_ref().unwrap().id;
-
-    let nns_request_provider = NnsRequestProvider::default();
-    let nns_node = env.get_first_healthy_system_node_snapshot();
-    let nns_agent = nns_node
-        .build_canister_agent_with_identity(nns_neuron)
-        .await;
-
-    let list_neurons_response = {
-        let request = nns_request_provider.list_neurons(vec![neuron_id], false, CallMode::Update);
-        nns_agent.call_and_parse(&request).await.result().unwrap()
-    };
-
-    list_neurons_response
-        .full_neurons
-        .into_iter()
-        .next()
-        .ok_or("neuron not found or access denied".to_string())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -107,5 +87,29 @@ impl Identity for NnsNfNeuron {
             signature: Some(signature.as_ref().to_vec()),
             public_key: Some(pk_der),
         })
+    }
+}
+
+impl NnsNfNeuron {
+    pub async fn get_current_info(
+        &self,
+        nns_node: &crate::driver::test_env_api::IcNodeSnapshot,
+        nns_request_provider: &NnsRequestProvider,
+    ) -> Result<Neuron, String> {
+        let neuron_id = self.neuron.id.as_ref().unwrap().id;
+        let nns_agent = nns_node
+            .build_canister_agent_with_identity(self.clone())
+            .await;
+        let request = nns_request_provider.list_neurons(vec![neuron_id], false, CallMode::Query);
+        let neuron = nns_agent
+            .call_and_parse(&request)
+            .await
+            .result()
+            .map_err(|err| err.to_string())?
+            .full_neurons
+            .into_iter()
+            .next()
+            .ok_or_else(|| format!("no neurons owned by {neuron_id}"))?;
+        Ok(neuron)
     }
 }
