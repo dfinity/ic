@@ -332,9 +332,17 @@ pub type IngressFilterService = BoxCloneService<
     Infallible,
 >;
 
+/// Errors that can occur when handling a query execution request.
+pub enum QueryExecutionError {
+    CertifiedStateUnavailable,
+}
+
+/// The response type to a `call()` request in [`QueryExecutionService`].
+pub type QueryExecutionResponse = Result<HttpQueryResponse, QueryExecutionError>;
+
 /// Interface for the component to execute queries.
 pub type QueryExecutionService =
-    BoxCloneService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, Infallible>;
+    BoxCloneService<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse, Infallible>;
 
 /// Interface for the component to execute queries on canisters.  It can be used
 /// by the HttpHandler and other system components to execute queries.
