@@ -525,8 +525,7 @@ fn generate_mega_public_key() -> MEGaPublicKey {
     let (mega_pk, _mega_sk) = ic_crypto_internal_threshold_sig_ecdsa::gen_keypair(
         EccCurveType::K256,
         Seed::from_rng(rng),
-    )
-    .expect("failed to generate keypair");
+    );
     mega_pk
 }
 

@@ -62,7 +62,7 @@ fn poly_bench(c: &mut Criterion) {
 
 fn random_point(curve_type: EccCurveType) -> EccPoint {
     let mut rng = rand::thread_rng();
-    EccPoint::mul_by_g(&EccScalar::random(curve_type, &mut rng)).unwrap()
+    EccPoint::mul_by_g(&EccScalar::random(curve_type, &mut rng))
 }
 
 fn random_scalar(curve_type: EccCurveType) -> EccScalar {

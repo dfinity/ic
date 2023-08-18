@@ -277,16 +277,13 @@ pub use crate::key_derivation::{DerivationIndex, DerivationPath};
 pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal};
 
 /// Create MEGa encryption keypair
-pub fn gen_keypair(
-    curve_type: EccCurveType,
-    seed: Seed,
-) -> Result<(MEGaPublicKey, MEGaPrivateKey), ThresholdEcdsaError> {
+pub fn gen_keypair(curve_type: EccCurveType, seed: Seed) -> (MEGaPublicKey, MEGaPrivateKey) {
     let mut rng = seed.into_rng();
     let private_key = MEGaPrivateKey::generate(curve_type, &mut rng);
 
-    let public_key = private_key.public_key()?;
+    let public_key = private_key.public_key();
 
-    Ok((public_key, private_key))
+    (public_key, private_key)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

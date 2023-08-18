@@ -13,7 +13,7 @@ fn zk_proofs(c: &mut Criterion) {
     let masking = EccScalar::random(curve, &mut rng);
 
     let pedersen = EccPoint::pedersen(&secret, &masking).unwrap();
-    let simple = EccPoint::mul_by_g(&secret).unwrap();
+    let simple = EccPoint::mul_by_g(&secret);
 
     c.bench_function("ProofOfEqualOpenings::create", |b| {
         b.iter(|| zk::ProofOfEqualOpenings::create(seed.clone(), &secret, &masking, &ad).unwrap())
@@ -57,7 +57,7 @@ fn zk_proofs(c: &mut Criterion) {
     )
     .unwrap();
 
-    let lhs_c = EccPoint::mul_by_g(&lhs).unwrap();
+    let lhs_c = EccPoint::mul_by_g(&lhs);
     let rhs_c = EccPoint::pedersen(&rhs, &rhs_masking).unwrap();
     let product_c = EccPoint::pedersen(&product, &product_masking).unwrap();
 

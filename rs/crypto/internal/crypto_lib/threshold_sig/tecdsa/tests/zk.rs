@@ -15,7 +15,7 @@ fn should_zk_equal_openings_proof_work() -> ThresholdEcdsaResult<()> {
     let masking = EccScalar::random(curve, &mut rng);
 
     let pedersen = EccPoint::pedersen(&secret, &masking)?;
-    let simple = EccPoint::mul_by_g(&secret)?;
+    let simple = EccPoint::mul_by_g(&secret);
 
     let proof = zk::ProofOfEqualOpenings::create(seed, &secret, &masking, &ad)?;
 
@@ -46,7 +46,7 @@ fn should_zk_mul_proof_work() -> ThresholdEcdsaResult<()> {
     let product_masking = EccScalar::random(curve, &mut rng);
     let product_c = EccPoint::pedersen(&product, &product_masking)?;
 
-    let lhs_c = EccPoint::mul_by_g(&lhs)?;
+    let lhs_c = EccPoint::mul_by_g(&lhs);
     let rhs_c = EccPoint::pedersen(&rhs, &masking)?;
 
     let proof =
@@ -78,7 +78,7 @@ fn should_invalid_zk_mul_proof_be_rejected() -> ThresholdEcdsaResult<()> {
     let product_masking = EccScalar::random(curve, &mut rng);
     let product_c = EccPoint::pedersen(&product, &product_masking)?;
 
-    let lhs_c = EccPoint::mul_by_g(&lhs)?;
+    let lhs_c = EccPoint::mul_by_g(&lhs);
     let rhs_c = EccPoint::pedersen(&rhs, &masking)?;
 
     let proof =

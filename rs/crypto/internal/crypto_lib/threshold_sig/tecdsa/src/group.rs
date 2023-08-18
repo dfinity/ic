@@ -917,10 +917,11 @@ impl EccPoint {
         Self::mul_2_points(&g, scalar1, &h, scalar2)
     }
 
-    pub fn mul_by_g(scalar: &EccScalar) -> ThresholdEcdsaResult<Self> {
-        let curve_type = scalar.curve_type();
-        let g = Self::generator_g(curve_type);
-        g.scalar_mul(scalar)
+    pub fn mul_by_g(scalar: &EccScalar) -> Self {
+        match scalar {
+            EccScalar::K256(s) => secp256k1::Point::generator().mul(s).into(),
+            EccScalar::P256(s) => secp256r1::Point::generator().mul(s).into(),
+        }
     }
 
     /// Serialize a point in compressed form

@@ -101,7 +101,7 @@ mod generate_dkg_dealing_encryption_keys {
 mod generate_idkg_dealing_encryption_keys {
     use super::*;
     use crate::IDkgDealingEncryptionKeysGenerationError;
-    use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaError::CurveMismatch;
+    use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaSerializationError;
 
     #[test]
     fn should_delegate_to_csp() {
@@ -137,15 +137,15 @@ mod generate_idkg_dealing_encryption_keys {
         let mut csp = MockAllCryptoServiceProvider::new();
         csp.expect_idkg_gen_dealing_encryption_key_pair()
             .times(1)
-            .return_const(Err(CspCreateMEGaKeyError::FailedKeyGeneration(
-                CurveMismatch,
+            .return_const(Err(CspCreateMEGaKeyError::SerializationError(
+                ThresholdEcdsaSerializationError("TEST".to_string()),
             )));
 
         let public_key = generate_idkg_dealing_encryption_keys(&csp);
 
         assert_matches!(
             public_key,
-            Err(IDkgDealingEncryptionKeysGenerationError::InternalError(e)) if e.contains("CurveMismatch")
+            Err(IDkgDealingEncryptionKeysGenerationError::InternalError(e)) if e.contains("TEST")
         )
     }
 }

@@ -281,8 +281,7 @@ pub fn arbitrary_threshold_bls12381_individual_signature() -> ThresBls12_381_Sig
 pub fn arbitrary_mega_k256_encryption_key_set() -> CspSecretKey {
     let seed = Seed::from_rng(&mut rand::thread_rng());
 
-    let (public_key, private_key) =
-        gen_keypair(EccCurveType::K256, seed).expect("failed to generate MEGa key pair");
+    let (public_key, private_key) = gen_keypair(EccCurveType::K256, seed);
     let public_key =
         MEGaPublicKeyK256Bytes::try_from(&public_key).expect("just-generated key should serialize");
     let private_key = MEGaPrivateKeyK256Bytes::try_from(&private_key)

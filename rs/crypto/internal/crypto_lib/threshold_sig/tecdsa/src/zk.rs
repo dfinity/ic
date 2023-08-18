@@ -42,7 +42,7 @@ impl ProofOfEqualOpeningsInstance {
         let g = EccPoint::generator_g(curve_type);
         let h = EccPoint::generator_h(curve_type);
         let a = EccPoint::pedersen(secret, masking)?;
-        let b = EccPoint::mul_by_g(secret)?;
+        let b = EccPoint::mul_by_g(secret);
         Ok(Self {
             curve_type,
             g,
@@ -214,7 +214,7 @@ impl ProofOfProductInstance {
         &self,
         proof: &ProofOfProduct,
     ) -> ThresholdEcdsaResult<(EccPoint, EccPoint)> {
-        let r1_com = EccPoint::mul_by_g(&proof.response1)?
+        let r1_com = EccPoint::mul_by_g(&proof.response1)
             .sub_points(&self.lhs_com.scalar_mul(&proof.challenge)?)?;
 
         let r2_com =

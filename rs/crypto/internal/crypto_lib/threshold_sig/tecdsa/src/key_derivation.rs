@@ -137,7 +137,7 @@ impl DerivationPath {
             index,
         )?;
 
-        let new_key = public_key.add_points(&EccPoint::mul_by_g(&key_offset)?)?;
+        let new_key = public_key.add_points(&EccPoint::mul_by_g(&key_offset))?;
 
         // If the new key is infinity, try again with the next index
         if new_key.is_infinity()? {

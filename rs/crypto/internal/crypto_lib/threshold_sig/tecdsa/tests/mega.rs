@@ -6,7 +6,7 @@ use std::convert::TryFrom;
 fn mega_key_generation() -> ThresholdEcdsaResult<()> {
     let mut seed = Seed::from_bytes(&[0x42; 32]);
 
-    let (pk_k256, sk_k256) = gen_keypair(EccCurveType::K256, seed)?;
+    let (pk_k256, sk_k256) = gen_keypair(EccCurveType::K256, seed);
 
     assert_eq!(pk_k256.curve_type(), EccCurveType::K256);
     assert_eq!(sk_k256.curve_type(), EccCurveType::K256);
@@ -21,7 +21,7 @@ fn mega_key_generation() -> ThresholdEcdsaResult<()> {
     );
 
     seed = Seed::from_bytes(&[0x42; 32]);
-    let (pk_p256, sk_p256) = gen_keypair(EccCurveType::P256, seed)?;
+    let (pk_p256, sk_p256) = gen_keypair(EccCurveType::P256, seed);
 
     assert_eq!(pk_p256.curve_type(), EccCurveType::P256);
     assert_eq!(sk_p256.curve_type(), EccCurveType::P256);
@@ -44,7 +44,7 @@ fn mega_key_validity() -> ThresholdEcdsaResult<()> {
 
     for curve_type in EccCurveType::all() {
         let sk = MEGaPrivateKey::generate(curve_type, &mut rng);
-        let pk = sk.public_key()?;
+        let pk = sk.public_key();
 
         let mut pk_bytes = pk.serialize();
 
@@ -78,8 +78,8 @@ fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
     let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
     let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
 
-    let a_pk = a_sk.public_key()?;
-    let b_pk = b_sk.public_key()?;
+    let a_pk = a_sk.public_key();
+    let b_pk = b_sk.public_key();
 
     let associated_data = b"assoc_data_test";
 
@@ -124,8 +124,8 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
     let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
     let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
 
-    let a_pk = a_sk.public_key()?;
-    let b_pk = b_sk.public_key()?;
+    let a_pk = a_sk.public_key();
+    let b_pk = b_sk.public_key();
 
     let associated_data = b"assoc_data_test";
 
@@ -168,8 +168,8 @@ fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
     let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
     let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
 
-    let a_pk = a_sk.public_key()?;
-    let b_pk = b_sk.public_key()?;
+    let a_pk = a_sk.public_key();
+    let b_pk = b_sk.public_key();
 
     let ad = b"assoc_data_test";
 
@@ -398,12 +398,8 @@ mod mega_cipher_text {
             let curve = EccCurveType::K256;
             let a_sk = MEGaPrivateKey::generate(curve, rng);
             let b_sk = MEGaPrivateKey::generate(curve, rng);
-            let a_pk = a_sk
-                .public_key()
-                .expect("should produce public key from secret key");
-            let b_pk = b_sk
-                .public_key()
-                .expect("should produce public key from secret key");
+            let a_pk = a_sk.public_key();
+            let b_pk = b_sk.public_key();
             let associated_data = b"assoc_data_test";
             let dealer_index = 0;
             let seed = Seed::from_rng(rng);
