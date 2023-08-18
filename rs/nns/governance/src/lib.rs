@@ -135,6 +135,7 @@ mod heap_governance_data;
 pub mod init;
 mod known_neuron_index;
 mod neuron;
+mod neuron_store;
 pub mod pb;
 pub mod proposals;
 mod reward;
