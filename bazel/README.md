@@ -279,7 +279,7 @@ contrast the  the  `Cargo.toml` file with its associated `BAZEL.build` file.
 # Visualize and Share
 
 Developers may inspect and share detailed build results, timings, logs and
-artifacts with the buildfarm URL. Note the buildfarm URL emited at the start and
+artifacts with the buildfarm URL. Note the buildfarm URL emitted at the start and
 end of the build.
 
 
@@ -295,7 +295,7 @@ Mark the test as **flaky** to make Bazel will retry the test up to three times.
 ```bash
 rust_test(
 	name = "foo_test",
-  # lines ommitted
+  # lines omitted
 	flaky = True",
 )
 ```
@@ -306,7 +306,7 @@ concurrent test cases collide but may greatly increase the runtime of the tests.
 ```bash
 rust_test(
 	name = "foo_test",
-  # lines ommitted
+  # lines omitted
   args = [
        "--test-threads",
       "1",
