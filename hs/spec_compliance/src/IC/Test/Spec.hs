@@ -979,7 +979,7 @@ icTests my_sub other_sub =
                                                                              never = ""
                                                                           in concat
                                                                                [ t "msg_arg_data" "I U Q Ry F" $ ignore argData,
-                                                                                 t "msg_caller" "I G U Q F" $ ignore caller,
+                                                                                 t "msg_caller" star $ ignore caller,
                                                                                  t "msg_reject_code" "Ry Rt" $ ignore reject_code,
                                                                                  t "msg_reject_msg" "Rt" $ ignore reject_msg,
                                                                                  t "msg_reply_data_append" "U Q Ry Rt" $ replyDataAppend "Hey!",

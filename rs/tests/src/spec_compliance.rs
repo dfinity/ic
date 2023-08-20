@@ -31,9 +31,6 @@ const EXCLUDED: &[&str] = &[
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
     "$0 ~ /Call from query method traps (in query call)/",
-    // Temporarily exclude "msg_caller traps" until the spec compliance test
-    // suite is migrated to the IC repo.
-    "$0 ~ /msg_caller traps/",
 ];
 
 pub fn config_impl(env: TestEnv) {
