@@ -96,11 +96,11 @@ fn test_load_shedding_query() {
         query_exec_running.notify_one();
         load_shedder_returned.notified().await;
 
-        resp.send_response(HttpQueryResponse::Replied {
+        resp.send_response(Ok(HttpQueryResponse::Replied {
             reply: HttpQueryResponseReply {
                 arg: Blob("success".into()),
             },
-        })
+        }))
     });
 
     rt.block_on(async {
@@ -110,7 +110,7 @@ fn test_load_shedding_query() {
             .query_signed(query.effective_canister_id, query.signed_query.clone())
             .await;
 
-        assert!(resp.is_ok(), "Received unexpeceted response: {:?}", resp);
+        assert!(resp.is_ok(), "Received unexpected response: {:?}", resp);
 
         let resp = load_shedded_agent.await.unwrap();
         let expected_resp = StatusCode::TOO_MANY_REQUESTS;
@@ -120,7 +120,7 @@ fn test_load_shedding_query() {
                 assert_eq!(expected_resp, status)
             }
             _ => panic!(
-                "Load shedder did not kick in. Received unexpeceted response: {:?}",
+                "Load shedder did not kick in. Received unexpected response: {:?}",
                 resp
             ),
         }
@@ -241,7 +241,7 @@ fn test_load_shedding_read_state() {
         assert!(
             !(matches!(response, Err(AgentError::HttpError(HttpErrorPayload { status, .. })) if StatusCode::TOO_MANY_REQUESTS == status
             )),
-            "Load shedder kicked in. Received unexpeceted response: {:?}", response
+            "Load shedder kicked in. Received unexpected response: {:?}", response
         );
 
         let response = load_shedded_agent_resp.await.unwrap();
@@ -250,7 +250,7 @@ fn test_load_shedding_read_state() {
         assert!(
             matches!(response, Err(AgentError::HttpError(HttpErrorPayload { status, .. })) if StatusCode::TOO_MANY_REQUESTS == status
             ),
-            "Load shedder did not kick in. Received unexpeceted response: {:?}", response
+            "Load shedder did not kick in. Received unexpected response: {:?}", response
         );
     });
 }
@@ -447,7 +447,7 @@ fn test_load_shedding_update_call() {
         wait_for_status_healthy(&ok_agent).await.unwrap();
         let resp = ok_agent.update(&canister, "some method").call().await;
 
-        assert!(resp.is_ok(), "Received unexpeceted response: {:?}", resp);
+        assert!(resp.is_ok(), "Received unexpected response: {:?}", resp);
 
         let resp = load_shedded_agent_handle.await.unwrap();
         let expected_resp = StatusCode::TOO_MANY_REQUESTS;
@@ -457,7 +457,7 @@ fn test_load_shedding_update_call() {
                 assert_eq!(expected_resp, status)
             }
             _ => panic!(
-                "Load shedder did not kick in. Received unexpeceted response: {:?}",
+                "Load shedder did not kick in. Received unexpected response: {:?}",
                 resp
             ),
         }

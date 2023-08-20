@@ -58,9 +58,7 @@ use ic_types::{
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
     },
     malicious_flags::MaliciousFlags,
-    messages::{
-        CertificateDelegation, HttpQueryResponse, SignedIngress, SignedIngressContent, UserQuery,
-    },
+    messages::{CertificateDelegation, SignedIngress, SignedIngressContent, UserQuery},
     signature::ThresholdSignature,
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
@@ -77,25 +75,29 @@ use tower_test::mock::Handle;
 pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
 pub type QueryExecutionHandle =
-    Handle<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse>;
+    Handle<(UserQuery, Option<CertificateDelegation>), QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
-    let (service, handle) =
-        tower_test::mock::pair::<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse>();
+    let (service, handle) = tower_test::mock::pair::<
+        (UserQuery, Option<CertificateDelegation>),
+        QueryExecutionResponse,
+    >();
 
     let infallible_service =
         tower::service_fn(move |request: (UserQuery, Option<CertificateDelegation>)| {
             let mut service_clone = service.clone();
             async move {
-                Ok::<QueryExecutionResponse, Infallible>(Ok({
+                Ok::<QueryExecutionResponse, Infallible>(
                     service_clone
                         .ready()
                         .await
                         .expect("Mocking Infallible service. Waiting for readiness failed.")
                         .call(request)
                         .await
-                        .expect("Mocking Infallible service and can therefore not return an error.")
-                }))
+                        .expect(
+                            "Mocking Infallible service and can therefore not return an error.",
+                        ),
+                )
             }
         });
     (BoxCloneService::new(infallible_service), handle)
