@@ -12,22 +12,32 @@ cargo run -p ic-prep --bin ic-prep -- \
   --replica_version 0.1.0 \
   --replica-download-url ... \
   --orchestrator-download-url ... \
-  --node 'idx:1,subnet_idx:1,xnet_api:"http://1.2.3.4:81",public_api:"http://1.2.3.4:82",p2p_addr:"http://1.2.3.4:80"'
+  --node 'idx:1,subnet_idx:1,xnet_api:"1.2.3.4:81",public_api:"1.2.3.4:82",p2p_addr:"1.2.3.4:80"'
   --node ...
 ----
 
-=== Specifying an endpoint
+== --node flag
 
-Each endpoint is given as a URL, in `scheme://ip:port` format.
+The `--node` flag is used to provide information about one node.
 
-Valid schemes are:
+To provide information about multiple nodes, repeat the flag.
 
-- `http`
-- `https` (note: implies TLS1.3)
-- `org.internetcomputer.p2p1` (v1 of the P2P protocol, implies TLS1.3)
+The flag's value is a comma-separated list of key:value pairs, in JSON5
+format, without the `{` and `}` delimiters.
 
-See https://docs.google.com/document/d/1gr4l1NrVnA2LKbnDXqRPqV5zMNqAu2lhqIhqIing7CE/edit#
-for more details on how this works.
+The fields are:
+
+- `idx` - the node's index
+
+- `subnet_idx` - the node's subnet index
+
+- `public_api` - an endpoint on which the node will serve the public API.
+
+- `p2p_addr` - the base endpoint on which the node will serve P2P
+
+- `xnet_api` - an endpoint on which the node will handle XNet messages
+
+- `chip_id` - an optional value to register as the node's chip id.
 
 === Example
 
@@ -38,6 +48,6 @@ with their connection endpoints on the same ports but different IP addresses
 ----
 ic-admin
   ...
-  --node 'idx:1,subnet_idx:1,xnet_api:"http://1.2.3.4:81",public_api:"http://1.2.3.4:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
-  --node 'idx:2,subnet_idx:1,xnet_api:"http://4.3.2.1:81",public_api:"http://4.3.2.1:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"''
+  --node 'idx:1,subnet_idx:1,xnet_api:"1.2.3.4:81",public_api:"1.2.3.4:82",p2p_addr:"1.2.3.4:80"'
+  --node 'idx:2,subnet_idx:1,xnet_api:"4.3.2.1:81",public_api:"4.3.2.1:82",p2p_addr:"1.2.3.4:80"''
 ----
