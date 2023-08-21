@@ -9315,6 +9315,7 @@ dependencies = [
  "prometheus 0.12.0",
  "quinn",
  "serde",
+ "serde_bytes",
  "slog",
  "socket2 0.5.3",
  "tokio",

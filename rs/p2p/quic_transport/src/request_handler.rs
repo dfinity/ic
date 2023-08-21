@@ -12,7 +12,6 @@ use axum::Router;
 use ic_logger::{info, ReplicaLogger};
 use ic_types::NodeId;
 use quinn::{RecvStream, SendStream};
-use tokio_util::codec::length_delimited;
 use tower::ServiceExt;
 
 use crate::{
@@ -114,13 +113,10 @@ async fn handle_bi_stream(
     log: ReplicaLogger,
     metrics: QuicTransportMetrics,
     router: Router,
-    bi_tx: SendStream,
-    bi_rx: RecvStream,
+    mut bi_tx: SendStream,
+    mut bi_rx: RecvStream,
 ) {
-    let mut send_stream = length_delimited::Builder::new().new_write(bi_tx);
-    let mut recv_stream = length_delimited::Builder::new().new_read(bi_rx);
-
-    let mut request = match read_request(&mut recv_stream).await {
+    let mut request = match read_request(&mut bi_rx).await {
         Ok(request) => request,
         Err(e) => {
             info!(
@@ -139,7 +135,7 @@ async fn handle_bi_stream(
     request.extensions_mut().insert::<NodeId>(peer_id);
 
     let svc = router.oneshot(request);
-    let stopped = send_stream.get_mut().stopped();
+    let stopped = bi_tx.stopped();
     let response = tokio::select! {
         response = svc => response.expect("Infallible"),
         _ = stopped => {
@@ -158,14 +154,14 @@ async fn handle_bi_stream(
     // We can ignore the errors because if both peers follow the protocol an errors will only occur
     // if the other peer has closed the connection. In this case `accept_bi` in the peer event
     // loop will close this connection.
-    if let Err(e) = write_response(&mut send_stream, response).await {
+    if let Err(e) = write_response(&mut bi_tx, response).await {
         info!(log, "Failed to write response to stream: {}", e.to_string());
         metrics
             .request_handle_errors_total
             .with_label_values(&[STREAM_TYPE_BIDI, ERROR_TYPE_WRITE])
             .inc();
     }
-    if let Err(e) = send_stream.get_mut().finish().await {
+    if let Err(e) = bi_tx.finish().await {
         info!(log, "Failed to finish stream: {}", e.to_string());
         metrics
             .request_handle_errors_total
@@ -179,11 +175,9 @@ async fn handle_uni_stream(
     log: ReplicaLogger,
     metrics: QuicTransportMetrics,
     router: Router,
-    uni_rx: RecvStream,
+    mut uni_rx: RecvStream,
 ) {
-    let mut recv_stream = length_delimited::Builder::new().new_read(uni_rx);
-
-    let mut request = match read_request(&mut recv_stream).await {
+    let mut request = match read_request(&mut uni_rx).await {
         Ok(request) => request,
         Err(e) => {
             info!(
@@ -198,18 +192,6 @@ async fn handle_uni_stream(
             return;
         }
     };
-
-    // Explicity reading to end to avoid an ungraceful shutdown of the stream.
-    // Docs: https://docs.rs/quinn/0.10.1/quinn/struct.RecvStream.html#closing-a-stream
-    if recv_stream.get_mut().read_to_end(0).await.is_err() {
-        // Discard unexpected data and notify the peer to stop sending it
-        let _ = recv_stream.get_mut().stop(0u8.into());
-        metrics
-            .request_handle_errors_total
-            .with_label_values(&[STREAM_TYPE_UNI, ERROR_TYPE_READ])
-            .inc();
-        return;
-    }
 
     request.extensions_mut().insert::<NodeId>(peer_id);
 
