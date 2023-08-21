@@ -135,10 +135,7 @@ where
             .into(),
     );
     // Create a reject
-    let reject = Payload::Reject(RejectContext {
-        code: RejectCode::SysFatal,
-        message: "reject message".to_string(),
-    });
+    let reject = Payload::Reject(RejectContext::new(RejectCode::SysFatal, "reject message"));
 
     // Create execution parameters
     let execution_parameters = ExecutionParameters {

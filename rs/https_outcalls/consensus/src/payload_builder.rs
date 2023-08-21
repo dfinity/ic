@@ -685,10 +685,10 @@ impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPaylo
             stats.timeouts += 1;
             (
                 *timeout,
-                Payload::Reject(RejectContext {
-                    code: RejectCode::SysTransient,
-                    message: "Canister http request timed out".to_string(),
-                }),
+                Payload::Reject(RejectContext::new(
+                    RejectCode::SysTransient,
+                    "Canister http request timed out",
+                )),
             )
         });
 
@@ -702,12 +702,12 @@ impl IntoMessages<(Vec<Response>, CanisterHttpBatchStats)> for CanisterHttpPaylo
                 stats.divergence_responses += 1;
                 (
                     share.content.id,
-                    Payload::Reject(RejectContext {
-                        code: RejectCode::SysTransient,
-                        message: "Canister http responses were different across replicas, \
+                    Payload::Reject(RejectContext::new(
+                        RejectCode::SysTransient,
+                        "Canister http responses were different across replicas, \
                           and no consensus was reached"
                             .to_string(),
-                    }),
+                    )),
                 )
             })
         });

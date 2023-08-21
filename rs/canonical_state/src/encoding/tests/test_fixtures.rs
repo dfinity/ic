@@ -53,10 +53,10 @@ pub fn reject_response() -> RequestOrResponse {
         .respondent(canister_test_id(5))
         .originator_reply_callback(CallbackId::from(4))
         .refund(Cycles::new(3))
-        .response_payload(Payload::Reject(RejectContext {
-            code: RejectCode::SysFatal,
-            message: "Oops".into(),
-        }))
+        .response_payload(Payload::Reject(RejectContext::new(
+            RejectCode::SysFatal,
+            "Oops",
+        )))
         .build()
         .into()
 }

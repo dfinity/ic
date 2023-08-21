@@ -404,8 +404,8 @@ impl From<(&ic_types::messages::RejectContext, CertificationVersion)> for Reject
         ),
     ) -> Self {
         Self {
-            code: context.code as u8,
-            message: context.message.clone(),
+            code: context.code() as u8,
+            message: context.message().clone(),
         }
     }
 }
@@ -414,15 +414,15 @@ impl TryFrom<RejectContext> for ic_types::messages::RejectContext {
     type Error = ProxyDecodeError;
 
     fn try_from(context: RejectContext) -> Result<Self, Self::Error> {
-        Ok(Self {
-            code: (context.code as u64).try_into().map_err(|err| match err {
+        Ok(Self::from_canonical(
+            (context.code as u64).try_into().map_err(|err| match err {
                 TryFromError::ValueOutOfRange(code) => ProxyDecodeError::ValueOutOfRange {
                     typ: "RejectContext",
                     err: code.to_string(),
                 },
             })?,
-            message: context.message,
-        })
+            context.message,
+        ))
     }
 }
 

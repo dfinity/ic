@@ -535,10 +535,8 @@ fn test_reject_api_support_on_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::build_reject_api(RejectContext {
-        code: RejectCode::CanisterReject,
-        message: "error".to_string(),
-    });
+    let api_type =
+        ApiTypeBuilder::build_reject_api(RejectContext::new(RejectCode::CanisterReject, "error"));
     let mut api = get_system_api(api_type, &get_cmc_system_state(), cycles_account_manager);
 
     assert_api_supported(api.ic0_msg_caller_size());
@@ -594,10 +592,8 @@ fn test_reject_api_support_non_nns() {
         .with_subnet_type(SubnetType::System)
         .build();
 
-    let api_type = ApiTypeBuilder::build_reject_api(RejectContext {
-        code: RejectCode::CanisterReject,
-        message: "error".to_string(),
-    });
+    let api_type =
+        ApiTypeBuilder::build_reject_api(RejectContext::new(RejectCode::CanisterReject, "error"));
     let mut api = get_system_api(api_type, &get_system_state(), cycles_account_manager);
 
     assert_api_supported(api.ic0_msg_caller_size());

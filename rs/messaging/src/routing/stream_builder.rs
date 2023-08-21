@@ -13,7 +13,7 @@ use ic_replicated_state::{
 use ic_types::{
     messages::{
         Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
     },
     xnet::QueueId,
     CountBytes, SubnetId,
@@ -387,23 +387,17 @@ impl StreamBuilderImpl {
                             match &mut rep.response_payload {
                                 // Replace oversized data payloads with reject payloads.
                                 Payload::Data(_) => {
-                                    rep.response_payload = Payload::Reject(RejectContext {
-                                        code: RejectCode::CanisterError,
-                                        message: format!(
+                                    rep.response_payload = Payload::Reject(RejectContext::new(
+                                        RejectCode::CanisterError,
+                                        format!(
                                             "Canister {} violated contract: attempted to send a message of size {} exceeding the limit {}",
                                             rep.respondent, rep.payload_size_bytes(), MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                                         ),
-                                    })
+                                    ))
                                 }
                                 // Truncate error messages of oversized reject payloads.
                                 &mut Payload::Reject(ref mut context @ RejectContext { .. }) => {
-                                    use ic_utils::str::StrTruncate;
-                                    const KB: usize = 1024;
-                                    let mut message = String::with_capacity(8 * KB);
-                                    message.push_str(context.message.safe_truncate(5 * KB));
-                                    message.push_str("...");
-                                    message.push_str(context.message.safe_truncate_right(2 * KB));
-                                    context.message = message;
+                                    rep.response_payload = Payload::Reject(RejectContext::new_with_message_length_limit(context.code(), context.message(), MAX_REJECT_MESSAGE_LEN_BYTES));
                                 }
                             }
 

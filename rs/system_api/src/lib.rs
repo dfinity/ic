@@ -1004,7 +1004,7 @@ impl SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => None,
             ApiType::ReplyCallback { .. } => Some(0),
-            ApiType::RejectCallback { reject_context, .. } => Some(reject_context.code as i32),
+            ApiType::RejectCallback { reject_context, .. } => Some(reject_context.code() as i32),
         }
     }
 

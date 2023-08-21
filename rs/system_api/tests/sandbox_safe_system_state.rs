@@ -551,7 +551,7 @@ fn assert_failed_call(
             assert_eq!(resp.respondent, respondent);
             match &resp.response_payload {
                 ic_types::messages::Payload::Reject(ctxt) => {
-                    assert_eq!(ctxt.message, expected_message)
+                    assert_eq!(ctxt.message(), &expected_message)
                 }
                 _ => panic!("input response should be a reject"),
             }

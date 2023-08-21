@@ -96,18 +96,12 @@ pub(crate) fn action_to_request_response(
     let response_payload_and_refund = match action {
         CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => None,
         CallContextAction::NoResponse { refund } => Some((
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: "No response".to_string(),
-            }),
+            Payload::Reject(RejectContext::new(RejectCode::CanisterError, "No response")),
             refund,
         )),
 
         CallContextAction::Reject { payload, refund } => Some((
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: payload,
-            }),
+            Payload::Reject(RejectContext::new(RejectCode::CanisterReject, payload)),
             refund,
         )),
 
@@ -116,10 +110,7 @@ pub(crate) fn action_to_request_response(
         CallContextAction::Fail { error, refund } => {
             let user_error = error.into_user_error(&canister.canister_id());
             Some((
-                Payload::Reject(RejectContext {
-                    code: user_error.reject_code(),
-                    message: user_error.to_string(),
-                }),
+                Payload::Reject(RejectContext::new(user_error.reject_code(), user_error)),
                 refund,
             ))
         }

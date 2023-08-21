@@ -1106,7 +1106,7 @@ fn generate_timeout_response(request: &Arc<Request>) -> RequestOrResponse {
         refund: request.payment,
         response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
             RejectCode::SysTransient,
-            "Request timed out.".to_string(),
+            "Request timed out.",
             MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
         )),
     }))
