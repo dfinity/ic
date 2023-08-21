@@ -104,6 +104,10 @@ struct CliArgs {
     #[clap(long, parse(try_from_str = parse_nodes_deprecated), group = "node_spec", multiple_values(true))]
     pub nodes: Vec<Node>,
 
+    /// JSON5 node definition
+    #[clap(long, group = "node_spec", multiple_values(true))]
+    pub node: Vec<Node>,
+
     /// Path to working directory for node states.
     #[clap(long, parse(from_os_str))]
     pub working_dir: PathBuf,
@@ -373,7 +377,8 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
 }
 
 /// Values passed to the `--node` flag.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NodeFlag {
     idx: Option<u64>,
     subnet_idx: Option<u64>,
@@ -382,6 +387,18 @@ struct NodeFlag {
     /// The initial endpoint that P2P uses.
     pub p2p_addr: Option<SocketAddr>,
     pub chip_id: Option<Vec<u8>>,
+}
+
+#[derive(Error, Clone, Debug, PartialEq)]
+enum NodeFlagParseError {
+    #[error("field is missing: {source}")]
+    MissingField {
+        #[from]
+        source: MissingFieldError,
+    },
+
+    #[error("parsing flag '{flag}' failed: {source}")]
+    Json5ParseFailed { source: json5::Error, flag: String },
 }
 
 #[derive(Error, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -402,6 +419,61 @@ enum MissingFieldError {
     P2PAddr,
 }
 
+impl TryFrom<NodeFlag> for Node {
+    type Error = NodeFlagParseError;
+
+    fn try_from(value: NodeFlag) -> Result<Self, Self::Error> {
+        let node_index = value.idx.ok_or(MissingFieldError::NodeIndex)?;
+        let xnet_api = value.xnet_api.ok_or(MissingFieldError::Xnet)?;
+        let public_api = value.public_api.ok_or(MissingFieldError::PublicApi)?;
+        let p2p_addr = value.p2p_addr.ok_or(MissingFieldError::P2PAddr)?;
+        let chip_id = value.chip_id.unwrap_or_default();
+
+        Ok(Self {
+            node_index,
+            subnet_index: value.subnet_idx,
+            config: NodeConfiguration {
+                xnet_api,
+                public_api,
+                p2p_addr,
+                node_operator_principal_id: None,
+                secret_key_store: None,
+                chip_id,
+            },
+        })
+    }
+}
+
+impl FromStr for Node {
+    type Err = NodeFlagParseError;
+
+    /// Parses a node string in to a `Node`.
+    ///
+    /// A --node flag and node string looks like this:
+    ///
+    /// ```text
+    /// --node field:value,field:value,array_field:[value,value],...
+    /// ```
+    ///
+    /// The field names must match the field names in `NodeConfiguration`, with
+    /// the associated types.
+    ///
+    /// This is because the text is actually the JSON5 representation of the
+    /// value, without the opening/closing `{` and `}`. This means that the
+    /// field names do not need to be quoted
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let flag: NodeFlag = json5::from_str(&format!("{{ {} }}", s)).map_err(|source| {
+            Self::Err::Json5ParseFailed {
+                source,
+                flag: s.to_string(),
+            }
+        })?;
+
+        let node = Node::try_from(flag)?;
+        Ok(node)
+    }
+}
+
 impl Display for Node {
     /// Displays the node in a format that will be accepted by the `--node`
     /// flag.
@@ -415,6 +487,13 @@ impl Display for Node {
         write!(f, r#",xnet_api:"{}""#, self.config.xnet_api)?;
 
         Ok(())
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Node {
+    type Error = <Node as FromStr>::Err;
+    fn try_from(s: &'a str) -> Result<Node, Self::Error> {
+        Node::from_str(s)
     }
 }
 
@@ -435,6 +514,12 @@ impl CliArgs {
         let mut subnets: BTreeMap<SubnetIndex, BTreeMap<NodeIndex, NodeConfiguration>> =
             BTreeMap::new();
 
+        let nodes: Vec<_> = if self.nodes.is_empty() {
+            self.node
+        } else {
+            self.nodes
+        };
+
         for (
             i,
             Node {
@@ -442,7 +527,7 @@ impl CliArgs {
                 subnet_index,
                 config,
             },
-        ) in self.nodes.iter().enumerate()
+        ) in nodes.iter().enumerate()
         {
             if !node_idx_set.insert(node_index) {
                 bail!("the {}'th entry repeats the node index {}", i, node_index);
@@ -695,5 +780,88 @@ mod test_flag_nodes_parser_deprecated {
         };
 
         assert_eq!(got, want);
+    }
+}
+
+#[cfg(test)]
+mod test_flag_node_parser {
+    use super::*;
+    use assert_matches::assert_matches;
+    use pretty_assertions::assert_eq;
+
+    const GOOD_FLAG: &str =
+        r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#;
+
+    /// Verifies that a good flag parses correctly
+    #[test]
+    fn valid_flag() {
+        let got: Node = GOOD_FLAG.parse().unwrap();
+        let want = Node {
+            node_index: 1,
+            subnet_index: Some(2),
+            config: NodeConfiguration {
+                xnet_api: "1.2.3.4:81".parse().unwrap(),
+                public_api: "3.4.5.6:82".parse().unwrap(),
+                p2p_addr: "1.2.3.4:80".parse().unwrap(),
+                node_operator_principal_id: None,
+                secret_key_store: None,
+                chip_id: vec![],
+            },
+        };
+
+        assert_eq!(got, want);
+    }
+
+    /// Verifies that flags with missing fields return an Err
+    #[test]
+    fn missing_fields() {
+        // Each flag variant omits a field, starting with `idx`.
+        let flags = vec![
+            r#"subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
+            // Omitting subnet index yields an unassigned node.
+            // r#"idx:1,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
+            r#"idx:1,subnet_idx:2,public_api:"3.4.5.6:82",p2p_addr:"1.2.3.4:80""#,
+            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",p2p_addr:"1.2.3.4:80""#,
+            r#"idx:1,subnet_idx:2,xnet_api:"1.2.3.4:81",public_api:"3.4.5.6:82""#,
+        ];
+
+        for flag in flags {
+            assert_matches!(
+                flag.parse::<Node>(),
+                Err(NodeFlagParseError::MissingField { .. })
+            );
+        }
+    }
+
+    /// Verifies that unknown fields return an Err
+    #[test]
+    fn unknown_fields() {
+        let flag = format!("new_field:0,{}", GOOD_FLAG);
+        assert_matches!(
+            flag.parse::<Node>(),
+            Err(NodeFlagParseError::Json5ParseFailed { .. })
+        );
+    }
+
+    /// Verifies that the flag can roundrip through parsing
+    #[test]
+    fn roundtrip() {
+        let node: Node = GOOD_FLAG.parse().unwrap();
+        let node_flag = node.to_string();
+
+        let new_node: Node = node_flag.parse().unwrap();
+
+        assert_eq!(node, new_node);
+    }
+
+    #[test]
+    #[ignore] // side-effectful unit tests are ignored
+    fn can_fetch_sha256() {
+        let version_id =
+            ReplicaVersion::try_from("963c47c0179fb302cb02b1e4712f51b14ea738b6").unwrap();
+        assert_eq!(
+            fetch_replica_version_sha256(version_id).unwrap(),
+            "d081ffe20488380b4cf90069f3fc23e2fa4a904e4103d6f175c85ea87b2634b5"
+        );
     }
 }
