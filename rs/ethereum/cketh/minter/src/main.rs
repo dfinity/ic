@@ -1,4 +1,5 @@
 use candid::candid_method;
+use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
@@ -11,6 +12,7 @@ use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
 use ic_cketh_minter::eth_rpc::JsonRpcResult;
 use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
 use ic_cketh_minter::guard::{retrieve_eth_guard, retrieve_eth_timer_guard};
+use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
 use ic_cketh_minter::state::mutate_state;
 use ic_cketh_minter::state::read_state;
@@ -34,6 +36,7 @@ pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 fn init(arg: MinterArg) {
     match arg {
         MinterArg::InitArg(init_arg) => {
+            log!(INFO, "[init]: initialized minter with arg: {:?}", init_arg);
             STATE.with(|cell| *cell.borrow_mut() = Some(State::from(init_arg)));
         }
         MinterArg::UpgradeArg => {
@@ -58,16 +61,17 @@ async fn scrap_eth_logs() {
     const MAX_BLOCK_SPREAD: u128 = 1024;
 
     let last_seen_block_number = read_state(|s| s.last_seen_block_number.clone());
-    ic_cdk::println!(
-        "Scraping ETH logs, last seen finalized block number: {:?}...",
-        last_seen_block_number
-    );
 
     let finalized_block: Block = RPC_CLIENT
         .eth_get_last_finalized_block()
         .await
         .expect("HTTP call failed");
-    ic_cdk::println!("Last finalized block: {:?}", finalized_block);
+    log!(
+        DEBUG,
+        "[scrap_eth_logs] last seen finalized block: {:?}, last finalized block: {:?}",
+        last_seen_block_number,
+        finalized_block
+    );
 
     match last_seen_block_number.cmp(&finalized_block.number) {
         Ordering::Less => {
@@ -75,11 +79,14 @@ async fn scrap_eth_logs() {
                 last_seen_block_number.clone() + MAX_BLOCK_SPREAD,
                 finalized_block.number,
             );
-            ic_cdk::println!(
+
+            log!(
+                DEBUG,
                 "Scrapping ETH logs from block {:?} to block {:?}...",
                 last_seen_block_number,
                 max_finalized_block_number
             );
+
             let (transaction_events, errors) = eth_logs::last_received_eth_events(
                 last_seen_block_number.clone(),
                 max_finalized_block_number.clone(),
@@ -94,9 +101,9 @@ async fn scrap_eth_logs() {
             mutate_state(|s| s.last_seen_block_number = max_finalized_block_number);
         }
         Ordering::Equal => {
-            ic_cdk::println!(
-                "Skipping scrapping ETH logs: no new blocks. Last seen block number: {:?}",
-                last_seen_block_number
+            log!(
+                DEBUG,
+                "[scrap_eth_logs] Skipping scrapping ETH logs: no new blocks",
             );
         }
         Ordering::Greater => {
@@ -331,8 +338,9 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
     let destination = Address::from_str(&recipient)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to parse recipient address: {:?}", e)));
     //TODO FI-868: verify that the source account has enough funds on the ledger
-    ic_cdk::println!(
-        "Principal {} withdrawing {:?} to {:?}",
+    log!(
+        INFO,
+        "[withdraw]: {} withdrawing {:?} wei to {:?}",
         caller,
         amount,
         destination
@@ -340,7 +348,11 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
 
     let transaction_price = estimate_transaction_price(&eth_fee_history().await);
     let max_transaction_fee = transaction_price.max_transaction_fee();
-    ic_cdk::println!("Estimated max transaction fee: {:?}", max_transaction_fee);
+    log!(
+        INFO,
+        "[withdraw]: Estimated max transaction fee: {:?}",
+        max_transaction_fee,
+    );
     if max_transaction_fee >= amount {
         ic_cdk::trap(&format!(
             "WARN: skipping transaction since fee {:?} is at least the amount {:?} to be withdrawn",
@@ -350,8 +362,9 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
 
     //TODO FI-868: contact ledger to burn funds
     let ledger_burn_index = LedgerBurnIndex(0);
-    ic_cdk::println!(
-        "Burning {:?}",
+    log!(
+        INFO,
+        "[withdraw]: burning {:?}",
         amount
             .checked_sub(max_transaction_fee)
             .expect("cannot underflow due to previous check that max_transaction_fee >= amount")
@@ -365,7 +378,12 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
         destination,
         amount,
     );
-    ic_cdk::println!("Queuing transaction: {:?} for signing", transaction,);
+
+    log!(
+        INFO,
+        "[withdraw]: queuing transaction: {:?} for signing",
+        transaction,
+    );
     mutate_state(|s| {
         s.pending_retrieve_eth_requests
             .insert(ledger_burn_index, transaction.clone())
@@ -429,13 +447,22 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
             ic_cdk::trap("cannot upgrade canister state with init args");
         }
         None | Some(MinterArg::UpgradeArg) => {
-            ic_cdk::println!("Upgrading...");
+            let start = ic_cdk::api::instruction_counter();
+
             STATE.with(|cell| {
                 *cell.borrow_mut() = Some(
                     ciborium::de::from_reader(StableReader::default())
                         .expect("failed to decode ledger state"),
                 );
             });
+
+            let end = ic_cdk::api::instruction_counter();
+
+            log!(
+                INFO,
+                "[upgrade]: upgrade consumed {} instructions",
+                start - end
+            );
         }
     }
     setup_timers();
@@ -518,6 +545,44 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     .build()
             }
         }
+    } else if req.path() == "/logs" {
+        use ic_cketh_minter::logs::{Log, Priority};
+        use serde_json;
+        use std::str::FromStr;
+
+        let max_skip_timestamp = match req.raw_query_param("time") {
+            Some(arg) => match u64::from_str(arg) {
+                Ok(value) => value,
+                Err(_) => {
+                    return HttpResponseBuilder::bad_request()
+                        .with_body_and_content_length("failed to parse the 'time' parameter")
+                        .build()
+                }
+            },
+            None => 0,
+        };
+
+        let mut entries: Log = Default::default();
+
+        match req.raw_query_param("priority") {
+            Some(priority_str) => match Priority::from_str(priority_str) {
+                Ok(priority) => match priority {
+                    Priority::Info => entries.push_logs(Priority::Info),
+                    Priority::TraceHttp => entries.push_logs(Priority::TraceHttp),
+                    Priority::Debug => entries.push_logs(Priority::Debug),
+                },
+                Err(_) => entries.push_all(),
+            },
+            None => entries.push_all(),
+        }
+
+        entries
+            .entries
+            .retain(|entry| entry.timestamp >= max_skip_timestamp);
+        HttpResponseBuilder::ok()
+            .header("Content-Type", "application/json; charset=utf-8")
+            .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
+            .build()
     } else {
         HttpResponseBuilder::not_found().build()
     }

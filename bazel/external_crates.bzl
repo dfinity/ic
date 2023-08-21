@@ -484,6 +484,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 git = "https://github.com/dfinity/bitcoin-canister",
                 rev = "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7",
             ),
+            "ic-canister-log": crate.spec(
+                version = "0.2.0",
+            ),
             "ic-cdk": crate.spec(
                 version = "0.7.0",
             ),

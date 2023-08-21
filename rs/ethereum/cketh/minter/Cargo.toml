@@ -20,6 +20,7 @@ futures = "0.3"
 hex = "0.4"
 ic-ic00-types = { path = "../../../types/ic00_types" }
 hex-literal = "0.4.1"
+ic-canister-log = "0.2.0"
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
 ic-cdk-macros = { workspace = true }
