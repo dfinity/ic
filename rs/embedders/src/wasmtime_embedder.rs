@@ -658,6 +658,10 @@ pub struct PageAccessResults {
     pub read_before_write_count: usize,
     pub direct_write_count: usize,
     pub stable_dirty_pages: Vec<PageIndex>,
+    pub sigsegv_count: usize,
+    pub mmap_count: usize,
+    pub mprotect_count: usize,
+    pub copy_page_count: usize,
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
@@ -725,6 +729,10 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 read_before_write_count: 0,
                 direct_write_count: 0,
                 stable_dirty_pages,
+                sigsegv_count: 0,
+                mmap_count: 0,
+                mprotect_count: 0,
+                copy_page_count: 0,
             })
         } else {
             let dirty_pages = match self.modification_tracking {
@@ -764,6 +772,10 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 read_before_write_count: tracker.read_before_write_count(),
                 direct_write_count: tracker.direct_write_count(),
                 stable_dirty_pages,
+                sigsegv_count: tracker.sigsegv_count(),
+                mmap_count: tracker.mmap_count(),
+                mprotect_count: tracker.mprotect_count(),
+                copy_page_count: tracker.copy_page_count(),
             })
         }
     }
@@ -830,6 +842,10 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         self.instance_stats.dirty_pages += access.dirty_pages.len();
         self.instance_stats.read_before_write_count += access.read_before_write_count;
         self.instance_stats.direct_write_count += access.direct_write_count;
+        self.instance_stats.sigsegv_count += access.sigsegv_count;
+        self.instance_stats.mmap_count += access.mmap_count;
+        self.instance_stats.mprotect_count += access.mprotect_count;
+        self.instance_stats.copy_page_count += access.copy_page_count;
 
         if let MeteringType::New = self.metering_type {
             // charge for dirty heap pages
