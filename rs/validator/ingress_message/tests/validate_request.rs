@@ -1,19 +1,18 @@
 use assert_matches::assert_matches;
-use ic_canister_client_sender::Ed25519KeyPair;
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use ic_registry_client_helpers::node_operator::PrincipalId;
 use ic_types::messages::Blob;
 use ic_types::messages::HttpRequestContent;
-use ic_types::time::GENESIS;
 use ic_types::CanisterId;
 use ic_types::{Time, UserId};
 use ic_validator_http_request_test_utils::DirectAuthenticationScheme::{
     CanisterSignature, UserKeyPair,
 };
-use ic_validator_http_request_test_utils::HttpRequestEnvelopeContent;
 use ic_validator_http_request_test_utils::{
-    hard_coded_root_of_trust, AuthenticationScheme, CanisterSigner, DelegationChain,
-    DirectAuthenticationScheme, HttpRequestBuilder, RootOfTrust,
+    all_authentication_schemes, canister_signature, hard_coded_root_of_trust, random_user_key_pair,
+    AuthenticationScheme, CanisterSigner, DirectAuthenticationScheme, HttpRequestBuilder,
+    HttpRequestEnvelopeContent, RootOfTrust, CANISTER_ID_SIGNER, CANISTER_SIGNATURE_SEED,
+    CURRENT_TIME,
 };
 use ic_validator_ingress_message::AuthenticationError;
 use ic_validator_ingress_message::AuthenticationError::DelegationContainsCyclesError;
@@ -28,9 +27,6 @@ use rand::{CryptoRng, Rng};
 use std::fmt::Debug;
 use std::str::FromStr;
 
-const CANISTER_SIGNATURE_SEED: [u8; 1] = [42];
-const CANISTER_ID_SIGNER: CanisterId = CanisterId::from_u64(1185);
-const CURRENT_TIME: Time = GENESIS;
 const CANISTER_ID_WRONG_SIGNER: CanisterId = CanisterId::from_u64(1186);
 
 trait EnvelopeContent<C>: HttpRequestEnvelopeContent<HttpRequestContentType = C> + Debug {}
@@ -49,7 +45,7 @@ mod ingress_expiry {
     #[test]
     fn should_error_when_request_expired() {
         let mut rng = ReproducibleRng::new();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         for scheme in all_authentication_schemes(&mut rng) {
             test(
@@ -90,7 +86,7 @@ mod ingress_expiry {
 
     #[test]
     fn should_error_when_request_expiry_too_far_in_future() {
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let mut rng = ReproducibleRng::new();
         for scheme in all_authentication_schemes(&mut rng) {
             test(
@@ -366,7 +362,7 @@ mod anonymous_request {
 
     #[test]
     fn should_validate_anonymous_request() {
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         test(&verifier, HttpRequestBuilder::new_update_call());
         test(&verifier, HttpRequestBuilder::new_query());
@@ -394,7 +390,7 @@ mod anonymous_request {
 
     #[test]
     fn should_error_if_sender_not_anonymous_principal_in_unsigned_request() {
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         test(&verifier, HttpRequestBuilder::new_update_call());
         test(&verifier, HttpRequestBuilder::new_query());
@@ -430,7 +426,7 @@ mod anonymous_request {
     #[test]
     fn should_error_when_anonymous_request_signed() {
         let mut rng = ReproducibleRng::new();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
         test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
@@ -474,7 +470,7 @@ mod authenticated_requests_direct_ed25519 {
     #[test]
     fn should_validate_signed_request() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
         test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
@@ -504,7 +500,7 @@ mod authenticated_requests_direct_ed25519 {
     #[test]
     fn should_error_when_signature_corrupted() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
         test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
@@ -537,7 +533,7 @@ mod authenticated_requests_direct_ed25519 {
     #[test]
     fn should_error_when_public_key_does_not_match_sender() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
         test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
@@ -575,7 +571,7 @@ mod authenticated_requests_direct_ed25519 {
     #[test]
     fn should_error_when_request_signed_by_other_key_pair() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
         test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
@@ -905,7 +901,6 @@ mod authenticated_requests_delegations {
     use crate::{HttpRequestVerifier, RequestValidationError};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::messages::{HttpRequest, ReadState, SignedIngressContent, UserQuery};
-    use ic_types::time::GENESIS;
     use ic_types::{CanisterId, Time};
     use ic_validator_http_request_test_utils::{
         AuthenticationScheme, DelegationChain, DelegationChainBuilder,
@@ -916,12 +911,11 @@ mod authenticated_requests_delegations {
 
     const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20; // !changing this number might be breaking!
     const MAXIMUM_NUMBER_OF_TARGETS: usize = 1_000; // !changing this number might be breaking!
-    const CURRENT_TIME: Time = GENESIS;
 
     #[test]
     fn should_validate_empty_delegations() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
         test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
@@ -952,7 +946,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_validate_delegation_chains_of_length_up_to_20() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(&mut rng));
         for number_of_delegations in 1..=20 {
             chain_builder = chain_builder.delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME);
@@ -1008,7 +1002,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_when_delegation_chain_length_just_above_boundary() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let delegation_chain =
             delegation_chain_of_length(MAXIMUM_NUMBER_OF_DELEGATIONS + 1, CURRENT_TIME, &mut rng)
                 .build();
@@ -1031,7 +1025,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_when_delegation_chain_too_long() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let number_of_delegations =
             rng.gen_range(MAXIMUM_NUMBER_OF_DELEGATIONS + 2..=2 * MAXIMUM_NUMBER_OF_DELEGATIONS);
         let delegation_chain =
@@ -1056,7 +1050,7 @@ mod authenticated_requests_delegations {
     fn should_fail_when_a_single_delegation_expired() {
         let mut rng1 = reproducible_rng();
         let mut rng2 = rng1.fork();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let expired_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let one_ns = Duration::from_nanos(1);
         let expired = CURRENT_TIME.saturating_sub_duration(one_ns);
@@ -1088,7 +1082,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_validate_non_expiring_delegation() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let never_expire = Time::from_nanos_since_unix_epoch(u64::MAX);
         let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
             .delegate_to(random_user_key_pair(&mut rng), never_expire)
@@ -1113,7 +1107,7 @@ mod authenticated_requests_delegations {
     fn should_fail_when_single_delegation_signature_corrupted() {
         let mut rng1 = reproducible_rng();
         let mut rng2 = rng1.fork();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let corrupted_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let mut key_pair_whose_signature_is_corrupted = None;
         let delegation_chain = grow_delegation_chain(
@@ -1156,7 +1150,7 @@ mod authenticated_requests_delegations {
     fn should_fail_when_delegations_do_not_form_a_chain() {
         let mut rng1 = reproducible_rng();
         let mut rng2 = rng1.fork();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let wrong_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let other_key_pair = random_user_key_pair(&mut rng1);
         let delegation_chain = grow_delegation_chain(
@@ -1256,7 +1250,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_validate_request_when_canister_id_among_all_targets() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let requested_canister_id = CanisterId::from(42);
         let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
             .delegate_to_with_targets(
@@ -1315,7 +1309,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_when_requested_canister_id_not_among_all_targets() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let requested_canister_id = CanisterId::from(42);
         let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
             .delegate_to_with_targets(
@@ -1378,7 +1372,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_when_targets_empty() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let requested_canister_id = CanisterId::from(42);
         let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
             .delegate_to_with_targets(random_user_key_pair(&mut rng), CURRENT_TIME, vec![])
@@ -1427,7 +1421,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_accept_repeating_target() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let requested_canister_id = CanisterId::from(42);
         let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
             .delegate_to_with_targets(
@@ -1483,7 +1477,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_when_delegations_self_signed() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let mut key_pairs = random_user_key_pairs(3, &mut rng);
         let duplicated_key_pair = key_pairs[1].clone();
         key_pairs.insert(1, duplicated_key_pair.clone());
@@ -1509,7 +1503,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_when_start_of_delegations_self_signed() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let mut key_pairs = random_user_key_pairs(2, &mut rng);
         let duplicated_key_pair = key_pairs[0].clone();
         key_pairs.insert(0, duplicated_key_pair.clone());
@@ -1535,7 +1529,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_when_delegation_chain_contains_a_cycle_with_start_of_chain() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let mut key_pairs = random_user_key_pairs(2, &mut rng);
         let duplicated_key_pair = key_pairs[0].clone();
         key_pairs.push(duplicated_key_pair.clone());
@@ -1560,7 +1554,7 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_when_delegation_chain_contains_a_cycle() {
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
         let mut key_pairs = random_user_key_pairs(3, &mut rng);
         let duplicated_key_pair = key_pairs[1].clone();
         key_pairs.push(duplicated_key_pair.clone());
@@ -1589,7 +1583,7 @@ mod authenticated_requests_delegations {
             targets.push(CanisterId::from_u64(i as u64))
         }
         let mut rng = reproducible_rng();
-        let verifier = verifier_at_time(CURRENT_TIME);
+        let verifier = verifier_at_time(CURRENT_TIME).build();
 
         let update_request = request_authenticated_by_delegation_with_targets(
             HttpRequestBuilder::new_update_call(),
@@ -1621,7 +1615,9 @@ mod authenticated_requests_delegations {
             targets.clone(),
             &mut rng,
         );
-        let result = verifier_at_time(CURRENT_TIME).validate_request(&update_request);
+        let result = verifier_at_time(CURRENT_TIME)
+            .build()
+            .validate_request(&update_request);
         assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"));
 
         let query_request = request_authenticated_by_delegation_with_targets(
@@ -1629,7 +1625,9 @@ mod authenticated_requests_delegations {
             targets,
             &mut rng,
         );
-        let result = verifier_at_time(CURRENT_TIME).validate_request(&query_request);
+        let result = verifier_at_time(CURRENT_TIME)
+            .build()
+            .validate_request(&query_request);
         assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"))
     }
 
@@ -1763,29 +1761,8 @@ mod authenticated_requests_delegations {
     }
 }
 
-fn all_authentication_schemes<R: Rng + CryptoRng>(rng: &mut R) -> Vec<AuthenticationScheme> {
-    use strum::EnumCount;
-
-    let schemes = vec![
-        AuthenticationScheme::Anonymous,
-        AuthenticationScheme::Direct(random_user_key_pair(rng)),
-        AuthenticationScheme::Direct(canister_signature_with_hard_coded_root_of_trust()),
-        AuthenticationScheme::Delegation(
-            DelegationChain::rooted_at(random_user_key_pair(rng))
-                .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
-                .build(),
-        ),
-    ];
-    assert_eq!(schemes.len(), AuthenticationScheme::COUNT + 1);
-    schemes
-}
-
 fn auth_with_random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> AuthenticationScheme {
     AuthenticationScheme::Direct(random_user_key_pair(rng))
-}
-
-fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {
-    UserKeyPair(Ed25519KeyPair::generate(rng))
 }
 
 fn random_user_key_pairs<R: Rng + CryptoRng>(
@@ -1800,19 +1777,6 @@ fn random_user_key_pairs<R: Rng + CryptoRng>(
     key_pairs
 }
 
-fn canister_signature_with_hard_coded_root_of_trust() -> DirectAuthenticationScheme {
-    canister_signature(hard_coded_root_of_trust())
-}
-
-fn canister_signature(root_of_trust: RootOfTrust) -> DirectAuthenticationScheme {
-    CanisterSignature(CanisterSigner {
-        seed: CANISTER_SIGNATURE_SEED.to_vec(),
-        canister_id: CANISTER_ID_SIGNER,
-        root_public_key: root_of_trust.public_key,
-        root_secret_key: root_of_trust.secret_key,
-    })
-}
-
 fn max_ingress_expiry_at(current_time: Time) -> Time {
     use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
     current_time + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR
@@ -1822,8 +1786,6 @@ fn default_verifier() -> IngressMessageVerifierBuilder {
     IngressMessageVerifier::builder().with_time_provider(TimeProvider::Constant(CURRENT_TIME))
 }
 
-fn verifier_at_time(current_time: Time) -> IngressMessageVerifier {
-    default_verifier()
-        .with_time_provider(TimeProvider::Constant(current_time))
-        .build()
+fn verifier_at_time(current_time: Time) -> IngressMessageVerifierBuilder {
+    default_verifier().with_time_provider(TimeProvider::Constant(current_time))
 }
