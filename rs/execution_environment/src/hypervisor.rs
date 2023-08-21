@@ -37,6 +37,10 @@ pub struct HypervisorMetrics {
     largest_function_instruction_count: Histogram,
     compile: Histogram,
     max_complexity: Histogram,
+    sigsegv_count: Histogram,
+    mmap_count: Histogram,
+    mprotect_count: Histogram,
+    copy_page_count: Histogram,
 }
 
 impl HypervisorMetrics {
@@ -82,7 +86,27 @@ impl HypervisorMetrics {
                 "hypervisor_wasm_max_function_complexity",
                 "The maximum function complexity in a wasm module.",
                 decimal_buckets_with_zero(1, 8), //10 - 100M.
-            )
+            ),
+            sigsegv_count: metrics_registry.histogram(
+                "hypervisor_sigsegv_count",
+                "Number of signal faults handled during the execution.",
+                decimal_buckets_with_zero(0,8),
+            ),
+            mmap_count: metrics_registry.histogram(
+                "hypervisor_mmap_count",
+                "Number of calls to mmap during the execution.",
+                decimal_buckets_with_zero(0,8),
+            ),
+            mprotect_count: metrics_registry.histogram(
+                "hypervisor_mprotect_count",
+                "Number of calls to mprotect during the execution.",
+                decimal_buckets_with_zero(0,8),
+            ),
+            copy_page_count: metrics_registry.histogram(
+                "hypervisor_copy_page_count",
+                "Number of calls to pages memcopied during the execution.",
+                decimal_buckets_with_zero(0,8),
+            ),
         }
     }
 
@@ -97,6 +121,14 @@ impl HypervisorMetrics {
             self.direct_write_count
                 .observe(output.instance_stats.direct_write_count as f64);
             self.allocated_pages.set(allocated_pages_count() as i64);
+            self.sigsegv_count
+                .observe(output.instance_stats.sigsegv_count as f64);
+            self.mmap_count
+                .observe(output.instance_stats.mmap_count as f64);
+            self.mprotect_count
+                .observe(output.instance_stats.mprotect_count as f64);
+            self.copy_page_count
+                .observe(output.instance_stats.copy_page_count as f64);
         }
     }
 

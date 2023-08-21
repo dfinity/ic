@@ -204,6 +204,12 @@ struct ReadBeforeWriteStats {
     direct_write_count: AtomicUsize,
 }
 
+struct MemoryInstructionsStats {
+    mmap_count: AtomicUsize,
+    mprotect_count: AtomicUsize,
+    copy_page_count: AtomicUsize,
+}
+
 pub struct SigsegvMemoryTracker {
     memory_area: MemoryArea,
     accessed_bitmap: RefCell<PageBitmap>,
@@ -216,6 +222,8 @@ pub struct SigsegvMemoryTracker {
     #[cfg(feature = "sigsegv_handler_checksum")]
     checksum: RefCell<checksum::SigsegChecksum>,
     read_before_write_stats: ReadBeforeWriteStats,
+    sigsegv_count: AtomicUsize,
+    memory_instructions_stats: MemoryInstructionsStats,
 }
 
 impl SigsegvMemoryTracker {
@@ -255,6 +263,12 @@ impl SigsegvMemoryTracker {
                 read_before_write_count: AtomicUsize::new(0),
                 direct_write_count: AtomicUsize::new(0),
             },
+            sigsegv_count: AtomicUsize::new(0),
+            memory_instructions_stats: MemoryInstructionsStats {
+                mmap_count: AtomicUsize::new(0),
+                mprotect_count: AtomicUsize::new(0),
+                copy_page_count: AtomicUsize::new(0),
+            },
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
@@ -267,6 +281,10 @@ impl SigsegvMemoryTracker {
             apply_memory_instructions(&tracker, ProtFlags::PROT_NONE, instructions);
         } else {
             unsafe { mprotect(addr, size, ProtFlags::PROT_NONE)? }
+            tracker
+                .memory_instructions_stats
+                .mprotect_count
+                .fetch_add(1, Ordering::Relaxed);
         }
 
         Ok(tracker)
@@ -277,6 +295,7 @@ impl SigsegvMemoryTracker {
         access_kind: Option<AccessKind>,
         fault_address: *mut libc::c_void,
     ) -> bool {
+        self.sigsegv_count.fetch_add(1, Ordering::Relaxed);
         if self.use_new_signal_handler {
             sigsegv_fault_handler_new(self, access_kind.unwrap(), fault_address)
         } else {
@@ -363,14 +382,40 @@ impl SigsegvMemoryTracker {
     pub fn read_before_write_count(&self) -> usize {
         self.read_before_write_stats
             .read_before_write_count
-            .load(Ordering::SeqCst)
+            .load(Ordering::Relaxed)
     }
 
     /// The number of pages that had an initial write access.
     pub fn direct_write_count(&self) -> usize {
         self.read_before_write_stats
             .direct_write_count
-            .load(Ordering::SeqCst)
+            .load(Ordering::Relaxed)
+    }
+
+    /// The number of calls to `handle_sigsegv`.
+    pub fn sigsegv_count(&self) -> usize {
+        self.sigsegv_count.load(Ordering::Relaxed)
+    }
+
+    /// The number of calls to `mmap`.
+    pub fn mmap_count(&self) -> usize {
+        self.memory_instructions_stats
+            .mmap_count
+            .load(Ordering::Relaxed)
+    }
+
+    /// The number of calls to `mprotect`.
+    pub fn mprotect_count(&self) -> usize {
+        self.memory_instructions_stats
+            .mprotect_count
+            .load(Ordering::Relaxed)
+    }
+
+    /// The number of pages copied as part of memory instructions.
+    pub fn copy_page_count(&self) -> usize {
+        self.memory_instructions_stats
+            .copy_page_count
+            .load(Ordering::Relaxed)
     }
 }
 
@@ -582,7 +627,7 @@ pub fn sigsegv_fault_handler_new(
                 tracker
                     .read_before_write_stats
                     .read_before_write_count
-                    .fetch_add(1, Ordering::SeqCst);
+                    .fetch_add(1, Ordering::Relaxed);
                 // Ensure that all pages in the range have already been accessed because we are
                 // going to simply `mprotect` the range.
                 let prefetch_range = accessed_bitmap.restrict_range_to_marked(prefetch_range);
@@ -598,13 +643,17 @@ pub fn sigsegv_fault_handler_new(
                     .map_err(print_enomem_help)
                     .unwrap()
                 };
+                tracker
+                    .memory_instructions_stats
+                    .mprotect_count
+                    .fetch_add(1, Ordering::Relaxed);
                 dirty_bitmap.mark_range(&prefetch_range);
                 tracker.add_dirty_pages(faulting_page, prefetch_range);
             } else {
                 tracker
                     .read_before_write_stats
                     .direct_write_count
-                    .fetch_add(1, Ordering::SeqCst);
+                    .fetch_add(1, Ordering::Relaxed);
                 // The first access to the page is a write access. This is a good case because
                 // it allows us to set up read/write mapping right away.
                 // Ensure that all pages in the range have not been accessed yet because we are
@@ -685,6 +734,10 @@ fn apply_memory_instructions(
                 FileDescriptor { fd },
                 offset,
             ) => {
+                tracker
+                    .memory_instructions_stats
+                    .mmap_count
+                    .fetch_add(1, Ordering::Relaxed);
                 unsafe {
                     mmap(
                         tracker.page_start_addr_from(clamped_range.start),
@@ -699,6 +752,11 @@ fn apply_memory_instructions(
                 };
             }
             ic_replicated_state::page_map::MemoryMapOrData::Data(data) => {
+                tracker.memory_instructions_stats.copy_page_count.fetch_add(
+                    (clamped_range.end.get() - clamped_range.start.get()) as usize,
+                    Ordering::Relaxed,
+                );
+
                 if current_prot_flags != ProtFlags::PROT_READ | ProtFlags::PROT_WRITE {
                     current_prot_flags = ProtFlags::PROT_READ | ProtFlags::PROT_WRITE;
                     unsafe {
@@ -710,6 +768,10 @@ fn apply_memory_instructions(
                         .map_err(print_enomem_help)
                         .unwrap()
                     };
+                    tracker
+                        .memory_instructions_stats
+                        .mprotect_count
+                        .fetch_add(1, Ordering::Relaxed);
                 }
                 unsafe {
                     let data = &data[start_offset * PAGE_SIZE
@@ -739,6 +801,10 @@ fn apply_memory_instructions(
             .map_err(print_enomem_help)
             .unwrap()
         };
+        tracker
+            .memory_instructions_stats
+            .mprotect_count
+            .fetch_add(1, Ordering::Relaxed);
     }
 }
 

@@ -1111,6 +1111,10 @@ impl TestWasmExecutorCore {
             dirty_pages: message.dirty_pages,
             read_before_write_count: message.dirty_pages,
             direct_write_count: 0,
+            sigsegv_count: 0,
+            mmap_count: 0,
+            mprotect_count: 0,
+            copy_page_count: 0,
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,

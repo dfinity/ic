@@ -45,6 +45,18 @@ pub struct InstanceStats {
     /// Number of times a write access is handled when the page has not yet been
     /// read.
     pub direct_write_count: usize,
+
+    /// Number of sigsegv handled.
+    pub sigsegv_count: usize,
+
+    /// Number of calls to mmap.
+    pub mmap_count: usize,
+
+    /// Number of calls to mprotect.
+    pub mprotect_count: usize,
+
+    /// Number of pages loaded by copying the data.
+    pub copy_page_count: usize,
 }
 
 /// Errors that can be returned when fetching the available memory on a subnet.
