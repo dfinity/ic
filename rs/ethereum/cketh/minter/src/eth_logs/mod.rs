@@ -4,9 +4,11 @@ mod tests;
 use crate::address::Address;
 use crate::endpoints::ReceivedEthEvent;
 use crate::eth_rpc::{into_nat, BlockNumber, FixedSizeData, Hash, LogEntry};
+use crate::logs::{DEBUG, INFO};
 use crate::RPC_CLIENT;
 use candid::Principal;
 use hex_literal::hex;
+use ic_canister_log::log;
 use num_bigint::BigUint;
 use std::collections::BTreeSet;
 
@@ -39,7 +41,7 @@ pub async fn last_received_eth_events(
 
     let (ok, not_ok): (Vec<_>, Vec<_>) = result
         .into_iter()
-        .map(|log| ReceivedEthEvent::try_from(log))
+        .map(ReceivedEthEvent::try_from)
         .partition(Result::is_ok);
     let valid_transactions: Vec<ReceivedEthEvent> = ok.into_iter().map(Result::unwrap).collect();
     let errors: Vec<ReceivedEthEventError> = not_ok.into_iter().map(Result::unwrap_err).collect();
@@ -51,17 +53,18 @@ pub fn mint_transaction(minted_transactions: &mut BTreeSet<Hash>, event: Receive
 
     let transaction_hash = Hash::from_str(&event.transaction_hash).expect("valid transaction hash");
     if minted_transactions.insert(transaction_hash) {
-        ic_cdk::println!(
-            "Received new event {:?}: Minting {} wei to {}",
+        log!(
+            INFO,
+            "[mint_transaction]: received event: {:?}, minting {} wei to {}",
             event,
             event.value,
             event.principal
         );
     } else {
-        ic_cdk::println!(
-            "Ignoring event {:?} since transaction {:?} was already minted",
+        log!(
+            DEBUG,
+            "[mint_transaction]: ignoring event: {:?}, since it has already been minted",
             event,
-            event.transaction_hash
         );
     }
 }
@@ -72,24 +75,33 @@ pub fn report_transaction_error(
 ) {
     match error {
         ReceivedEthEventError::PendingLogEntry => {
-            ic_cdk::println!("Ignoring pending log entry");
+            log!(
+                DEBUG,
+                "[report_transaction_error]: ignoring pending log entry",
+            );
         }
         ReceivedEthEventError::InvalidLogEntry(err) => {
-            ic_cdk::println!("ERROR: Ignoring invalid log entry: {}. This is either a BUG or there is a problem with the queried provider", err);
+            log!(
+                INFO,
+                "[report_transaction_error]: Ignoring invalid log entry: {}. This is either a BUG or there is a problem with the queried provider",
+                err,
+            );
         }
         ReceivedEthEventError::InvalidIcPrincipal {
             transaction_hash,
             invalid_principal,
         } => {
             if invalid_transactions.insert(transaction_hash.clone()) {
-                ic_cdk::println!(
-                    "WARN: Cannot process transaction with hash {:?} since the given IC principal {:?} is invalid",
+                log!(
+                    INFO,
+                    "[report_transaction_error]: cannot process transaction with hash {:?} since the given IC principal {:?} is invalid",
                     transaction_hash,
                     invalid_principal
                 );
             } else {
-                ic_cdk::println!(
-                    "Ignoring invalid transaction with hash {:?} since it was already reported",
+                log!(
+                    DEBUG,
+                    "[report_transaction_error]: Ignoring invalid transaction with hash {:?} since it was already reported",
                     transaction_hash,
                 );
             }

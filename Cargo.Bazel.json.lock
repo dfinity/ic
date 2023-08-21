@@ -1,5 +1,5 @@
 {
-  "checksum": "27795163547e9160ebcd8d0ef5875007872f2d56037210227f75abd754a9ddf3",
+  "checksum": "005a5d5061a0e74eb194d256769ecee9652d3575ad16562fe82c56866277f0bc",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13864,6 +13864,10 @@
               "target": "ic_btc_validation"
             },
             {
+              "id": "ic-canister-log 0.2.0",
+              "target": "ic_canister_log"
+            },
+            {
               "id": "ic-cdk 0.7.4",
               "target": "ic_cdk"
             },
@@ -22014,6 +22018,45 @@
       },
       "license": null
     },
+    "ic-canister-log 0.2.0": {
+      "name": "ic-canister-log",
+      "version": "0.2.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ic-canister-log/0.2.0/download",
+          "sha256": "cb82c4f617ecff6e452fe65af0489626ec7330ffe3eedd9ea14e6178eea48d1a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_canister_log",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ic_canister_log",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "serde 1.0.171",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.2.0"
+      },
+      "license": "Apache-2.0"
+    },
     "ic-cdk 0.7.4": {
       "name": "ic-cdk",
       "version": "0.7.4",
@@ -27616,27 +27659,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2018",
         "version": "0.3.8"
@@ -27670,27 +27698,12 @@
         ],
         "crate_features": {
           "common": [
+            "errno",
             "general",
             "ioctl",
             "no_std"
           ],
-          "selects": {
-            "aarch64-unknown-linux-gnu": [
-              "errno"
-            ],
-            "arm-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "armv7-unknown-linux-gnueabi": [
-              "errno"
-            ],
-            "i686-unknown-linux-gnu": [
-              "errno"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "errno"
-            ]
-          }
+          "selects": {}
         },
         "edition": "2021",
         "version": "0.4.3"

@@ -4,6 +4,8 @@ use crate::eth_rpc::{
     JsonRpcResult, LogEntry, Transaction,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
+use crate::logs::{DEBUG, INFO};
+use ic_canister_log::log;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -49,7 +51,11 @@ impl EthRpcClient {
     ) -> HttpOutcallResult<JsonRpcResult<O>> {
         let mut last_result: Option<HttpOutcallResult<JsonRpcResult<O>>> = None;
         for provider in self.providers() {
-            ic_cdk::println!("Calling provider {:?}", provider);
+            log!(
+                DEBUG,
+                "[sequential_call_until_ok]: calling provider: {:?}",
+                provider
+            );
             let result =
                 eth_rpc::call(provider.url().to_string(), method.clone(), params.clone()).await;
             match result {
@@ -85,7 +91,7 @@ impl EthRpcClient {
         let results = {
             let mut fut = Vec::with_capacity(providers.len());
             for provider in providers {
-                ic_cdk::println!("Will call provider {:?}", provider);
+                log!(DEBUG, "[parallel_call]: will call provider: {:?}", provider);
                 fut.push(eth_rpc::call(
                     provider.url().to_string(),
                     method.clone(),
@@ -184,13 +190,12 @@ impl<T: Debug + PartialEq> MultiCallResults<T> {
             .expect("BUG: MultiCallResults is guaranteed to be non-empty");
         for (provider, result) in results {
             if result != base_result {
-                ic_cdk::println!(
-                    "WARN: Provider {:?} returned a different result than {:?}. Result {:?} is not equal to {:?}",
-                    provider,
-                    base_node_provider,
-                    result,
-                    base_result
-                );
+                log!(INFO, "[reduce_with_equality]: Provider {:?} returned a different result than {:?}. Result {:?} is not equal to {:?}",
+                provider,
+                base_node_provider,
+                result,
+                base_result
+            );
                 return Err(MultiCallError::InconsistentResults(
                     MultiCallResults::from_non_empty_iter(vec![
                         (base_node_provider, base_result),

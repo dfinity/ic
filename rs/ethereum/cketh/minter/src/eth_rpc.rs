@@ -2,9 +2,11 @@
 //! interface.
 
 use crate::address::Address;
+use crate::logs::TRACE_HTTP;
 use crate::numeric::Wei;
 use candid::{candid_method, CandidType, Principal};
 use ethnum::u256;
+use ic_canister_log::log;
 use ic_cdk::api::call::{call_with_payment128, RejectionCode};
 use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
@@ -481,9 +483,14 @@ pub async fn call<I: Serialize, O: DeserializeOwned>(
         id: 1,
     })
     .unwrap();
-    ic_cdk::println!("REQUEST: {payload}");
+    let url = url.into();
+    log!(
+        TRACE_HTTP,
+        "Calling url: {}, with payload: {payload}",
+        url.clone()
+    );
     let request = CanisterHttpRequestArgument {
-        url: url.into(),
+        url: url.clone(),
         max_response_bytes: Some(10 * KIB),
         method: HttpMethod::POST,
         headers: vec![HttpHeader {
@@ -510,6 +517,14 @@ pub async fn call<I: Serialize, O: DeserializeOwned>(
     )
     .await
     .map_err(|(code, message)| HttpOutcallError::IcError { code, message })?;
+
+    log!(
+        TRACE_HTTP,
+        "Got response: {} from url: {} with status: {}",
+        String::from_utf8_lossy(&response.body),
+        url,
+        response.status
+    );
 
     // JSON-RPC responses over HTTP should have a 2xx status code,
     // even if the contained JsonRpcResult is an error.

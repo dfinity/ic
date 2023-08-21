@@ -2752,6 +2752,7 @@ dependencies = [
  "ic-btc-interface",
  "ic-btc-test-utils",
  "ic-btc-validation",
+ "ic-canister-log",
  "ic-cdk 0.7.4",
  "ic-cdk-macros",
  "ic-cdk-timers",
@@ -4391,6 +4392,15 @@ version = "0.1.0"
 source = "git+https://github.com/dfinity/bitcoin-canister?rev=0e996988693f2d55fc9533c44dc20ae5310a1894#0e996988693f2d55fc9533c44dc20ae5310a1894"
 dependencies = [
  "bitcoin 0.28.2",
+]
+
+[[package]]
+name = "ic-canister-log"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb82c4f617ecff6e452fe65af0489626ec7330ffe3eedd9ea14e6178eea48d1a"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
