@@ -19,6 +19,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/types/types",
     "@crate_index//:bincode",
+    "@crate_index//:crossbeam-channel",
     "@crate_index//:futures",
     "@crate_index//:linked-hash-map",
     "@crate_index//:lru",

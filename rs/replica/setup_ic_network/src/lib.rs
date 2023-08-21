@@ -3,7 +3,7 @@
 //! Specifically, it constructs all the artifact pools and the Consensus/P2P
 //! time source.
 
-use crossbeam_channel::Sender;
+use crossbeam_channel::{bounded, Sender};
 use ic_artifact_manager::{manager, *};
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl,
@@ -72,7 +72,6 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
 };
-use tokio::sync::mpsc::channel;
 
 /// The P2P state sync client.
 pub enum P2PStateSyncClient {
@@ -154,7 +153,7 @@ pub fn setup_consensus_and_p2p(
     Vec<Box<dyn JoinGuard>>,
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
-    let (advert_tx, advert_rx) = channel(MAX_ADVERT_BUFFER);
+    let (advert_tx, advert_rx) = bounded(MAX_ADVERT_BUFFER);
 
     let (p2p_clients, mut join_handles, ingress_pool) = start_consensus(
         log,
@@ -213,7 +212,7 @@ pub fn setup_consensus_and_p2p(
                 metrics_registry.clone(),
                 client_on_state_change,
                 move |req| {
-                    advert_tx.blocking_send(req.into()).unwrap();
+                    let _ = advert_tx.send(req.into());
                 },
             );
             join_handles.push(jh);
@@ -233,7 +232,7 @@ pub fn setup_consensus_and_p2p(
                 metrics_registry.clone(),
                 Box::new(client.clone()) as Box<_>,
                 move |req| {
-                    advert_tx.blocking_send(req.into()).unwrap();
+                    let _ = advert_tx.send(req.into());
                 },
             );
             join_handles.push(jh);
@@ -270,7 +269,7 @@ pub fn setup_consensus_and_p2p(
         backends,
     ));
 
-    start_p2p(
+    join_handles.push(start_p2p(
         log,
         metrics_registry,
         rt_handle,
@@ -282,7 +281,7 @@ pub fn setup_consensus_and_p2p(
         consensus_pool_cache,
         artifact_manager,
         advert_rx,
-    );
+    ));
     (ingress_pool, ingress_sender, join_handles)
 }
 
@@ -314,7 +313,7 @@ fn start_consensus(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     registry_poll_delay_duration_ms: u64,
-    advert_tx: tokio::sync::mpsc::Sender<GossipAdvert>,
+    advert_tx: Sender<GossipAdvert>,
     canister_http_adapter_client: CanisterHttpAdapterClient,
     time_source: Arc<SysTimeSource>,
 ) -> (
@@ -379,7 +378,7 @@ fn start_consensus(
         // Create the consensus client.
         let (client, jh) = create_consensus_handlers(
             move |req| {
-                advert_tx.blocking_send(req.into()).unwrap();
+                let _ = advert_tx.send(req.into());
             },
             consensus_setup(
                 replica_config.clone(),
@@ -417,7 +416,7 @@ fn start_consensus(
         let ingress_prioritizer = IngressPrioritizer::new(time_source.clone());
         let (client, jh) = create_ingress_handlers(
             move |req| {
-                advert_tx.blocking_send(req.into()).unwrap();
+                let _ = advert_tx.send(req.into());
             },
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
@@ -435,7 +434,7 @@ fn start_consensus(
         // Create the certification client.
         let (client, jh) = create_certification_handlers(
             move |req| {
-                advert_tx.blocking_send(req.into()).unwrap();
+                let _ = advert_tx.send(req.into());
             },
             certification_setup(
                 replica_config,
@@ -459,7 +458,7 @@ fn start_consensus(
         // Create the DKG client.
         let (client, jh) = create_dkg_handlers(
             move |req| {
-                advert_tx.blocking_send(req.into()).unwrap();
+                let _ = advert_tx.send(req.into());
             },
             (
                 dkg::DkgImpl::new(
@@ -497,7 +496,7 @@ fn start_consensus(
         let advert_tx = advert_tx.clone();
         let (client, jh) = create_ecdsa_handlers(
             move |req| {
-                advert_tx.blocking_send(req.into()).unwrap();
+                let _ = advert_tx.send(req.into());
             },
             (
                 ecdsa::EcdsaImpl::new(
@@ -527,7 +526,7 @@ fn start_consensus(
         let advert_tx = advert_tx.clone();
         let (client, jh) = create_https_outcalls_handlers(
             move |req| {
-                advert_tx.blocking_send(req.into()).unwrap();
+                let _ = advert_tx.send(req.into());
             },
             (
                 CanisterHttpPoolManagerImpl::new(
