@@ -1,0 +1,81 @@
+use std::time::Instant;
+
+use async_trait::async_trait;
+use reqwest::{Error as ReqwestError, Request, Response};
+use tracing::info;
+
+use crate::metrics::{MetricParams, WithMetrics};
+
+#[async_trait]
+pub trait HttpClient: Send + Sync {
+    async fn execute(&self, req: Request) -> Result<Response, ReqwestError>;
+}
+
+pub struct ReqwestClient(pub reqwest::Client);
+
+#[async_trait]
+impl HttpClient for ReqwestClient {
+    async fn execute(&self, req: Request) -> Result<Response, ReqwestError> {
+        self.0.execute(req).await
+    }
+}
+
+#[async_trait]
+impl<T: HttpClient> HttpClient for WithMetrics<T> {
+    async fn execute(&self, req: Request) -> Result<Response, ReqwestError> {
+        let start_time = Instant::now();
+
+        // Attribute (Method)
+        let method = req.method().to_string();
+
+        // Attribute (Scheme)
+        let scheme = req.url().scheme().to_string();
+
+        // Attribute (Host)
+        let host = match req.url().host_str() {
+            Some(h) => h.to_string(),
+            None => "".to_string(),
+        };
+
+        // Attribute (Path)
+        let path = req.url().path().to_string();
+
+        // Attribute (Query)
+        let query = match req.url().query() {
+            Some(q) => q.to_string(),
+            None => "".to_string(),
+        };
+
+        let out = self.0.execute(req).await;
+
+        let status = match out {
+            Ok(_) => "ok",
+            Err(_) => "fail",
+        };
+
+        let duration = start_time.elapsed().as_secs_f64();
+
+        // Attribute (Status Code)
+        let status_code = match &out {
+            Ok(out) => Some(out.status().as_u16()),
+            Err(_) => None,
+        };
+
+        let MetricParams { action, .. } = &self.1;
+
+        info!(
+            action = action.as_str(),
+            method,
+            scheme,
+            host,
+            path,
+            query,
+            status_code,
+            status,
+            duration,
+            error = ?out.as_ref().err(),
+        );
+
+        out
+    }
+}

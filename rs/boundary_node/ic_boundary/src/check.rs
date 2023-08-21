@@ -1,6 +1,7 @@
 use std::{
     fmt,
     num::Wrapping,
+    str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -12,12 +13,15 @@ use async_trait::async_trait;
 use bytes::Buf;
 use candid::Principal;
 use dashmap::DashMap;
+use http::Method;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use opentelemetry::{baggage::BaggageExt, trace::FutureExt, Context as TlmContext, KeyValue};
 use simple_moving_average::{SingleSumSMA, SMA};
+use url::Url;
 
 use crate::{
+    http::HttpClient,
     persist::Persist,
     snapshot::RoutingTable,
     snapshot::{Node, Subnet},
@@ -319,11 +323,11 @@ pub trait Check: Send + Sync {
 }
 
 pub struct Checker {
-    http_client: Arc<reqwest::Client>,
+    http_client: Arc<dyn HttpClient>,
 }
 
 impl Checker {
-    pub fn new(http_client: Arc<reqwest::Client>) -> Self {
+    pub fn new(http_client: Arc<dyn HttpClient>) -> Self {
         Self { http_client }
     }
 }
@@ -331,20 +335,20 @@ impl Checker {
 #[async_trait]
 impl Check for Checker {
     async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
-        let request = match self
-            .http_client
-            .get(format!("https://{}:{}/api/v2/status", node.id, node.port))
-            .build()
-        {
-            Ok(v) => v,
-            Err(e) => return Err(CheckError::Generic(e.to_string())),
-        };
+        // Create request
+        let u = Url::from_str(&format!("https://{}:{}/api/v2/status", node.id, node.port))
+            .map_err(|err| CheckError::Generic(err.to_string()))?;
 
+        let request = reqwest::Request::new(Method::GET, u);
+
+        // Execute request
         let start_time = Instant::now();
-        let response = match self.http_client.execute(request).await {
-            Ok(v) => v,
-            Err(e) => return Err(CheckError::Network(e.to_string())),
-        };
+
+        let response = self
+            .http_client
+            .execute(request)
+            .await
+            .map_err(|err| CheckError::Network(err.to_string()))?;
 
         let latency = start_time.elapsed();
 

@@ -25,7 +25,6 @@ use axum_server::{accept::DefaultAcceptor, Server};
 use clap::{Args, Parser};
 use configuration::{Configure, ServiceConfiguration};
 use futures::TryFutureExt;
-use http::{header::HeaderName, Request, Response};
 use hyper_rustls::ConfigBuilderExt;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_local_store::LocalStoreImpl;
@@ -58,6 +57,7 @@ use crate::{
     cli::Cli,
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
     dns::DnsResolver,
+    http::ReqwestClient,
     metrics::{MetricParams, WithMetrics},
     nns::Loader,
     routes::{MiddlewareState, ProxyRouter},
@@ -74,6 +74,7 @@ mod cli;
 mod configuration;
 mod dns;
 mod firewall;
+mod http;
 mod metrics;
 mod nns;
 mod persist;
@@ -149,15 +150,20 @@ async fn main() -> Result<(), Error> {
         .with_no_client_auth();
 
     // HTTP Client
-    let http_client = Arc::new(
-        reqwest::Client::builder()
-            .timeout(Duration::from_secs(cli.listen.http_timeout))
-            .connect_timeout(Duration::from_secs(cli.listen.http_timeout_connect))
-            .use_preconfigured_tls(rustls_config)
-            .dns_resolver(Arc::new(dns_resolver))
-            .build()
-            .context("unable to build HTTP client")?,
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(cli.listen.http_timeout))
+        .connect_timeout(Duration::from_secs(cli.listen.http_timeout_connect))
+        .use_preconfigured_tls(rustls_config)
+        .dns_resolver(Arc::new(dns_resolver))
+        .build()
+        .context("unable to build HTTP client")?;
+
+    let http_client = ReqwestClient(http_client);
+    let http_client = WithMetrics(
+        http_client,
+        MetricParams::new(&meter, SERVICE_NAME, "http_request"),
     );
+    let http_client = Arc::new(http_client);
 
     // Registry Client
     let local_store = Arc::new(LocalStoreImpl::new(&cli.registry.local_store_path));
@@ -229,7 +235,7 @@ async fn main() -> Result<(), Error> {
 
     // Server / API
     let proxy_router = Arc::new(ProxyRouter::new(
-        Arc::clone(&http_client),
+        http_client.clone(),
         Arc::clone(&lookup_table),
         nns_pub_key.into_bytes().into(),
     ));
@@ -308,7 +314,7 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "persist"),
     );
 
-    let checker = Checker::new(Arc::clone(&http_client)); // HTTP client does not need Arc
+    let checker = Checker::new(http_client);
     let checker = WithMetrics(checker, MetricParams::new(&meter, SERVICE_NAME, "check"));
     let checker = WithRetryLimited(
         checker,

@@ -1,4 +1,4 @@
-use std::{fmt, io::Read, sync::Arc, time::Instant};
+use std::{fmt, io::Read, str::FromStr, sync::Arc, time::Instant};
 
 use anyhow::{anyhow, Context, Error};
 use arc_swap::ArcSwapOption;
@@ -15,7 +15,7 @@ use axum::{
 use bytes::Buf;
 use candid::Principal;
 use futures_util::{StreamExt, TryFutureExt};
-use http::{header, request::Parts, HeaderValue};
+use http::{header, request::Parts, HeaderValue, Method};
 use ic_types::{
     messages::{
         Blob, HttpQueryContent, HttpRequestEnvelope, HttpStatusResponse, HttpUserQuery,
@@ -30,8 +30,9 @@ use serde_cbor::Value as CborValue;
 use tokio::sync::RwLock;
 use tower_http::request_id::{MakeRequestId, RequestId};
 use tracing::{error, info};
+use url::Url;
 
-use crate::{metrics::HttpMetricParams, persist::Routes, snapshot::Node};
+use crate::{http::HttpClient, metrics::HttpMetricParams, persist::Routes, snapshot::Node};
 
 // Type of IC request
 #[derive(Default, Clone, Copy)]
@@ -170,14 +171,14 @@ pub trait Proxier {
 // and owning HTTP client for outgoing requests
 #[derive(Clone)]
 pub struct ProxyRouter {
-    http_client: Arc<reqwest::Client>,
+    http_client: Arc<dyn HttpClient>,
     published_routes: Arc<ArcSwapOption<Routes>>,
     root_key: Vec<u8>,
 }
 
 impl ProxyRouter {
     pub fn new(
-        http_client: Arc<reqwest::Client>,
+        http_client: Arc<dyn HttpClient>,
         published_routes: Arc<ArcSwapOption<Routes>>,
         root_key: Vec<u8>,
     ) -> Self {
@@ -199,22 +200,21 @@ impl Proxier for ProxyRouter {
         canister_id: Principal,
     ) -> Result<Response, ErrorCause> {
         // Prepare the request
-        let url = format!(
-            "https://{}:{}/api/v2/canister/{canister_id}/{request_type}",
-            node.id, node.port,
-        );
-
         let (parts, body) = request.into_parts();
 
-        let request = self
-            .http_client
-            .post(url)
-            .headers(parts.headers)
-            .body(body)
-            .build()
-            .map_err(|e| ErrorCause::Other(format!("Unable to build request: {e}")))?; // TODO can this even fail?
+        // Create request
+        let u = Url::from_str(&format!(
+            "https://{}:{}/api/v2/canister/{canister_id}/{request_type}",
+            node.id, node.port,
+        ))
+        .map_err(|e| ErrorCause::Other(format!("failed to build request url: {e}")))?;
 
-        // Send the request
+        let mut request = reqwest::Request::new(Method::POST, u);
+
+        *request.headers_mut() = parts.headers;
+        *request.body_mut() = Some(body.into());
+
+        // Execute request
         let response = self
             .http_client
             .execute(request)
