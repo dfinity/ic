@@ -437,13 +437,16 @@ impl InstallCodeHelper {
         let new_wasm_custom_sections_memory_used = execution_state.metadata.memory_usage();
 
         if let Some(old) = self.canister.execution_state.take() {
-            let wasm_binary = execution_state.wasm_binary.clone();
-            let old_memory = old.wasm_memory;
-            let new_memory = execution_state.wasm_memory;
-            execution_state.wasm_memory =
-                OrthogonalPersistence::upgrade_memory(wasm_binary, old_memory, new_memory);
-
+            // Currently, `StableMemoryHandling::Keep` is used to denote an upgrade.
+            // Retain both the main Wasm memory and the stable memory on an upgrades.
+            // Clear both memory on `reinstall` denoted by `StableMemoryHandling::Replace`.
             if stable_memory_handling == StableMemoryHandling::Keep {
+                let wasm_binary = execution_state.wasm_binary.clone();
+                let old_memory = old.wasm_memory;
+                let new_memory = execution_state.wasm_memory;
+                execution_state.wasm_memory =
+                    OrthogonalPersistence::upgrade_memory(wasm_binary, old_memory, new_memory);
+
                 execution_state.stable_memory = old.stable_memory;
             }
         };
