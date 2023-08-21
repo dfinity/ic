@@ -354,10 +354,7 @@ fn callee_can_reject() {
         assert_eq!(msg.respondent, canister_id);
         assert_eq!(
             msg.response_payload,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: "MONOLORD".to_string()
-            })
+            Payload::Reject(RejectContext::new(RejectCode::CanisterReject, "MONOLORD"))
         );
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -410,10 +407,7 @@ fn response_callback_can_reject() {
         assert_eq!(msg.respondent, b_id);
         assert_eq!(
             msg.response_payload,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterReject,
-                message: "error".to_string()
-            })
+            Payload::Reject(RejectContext::new(RejectCode::CanisterReject, "error"))
         );
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -497,10 +491,10 @@ fn stopping_canister_rejects_requests() {
         assert_eq!(msg.respondent, b_id);
         assert_eq!(
             msg.response_payload,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: format!("IC0509: Canister {} is not running", b_id)
-            })
+            Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!("IC0509: Canister {} is not running", b_id)
+            ))
         );
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -542,10 +536,10 @@ fn stopped_canister_rejects_requests() {
         assert_eq!(msg.respondent, b_id);
         assert_eq!(
             msg.response_payload,
-            Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: format!("IC0508: Canister {} is not running", b_id)
-            })
+            Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!("IC0508: Canister {} is not running", b_id)
+            ))
         );
     } else {
         panic!("unexpected message popped: {:?}", message);
@@ -1161,14 +1155,14 @@ fn setup_initial_dkg_sender_not_on_nns() {
             respondent: CanisterId::from(own_subnet),
             originator_reply_callback: CallbackId::new(0),
             refund: test.canister_creation_fee(),
-            response_payload: Payload::Reject(RejectContext {
-                code: RejectCode::CanisterError,
-                message: format!(
+            response_payload: Payload::Reject(RejectContext::new(
+                RejectCode::CanisterError,
+                format!(
                     "{} is called by {}. It can only be called by NNS.",
                     ic00::Method::SetupInitialDKG,
                     other_canister,
                 )
-            })
+            ))
         }
         .into()
     );
@@ -1634,7 +1628,7 @@ fn get_reject_message(response: RequestOrResponse) -> String {
         RequestOrResponse::Request(_) => panic!("Expected Response"),
         RequestOrResponse::Response(resp) => match &resp.response_payload {
             Payload::Data(_) => panic!("Expected Reject"),
-            Payload::Reject(reject) => reject.message.clone(),
+            Payload::Reject(reject) => reject.message().clone(),
         },
     }
 }

@@ -1442,10 +1442,7 @@ fn test_reject_subnet_output_request() {
         .sender(this)
         .receiver(IC_00)
         .build();
-    let reject_context = RejectContext {
-        code: ic_error_types::RejectCode::DestinationInvalid,
-        message: "".into(),
-    };
+    let reject_context = RejectContext::new(ic_error_types::RejectCode::DestinationInvalid, "");
 
     let mut queues = CanisterQueues::default();
 
@@ -1864,7 +1861,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                 refund: Cycles::from(7_u64),
                 response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
                     RejectCode::SysTransient,
-                    "Request timed out.".to_string(),
+                    "Request timed out.",
                     MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN
                 ))
             }),

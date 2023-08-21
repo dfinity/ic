@@ -131,13 +131,13 @@ impl SystemStateChanges {
             msg.method_name,
             err
         );
-        let reject_context = RejectContext {
-            code: RejectCode::DestinationInvalid,
-            message: format!(
+        let reject_context = RejectContext::new(
+            RejectCode::DestinationInvalid,
+            format!(
                 "Unable to route management canister request {}: {:?}",
                 msg.method_name, err
             ),
-        };
+        );
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
@@ -159,10 +159,7 @@ impl SystemStateChanges {
             err
         );
 
-        let reject_context = RejectContext {
-            code: RejectCode::CanisterError,
-            message: err.to_string(),
-        };
+        let reject_context = RejectContext::new(RejectCode::CanisterError, err.to_string());
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
             .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;

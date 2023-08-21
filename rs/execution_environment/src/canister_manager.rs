@@ -1687,10 +1687,10 @@ pub fn uninstall_canister(
                         respondent: canister_id,
                         originator_reply_callback: *callback_id,
                         refund: call_context.available_cycles(),
-                        response_payload: Payload::Reject(RejectContext {
-                            code: RejectCode::CanisterReject,
-                            message: String::from("Canister has been uninstalled."),
-                        }),
+                        response_payload: Payload::Reject(RejectContext::new(
+                            RejectCode::CanisterReject,
+                            "Canister has been uninstalled.",
+                        )),
                     }));
                 }
                 CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(

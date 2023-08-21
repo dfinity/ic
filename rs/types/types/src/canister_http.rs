@@ -499,7 +499,7 @@ pub struct CanisterHttpReject {
 
 impl From<&CanisterHttpReject> for RejectContext {
     fn from(value: &CanisterHttpReject) -> RejectContext {
-        RejectContext::new(value.reject_code, value.message.clone())
+        RejectContext::new(value.reject_code, &value.message)
     }
 }
 

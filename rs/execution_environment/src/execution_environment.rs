@@ -434,13 +434,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::SignWithECDSA) => match &msg {
                 CanisterCall::Request(request) => {
-                    let reject_message = if payload.is_empty() {
-                        "An empty message cannot be signed".to_string()
-                    } else {
-                        String::new()
-                    };
-
-                    if !reject_message.is_empty() {
+                    if payload.is_empty() {
                         use ic_types::messages;
                         state.push_subnet_output_response(
                             Response {
@@ -449,10 +443,10 @@ impl ExecutionEnvironment {
                                 originator_reply_callback: request.sender_reply_callback,
                                 refund: request.payment,
                                 response_payload: messages::Payload::Reject(
-                                    messages::RejectContext {
-                                        code: ic_error_types::RejectCode::CanisterReject,
-                                        message: reject_message,
-                                    },
+                                    messages::RejectContext::new(
+                                        ic_error_types::RejectCode::CanisterReject,
+                                        "An empty message cannot be signed",
+                                    ),
                                 ),
                             }
                             .into(),
@@ -1726,10 +1720,10 @@ impl ExecutionEnvironment {
                         respondent: subnet_id_as_canister_id,
                         originator_reply_callback: reply_callback,
                         refund: cycles,
-                        response_payload: Payload::Reject(RejectContext {
-                            code: RejectCode::CanisterReject,
-                            message: format!("Canister {}'s stop request cancelled", canister_id),
-                        }),
+                        response_payload: Payload::Reject(RejectContext::new(
+                            RejectCode::CanisterReject,
+                            format!("Canister {}'s stop request cancelled", canister_id),
+                        )),
                     };
                     state.push_subnet_output_response(response.into());
                 }

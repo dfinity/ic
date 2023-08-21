@@ -48,10 +48,10 @@ pub fn push_response(
 
                     Payload::Data(initial_response.encode())
                 }
-                Err(err) => Payload::Reject(RejectContext {
-                    code: RejectCode::CanisterError,
-                    message: format!("Received invalid response from adapter: {:?}", err),
-                }),
+                Err(err) => Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterError,
+                    format!("Received invalid response from adapter: {:?}", err),
+                )),
             };
 
             // Add response to the consensus queue.

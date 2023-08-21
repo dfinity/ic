@@ -159,29 +159,69 @@ impl std::fmt::Debug for Request {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct RejectContext {
-    pub code: RejectCode,
-    pub message: String,
+    code: RejectCode,
+    message: String,
 }
 
+/// Minimum length limit that may be imposed on reject messages.
+const MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES: usize = 10;
+/// Maximum allowed length for reject messages.
+pub const MAX_REJECT_MESSAGE_LEN_BYTES: usize = 8 * 1024;
+
 impl RejectContext {
-    pub fn new(code: RejectCode, message: String) -> Self {
-        Self { code, message }
+    pub fn new(code: RejectCode, message: impl ToString) -> Self {
+        Self::new_with_message_length_limit(code, message, MAX_REJECT_MESSAGE_LEN_BYTES)
     }
 
     pub fn new_with_message_length_limit(
         code: RejectCode,
-        message: String,
-        max_msg_len: usize,
+        message: impl ToString,
+        mut max_msg_len: usize,
     ) -> Self {
-        Self::new(code, message.safe_truncate(max_msg_len).to_string())
+        // Ensure `max_msg_len` is within reasonable bounds.
+        if max_msg_len < MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES {
+            max_msg_len = MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES;
+        } else if max_msg_len > MAX_REJECT_MESSAGE_LEN_BYTES {
+            max_msg_len = MAX_REJECT_MESSAGE_LEN_BYTES;
+        }
+
+        let message = message.to_string();
+        if message.len() <= max_msg_len {
+            return Self { code, message };
+        }
+
+        // Use 1/4 of maximum length for suffix.
+        let suffix_len = max_msg_len / 4;
+        // And the rest (minus the space required by the ellipsis) for prefix.
+        let prefix_len = max_msg_len - suffix_len - 3;
+
+        let mut truncated = String::with_capacity(max_msg_len);
+        truncated.push_str(message.safe_truncate(prefix_len));
+        truncated.push_str("...");
+        truncated.push_str(message.safe_truncate_right(suffix_len));
+
+        Self {
+            code,
+            message: truncated,
+        }
+    }
+
+    /// A constructor to be used only when decoding from the canonical
+    /// representation, so we do not accidentally change the canonical
+    /// representation of an already certified `RejectContext`.
+    pub fn from_canonical(code: RejectCode, message: impl ToString) -> Self {
+        Self {
+            code,
+            message: message.to_string(),
+        }
     }
 
     pub fn code(&self) -> RejectCode {
         self.code
     }
 
-    pub fn message(&self) -> String {
-        self.message.clone()
+    pub fn message(&self) -> &String {
+        &self.message
     }
 
     /// Returns the size of this `RejectContext` in bytes.
@@ -421,7 +461,7 @@ impl From<&RejectContext> for pb_queues::RejectContext {
     fn from(rc: &RejectContext) -> Self {
         Self {
             reject_code: rc.code as u64,
-            reject_message: rc.message(),
+            reject_message: rc.message.clone(),
         }
     }
 }

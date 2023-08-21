@@ -134,10 +134,7 @@ pub fn response_payload() -> impl Strategy<Value = Payload> {
         prop::collection::vec(any::<u8>(), 0..16).prop_flat_map(|data| Just(Payload::Data(data))),
         // Reject payload.
         (1u64..5, "[a-zA-Z]{1,6}").prop_flat_map(|(code, message)| Just(Payload::Reject(
-            RejectContext {
-                code: code.try_into().unwrap(),
-                message
-            }
+            RejectContext::new(code.try_into().unwrap(), message)
         )))
     ]
 }

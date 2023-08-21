@@ -1007,13 +1007,13 @@ pub(crate) fn get_signing_requests<'a>(
                 respondent: ic_types::CanisterId::ic_00(),
                 originator_reply_callback: *callback_id,
                 refund: context.request.payment,
-                response_payload: ic_types::messages::Payload::Reject(RejectContext {
-                    code: RejectCode::CanisterReject,
-                    message: format!(
+                response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+                    RejectCode::CanisterReject,
+                    format!(
                         "Invalid or disabled key_id in signature request: {:?}",
                         context.key_id
                     ),
-                }),
+                )),
             };
             ecdsa_payload.signature_agreements.insert(
                 context.pseudo_random_id,
@@ -1066,10 +1066,10 @@ pub(crate) fn get_signing_requests<'a>(
                     respondent: ic_types::CanisterId::ic_00(),
                     originator_reply_callback: *callback_id,
                     refund: context.request.payment,
-                    response_payload: ic_types::messages::Payload::Reject(RejectContext {
-                        code: RejectCode::CanisterError,
-                        message: "Signature request expired".to_string(),
-                    }),
+                    response_payload: ic_types::messages::Payload::Reject(RejectContext::new(
+                        RejectCode::CanisterError,
+                        "Signature request expired",
+                    )),
                 };
                 ecdsa_payload.signature_agreements.insert(
                     context.pseudo_random_id,

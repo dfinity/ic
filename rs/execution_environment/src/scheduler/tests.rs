@@ -2924,10 +2924,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
         respondent: ic_types::CanisterId::ic_00(),
         originator_reply_callback: *callback_id,
         refund: context.request.payment,
-        response_payload: Payload::Reject(RejectContext {
-            code: RejectCode::SysFatal,
-            message: "".into(),
-        }),
+        response_payload: Payload::Reject(RejectContext::new(RejectCode::SysFatal, "")),
     };
 
     test.state_mut().consensus_queue.push(response);
@@ -3773,10 +3770,10 @@ fn rate_limiting_of_install_code() {
         Payload::Reject(reject) => {
             assert!(
                 reject
-                    .message
+                    .message()
                     .contains("is rate limited because it executed too many instructions"),
                 "{}",
-                reject.message
+                reject.message()
             );
         }
     };

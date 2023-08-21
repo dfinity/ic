@@ -413,10 +413,7 @@ fn canonical_encoding_reject_response() {
         .respondent(canister_test_id(5))
         .originator_reply_callback(CallbackId::from(4))
         .refund(Cycles::new(3))
-        .response_payload(Payload::Reject(RejectContext {
-            code: RejectCode::SysFatal,
-            message: "Oops".into(),
-        }))
+        .response_payload(Payload::Reject(reject_context()))
         .build()
         .into();
 
@@ -945,8 +942,5 @@ fn reject_payload() -> Payload {
 }
 
 fn reject_context() -> RejectContext {
-    RejectContext {
-        code: RejectCode::SysFatal,
-        message: "Oops".into(),
-    }
+    RejectContext::new(RejectCode::SysFatal, "Oops")
 }

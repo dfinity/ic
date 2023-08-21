@@ -399,18 +399,18 @@ fn generate_dkg_response_payload(
 
             Some(Payload::Data(initial_transcript_records.encode()))
         }
-        (Some(Err(err_str1)), Some(Err(err_str2))) => Some(Payload::Reject(RejectContext {
-            code: ic_error_types::RejectCode::CanisterReject,
-            message: format!("{}{}", err_str1, err_str2),
-        })),
-        (Some(Err(err_str)), _) => Some(Payload::Reject(RejectContext {
-            code: ic_error_types::RejectCode::CanisterReject,
-            message: err_str.to_string(),
-        })),
-        (_, Some(Err(err_str))) => Some(Payload::Reject(RejectContext {
-            code: ic_error_types::RejectCode::CanisterReject,
-            message: err_str.to_string(),
-        })),
+        (Some(Err(err_str1)), Some(Err(err_str2))) => Some(Payload::Reject(RejectContext::new(
+            ic_error_types::RejectCode::CanisterReject,
+            format!("{}{}", err_str1, err_str2),
+        ))),
+        (Some(Err(err_str)), _) => Some(Payload::Reject(RejectContext::new(
+            ic_error_types::RejectCode::CanisterReject,
+            err_str,
+        ))),
+        (_, Some(Err(err_str))) => Some(Payload::Reject(RejectContext::new(
+            ic_error_types::RejectCode::CanisterReject,
+            err_str,
+        ))),
         _ => None,
     }
 }
