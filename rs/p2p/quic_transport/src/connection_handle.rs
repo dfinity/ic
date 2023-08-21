@@ -98,17 +98,12 @@ impl ConnectionHandle {
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
 
-        let (send_stream, recv_stream) = self.connection.open_bi().await.map_err(|e| {
+        let (mut send_stream, mut recv_stream) = self.connection.open_bi().await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
             e
         })?;
-
-        let mut send_stream =
-            tokio_util::codec::length_delimited::Builder::new().new_write(send_stream);
-        let mut recv_stream =
-            tokio_util::codec::length_delimited::Builder::new().new_read(recv_stream);
 
         write_request(&mut send_stream, request)
             .await
@@ -119,7 +114,7 @@ impl ConnectionHandle {
                 TransportError::Io { error: e }
             })?;
 
-        send_stream.get_mut().finish().await.map_err(|e| {
+        send_stream.finish().await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH]);
@@ -148,15 +143,12 @@ impl ConnectionHandle {
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
 
-        let send_stream = self.connection.open_uni().await.map_err(|e| {
+        let mut send_stream = self.connection.open_uni().await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_OPEN]);
             e
         })?;
-
-        let mut send_stream =
-            tokio_util::codec::length_delimited::Builder::new().new_write(send_stream);
 
         write_request(&mut send_stream, request)
             .await
@@ -167,7 +159,7 @@ impl ConnectionHandle {
                 TransportError::Io { error: e }
             })?;
 
-        send_stream.get_mut().finish().await.map_err(|e| {
+        send_stream.finish().await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH]);
