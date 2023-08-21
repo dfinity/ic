@@ -145,10 +145,13 @@ fn dts_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> StateMachine {
-    StateMachine::new_with_config(dts_state_machine_config(dts_subnet_config(
-        message_instruction_limit,
-        slice_instruction_limit,
-    )))
+    ic_state_machine_tests::StateMachineBuilder::new()
+        .with_config(Some(dts_state_machine_config(dts_subnet_config(
+            message_instruction_limit,
+            slice_instruction_limit,
+        ))))
+        .with_subnet_type(SubnetType::Application)
+        .build()
 }
 
 fn dts_install_code_env(
@@ -177,10 +180,13 @@ fn dts_install_code_env(
         },
     );
     (
-        StateMachine::new_with_config(StateMachineConfig::new(
-            config.subnet_config.clone(),
-            config.hypervisor_config.clone(),
-        )),
+        ic_state_machine_tests::StateMachineBuilder::new()
+            .with_config(Some(StateMachineConfig::new(
+                config.subnet_config.clone(),
+                config.hypervisor_config.clone(),
+            )))
+            .with_subnet_type(SubnetType::Application)
+            .build(),
         config,
     )
 }
