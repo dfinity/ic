@@ -17,13 +17,13 @@ mod tests;
 const IC_NNS_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
 
 /// An implementation of [`HttpRequestVerifier`] to verify ingress messages.
-pub struct IngressMessageVerifier {
-    root_of_trust_provider: ConstantRootOfTrustProvider,
+pub struct IngressMessageVerifier<P: RootOfTrustProvider> {
+    root_of_trust_provider: P,
     time_source: Arc<dyn TimeSource>,
     validator: ic_validator::HttpRequestVerifierImpl,
 }
 
-impl Default for IngressMessageVerifier {
+impl Default for IngressMessageVerifier<ConstantRootOfTrustProvider> {
     /// Default verifier for ingress messages that is suitable for production.
     ///
     /// It uses the following defaults:
@@ -73,14 +73,14 @@ impl Default for IngressMessageVerifier {
     /// }
     /// ```
     fn default() -> Self {
-        IngressMessageVerifier::builder()
+        IngressMessageVerifier::<ConstantRootOfTrustProvider>::builder()
             .with_root_of_trust(nns_root_public_key())
             .with_time_provider(TimeProvider::SystemTime)
             .build()
     }
 }
 
-impl IngressMessageVerifier {
+impl IngressMessageVerifier<ConstantRootOfTrustProvider> {
     fn new_internal<T: Into<IcRootOfTrust>>(
         root_of_trust: T,
         time_source: Arc<dyn TimeSource>,
@@ -157,10 +157,10 @@ fn nns_root_public_key() -> IcRootOfTrust {
     )
 }
 
-impl<C: HttpRequestContent> HttpRequestVerifier<C> for IngressMessageVerifier
+impl<C: HttpRequestContent, P: RootOfTrustProvider> HttpRequestVerifier<C>
+    for IngressMessageVerifier<P>
 where
-    ic_validator::HttpRequestVerifierImpl:
-        ic_validator::HttpRequestVerifier<C, ConstantRootOfTrustProvider>,
+    ic_validator::HttpRequestVerifierImpl: ic_validator::HttpRequestVerifier<C, P>,
 {
     fn validate_request(&self, request: &HttpRequest<C>) -> Result<(), RequestValidationError> {
         ic_validator::HttpRequestVerifier::validate_request(
@@ -259,7 +259,7 @@ impl IngressMessageVerifierBuilder {
         self
     }
 
-    pub fn build(self) -> IngressMessageVerifier {
+    pub fn build(self) -> IngressMessageVerifier<ConstantRootOfTrustProvider> {
         IngressMessageVerifier::new_internal(self.root_of_trust, Arc::new(self.time_provider))
     }
 }
