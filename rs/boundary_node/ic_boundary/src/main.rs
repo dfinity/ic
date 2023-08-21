@@ -57,10 +57,12 @@ use crate::{
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
+    dns::DnsResolver,
     metrics::{MetricParams, WithMetrics},
     nns::Loader,
     routes::{MiddlewareState, ProxyRouter},
-    snapshot::{DnsResolver, Runner as SnapshotRunner, TlsVerifier},
+    snapshot::Runner as SnapshotRunner,
+    tls_verify::TlsVerifier,
 };
 
 #[cfg(feature = "tls")]
@@ -70,12 +72,15 @@ mod acme;
 mod check;
 mod cli;
 mod configuration;
+mod dns;
 mod firewall;
 mod metrics;
 mod nns;
 mod persist;
 mod routes;
 mod snapshot;
+mod tls_verify;
+
 #[cfg(feature = "tls")]
 mod tls;
 
@@ -120,10 +125,21 @@ async fn main() -> Result<(), Error> {
     let lookup_table = Arc::new(ArcSwapOption::empty());
     let routing_table = Arc::new(ArcSwapOption::empty());
 
-    // HTTP Client
-    let tls_verifier = TlsVerifier::new(Arc::clone(&routing_table));
+    // DNS
     let dns_resolver = DnsResolver::new(Arc::clone(&routing_table));
+    let dns_resolver = WithMetrics(
+        dns_resolver,
+        MetricParams::new(&meter, SERVICE_NAME, "dns_resolve"),
+    );
 
+    // TLS Verification
+    let tls_verifier = TlsVerifier::new(Arc::clone(&routing_table));
+    let tls_verifier = WithMetrics(
+        tls_verifier,
+        MetricParams::new(&meter, SERVICE_NAME, "verify_tls"),
+    );
+
+    // TLS Configuration
     let rustls_config = rustls::ClientConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
@@ -132,6 +148,7 @@ async fn main() -> Result<(), Error> {
         .with_custom_certificate_verifier(Arc::new(tls_verifier))
         .with_no_client_auth();
 
+    // HTTP Client
     let http_client = Arc::new(
         reqwest::Client::builder()
             .timeout(Duration::from_secs(cli.listen.http_timeout))
