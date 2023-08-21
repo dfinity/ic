@@ -26,17 +26,12 @@ use ic_agent::{
 };
 use instant_acme::{Account, AccountCredentials, NewAccount};
 use opentelemetry::{
-    global,
-    metrics::{Counter, Histogram},
-    sdk::{
-        export::metrics::aggregation,
-        metrics::{controllers, processors, selectors},
-        Resource,
-    },
+    metrics::{Counter, Histogram, MeterProvider as _},
+    sdk::metrics::MeterProvider,
     KeyValue,
 };
-use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
-use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
+use opentelemetry_prometheus::exporter;
+use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use tokio::{sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
@@ -147,22 +142,16 @@ async fn main() -> Result<(), Error> {
         .context("failed to set global subscriber")?;
 
     // Metrics
-    let exporter = ExporterBuilder::new(
-        controllers::basic(
-            processors::factory(
-                selectors::simple::histogram([]),
-                aggregation::cumulative_temporality_selector(),
-            )
-            .with_memory(true),
-        )
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .build(),
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => SERVICE_NAME.into()}),
     )
-    .init();
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let meter = provider.meter(SERVICE_NAME);
 
-    let meter = global::meter(SERVICE_NAME);
-
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
     // Orchestrator
@@ -591,13 +580,13 @@ async fn main() -> Result<(), Error> {
 
 #[derive(Clone)]
 struct MetricsHandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { registry }): Extension<MetricsHandlerArgs>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -622,8 +611,6 @@ struct MetricsMiddlewareArgs {
 }
 
 async fn metrics_mw<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
-    let cx = opentelemetry::Context::current();
-
     let MetricsMiddlewareArgs { counter, recorder } = req
         .extensions()
         .get::<MetricsMiddlewareArgs>()
@@ -654,8 +641,8 @@ async fn metrics_mw<B>(req: Request<B>, next: Next<B>) -> impl IntoResponse {
         KeyValue::new("status_code", status_code),
     ];
 
-    counter.add(&cx, 1, labels);
-    recorder.record(&cx, request_duration, labels);
+    counter.add(1, labels);
+    recorder.record(request_duration, labels);
 
     response
 }

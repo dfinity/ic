@@ -7,13 +7,12 @@ use clap::Args;
 use hyper::{self, Body, Request, Response, StatusCode};
 use ic_agent::Agent;
 use opentelemetry::{
-    global,
-    metrics::{Counter, Meter},
-    sdk::Resource,
+    metrics::{Counter, Meter, MeterProvider as _},
+    sdk::metrics::MeterProvider,
     KeyValue,
 };
-use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{Encoder, TextEncoder};
+use opentelemetry_prometheus::exporter;
+use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 
 use crate::http::request::HttpRequest;
 use crate::http::response::HttpResponse;
@@ -73,14 +72,14 @@ impl<T: Validate> Validate for WithMetrics<T> {
 
 #[derive(Clone)]
 struct HandlerArgs {
-    exporter: PrometheusExporter,
+    registry: Registry,
 }
 
 async fn metrics_handler(
-    Extension(HandlerArgs { exporter }): Extension<HandlerArgs>,
+    Extension(HandlerArgs { registry }): Extension<HandlerArgs>,
     _: Request<Body>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 
@@ -98,20 +97,25 @@ async fn metrics_handler(
         .unwrap()
 }
 pub fn setup(opts: MetricsOpts) -> (Meter, Runner) {
-    let exporter = opentelemetry_prometheus::exporter()
-        .with_resource(Resource::new(vec![KeyValue::new("service", "prober")]))
-        .init();
+    let service_name = "prober";
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => service_name.into()}),
+    )
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build().unwrap();
+    let provider = MeterProvider::builder().with_reader(exporter).build();
     (
-        global::meter("icx-proxy"),
+        provider.meter("icx_proxy"),
         Runner {
-            exporter,
+            registry,
             metrics_addr: opts.metrics_addr,
         },
     )
 }
 
 pub struct Runner {
-    exporter: PrometheusExporter,
+    registry: Registry,
     metrics_addr: Option<SocketAddr>,
 }
 
@@ -124,7 +128,7 @@ impl Runner {
         let metrics_router = Router::new().route(
             "/metrics",
             get(metrics_handler.layer(Extension(HandlerArgs {
-                exporter: self.exporter,
+                registry: self.registry,
             }))),
         );
 

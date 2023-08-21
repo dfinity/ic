@@ -218,10 +218,10 @@ pub async fn with_metrics_middleware(
         .unwrap_or(0);
 
     let _ctx = Context::current();
-    counter.add(&_ctx, 1, labels);
-    durationer.record(&_ctx, duration, labels);
-    request_sizer.record(&_ctx, request_size.into(), labels);
-    response_sizer.record(&_ctx, response_size.into(), labels);
+    counter.add(1, labels);
+    durationer.record(duration, labels);
+    request_sizer.record(request_size.into(), labels);
+    response_sizer.record(response_size.into(), labels);
 
     info!(
         request_id,
@@ -252,13 +252,13 @@ impl<T> FromRef<MiddlewareState<T>> for HttpMetricParams {
 
 #[derive(Clone)]
 pub struct MetricsHandlerArgs {
-    pub exporter: PrometheusExporter,
+    pub registry: Registry,
 }
 
 pub async fn metrics_handler(
-    State(MetricsHandlerArgs { exporter }): State<MetricsHandlerArgs>,
+    State(MetricsHandlerArgs { registry }): State<MetricsHandlerArgs>,
 ) -> Response<Body> {
-    let metric_families = exporter.registry().gather();
+    let metric_families = registry.gather();
 
     let encoder = TextEncoder::new();
 

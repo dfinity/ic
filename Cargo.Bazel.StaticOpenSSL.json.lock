@@ -1,5 +1,5 @@
 {
-  "checksum": "c83109dabe3e7e9a4b4dd6a8b34f3207eff26a93b83d8b79b9d91d215b880f9c",
+  "checksum": "158ce098e3d1940f73988cf2141ff2f618e0ddf540ef9f416df37f68ed39463d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12246,55 +12246,6 @@
       },
       "license": "MIT"
     },
-    "dashmap 4.0.2": {
-      "name": "dashmap",
-      "version": "4.0.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/dashmap/4.0.2/download",
-          "sha256": "e77a43b28d0668df09411cb0bc9a8c2adc40f9a048afe863e05fd43251e8e39c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "dashmap",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "dashmap",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "num_cpus 1.16.0",
-              "target": "num_cpus"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "4.0.2"
-      },
-      "license": "MIT"
-    },
     "dashmap 5.5.0": {
       "name": "dashmap",
       "version": "5.5.0",
@@ -14114,22 +14065,14 @@
               "target": "openssl_sys"
             },
             {
-              "id": "opentelemetry 0.17.0",
-              "target": "opentelemetry"
-            },
-            {
-              "id": "opentelemetry 0.18.0",
+              "id": "opentelemetry 0.20.0",
               "target": "opentelemetry",
-              "alias": "opentelemetry_0_18_0"
+              "alias": "opentelemetry_0_20_0_metrics"
             },
             {
-              "id": "opentelemetry-prometheus 0.10.0",
-              "target": "opentelemetry_prometheus"
-            },
-            {
-              "id": "opentelemetry-prometheus 0.11.0",
+              "id": "opentelemetry-prometheus 0.13.0",
               "target": "opentelemetry_prometheus",
-              "alias": "opentelemetry_prometheus_0_11_0"
+              "alias": "opentelemetry_prometheus_0_13_0"
             },
             {
               "id": "p256 0.13.2",
@@ -33098,10 +33041,6 @@
           "common": [
             "async-trait",
             "crossbeam-channel",
-            "dashmap",
-            "default",
-            "fnv",
-            "metrics",
             "percent-encoding",
             "pin-project",
             "rand",
@@ -33114,14 +33053,6 @@
             {
               "id": "crossbeam-channel 0.5.8",
               "target": "crossbeam_channel"
-            },
-            {
-              "id": "dashmap 4.0.2",
-              "target": "dashmap"
-            },
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
             },
             {
               "id": "futures-channel 0.3.28",
@@ -33179,13 +33110,13 @@
       },
       "license": "Apache-2.0"
     },
-    "opentelemetry 0.18.0": {
+    "opentelemetry 0.20.0": {
       "name": "opentelemetry",
-      "version": "0.18.0",
+      "version": "0.20.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry/0.18.0/download",
-          "sha256": "69d6c3d7288a106c0a363e4b0e8d308058d56902adefb16f4936f417ffef086e"
+          "url": "https://crates.io/api/v1/crates/opentelemetry/0.20.0/download",
+          "sha256": "9591d937bc0e6d2feb6f71a559540ab300ea49955229c347a517a28d27784c54"
         }
       },
       "targets": [
@@ -33215,28 +33146,28 @@
         "deps": {
           "common": [
             {
-              "id": "opentelemetry_api 0.18.0",
+              "id": "opentelemetry_api 0.20.0",
               "target": "opentelemetry_api"
             },
             {
-              "id": "opentelemetry_sdk 0.18.0",
+              "id": "opentelemetry_sdk 0.20.0",
               "target": "opentelemetry_sdk"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.18.0"
+        "version": "0.20.0"
       },
       "license": "Apache-2.0"
     },
-    "opentelemetry-prometheus 0.10.0": {
+    "opentelemetry-prometheus 0.13.0": {
       "name": "opentelemetry-prometheus",
-      "version": "0.10.0",
+      "version": "0.13.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry-prometheus/0.10.0/download",
-          "sha256": "9328977e479cebe12ce0d3fcecdaea4721d234895a9440c5b5dfd113f0594ac6"
+          "url": "https://crates.io/api/v1/crates/opentelemetry-prometheus/0.13.0/download",
+          "sha256": "c7d81bc254e2d572120363a2b16cdb0d715d301b5789be0cfc26ad87e4e10e53"
         }
       },
       "targets": [
@@ -33258,55 +33189,16 @@
         "deps": {
           "common": [
             {
-              "id": "opentelemetry 0.17.0",
-              "target": "opentelemetry"
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
             },
             {
-              "id": "prometheus 0.13.3",
-              "target": "prometheus"
+              "id": "opentelemetry_api 0.20.0",
+              "target": "opentelemetry_api"
             },
             {
-              "id": "protobuf 2.28.0",
-              "target": "protobuf"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.10.0"
-      },
-      "license": "Apache-2.0"
-    },
-    "opentelemetry-prometheus 0.11.0": {
-      "name": "opentelemetry-prometheus",
-      "version": "0.11.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry-prometheus/0.11.0/download",
-          "sha256": "06c3d833835a53cf91331d2cfb27e9121f5a95261f31f08a1f79ab31688b8da8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "opentelemetry_prometheus",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "opentelemetry_prometheus",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "opentelemetry 0.18.0",
-              "target": "opentelemetry"
+              "id": "opentelemetry_sdk 0.20.0",
+              "target": "opentelemetry_sdk"
             },
             {
               "id": "prometheus 0.13.3",
@@ -33320,17 +33212,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.0"
+        "version": "0.13.0"
       },
       "license": "Apache-2.0"
     },
-    "opentelemetry_api 0.18.0": {
+    "opentelemetry_api 0.20.0": {
       "name": "opentelemetry_api",
-      "version": "0.18.0",
+      "version": "0.20.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry_api/0.18.0/download",
-          "sha256": "c24f96e21e7acc813c7a8394ee94978929db2bcc46cf6b5014fc612bf7760c22"
+          "url": "https://crates.io/api/v1/crates/opentelemetry_api/0.20.0/download",
+          "sha256": "8a81f725323db1b1206ca3da8bb19874bbd3f57c3bcd59471bfb04525b265b9b"
         }
       },
       "targets": [
@@ -33352,7 +33244,6 @@
         "crate_features": {
           "common": [
             "default",
-            "fnv",
             "metrics",
             "pin-project-lite",
             "trace"
@@ -33361,10 +33252,6 @@
         },
         "deps": {
           "common": [
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
-            },
             {
               "id": "futures-channel 0.3.28",
               "target": "futures_channel"
@@ -33388,10 +33275,14 @@
             {
               "id": "thiserror 1.0.43",
               "target": "thiserror"
+            },
+            {
+              "id": "urlencoding 2.1.3",
+              "target": "urlencoding"
             }
           ],
           "selects": {
-            "cfg(target_arch = \"wasm32\")": [
+            "cfg(all(target_arch = \"wasm32\", not(target_os = \"wasi\")))": [
               {
                 "id": "js-sys 0.3.64",
                 "target": "js_sys"
@@ -33400,17 +33291,17 @@
           }
         },
         "edition": "2021",
-        "version": "0.18.0"
+        "version": "0.20.0"
       },
       "license": "Apache-2.0"
     },
-    "opentelemetry_sdk 0.18.0": {
+    "opentelemetry_sdk 0.20.0": {
       "name": "opentelemetry_sdk",
-      "version": "0.18.0",
+      "version": "0.20.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/opentelemetry_sdk/0.18.0/download",
-          "sha256": "1ca41c4933371b61c2a2f214bf16931499af4ec90543604ec828f7a625c09113"
+          "url": "https://crates.io/api/v1/crates/opentelemetry_sdk/0.20.0/download",
+          "sha256": "fa8e705a0612d48139799fcbaba0d4a90f06277153e43dd2bdc16c6f0edd8026"
         }
       },
       "targets": [
@@ -33433,12 +33324,11 @@
           "common": [
             "async-trait",
             "crossbeam-channel",
-            "dashmap",
             "default",
-            "fnv",
             "metrics",
             "percent-encoding",
             "rand",
+            "regex",
             "trace"
           ],
           "selects": {}
@@ -33448,14 +33338,6 @@
             {
               "id": "crossbeam-channel 0.5.8",
               "target": "crossbeam_channel"
-            },
-            {
-              "id": "dashmap 5.5.0",
-              "target": "dashmap"
-            },
-            {
-              "id": "fnv 1.0.7",
-              "target": "fnv"
             },
             {
               "id": "futures-channel 0.3.28",
@@ -33474,8 +33356,12 @@
               "target": "once_cell"
             },
             {
-              "id": "opentelemetry_api 0.18.0",
+              "id": "opentelemetry_api 0.20.0",
               "target": "opentelemetry_api"
+            },
+            {
+              "id": "ordered-float 3.7.0",
+              "target": "ordered_float"
             },
             {
               "id": "percent-encoding 2.3.0",
@@ -33484,6 +33370,10 @@
             {
               "id": "rand 0.8.5",
               "target": "rand"
+            },
+            {
+              "id": "regex 1.9.1",
+              "target": "regex"
             },
             {
               "id": "thiserror 1.0.43",
@@ -33502,7 +33392,7 @@
           ],
           "selects": {}
         },
-        "version": "0.18.0"
+        "version": "0.20.0"
       },
       "license": "Apache-2.0"
     },
@@ -33579,6 +33469,52 @@
         },
         "edition": "2018",
         "version": "2.10.0"
+      },
+      "license": "MIT"
+    },
+    "ordered-float 3.7.0": {
+      "name": "ordered-float",
+      "version": "3.7.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ordered-float/3.7.0/download",
+          "sha256": "2fc2dbde8f8a79f2102cc474ceb0ad68e3b80b85289ea62389b60e66777e4213"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ordered_float",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "ordered_float",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "num-traits 0.2.15",
+              "target": "num_traits"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "3.7.0"
       },
       "license": "MIT"
     },
