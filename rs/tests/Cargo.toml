@@ -591,6 +591,10 @@ name = "ic-systest-medium"
 path = "testing_verification/testnets/medium.rs"
 
 [[bin]]
+name = "ic-systest-large"
+path = "testing_verification/testnets/large.rs"
+
+[[bin]]
 name = "ic-systest-consensus-performance"
 path = "consensus/consensus_performance.rs"
 
