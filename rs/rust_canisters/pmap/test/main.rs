@@ -1,11 +1,8 @@
 use canister_test::*;
 use dfn_json::json;
-use ic_utils::ic_features::*;
 
 #[test]
 fn test() {
-    cow_state_feature::enable(cow_state_feature::cow_state);
-
     local_test_e(|runtime| async move {
         ///////////////////////////////////////////////////////
         // Create a new instance of pmap

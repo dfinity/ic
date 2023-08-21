@@ -3724,15 +3724,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "features"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83072b3c84e55f9d0c0ff36a4575d0fd2e543ae4a56e04e7f5a9222188d574e3"
-dependencies = [
- "bitflags 1.3.2",
-]
-
-[[package]]
 name = "ff"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11312,9 +11303,7 @@ name = "ic-utils"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "bitflags 1.3.2",
  "cvt",
- "features",
  "hex",
  "ic-sys",
  "libc",

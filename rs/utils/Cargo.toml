@@ -4,8 +4,6 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-features = "0.10.0"
-bitflags = "1.2.1"
 hex = "0.4.2"
 prost = "0.11.0"
 scoped_threadpool = "0.1.*"
