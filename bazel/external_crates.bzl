@@ -349,9 +349,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "eyre": crate.spec(
                 version = "^0.6.8",
             ),
-            "features": crate.spec(
-                version = "^0.10.0",
-            ),
             "ff": crate.spec(
                 version = "^0.12.0",
                 features = [
