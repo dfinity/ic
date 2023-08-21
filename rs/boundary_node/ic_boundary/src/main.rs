@@ -34,17 +34,12 @@ use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
 use lazy_static::lazy_static;
 use nns::Load;
 use opentelemetry::{
-    global,
-    metrics::{Counter, Histogram},
-    sdk::{
-        export::metrics::aggregation,
-        metrics::{controllers, processors, selectors},
-        Resource,
-    },
+    metrics::{Counter, Histogram, Meter, MeterProvider as _, Unit},
+    sdk::metrics::MeterProvider,
     KeyValue,
 };
-use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
-use prometheus::{labels, Encoder as PrometheusEncoder, TextEncoder};
+use opentelemetry_prometheus::{exporter, ExporterBuilder, PrometheusExporter};
+use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
 use tokio::sync::{Mutex, RwLock};
 use tower::ServiceBuilder;
 use tower_http::{
@@ -104,24 +99,18 @@ async fn main() -> Result<(), Error> {
     .expect("failed to set global subscriber");
 
     // Metrics
-    let exporter = ExporterBuilder::new(
-        controllers::basic(
-            processors::factory(
-                selectors::simple::histogram([]),
-                aggregation::cumulative_temporality_selector(),
-            )
-            .with_memory(true),
-        )
-        .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .build(),
+    let registry: Registry = Registry::new_custom(
+        None,
+        Some(labels! {"service".into() => SERVICE_NAME.into()}),
     )
-    .init();
-
-    let meter = global::meter(SERVICE_NAME);
+    .unwrap();
+    let exporter = exporter().with_registry(registry.clone()).build()?;
+    let provider = MeterProvider::builder().with_reader(exporter).build();
+    let meter = provider.meter(SERVICE_NAME);
 
     let metrics_router = Router::new()
         .route("/metrics", get(metrics::metrics_handler))
-        .with_state(metrics::MetricsHandlerArgs { exporter });
+        .with_state(metrics::MetricsHandlerArgs { registry });
 
     info!(
         msg = format!("Starting {SERVICE_NAME}"),
@@ -186,8 +175,9 @@ async fn main() -> Result<(), Error> {
     };
 
     #[cfg(feature = "tls")]
-    let (tls_configurator, tls_acceptor, token) =
-        prepare_tls(&cli).await.context("unable to prepare TLS")?;
+    let (tls_configurator, tls_acceptor, token) = prepare_tls(&cli, &meter)
+        .await
+        .context("unable to prepare TLS")?;
 
     // No-op configurator is used to make compiler/clippy happy
     // Otherwise the enums in Configurator become single-variant and it complains
@@ -377,6 +367,7 @@ async fn main() -> Result<(), Error> {
 #[cfg(feature = "tls")]
 async fn prepare_tls(
     cli: &Cli,
+    meter: &Meter,
 ) -> Result<(impl Configure, CustomAcceptor, Arc<RwLock<Option<String>>>), Error> {
     // TLS Certificates (Ingress)
     let tls_loader = tls::Loader {
@@ -448,7 +439,7 @@ async fn prepare_tls(
     let tls_configurator = WithDeduplication::wrap(tls_configurator);
     let tls_configurator = WithMetrics(
         tls_configurator,
-        MetricParams::new(&global::meter(SERVICE_NAME), SERVICE_NAME, "configure_tls"),
+        MetricParams::new(meter, SERVICE_NAME, "configure_tls"),
     );
 
     let tls_acceptor = CustomAcceptor::new(tls_acceptor);

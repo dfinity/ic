@@ -8,7 +8,7 @@ use std::{
 
 use anyhow::{Context as AnyhowContext, Error};
 use async_trait::async_trait;
-use opentelemetry::{Context as OtContext, KeyValue};
+use opentelemetry::KeyValue;
 use tracing::info;
 
 use crate::{
@@ -173,10 +173,8 @@ impl<T: Persist> Persist for WithMetrics<T> {
             recorder,
         } = &self.1;
 
-        let cx = OtContext::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 

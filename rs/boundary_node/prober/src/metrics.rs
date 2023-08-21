@@ -6,7 +6,7 @@ use opentelemetry::{baggage::BaggageExt, metrics::Meter, Context};
 use tokio::time::Instant;
 
 use opentelemetry::{
-    metrics::{Counter, ValueRecorder},
+    metrics::{Counter, Histogram},
     KeyValue,
 };
 use tracing::info;
@@ -16,7 +16,7 @@ use crate::{Create, Delete, Install, Load, Probe, Routes, Run, Stop, TestContext
 #[derive(Clone)]
 pub struct MetricParams {
     pub counter: Counter<u64>,
-    pub recorder: ValueRecorder<f64>,
+    pub recorder: Histogram<f64>,
 }
 
 impl MetricParams {
@@ -27,7 +27,7 @@ impl MetricParams {
                 .with_description(format!("Counts occurences of {namespace}.{name} calls"))
                 .init(),
             recorder: meter
-                .f64_value_recorder(format!("{namespace}.{name}.duration_sec"))
+                .f64_histogram(format!("{namespace}.{name}.duration_sec"))
                 .with_description(format!(
                     "Records the duration of {namespace}.{name} calls in sec"
                 ))
