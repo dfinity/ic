@@ -58,12 +58,12 @@ function ic_prep() {
     local node_index=0
     for ip in "${nns_ips[@]}"; do
         node_definitions+=("--node")
-        node_definitions+=("idx:$((node_index++)),subnet_idx:0,p2p_addr:\"org.internetcomputer.p2p1://[${ip}]:4100\",xnet_api:\"http://[${ip}]:2497\",public_api:\"http://[${ip}]:8080\"")
+        node_definitions+=("idx:$((node_index++)),subnet_idx:0,p2p_addr:\"[${ip}]:4100\",xnet_api:\"[${ip}]:2497\",public_api:\"[${ip}]:8080\"")
     done
 
     for ip in "${app_ips[@]}"; do
         node_definitions+=("--node")
-        node_definitions+=("idx:$((node_index++)),subnet_idx:1,p2p_addr:\"org.internetcomputer.p2p1://[${ip}]:4100\",xnet_api:\"http://[${ip}]:2497\",public_api:\"http://[${ip}]:8080\"")
+        node_definitions+=("idx:$((node_index++)),subnet_idx:1,p2p_addr:\"[${ip}]:4100\",xnet_api:\"[${ip}]:2497\",public_api:\"[${ip}]:8080\"")
     done
 
     # Allow any principal to create canisters on any subnet
@@ -79,7 +79,6 @@ function ic_prep() {
         "--working-dir" "${IC_PREP_DIR}" \
         "--replica-version" "${REPLICA_VERSION}" \
         "${node_definitions[@]}" \
-        "--p2p-flows" "1234-1" \
         "--provisional-whitelist" "${whitelist_file}" \
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
         "--initial-node-provider" "${NODE_OPERATOR_ID}" \
