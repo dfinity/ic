@@ -67,6 +67,8 @@ impl From<Wei> for candid::Nat {
 pub struct TransactionNonce(ethnum::u256);
 
 impl TransactionNonce {
+    pub const ZERO: Self = TransactionNonce(ethnum::u256::ZERO);
+
     pub fn checked_increment(&self) -> Option<Self> {
         self.0.checked_add(ethnum::u256::ONE).map(Self)
     }
@@ -75,6 +77,20 @@ impl TransactionNonce {
 impl From<u64> for TransactionNonce {
     fn from(value: u64) -> Self {
         TransactionNonce(ethnum::u256::from(value))
+    }
+}
+
+impl TryFrom<candid::Nat> for TransactionNonce {
+    type Error = String;
+
+    fn try_from(value: candid::Nat) -> Result<Self, Self::Error> {
+        let bytes = value.0.to_bytes_be();
+        if bytes.len() > 32 {
+            return Err(format!("Nat does not fit in a U256: {}", value));
+        }
+        let mut u256_bytes = [0u8; 32];
+        u256_bytes[32 - bytes.len()..].copy_from_slice(&bytes);
+        Ok(Self(ethnum::u256::from_be_bytes(u256_bytes)))
     }
 }
 

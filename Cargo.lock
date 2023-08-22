@@ -5782,6 +5782,7 @@ dependencies = [
  "ic-metrics-encoder",
  "num-bigint 0.4.3",
  "num-traits",
+ "proptest",
  "rlp",
  "serde",
  "serde_bytes",

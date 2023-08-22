@@ -145,26 +145,6 @@ pub fn encode_u256<T: Into<u256>>(stream: &mut RlpStream, value: T) {
 }
 
 impl Eip1559TransactionRequest {
-    pub fn new_transfer(
-        chain_id: u64,
-        nonce: TransactionNonce,
-        price: TransactionPrice,
-        destination: Address,
-        amount: Wei,
-    ) -> Self {
-        Self {
-            chain_id,
-            nonce,
-            max_priority_fee_per_gas: price.max_priority_fee_per_gas,
-            max_fee_per_gas: price.max_fee_per_gas,
-            gas_limit: price.gas_limit,
-            destination,
-            amount,
-            data: Vec::new(),
-            access_list: AccessList::new(),
-        }
-    }
-
     pub fn transaction_type(&self) -> u8 {
         EIP1559_TX_ID
     }

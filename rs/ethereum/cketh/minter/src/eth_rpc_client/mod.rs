@@ -22,6 +22,15 @@ pub enum EthereumChain {
     Sepolia,
 }
 
+impl EthereumChain {
+    pub fn chain_id(&self) -> u64 {
+        match self {
+            EthereumChain::Mainnet => 1,
+            EthereumChain::Sepolia => 11155111,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct EthRpcClient {
     chain: EthereumChain,
