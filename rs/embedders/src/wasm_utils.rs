@@ -36,8 +36,8 @@ pub struct WasmImportsDetails {
     pub imports_mint_cycles: bool,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Default)]
-pub struct Complexity(u64);
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Complexity(pub u64);
 
 /// Returned as a result of `validate_wasm_binary` and provides
 /// additional information about the validation.
