@@ -1535,16 +1535,36 @@ impl DerivationPath {
 
 impl<'de> Deserialize<'de> for DerivationPath {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let decoded: Vec<ByteBuf> = Deserialize::deserialize(deserializer)?;
-        if decoded.len() > MAXIMUM_DERIVATION_PATH_LENGTH {
-            Err(serde::de::Error::custom(format!(
-                "Derivation path length {} exceeds maximum allowed {}",
-                decoded.len(),
-                MAXIMUM_DERIVATION_PATH_LENGTH
-            )))
-        } else {
-            Ok(DerivationPath::new(decoded))
+        struct SeqVisitor;
+
+        use serde::de::{SeqAccess, Visitor};
+
+        impl<'de> Visitor<'de> for SeqVisitor {
+            type Value = DerivationPath;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a sequence of binary blobs")
+            }
+
+            fn visit_seq<S>(self, mut seq: S) -> Result<Self::Value, S::Error>
+            where
+                S: SeqAccess<'de>,
+            {
+                let mut elements = Vec::with_capacity(MAXIMUM_DERIVATION_PATH_LENGTH);
+                while let Some(element) = seq.next_element::<ByteBuf>()? {
+                    if elements.len() >= MAXIMUM_DERIVATION_PATH_LENGTH {
+                        return Err(serde::de::Error::custom(format!(
+                            "Derivation path length exceeds maximum allowed {}",
+                            MAXIMUM_DERIVATION_PATH_LENGTH
+                        )));
+                    }
+                    elements.push(element);
+                }
+                Ok(DerivationPath(elements))
+            }
         }
+
+        deserializer.deserialize_seq(SeqVisitor)
     }
 }
 
@@ -1593,10 +1613,14 @@ fn verify_max_derivation_path_length() {
         let encoded = path.encode();
         let res = DerivationPath::decode(&encoded).unwrap_err();
         assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
-        assert!(res.description().contains(&format!(
-            "Deserialize error: Derivation path length {} exceeds maximum allowed {}",
-            i, MAXIMUM_DERIVATION_PATH_LENGTH
-        )));
+        assert!(
+            res.description().contains(&format!(
+                "Deserialize error: Derivation path length exceeds maximum allowed {}",
+                MAXIMUM_DERIVATION_PATH_LENGTH
+            )),
+            "Actual: {}",
+            res.description()
+        );
 
         let sign_with_ecdsa = SignWithECDSAArgs {
             message_hash: [1; 32],
@@ -1610,10 +1634,14 @@ fn verify_max_derivation_path_length() {
         let encoded = sign_with_ecdsa.encode();
         let res = SignWithECDSAArgs::decode(&encoded).unwrap_err();
         assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
-        assert!(res.description().contains(&format!(
-            "Deserialize error: Derivation path length {} exceeds maximum allowed {}",
-            i, MAXIMUM_DERIVATION_PATH_LENGTH
-        )));
+        assert!(
+            res.description().contains(&format!(
+                "Deserialize error: Derivation path length exceeds maximum allowed {}",
+                MAXIMUM_DERIVATION_PATH_LENGTH
+            )),
+            "Actual: {}",
+            res.description()
+        );
 
         let ecsda_public_key = ECDSAPublicKeyArgs {
             canister_id: None,
@@ -1627,10 +1655,14 @@ fn verify_max_derivation_path_length() {
         let encoded = ecsda_public_key.encode();
         let res = ECDSAPublicKeyArgs::decode(&encoded).unwrap_err();
         assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
-        assert!(res.description().contains(&format!(
-            "Deserialize error: Derivation path length {} exceeds maximum allowed {}",
-            i, MAXIMUM_DERIVATION_PATH_LENGTH
-        )));
+        assert!(
+            res.description().contains(&format!(
+                "Deserialize error: Derivation path length exceeds maximum allowed {}",
+                MAXIMUM_DERIVATION_PATH_LENGTH
+            )),
+            "Actual: {}",
+            res.description()
+        );
     }
 }
 
