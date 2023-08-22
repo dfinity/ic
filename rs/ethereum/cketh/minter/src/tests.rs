@@ -831,6 +831,7 @@ mod eth_fee_history {
 mod eth_get_transaction_by_hash {
     use crate::address::Address;
     use crate::eth_rpc::{BlockNumber, Data, Hash, Quantity, Transaction};
+    use crate::numeric::{TransactionNonce, Wei};
     use std::str::FromStr;
 
     #[test]
@@ -870,7 +871,7 @@ mod eth_get_transaction_by_hash {
                 ),
                 block_number: Some(BlockNumber::new(0x3ca487)),
                 gas: Quantity::new(0xdafd),
-                gas_price: Quantity::new(0x59682f0e),
+                gas_price: Wei::new(0x59682f0e),
                 from: Address::from_str("0xdd2851cdd40ae6536831558dd46db62fac7a844d").unwrap(),
                 hash: Hash::from_str(
                     "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
@@ -880,10 +881,10 @@ mod eth_get_transaction_by_hash {
                     178, 20, 250, 165, 9, 239, 205, 171, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
                 ]),
-                nonce: Quantity::new(0x5),
+                nonce: TransactionNonce::from(0x5),
                 to: Some(Address::from_str("0xb44b5e756a894775fc32eddf3314bb1b1944dc34").unwrap()),
                 transaction_index: Some(Quantity::new(0x22)),
-                value: Quantity::new(0x2386f26fc10000),
+                value: Wei::new(0x2386f26fc10000),
             }
         )
     }

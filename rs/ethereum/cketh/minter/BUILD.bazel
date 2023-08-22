@@ -34,6 +34,7 @@ rust_library(
         "//rs/crypto/sha3",
         "//rs/types/ic00_types",
         "@crate_index//:candid",
+        "@crate_index//:ciborium",
         "@crate_index//:ethabi",
         "@crate_index//:ethnum",
         "@crate_index//:futures",
