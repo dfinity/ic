@@ -785,8 +785,6 @@ pub struct Block {
     pub self_validating_payload: ::core::option::Option<SelfValidatingPayload>,
     #[prost(message, optional, tag = "13")]
     pub ecdsa_payload: ::core::option::Option<EcdsaPayload>,
-    #[prost(message, optional, tag = "14")]
-    pub canister_http_payload: ::core::option::Option<CanisterHttpPayload>,
     #[prost(bytes = "vec", tag = "15")]
     pub canister_http_payload_bytes: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", tag = "16")]
@@ -990,20 +988,6 @@ pub struct SelfValidatingPayload {
 pub struct XNetPayload {
     #[prost(message, repeated, tag = "1")]
     pub stream_slices: ::prost::alloc::vec::Vec<SubnetStreamSlice>,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterHttpPayload {
-    #[prost(message, repeated, tag = "1")]
-    pub responses: ::prost::alloc::vec::Vec<
-        super::super::canister_http::v1::CanisterHttpResponseWithConsensus,
-    >,
-    #[prost(uint64, repeated, tag = "2")]
-    pub timeouts: ::prost::alloc::vec::Vec<u64>,
-    #[prost(message, repeated, tag = "3")]
-    pub divergence_responses:
-        ::prost::alloc::vec::Vec<super::super::canister_http::v1::CanisterHttpResponseDivergence>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

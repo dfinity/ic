@@ -1382,7 +1382,6 @@ impl From<&Block> for pb::Block {
             xnet_payload,
             ingress_payload,
             self_validating_payload,
-            canister_http_payload: None,
             canister_http_payload_bytes,
             query_stats_payload_bytes,
             ecdsa_payload,
