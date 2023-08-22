@@ -1,16 +1,12 @@
 use std::sync::Arc;
 
-use anyhow::{anyhow, Error};
+use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
-use tracing::info;
 
-use crate::{
-    snapshot::{Node, RoutingTable},
-    Run,
-};
+use crate::snapshot::{Node, RoutingTable};
 
 pub struct PersistResults {
     pub ranges_old: u32,
@@ -39,6 +35,7 @@ fn principal_bytes_to_u256(p: &[u8]) -> u256 {
 }
 
 // Converts string principal to a u256
+#[allow(dead_code)] // remove if this is used outside of tests
 fn principal_to_u256(p: &str) -> Result<u256, Error> {
     // Parse textual representation into a byte slice
     let p = Principal::from_text(p)?;
@@ -121,7 +118,7 @@ impl Persister {
 #[async_trait]
 impl Persist for Persister {
     // Construct a lookup table based on provided routing table
-    async fn persist(&self, mut rt: RoutingTable) -> Result<PersistStatus, Error> {
+    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
         if rt.subnets.is_empty() {
             return Ok(PersistStatus::SkippedEmpty);
         }

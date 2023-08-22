@@ -3,14 +3,10 @@ use std::{net::SocketAddr, sync::Arc, time::Instant};
 use arc_swap::ArcSwapOption;
 use futures_util::{future::ready, FutureExt};
 use hyper::client::connect::dns::Name;
-use opentelemetry::KeyValue;
 use reqwest::dns::{Addrs, Resolve, Resolving};
 use tracing::info;
 
-use crate::{
-    metrics::{MetricParams, WithMetrics},
-    snapshot::RoutingTable,
-};
+use crate::{metrics::WithMetrics, snapshot::RoutingTable};
 
 const UNUSED_PORT: u16 = 0;
 

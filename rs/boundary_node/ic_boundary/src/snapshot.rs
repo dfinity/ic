@@ -1,27 +1,16 @@
-use std::{
-    collections::HashMap,
-    fmt,
-    net::{IpAddr, SocketAddr, ToSocketAddrs},
-    str::FromStr,
-    sync::Arc,
-    time::SystemTime,
-};
-
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
-use hyper::client::connect::dns::Name;
 use ic_protobuf::registry::subnet::v1::SubnetType;
-use ic_registry_client::client::{RegistryClient, RegistryDataProvider};
+use ic_registry_client::client::RegistryClient;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     node::NodeRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
 };
-use ic_types::replica_version::ReplicaVersion;
-use tracing::warn;
+use std::{collections::HashMap, fmt, net::IpAddr, str::FromStr, sync::Arc};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
 use crate::Run;

@@ -1,30 +1,27 @@
 use std::time::Instant;
 
-use anyhow::{anyhow, Error};
+use anyhow::Error;
 use async_trait::async_trait;
 use axum::{
     body::Body,
     extract::{FromRef, State},
     http::{Request, StatusCode},
-    middleware::{self, Next},
+    middleware::Next,
     response::Response,
-    Extension,
 };
-use http::{header, HeaderValue};
+use http::header;
 use opentelemetry::{
     baggage::BaggageExt,
     metrics::{Counter, Histogram, Meter},
-    trace::FutureExt,
     Context, KeyValue,
 };
-use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
 use prometheus::{Encoder, Registry, TextEncoder};
 use tower_http::request_id::RequestId;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 use crate::{
     check::{Check, CheckError, CheckResult},
-    persist::{Persist, PersistResults, PersistStatus},
+    persist::{Persist, PersistStatus},
     routes::{MiddlewareState, RequestContext},
     snapshot::{Node, RoutingTable},
 };
@@ -203,7 +200,7 @@ pub async fn with_metrics_middleware(
     ];
 
     let HttpMetricParams {
-        action,
+        action: _,
         counter,
         durationer,
         request_sizer,

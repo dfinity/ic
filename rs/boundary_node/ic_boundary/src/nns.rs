@@ -20,6 +20,7 @@ pub trait Load: Send + Sync {
     async fn load(&self) -> Result<NodeRecordTmp, LoadError>;
 }
 
+#[allow(dead_code)] // remove when registry_client is used
 pub struct Loader {
     registry_client: Arc<dyn RegistryClient>,
 }

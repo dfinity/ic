@@ -1,36 +1,31 @@
-use std::{fmt, io::Read, str::FromStr, sync::Arc, time::Instant};
-
-use anyhow::{anyhow, Context, Error};
+use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
-    body::{Body, Bytes, StreamBody},
-    extract::{FromRef, FromRequestParts, Host, MatchedPath, OriginalUri, Path, RawBody, State},
-    http::{uri::PathAndQuery, Request, StatusCode, Uri},
-    middleware::{self, Next},
-    response::{IntoResponse, IntoResponseParts, Redirect, Response, ResponseParts},
-    routing::get,
-    Extension, RequestExt, RequestPartsExt, Router,
+    body::{Body, StreamBody},
+    extract::{FromRef, Path, State},
+    http::{Request, StatusCode},
+    middleware::Next,
+    response::{IntoResponse, Response},
+    Extension,
 };
-use bytes::Buf;
 use candid::Principal;
-use futures_util::{StreamExt, TryFutureExt};
-use http::{header, request::Parts, HeaderValue, Method};
-use ic_types::{
-    messages::{
-        Blob, HttpQueryContent, HttpRequestEnvelope, HttpStatusResponse, HttpUserQuery,
-        ReplicaHealthStatus,
-    },
-    CanisterId,
-};
+use http::{request::Parts, Method};
+use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use rand::seq::SliceRandom;
-use reqwest::Response as ReqwestResponse;
 use serde::{Deserialize, Serialize};
-use serde_cbor::Value as CborValue;
-use tokio::sync::RwLock;
-use tower_http::request_id::{MakeRequestId, RequestId};
-use tracing::{error, info};
+use std::{fmt, str::FromStr, sync::Arc};
 use url::Url;
+
+#[cfg(feature = "tls")]
+use {
+    axum::{
+        extract::{Host, OriginalUri},
+        http::{uri::PathAndQuery, Uri},
+        response::Redirect,
+    },
+    tokio::sync::RwLock,
+};
 
 use crate::{http::HttpClient, metrics::HttpMetricParams, persist::Routes, snapshot::Node};
 
@@ -342,13 +337,13 @@ pub fn parse_body(ctx: &mut RequestContext, body: &[u8]) -> Result<(), Error> {
 pub async fn preprocess_request(
     Path(canister_id): Path<String>,
     State(proxier): State<Arc<impl Proxier>>,
-    mut request: Request<Body>,
+    request: Request<Body>,
     next: Next<Body>,
 ) -> Result<Response, Response> {
     let mut ctx = RequestContext::default();
 
     // Consume body
-    let (mut parts, body) = read_body(request).await.map_err(|e| ctx.respond(e))?;
+    let (parts, body) = read_body(request).await.map_err(|e| ctx.respond(e))?;
     ctx.request_size = body.len() as u32;
 
     // Get canister_id from URL
