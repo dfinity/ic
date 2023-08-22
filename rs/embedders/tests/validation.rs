@@ -4,7 +4,7 @@ use ic_embedders::{
     wasm_utils::{
         validate_and_instrument_for_testing,
         validation::{extract_custom_section_name, RESERVED_SYMBOLS},
-        WasmImportsDetails, WasmValidationDetails,
+        Complexity, WasmImportsDetails, WasmValidationDetails,
     },
     WasmtimeEmbedder,
 };
@@ -100,6 +100,7 @@ fn can_validate_valid_export_section() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -402,6 +403,7 @@ fn can_validate_many_exported_functions() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -436,6 +438,7 @@ fn can_validate_large_sum_exported_function_name_lengths() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );
@@ -477,6 +480,7 @@ fn can_validate_canister_query_update_method_name_with_whitespace() {
         validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
         Ok(WasmValidationDetails {
             largest_function_instruction_count: NumInstructions::new(1),
+            max_complexity: Complexity(1),
             ..Default::default()
         })
     );

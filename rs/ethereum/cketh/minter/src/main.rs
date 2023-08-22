@@ -10,7 +10,7 @@ use ic_cketh_minter::endpoints::{
 };
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
 use ic_cketh_minter::eth_rpc::JsonRpcResult;
-use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
+use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash, ResponseSizeEstimate};
 use ic_cketh_minter::eth_rpc_client::EthereumChain;
 use ic_cketh_minter::guard::{retrieve_eth_guard, retrieve_eth_timer_guard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
@@ -217,6 +217,7 @@ async fn display_logs(req: DisplayLogsRequest) -> Vec<ReceivedEthEvent> {
             address: vec![req.address.parse().expect("failed to parse 'address'")],
             topics: vec![],
         }],
+        ResponseSizeEstimate::new(1024),
     )
     .await
     .expect("HTTP call failed")
@@ -311,10 +312,15 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 async fn eip_2930_transaction_price() -> Eip2930TransactionPrice {
     use ic_cketh_minter::numeric::Wei;
 
-    let gas_price: Wei = eth_rpc::call("https://rpc.sepolia.org", "eth_gasPrice", ())
-        .await
-        .expect("HTTP call failed")
-        .unwrap();
+    let gas_price: Wei = eth_rpc::call(
+        "https://rpc.sepolia.org",
+        "eth_gasPrice",
+        (),
+        ResponseSizeEstimate::new(100),
+    )
+    .await
+    .expect("HTTP call failed")
+    .unwrap();
 
     let gas_price = candid::Nat::from(gas_price);
     let gas_limit = candid::Nat::from(TRANSACTION_GAS_LIMIT);

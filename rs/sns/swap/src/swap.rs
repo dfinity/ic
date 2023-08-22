@@ -58,6 +58,7 @@ use std::{
         Div,
     },
     str::FromStr,
+    time::Duration,
 };
 
 // TODO(NNS1-1589): Get these from the canonical location.
@@ -2333,9 +2334,9 @@ impl Swap {
             if !to_purge.is_empty() {
                 log!(
                     INFO,
-                    "Purging {} open tickets because they are older than {} seconds (number of open tickets: {})",
+                    "Purging {} open tickets because they are older than {:?} (number of open tickets: {})",
                     to_purge.len(),
-                    max_age_in_nanoseconds,
+                    Duration::from_nanos(max_age_in_nanoseconds),
                     tickets.borrow().len(),
                 );
             }
