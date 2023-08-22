@@ -6,9 +6,10 @@ use crate::driver::{
     node_software_version::NodeSoftwareVersion,
     port_allocator::AddrType,
     resource::AllocatedVm,
-    test_env::{HasIcPrepDir, TestEnv},
+    test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
     test_env_api::{
-        HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer, NodesInfo,
+        HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer,
+        InitialReplicaVersion, NodesInfo,
     },
 };
 use anyhow::{bail, Result};
@@ -22,6 +23,7 @@ use ic_prep_lib::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
 use std::{
     collections::BTreeMap,
@@ -69,16 +71,27 @@ pub fn init_ic(
     // only as a placeholder: Updating individual binaries (replica/orchestrator)
     // is not supported anymore.
     let dummy_hash = "60958ccac3e5dfa6ae74aa4f8d6206fd33a5fc9546b8abaad65e3f1c4023c5bf".to_string();
-    let initial_replica_version = test_env.get_initial_replica_version()?;
+
+    let replica_version = if ic.with_mainnet_config {
+        let mainnet_nns_revisions_path = "testnet/mainnet_nns_revision.txt".to_string();
+        test_env.read_dependency_to_string(mainnet_nns_revisions_path.clone())?
+    } else {
+        test_env.read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?
+    };
+    let replica_version = ReplicaVersion::try_from(replica_version.clone())?;
+    let initial_replica_version = InitialReplicaVersion {
+        version: replica_version.clone(),
+    };
+    initial_replica_version.write_attribute(test_env);
     info!(
         logger,
-        "Replica Version that is passed is: {:?}", &initial_replica_version
+        "Replica Version that is passed is: {:?}", &replica_version
     );
     let initial_replica = ic
         .initial_version
         .clone()
         .unwrap_or_else(|| NodeSoftwareVersion {
-            replica_version: initial_replica_version,
+            replica_version,
             // the following are dummy values, these are not used in production
             replica_url: Url::parse("file:///opt/replica").unwrap(),
             replica_hash: dummy_hash.clone(),

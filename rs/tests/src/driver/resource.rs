@@ -2,7 +2,7 @@ use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, Node, NrOfVCPUs};
 use crate::driver::universal_vm::UniversalVm;
 use anyhow;
 use serde::{Deserialize, Serialize};
-use slog::warn;
+use slog::{info, warn};
 use std::collections::BTreeMap;
 use std::net::Ipv6Addr;
 use url::Url;
@@ -146,7 +146,20 @@ pub fn get_resource_request(
                 test_env.get_malicious_ic_os_img_sha256()?,
                 test_env.get_malicious_ic_os_img_url()?,
             )
+        } else if config.with_mainnet_config {
+            warn!(
+                test_env.logger(),
+                "Using mainnet guestos image for IC config."
+            );
+            (
+                test_env.get_mainnet_ic_os_img_sha256()?,
+                test_env.get_mainnet_ic_os_img_url()?,
+            )
         } else {
+            info!(
+                test_env.logger(),
+                "Using tip-of-branch guestos image for IC config."
+            );
             (
                 test_env.get_ic_os_img_sha256()?,
                 test_env.get_ic_os_img_url()?,

@@ -73,7 +73,7 @@ ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-recovery = { path = "../recovery" }
-ic-subnet-splitting= { path = "../recovery/subnet_splitting" }
+ic-subnet-splitting = { path = "../recovery/subnet_splitting" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
@@ -321,6 +321,10 @@ path = "financial_integrations/ckbtc/ckbtc_minter_update_balance.rs"
 [[bin]]
 name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
+
+[[bin]]
+name = "ic-systest-nns-upgrade-test"
+path = "nns/nns_upgrade_test.rs"
 
 [[bin]]
 name = "ic-systest-create-subnet-pre-master-test"
