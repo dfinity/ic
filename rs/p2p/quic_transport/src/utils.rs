@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 8 * 1024 * 1024;
 
-pub(crate) fn bincode_config() -> impl Options {
+fn bincode_config() -> impl Options {
     bincode::DefaultOptions::new()
         .with_fixint_encoding()
         .with_limit(MAX_MESSAGE_SIZE_BYTES as u64)
@@ -41,10 +41,8 @@ pub(crate) async fn read_request(
         )
     })?;
 
-    let request = Request::builder()
-        .uri(msg.uri)
-        .body(Body::from(Bytes::copy_from_slice(msg.body)))
-        .expect("Building from typed values can not fail");
+    let mut request = Request::new(Body::from(Bytes::copy_from_slice(msg.body)));
+    let _ = std::mem::replace(request.uri_mut(), msg.uri);
     Ok(request)
 }
 
@@ -62,10 +60,8 @@ pub(crate) async fn read_response(
         )
     })?;
 
-    let response = Response::builder()
-        .status(msg.status)
-        .body(Bytes::copy_from_slice(msg.body))
-        .expect("Building from typed values can not fail.");
+    let mut response = Response::new(Bytes::copy_from_slice(msg.body));
+    let _ = std::mem::replace(response.status_mut(), msg.status);
     Ok(response)
 }
 
@@ -132,7 +128,7 @@ struct WireRequest<'a> {
 // It might look slow but since in our case the data is fully available
 // the first data() call will immediately return everything.
 // With hyper 1.0 etc. this situation will improve.
-pub(crate) async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
+async fn to_bytes<T>(body: T) -> Result<Bytes, T::Error>
 where
     T: HttpBody + Unpin,
 {

@@ -11,11 +11,10 @@
 use axum::Router;
 use ic_logger::{info, ReplicaLogger};
 use ic_types::NodeId;
-use quinn::{RecvStream, SendStream};
+use quinn::{Connection, RecvStream, SendStream};
 use tower::ServiceExt;
 
 use crate::{
-    connection_handle::ConnectionHandle,
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
         ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
@@ -23,12 +22,10 @@ use crate::{
     utils::{read_request, write_response},
 };
 
-pub async fn start_request_handler(
-    ConnectionHandle {
-        peer_id,
-        connection,
-        metrics,
-    }: ConnectionHandle,
+pub(crate) async fn start_request_handler(
+    peer_id: NodeId,
+    connection: Connection,
+    metrics: QuicTransportMetrics,
     log: ReplicaLogger,
     router: Router,
 ) {

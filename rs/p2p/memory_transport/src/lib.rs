@@ -282,7 +282,7 @@ impl Transport for PeerTransport {
     ) -> Result<Response<Bytes>, TransportError> {
         if peer_id == &self.node_id {
             return Err(TransportError::Disconnected {
-                connection_error: Some("Can't connect to self".to_string()),
+                connection_error: "Can't connect to self".to_string(),
             });
         }
 

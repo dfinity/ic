@@ -26,7 +26,7 @@ impl From<quinn::WriteError> for TransportError {
                 error: io::Error::new(io::ErrorKind::ConnectionReset, e.to_string()),
             },
             quinn::WriteError::ConnectionLost(cause) => TransportError::Disconnected {
-                connection_error: Some(cause.to_string()),
+                connection_error: cause.to_string(),
             },
             quinn::WriteError::UnknownStream => TransportError::Io {
                 error: io::Error::new(io::ErrorKind::ConnectionReset, "unknown quic stream"),
@@ -54,20 +54,20 @@ impl From<quinn::ConnectionError> for TransportError {
                 error: io::Error::from(io::ErrorKind::TimedOut),
             },
             quinn::ConnectionError::ConnectionClosed(e) => TransportError::Disconnected {
-                connection_error: Some(e.to_string()),
+                connection_error: e.to_string(),
             },
             quinn::ConnectionError::ApplicationClosed(e) => TransportError::Disconnected {
-                connection_error: Some(e.to_string()),
+                connection_error: e.to_string(),
             },
             quinn::ConnectionError::LocallyClosed => TransportError::Disconnected {
-                connection_error: Some("Connection closed locally".to_string()),
+                connection_error: "Connection closed locally".to_string(),
             },
         }
     }
 }
 
 #[derive(Clone, Debug)]
-pub struct ConnectionHandle {
+pub(crate) struct ConnectionHandle {
     pub peer_id: NodeId,
     pub connection: Connection,
     pub metrics: QuicTransportMetrics,
@@ -86,7 +86,7 @@ impl ConnectionHandle {
         }
     }
 
-    pub async fn rpc(
+    pub(crate) async fn rpc(
         &self,
         mut request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError> {
@@ -134,7 +134,7 @@ impl ConnectionHandle {
         Ok(response)
     }
 
-    pub async fn push(&self, mut request: Request<Bytes>) -> Result<(), TransportError> {
+    pub(crate) async fn push(&self, mut request: Request<Bytes>) -> Result<(), TransportError> {
         self.metrics
             .connection_handle_requests_total
             .with_label_values(&[REQUEST_TYPE_PUSH])

@@ -183,10 +183,10 @@ impl std::fmt::Display for ConnectionEstablishError {
     }
 }
 
-pub fn start_connection_manager(
-    log: ReplicaLogger,
-    rt: Handle,
+pub(crate) fn start_connection_manager(
+    log: &ReplicaLogger,
     metrics_registry: &MetricsRegistry,
+    rt: Handle,
     tls_config: Arc<dyn TlsConfig + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
@@ -256,15 +256,14 @@ pub fn start_connection_manager(
                 .bind(&SockAddr::from(addr))
                 .expect("Failed to bind to UDP socket");
 
-            rt.block_on(async {
-                Endpoint::new(
-                    endpoint_config,
-                    Some(server_config),
-                    socket2.into(),
-                    Arc::new(quinn::TokioRuntime),
-                )
-                .expect("Failed to create endpoint")
-            })
+            let _enter_guard = rt.enter();
+            Endpoint::new(
+                endpoint_config,
+                Some(server_config),
+                socket2.into(),
+                Arc::new(quinn::TokioRuntime),
+            )
+            .expect("Failed to create endpoint")
         }
         Either::Right(async_udp_socket) => Endpoint::new_with_abstract_socket(
             endpoint_config,
@@ -276,7 +275,7 @@ pub fn start_connection_manager(
     };
 
     let manager = ConnectionManager {
-        log,
+        log: log.clone(),
         rt: rt.clone(),
         tls_config,
         metrics,
@@ -582,7 +581,9 @@ impl ConnectionManager {
                 self.active_connections.spawn_on(
                     peer_id,
                     start_request_handler(
-                        req_handler_connection,
+                        req_handler_connection.peer_id,
+                        req_handler_connection.connection,
+                        req_handler_connection.metrics,
                         self.log.clone(),
                         self.router.clone(),
                     ),

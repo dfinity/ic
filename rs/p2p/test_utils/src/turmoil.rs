@@ -292,15 +292,15 @@ pub fn add_transport_to_sim<F>(
             };
 
             let transport = Arc::new(QuicTransport::build(
+                &log,
+                &MetricsRegistry::default(),
                 tokio::runtime::Handle::current(),
-                log.clone(),
                 node_crypto_clone,
                 registry_client,
                 sev_handshake_clone,
                 peer,
                 topology_watcher_clone,
                 Either::Right(custom_udp),
-                &MetricsRegistry::default(),
                 router,
             ));
 
