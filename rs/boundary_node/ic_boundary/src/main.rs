@@ -21,6 +21,7 @@ use futures::TryFutureExt;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
+use metrics::HistogramDefinition;
 use nns::Load;
 use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider};
 use opentelemetry_prometheus::exporter;
@@ -44,7 +45,7 @@ use crate::{
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
     dns::DnsResolver,
     http::ReqwestClient,
-    metrics::{MetricParams, WithMetrics},
+    metrics::{apply_histogram_definitions, MetricParams, WithMetrics},
     nns::Loader,
     routes::{MiddlewareState, ProxyRouter},
     snapshot::Runner as SnapshotRunner,
@@ -81,6 +82,12 @@ const SECOND: Duration = Duration::from_secs(1);
 #[cfg(feature = "tls")]
 const DAY: Duration = Duration::from_secs(24 * 3600);
 
+const HISTOGRAM_DEFINITIONS: &[HistogramDefinition] = &[
+    HistogramDefinition("dns_resolve", &[1.0, 2.0, 3.0]),
+    HistogramDefinition("verify_tls", &[0.01, 0.1, 1.0]),
+    HistogramDefinition("http_request", &[0.01, 0.1, 1.0]),
+];
+
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let cli = Cli::parse();
@@ -90,18 +97,26 @@ async fn main() -> Result<(), Error> {
             .json()
             .flatten_event(true)
             .finish(),
-    )
-    .expect("failed to set global subscriber");
+    )?;
 
     // Metrics
     let registry: Registry = Registry::new_custom(
-        None,
-        Some(labels! {"service".into() => SERVICE_NAME.into()}),
-    )
-    .unwrap();
-    let exporter = exporter().with_registry(registry.clone()).build()?;
-    let provider = MeterProvider::builder().with_reader(exporter).build();
-    let meter = provider.meter(SERVICE_NAME);
+        Some(SERVICE_NAME.into()),
+        Some(labels! {
+            "service".into() => SERVICE_NAME.into(),
+        }),
+    )?;
+
+    let meter = {
+        let exp = exporter().with_registry(registry.clone()).build()?;
+
+        let mut b = MeterProvider::builder().with_reader(exp);
+
+        // Apply histogram buckets
+        b = apply_histogram_definitions(b, HISTOGRAM_DEFINITIONS)?;
+
+        b.build().meter(SERVICE_NAME)
+    };
 
     let metrics_router = Router::new()
         .route("/metrics", get(metrics::metrics_handler))
@@ -117,17 +132,11 @@ async fn main() -> Result<(), Error> {
 
     // DNS
     let dns_resolver = DnsResolver::new(Arc::clone(&routing_table));
-    let dns_resolver = WithMetrics(
-        dns_resolver,
-        MetricParams::new(&meter, SERVICE_NAME, "dns_resolve"),
-    );
+    let dns_resolver = WithMetrics(dns_resolver, MetricParams::new(&meter, "dns_resolve"));
 
     // TLS Verification
     let tls_verifier = TlsVerifier::new(Arc::clone(&routing_table));
-    let tls_verifier = WithMetrics(
-        tls_verifier,
-        MetricParams::new(&meter, SERVICE_NAME, "verify_tls"),
-    );
+    let tls_verifier = WithMetrics(tls_verifier, MetricParams::new(&meter, "verify_tls"));
 
     // TLS Configuration
     let rustls_config = rustls::ClientConfig::builder()
@@ -148,10 +157,7 @@ async fn main() -> Result<(), Error> {
         .context("unable to build HTTP client")?;
 
     let http_client = ReqwestClient(http_client);
-    let http_client = WithMetrics(
-        http_client,
-        MetricParams::new(&meter, SERVICE_NAME, "http_request"),
-    );
+    let http_client = WithMetrics(http_client, MetricParams::new(&meter, "http_request"));
     let http_client = Arc::new(http_client);
 
     // Registry Client
@@ -201,7 +207,7 @@ async fn main() -> Result<(), Error> {
     let fw_configurator = WithDeduplication::wrap(fw_configurator);
     let fw_configurator = WithMetrics(
         fw_configurator,
-        MetricParams::new(&meter, SERVICE_NAME, "configure_firewall"),
+        MetricParams::new(&meter, "configure_firewall"),
     );
 
     // Service Configurator
@@ -217,7 +223,7 @@ async fn main() -> Result<(), Error> {
     );
     let configuration_runner = WithMetrics(
         configuration_runner,
-        MetricParams::new(&meter, SERVICE_NAME, "run_configuration"),
+        MetricParams::new(&meter, "run_configuration"),
     );
     let configuration_runner = WithThrottle(configuration_runner, ThrottleParams::new(10 * SECOND));
 
@@ -230,7 +236,7 @@ async fn main() -> Result<(), Error> {
 
     let state = MiddlewareState {
         proxier: proxy_router,
-        metric_params: metrics::HttpMetricParams::new(&meter, SERVICE_NAME, "http_request"),
+        metric_params: metrics::HttpMetricParams::new(&meter, "http_request"),
     };
     let routers_https: Router<_> = Router::new()
         .route("/api/v2/status", get(routes::status))
@@ -289,20 +295,17 @@ async fn main() -> Result<(), Error> {
 
     // Snapshots
     let snapshot_runner = SnapshotRunner::new(Arc::clone(&routing_table), registry_client);
-    let snapshot_runner = WithMetrics(
-        snapshot_runner,
-        MetricParams::new(&meter, SERVICE_NAME, "run_snapshot"),
-    );
+    let snapshot_runner = WithMetrics(snapshot_runner, MetricParams::new(&meter, "run_snapshot"));
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(10 * SECOND));
 
     // Checks
     let persister = WithMetrics(
         persist::Persister::new(Arc::clone(&lookup_table)),
-        MetricParams::new(&meter, SERVICE_NAME, "persist"),
+        MetricParams::new(&meter, "persist"),
     );
 
     let checker = Checker::new(http_client);
-    let checker = WithMetrics(checker, MetricParams::new(&meter, SERVICE_NAME, "check"));
+    let checker = WithMetrics(checker, MetricParams::new(&meter, "check"));
     let checker = WithRetryLimited(
         checker,
         cli.health.check_retries,
@@ -316,10 +319,7 @@ async fn main() -> Result<(), Error> {
         persister,
         checker,
     );
-    let check_runner = WithMetrics(
-        check_runner,
-        MetricParams::new(&meter, SERVICE_NAME, "run_check"),
-    );
+    let check_runner = WithMetrics(check_runner, MetricParams::new(&meter, "run_check"));
     let check_runner = WithThrottle(
         check_runner,
         ThrottleParams::new(Duration::from_secs(cli.health.check_interval)),
@@ -446,10 +446,7 @@ async fn prepare_tls(
 
     let tls_configurator = TlsConfigurator::new(tls_acceptor.clone(), tls_provisioner);
     let tls_configurator = WithDeduplication::wrap(tls_configurator);
-    let tls_configurator = WithMetrics(
-        tls_configurator,
-        MetricParams::new(meter, SERVICE_NAME, "configure_tls"),
-    );
+    let tls_configurator = WithMetrics(tls_configurator, MetricParams::new(meter, "configure_tls"));
 
     let tls_acceptor = CustomAcceptor::new(tls_acceptor);
 
@@ -471,11 +468,7 @@ impl<T: Run> Run for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let MetricParams {
-            action,
-            counter: _,
-            durationer: _,
-        } = &self.1;
+        let MetricParams { action, .. } = &self.1;
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
