@@ -13,6 +13,7 @@ use http::header;
 use opentelemetry::{
     baggage::BaggageExt,
     metrics::{Counter, Histogram, Meter},
+    sdk::metrics::{new_view, Aggregation, Instrument, MeterProviderBuilder, Stream},
     Context, KeyValue,
 };
 use prometheus::{Encoder, Registry, TextEncoder};
@@ -26,25 +27,50 @@ use crate::{
     snapshot::{Node, RoutingTable},
 };
 
+pub struct HistogramDefinition(
+    pub &'static str,   // action
+    pub &'static [f64], // boundaries
+);
+
+pub fn apply_histogram_definitions(
+    b: MeterProviderBuilder,
+    defs: &[HistogramDefinition],
+) -> Result<MeterProviderBuilder, Error> {
+    defs.iter()
+        .try_fold(b, |b, &HistogramDefinition(action, boundaries)| {
+            Ok::<_, Error>(b.with_view(new_view(
+                Instrument::new().name(format!("{action}_duration_sec")), // criteria
+                Stream::new().aggregation(Aggregation::ExplicitBucketHistogram {
+                    boundaries: boundaries.to_owned(),
+                    record_min_max: false,
+                }), // mask
+            )?))
+        })
+}
+
 pub struct WithMetrics<T>(pub T, pub MetricParams);
 
 #[derive(Clone)]
 pub struct MetricParams {
     pub action: String,
     pub counter: Counter<u64>,
-    pub durationer: Histogram<f64>,
+    pub recorder: Histogram<f64>,
 }
 
 impl MetricParams {
-    pub fn new(meter: &Meter, namespace: &str, action: &str) -> Self {
+    pub fn new(meter: &Meter, action: &str) -> Self {
         Self {
             action: action.to_string(),
+
+            // Counter
             counter: meter
-                .u64_counter(format!("{namespace}.{action}.total"))
+                .u64_counter(format!("{action}_total"))
                 .with_description(format!("Counts occurences of {action} calls"))
                 .init(),
-            durationer: meter
-                .f64_histogram(format!("{namespace}.{action}.duration_sec"))
+
+            // Duration
+            recorder: meter
+                .f64_histogram(format!("{action}_duration_sec"))
                 .with_description(format!("Records the duration of {action} calls in seconds"))
                 .init(),
         }
@@ -61,23 +87,23 @@ pub struct HttpMetricParams {
 }
 
 impl HttpMetricParams {
-    pub fn new(meter: &Meter, namespace: &str, action: &str) -> Self {
+    pub fn new(meter: &Meter, action: &str) -> Self {
         Self {
             action: action.to_string(),
             counter: meter
-                .u64_counter(format!("{namespace}.{action}.total"))
+                .u64_counter(format!("{action}_total"))
                 .with_description(format!("Counts occurences of {action} calls"))
                 .init(),
             durationer: meter
-                .f64_histogram(format!("{namespace}.{action}.duration_sec"))
+                .f64_histogram(format!("{action}_duration_sec"))
                 .with_description(format!("Records the duration of {action} calls in seconds"))
                 .init(),
             request_sizer: meter
-                .u64_histogram(format!("{namespace}.{action}.request_size"))
+                .u64_histogram(format!("{action}_request_size"))
                 .with_description(format!("Records the size of {action} requests"))
                 .init(),
             response_sizer: meter
-                .u64_histogram(format!("{namespace}.{action}.response_size"))
+                .u64_histogram(format!("{action}_response_size"))
                 .with_description(format!("Records the size of {action} responses."))
                 .init(),
         }
