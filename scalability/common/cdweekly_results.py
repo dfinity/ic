@@ -586,7 +586,7 @@ def render_results(
         data = sorted(data)
         xdata = [e[0] for e in data]
         ydata = [e[1] for e in data]
-        text = [e[2] for e in data]
+        text = [str(e[2]) for e in data]
 
         all_xdata += xdata
         all_ydata += ydata
@@ -633,6 +633,7 @@ def filter_multiple_canisters(result: ExperimentResultDirectory):
     canister_ids = [i for canisters in canister_ids.values() for i in canisters]
     return len(canister_ids) > 1
 
+
 if __name__ == "__main__":
 
     misc.load_artifacts("../artifacts/release")
@@ -676,7 +677,8 @@ if __name__ == "__main__":
 
         # Update counter
         # -----------------------------------------------------------------------------
-        experiments = ["experiment_1", "run_system_baseline_experiment", "system-baseline-experiment"]
+        experiments = ["experiment_1", "run_system_baseline_experiment",
+                       "system-baseline-experiment", "run_system_baseline_experiment_cached"]
         request_type = ["update"]
         label = "plot_exp1_update"
         data[f"{label}"] = render_results(
