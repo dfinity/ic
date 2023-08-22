@@ -254,7 +254,7 @@ test_propose_to_open_sns_token_swap_pem() {
         --swap-due-timestamp-seconds $NOW_PLUS_TWO_DAYS \
         --sns-token-e8s 3000000000000 \
         --target-swap-canister-id "$SWAP_ID" \
-        --neuron-basket-count 1 \
+        --neuron-basket-count 3000 \
         --neuron-basket-dissolve-delay-interval-seconds 100 \
         --proposal-title "Decentralize this SNS" \
         --summary "Decentralize this SNS" \
@@ -588,6 +588,27 @@ sns_get_proposal() {
         "$SNS_GOVERNANCE_CANISTER_ID" get_proposal "( record { proposal_id = opt record { id = $PROPOSAL_ID : nat64 }})"
 }
 
+sns_get_archive() {
+    local SUBNET_URL=$1
+    local SNS_LEDGER_CANISTER_ID=$2
+
+    set -e
+    # Unfortunately the ledger .did file does not support this method even though the canister does.
+    # This forces us to use grep & awk instead of jq
+    ARCHIVE_ID=$(dfx canister --network "$SUBNET_URL" call "${SNS_LEDGER_CANISTER_ID}" archives '()' \
+        | grep -o 'principal "[^"]*"' | awk -F '"' '{print $2}')
+    set +e
+
+    echo "${ARCHIVE_ID}"
+}
+
+add_archive_to_sns_canister_ids() {
+    local FILE=$1
+    local ARCHIVE_CANISTER_ID=$2
+
+    jq '. + {"archive_canister_id": "'"$ARCHIVE_CANISTER_ID"'"}' $FILE | sponge $FILE
+}
+
 ##: wait_for_proposal_to_execute
 ## Waits with a timeout for an NNS Proposal to successfully execute.
 ## Usage: $1 <NNS_URL> <PROPOSAL_ID>
@@ -610,5 +631,28 @@ wait_for_proposal_to_execute() {
     done
 
     print_red "NNS proposal ${PROPOSAL_ID} did not execute successfully"
+    return 1
+}
+
+wait_for_sns_governance_to_be_in_normal_mode() {
+    ensure_variable_set IDL2JSON
+
+    local SUBNET_URL=$1
+    local SNS_GOVERNANCE_CANISTER_ID=$2
+
+    local IC=$(repo_root)
+    local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
+
+    for i in {1..20}; do
+        echo "Testing to see if SNS governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode (${i}/20)"
+        EXECUTED=$(dfx canister --network "$SUBNET_URL" call --candid $GOV_DID "${SNS_GOVERNANCE_CANISTER_ID}" get_mode '(record {})' | $IDL2JSON | jq -r '.mode[0]')
+        if [[ "${EXECUTED}" -eq 1 ]]; then
+            print_green "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} is in normal mode"
+            return 0
+        fi
+        sleep 10
+    done
+
+    print_red "SNS Governance ${SNS_GOVERNANCE_CANISTER_ID} never reached normal mode"
     return 1
 }
