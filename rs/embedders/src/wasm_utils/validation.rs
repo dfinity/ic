@@ -1,7 +1,7 @@
 //! This module is responsible for validating the wasm binaries that are
 //! installed on the Internet Computer.
 
-use super::{Complexity, WasmImportsDetails, WasmValidationDetails};
+use super::{wasm_transform::Body, Complexity, WasmImportsDetails, WasmValidationDetails};
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_replicated_state::canister_state::execution_state::{
@@ -35,7 +35,7 @@ pub const RESERVED_SYMBOLS: [&str; 6] = [
     STABLE_BYTEMAP_MEMORY_NAME,
 ];
 
-const WASM_FUNCTION_COMPLEXITY_LIMIT: usize = 15_000;
+const WASM_FUNCTION_COMPLEXITY_LIMIT: Complexity = Complexity(15_000);
 const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;
 const MAX_CODE_SECTION_SIZE_IN_BYTES: u32 = 10 * 1024 * 1024;
 
@@ -1090,40 +1090,199 @@ fn validate_custom_section(
     Ok(WasmMetadata::new(validated_custom_sections))
 }
 
+fn new_wasm_function_complexity(body: &Body<'_>) -> Complexity {
+    use Operator::*;
+
+    let complexity = body
+        .instructions
+        .iter()
+        .map(|instruction| match instruction {
+            Block { .. }
+            | Loop { .. }
+            | If { .. }
+            | Br { .. }
+            | BrIf { .. }
+            | BrTable { .. }
+            | Call { .. }
+            | CallIndirect { .. } => 50,
+            TableGet { .. } => 12,
+            RefFunc { .. } => 8,
+            TableSet { .. } => 7,
+            TableGrow { .. } => 6,
+            TableFill { .. }
+            | I32TruncF32S
+            | I32TruncF32U
+            | I32TruncF64S
+            | I32TruncF64U
+            | I64ExtendI32S
+            | I64ExtendI32U
+            | I64TruncF32S
+            | I64TruncF32U
+            | I64TruncF64S
+            | I64TruncF64U
+            | F32ConvertI32S
+            | F32ConvertI32U
+            | F32ConvertI64S
+            | F32ConvertI64U
+            | F32DemoteF64
+            | F64ConvertI32S
+            | F64ConvertI32U
+            | F64ConvertI64S
+            | F64ConvertI64U => 5,
+            F32Neg
+            | F32Abs
+            | F64Neg
+            | F64Abs
+            | TableCopy { .. }
+            | TableInit { .. }
+            | MemoryCopy { .. }
+            | MemoryGrow { .. }
+            | RefIsNull => 4,
+            F32Copysign
+            | F64Copysign
+            | F64Eq
+            | I32RemU
+            | I32RemS
+            | I64RemU
+            | I64RemS
+            | I32DivU
+            | I32DivS
+            | I64DivU
+            | I64DivS
+            | MemoryFill { .. }
+            | I32Load { .. }
+            | I64Load { .. }
+            | F32Load { .. }
+            | F64Load { .. }
+            | I32Load8S { .. }
+            | I32Load8U { .. }
+            | I32Load16S { .. }
+            | I32Load16U { .. }
+            | I64Load8S { .. }
+            | I64Load8U { .. }
+            | I64Load16S { .. }
+            | I64Load16U { .. }
+            | I64Load32S { .. }
+            | I64Load32U { .. }
+            | I32TruncSatF32S
+            | I32TruncSatF32U
+            | I32TruncSatF64S
+            | I32TruncSatF64U
+            | I64TruncSatF32S
+            | I64TruncSatF32U
+            | I64TruncSatF64S
+            | I64TruncSatF64U => 3,
+            GlobalGet { .. }
+            | I32Popcnt
+            | I64Popcnt
+            | Select
+            | MemorySize { .. }
+            | I32Store { .. }
+            | I32Store16 { .. }
+            | I32Store8 { .. }
+            | I64Store { .. }
+            | I64Store32 { .. }
+            | I64Store16 { .. }
+            | I64Store8 { .. }
+            | F64Store { .. }
+            | F32Store { .. }
+            | I32Eqz
+            | I32Eq
+            | I32Ne
+            | I32LtS
+            | I32LtU
+            | I32GtS
+            | I32GtU
+            | I32LeS
+            | I32LeU
+            | I32GeS
+            | I32GeU
+            | I64Eqz
+            | I64Eq
+            | I64Ne
+            | I64LtS
+            | I64LtU
+            | I64GtS
+            | I64GtU
+            | I64LeS
+            | I64LeU
+            | I64GeS
+            | I64GeU
+            | F32Eq
+            | F32Ne
+            | F32Lt
+            | F32Gt
+            | F32Le
+            | F32Ge
+            | F64Ne
+            | F64Lt
+            | F64Gt
+            | F64Le
+            | F64Ge
+            | F32Ceil
+            | F64Ceil
+            | F32Floor
+            | F64Floor
+            | F32Sqrt
+            | F64Sqrt
+            | F32Trunc
+            | F64Trunc
+            | I32ReinterpretF32
+            | I64ReinterpretF64
+            | F32ReinterpretI32
+            | F64ReinterpretI64
+            | I32WrapI64
+            | I32Extend8S
+            | I32Extend16S
+            | I64Extend8S
+            | I64Extend16S
+            | I64Extend32S
+            | F64PromoteF32 => 2,
+            _ => 1,
+        })
+        .sum();
+    Complexity(complexity)
+}
+
+fn wasm_function_complexity(body: &Body<'_>) -> Complexity {
+    let complexity = body
+        .instructions
+        .iter()
+        .filter(|instruction| {
+            matches!(
+                instruction,
+                Operator::Block { .. }
+                    | Operator::Loop { .. }
+                    | Operator::If { .. }
+                    | Operator::Br { .. }
+                    | Operator::BrIf { .. }
+                    | Operator::BrTable { .. }
+                    | Operator::Call { .. }
+                    | Operator::CallIndirect { .. }
+            )
+        })
+        .count() as u64;
+    Complexity(complexity)
+}
+
 fn validate_code_section(
     module: &Module,
 ) -> Result<(NumInstructions, Complexity), WasmValidationError> {
     let mut max_function_size = NumInstructions::new(0);
-    let mut max_complexity = 0;
+    let mut max_complexity = Complexity(0);
 
     for (index, func_body) in module.code_sections.iter().enumerate() {
         let size = func_body.instructions.len();
-        let complexity = func_body
-            .instructions
-            .iter()
-            .filter(|instruction| {
-                matches!(
-                    instruction,
-                    Operator::Block { .. }
-                        | Operator::Loop { .. }
-                        | Operator::If { .. }
-                        | Operator::Br { .. }
-                        | Operator::BrIf { .. }
-                        | Operator::BrTable { .. }
-                        | Operator::Call { .. }
-                        | Operator::CallIndirect { .. }
-                )
-            })
-            .count();
-
+        let complexity = wasm_function_complexity(func_body);
+        let new_complexity = new_wasm_function_complexity(func_body);
         if complexity > WASM_FUNCTION_COMPLEXITY_LIMIT {
             return Err(WasmValidationError::FunctionComplexityTooHigh {
                 index,
-                complexity,
-                allowed: WASM_FUNCTION_COMPLEXITY_LIMIT,
+                complexity: complexity.0 as usize,
+                allowed: WASM_FUNCTION_COMPLEXITY_LIMIT.0 as usize,
             });
         } else {
-            max_complexity = cmp::max(max_complexity, complexity);
+            max_complexity = cmp::max(max_complexity, new_complexity);
         }
 
         if size > WASM_FUNCTION_SIZE_LIMIT {
@@ -1136,7 +1295,7 @@ fn validate_code_section(
             max_function_size = cmp::max(max_function_size, NumInstructions::new(size as u64));
         }
     }
-    Ok((max_function_size, Complexity(max_complexity as u64)))
+    Ok((max_function_size, max_complexity))
 }
 
 /// Sets Wasmtime flags to ensure deterministic execution.
