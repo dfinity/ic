@@ -49,28 +49,6 @@ impl CanisterHttpPayload {
     }
 }
 
-impl From<&CanisterHttpPayload> for pb::CanisterHttpPayload {
-    fn from(payload: &CanisterHttpPayload) -> Self {
-        Self {
-            responses: payload
-                .responses
-                .iter()
-                .map(canister_http_pb::CanisterHttpResponseWithConsensus::from)
-                .collect(),
-            timeouts: payload
-                .timeouts
-                .iter()
-                .map(|timeout| timeout.get())
-                .collect(),
-            divergence_responses: payload
-                .divergence_responses
-                .iter()
-                .map(canister_http_pb::CanisterHttpResponseDivergence::from)
-                .collect(),
-        }
-    }
-}
-
 impl From<&CanisterHttpResponseWithConsensus>
     for canister_http_pb::CanisterHttpResponseWithConsensus
 {
@@ -107,26 +85,6 @@ impl From<&CanisterHttpResponseDivergence> for canister_http_pb::CanisterHttpRes
         canister_http_pb::CanisterHttpResponseDivergence {
             shares: payload.shares.iter().map(Into::into).collect(),
         }
-    }
-}
-
-impl TryFrom<pb::CanisterHttpPayload> for CanisterHttpPayload {
-    type Error = ProxyDecodeError;
-
-    fn try_from(payload: pb::CanisterHttpPayload) -> Result<Self, Self::Error> {
-        Ok(CanisterHttpPayload {
-            divergence_responses: payload
-                .divergence_responses
-                .into_iter()
-                .map(|divergence_response| divergence_response.try_into())
-                .collect::<Result<Vec<CanisterHttpResponseDivergence>, ProxyDecodeError>>()?,
-            responses: payload
-                .responses
-                .into_iter()
-                .map(|payload| payload.try_into())
-                .collect::<Result<Vec<CanisterHttpResponseWithConsensus>, ProxyDecodeError>>()?,
-            timeouts: payload.timeouts.into_iter().map(CallbackId::new).collect(),
-        })
     }
 }
 
@@ -310,69 +268,74 @@ impl TryFrom<canister_http_pb::CanisterHttpShare> for CanisterHttpResponseShare 
 mod tests {
     use super::*;
     use candid::Encode;
+
     /// Tests, whether a roundtrip of protobuf conversions generates the same
-    /// `CanisterHttpPayload`
+    /// `CanisterHttpResponseWithConsensus`
     #[test]
-    fn into_canister_http_payload_and_back() {
-        let payload = CanisterHttpPayload {
-            divergence_responses: vec![CanisterHttpResponseDivergence {
-                shares: vec![Signed {
-                    content: CanisterHttpResponseMetadata {
-                        id: CanisterHttpRequestId::new(1),
-                        timeout: Time::from_nanos_since_unix_epoch(1234),
-                        content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
-                            0, 1, 2, 3,
-                        ])),
-                        registry_version: RegistryVersion::new(1),
-                    },
-                    signature: BasicSignature {
-                        signer: NodeId::from(PrincipalId::new_node_test_id(1)),
-                        signature: BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
-                    },
-                }],
-            }],
-            responses: vec![CanisterHttpResponseWithConsensus {
-                content: CanisterHttpResponse {
+    fn canister_http_response_with_consensus_conversion() {
+        let payload = CanisterHttpResponseWithConsensus {
+            content: CanisterHttpResponse {
+                id: CanisterHttpRequestId::new(1),
+                timeout: Time::from_nanos_since_unix_epoch(1234),
+                canister_id: crate::CanisterId::from(1),
+                content: CanisterHttpResponseContent::Success(
+                    Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
+                        status: 200,
+                        headers: vec![ic_ic00_types::HttpHeader {
+                            name: "test_header1".to_string(),
+                            value: "value1".to_string()
+                        }],
+                        body: b"Test data in body".to_vec(),
+                    })
+                    .unwrap(),
+                ),
+            },
+            proof: Signed {
+                content: CanisterHttpResponseMetadata {
                     id: CanisterHttpRequestId::new(1),
                     timeout: Time::from_nanos_since_unix_epoch(1234),
-                    canister_id: crate::CanisterId::from(1),
-                    content: CanisterHttpResponseContent::Success(
-                        Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-                            status: 200,
-                            headers: vec![ic_ic00_types::HttpHeader {
-                                name: "test_header1".to_string(),
-                                value: "value1".to_string()
-                            }],
-                            body: b"Test data in body".to_vec(),
-                        })
-                        .unwrap(),
-                    ),
+                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
+                        0, 1, 2, 3,
+                    ])),
+                    registry_version: RegistryVersion::new(1),
                 },
-                proof: Signed {
-                    content: CanisterHttpResponseMetadata {
-                        id: CanisterHttpRequestId::new(1),
-                        timeout: Time::from_nanos_since_unix_epoch(1234),
-                        content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
-                            0, 1, 2, 3,
-                        ])),
-                        registry_version: RegistryVersion::new(1),
-                    },
-                    signature: BasicSignatureBatch {
-                        signatures_map: vec![(
-                            NodeId::from(PrincipalId::new_node_test_id(1)),
-                            BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
-                        )]
-                        .into_iter()
-                        .collect(),
-                    },
+                signature: BasicSignatureBatch {
+                    signatures_map: vec![(
+                        NodeId::from(PrincipalId::new_node_test_id(1)),
+                        BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
+                    )]
+                    .into_iter()
+                    .collect(),
+                },
+            },
+        };
+        let pb_payload = canister_http_pb::CanisterHttpResponseWithConsensus::from(&payload);
+        let new_payload = CanisterHttpResponseWithConsensus::try_from(pb_payload).unwrap();
+        assert_eq!(payload, new_payload);
+    }
+
+    /// Tests, whether a roundtrip of protobuf conversions generates the same
+    /// `CanisterHttpResponseDivergence`
+    #[test]
+    fn canister_http_diverge_response_conversion() {
+        let payload = CanisterHttpResponseDivergence {
+            shares: vec![Signed {
+                content: CanisterHttpResponseMetadata {
+                    id: CanisterHttpRequestId::new(1),
+                    timeout: Time::from_nanos_since_unix_epoch(1234),
+                    content_hash: CryptoHashOf::<CanisterHttpResponse>::new(CryptoHash(vec![
+                        0, 1, 2, 3,
+                    ])),
+                    registry_version: RegistryVersion::new(1),
+                },
+                signature: BasicSignature {
+                    signer: NodeId::from(PrincipalId::new_node_test_id(1)),
+                    signature: BasicSigOf::new(BasicSig(vec![0, 1, 2, 3])),
                 },
             }],
-            timeouts: vec![CanisterHttpRequestId::new(2)],
         };
-
-        let pb_payload = pb::CanisterHttpPayload::from(&payload);
-        let new_payload = CanisterHttpPayload::try_from(pb_payload).unwrap();
-
-        assert_eq!(payload, new_payload)
+        let pb_payload = canister_http_pb::CanisterHttpResponseDivergence::from(&payload);
+        let new_payload = CanisterHttpResponseDivergence::try_from(pb_payload).unwrap();
+        assert_eq!(payload, new_payload);
     }
 }
