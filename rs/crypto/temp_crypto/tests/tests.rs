@@ -1,5 +1,4 @@
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_temp_crypto::CryptoComponentRng;
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_crypto_test_utils::empty_fake_registry;
 use ic_interfaces::crypto::CurrentNodePublicKeysError;
@@ -54,7 +53,6 @@ mod vault_rng {
     use super::*;
     use assert_matches::assert_matches;
     use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
-    use ic_crypto_internal_csp::Csp;
     use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate};
     use ic_interfaces::crypto::KeyManager;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -157,10 +155,10 @@ mod vault_rng {
         }
     }
 
-    fn new_idkg_crypto_with_rng_and_opt_remote_vault<R: CryptoComponentRng>(
-        rng: R,
+    fn new_idkg_crypto_with_rng_and_opt_remote_vault(
+        rng: ChaCha20Rng,
         with_remote_vault: bool,
-    ) -> TempCryptoComponentGeneric<Csp, R> {
+    ) -> TempCryptoComponentGeneric<ChaCha20Rng> {
         let node_id = NodeId::from(PrincipalId::new_node_test_id(0));
         let registry_data = Arc::new(ProtoRegistryDataProvider::new());
         let registry_client =

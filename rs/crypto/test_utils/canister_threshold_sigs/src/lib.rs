@@ -1,7 +1,6 @@
 //! Utilities for testing IDkg and canister threshold signature operations.
 
 use crate::node::{Node, Nodes};
-use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_threshold_sig_ecdsa::test_utils::corrupt_dealing;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, NodeIndex, Seed};
 use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
@@ -257,7 +256,6 @@ pub fn build_params_from_previous<R: RngCore + CryptoRng>(
 
 pub mod node {
     use crate::{IDkgParticipants, IDkgParticipantsRandom};
-    use ic_crypto_internal_csp::Csp;
     use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
     use ic_interfaces::crypto::{
         BasicSigVerifier, BasicSigner, CurrentNodePublicKeysError, IDkgProtocol, KeyManager,
@@ -300,7 +298,7 @@ pub mod node {
     /// A node is uniquely identified by its `id`.
     pub struct Node {
         id: NodeId,
-        crypto_component: Arc<TempCryptoComponentGeneric<Csp, ChaCha20Rng>>,
+        crypto_component: Arc<TempCryptoComponentGeneric<ChaCha20Rng>>,
         logger: InMemoryReplicaLogger,
     }
 
@@ -329,7 +327,7 @@ pub mod node {
             self.id
         }
 
-        pub fn crypto(&self) -> Arc<TempCryptoComponentGeneric<Csp, ChaCha20Rng>> {
+        pub fn crypto(&self) -> Arc<TempCryptoComponentGeneric<ChaCha20Rng>> {
             Arc::clone(&self.crypto_component)
         }
 
@@ -570,7 +568,7 @@ pub mod node {
         registry: Arc<FakeRegistryClient>,
         logger: ReplicaLogger,
         rng: &mut R,
-    ) -> TempCryptoComponentGeneric<Csp, ChaCha20Rng> {
+    ) -> TempCryptoComponentGeneric<ChaCha20Rng> {
         TempCryptoComponent::builder()
             .with_registry(Arc::clone(&registry) as Arc<_>)
             .with_node_id(node_id)
@@ -1326,7 +1324,7 @@ pub fn random_crypto_component_not_in_receivers<R: RngCore + CryptoRng>(
     env: &CanisterThresholdSigTestEnvironment,
     receivers: &IDkgReceivers,
     rng: &mut R,
-) -> TempCryptoComponentGeneric<Csp, ChaCha20Rng> {
+) -> TempCryptoComponentGeneric<ChaCha20Rng> {
     let node_id = random_node_id_excluding(receivers.get(), rng);
     TempCryptoComponent::builder()
         .with_registry(Arc::clone(&env.registry) as Arc<_>)

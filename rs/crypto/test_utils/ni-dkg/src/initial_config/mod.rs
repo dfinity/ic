@@ -1,7 +1,7 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
 use ic_crypto_internal_types::NodeIndex;
-use ic_crypto_temp_crypto::TempCryptoComponent;
+use ic_crypto_temp_crypto::{CryptoComponentRng, TempCryptoComponent, TempCryptoComponentGeneric};
 use ic_interfaces::crypto::NiDkgAlgorithm;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -17,6 +17,8 @@ use ic_types::crypto::threshold_sig::ni_dkg::{
 use ic_types::crypto::KeyPurpose;
 use ic_types::{Height, NodeId, SubnetId};
 use ic_types::{NumberOfNodes, RegistryVersion};
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -99,9 +101,10 @@ impl InitialNiDkgConfig {
 /// # Panics
 /// * If the `receiver_keys` don't match the receivers in the
 ///   `initial_dkg_config`.
-pub fn initial_dkg_transcript(
+pub fn initial_dkg_transcript<R: rand::Rng + rand::CryptoRng>(
     initial_dkg_config: InitialNiDkgConfig,
     receiver_keys: &BTreeMap<NodeId, PublicKeyProto>,
+    rng: &mut R,
 ) -> NiDkgTranscript {
     let dkg_config = initial_dkg_config.get();
     ensure_matching_node_ids(dkg_config.receivers(), receiver_keys);
@@ -111,6 +114,7 @@ pub fn initial_dkg_transcript(
     let dealer_crypto = TempCryptoComponent::builder()
         .with_registry(Arc::new(registry))
         .with_node_id(dealer_id)
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
 
     transcript_with_single_dealing(dkg_config, dealer_crypto, dealer_id)
@@ -167,9 +171,9 @@ fn map_with(dealer: NodeId, dealing: NiDkgDealing) -> BTreeMap<NodeId, NiDkgDeal
     map
 }
 
-fn transcript_with_single_dealing(
+fn transcript_with_single_dealing<R: CryptoComponentRng>(
     dkg_config: &NiDkgConfig,
-    dealer_crypto: TempCryptoComponent,
+    dealer_crypto: TempCryptoComponentGeneric<R>,
     dealer_id: NodeId,
 ) -> NiDkgTranscript {
     let dealing = dealer_crypto
