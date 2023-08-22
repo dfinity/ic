@@ -268,7 +268,8 @@ fn verify_paths(
             }
             [b"subnet"] => {}
             [b"subnet", _subnet_id] => {}
-            [b"subnet", _subnet_id, b"public_key" | b"canister_ranges"] => {}
+            [b"subnet", _subnet_id, b"public_key" | b"canister_ranges" | b"node"] => {}
+            [b"subnet", _subnet_id, b"node", _node_id, b"public_key"] => {}
             [b"request_status", request_id]
             | [b"request_status", request_id, b"status" | b"reply" | b"reject_code" | b"reject_message" | b"error_code"] =>
             {
