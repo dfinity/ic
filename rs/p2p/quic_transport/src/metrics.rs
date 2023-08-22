@@ -1,11 +1,8 @@
 use ic_metrics::{tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry};
-use ic_types::NodeId;
-use prometheus::{GaugeVec, IntCounter, IntCounterVec, IntGauge};
-use quinn::Connection;
+use prometheus::{IntCounter, IntCounterVec, IntGauge};
 use tokio_metrics::TaskMonitor;
 
 const CONNECTION_RESULT_LABEL: &str = "status";
-const PEER_ID_LABEL: &str = "peer";
 const REQUEST_TASK_MONITOR_NAME: &str = "quic_transport_request_handler";
 const STREAM_TYPE_LABEL: &str = "stream";
 const REQUEST_TYPE_LABEL: &str = "request";
@@ -43,8 +40,6 @@ pub struct QuicTransportMetrics {
     // Connection handle
     pub connection_handle_requests_total: IntCounterVec,
     pub connection_handle_errors_total: IntCounterVec,
-    // Quinn
-    quinn_path_rtt_duration: GaugeVec,
 }
 
 impl QuicTransportMetrics {
@@ -117,20 +112,6 @@ impl QuicTransportMetrics {
                 "Request handler errors by stream type and error type.",
                 &[REQUEST_TYPE_LABEL, ERROR_TYPE_LABEL],
             ),
-
-            // Quinn stats
-            quinn_path_rtt_duration: metrics_registry.gauge_vec(
-                "quic_transport_quinn_path_rtt_duration",
-                "Estimated rtt of this connection.",
-                &[PEER_ID_LABEL],
-            ),
         }
-    }
-
-    pub(crate) fn collect_quic_connection_stats(&self, conn: &Connection, peer_id: &NodeId) {
-        let stats = conn.stats();
-        self.quinn_path_rtt_duration
-            .with_label_values(&[&peer_id.to_string()])
-            .set(stats.path.rtt.as_secs_f64());
     }
 }

@@ -77,7 +77,6 @@ const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
 /// Timeout after which quic marks connections as broken. This timeout is used to detect connections
 /// that were not explicitly closed. I.e replica crash
 const IDLE_TIMEOUT: Duration = Duration::from_secs(5);
-const CONNECTION_MANAGER_HEARTBEAT: Duration = Duration::from_secs(5);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_RETRY_BACKOFF: Duration = Duration::from_secs(3);
 const GRUEZI_HANDSHAKE: &str = "gruezi";
@@ -91,7 +90,7 @@ enum Direction {
 /// Connection manager is responsible for making sure that
 /// there always exists a healthy connection to each peer
 /// currently in the subnet topology.
-pub(crate) struct ConnectionManager {
+struct ConnectionManager {
     log: ReplicaLogger,
     node_id: NodeId,
     rt: Handle,
@@ -298,7 +297,6 @@ pub(crate) fn start_connection_manager(
 
 impl ConnectionManager {
     pub async fn run(mut self) {
-        let mut heartbeat = tokio::time::interval(CONNECTION_MANAGER_HEARTBEAT);
         loop {
             select! {
                 Some(reconnect) = self.connect_queue.next() => {
@@ -315,9 +313,6 @@ impl ConnectionManager {
                         }
                     }
                 },
-                _ = heartbeat.tick() => {
-                    self.handle_heartbeat();
-                }
                 connecting = self.endpoint.accept() => {
                     if let Some(connecting) = connecting {
                         self.handle_inbound(connecting);
@@ -362,6 +357,11 @@ impl ConnectionManager {
                 },
             }
         }
+        // This point is reached only in two cases - replica gracefully shutting down or
+        // bug which makes the peer manager unavaible.
+        // If the peer manager is unavailable, the replica needs must exist that's why
+        // the endpoint is closed proactively.
+        self.endpoint.close(0u8.into(), b"shutting down");
 
         self.endpoint.wait_idle().await;
     }
@@ -375,11 +375,7 @@ impl ConnectionManager {
 
     fn handle_topology_change(&mut self) {
         self.metrics.topology_changes_total.inc();
-        let topology = self.watcher.borrow_and_update();
-
-        // Store new topology.
-        self.topology = topology.clone();
-        drop(topology);
+        self.topology = self.watcher.borrow_and_update().clone();
 
         let subnet_node_set = self.topology.get_subnet_nodes();
         self.metrics.topology_size.set(subnet_node_set.len() as i64);
@@ -404,7 +400,7 @@ impl ConnectionManager {
 
         // Connect/Disconnect from peers according to new topology
         for (peer_id, _) in self.topology.iter() {
-            let dialer = &self.node_id < peer_id;
+            let dialer = self.node_id < *peer_id;
             let no_active_connection_attempt = !self.outbound_connecting.contains(peer_id);
             let no_active_connection = !self.active_connections.contains(peer_id);
             let node_in_subnet = self.topology.is_member(&self.node_id);
@@ -437,30 +433,6 @@ impl ConnectionManager {
                 true
             }
         });
-    }
-
-    fn handle_heartbeat(&mut self) {
-        // Collect metrics
-        self.metrics
-            .active_connections
-            .set(self.active_connections.len() as i64);
-        self.metrics
-            .connecting_connections
-            .set(self.inbound_connecting.len() as i64 + self.outbound_connecting.len() as i64);
-        self.metrics
-            .delay_queue_size
-            .set(self.connect_queue.len() as i64);
-
-        // Reconnect to peers to which connection seems closed.
-        let peer_map = self.peer_map.read().unwrap();
-        self.metrics.peer_map_size.set(peer_map.len() as i64);
-        for (peer_id, conn) in peer_map.iter() {
-            self.metrics
-                .collect_quic_connection_stats(&conn.connection, &conn.peer_id);
-            if conn.connection.close_reason().is_some() {
-                self.connect_queue.insert(*peer_id, Duration::from_secs(0));
-            }
-        }
     }
 
     fn handle_dial(&mut self, peer_id: NodeId) {
