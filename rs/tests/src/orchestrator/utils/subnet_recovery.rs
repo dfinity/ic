@@ -34,7 +34,7 @@ use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use url::Url;
 
-pub(crate) fn set_sandbox_env_vars(dir: PathBuf) {
+pub fn set_sandbox_env_vars(dir: PathBuf) {
     set_var_to_path("SANDBOX_BINARY", dir.join("canister_sandbox"));
     set_var_to_path("LAUNCHER_BINARY", dir.join("sandbox_launcher"));
 }

@@ -926,6 +926,10 @@ pub trait HasIcDependencies {
     fn get_boundary_node_snp_img_sha256(&self) -> Result<String>;
     fn get_boundary_node_img_url(&self) -> Result<Url>;
     fn get_boundary_node_img_sha256(&self) -> Result<String>;
+    fn get_mainnet_ic_os_img_url(&self) -> Result<Url>;
+    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String>;
+    fn get_mainnet_ic_os_update_img_url(&self) -> Result<Url>;
+    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String>;
     fn get_api_boundary_node_img_url(&self) -> Result<Url>;
     fn get_api_boundary_node_img_sha256(&self) -> Result<String>;
     fn get_canister_http_test_ca_cert(&self) -> Result<String>;
@@ -950,8 +954,8 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let replica_ver = self.read_dependency_from_env_to_string("ENV_DEPS__IC_VERSION_FILE")?;
-        Ok(ReplicaVersion::try_from(replica_ver)?)
+        let initial_replica_version = InitialReplicaVersion::read_attribute(&self.test_env());
+        Ok(initial_replica_version.version)
     }
 
     fn get_replica_log_debug_overrides(&self) -> Result<Vec<String>> {
@@ -1065,6 +1069,31 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         Ok(sha256)
     }
 
+    fn get_mainnet_ic_os_img_url(&self) -> Result<Url> {
+        let mainnet_version: String =
+            self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img/disk-img.tar.zst");
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_mainnet_ic_os_img_sha256(&self) -> Result<String> {
+        let mainnet_version: String =
+            self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/disk-img"), "disk-img.tar.zst")
+    }
+
+    fn get_mainnet_ic_os_update_img_url(&self) -> Result<Url> {
+        let mainnet_version = self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        let url = format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img/update-img.tar.zst");
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_mainnet_ic_os_update_img_sha256(&self) -> Result<String> {
+        let mainnet_version: String =
+            self.read_dependency_to_string("testnet/mainnet_nns_revision.txt")?;
+        fetch_sha256(format!("http://download.proxy-global.dfinity.network:8080/ic/{mainnet_version}/guest-os/update-img"), "update-img.tar.zst")
+    }
+
     fn get_canister_http_test_ca_cert(&self) -> Result<String> {
         let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert";
         self.read_dependency_to_string(dep_rel_path)
@@ -1073,6 +1102,26 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         let dep_rel_path = "ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.key";
         self.read_dependency_to_string(dep_rel_path)
     }
+}
+
+fn fetch_sha256(base_url: String, file: &str) -> Result<String> {
+    let sha256sums_url = format!("{base_url}/SHA256SUMS");
+
+    let body = reqwest::blocking::get(sha256sums_url)?.text()?;
+
+    // body should look like:
+    // eb2bd3cc9db26427dcee039b0e696a4127c2466e2e487d8628c4a7b2d3ecdbd3 *disk-img.tar.gz
+    // 7348b0f4b0267da7424306efddd57e26dc5a858cd642d64afaeaa592c4974af8 *disk-img.tar.zst
+
+    let lines = body
+        .split('\n')
+        .filter(|line| line.ends_with(file))
+        .collect::<Vec<&str>>();
+    let line = lines.first().unwrap();
+    let parts = line.split(' ').collect::<Vec<&str>>();
+    let sha256 = parts.first().unwrap();
+    bail_if_sha256_invalid(sha256, &format!("{base_url}/{file}"))?;
+    Ok(sha256.to_string())
 }
 
 pub trait HasGroupSetup {
@@ -2107,6 +2156,17 @@ impl From<FarmBaseUrl> for Url {
 impl TestEnvAttribute for FarmBaseUrl {
     fn attribute_name() -> String {
         "farm_url".to_string()
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct InitialReplicaVersion {
+    pub version: ReplicaVersion,
+}
+
+impl TestEnvAttribute for InitialReplicaVersion {
+    fn attribute_name() -> String {
+        "initial_replica_version".to_string()
     }
 }
 

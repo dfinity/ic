@@ -166,6 +166,8 @@ GUESTOS_RUNTIME_DEPS = [
     GUESTOS_DEV_VERSION,
 ]
 
+MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
+
 NNS_CANISTER_WASM_PROVIDERS = {
     "registry-canister": {
         "tip-of-branch": "//rs/registry/canister:registry-canister",
