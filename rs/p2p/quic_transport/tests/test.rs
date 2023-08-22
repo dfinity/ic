@@ -1,12 +1,16 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::common::{ConnectivityChecker, PeerRestrictedSevHandshake, PeerRestrictedTlsConfig};
+use bytes::Bytes;
+use futures::FutureExt;
+use http::Request;
 use ic_logger::info;
 use ic_p2p_test_utils::turmoil::{
     add_peer_manager_to_sim, add_transport_to_sim, wait_for, wait_for_timeout, PeerManagerAction,
 };
+use ic_quic_transport::Transport;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::RegistryVersion;
+use ic_types::{NodeId, RegistryVersion};
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5};
 use tokio::sync::Notify;
 use turmoil::Builder;
@@ -79,6 +83,94 @@ fn ping_pong() {
         registry_handle.registry_client.update_to_latest_version();
 
         wait_for(&mut sim, || conn_checker.fully_connected())
+            .expect("The network did not reach a fully connected state after startup");
+
+        exit_notify.notify_waiters();
+        sim.run().unwrap();
+    })
+}
+
+/// Test sending large message that is above our message limit. This should be rejected during the serialization step.
+#[test]
+fn test_sending_large_message() {
+    with_test_replica_logger(|log| {
+        info!(log, "Starting test");
+
+        let mut sim = Builder::new()
+            .tick_duration(Duration::from_millis(100))
+            .simulation_duration(Duration::from_secs(10))
+            .build();
+
+        let exit_notify = Arc::new(Notify::new());
+
+        let node_1_port = 8888;
+        let node_2_port = 9999;
+
+        let (peer_manager_cmd_sender, topology_watcher, registry_handle) =
+            add_peer_manager_to_sim(&mut sim, exit_notify.clone(), log.clone());
+
+        let conn_checker = ConnectivityChecker::new(&[NODE_1, NODE_2]);
+
+        // Send large message that should be reject and verify connectivity.
+        let send_large_msg_to_node_2 = |_node_id: NodeId, transport: Arc<dyn Transport>| {
+            async move {
+                loop {
+                    transport
+                        .push(&NODE_2, Request::new(Bytes::from(vec![0; 50_000_000])))
+                        .await
+                        .unwrap_err();
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            }
+            .boxed()
+        };
+
+        add_transport_to_sim(
+            &mut sim,
+            log.clone(),
+            NODE_1,
+            node_1_port,
+            registry_handle.clone(),
+            topology_watcher.clone(),
+            Some(ConnectivityChecker::router()),
+            None,
+            None,
+            None,
+            send_large_msg_to_node_2,
+        );
+
+        add_transport_to_sim(
+            &mut sim,
+            log,
+            NODE_2,
+            node_2_port,
+            registry_handle.clone(),
+            topology_watcher,
+            Some(ConnectivityChecker::router()),
+            None,
+            None,
+            None,
+            conn_checker.check_fut(),
+        );
+
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_1,
+                node_1_port,
+                RegistryVersion::from(2),
+            )))
+            .unwrap();
+        peer_manager_cmd_sender
+            .send(PeerManagerAction::Add((
+                NODE_2,
+                node_2_port,
+                RegistryVersion::from(3),
+            )))
+            .unwrap();
+        registry_handle.registry_client.reload();
+        registry_handle.registry_client.update_to_latest_version();
+
+        wait_for_timeout(&mut sim, || false, Duration::from_secs(5))
             .expect("The network did not reach a fully connected state after startup");
 
         exit_notify.notify_waiters();

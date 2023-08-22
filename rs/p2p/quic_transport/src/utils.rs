@@ -82,7 +82,7 @@ pub(crate) async fn write_request(
 
     let res = bincode_config()
         .serialize(&msg)
-        .expect("serialization should not fail");
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
     send_stream.write_all(&res).await?;
 
     Ok(())
@@ -106,7 +106,7 @@ pub(crate) async fn write_response(
 
     let res = bincode_config()
         .serialize(&msg)
-        .expect("serialization should not fail");
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
     send_stream.write_all(&res).await?;
 
     Ok(())
