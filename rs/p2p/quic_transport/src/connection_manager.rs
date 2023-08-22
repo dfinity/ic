@@ -300,9 +300,11 @@ impl ConnectionManager {
         loop {
             select! {
                 Some(reconnect) = self.connect_queue.next() => {
+                    self.set_metric_gauges();
                     self.handle_dial(reconnect.into_inner())
                 }
                 topology = self.watcher.changed() => {
+                    self.set_metric_gauges();
                     match topology {
                         Ok(_) => {
                             self.handle_topology_change();
@@ -314,6 +316,7 @@ impl ConnectionManager {
                     }
                 },
                 connecting = self.endpoint.accept() => {
+                    self.set_metric_gauges();
                     if let Some(connecting) = connecting {
                         self.handle_inbound(connecting);
                     } else {
@@ -323,6 +326,7 @@ impl ConnectionManager {
                     }
                 },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
+                    self.set_metric_gauges();
                     match conn_res {
                         Ok((conn_out, peer_id)) => self.handle_connecting_result(conn_out, Some(peer_id)),
                         Err(err) => {
@@ -334,6 +338,7 @@ impl ConnectionManager {
                     }
                 },
                 Some(conn_res) = self.inbound_connecting.join_next() => {
+                    self.set_metric_gauges();
                     match conn_res {
                         Ok(conn_out) => self.handle_connecting_result(conn_out, None),
                         Err(err) => {
@@ -345,6 +350,7 @@ impl ConnectionManager {
                     }
                 },
                 Some(active_result) = self.active_connections.join_next() => {
+                    self.set_metric_gauges();
                     match active_result {
                         Ok((_, peer_id)) => self.handled_closed_conn(peer_id),
                         Err(err) => {
@@ -433,6 +439,27 @@ impl ConnectionManager {
                 true
             }
         });
+    }
+
+    fn set_metric_gauges(&self) {
+        // Collect metrics
+        self.metrics
+            .active_connections
+            .set(self.active_connections.len() as i64);
+        self.metrics
+            .connecting_connections
+            .set(self.inbound_connecting.len() as i64 + self.outbound_connecting.len() as i64);
+        self.metrics
+            .delay_queue_size
+            .set(self.connect_queue.len() as i64);
+
+        // Reconnect to peers to which connection seems closed.
+        let peer_map = self.peer_map.read().unwrap();
+        self.metrics.peer_map_size.set(peer_map.len() as i64);
+        for (_, conn) in peer_map.iter() {
+            self.metrics
+                .collect_quic_connection_stats(&conn.connection, &conn.peer_id);
+        }
     }
 
     fn handle_dial(&mut self, peer_id: NodeId) {
