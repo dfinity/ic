@@ -91,6 +91,7 @@ pub(crate) async fn start_request_handler(
             },
             _ = connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
+                metrics.collect_quic_connection_stats(&connection, &peer_id);
                 if let Err(err) = completed_request {
                     // Cancelling tasks is ok. Panicing tasks are not.
                     if err.is_panic() {

@@ -452,14 +452,6 @@ impl ConnectionManager {
         self.metrics
             .delay_queue_size
             .set(self.connect_queue.len() as i64);
-
-        // Reconnect to peers to which connection seems closed.
-        let peer_map = self.peer_map.read().unwrap();
-        self.metrics.peer_map_size.set(peer_map.len() as i64);
-        for (_, conn) in peer_map.iter() {
-            self.metrics
-                .collect_quic_connection_stats(&conn.connection, &conn.peer_id);
-        }
     }
 
     fn handle_dial(&mut self, peer_id: NodeId) {
