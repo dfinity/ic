@@ -3,17 +3,13 @@
 
 use crate::hasher::Hasher;
 use crate::{
-    flatmap, Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MixedHashTree, Path,
+    Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MixedHashTree, Path,
     TreeHashError, Witness, WitnessGenerator, MAX_HASH_TREE_DEPTH,
 };
 use std::collections::VecDeque;
-use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Debug;
 use std::iter::Peekable;
-
-#[cfg(test)]
-mod tests;
 
 const DOMAIN_HASHTREE_LEAF: &str = "ic-hashtree-leaf";
 const DOMAIN_HASHTREE_EMPTY_SUBTREE: &str = "ic-hashtree-empty";
@@ -972,96 +968,6 @@ impl fmt::Debug for WitnessGeneratorImpl {
     }
 }
 
-fn path_as_string(path: &[Label]) -> String {
-    let mut str = String::new();
-    str.push('[');
-    for label in path {
-        str.push_str(&label.to_string())
-    }
-    str.push(']');
-    str
-}
-
-fn labeled_tree_from_hashtree(
-    hash_tree: &HashTree,
-    curr_path: &mut Vec<Label>,
-) -> Result<LabeledTree<Digest>, TreeHashError> {
-    /// Traverses the first level of labeled Nodes reacheable from the specified
-    /// tree root, recursively converts those into labeled trees and
-    /// collects them into a map indexed by the corresponding label.
-    fn collect_children(
-        tree: &HashTree,
-        path: &mut Vec<Label>,
-        map: &mut FlatMap<Label, LabeledTree<Digest>>,
-    ) -> Result<(), TreeHashError> {
-        match tree {
-            HashTree::Leaf { .. } => Err(TreeHashError::InvalidArgument {
-                info: format!(
-                    "subtree leaf without a node at path {}",
-                    path_as_string(path)
-                ),
-            }),
-
-            HashTree::Node {
-                label, hash_tree, ..
-            } => {
-                path.push(label.clone());
-                let child = labeled_tree_from_hashtree(hash_tree, path)?;
-                path.pop();
-                map.try_append(label.clone(), child)
-                    .map_err(|_| TreeHashError::InvalidArgument {
-                        info: format!(
-                            "non-sorted labels in a subtree at path {}",
-                            path_as_string(path)
-                        ),
-                    })
-            }
-
-            HashTree::Fork {
-                ref left_tree,
-                ref right_tree,
-                ..
-            } => {
-                collect_children(left_tree, path, map)?;
-                collect_children(right_tree, path, map)
-            }
-        }
-    }
-
-    match hash_tree {
-        HashTree::Leaf { digest } => {
-            if *digest == empty_subtree_hash() {
-                Ok(LabeledTree::SubTree(FlatMap::new()))
-            } else {
-                Ok(LabeledTree::Leaf(digest.to_owned()))
-            }
-        }
-        HashTree::Node {
-            label,
-            hash_tree: hash_subtree,
-            ..
-        } => {
-            curr_path.push(label.to_owned());
-            let labeled_subtree = labeled_tree_from_hashtree(hash_subtree, curr_path)?;
-            curr_path.pop();
-            let map = flatmap!(label.to_owned() => labeled_subtree);
-            Ok(LabeledTree::SubTree(map))
-        }
-
-        HashTree::Fork {
-            left_tree,
-            right_tree,
-            ..
-        } => {
-            let mut children = FlatMap::new();
-            collect_children(left_tree, curr_path, &mut children)?;
-            collect_children(right_tree, curr_path, &mut children)?;
-
-            Ok(LabeledTree::SubTree(children))
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub struct TooLongPathError;
 
@@ -1155,24 +1061,6 @@ pub fn sparse_labeled_tree_from_paths(paths: &[Path]) -> Result<LabeledTree<()>,
     }
 
     Ok(root)
-}
-
-impl TryFrom<HashTree> for WitnessGeneratorImpl {
-    type Error = TreeHashError;
-
-    /// Creates a `WitnessGenerator` from a `HashTree`, that must have
-    /// a structure matching a valid `LabeledTree`.
-    /// Returns an error if the given hash tree doesn't match a valid
-    /// `LabeledTree`, e.g. if the hash tree has only some `HashTree::Fork`-
-    /// and `HashTree::Leaf`-elements, but none `HashTree::Node`-elements.
-    fn try_from(hash_tree: HashTree) -> Result<Self, Self::Error> {
-        let mut curr_path = Vec::new();
-        let labeled_tree = labeled_tree_from_hashtree(&hash_tree, &mut curr_path)?;
-        Ok(WitnessGeneratorImpl {
-            orig_tree: labeled_tree,
-            hash_tree,
-        })
-    }
 }
 
 impl WitnessGenerator for WitnessGeneratorImpl {

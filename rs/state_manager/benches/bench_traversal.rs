@@ -1,13 +1,11 @@
 use criterion::{black_box, BatchSize, BenchmarkId, Criterion};
 use criterion_time::ProcessTime;
 use ic_base_types::NumBytes;
-use ic_canonical_state::lazy_tree_conversion::replicated_state_as_lazy_tree;
+use ic_canonical_state::{lazy_tree_conversion::replicated_state_as_lazy_tree, traverse};
 use ic_canonical_state_tree_hash::hash_tree::hash_lazy_tree;
-use ic_canonical_state_tree_hash_test_utils::crypto_hash_lazy_tree;
+use ic_canonical_state_tree_hash_test_utils::{build_witness_gen, crypto_hash_lazy_tree};
 use ic_certification_version::CURRENT_CERTIFICATION_VERSION;
-use ic_crypto_tree_hash::{
-    flatmap, FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator, WitnessGeneratorImpl,
-};
+use ic_crypto_tree_hash::{flatmap, FlatMap, Label, LabeledTree, MixedHashTree, WitnessGenerator};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
@@ -15,6 +13,7 @@ use ic_replicated_state::{
     testing::ReplicatedStateTesting,
     ReplicatedState,
 };
+use ic_state_manager::labeled_tree_visitor::LabeledTreeVisitor;
 use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
 use ic_test_utilities::{
     mock_time,
@@ -30,7 +29,6 @@ use ic_types::{
     Cycles,
 };
 use maplit::btreemap;
-use std::convert::TryFrom;
 
 fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     const NUM_STREAM_MESSAGES: u64 = 1_000;
@@ -163,16 +161,17 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     });
 
     c.bench_function("traverse/build_witness_gen", |b| {
-        let hash_tree = hash_state(&state);
+        let labeled_tree = traverse(&state, LabeledTreeVisitor::default());
         b.iter(|| {
-            black_box(WitnessGeneratorImpl::try_from(hash_tree.clone()).unwrap());
+            black_box(build_witness_gen(&labeled_tree));
         })
     });
 
     c.bench_function("traverse/certify_response/1", |b| {
         use LabeledTree::*;
-        let hash_tree = hash_state(&state);
-        let witness_gen = WitnessGeneratorImpl::try_from(hash_tree).unwrap();
+
+        let labeled_tree = traverse(&state, LabeledTreeVisitor::default());
+        let witness_gen = build_witness_gen(&labeled_tree);
 
         let data_tree = SubTree(flatmap! {
             Label::from("request_status") => SubTree(flatmap!{
@@ -211,8 +210,8 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     };
 
     c.bench_function("traverse/certify_response/100", |b| {
-        let hash_tree = hash_state(&state);
-        let witness_gen = WitnessGeneratorImpl::try_from(hash_tree).unwrap();
+        let labeled_tree = traverse(&state, LabeledTreeVisitor::default());
+        let witness_gen = build_witness_gen(&labeled_tree);
 
         b.iter(|| {
             black_box(
