@@ -1,27 +1,24 @@
-use std::{
-    net::{IpAddr, SocketAddr},
-    str::FromStr,
-    sync::Arc,
-    time::Instant,
-};
-
-use anyhow::{Context, Error};
-use arc_swap::{access::Access, ArcSwapOption};
 use async_trait::async_trait;
-use axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig};
-use ic_registry_client::client::RegistryClient;
-use tokio::sync::Mutex;
+use std::time::Instant;
 use tracing::info;
+
+#[cfg(feature = "tls")]
+use {
+    anyhow::Context,
+    arc_swap::ArcSwapOption,
+    axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig},
+    std::sync::Arc,
+};
 
 use crate::{
     firewall::Rule,
     metrics::{MetricParams, WithMetrics},
-    Run,
 };
 
 #[cfg(feature = "tls")]
 use crate::tls::{self, Provision};
 
+#[allow(dead_code)] // TODO: remove when Firewall() is used.
 #[derive(Clone, PartialEq)]
 pub enum ServiceConfiguration {
     Tls(String),
@@ -55,8 +52,8 @@ impl<T: Configure> Configure for WithMetrics<T> {
 
         let MetricParams {
             action,
-            counter,
-            durationer,
+            counter: _,
+            durationer: _,
         } = &self.1;
 
         info!(action, status, duration, error = ?out.as_ref().err());
@@ -151,7 +148,7 @@ pub struct TlsConfigurator {}
 #[cfg(not(feature = "tls"))]
 #[async_trait]
 impl Configure for TlsConfigurator {
-    async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
+    async fn configure(&mut self, _cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
         Ok(())
     }
 }

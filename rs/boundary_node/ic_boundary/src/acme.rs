@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
@@ -62,6 +62,7 @@ pub struct Acme {
     account: Account,
 }
 
+#[cfg(feature = "tls")]
 impl Acme {
     pub fn new(account: Account) -> Self {
         Self { account }

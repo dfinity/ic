@@ -199,7 +199,7 @@ async fn test_persist() -> Result<(), Error> {
     let routing_table = generate_test_routing_table(0);
 
     let rt_init = Arc::new(ArcSwapOption::empty());
-    let mut persister = Persister::new(Arc::clone(&rt_init));
+    let persister = Persister::new(Arc::clone(&rt_init));
 
     // Persist the routing table
     let result = persister.persist(routing_table.clone()).await.unwrap();

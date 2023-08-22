@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::persist::test::node;
-use ic_types::messages::Blob;
+use ic_types::messages::{Blob, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery};
 
 struct ProxyRouter {
     node: Node,
@@ -12,15 +12,15 @@ struct ProxyRouter {
 impl Proxier for ProxyRouter {
     async fn proxy(
         &self,
-        request_type: RequestType,
-        request: Request<Body>,
-        node: Node,
-        canister_id: Principal,
+        _request_type: RequestType,
+        _request: Request<Body>,
+        _node: Node,
+        _canister_id: Principal,
     ) -> Result<Response, ErrorCause> {
         Ok("foobar".into_response())
     }
 
-    fn lookup_node(&self, canister_id: Principal) -> Result<Node, ErrorCause> {
+    fn lookup_node(&self, _canister_id: Principal) -> Result<Node, ErrorCause> {
         Ok(self.node.clone())
     }
 
@@ -45,7 +45,7 @@ async fn test_status() -> Result<(), Error> {
     let resp = status(State(Arc::new(state))).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let (parts, body) = resp.into_parts();
+    let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
 
     let health: HttpStatusResponse = serde_cbor::from_slice(&body)?;
@@ -95,7 +95,7 @@ async fn test_query() -> Result<(), Error> {
     ctx.canister_id = Some(canister_id);
     ctx.node = Some(node);
 
-    let mut request = Request::builder().body(Body::from(body)).unwrap();
+    let request = Request::builder().body(Body::from(body)).unwrap();
 
     let resp = query(State(Arc::new(state)), Extension(ctx), request).await;
 
@@ -103,7 +103,7 @@ async fn test_query() -> Result<(), Error> {
     let resp = resp.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let (parts, body) = resp.into_parts();
+    let (_parts, body) = resp.into_parts();
     let body = hyper::body::to_bytes(body).await.unwrap().to_vec();
     let body = String::from_utf8_lossy(&body);
     assert_eq!(body, "foobar");

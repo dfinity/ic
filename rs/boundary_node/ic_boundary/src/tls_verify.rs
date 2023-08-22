@@ -37,10 +37,10 @@ impl ServerCertVerifier for TlsVerifier {
     fn verify_server_cert(
         &self,
         end_entity: &Certificate,
-        intermediates: &[Certificate],
+        _intermediates: &[Certificate],
         server_name: &ServerName,
-        scts: &mut dyn Iterator<Item = &[u8]>,
-        ocsp_response: &[u8],
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
         now: SystemTime,
     ) -> Result<ServerCertVerified, RustlsError> {
         // Load a routing table if we have one
@@ -81,12 +81,12 @@ impl ServerCertVerifier for TlsVerifier {
 
         // Parse the certificate provided by server
         let (_, provided_cert) = X509Certificate::from_der(&end_entity.0)
-            .map_err(|x| RustlsError::InvalidCertificate(CertificateError::BadEncoding))?;
+            .map_err(|_x| RustlsError::InvalidCertificate(CertificateError::BadEncoding))?;
 
         // Verify the provided self-signed certificate using the public key from registry
         provided_cert
             .verify_signature(Some(&node_cert.tbs_certificate.subject_pki))
-            .map_err(|x| RustlsError::InvalidCertificate(CertificateError::BadSignature))?;
+            .map_err(|_x| RustlsError::InvalidCertificate(CertificateError::BadSignature))?;
 
         // Check if the certificate is valid at provided `now` time
         if !provided_cert.validity.is_valid_at(

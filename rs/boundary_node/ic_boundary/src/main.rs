@@ -1,11 +1,5 @@
-// TODO: remove
-#![allow(unused)]
-
 use std::{
-    fs::File,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    path::PathBuf,
-    str::FromStr,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -15,44 +9,36 @@ use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
 use axum::{
-    extract::{DefaultBodyLimit, State},
-    handler::Handler,
+    extract::DefaultBodyLimit,
     middleware,
     routing::method_routing::{get, post},
-    Extension, Router,
+    Router,
 };
 use axum_server::{accept::DefaultAcceptor, Server};
-use clap::{Args, Parser};
+use clap::Parser;
 use configuration::{Configure, ServiceConfiguration};
 use futures::TryFutureExt;
-use hyper_rustls::ConfigBuilderExt;
-use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
-use lazy_static::lazy_static;
 use nns::Load;
-use opentelemetry::{
-    metrics::{Counter, Histogram, Meter, MeterProvider as _, Unit},
-    sdk::metrics::MeterProvider,
-    KeyValue,
-};
-use opentelemetry_prometheus::{exporter, ExporterBuilder, PrometheusExporter};
-use prometheus::{labels, Encoder as PrometheusEncoder, Registry, TextEncoder};
-use tokio::sync::{Mutex, RwLock};
+use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider};
+use opentelemetry_prometheus::exporter;
+use prometheus::{labels, Registry};
 use tower::ServiceBuilder;
-use tower_http::{
-    request_id::{
-        MakeRequestId, MakeRequestUuid, PropagateRequestIdLayer, RequestId, SetRequestIdLayer,
-    },
-    trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
-    ServiceBuilderExt,
+use tower_http::{request_id::MakeRequestUuid, ServiceBuilderExt};
+use tracing::info;
+
+#[cfg(feature = "tls")]
+use {
+    axum::{handler::Handler, Extension},
+    instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount},
+    opentelemetry::metrics::Meter,
+    std::{fs::File, path::PathBuf},
+    tokio::sync::RwLock,
 };
-use tracing::{error, info};
-use url::Url;
 
 use crate::{
-    acme::Acme,
     check::{Checker, Runner as CheckRunner},
     cli::Cli,
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
@@ -66,7 +52,10 @@ use crate::{
 };
 
 #[cfg(feature = "tls")]
-use crate::tls::{CustomAcceptor, Provisioner, TokenSetter, WithLoad, WithStore};
+use crate::{
+    acme::Acme,
+    tls::{CustomAcceptor, Provisioner, TokenSetter, WithLoad, WithStore},
+};
 
 mod acme;
 mod check;
@@ -89,7 +78,7 @@ pub const SERVICE_NAME: &str = "ic-boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
 
 const SECOND: Duration = Duration::from_secs(1);
-const MINUTE: Duration = Duration::from_secs(60);
+#[cfg(feature = "tls")]
 const DAY: Duration = Duration::from_secs(24 * 3600);
 
 #[tokio::main]
@@ -216,7 +205,7 @@ async fn main() -> Result<(), Error> {
     );
 
     // Service Configurator
-    let mut svc_configurator = Configurator {
+    let svc_configurator = Configurator {
         tls: Box::new(tls_configurator),
         firewall: Box::new(fw_configurator),
     };
@@ -231,7 +220,6 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "run_configuration"),
     );
     let configuration_runner = WithThrottle(configuration_runner, ThrottleParams::new(10 * SECOND));
-    let mut configuration_runner = configuration_runner;
 
     // Server / API
     let proxy_router = Arc::new(ProxyRouter::new(
@@ -306,7 +294,6 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "run_snapshot"),
     );
     let snapshot_runner = WithThrottle(snapshot_runner, ThrottleParams::new(10 * SECOND));
-    let mut snapshot_runner = snapshot_runner;
 
     // Checks
     let persister = WithMetrics(
@@ -337,7 +324,6 @@ async fn main() -> Result<(), Error> {
         check_runner,
         ThrottleParams::new(Duration::from_secs(cli.health.check_interval)),
     );
-    let mut check_runner = check_runner;
 
     // Runners
     let runners: Vec<Box<dyn Run>> = vec![
@@ -487,8 +473,8 @@ impl<T: Run> Run for WithMetrics<T> {
 
         let MetricParams {
             action,
-            counter,
-            durationer,
+            counter: _,
+            durationer: _,
         } = &self.1;
 
         info!(action, status, duration, error = ?out.as_ref().err());

@@ -57,11 +57,11 @@ pub enum CheckError {
 impl CheckError {
     pub fn short(&self) -> &str {
         match self {
-            Self::Generic(e) => "generic",
-            Self::Network(e) => "network",
-            Self::Http(code) => "http",
-            Self::ReadBody(e) => "read_body",
-            Self::Cbor(e) => "cbor",
+            Self::Generic(_) => "generic",
+            Self::Network(_) => "network",
+            Self::Http(_) => "http",
+            Self::ReadBody(_) => "read_body",
+            Self::Cbor(_) => "cbor",
             Self::Health => "health",
         }
     }
@@ -102,7 +102,7 @@ fn nodes_sort_by_score(mut nodes: Vec<NodeCheckResult>) -> Vec<Node> {
     let latency_max = latencies.into_iter().reduce(f32::max).unwrap_or(0.0);
 
     // Normalize latency to 0..1 range
-    nodes.iter_mut().for_each(|mut x| {
+    nodes.iter_mut().for_each(|x| {
         x.average_latency = (x.average_latency - latency_min) / (latency_max - latency_min)
     });
 
@@ -255,7 +255,7 @@ impl<P: Persist, C: Check> Runner<P, C> {
         };
 
         // Filter out nodes that fail the predicates
-        let mut nodes = nodes
+        let nodes = nodes
             .into_iter()
             .filter(|x| x.height >= min_height) // Filter below min_height
             .filter(|x| x.ok_count >= self.min_ok_count) // Filter below min_ok_count
