@@ -115,6 +115,11 @@ impl QuicTransport {
     }
 }
 
+enum ConnCmd {
+    Push(Request<Bytes>, oneshot::Sender<()>),
+    Rpc(Request<Bytes>, oneshot::Sender<Response<Bytes>>),
+}
+
 #[async_trait]
 impl Transport for QuicTransport {
     async fn rpc(

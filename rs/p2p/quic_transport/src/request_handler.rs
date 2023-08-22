@@ -12,6 +12,7 @@ use axum::Router;
 use ic_logger::{info, ReplicaLogger};
 use ic_types::NodeId;
 use quinn::{Connection, RecvStream, SendStream};
+use tokio::sync::oneshot;
 use tower::ServiceExt;
 
 use crate::{
@@ -19,7 +20,7 @@ use crate::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
         ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
     },
-    utils::{read_request, write_response},
+    utils::{read_request, read_response, write_request, write_response},
 };
 
 pub(crate) async fn start_request_handler(
@@ -30,6 +31,8 @@ pub(crate) async fn start_request_handler(
     router: Router,
 ) {
     let mut inflight_requests = tokio::task::JoinSet::new();
+    let mut inflight_cmds = tokio::task::JoinSet::new();
+
     loop {
         tokio::select! {
             uni = connection.accept_uni() => {
@@ -89,6 +92,12 @@ pub(crate) async fn start_request_handler(
                     }
                 }
             },
+            cmd = cmd_rx.recv() => {
+                match cmd {
+                    ConnCmd::Rpc((request, rpc_tx)) => inflight_cmds.spawn(handle_rpc(request, rpc_tx)),
+                    ConnCmd::Push((request, push_tx)) => inflight_cmds.spawn(handle_push(request, rpc_tx)),
+                }
+            }
             _ = connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
                 metrics.collect_quic_connection_stats(&connection, &peer_id);
@@ -99,11 +108,82 @@ pub(crate) async fn start_request_handler(
                     }
                 }
             },
+            Some(completed_cmd) = inflight_cmds.join_next() => {
+                metrics.collect_quic_connection_stats(&connection, &peer_id);
+                if let Err(err) = completed_cmd {
+                    // Cancelling tasks is ok. Panicing tasks are not.
+                    if err.is_panic() {
+                        std::panic::resume_unwind(err.into_panic());
+                    }
+                }
+            },
+
         }
     }
     info!(log, "Shutting down request handler for peer {}", peer_id);
 
     inflight_requests.shutdown().await;
+}
+
+async fn handle_rpc(request: Request<Bytes>, rpc_tx: oneshot::Sender<Response<Bytes>>) {
+    let (mut send_stream, mut recv_stream) = self.connection.open_bi().await.map_err(|e| {
+        self.metrics
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
+        e
+    })?;
+
+    write_request(&mut send_stream, request)
+        .await
+        .map_err(|e| {
+            self.metrics
+                .connection_handle_errors_total
+                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE]);
+            TransportError::Io { error: e }
+        })?;
+
+    send_stream.finish().await.map_err(|e| {
+        self.metrics
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH]);
+        e
+    })?;
+
+    let mut response = read_response(&mut recv_stream).await.map_err(|e| {
+        self.metrics
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ]);
+        TransportError::Io { error: e }
+    })?;
+
+    rpc_tx.send(response);
+}
+
+async fn handle_push(request: Request<Bytes>, push_tx: oneshot::Sender<()>) {
+    let mut send_stream = self.connection.open_uni().await.map_err(|e| {
+        self.metrics
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_OPEN]);
+        e
+    })?;
+
+    write_request(&mut send_stream, request)
+        .await
+        .map_err(|e| {
+            self.metrics
+                .connection_handle_errors_total
+                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE]);
+            TransportError::Io { error: e }
+        })?;
+
+    send_stream.finish().await.map_err(|e| {
+        self.metrics
+            .connection_handle_errors_total
+            .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH]);
+        e
+    })?;
+
+    push_tx.send(());
 }
 
 async fn handle_bi_stream(

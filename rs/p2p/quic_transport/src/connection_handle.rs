@@ -9,13 +9,13 @@ use bytes::Bytes;
 use http::{Request, Response};
 use ic_types::NodeId;
 use quinn::Connection;
+use tokio::sync::mpsc::Sender;
 
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_FINISH, ERROR_TYPE_OPEN, ERROR_TYPE_READ,
         ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
     },
-    utils::{read_response, write_request},
     TransportError,
 };
 
@@ -69,7 +69,7 @@ impl From<quinn::ConnectionError> for TransportError {
 #[derive(Clone, Debug)]
 pub(crate) struct ConnectionHandle {
     pub peer_id: NodeId,
-    pub connection: Connection,
+    pub cmd_tx: Sender<ConnCmd>,
     pub metrics: QuicTransportMetrics,
 }
 
@@ -77,11 +77,12 @@ impl ConnectionHandle {
     pub(crate) fn new(
         peer_id: NodeId,
         connection: Connection,
+        cmd_tx: Sender<ConnCmd>,
         metrics: QuicTransportMetrics,
     ) -> Self {
         Self {
             peer_id,
-            connection,
+            cmd_tx,
             metrics,
         }
     }
@@ -98,35 +99,13 @@ impl ConnectionHandle {
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
 
-        let (mut send_stream, mut recv_stream) = self.connection.open_bi().await.map_err(|e| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
-            e
-        })?;
-
-        write_request(&mut send_stream, request)
+        let (rpc_tx, rpc_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(ConnCmd::Rpc(request, rpc_tx))
             .await
-            .map_err(|e| {
-                self.metrics
-                    .connection_handle_errors_total
-                    .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE]);
-                TransportError::Io { error: e }
-            })?;
+            .map_err(|err| TransportError::Disconnect(err))?;
 
-        send_stream.finish().await.map_err(|e| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH]);
-            e
-        })?;
-
-        let mut response = read_response(&mut recv_stream).await.map_err(|e| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ]);
-            TransportError::Io { error: e }
-        })?;
+        let response = rpc_rx.await.unwrap();
 
         // Propagate PeerId from this request to upper layers.
         response.extensions_mut().insert(self.peer_id);
@@ -143,28 +122,13 @@ impl ConnectionHandle {
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
 
-        let mut send_stream = self.connection.open_uni().await.map_err(|e| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_OPEN]);
-            e
-        })?;
-
-        write_request(&mut send_stream, request)
+        let (push_tx, push_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(ConnCmd::Push(request, push_rx))
             .await
-            .map_err(|e| {
-                self.metrics
-                    .connection_handle_errors_total
-                    .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE]);
-                TransportError::Io { error: e }
-            })?;
+            .map_err(|err| TransportError::Disconnect(err))?;
 
-        send_stream.finish().await.map_err(|e| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH]);
-            e
-        })?;
+        let response = push_rx.await.unwrap();
 
         Ok(())
     }
