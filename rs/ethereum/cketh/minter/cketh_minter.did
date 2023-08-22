@@ -1,5 +1,5 @@
 type DisplayLogsRequest = record { to : text; from : text; address : text };
-type InitArg = record { ecdsa_key_name : text };
+type InitArg = record { ecdsa_key_name : text; next_transaction_nonce: nat };
 type JsonRpcRawTxResult = record { id : nat32; result : text; jsonrpc : text };
 type JsonRpcResult = variant {
   Error : record { code : int64; message : text };
@@ -39,7 +39,7 @@ service : (MinterArg) -> {
         last_seen_block_number: nat;
         minted_transactions : vec record {transaction_hash : text};
         invalid_transactions : vec record {transaction_hash : text};
-        num_issued_transactions : nat;
+        next_transaction_nonce : nat;
         unapproved_retrieve_eth_requests : vec text;
         signed_retrieve_eth_requests : vec text;
         sent_retrieve_eth_requests : vec text;

@@ -57,6 +57,7 @@ rust_test(
         ":minter",
         "@crate_index//:assert_matches",
         "@crate_index//:ethers-core",
+        "@crate_index//:proptest",
     ],
 )
 

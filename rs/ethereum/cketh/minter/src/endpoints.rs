@@ -3,6 +3,7 @@ use candid::{CandidType, Deserialize, Nat};
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct InitArg {
     pub ecdsa_key_name: String,
+    pub next_transaction_nonce: Nat,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
@@ -49,7 +50,7 @@ pub struct DebugState {
     pub last_seen_block_number: Nat,
     pub minted_transactions: Vec<EthTransaction>,
     pub invalid_transactions: Vec<EthTransaction>,
-    pub num_issued_transactions: Nat,
+    pub next_transaction_nonce: Nat,
     pub unapproved_retrieve_eth_requests: Vec<String>,
     pub signed_retrieve_eth_requests: Vec<String>,
     pub sent_retrieve_eth_requests: Vec<String>,

@@ -11,6 +11,7 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
 use ic_cketh_minter::eth_rpc::JsonRpcResult;
 use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
+use ic_cketh_minter::eth_rpc_client::EthereumChain;
 use ic_cketh_minter::guard::{retrieve_eth_guard, retrieve_eth_timer_guard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
@@ -359,41 +360,33 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
             max_transaction_fee, amount
         ));
     }
+    let tx_amount = amount
+        .checked_sub(max_transaction_fee)
+        .expect("BUG: should not happen due to previous check that amount > max_transaction_fee");
 
     //TODO FI-868: contact ledger to burn funds
     let ledger_burn_index = LedgerBurnIndex(0);
-    log!(
-        INFO,
-        "[withdraw]: burning {:?}",
-        amount
-            .checked_sub(max_transaction_fee)
-            .expect("cannot underflow due to previous check that max_transaction_fee >= amount")
-    );
+    log!(INFO, "[withdraw]: burning {:?}", amount);
 
-    let nonce = mutate_state(|s| s.increment_and_get_nonce());
-    let transaction = Eip1559TransactionRequest::new_transfer(
-        SEPOLIA_TEST_CHAIN_ID,
+    let nonce = mutate_state(|s| s.get_and_increment_nonce());
+    let transaction = Eip1559TransactionRequest {
+        //TODO FI-867: add chain id to InitArgs, read it from state and pass it as parameter of that function
+        chain_id: EthereumChain::Sepolia.chain_id(),
         nonce,
-        transaction_price,
+        max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
+        max_fee_per_gas: transaction_price.max_fee_per_gas,
+        gas_limit: transaction_price.gas_limit,
         destination,
-        amount,
-    );
-
+        amount: tx_amount,
+        data: Vec::new(),
+        access_list: AccessList::new(),
+    };
     log!(
         INFO,
         "[withdraw]: queuing transaction: {:?} for signing",
         transaction,
     );
-    mutate_state(|s| {
-        s.pending_retrieve_eth_requests
-            .insert(ledger_burn_index, transaction.clone())
-            .unwrap_or_else(|e| {
-                ic_cdk::trap(&format!(
-                    "BUG: skipping transaction {:?} since it could not be queued for signing: {}",
-                    transaction, e
-                ))
-            });
-    });
+    mutate_state(|s| s.record_retrieve_eth_request(ledger_burn_index, transaction));
 
     RetrieveEthRequest {
         block_index: candid::Nat::from(ledger_burn_index),
@@ -485,7 +478,7 @@ fn dump_state_for_debugging() -> DebugState {
         last_seen_block_number: candid::Nat::from(s.last_seen_block_number.clone()),
         minted_transactions: s.minted_transactions.iter().map(to_tx).collect(),
         invalid_transactions: s.invalid_transactions.iter().map(to_tx).collect(),
-        num_issued_transactions: candid::Nat::from(s.num_issued_transactions),
+        next_transaction_nonce: candid::Nat::from(s.next_transaction_nonce),
         unapproved_retrieve_eth_requests: vec_debug(
             &s.pending_retrieve_eth_requests.transactions_to_sign(),
         ),

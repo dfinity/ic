@@ -1,8 +1,9 @@
 use crate::endpoints::InitArg;
 use crate::eth_rpc::BlockNumber;
 use crate::eth_rpc::Hash;
-use crate::numeric::TransactionNonce;
+use crate::numeric::{LedgerBurnIndex, TransactionNonce};
 use crate::transactions::PendingEthTransactions;
+use crate::tx::Eip1559TransactionRequest;
 use candid::Principal;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
@@ -21,7 +22,7 @@ pub struct State {
     pub last_seen_block_number: BlockNumber,
     pub minted_transactions: BTreeSet<Hash>,
     pub invalid_transactions: BTreeSet<Hash>,
-    pub num_issued_transactions: TransactionNonce,
+    pub next_transaction_nonce: TransactionNonce,
 
     /// Per-principal lock for pending_retrieve_eth_requests
     pub retrieve_eth_principals: BTreeSet<Principal>,
@@ -32,7 +33,7 @@ pub struct State {
 
 impl Default for State {
     fn default() -> Self {
-        let initial_nonce = TransactionNonce::from(3);
+        let next_transaction_nonce = TransactionNonce::ZERO;
         Self {
             ecdsa_key_name: "test_key_1".to_string(),
             ecdsa_public_key: None,
@@ -43,35 +44,52 @@ impl Default for State {
             last_seen_block_number: BlockNumber::new(3_956_206),
             minted_transactions: BTreeSet::new(),
             invalid_transactions: BTreeSet::new(),
-            num_issued_transactions: initial_nonce,
+            next_transaction_nonce,
             retrieve_eth_principals: BTreeSet::new(),
-            pending_retrieve_eth_requests: PendingEthTransactions::new(
-                initial_nonce
-                    .checked_increment()
-                    .expect("transaction nonce overflow"),
-            ),
+            pending_retrieve_eth_requests: PendingEthTransactions::new(next_transaction_nonce),
             is_retrieve_eth_timer_running: false,
         }
     }
 }
 
 impl From<InitArg> for State {
-    fn from(InitArg { ecdsa_key_name }: InitArg) -> Self {
+    fn from(
+        InitArg {
+            ecdsa_key_name,
+            next_transaction_nonce,
+        }: InitArg,
+    ) -> Self {
+        let initial_nonce = TransactionNonce::try_from(next_transaction_nonce)
+            .expect("BUG: initial nonce must be less than U256::MAX");
         Self {
             ecdsa_key_name,
+            next_transaction_nonce: initial_nonce,
+            pending_retrieve_eth_requests: PendingEthTransactions::new(initial_nonce),
             ..Self::default()
         }
     }
 }
 
 impl State {
-    pub fn increment_and_get_nonce(&mut self) -> TransactionNonce {
-        let incremented_nonce = self
-            .num_issued_transactions
+    pub fn get_and_increment_nonce(&mut self) -> TransactionNonce {
+        let current_nonce = self.next_transaction_nonce;
+        self.next_transaction_nonce = self
+            .next_transaction_nonce
             .checked_increment()
-            .expect("transaction nonce overflow");
-        self.num_issued_transactions = incremented_nonce;
-        incremented_nonce
+            .expect("transaction nonce overflow only possible after U256::MAX transactions");
+        current_nonce
+    }
+
+    pub fn record_retrieve_eth_request(
+        &mut self,
+        leder_burn_index: LedgerBurnIndex,
+        transaction: Eip1559TransactionRequest,
+    ) {
+        debug_assert_eq!(
+            self.pending_retrieve_eth_requests
+                .insert(leder_burn_index, transaction),
+            Ok(())
+        );
     }
 }
 
