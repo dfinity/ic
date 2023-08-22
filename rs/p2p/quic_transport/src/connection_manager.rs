@@ -228,7 +228,8 @@ pub fn start_connection_manager(
     // Upper bound on receive memory consumption.
     transport_config.receive_window(VarInt::from_u32(200_000_000));
     transport_config.stream_receive_window(VarInt::from_u32(4_000_000));
-    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(10_000));
+    transport_config.max_concurrent_bidi_streams(VarInt::from_u32(1_000));
+    transport_config.max_concurrent_uni_streams(VarInt::from_u32(1_000));
     let transport_config = Arc::new(transport_config);
     let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(rustls_server_config));
     server_config.transport_config(transport_config.clone());
@@ -720,7 +721,7 @@ impl ConnectionManager {
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 let data = recv
-                    .read_to_end(10)
+                    .read_to_end(GRUEZI_HANDSHAKE.len())
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 if data != GRUEZI_HANDSHAKE.as_bytes() {
@@ -736,7 +737,7 @@ impl ConnectionManager {
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 let data = recv
-                    .read_to_end(10)
+                    .read_to_end(GRUEZI_HANDSHAKE.len())
                     .await
                     .map_err(|e| ConnectionEstablishError::Gruezi(e.to_string()))?;
                 if data != GRUEZI_HANDSHAKE.as_bytes() {
