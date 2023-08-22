@@ -27,6 +27,12 @@ def install_ii_canister(hostname: str):
     args = [f"{dfx_path}", "deploy", "--network", hostname, "--no-wallet", "--yes"]
     logging.info("II: Installing canister: " + " ".join(args))
 
+    # Delete folder .dfx to make sure we don't reuse previous installations of II
+    dfx_dir = os.path.join(ii_path, "/.dfx")
+    if os.path.exists(dfx_dir):
+        logging.info("Deleting old .dfx folder ..")
+        subprocess.run(["rm", "-rf", dfx_dir])
+
     output = subprocess.run(
         args,
         cwd=ii_path,
