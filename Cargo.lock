@@ -6924,6 +6924,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-protobuf",
@@ -6934,6 +6935,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "serde",
 ]
 

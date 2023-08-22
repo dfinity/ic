@@ -337,6 +337,7 @@ impl SubnetConfig {
                 INITIAL_REGISTRY_VERSION,
             ),
             &dkg_dealing_encryption_pubkeys,
+            &mut rand::rngs::OsRng,
         );
         let ni_dkg_transcript_high_threshold = initial_dkg_transcript(
             InitialNiDkgConfig::new(
@@ -347,6 +348,7 @@ impl SubnetConfig {
                 INITIAL_REGISTRY_VERSION,
             ),
             &dkg_dealing_encryption_pubkeys,
+            &mut rand::rngs::OsRng,
         );
         let subnet_threshold_signing_public_key = PublicKey::from(ThresholdSigPublicKey::from(
             &ni_dkg_transcript_high_threshold,
