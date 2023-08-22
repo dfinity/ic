@@ -47,8 +47,6 @@ const RND_SEED: u64 = 42;
 const PAYLOAD_SIZE_BYTES: usize = 1024;
 // Duration of each request is placed into one of two categories - below or above this threshold.
 const DURATION_THRESHOLD: Duration = Duration::from_secs(20);
-// Ratio of requests with duration < DURATION_THRESHOLD should exceed this parameter.
-const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to nodes stressing.
 const BANDWIDTH_MIN: u32 = 10;
 const BANDWIDTH_MAX: u32 = 100;
@@ -73,7 +71,6 @@ pub struct Config {
     pub nodes_app_subnet: usize,
     pub runtime: Duration,
     pub rps: usize,
-    pub max_failures_ratio: f64,
 }
 
 pub fn setup(env: TestEnv, config: Config) {
@@ -309,25 +306,15 @@ pub fn test(env: TestEnv, config: Config) {
         load_metrics_nns.requests_count_below_threshold(DURATION_THRESHOLD);
     let requests_count_below_threshold_app =
         load_metrics_app.requests_count_below_threshold(DURATION_THRESHOLD);
-    let requests_ratio_below_threshold_nns =
-        load_metrics_nns.requests_ratio_below_threshold(DURATION_THRESHOLD);
-    let requests_ratio_below_threshold_app =
-        load_metrics_app.requests_ratio_below_threshold(DURATION_THRESHOLD);
-    info!(
-        &log,
-        "Requests below {} sec:\nRequests_count: NNS={:?} APP={:?}\nRequests_ratio: NNS={:?} APP={:?}.",
-        DURATION_THRESHOLD.as_secs(),
-        requests_count_below_threshold_nns,
-        requests_count_below_threshold_app,
-        requests_ratio_below_threshold_nns,
-        requests_ratio_below_threshold_app,
-    );
-    assert!(requests_ratio_below_threshold_nns
+    let min_expected_success_count = config.rps * config.runtime.as_secs() as usize;
+    assert_eq!(load_metrics_nns.failure_calls(), 0);
+    assert_eq!(load_metrics_app.failure_calls(), 0);
+    assert!(requests_count_below_threshold_nns
         .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
-    assert!(requests_ratio_below_threshold_app
+        .all(|(_, count)| *count as usize == min_expected_success_count));
+    assert!(requests_count_below_threshold_app
         .iter()
-        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
+        .all(|(_, count)| *count as usize == min_expected_success_count));
     // Create agents to read results from the counter canisters.
     let agent_nns = subnet_nns
         .nodes()
@@ -343,10 +330,6 @@ pub fn test(env: TestEnv, config: Config) {
         &log,
         "Step 6: Assert min counter value on both canisters has been reached ... "
     );
-    let min_expected_success_count = {
-        let total_requests_count = config.rps * config.runtime.as_secs() as usize;
-        ((1.0 - config.max_failures_ratio) * total_requests_count as f64) as usize
-    };
     block_on(async {
         assert_canister_counter_with_retries(
             &log,

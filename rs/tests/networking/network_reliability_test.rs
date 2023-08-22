@@ -14,7 +14,6 @@ const CONFIG: Config = Config {
     nodes_app_subnet: 4,
     runtime: Duration::from_secs(180),
     rps: 100,
-    max_failures_ratio: 0.05,
 };
 // Timeout parameters
 const TASK_TIMEOUT: Duration = Duration::from_secs(320 * 60);
