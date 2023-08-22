@@ -1,7 +1,7 @@
 use crate::eth_rpc;
 use crate::eth_rpc::{
     Block, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult,
-    JsonRpcResult, LogEntry, Transaction,
+    HttpResponsePayload, JsonRpcResult, LogEntry, ResponseSizeEstimate, Transaction,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::logs::{DEBUG, INFO};
@@ -53,11 +53,16 @@ impl EthRpcClient {
     /// If none of the providers return an ok result, return the last error.
     /// This method is useful in case a provider is temporarily down but should only be for
     /// querying data that is **not** critical since the returned value comes from a single provider.
-    async fn sequential_call_until_ok<I: Serialize + Clone, O: DeserializeOwned + Debug>(
+    async fn sequential_call_until_ok<I, O>(
         &self,
         method: impl Into<String> + Clone,
         params: I,
-    ) -> HttpOutcallResult<JsonRpcResult<O>> {
+        response_size_estimate: ResponseSizeEstimate,
+    ) -> HttpOutcallResult<JsonRpcResult<O>>
+    where
+        I: Serialize + Clone,
+        O: DeserializeOwned + HttpResponsePayload + Debug,
+    {
         let mut last_result: Option<HttpOutcallResult<JsonRpcResult<O>>> = None;
         for provider in self.providers() {
             log!(
@@ -65,8 +70,13 @@ impl EthRpcClient {
                 "[sequential_call_until_ok]: calling provider: {:?}",
                 provider
             );
-            let result =
-                eth_rpc::call(provider.url().to_string(), method.clone(), params.clone()).await;
+            let result = eth_rpc::call(
+                provider.url().to_string(),
+                method.clone(),
+                params.clone(),
+                response_size_estimate,
+            )
+            .await;
             match result {
                 Ok(JsonRpcResult::Result(value)) => return Ok(JsonRpcResult::Result(value)),
                 Ok(json_rpc_error @ JsonRpcResult::Error { .. }) => {
@@ -91,11 +101,16 @@ impl EthRpcClient {
     /// (e.g., if different providers gave different responses).
     /// This method is useful for querying data that is critical for the system to ensure that there is no single point of failure,
     /// e.g., ethereum logs upon which ckETH will be minted.
-    async fn parallel_call<I: Serialize + Clone, O: DeserializeOwned>(
+    async fn parallel_call<I, O>(
         &self,
         method: impl Into<String> + Clone,
         params: I,
-    ) -> MultiCallResults<O> {
+        response_size_estimate: ResponseSizeEstimate,
+    ) -> MultiCallResults<O>
+    where
+        I: Serialize + Clone,
+        O: DeserializeOwned + HttpResponsePayload,
+    {
         let providers = self.providers();
         let results = {
             let mut fut = Vec::with_capacity(providers.len());
@@ -105,6 +120,7 @@ impl EthRpcClient {
                     provider.url().to_string(),
                     method.clone(),
                     params.clone(),
+                    response_size_estimate,
                 ));
             }
             futures::future::join_all(fut).await
@@ -116,8 +132,10 @@ impl EthRpcClient {
         &self,
         params: GetLogsParam,
     ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
-        let results: MultiCallResults<Vec<LogEntry>> =
-            self.parallel_call("eth_getLogs", vec![params]).await;
+        // We expect most of the calls to contain zero events.
+        let results: MultiCallResults<Vec<LogEntry>> = self
+            .parallel_call("eth_getLogs", vec![params], ResponseSizeEstimate::new(100))
+            .await;
         results.reduce_with_equality()
     }
 
@@ -131,6 +149,7 @@ impl EthRpcClient {
                     block: BlockSpec::Tag(BlockTag::Finalized),
                     include_full_transactions: false,
                 },
+                ResponseSizeEstimate::new(6 * 1024),
             )
             .await;
         results.reduce_with_equality()
@@ -141,7 +160,11 @@ impl EthRpcClient {
         tx_hash: Hash,
     ) -> Result<Option<Transaction>, MultiCallError<Option<Transaction>>> {
         let results: MultiCallResults<Option<Transaction>> = self
-            .parallel_call("eth_getTransactionByHash", vec![tx_hash])
+            .parallel_call(
+                "eth_getTransactionByHash",
+                vec![tx_hash],
+                ResponseSizeEstimate::new(1200),
+            )
             .await;
         results.reduce_with_equality()
     }
@@ -150,7 +173,8 @@ impl EthRpcClient {
         &self,
         params: FeeHistoryParams,
     ) -> HttpOutcallResult<JsonRpcResult<FeeHistory>> {
-        self.sequential_call_until_ok("eth_feeHistory", params)
+        // A typical response is slightly above 300 bytes.
+        self.sequential_call_until_ok("eth_feeHistory", params, ResponseSizeEstimate::new(512))
             .await
     }
 
@@ -158,8 +182,14 @@ impl EthRpcClient {
         &self,
         raw_signed_transaction_hex: String,
     ) -> HttpOutcallResult<JsonRpcResult<Hash>> {
-        self.sequential_call_until_ok("eth_sendRawTransaction", vec![raw_signed_transaction_hex])
-            .await
+        // A successful reply is under 256 bytes, but we expect most calls to end with an error
+        // since we submit the same transaction from multiple nodes.
+        self.sequential_call_until_ok(
+            "eth_sendRawTransaction",
+            vec![raw_signed_transaction_hex],
+            ResponseSizeEstimate::new(256),
+        )
+        .await
     }
 }
 

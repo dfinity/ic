@@ -3,7 +3,7 @@
 
 use crate::address::Address;
 use crate::logs::TRACE_HTTP;
-use crate::numeric::Wei;
+use crate::numeric::{TransactionNonce, Wei};
 use candid::{candid_method, CandidType, Principal};
 use ethnum::u256;
 use ic_canister_log::log;
@@ -14,8 +14,25 @@ use ic_cdk::api::management_canister::http_request::{
 };
 use ic_cdk_macros::query;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::fmt;
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 use std::ops::Add;
+
+#[cfg(test)]
+mod tests;
+
+// This constant is our approximation of the expected header size.
+// The HTTP standard doesn't define any limit, and many implementations limit
+// the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
+// fit in the constant defined below, and if there is spike, then the payload size adjustment
+// should take care of that.
+const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
+
+// This constant comes from the IC specification:
+// > If provided, the value must not exceed 2MB
+const HTTP_MAX_SIZE: u64 = 2_000_000;
+
+pub const MAX_PAYLOAD_SIZE: u64 = HTTP_MAX_SIZE - HEADER_SIZE_LIMIT;
 
 pub type Quantity = u256;
 
@@ -124,13 +141,15 @@ impl std::str::FromStr for Hash {
     }
 }
 
+impl HttpResponsePayload for Hash {}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct BlockResponse {
     pub number: Quantity,
     pub hash: Data,
 }
 
-#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     /// The hash of the block containing the transaction.
@@ -145,7 +164,7 @@ pub struct Transaction {
     pub gas: Quantity,
 
     /// Gas price provided by the sender in Wei.
-    pub gas_price: Quantity,
+    pub gas_price: Wei,
 
     /// The sender address.
     pub from: Address,
@@ -157,7 +176,7 @@ pub struct Transaction {
     pub input: Data,
 
     /// The number of transactions made by the sender prior to this one.
-    pub nonce: Quantity,
+    pub nonce: TransactionNonce,
 
     /// The receiver address.
     /// None if it's a contract creation transaction.
@@ -168,12 +187,18 @@ pub struct Transaction {
     pub transaction_index: Option<Quantity>,
 
     /// Value transferred in Wei.
-    pub value: Quantity,
+    pub value: Wei,
 }
 
 impl Transaction {
     pub fn is_confirmed(&self) -> bool {
         self.block_hash.is_some() && self.block_number.is_some() && self.transaction_index.is_some()
+    }
+}
+
+impl HttpResponsePayload for Transaction {
+    fn response_transform() -> Option<ResponseTransform> {
+        Some(ResponseTransform::Transaction)
     }
 }
 
@@ -301,6 +326,8 @@ pub struct LogEntry {
     pub removed: bool,
 }
 
+impl HttpResponsePayload for Vec<LogEntry> {}
+
 /// Parameters of the [`eth_getBlockByNumber`](https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_getblockbynumber) call.
 #[derive(Debug, Serialize, Clone)]
 #[serde(into = "(BlockSpec, bool)")]
@@ -344,7 +371,7 @@ impl From<FeeHistoryParams> for (Quantity, BlockSpec, Vec<u8>) {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FeeHistory {
     /// Lowest number block of the returned range.
@@ -357,6 +384,14 @@ pub struct FeeHistory {
     /// A two-dimensional array of effective priority fees per gas at the requested block percentiles.
     pub reward: Vec<Vec<Wei>>,
 }
+
+impl HttpResponsePayload for FeeHistory {
+    fn response_transform() -> Option<ResponseTransform> {
+        Some(ResponseTransform::FeeHistory)
+    }
+}
+
+impl HttpResponsePayload for Wei {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd)]
 #[serde(transparent)]
@@ -392,7 +427,7 @@ impl From<BlockNumber> for candid::Nat {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Block {
     ///The block number. `None` when its pending block.
@@ -400,6 +435,8 @@ pub struct Block {
     /// Base fee value of this block
     pub base_fee_per_gas: Wei,
 }
+
+impl HttpResponsePayload for Block {}
 
 /// An envelope for all JSON-RPC requests.
 #[derive(Serialize)]
@@ -410,7 +447,7 @@ struct JsonRpcRequest<T> {
     params: T,
 }
 
-#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JsonRpcReply<T> {
     pub id: u32,
@@ -420,7 +457,7 @@ pub struct JsonRpcReply<T> {
 }
 
 /// An envelope for all JSON-RPC replies.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, CandidType)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, CandidType)]
 #[serde(rename_all = "camelCase")]
 pub enum JsonRpcResult<T> {
     Result(T),
@@ -438,6 +475,39 @@ impl<T> JsonRpcResult<T> {
     }
 }
 
+/// Describes a payload transformation to execute before passing the HTTP response to consensus.
+/// The purpose of these transformations is to ensure that the response encoding is deterministic
+/// (the field order is the same).
+#[derive(Serialize, Deserialize, Debug)]
+pub enum ResponseTransform {
+    Block,
+    Transaction,
+    FeeHistory,
+}
+
+impl ResponseTransform {
+    fn apply(&self, body_bytes: &mut Vec<u8>) {
+        fn redact_response<T>(body: &mut Vec<u8>)
+        where
+            T: Serialize + DeserializeOwned,
+        {
+            let response: JsonRpcReply<T> = match serde_json::from_slice(body) {
+                Ok(response) => response,
+                Err(_) => return,
+            };
+            *body = serde_json::to_string(&response)
+                .expect("BUG: failed to serialize response")
+                .into_bytes();
+        }
+
+        match self {
+            Self::Block => redact_response::<Block>(body_bytes),
+            Self::Transaction => redact_response::<Transaction>(body_bytes),
+            Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
+        }
+    }
+}
+
 #[query]
 #[candid_method(query)]
 fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
@@ -447,6 +517,14 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
         args.response.status,
         String::from_utf8_lossy(&args.response.body).to_string()
     );
+    let status_ok = args.response.status >= 200u16 && args.response.status < 300u16;
+    if status_ok && !args.context.is_empty() {
+        let maybe_transform: Result<ResponseTransform, _> =
+            ciborium::de::from_reader(&args.context[..]);
+        if let Ok(transform) = maybe_transform {
+            transform.apply(&mut args.response.body);
+        }
+    }
     args.response
 }
 
@@ -469,84 +547,153 @@ pub enum HttpOutcallError {
 
 pub type HttpOutcallResult<T> = Result<T, HttpOutcallError>;
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ResponseSizeEstimate(u64);
+
+impl ResponseSizeEstimate {
+    pub fn new(num_bytes: u64) -> Self {
+        assert!(num_bytes > 0);
+        assert!(num_bytes <= MAX_PAYLOAD_SIZE);
+        Self(num_bytes)
+    }
+
+    /// Describes the expected (90th percentile) number of bytes in the HTTP response body.
+    /// This number should be less than `MAX_PAYLOAD_SIZE`.
+    pub fn get(self) -> u64 {
+        self.0
+    }
+
+    /// Returns a higher estimate for the payload size.
+    pub fn adjust(self) -> Self {
+        Self(self.0.max(1024).saturating_mul(2).min(MAX_PAYLOAD_SIZE))
+    }
+}
+
+impl fmt::Display for ResponseSizeEstimate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+pub trait HttpResponsePayload {
+    fn response_transform() -> Option<ResponseTransform> {
+        None
+    }
+}
+
+impl<T: HttpResponsePayload> HttpResponsePayload for Option<T> {}
+
 /// Calls a JSON-RPC method on an Ethereum node at the specified URL.
-pub async fn call<I: Serialize, O: DeserializeOwned>(
+pub async fn call<I, O>(
     url: impl Into<String>,
     method: impl Into<String>,
     params: I,
-) -> HttpOutcallResult<JsonRpcResult<O>> {
-    const KIB: u64 = 1024;
+    mut response_size_estimate: ResponseSizeEstimate,
+) -> HttpOutcallResult<JsonRpcResult<O>>
+where
+    I: Serialize,
+    O: DeserializeOwned + HttpResponsePayload,
+{
+    let eth_method = method.into();
     let payload = serde_json::to_string(&JsonRpcRequest {
         jsonrpc: "2.0",
         params,
-        method: method.into(),
+        method: eth_method.clone(),
         id: 1,
     })
     .unwrap();
     let url = url.into();
-    log!(
-        TRACE_HTTP,
-        "Calling url: {}, with payload: {payload}",
-        url.clone()
-    );
-    let request = CanisterHttpRequestArgument {
-        url: url.clone(),
-        max_response_bytes: Some(10 * KIB),
-        method: HttpMethod::POST,
-        headers: vec![HttpHeader {
-            name: "Content-Type".to_string(),
-            value: "application/json".to_string(),
-        }],
-        body: Some(payload.into_bytes()),
-        transform: Some(TransformContext::new(cleanup_response, vec![])),
-    };
 
-    // Details of the values used in the following lines can be found here:
-    // https://internetcomputer.org/docs/current/developer-docs/production/computation-and-storage-costs
-    const HTTP_MAX_SIZE: u128 = 2 * 1024 * 1024;
-    let base_cycles = 400_000_000u128 + 100_000u128 * (2 * HTTP_MAX_SIZE);
+    loop {
+        log!(
+            TRACE_HTTP,
+            "Calling url: {}, with payload: {payload}",
+            url.clone()
+        );
 
-    const BASE_SUBNET_SIZE: u128 = 13;
-    const SUBNET_SIZE: u128 = 34;
-    let cycles = base_cycles * SUBNET_SIZE / BASE_SUBNET_SIZE;
-    let (response,): (HttpResponse,) = call_with_payment128(
-        Principal::management_canister(),
-        "http_request",
-        (request,),
-        cycles,
-    )
-    .await
-    .map_err(|(code, message)| HttpOutcallError::IcError { code, message })?;
+        let effective_size_estimate = response_size_estimate.get() + HEADER_SIZE_LIMIT;
+        let transform_op = O::response_transform()
+            .as_ref()
+            .map(|t| {
+                let mut buf = vec![];
+                ciborium::ser::into_writer(t, &mut buf).unwrap();
+                buf
+            })
+            .unwrap_or_default();
 
-    log!(
-        TRACE_HTTP,
-        "Got response: {} from url: {} with status: {}",
-        String::from_utf8_lossy(&response.body),
-        url,
-        response.status
-    );
+        let request = CanisterHttpRequestArgument {
+            url: url.clone(),
+            max_response_bytes: Some(effective_size_estimate),
+            method: HttpMethod::POST,
+            headers: vec![HttpHeader {
+                name: "Content-Type".to_string(),
+                value: "application/json".to_string(),
+            }],
+            body: Some(payload.as_bytes().to_vec()),
+            transform: Some(TransformContext::new(cleanup_response, transform_op)),
+        };
 
-    // JSON-RPC responses over HTTP should have a 2xx status code,
-    // even if the contained JsonRpcResult is an error.
-    // If the server is not available, it will sometimes (wrongly) return HTML that will fail parsing as JSON.
-    let http_status_code = http_status_code(&response);
-    if !is_successful_http_code(&http_status_code) {
-        return Err(HttpOutcallError::InvalidHttpJsonRpcResponse {
-            status: http_status_code,
-            body: String::from_utf8_lossy(&response.body).to_string(),
-            parsing_error: None,
-        });
-    }
+        // Details of the values used in the following lines can be found here:
+        // https://internetcomputer.org/docs/current/developer-docs/production/computation-and-storage-costs
+        let base_cycles = 400_000_000u128 + 100_000u128 * (2 * effective_size_estimate as u128);
 
-    let reply: JsonRpcReply<O> = serde_json::from_slice(&response.body).map_err(|e| {
-        HttpOutcallError::InvalidHttpJsonRpcResponse {
-            status: http_status_code,
-            body: String::from_utf8_lossy(&response.body).to_string(),
-            parsing_error: Some(e.to_string()),
+        const BASE_SUBNET_SIZE: u128 = 13;
+        const SUBNET_SIZE: u128 = 34;
+        let cycles = base_cycles * SUBNET_SIZE / BASE_SUBNET_SIZE;
+
+        let response: HttpResponse = match call_with_payment128(
+            Principal::management_canister(),
+            "http_request",
+            (request,),
+            cycles,
+        )
+        .await
+        {
+            Ok((response,)) => response,
+            Err((code, message))
+                if code == RejectionCode::SysFatal && message.contains("body size limit") =>
+            {
+                let new_estimate = response_size_estimate.adjust();
+                if response_size_estimate == new_estimate {
+                    return Err(HttpOutcallError::IcError { code, message });
+                }
+                ic_cdk::println!("The {} response didn't fit into {response_size_estimate} bytes, retrying with {new_estimate}", eth_method);
+                response_size_estimate = new_estimate;
+                continue;
+            }
+            Err((code, message)) => return Err(HttpOutcallError::IcError { code, message }),
+        };
+
+        log!(
+            TRACE_HTTP,
+            "Got response: {} from url: {} with status: {}",
+            String::from_utf8_lossy(&response.body),
+            url,
+            response.status
+        );
+
+        // JSON-RPC responses over HTTP should have a 2xx status code,
+        // even if the contained JsonRpcResult is an error.
+        // If the server is not available, it will sometimes (wrongly) return HTML that will fail parsing as JSON.
+        let http_status_code = http_status_code(&response);
+        if !is_successful_http_code(&http_status_code) {
+            return Err(HttpOutcallError::InvalidHttpJsonRpcResponse {
+                status: http_status_code,
+                body: String::from_utf8_lossy(&response.body).to_string(),
+                parsing_error: None,
+            });
         }
-    })?;
 
-    Ok(reply.result)
+        let reply: JsonRpcReply<O> = serde_json::from_slice(&response.body).map_err(|e| {
+            HttpOutcallError::InvalidHttpJsonRpcResponse {
+                status: http_status_code,
+                body: String::from_utf8_lossy(&response.body).to_string(),
+                parsing_error: Some(e.to_string()),
+            }
+        })?;
+
+        return Ok(reply.result);
+    }
 }
 
 fn http_status_code(response: &HttpResponse) -> u16 {
