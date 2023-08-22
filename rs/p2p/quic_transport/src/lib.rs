@@ -40,7 +40,6 @@ use std::{
 use async_trait::async_trait;
 use axum::Router;
 use bytes::Bytes;
-use connection_handle::ConnectionHandle;
 use either::Either;
 use http::{Request, Response};
 use ic_crypto_tls_interfaces::{TlsConfig, TlsStream};
@@ -52,6 +51,7 @@ use ic_peer_manager::SubnetTopology;
 use ic_types::NodeId;
 use quinn::AsyncUdpSocket;
 
+use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
 
 mod connection_handle;
@@ -65,29 +65,26 @@ pub struct QuicTransport(Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>);
 
 impl QuicTransport {
     pub fn build(
+        log: &ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
         rt: tokio::runtime::Handle,
-        log: ReplicaLogger,
         tls_config: Arc<dyn TlsConfig + Send + Sync>,
         registry_client: Arc<dyn RegistryClient>,
         sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         node_id: NodeId,
         topology_watcher: tokio::sync::watch::Receiver<SubnetTopology>,
         udp_socket: Either<SocketAddr, impl AsyncUdpSocket>,
-        metrics_registry: &MetricsRegistry,
-        state_sync_router: Router,
+        // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
+        router: Router,
     ) -> QuicTransport {
-        info!(log, "Building Quic transport.");
+        info!(log, "Starting Quic transport.");
 
         let peer_map = Arc::new(RwLock::new(HashMap::new()));
 
-        // If we have multiple services we need to combine the routers here.
-        // Make sure this is respected https://docs.rs/axum/latest/axum/struct.Router.html#a-note-about-performance
-        let router = state_sync_router;
-
         start_connection_manager(
             log,
-            rt,
             metrics_registry,
+            rt,
             tls_config.clone(),
             registry_client,
             sev_handshake,
@@ -111,12 +108,13 @@ impl QuicTransport {
             .unwrap()
             .get(peer_id)
             .ok_or(TransportError::Disconnected {
-                connection_error: Some(String::from("Currently not connected to this peer")),
+                connection_error: String::from("Currently not connected to this peer"),
             })?
             .clone();
         Ok(conn)
     }
 }
+
 #[async_trait]
 impl Transport for QuicTransport {
     async fn rpc(
@@ -142,7 +140,7 @@ impl Transport for QuicTransport {
 pub enum TransportError {
     Disconnected {
         // Potential reason for not being connected
-        connection_error: Option<String>,
+        connection_error: String,
     },
     Io {
         error: std::io::Error,
@@ -153,14 +151,9 @@ impl std::fmt::Display for TransportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Disconnected {
-                connection_error: Some(e),
+                connection_error: e,
             } => {
                 write!(f, "Disconnected/No connection to peer: {}", e)
-            }
-            Self::Disconnected {
-                connection_error: None,
-            } => {
-                write!(f, "Disconnected/No connection to peer")
             }
             Self::Io { error } => {
                 write!(f, "Io error: {}", error)
