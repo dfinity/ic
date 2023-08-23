@@ -60,6 +60,7 @@ use crate::{
 
 pub const SERVICE_NAME: &str = "ic-boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
+const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
 const SECOND: Duration = Duration::from_secs(1);
 #[cfg(feature = "tls")]
@@ -211,36 +212,50 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let proxy_router = Arc::new(ProxyRouter::new(
         http_client.clone(),
         Arc::clone(&lookup_table),
-        nns_pub_key.into_bytes().into(),
+        [DER_PREFIX.as_slice(), nns_pub_key.into_bytes().as_slice()].concat(),
     ));
 
     let state = MiddlewareState {
         proxier: proxy_router,
         metric_params: metrics::HttpMetricParams::new(&meter, "http_request"),
     };
-    let routers_https: Router<_> = Router::new()
-        .route("/api/v2/status", get(routes::status))
-        .route("/api/v2/canister/:canister_id/query", post(routes::query))
-        .route("/api/v2/canister/:canister_id/call", post(routes::call))
-        .route(
-            "/api/v2/canister/:canister_id/read_state",
-            post(routes::read_state),
-        )
-        .layer(
-            ServiceBuilder::new()
-                .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
-                .set_x_request_id(MakeRequestUuid)
-                .propagate_x_request_id()
-                .layer(middleware::from_fn_with_state(
-                    state.metric_params.clone(),
-                    metrics::with_metrics_middleware,
-                ))
-                .layer(middleware::from_fn_with_state(
-                    state.proxier.clone(),
-                    routes::preprocess_request,
-                )),
-        )
-        .with_state(state);
+    let routers_https: Router<_> = {
+        let router1: Router<_> = Router::new()
+            .route("/api/v2/canister/:canister_id/query", post(routes::query))
+            .route("/api/v2/canister/:canister_id/call", post(routes::call))
+            .route(
+                "/api/v2/canister/:canister_id/read_state",
+                post(routes::read_state),
+            )
+            .layer(
+                ServiceBuilder::new()
+                    .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
+                    .set_x_request_id(MakeRequestUuid)
+                    .propagate_x_request_id()
+                    .layer(middleware::from_fn_with_state(
+                        state.metric_params.clone(),
+                        metrics::with_metrics_middleware,
+                    ))
+                    .layer(middleware::from_fn_with_state(
+                        state.proxier.clone(),
+                        routes::preprocess_request,
+                    )),
+            )
+            .with_state(state.clone());
+        let router2: Router<_> = Router::new()
+            .route("/api/v2/status", get(routes::status))
+            .layer(
+                ServiceBuilder::new()
+                    .set_x_request_id(MakeRequestUuid)
+                    .propagate_x_request_id()
+                    .layer(middleware::from_fn_with_state(
+                        state.metric_params.clone(),
+                        metrics::with_metrics_middleware,
+                    )),
+            )
+            .with_state(state);
+        Router::new().merge(router1).merge(router2)
+    };
 
     #[cfg(feature = "tls")]
     let routers_http = Router::new()
