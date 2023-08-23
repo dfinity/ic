@@ -785,6 +785,73 @@ fn test_vesting_neuron_manage_neuron_operations() {
 }
 
 #[test]
+fn test_refresh_neuron() {
+    use manage_neuron::Command;
+
+    let claim_or_refresh = ClaimOrRefresh {
+        by: Some(claim_or_refresh::By::NeuronId(Empty {})),
+    };
+
+    let user_principal1 = PrincipalId::new_user_test_id(1000);
+    let neuron_id1 = neuron_id(user_principal1, /*memo*/ 0);
+
+    let user_principal2 = PrincipalId::new_user_test_id(1002);
+    let neuron_id2 = neuron_id(user_principal2, /*memo*/ 0);
+
+    // Set up the test environment with a single dissolved neuron
+    let mut gov = GovernanceCanisterFixtureBuilder::new()
+        // Add a neuron that will be configured the way a neuron originating from an NNS Neurons' Fund participation
+        // in a decentralization swap will be
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id1.clone(),
+                E8,
+                NeuronPermission::all(&PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)),
+            )
+            .add_neuron_permission(NeuronPermission {
+                principal: Some(user_principal1),
+                permission_type: vec![NeuronPermissionType::Vote as i32],
+            }),
+        )
+        // Add a regular neuron for comparison's sake
+        .add_neuron(NeuronBuilder::new(
+            neuron_id2.clone(),
+            E8,
+            NeuronPermission::all(&user_principal2),
+        ))
+        .create();
+
+    {
+        let actual_response = gov.manage_neuron(
+            &neuron_id1,
+            Command::ClaimOrRefresh(claim_or_refresh.clone()),
+            user_principal1,
+        );
+        assert_eq!(
+            ManageNeuronResponse {
+                command: Some(CommandResponse::Error(GovernanceError {
+                    error_type: ErrorType::PreconditionFailed as i32,
+                    error_message: "Cannot refresh an SNS Neuron controlled by the Neurons' Fund"
+                        .to_string()
+                }))
+            },
+            actual_response
+        );
+    }
+    {
+        let actual_response = gov.manage_neuron(
+            &neuron_id2,
+            Command::ClaimOrRefresh(claim_or_refresh),
+            user_principal2,
+        );
+        assert_eq!(
+            ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id2.clone()),
+            actual_response
+        );
+    }
+}
+
+#[test]
 fn test_adding_permissions_when_we_have_manage_principals() {
     let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
     let target = *TEST_NEURON_2_OWNER_PRINCIPAL;

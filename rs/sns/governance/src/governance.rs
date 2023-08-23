@@ -3446,10 +3446,25 @@ impl Governance {
     /// - the neuron is not in the set of neurons with ongoing operations
     /// - the neuron's balance on the ledger account is at least
     ///   neuron_minimum_stake_e8s as defined in the nervous system parameters
+    /// - the neuron was not created via an NNS Neurons' Fund participation in the
+    ///   decentralization swap
     async fn refresh_neuron(&mut self, nid: &NeuronId) -> Result<(), GovernanceError> {
         let now = self.env.now();
         let subaccount = nid.subaccount()?;
         let account = self.neuron_account_id(subaccount);
+
+        // First ensure that the neuron was not created via an NNS Neurons' Fund participation in the
+        // decentralization swap
+        {
+            let neuron = self.get_neuron_result(nid)?;
+
+            if neuron.is_neurons_fund_controlled() {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot refresh an SNS Neuron controlled by the Neurons' Fund",
+                ));
+            }
+        }
 
         // Get the balance of the neuron from the ledger canister.
         let balance = self.ledger.account_balance(account).await?;
@@ -3464,7 +3479,7 @@ impl Governance {
                     ErrorType::InsufficientFunds,
                     format!(
                         "Account does not have enough funds to refresh a neuron. \
-                     Please make sure that account has at least {:?} e8s (was {:?} e8s)",
+                        Please make sure that account has at least {:?} e8s (was {:?} e8s)",
                         min_stake,
                         balance.get_e8s()
                     ),

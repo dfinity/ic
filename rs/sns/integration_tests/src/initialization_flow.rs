@@ -37,14 +37,18 @@ use ic_nns_test_utils::{
         setup_nns_canisters, sns_get_icp_treasury_account_balance, sns_governance_get_mode,
     },
 };
-use ic_sns_governance::pb::v1::governance::Mode::{Normal, PreInitializationSwap};
+use ic_sns_governance::pb::v1::{
+    governance::Mode::{Normal, PreInitializationSwap},
+    ListNeurons,
+};
 use ic_sns_governance::types::ONE_DAY_SECONDS;
 use ic_sns_swap::pb::v1::{
     Lifecycle, NeuronBasketConstructionParameters as SwapNeuronBasketConstructionParameters,
     OpenRequest, Params,
 };
 use ic_sns_test_utils::state_test_helpers::{
-    get_lifecycle, get_sns_canisters_summary, list_community_fund_participants, participate_in_swap,
+    get_lifecycle, get_sns_canisters_summary, list_community_fund_participants,
+    participate_in_swap, sns_governance_list_neurons,
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
@@ -432,6 +436,7 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         &0,   // offset
     )
     .cf_participants;
+    assert!(!cf_participants.is_empty());
 
     for cf_participant in &cf_participants {
         for cf_neuron in &cf_participant.cf_neurons {
@@ -534,6 +539,33 @@ fn test_one_proposal_sns_initialization_success_with_neurons_fund_participation(
         icp_treasury_balance.get_e8s(),
         expected_direct_participation_amount_e8s + expected_cf_participation_amount_e8s,
     );
+
+    // Check that the NF neurons are configured correctly
+    let cf_participants_principals = cf_participants
+        .iter()
+        .map(|cf_participant| cf_participant.hotkey_principal.clone())
+        .collect::<Vec<_>>();
+    let neurons = sns_governance_list_neurons(
+        &mut sns_initialization_flow_test.state_machine,
+        canister_id_or_panic(test_sns.governance_canister_id),
+        &ListNeurons::default(),
+    )
+    .neurons;
+    let mut at_least_one_sns_neuron_is_nf_controlled = false;
+    for neuron in neurons {
+        if neuron.is_neurons_fund_controlled() {
+            at_least_one_sns_neuron_is_nf_controlled = true;
+            let from_neurons_fund = neuron.permissions.iter().any(|permission| {
+                cf_participants_principals.contains(&permission.principal.unwrap().to_string())
+            });
+            assert!(
+                from_neurons_fund,
+                "Neuron permissions: {:?}",
+                neuron.permissions
+            );
+        }
+    }
+    assert!(at_least_one_sns_neuron_is_nf_controlled);
 }
 
 #[test]
