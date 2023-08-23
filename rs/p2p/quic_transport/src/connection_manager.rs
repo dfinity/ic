@@ -62,12 +62,13 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     runtime::Handle,
     select,
+    sync::mpsc::channel,
     task::JoinSet,
 };
 use tokio_util::time::DelayQueue;
 
 use crate::{
-    connection_handle::ConnectionHandle,
+    connection_handle::{ConnectionHandle, ConnectionHandleOld},
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::start_request_handler};
@@ -114,10 +115,10 @@ struct ConnectionManager {
 
     // Local state.
     /// Task joinmap that holds stores a connecting tasks keys by peer id.
-    outbound_connecting: JoinMap<NodeId, Result<ConnectionHandle, ConnectionEstablishError>>,
+    outbound_connecting: JoinMap<NodeId, Result<ConnectionHandleOld, ConnectionEstablishError>>,
     /// Task joinset on which incoming connection requests are spawned. This is not a JoinMap
     /// because the peerId is not available until the TLS handshake succeeded.
-    inbound_connecting: JoinSet<Result<ConnectionHandle, ConnectionEstablishError>>,
+    inbound_connecting: JoinSet<Result<ConnectionHandleOld, ConnectionEstablishError>>,
     /// JoinMap that stores active connection handlers keyed by peer id.
     active_connections: JoinMap<NodeId, ()>,
 
@@ -431,9 +432,6 @@ impl ConnectionManager {
 
             if should_close_connection {
                 self.metrics.peers_removed_total.inc();
-                conn_handle
-                    .connection
-                    .close(VarInt::from_u32(0), b"node not part of subnet anymore");
                 false
             } else {
                 true
@@ -516,7 +514,11 @@ impl ConnectionManager {
             .await?;
             let connection = Self::gruezi(connection, Direction::Outbound).await?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionHandle::new(peer_id, connection, metrics))
+            Ok::<_, ConnectionEstablishError>(ConnectionHandleOld {
+                peer_id,
+                connection,
+                metrics,
+            })
         };
 
         let timeout_conn_fut = async move {
@@ -536,7 +538,7 @@ impl ConnectionManager {
     /// the dialer. I.e lower node id.
     fn handle_connecting_result(
         &mut self,
-        conn_res: Result<ConnectionHandle, ConnectionEstablishError>,
+        conn_res: Result<ConnectionHandleOld, ConnectionEstablishError>,
         peer_id: Option<NodeId>,
     ) {
         match conn_res {
@@ -545,25 +547,16 @@ impl ConnectionManager {
                     .connection_results_total
                     .with_label_values(&[CONNECTION_RESULT_SUCCESS_LABEL])
                     .inc();
-                let req_handler_connection = connection.clone();
+
                 let peer_id = connection.peer_id;
-                match self.peer_map.write().unwrap().entry(connection.peer_id) {
-                    Entry::Occupied(mut entry) => {
-                        info!(
-                            self.log,
-                            "Replacing old connection to {}  with newer", peer_id
-                        );
-                        // This can happen if peer closes and tries to reconnect and we didn't notice the closed connection
-                        let old_connection = entry.insert(connection);
-                        old_connection
-                            .connection
-                            .close(VarInt::from_u32(0), b"using newer connection");
-                    }
-                    Entry::Vacant(entry) => {
-                        info!(self.log, "Adding connection for node {}", peer_id);
-                        entry.insert(connection);
-                    }
-                }
+
+                let (cmd_tx, cmd_rx) = channel(10);
+                let new_conn_handle = ConnectionHandle::new(peer_id, cmd_tx, self.metrics.clone());
+
+                self.peer_map
+                    .write()
+                    .unwrap()
+                    .insert(peer_id, new_conn_handle);
 
                 info!(
                     self.log,
@@ -572,9 +565,10 @@ impl ConnectionManager {
                 self.active_connections.spawn_on(
                     peer_id,
                     start_request_handler(
-                        req_handler_connection.peer_id,
-                        req_handler_connection.connection,
-                        req_handler_connection.metrics,
+                        connection.peer_id,
+                        connection.connection,
+                        cmd_rx,
+                        connection.metrics,
                         self.log.clone(),
                         self.router.clone(),
                     ),
@@ -646,7 +640,11 @@ impl ConnectionManager {
             .await?;
             let connection = Self::gruezi(connection, Direction::Inbound).await?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionHandle::new(peer_id, connection, metrics))
+            Ok::<_, ConnectionEstablishError>(ConnectionHandleOld {
+                peer_id,
+                connection,
+                metrics,
+            })
         };
 
         let timeout_conn_fut = async move {

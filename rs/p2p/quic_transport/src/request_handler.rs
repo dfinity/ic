@@ -9,23 +9,28 @@
 //!     - Writes response to wire.
 //!
 use axum::Router;
+use bytes::Bytes;
+use http::{Request, Response};
 use ic_logger::{info, ReplicaLogger};
 use ic_types::NodeId;
 use quinn::{Connection, RecvStream, SendStream};
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc::Receiver, oneshot};
 use tower::ServiceExt;
 
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_ACCEPT, ERROR_TYPE_APP, ERROR_TYPE_FINISH,
-        ERROR_TYPE_READ, ERROR_TYPE_WRITE, STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
+        ERROR_TYPE_OPEN, ERROR_TYPE_READ, ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
+        STREAM_TYPE_BIDI, STREAM_TYPE_UNI,
     },
     utils::{read_request, read_response, write_request, write_response},
+    ConnCmd, TransportError,
 };
 
 pub(crate) async fn start_request_handler(
     peer_id: NodeId,
     connection: Connection,
+    mut cmd_rx: Receiver<ConnCmd>,
     metrics: QuicTransportMetrics,
     log: ReplicaLogger,
     router: Router,
@@ -94,9 +99,39 @@ pub(crate) async fn start_request_handler(
             },
             cmd = cmd_rx.recv() => {
                 match cmd {
-                    ConnCmd::Rpc((request, rpc_tx)) => inflight_cmds.spawn(handle_rpc(request, rpc_tx)),
-                    ConnCmd::Push((request, push_tx)) => inflight_cmds.spawn(handle_push(request, rpc_tx)),
-                }
+                    Some(ConnCmd::Rpc(request, rpc_tx)) => {
+                        match connection.open_bi().await.map_err(|e| {
+                            metrics
+                                .connection_handle_errors_total
+                                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
+                            e
+                        }) {
+                            Ok((s, r)) => {
+                                inflight_cmds.spawn(handle_rpc(request, rpc_tx, s, r, metrics.clone()));
+                            },
+                            Err(err) => {
+                                rpc_tx.send(Err(err.into())).unwrap();
+                            }
+                        };
+
+                    },
+                    Some(ConnCmd::Push(request, push_tx)) => {
+                        match connection.open_uni().await.map_err(|e| {
+                            metrics
+                                .connection_handle_errors_total
+                                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
+                            e
+                        }) {
+                            Ok(s,) => {
+                                inflight_cmds.spawn(handle_push(request, push_tx, s, metrics.clone()));
+                            },
+                            Err(err) => {
+                                push_tx.send(Err(err.into())).unwrap();
+                            }
+                        };
+                    },
+                    None => break,
+                };
             }
             _ = connection.read_datagram() => {},
             Some(completed_request) = inflight_requests.join_next() => {
@@ -125,65 +160,65 @@ pub(crate) async fn start_request_handler(
     inflight_requests.shutdown().await;
 }
 
-async fn handle_rpc(request: Request<Bytes>, rpc_tx: oneshot::Sender<Response<Bytes>>) {
-    let (mut send_stream, mut recv_stream) = self.connection.open_bi().await.map_err(|e| {
-        self.metrics
+async fn handle_rpc(
+    request: Request<Bytes>,
+    rpc_tx: oneshot::Sender<Result<Response<Bytes>, TransportError>>,
+    mut send_stream: SendStream,
+    mut recv_stream: RecvStream,
+    metrics: QuicTransportMetrics,
+) {
+    if let Err(err) = write_request(&mut send_stream, request).await.map_err(|e| {
+        metrics
             .connection_handle_errors_total
-            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
-        e
-    })?;
+            .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE]);
+        TransportError::Io { error: e }
+    }) {
+        rpc_tx.send(Err(err)).unwrap();
+        return;
+    }
 
-    write_request(&mut send_stream, request)
-        .await
-        .map_err(|e| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE]);
-            TransportError::Io { error: e }
-        })?;
-
-    send_stream.finish().await.map_err(|e| {
-        self.metrics
+    if let Err(err) = send_stream.finish().await.map_err(|e| {
+        metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH]);
         e
-    })?;
+    }) {
+        rpc_tx.send(Err(err.into())).unwrap();
+        return;
+    }
 
     let mut response = read_response(&mut recv_stream).await.map_err(|e| {
-        self.metrics
+        metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ]);
         TransportError::Io { error: e }
-    })?;
+    });
 
     rpc_tx.send(response);
 }
 
-async fn handle_push(request: Request<Bytes>, push_tx: oneshot::Sender<()>) {
-    let mut send_stream = self.connection.open_uni().await.map_err(|e| {
-        self.metrics
+async fn handle_push(
+    request: Request<Bytes>,
+    push_tx: oneshot::Sender<Result<(), TransportError>>,
+    mut send_stream: SendStream,
+    metrics: QuicTransportMetrics,
+) {
+    if let Err(err) = write_request(&mut send_stream, request).await.map_err(|e| {
+        metrics
             .connection_handle_errors_total
-            .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_OPEN]);
-        e
-    })?;
+            .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE]);
+        TransportError::Io { error: e }
+    }) {
+        push_tx.send(Err(err)).unwrap();
+        return;
+    }
 
-    write_request(&mut send_stream, request)
-        .await
-        .map_err(|e| {
-            self.metrics
-                .connection_handle_errors_total
-                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE]);
-            TransportError::Io { error: e }
-        })?;
-
-    send_stream.finish().await.map_err(|e| {
-        self.metrics
+    push_tx.send(send_stream.finish().await.map_err(|e| {
+        metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH]);
-        e
-    })?;
-
-    push_tx.send(());
+        e.into()
+    }));
 }
 
 async fn handle_bi_stream(

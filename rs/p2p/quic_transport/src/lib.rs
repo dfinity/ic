@@ -50,6 +50,7 @@ use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_types::NodeId;
 use quinn::AsyncUdpSocket;
+use tokio::sync::oneshot;
 
 use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
@@ -116,8 +117,11 @@ impl QuicTransport {
 }
 
 enum ConnCmd {
-    Push(Request<Bytes>, oneshot::Sender<()>),
-    Rpc(Request<Bytes>, oneshot::Sender<Response<Bytes>>),
+    Push(Request<Bytes>, oneshot::Sender<Result<(), TransportError>>),
+    Rpc(
+        Request<Bytes>,
+        oneshot::Sender<Result<Response<Bytes>, TransportError>>,
+    ),
 }
 
 #[async_trait]

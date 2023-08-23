@@ -9,14 +9,14 @@ use bytes::Bytes;
 use http::{Request, Response};
 use ic_types::NodeId;
 use quinn::Connection;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
     metrics::{
         QuicTransportMetrics, ERROR_TYPE_FINISH, ERROR_TYPE_OPEN, ERROR_TYPE_READ,
         ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
     },
-    TransportError,
+    ConnCmd, TransportError,
 };
 
 impl From<quinn::WriteError> for TransportError {
@@ -66,17 +66,23 @@ impl From<quinn::ConnectionError> for TransportError {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ConnectionHandle {
     pub peer_id: NodeId,
     pub cmd_tx: Sender<ConnCmd>,
     pub metrics: QuicTransportMetrics,
 }
 
+#[derive(Debug)]
+pub(crate) struct ConnectionHandleOld {
+    pub peer_id: NodeId,
+    pub connection: Connection,
+    pub metrics: QuicTransportMetrics,
+}
+
 impl ConnectionHandle {
     pub(crate) fn new(
         peer_id: NodeId,
-        connection: Connection,
         cmd_tx: Sender<ConnCmd>,
         metrics: QuicTransportMetrics,
     ) -> Self {
@@ -103,9 +109,11 @@ impl ConnectionHandle {
         self.cmd_tx
             .send(ConnCmd::Rpc(request, rpc_tx))
             .await
-            .map_err(|err| TransportError::Disconnect(err))?;
+            .map_err(|err| TransportError::Disconnected {
+                connection_error: "".to_string(),
+            })?;
 
-        let response = rpc_rx.await.unwrap();
+        let mut response = rpc_rx.await.unwrap()?;
 
         // Propagate PeerId from this request to upper layers.
         response.extensions_mut().insert(self.peer_id);
@@ -124,12 +132,11 @@ impl ConnectionHandle {
 
         let (push_tx, push_rx) = oneshot::channel();
         self.cmd_tx
-            .send(ConnCmd::Push(request, push_rx))
+            .send(ConnCmd::Push(request, push_tx))
             .await
-            .map_err(|err| TransportError::Disconnect(err))?;
-
-        let response = push_rx.await.unwrap();
-
-        Ok(())
+            .map_err(|err| TransportError::Disconnected {
+                connection_error: "".to_string(),
+            })?;
+        push_rx.await.unwrap()
     }
 }
