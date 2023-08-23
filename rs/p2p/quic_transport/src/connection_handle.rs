@@ -74,10 +74,9 @@ pub(crate) struct ConnectionHandle {
 }
 
 #[derive(Debug)]
-pub(crate) struct ConnectionHandleOld {
+pub(crate) struct QuicConnWithPeerId {
     pub peer_id: NodeId,
     pub connection: Connection,
-    pub metrics: QuicTransportMetrics,
 }
 
 impl ConnectionHandle {

@@ -68,7 +68,7 @@ use tokio::{
 use tokio_util::time::DelayQueue;
 
 use crate::{
-    connection_handle::{ConnectionHandle, ConnectionHandleOld},
+    connection_handle::{ConnectionHandle, QuicConnWithPeerId},
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
 };
 use crate::{metrics::QuicTransportMetrics, request_handler::start_request_handler};
@@ -115,10 +115,10 @@ struct ConnectionManager {
 
     // Local state.
     /// Task joinmap that holds stores a connecting tasks keys by peer id.
-    outbound_connecting: JoinMap<NodeId, Result<ConnectionHandleOld, ConnectionEstablishError>>,
+    outbound_connecting: JoinMap<NodeId, Result<QuicConnWithPeerId, ConnectionEstablishError>>,
     /// Task joinset on which incoming connection requests are spawned. This is not a JoinMap
     /// because the peerId is not available until the TLS handshake succeeded.
-    inbound_connecting: JoinSet<Result<ConnectionHandleOld, ConnectionEstablishError>>,
+    inbound_connecting: JoinSet<Result<QuicConnWithPeerId, ConnectionEstablishError>>,
     /// JoinMap that stores active connection handlers keyed by peer id.
     active_connections: JoinMap<NodeId, ()>,
 
@@ -514,10 +514,9 @@ impl ConnectionManager {
             .await?;
             let connection = Self::gruezi(connection, Direction::Outbound).await?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionHandleOld {
+            Ok::<_, ConnectionEstablishError>(QuicConnWithPeerId {
                 peer_id,
                 connection,
-                metrics,
             })
         };
 
@@ -538,7 +537,7 @@ impl ConnectionManager {
     /// the dialer. I.e lower node id.
     fn handle_connecting_result(
         &mut self,
-        conn_res: Result<ConnectionHandleOld, ConnectionEstablishError>,
+        conn_res: Result<QuicConnWithPeerId, ConnectionEstablishError>,
         peer_id: Option<NodeId>,
     ) {
         match conn_res {
@@ -568,7 +567,7 @@ impl ConnectionManager {
                         connection.peer_id,
                         connection.connection,
                         cmd_rx,
-                        connection.metrics,
+                        self.metrics.clone(),
                         self.log.clone(),
                         self.router.clone(),
                     ),
@@ -640,10 +639,9 @@ impl ConnectionManager {
             .await?;
             let connection = Self::gruezi(connection, Direction::Inbound).await?;
 
-            Ok::<_, ConnectionEstablishError>(ConnectionHandleOld {
+            Ok::<_, ConnectionEstablishError>(QuicConnWithPeerId {
                 peer_id,
                 connection,
-                metrics,
             })
         };
 
