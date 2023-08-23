@@ -4,7 +4,7 @@
 use crate::hasher::Hasher;
 use crate::{
     Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MixedHashTree, Path,
-    TreeHashError, Witness, WitnessGenerator, MAX_HASH_TREE_DEPTH,
+    TreeHashError, Witness, WitnessGenerationError, WitnessGenerator, MAX_HASH_TREE_DEPTH,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -166,7 +166,7 @@ fn prune_witness_subtree<'a, I>(
     witness: &Witness,
     children: &mut Peekable<I>,
     curr_path: &mut Vec<Label>,
-    witness_depth: usize,
+    witness_depth: u8,
 ) -> Result<(Witness, u64), TreeHashError>
 where
     I: Iterator<Item = (&'a Label, &'a LabeledTree<Vec<u8>>)>,
@@ -274,7 +274,7 @@ fn prune_witness_impl(
     witness: &Witness,
     partial_tree: &LabeledTree<Vec<u8>>,
     curr_path: &mut Vec<Label>,
-    witness_depth: usize,
+    witness_depth: u8,
 ) -> Result<(Witness, u64), TreeHashError> {
     if witness_depth > MAX_HASH_TREE_DEPTH {
         return Err(TreeHashError::TooDeepRecursion {
@@ -490,42 +490,27 @@ pub struct WitnessGeneratorImpl {
     hash_tree: HashTree,
 }
 
-/// Error produced by merging two witnesses of type `W`.
-#[derive(thiserror::Error, Debug, PartialEq)]
-pub enum MergeError<W> {
-    #[error("Merging witnesses failed due to too deep recursion (depth={0})")]
-    TooDeepRecursion(u32),
-    #[error("Merging witnesses failed due to their inconsistency at:\nleft={0:?}\nright={1:?}")]
-    InconsistentWitnesses(W, W),
-}
-
 /// WitnessBuilder abstracts away a specific representation of the witness
 /// structure and allows us to use the same algorithm to construct both
 /// witnesses that don't contain the data (e.g., for XNet) and the ones that do
 /// contain it (e.g., for certified reads).
 pub trait WitnessBuilder {
-    /// Type of the trees that this builder produces.
-    type Tree;
-
-    /// The error describing why tree merge operation failed.
-    type MergeError;
-
     /// Creates a witness for an empty tree.
-    fn make_empty() -> Self::Tree;
+    fn make_empty() -> Self;
 
     /// Constructs a witness for a labeled tree node pointing to the specified
     /// subtree.
-    fn make_node(label: Label, subtree: Self::Tree) -> Self::Tree;
+    fn make_node(label: Label, subtree: Self) -> Self;
 
     /// Constructs a witness for a fork given the witnesses for left and right
     /// subtrees.
-    fn make_fork(lhs: Self::Tree, rhs: Self::Tree) -> Self::Tree;
+    fn make_fork(lhs: Self, rhs: Self) -> Self;
 
     /// Constructs a witness for a leaf containing the specified data.
-    fn make_leaf(data: &[u8]) -> Self::Tree;
+    fn make_leaf(data: &[u8]) -> Self;
 
     /// Constructs a witness that only reveals a subtree hash.
-    fn make_pruned(digest: Digest) -> Self::Tree;
+    fn make_pruned(digest: Digest) -> Self;
 
     /// Merges two witnesses produced from the same tree.
     ///
@@ -552,13 +537,12 @@ pub trait WitnessBuilder {
     ///
     /// * If the recursion depth is too large.
     /// * If `lhs` and `rhs` do not match.
-    fn merge_trees(lhs: Self::Tree, rhs: Self::Tree) -> Result<Self::Tree, Self::MergeError>;
+    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, WitnessGenerationError<Self>>
+    where
+        Self: Sized;
 }
 
 impl WitnessBuilder for Witness {
-    type Tree = Self;
-    type MergeError = MergeError<Witness>;
-
     fn make_empty() -> Self {
         Self::Known()
     }
@@ -585,26 +569,26 @@ impl WitnessBuilder for Witness {
         Self::Pruned { digest }
     }
 
-    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, Self::MergeError> {
+    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, WitnessGenerationError<Self>> {
         fn merge_trees_impl(
             lhs: Witness,
             rhs: Witness,
-            depth: usize,
-        ) -> Result<Witness, MergeError<Witness>> {
+            depth: u8,
+        ) -> Result<Witness, WitnessGenerationError<Witness>> {
             use Witness::*;
 
             if depth > MAX_HASH_TREE_DEPTH {
-                return Err(MergeError::<Witness>::TooDeepRecursion(
-                    MAX_HASH_TREE_DEPTH as u32,
-                ));
+                return Err(WitnessGenerationError::<Witness>::TooDeepRecursion(depth));
             }
 
             let result = match (lhs, rhs) {
                 (Pruned { digest: l }, Pruned { digest: r }) if l != r => {
-                    return Err(MergeError::<Witness>::InconsistentWitnesses(
-                        Pruned { digest: l },
-                        Pruned { digest: r },
-                    ))
+                    return Err(
+                        WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(
+                            Pruned { digest: l },
+                            Pruned { digest: r },
+                        ),
+                    )
                 }
                 (Pruned { .. }, r) => r,
                 (l, Pruned { .. }) => l,
@@ -635,7 +619,11 @@ impl WitnessBuilder for Witness {
                     label: ll,
                     sub_witness: Box::new(merge_trees_impl(*lw, *rw, depth + 1)?),
                 },
-                (l, r) => return Err(MergeError::<Witness>::InconsistentWitnesses(l, r)),
+                (l, r) => {
+                    return Err(
+                        WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(l, r),
+                    )
+                }
             };
             Ok(result)
         }
@@ -645,9 +633,6 @@ impl WitnessBuilder for Witness {
 }
 
 impl WitnessBuilder for MixedHashTree {
-    type Tree = Self;
-    type MergeError = MergeError<MixedHashTree>;
-
     fn make_empty() -> Self {
         Self::Empty
     }
@@ -668,26 +653,28 @@ impl WitnessBuilder for MixedHashTree {
         Self::Pruned(digest)
     }
 
-    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, Self::MergeError> {
+    fn merge_trees(lhs: Self, rhs: Self) -> Result<Self, WitnessGenerationError<Self>> {
         fn merge_trees_impl(
             lhs: MixedHashTree,
             rhs: MixedHashTree,
-            depth: usize,
-        ) -> Result<MixedHashTree, MergeError<MixedHashTree>> {
+            depth: u8,
+        ) -> Result<MixedHashTree, WitnessGenerationError<MixedHashTree>> {
             use MixedHashTree::*;
 
             if depth > MAX_HASH_TREE_DEPTH {
-                return Err(MergeError::<MixedHashTree>::TooDeepRecursion(
-                    MAX_HASH_TREE_DEPTH as u32,
+                return Err(WitnessGenerationError::<MixedHashTree>::TooDeepRecursion(
+                    depth,
                 ));
             }
 
             let result = match (lhs, rhs) {
                 (Pruned(l), Pruned(r)) if l != r => {
-                    return Err(MergeError::<MixedHashTree>::InconsistentWitnesses(
-                        Pruned(l),
-                        Pruned(r),
-                    ))
+                    return Err(
+                        WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(
+                            Pruned(l),
+                            Pruned(r),
+                        ),
+                    )
                 }
                 (Pruned(_), r) => r,
                 (l, Pruned(_)) => l,
@@ -700,7 +687,11 @@ impl WitnessBuilder for MixedHashTree {
                     Labeled(label, Box::new(merge_trees_impl(*l, *r, depth + 1)?))
                 }
                 (Leaf(l), Leaf(r)) if l == r => Leaf(l),
-                (l, r) => return Err(MergeError::<MixedHashTree>::InconsistentWitnesses(l, r)),
+                (l, r) => {
+                    return Err(
+                        WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(l, r),
+                    )
+                }
             };
 
             Ok(result)
@@ -729,10 +720,10 @@ impl WitnessGeneratorImpl {
     /// * If `hash_tree` is empty.
     fn pruned_for_all_but_pos<Builder: WitnessBuilder>(
         hash_tree: &HashTree,
-        subwitness: Builder::Tree,
+        subwitness: Builder,
         pos: usize,
         subtree_size: usize,
-    ) -> Builder::Tree {
+    ) -> Builder {
         /// Returns the number of leaves in the left subtree for the given tree
         /// size, where the left subtree is always a full tree. For example, for
         /// trees of sizes 5 to 8, the result is 4, for trees of sizes 9 to 16,
@@ -846,11 +837,20 @@ impl WitnessGeneratorImpl {
         }
     }
 
-    fn witness_impl<Builder: WitnessBuilder, T: std::convert::AsRef<[u8]> + Debug>(
+    fn witness_impl<Builder, T>(
         partial_tree: &LabeledTree<T>,
         orig_tree: &LabeledTree<Digest>,
         hash_tree: &HashTree,
-    ) -> Result<Builder::Tree, Builder::MergeError> {
+        current_depth: u8,
+    ) -> Result<Builder, WitnessGenerationError<Builder>>
+    where
+        Builder: WitnessBuilder,
+        T: std::convert::AsRef<[u8]> + Debug,
+    {
+        if current_depth > MAX_HASH_TREE_DEPTH {
+            return Err(WitnessGenerationError::TooDeepRecursion(current_depth));
+        }
+
         let result = match partial_tree {
             LabeledTree::SubTree(children) => {
                 match orig_tree {
@@ -885,6 +885,7 @@ impl WitnessGeneratorImpl {
                                             .get(target_label)
                                             .expect("Could not get label"),
                                         target_hash_tree,
+                                        current_depth + 1,
                                     )?;
                                     result = Builder::merge_trees(
                                         result,
@@ -908,7 +909,7 @@ impl WitnessGeneratorImpl {
                                 // if `target_offset == 0`, we include `nodes[0]`,
                                 // if `target_offset == 1`, we include `nodes[0]` and `nodes[1]`.
                                 Err(target_offset) => {
-                                    let absence_witness_from_node_at = |i: usize| -> Builder::Tree {
+                                    let absence_witness_from_node_at = |i: usize| -> Builder {
                                         let subwitness = Builder::make_node(
                                             orig_children.keys()[i].clone(),
                                             Builder::make_pruned(nodes[i].digest().clone()),
@@ -1009,7 +1010,7 @@ pub struct TooLongPathError;
 /// (currently 127).
 pub fn sparse_labeled_tree_from_paths(paths: &[Path]) -> Result<LabeledTree<()>, TooLongPathError> {
     for path in paths {
-        if path.len() >= MAX_HASH_TREE_DEPTH {
+        if path.len() >= (MAX_HASH_TREE_DEPTH as usize) {
             return Err(TooLongPathError {});
         }
     }
@@ -1068,15 +1069,18 @@ impl WitnessGenerator for WitnessGeneratorImpl {
         &self.hash_tree
     }
 
-    fn witness(&self, partial_tree: &LabeledTree<Vec<u8>>) -> Result<Witness, MergeError<Witness>> {
-        Self::witness_impl::<Witness, _>(partial_tree, &self.orig_tree, &self.hash_tree)
+    fn witness(
+        &self,
+        partial_tree: &LabeledTree<Vec<u8>>,
+    ) -> Result<Witness, WitnessGenerationError<Witness>> {
+        Self::witness_impl::<Witness, _>(partial_tree, &self.orig_tree, &self.hash_tree, 1)
     }
 
     fn mixed_hash_tree(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
-    ) -> Result<MixedHashTree, MergeError<MixedHashTree>> {
-        Self::witness_impl::<MixedHashTree, _>(partial_tree, &self.orig_tree, &self.hash_tree)
+    ) -> Result<MixedHashTree, WitnessGenerationError<MixedHashTree>> {
+        Self::witness_impl::<MixedHashTree, _>(partial_tree, &self.orig_tree, &self.hash_tree, 1)
     }
 }
 

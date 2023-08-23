@@ -1696,7 +1696,10 @@ fn sparse_labeled_tree_deep_path() {
 
 #[test]
 fn sparse_labeled_tree_one_path_max_depth() {
-    let path = Path::from_iter(vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1]);
+    let path = Path::from_iter(vec![
+        Label::from("dummy_label");
+        MAX_HASH_TREE_DEPTH as usize - 1
+    ]);
 
     let result = sparse_labeled_tree_from_paths(&[path]);
 
@@ -1711,7 +1714,7 @@ fn sparse_labeled_tree_one_path_max_depth() {
 #[test]
 fn sparse_labeled_tree_many_paths_max_depth() {
     const TREE_WIDTH: usize = 100;
-    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
+    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 2];
 
     let mut paths = Vec::with_capacity(TREE_WIDTH);
     for i in 0..TREE_WIDTH {
@@ -1742,11 +1745,11 @@ fn sparse_labeled_tree_many_paths_max_depth() {
 #[test]
 fn sparse_labeled_tree_one_path_too_deep() {
     for depth in [
-        MAX_HASH_TREE_DEPTH,
-        MAX_HASH_TREE_DEPTH + 1,
-        10 * MAX_HASH_TREE_DEPTH,
+        MAX_HASH_TREE_DEPTH as u16,
+        MAX_HASH_TREE_DEPTH as u16 + 1,
+        10 * MAX_HASH_TREE_DEPTH as u16,
     ] {
-        let path = Path::from_iter(vec![Label::from("dummy_label"); depth]);
+        let path = Path::from_iter(vec![Label::from("dummy_label"); depth as usize]);
         assert_eq!(
             Err(TooLongPathError),
             sparse_labeled_tree_from_paths(&[path])
@@ -1757,8 +1760,8 @@ fn sparse_labeled_tree_one_path_too_deep() {
 #[test]
 fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
     const TREE_WIDTH: usize = 100;
-    let ok_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
-    let too_long_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1];
+    let ok_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 2];
+    let too_long_subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 1];
 
     let rng = &mut reproducible_rng();
     let target_index = rng.gen_range(0..TREE_WIDTH);
@@ -1791,7 +1794,10 @@ fn sparse_labeled_tree_many_paths_max_depth_one_too_deep() {
 
 #[test]
 fn sparse_labeled_tree_one_path_max_depth_does_not_panic_on_drop() {
-    let path = Path::from_iter(vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 1]);
+    let path = Path::from_iter(vec![
+        Label::from("dummy_label");
+        MAX_HASH_TREE_DEPTH as usize - 1
+    ]);
     let tree = sparse_labeled_tree_from_paths(&[path]);
     drop(tree);
 }
@@ -1799,7 +1805,7 @@ fn sparse_labeled_tree_one_path_max_depth_does_not_panic_on_drop() {
 #[test]
 fn sparse_labeled_tree_many_paths_max_depth_does_not_panic_on_drop() {
     const TREE_WIDTH: usize = 100;
-    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH - 2];
+    let subpath = vec![Label::from("dummy_label"); MAX_HASH_TREE_DEPTH as usize - 2];
 
     let mut paths = Vec::with_capacity(TREE_WIDTH);
     for i in 0..TREE_WIDTH {
@@ -2250,7 +2256,7 @@ fn prune_witness_prune_inexistent_leaf_from_empty_subtree() {
 #[test]
 fn prune_witness_exceed_recursion_depth() {
     const DUMMY_LABEL: &str = "dummy label";
-    fn witness_of_depth(depth: usize) -> Witness {
+    fn witness_of_depth(depth: u8) -> Witness {
         assert!(depth > 0);
         let mut result = Box::new(Witness::Known());
         if depth > 1 {
@@ -2270,7 +2276,7 @@ fn prune_witness_exceed_recursion_depth() {
         *result
     }
 
-    fn labeled_tree(depth: usize) -> LabeledTree<Vec<u8>> {
+    fn labeled_tree(depth: u8) -> LabeledTree<Vec<u8>> {
         let mut result = LabeledTree::Leaf("dummy value".into());
         if depth > 1 {
             result = LabeledTree::SubTree(flatmap!(DUMMY_LABEL.into() => result));
@@ -3246,4 +3252,46 @@ fn labeled_tree_does_not_produce_stack_overflow_for_deep_trees() {
     println!("dropping tree");
     std::mem::drop(tree);
     println!("tree dropped");
+}
+
+#[test]
+fn witness_generator_exceeding_recursion_depth_should_error() {
+    let mut labeled_tree = LabeledTree::Leaf(vec![0u8; 32]);
+    for _ in 1..MAX_HASH_TREE_DEPTH {
+        labeled_tree = LabeledTree::SubTree(flatmap! {
+            Label::from("a") => labeled_tree
+        });
+    }
+
+    // valid tree depth succeeds
+    let builder: HashTreeBuilderImpl = hash_tree_builder_from_labeled_tree(&labeled_tree);
+    let witness_generator = builder.witness_generator().unwrap();
+
+    let res_w = witness_generator.witness(&labeled_tree);
+    assert_matches!(res_w, Ok(_));
+    let res_mht = witness_generator.mixed_hash_tree(&labeled_tree);
+    assert_matches!(res_mht, Ok(_));
+
+    labeled_tree = LabeledTree::SubTree(flatmap! {
+        Label::from("a") => labeled_tree
+    });
+
+    // too deep recursion errors
+    let builder: HashTreeBuilderImpl = hash_tree_builder_from_labeled_tree(&labeled_tree);
+    let witness_generator = builder.witness_generator().unwrap();
+
+    let res_w = witness_generator.witness(&labeled_tree);
+    assert_eq!(
+        res_w,
+        Err(WitnessGenerationError::TooDeepRecursion(
+            MAX_HASH_TREE_DEPTH + 1
+        ))
+    );
+    let res_mht = witness_generator.mixed_hash_tree(&labeled_tree);
+    assert_eq!(
+        res_mht,
+        Err(WitnessGenerationError::TooDeepRecursion(
+            MAX_HASH_TREE_DEPTH + 1
+        ))
+    );
 }
