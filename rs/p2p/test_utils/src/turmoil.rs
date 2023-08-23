@@ -301,7 +301,7 @@ pub fn add_transport_to_sim<F>(
                 peer,
                 topology_watcher_clone,
                 Either::Right(custom_udp),
-                router,
+                Some(router),
             ));
 
             if let Some(state_sync_rx) = state_sync_rx {

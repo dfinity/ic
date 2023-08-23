@@ -77,6 +77,7 @@ socket2 = { version = "0.5", features = ["all"] }
 strum = "0.23.0"
 tempfile = "3.1.0"
 tokio = { version = "1.15.0" }
+tokio-rustls = "0.24.0"
 wat = "1.0.52"
 tower = "0.4.13"
 
