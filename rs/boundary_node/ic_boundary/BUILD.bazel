@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -73,11 +73,17 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+VERSION = "0.1.0"
+
 rust_binary(
     name = "ic-boundary",
-    srcs = glob(["src/**"]),
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/lib.rs"],
+    ),
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
+    version = VERSION,
     deps = DEPENDENCIES,
 )
 
@@ -87,5 +93,18 @@ rust_test(
     crate = ":ic-boundary",
     crate_features = ["tls"],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_library(
+    name = "ic-boundary-lib",
+    srcs = glob(
+        ["src/**"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_features = ["tls"],
+    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
+    version = VERSION,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

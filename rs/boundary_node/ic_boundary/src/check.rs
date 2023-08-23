@@ -21,11 +21,11 @@ use simple_moving_average::{SingleSumSMA, SMA};
 use url::Url;
 
 use crate::{
+    core::{Run, WithRetryLimited},
     http::HttpClient,
     persist::Persist,
     snapshot::RoutingTable,
     snapshot::{Node, Subnet},
-    Run, WithRetryLimited,
 };
 
 struct NodeState {
