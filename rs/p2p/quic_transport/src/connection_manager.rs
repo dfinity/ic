@@ -56,8 +56,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     runtime::Handle,
     select,
-    sync::mpsc::channel,
-    sync::RwLock,
+    sync::mpsc::{channel, Receiver},
     task::JoinSet,
 };
 use tokio_util::time::DelayQueue;
@@ -65,7 +64,7 @@ use tokio_util::time::DelayQueue;
 use crate::{metrics::QuicTransportMetrics, request_handler::start_request_handler};
 use crate::{
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    ConnectionHandle, QuicConnWithPeerId,
+    ConnCmd, ConnectionHandle, MngCmd, QuicConnWithPeerId, TransportError,
 };
 
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
@@ -106,7 +105,7 @@ struct ConnectionManager {
 
     // Shared state
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
-    peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
+    peer_map: HashMap<NodeId, ConnectionHandle>,
 
     // Local state.
     /// Task joinmap that holds stores a connecting tasks keys by peer id.
@@ -186,7 +185,7 @@ pub(crate) fn start_connection_manager(
     registry_client: Arc<dyn RegistryClient>,
     sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
     node_id: NodeId,
-    peer_map: Arc<RwLock<HashMap<NodeId, ConnectionHandle>>>,
+    mng_rx: Receiver<MngCmd>,
     watcher: tokio::sync::watch::Receiver<SubnetTopology>,
     socket: Either<SocketAddr, impl AsyncUdpSocket>,
     router: Router,
@@ -278,7 +277,7 @@ pub(crate) fn start_connection_manager(
         node_id,
         topology,
         connect_queue: DelayQueue::new(),
-        peer_map,
+        peer_map: HashMap::new(),
         watcher,
         endpoint,
         transport_config,
@@ -288,13 +287,47 @@ pub(crate) fn start_connection_manager(
         router,
     };
 
-    rt.spawn(manager.run());
+    rt.spawn(manager.run(mng_rx));
 }
 
 impl ConnectionManager {
-    pub async fn run(mut self) {
+    pub async fn run(mut self, mut mng_rx: Receiver<MngCmd>) {
         loop {
             select! {
+                Some(mng_cmd) = mng_rx.recv() => {
+                    match mng_cmd {
+                        MngCmd::Peers(peers_tx) => {
+                            info!(self.log, "{:?}",self.peer_map.keys().cloned().collect::<Vec<_>>());
+
+                            let _ = peers_tx.send(Ok(self.peer_map.keys().cloned().collect()));
+                        }
+                        MngCmd::ConnCmd((peer_id, conn_cmd)) => {
+                            info!(self.log, "received cmd");
+                            match conn_cmd {
+                                ConnCmd::Push(req, push_tx) => {
+                                    match self.peer_map.get(&peer_id) {
+                                        Some(conn_handle) => {
+                                            let _ = conn_handle.0.send(ConnCmd::Push(req, push_tx));
+                                        },
+                                        None => {
+                                           let _ = push_tx.send(Err(TransportError::Disconnected { reason: "".to_string()}));
+                                        }
+                                    }
+                                },
+                                ConnCmd::Rpc(req, rpc_tx) => {
+                                    match self.peer_map.get(&peer_id) {
+                                        Some(conn_handle) => {
+                                            let _ = conn_handle.0.send(ConnCmd::Rpc(req, rpc_tx));
+                                        },
+                                        None => {
+                                           let _ = rpc_tx.send(Err(TransportError::Disconnected { reason: "".to_string()}));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Some(reconnect) = self.connect_queue.next() => {
                     self.set_metric_gauges();
                     self.handle_dial(reconnect.into_inner())
@@ -370,7 +403,7 @@ impl ConnectionManager {
 
     // Removes connection and sets peer status to disconnected
     async fn handled_closed_conn(&mut self, peer_id: NodeId) {
-        self.peer_map.write().await.remove(&peer_id);
+        self.peer_map.remove(&peer_id);
         self.connect_queue.insert(peer_id, Duration::from_secs(0));
         self.metrics.closed_request_handlers_total.inc();
     }
@@ -418,8 +451,7 @@ impl ConnectionManager {
 
         // Remove peer connections that are not part of subnet anymore.
         // Also remove peer connections that have closed connections.
-        let mut peer_map = self.peer_map.write().await;
-        peer_map.retain(|peer_id, _| {
+        self.peer_map.retain(|peer_id, _| {
             let peer_left_topology = !self.topology.is_member(peer_id);
             let node_left_topology = !self.topology.is_member(&self.node_id);
             // If peer is not member anymore or this node not part of subnet close connection.
@@ -545,7 +577,7 @@ impl ConnectionManager {
 
                 let (cmd_tx, cmd_rx) = channel(10);
                 let new_conn_handle = ConnectionHandle(cmd_tx);
-                self.peer_map.write().await.insert(peer_id, new_conn_handle);
+                self.peer_map.insert(peer_id, new_conn_handle);
 
                 info!(
                     self.log,

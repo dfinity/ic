@@ -53,7 +53,7 @@ fn ping_pong() {
 
         add_transport_to_sim(
             &mut sim,
-            log,
+            log.clone(),
             NODE_2,
             node_2_port,
             registry_handle.clone(),
@@ -86,6 +86,7 @@ fn ping_pong() {
             .expect("The network did not reach a fully connected state after startup");
 
         exit_notify.notify_waiters();
+        info!(log, "Running test");
         sim.run().unwrap();
     })
 }
