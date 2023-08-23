@@ -12,7 +12,7 @@ dfn_macro = { path = "../dfn_macro" }
 dfn_json = { path = "../dfn_json" }
 rand = "0.8.4"
 rand_pcg = "0.3.1"
-on_wire = { path = "../on_wire"}
+on_wire = { path = "../on_wire" }
 
 [[bin]]
 name = "json"
@@ -40,7 +40,7 @@ path = "src/panics.rs"
 
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
-criterion = "0.3"
+criterion = "0.5"
 assert_matches = "1.3.0"
 on_wire = { path = "../on_wire" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
@@ -49,7 +49,7 @@ ic-ic00-types = { path = "../../types/ic00_types" }
 ic-test-identity = { path = "../../test_utilities/identity" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
-dfn_candid={path="../dfn_candid"}
+dfn_candid = { path = "../dfn_candid" }
 candid = { workspace = true }
 
 [[bench]]
@@ -69,9 +69,9 @@ name = "upgrade"
 path = "test/upgrade.rs"
 
 [[test]]
-name="canister_management"
-path="test/canister_management.rs"
+name = "canister_management"
+path = "test/canister_management.rs"
 
 [[test]]
-name="ingress"
-path="test/ingress.rs"
+name = "ingress"
+path = "test/ingress.rs"

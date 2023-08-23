@@ -283,7 +283,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.2.0",
             ),
             "criterion": crate.spec(
-                version = "^0.3",
+                version = "^0.5",
                 features = [
                     "html_reports",
                     "async_tokio",

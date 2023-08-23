@@ -1,5 +1,5 @@
 {
-  "checksum": "1c41844633aa9da54196e69cca35f0aa971b532505c768248b342a19b7b550ed",
+  "checksum": "a4505b89278caf7b8975f6b9574aee38d99120ba0606d03d8069ba2b25b027fe",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1526,6 +1526,42 @@
         },
         "edition": "2018",
         "version": "0.2.16"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "anes 0.1.6": {
+      "name": "anes",
+      "version": "0.1.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/anes/0.1.6/download",
+          "sha256": "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "anes",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "anes",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default"
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.1.6"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -8472,53 +8508,6 @@
       },
       "license": "Apache-2.0"
     },
-    "clap 2.34.0": {
-      "name": "clap",
-      "version": "2.34.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/2.34.0/download",
-          "sha256": "a0610544180c38b88101fecf2dd634b174a62eef6946f84dfc6a7127512b381c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "clap",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "clap",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 1.3.2",
-              "target": "bitflags"
-            },
-            {
-              "id": "textwrap 0.11.0",
-              "target": "textwrap"
-            },
-            {
-              "id": "unicode-width 0.1.10",
-              "target": "unicode_width"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "2.34.0"
-      },
-      "license": "MIT"
-    },
     "clap 3.2.25": {
       "name": "clap",
       "version": "3.2.25",
@@ -10756,13 +10745,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "criterion 0.3.6": {
+    "criterion 0.5.1": {
       "name": "criterion",
-      "version": "0.3.6",
+      "version": "0.5.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/criterion/0.3.6/download",
-          "sha256": "b01d6de93b2b6c65e17c634a26653a29d107b3c98c607c765bf38d041531cd8f"
+          "url": "https://crates.io/api/v1/crates/criterion/0.5.1/download",
+          "sha256": "f2b12d017a929603d80db1831cd3a24082f8137ce19c69e6447f54f5fc8d692f"
         }
       },
       "targets": [
@@ -10789,6 +10778,8 @@
             "default",
             "futures",
             "html_reports",
+            "plotters",
+            "rayon",
             "tokio"
           ],
           "selects": {}
@@ -10796,40 +10787,44 @@
         "deps": {
           "common": [
             {
-              "id": "atty 0.2.14",
-              "target": "atty"
+              "id": "anes 0.1.6",
+              "target": "anes"
             },
             {
               "id": "cast 0.3.0",
               "target": "cast"
             },
             {
-              "id": "clap 2.34.0",
+              "id": "ciborium 0.2.1",
+              "target": "ciborium"
+            },
+            {
+              "id": "clap 4.3.12",
               "target": "clap"
             },
             {
-              "id": "criterion-plot 0.4.5",
+              "id": "criterion-plot 0.5.0",
               "target": "criterion_plot"
-            },
-            {
-              "id": "csv 1.2.2",
-              "target": "csv"
             },
             {
               "id": "futures 0.3.28",
               "target": "futures"
             },
             {
+              "id": "is-terminal 0.4.9",
+              "target": "is_terminal"
+            },
+            {
               "id": "itertools 0.10.5",
               "target": "itertools"
             },
             {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
               "id": "num-traits 0.2.15",
               "target": "num_traits"
+            },
+            {
+              "id": "once_cell 1.18.0",
+              "target": "once_cell"
             },
             {
               "id": "oorandom 11.1.3",
@@ -10850,10 +10845,6 @@
             {
               "id": "serde 1.0.171",
               "target": "serde"
-            },
-            {
-              "id": "serde_cbor 0.11.2",
-              "target": "serde_cbor"
             },
             {
               "id": "serde_json 1.0.103",
@@ -10884,17 +10875,17 @@
           ],
           "selects": {}
         },
-        "version": "0.3.6"
+        "version": "0.5.1"
       },
-      "license": "Apache-2.0/MIT"
+      "license": "Apache-2.0 OR MIT"
     },
-    "criterion-plot 0.4.5": {
+    "criterion-plot 0.5.0": {
       "name": "criterion-plot",
-      "version": "0.4.5",
+      "version": "0.5.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/criterion-plot/0.4.5/download",
-          "sha256": "2673cc8207403546f45f5fd319a974b1e6983ad1a3ee7e6041650013be041876"
+          "url": "https://crates.io/api/v1/crates/criterion-plot/0.5.0/download",
+          "sha256": "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
         }
       },
       "targets": [
@@ -10927,7 +10918,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.5"
+        "version": "0.5.0"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -13615,7 +13606,7 @@
               "target": "crc32fast"
             },
             {
-              "id": "criterion 0.3.6",
+              "id": "criterion 0.5.1",
               "target": "criterion"
             },
             {
@@ -49270,45 +49261,6 @@
         "version": "0.7.0"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "textwrap 0.11.0": {
-      "name": "textwrap",
-      "version": "0.11.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/textwrap/0.11.0/download",
-          "sha256": "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "textwrap",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "textwrap",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "unicode-width 0.1.10",
-              "target": "unicode_width"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.11.0"
-      },
-      "license": "MIT"
     },
     "textwrap 0.16.0": {
       "name": "textwrap",
