@@ -85,6 +85,7 @@ mod tests {
     use ic_types::{
         crypto::CryptoHash,
         ingress::{IngressState, IngressStatus},
+        messages::RequestMetadata,
         xnet::{StreamIndex, StreamIndexedQueue},
         CryptoHashOfPartialState, Cycles, ExecutionRound, Time,
     };
@@ -200,8 +201,25 @@ mod tests {
             for _ in 1..6 {
                 stream.push(ResponseBuilder::new().build().into());
             }
-            for _ in 1..6 {
-                stream.push(RequestBuilder::new().build().into());
+            for i in 1..6 {
+                stream.push(
+                    RequestBuilder::new()
+                        .metadata(
+                            (certification_version >= CertificationVersion::V14).then_some(
+                                RequestMetadata {
+                                    call_tree_depth: (i % 2 > 0).then_some(i % 3),
+                                    call_tree_start_time: (i % 3 > 0)
+                                        .then_some(i % 2)
+                                        .map(Time::from_nanos_since_unix_epoch),
+                                    call_subtree_deadline: (i % 4 > 0)
+                                        .then_some(i % 3)
+                                        .map(Time::from_nanos_since_unix_epoch),
+                                },
+                            ),
+                        )
+                        .build()
+                        .into(),
+                );
             }
             if certification_version >= CertificationVersion::V8 {
                 stream.push_reject_signal(10.into());
@@ -297,6 +315,7 @@ mod tests {
             "1ED37E00D177681A4111B6D45F518DF3E414B0B614333BB6552EBC0D8492B687",
             "62B2E77DFCD17C7E0CE3E762FD37281776C4B0A38CE1B83A1316614C3F849E39",
             "80D4B528CC9E09C775273994261DD544D45EFFF90B655D90FC3A6E3F633ED718",
+            "E1108326097AE9BF8212F333F4F46B9619B947CDF2A73F3223BBEBC6FC2033B6",
         ];
 
         for certification_version in CertificationVersion::iter() {

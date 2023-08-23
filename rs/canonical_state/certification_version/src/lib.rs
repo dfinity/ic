@@ -33,6 +33,8 @@ pub enum CertificationVersion {
     V12 = 12,
     /// Dropped `/canister/<canister_id>/controller`.
     V13 = 13,
+    /// Define optional `Request::metadata` field.
+    V14 = 14,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -71,7 +73,7 @@ pub const CURRENT_CERTIFICATION_VERSION: CertificationVersion = CertificationVer
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V13;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V14;
 
 /// Returns a list of all certification versions up to [MAX_SUPPORTED_CERTIFICATION_VERSION].
 pub fn all_supported_versions() -> impl std::iter::Iterator<Item = CertificationVersion> {

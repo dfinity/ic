@@ -10964,6 +10964,7 @@ dependencies = [
  "ic-base-types",
  "ic-btc-types-internal",
  "ic-canister-client-sender",
+ "ic-certification-version",
  "ic-config",
  "ic-consensus",
  "ic-constants",
@@ -11288,6 +11289,8 @@ dependencies = [
 name = "ic-types-test-utils"
 version = "0.8.0"
 dependencies = [
+ "ic-canonical-state",
+ "ic-certification-version",
  "ic-types",
  "proptest",
  "strum 0.23.0",

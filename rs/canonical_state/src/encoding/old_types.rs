@@ -11,9 +11,122 @@ use std::{
 use crate::CertificationVersion;
 
 use super::types;
+use crate::encoding::types::{Bytes, Cycles, Funds, Response};
 use ic_protobuf::proxy::ProxyDecodeError;
-use ic_types::{messages::RequestOrResponse, xnet::StreamHeader};
+use ic_types::xnet::StreamHeader;
 use serde::{Deserialize, Serialize};
+
+// Copy of `types::RequestOrResponse` at canonical version 13 (before the
+// addition of `metadata` to `types::Request`).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequestOrResponseV13 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request: Option<RequestV13>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response: Option<Response>,
+}
+
+// Copy of `types::Request` at canonical version 13 (before the addition of `metadata`).
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequestV13 {
+    #[serde(with = "serde_bytes")]
+    pub receiver: Bytes,
+    #[serde(with = "serde_bytes")]
+    pub sender: Bytes,
+    pub sender_reply_callback: u64,
+    pub payment: Funds,
+    pub method_name: String,
+    #[serde(with = "serde_bytes")]
+    pub method_payload: Bytes,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycles_payment: Option<Cycles>,
+}
+
+impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for RequestOrResponseV13 {
+    fn from(
+        (message, certification_version): (
+            &ic_types::messages::RequestOrResponse,
+            CertificationVersion,
+        ),
+    ) -> Self {
+        use ic_types::messages::RequestOrResponse::*;
+        match message {
+            Request(request) => Self {
+                request: Some((request.as_ref(), certification_version).into()),
+                response: None,
+            },
+            Response(response) => Self {
+                request: None,
+                response: Some((response.as_ref(), certification_version).into()),
+            },
+        }
+    }
+}
+
+impl TryFrom<RequestOrResponseV13> for ic_types::messages::RequestOrResponse {
+    type Error = ProxyDecodeError;
+
+    fn try_from(message: RequestOrResponseV13) -> Result<Self, Self::Error> {
+        match message {
+          RequestOrResponseV13 {
+              request: Some(request),
+              response: None,
+          } => Ok(Self::Request(Arc::new(request.try_into()?))),
+          RequestOrResponseV13 {
+              request: None,
+              response: Some(response),
+          } => Ok(Self::Response(Arc::new(response.try_into()?))),
+          other => Err(ProxyDecodeError::Other(format!(
+              "RequestOrResponse: expected exactly one of `request` or `response` to be `Some(_)`, got `{:?}`",
+              other
+          )))
+      }
+    }
+}
+
+impl From<(&ic_types::messages::Request, CertificationVersion)> for RequestV13 {
+    fn from(
+        (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
+    ) -> Self {
+        let funds = Funds {
+            cycles: (&request.payment, certification_version).into(),
+            icp: 0,
+        };
+        Self {
+            receiver: request.receiver.get().to_vec(),
+            sender: request.sender.get().to_vec(),
+            sender_reply_callback: request.sender_reply_callback.get(),
+            payment: funds,
+            method_name: request.method_name.clone(),
+            method_payload: request.method_payload.clone(),
+            cycles_payment: None,
+        }
+    }
+}
+
+impl TryFrom<RequestV13> for ic_types::messages::Request {
+    type Error = ProxyDecodeError;
+
+    fn try_from(request: RequestV13) -> Result<Self, Self::Error> {
+        let payment = match request.cycles_payment {
+            Some(cycles) => cycles,
+            None => request.payment.cycles,
+        }
+        .try_into()?;
+
+        Ok(Self {
+            receiver: ic_types::CanisterId::new(request.receiver.as_slice().try_into()?)?,
+            sender: ic_types::CanisterId::new(request.sender.as_slice().try_into()?)?,
+            sender_reply_callback: request.sender_reply_callback.into(),
+            payment,
+            method_name: request.method_name,
+            method_payload: request.method_payload,
+            metadata: None,
+        })
+    }
+}
 
 // Copy of `types::Request` at canonical version 3 (before the addition of `cycles_payment`).
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,6 +173,7 @@ impl TryFrom<RequestV3> for ic_types::messages::Request {
             payment: request.payment.cycles.try_into()?,
             method_name: request.method_name,
             method_payload: request.method_payload,
+            metadata: None,
         })
     }
 }
@@ -127,12 +241,13 @@ impl From<(&ic_types::messages::RequestOrResponse, CertificationVersion)> for Re
             CertificationVersion,
         ),
     ) -> Self {
+        use ic_types::messages::RequestOrResponse::*;
         match message {
-            RequestOrResponse::Request(req) => RequestOrResponseV3 {
+            Request(req) => RequestOrResponseV3 {
                 request: Some(RequestV3::from((req.as_ref(), certification_version))),
                 response: None,
             },
-            RequestOrResponse::Response(resp) => RequestOrResponseV3 {
+            Response(resp) => RequestOrResponseV3 {
                 request: None,
                 response: Some(ResponseV3::from((resp.as_ref(), certification_version))),
             },

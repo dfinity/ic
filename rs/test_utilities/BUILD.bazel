@@ -13,6 +13,7 @@ rust_library(
     deps = [
         "//rs/bitcoin/types/internal",
         "//rs/canister_client/sender",
+        "//rs/canonical_state/certification_version",
         "//rs/config",
         "//rs/consensus",
         "//rs/constants",
