@@ -33,6 +33,7 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
+    io,
     net::SocketAddr,
     sync::{Arc, RwLock},
 };
@@ -49,13 +50,12 @@ use ic_logger::{info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_peer_manager::SubnetTopology;
 use ic_types::NodeId;
-use quinn::AsyncUdpSocket;
+use quinn::{AsyncUdpSocket, Connection};
+use tokio::sync::mpsc::Sender;
 use tokio::sync::oneshot;
 
-use crate::connection_handle::ConnectionHandle;
 use crate::connection_manager::start_connection_manager;
 
-mod connection_handle;
 mod connection_manager;
 mod metrics;
 mod request_handler;
@@ -109,7 +109,7 @@ impl QuicTransport {
             .unwrap()
             .get(peer_id)
             .ok_or(TransportError::Disconnected {
-                connection_error: String::from("Currently not connected to this peer"),
+                reason: String::from("Currently not connected to this peer"),
             })?
             .clone();
         Ok(conn)
@@ -129,15 +129,51 @@ impl Transport for QuicTransport {
     async fn rpc(
         &self,
         peer_id: &NodeId,
-        request: Request<Bytes>,
+        mut request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError> {
         let peer = self.get_peer_handle(peer_id)?;
-        peer.rpc(request).await
+
+        // Propagate PeerId from this connection to lower layers.
+        request.extensions_mut().insert(peer_id.clone());
+
+        let (rpc_tx, rpc_rx) = oneshot::channel();
+        peer.cmd_tx
+            .send(ConnCmd::Rpc(request, rpc_tx))
+            .await
+            .map_err(|_err| TransportError::Disconnected {
+                reason: "no existing connection event loop".to_string(),
+            })?;
+
+        let mut response = rpc_rx.await.map_err(|_err| TransportError::Disconnected {
+            reason: "no existing connection event loop".to_string(),
+        })??;
+
+        // Propagate PeerId from this request to upper layers.
+        response.extensions_mut().insert(peer_id.clone());
+
+        Ok(response)
     }
 
-    async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError> {
+    async fn push(
+        &self,
+        peer_id: &NodeId,
+        mut request: Request<Bytes>,
+    ) -> Result<(), TransportError> {
         let peer = self.get_peer_handle(peer_id)?;
-        peer.push(request).await
+
+        // Propagate PeerId from this connection to lower layers.
+        request.extensions_mut().insert(peer_id.clone());
+
+        let (push_tx, push_rx) = oneshot::channel();
+        peer.cmd_tx
+            .send(ConnCmd::Push(request, push_tx))
+            .await
+            .map_err(|_err| TransportError::Disconnected {
+                reason: "no existing connection event loop".to_string(),
+            })?;
+        push_rx.await.map_err(|_err| TransportError::Disconnected {
+            reason: "no existing connection event loop".to_string(),
+        })?
     }
 
     fn peers(&self) -> Vec<NodeId> {
@@ -145,11 +181,70 @@ impl Transport for QuicTransport {
     }
 }
 
+impl From<quinn::WriteError> for TransportError {
+    fn from(value: quinn::WriteError) -> Self {
+        match value {
+            quinn::WriteError::Stopped(e) => TransportError::Io {
+                error: io::Error::new(io::ErrorKind::ConnectionReset, e.to_string()),
+            },
+            quinn::WriteError::ConnectionLost(cause) => TransportError::Disconnected {
+                reason: cause.to_string(),
+            },
+            quinn::WriteError::UnknownStream => TransportError::Io {
+                error: io::Error::new(io::ErrorKind::ConnectionReset, "unknown quic stream"),
+            },
+            quinn::WriteError::ZeroRttRejected => TransportError::Io {
+                error: io::Error::new(io::ErrorKind::ConnectionRefused, "zero rtt rejected"),
+            },
+        }
+    }
+}
+
+impl From<quinn::ConnectionError> for TransportError {
+    fn from(value: quinn::ConnectionError) -> Self {
+        match value {
+            quinn::ConnectionError::VersionMismatch => TransportError::Io {
+                error: io::Error::new(io::ErrorKind::Unsupported, "Quic version mismatch"),
+            },
+            quinn::ConnectionError::TransportError(e) => TransportError::Io {
+                error: io::Error::new(io::ErrorKind::Unsupported, e.to_string()),
+            },
+            quinn::ConnectionError::Reset => TransportError::Io {
+                error: io::Error::from(io::ErrorKind::ConnectionReset),
+            },
+            quinn::ConnectionError::TimedOut => TransportError::Io {
+                error: io::Error::from(io::ErrorKind::TimedOut),
+            },
+            quinn::ConnectionError::ConnectionClosed(e) => TransportError::Disconnected {
+                reason: e.to_string(),
+            },
+            quinn::ConnectionError::ApplicationClosed(e) => TransportError::Disconnected {
+                reason: e.to_string(),
+            },
+            quinn::ConnectionError::LocallyClosed => TransportError::Disconnected {
+                reason: "Connection closed locally".to_string(),
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ConnectionHandle {
+    pub peer_id: NodeId,
+    pub cmd_tx: Sender<ConnCmd>,
+}
+
+#[derive(Debug)]
+pub(crate) struct QuicConnWithPeerId {
+    pub peer_id: NodeId,
+    pub connection: Connection,
+}
+
 #[derive(Debug)]
 pub enum TransportError {
     Disconnected {
         // Potential reason for not being connected
-        connection_error: String,
+        reason: String,
     },
     Io {
         error: std::io::Error,
@@ -159,9 +254,7 @@ pub enum TransportError {
 impl std::fmt::Display for TransportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Disconnected {
-                connection_error: e,
-            } => {
+            Self::Disconnected { reason: e } => {
                 write!(f, "Disconnected/No connection to peer: {}", e)
             }
             Self::Io { error } => {

@@ -67,11 +67,11 @@ use tokio::{
 };
 use tokio_util::time::DelayQueue;
 
-use crate::{
-    connection_handle::{ConnectionHandle, QuicConnWithPeerId},
-    metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-};
 use crate::{metrics::QuicTransportMetrics, request_handler::start_request_handler};
+use crate::{
+    metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
+    ConnectionHandle, QuicConnWithPeerId,
+};
 
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
@@ -549,7 +549,10 @@ impl ConnectionManager {
                 let peer_id = connection.peer_id;
 
                 let (cmd_tx, cmd_rx) = channel(10);
-                let new_conn_handle = ConnectionHandle::new(peer_id, cmd_tx, self.metrics.clone());
+                let new_conn_handle = ConnectionHandle {
+                    peer_id,
+                    cmd_tx,
+                };
 
                 self.peer_map
                     .write()
