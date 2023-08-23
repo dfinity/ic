@@ -76,6 +76,7 @@ pub(crate) async fn write_request(
         body: &body,
     };
 
+    // TODO move this out and make the function return WriteError and move the finish call here.
     let res = bincode_config()
         .serialize(&msg)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
