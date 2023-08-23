@@ -703,6 +703,30 @@ impl Neuron {
                 .collect(),
         }
     }
+
+    /// "NF neurons" are defined as neurons where the NNS governance canister
+    /// has the the `ManagePrincipals` permission and is the only principal that
+    /// does.
+    pub fn is_neurons_fund_controlled(&self) -> bool {
+        let principals_with_manage_principals_permission = self
+            .permissions
+            .iter()
+            .filter_map(|p| {
+                let manage_principals_present = p.permission_type.iter().any(|permission| {
+                    NeuronPermissionType::from_i32(*permission)
+                        == Some(NeuronPermissionType::ManagePrincipals)
+                });
+                if manage_principals_present {
+                    p.principal
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        principals_with_manage_principals_permission
+            == vec![PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)]
+    }
 }
 
 /// A neuron's ID that is defined as the neuron's subaccount on the ledger canister.
@@ -1209,5 +1233,29 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn neurons_with_governance_controller_are_nf() {
+        let neuron = Neuron {
+            permissions: vec![NeuronPermission {
+                principal: Some(PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)),
+                permission_type: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }],
+            ..Default::default()
+        };
+        assert!(neuron.is_neurons_fund_controlled())
+    }
+
+    #[test]
+    fn neurons_without_governance_controller_are_nf() {
+        let neuron = Neuron {
+            permissions: vec![NeuronPermission {
+                principal: Some(PrincipalId::new_user_test_id(1)),
+                permission_type: vec![NeuronPermissionType::ManagePrincipals as i32],
+            }],
+            ..Default::default()
+        };
+        assert!(!neuron.is_neurons_fund_controlled())
     }
 }
