@@ -41,6 +41,9 @@ tokio-util = { version = "0.7.4", features = ["codec", "time"] }
 tower = { version = "0.4.12", features = ["reconnect"] }
 
 [dev-dependencies]
+criterion = { version = "0.3", features = ["async_tokio"] }
+ic-icos-sev = { path = "../../ic_os/sev" }
+ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-p2p-test-utils = { path = "../test_utils" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }

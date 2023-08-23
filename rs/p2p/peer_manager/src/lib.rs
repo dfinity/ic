@@ -191,10 +191,15 @@ pub struct SubnetTopology {
 }
 
 impl SubnetTopology {
-    pub fn new<T: IntoIterator<Item = (NodeId, SocketAddr)>>(subnet_nodes: T) -> Self {
+    pub fn new<T: IntoIterator<Item = (NodeId, SocketAddr)>>(
+        subnet_nodes: T,
+        earliest_registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+    ) -> Self {
         Self {
             subnet_nodes: HashMap::from_iter(subnet_nodes),
-            ..Default::default()
+            earliest_registry_version,
+            latest_registry_version,
         }
     }
 
