@@ -6,7 +6,7 @@ use instant_acme::{
     Account, Authorization, Challenge, ChallengeType, Identifier, NewOrder, OrderStatus,
 };
 
-use crate::{WithRetry, WithThrottle};
+use crate::core::{WithRetry, WithThrottle};
 
 pub struct OrderHandle(instant_acme::Order);
 

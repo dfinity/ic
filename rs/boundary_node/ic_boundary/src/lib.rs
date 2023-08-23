@@ -1,8 +1,3 @@
-use anyhow::Error;
-use clap::Parser;
-
-use crate::cli::Cli;
-
 mod acme;
 mod check;
 mod cli;
@@ -21,8 +16,4 @@ mod tls_verify;
 #[cfg(feature = "tls")]
 mod tls;
 
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    let cli = Cli::parse();
-    core::main(cli).await
-}
+pub use crate::core::main;
