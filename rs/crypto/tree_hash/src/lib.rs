@@ -289,6 +289,38 @@ pub enum LabeledTree<T> {
     SubTree(FlatMap<Label, LabeledTree<T>>),
 }
 
+impl<T> Default for LabeledTree<T> {
+    fn default() -> Self {
+        Self::SubTree(FlatMap::new())
+    }
+}
+
+impl<T> Drop for LabeledTree<T> {
+    fn drop(&mut self) {
+        #[inline]
+        fn take_if_subtree<T>(t: &mut LabeledTree<T>, to_drop: &mut Vec<LabeledTree<T>>) {
+            match t {
+                LabeledTree::Leaf(_) => {}
+                LabeledTree::SubTree(children) => {
+                    for (_, child) in std::mem::take(children) {
+                        if matches!(child, LabeledTree::SubTree(_)) {
+                            to_drop.push(child);
+                        }
+                    }
+                }
+            }
+        }
+
+        //  allocate a vector of a small constant size to not have many reallocations
+        //  for small trees
+        let mut to_drop = Vec::with_capacity(100);
+        take_if_subtree(self, &mut to_drop);
+        while let Some(ref mut t) = to_drop.pop() {
+            take_if_subtree(t, &mut to_drop);
+        }
+    }
+}
+
 /// Descends into the subtree of `t` following the given `path`.
 /// Returns the reference to the corresponding subtree.
 pub fn lookup_path<'a>(
@@ -610,7 +642,11 @@ pub enum MixedHashTreeConversionError {
 }
 
 /// The maximum recursion depth of [`serde_cbor`] deserialization is currently 128.
-const MAX_HASH_TREE_DEPTH: usize = 128;
+const MAX_HASH_TREE_DEPTH: u8 = 128;
+// error handlig does not work if `MAX_HASH_TREE_DEPTH == u8::MAX`, since we
+// cannot reach the error bound of `u8::MAX + 1` with `u8`
+#[allow(clippy::assertions_on_constants)]
+const _: () = assert!(MAX_HASH_TREE_DEPTH < u8::MAX);
 
 /// Extracts the data part from a mixed hash tree by removing all forks and
 /// pruned nodes.
@@ -623,7 +659,7 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
         fn collect_children(
             t: MixedHashTree,
             children: &mut FlatMap<Label, LabeledTree<Vec<u8>>>,
-            depth: usize,
+            depth: u8,
         ) -> Result<(), E> {
             if depth > MAX_HASH_TREE_DEPTH {
                 return Err(E::TooDeepRecursion);
@@ -664,7 +700,7 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
             }
         }
 
-        fn try_from_impl(root: MixedHashTree, depth: usize) -> Result<LabeledTree<Vec<u8>>, E> {
+        fn try_from_impl(root: MixedHashTree, depth: u8) -> Result<LabeledTree<Vec<u8>>, E> {
             Ok(match root {
                 MixedHashTree::Leaf(data) => LabeledTree::Leaf(data),
                 MixedHashTree::Labeled(_, _) | MixedHashTree::Fork(_) => {
@@ -890,22 +926,22 @@ pub enum Witness {
 }
 
 fn write_witness(witness: &Witness, level: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let indent =
-        String::from_utf8(vec![b' '; (level * 8) as usize]).expect("String was not valid utf8");
+    let indent = String::from_utf8(vec![b' '; (level.saturating_mul(8)) as usize])
+        .expect("String was not valid utf8");
     match witness {
         Witness::Known() => writeln!(f, "{}** KNOWN **", indent),
         Witness::Pruned { digest } => writeln!(f, "{}\\__pruned:{:?}", indent, digest),
         Witness::Node { label, sub_witness } => {
             writeln!(f, "{}+-- node:{:?}", indent, label)?;
-            write_witness(sub_witness, level + 1, f)
+            write_witness(sub_witness, level.saturating_add(1), f)
         }
         Witness::Fork {
             left_tree,
             right_tree,
         } => {
             writeln!(f, "{}+-- fork:", indent)?;
-            write_witness(left_tree, level + 1, f)?;
-            write_witness(right_tree, level + 1, f)
+            write_witness(left_tree, level.saturating_add(1), f)?;
+            write_witness(right_tree, level.saturating_add(1), f)
         }
     }
 }
@@ -932,12 +968,24 @@ pub trait WitnessGenerator {
     /// an error is returned.
     ///
     /// Does not `panic!`.
-    fn witness(&self, partial_tree: &LabeledTree<Vec<u8>>) -> Result<Witness, MergeError<Witness>>;
+    fn witness(
+        &self,
+        partial_tree: &LabeledTree<Vec<u8>>,
+    ) -> Result<Witness, WitnessGenerationError<Witness>>;
 
     fn mixed_hash_tree(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
-    ) -> Result<MixedHashTree, MergeError<MixedHashTree>>;
+    ) -> Result<MixedHashTree, WitnessGenerationError<MixedHashTree>>;
+}
+
+/// Error produced by generating a witness of type `W` from [`WitnessGenerator`].
+#[derive(thiserror::Error, Debug, PartialEq, Clone)]
+pub enum WitnessGenerationError<W: WitnessBuilder> {
+    #[error("Generating a witness failed due to too deep recursion (depth={0})")]
+    TooDeepRecursion(u8),
+    #[error("Merging witnesses failed due to their inconsistency at:\nleft={0:?}\nright={1:?}")]
+    MergingInconsistentWitnesses(W, W),
 }
 
 /// `HashTreeBuilder` enables an iterative construction of a [`LabeledTree`],

@@ -1,6 +1,7 @@
 use std::time::Instant;
 
 use async_trait::async_trait;
+use opentelemetry::KeyValue;
 use reqwest::{Error as ReqwestError, Request, Response};
 use tracing::info;
 
@@ -57,11 +58,27 @@ impl<T: HttpClient> HttpClient for WithMetrics<T> {
 
         // Attribute (Status Code)
         let status_code = match &out {
-            Ok(out) => Some(out.status().as_u16()),
-            Err(_) => None,
+            Ok(out) => format!("{}", out.status().as_u16()),
+            Err(_) => "".to_string(),
         };
 
-        let MetricParams { action, .. } = &self.1;
+        let labels = &[
+            KeyValue::new("status", status),
+            // Attributes
+            KeyValue::new("method", method.clone()),
+            KeyValue::new("scheme", scheme.clone()),
+            KeyValue::new("host", host.clone()),
+            KeyValue::new("status_code", status_code.clone()),
+        ];
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(
             action = action.as_str(),

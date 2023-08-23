@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_crypto_sha2::Sha256;
-use ic_crypto_tree_hash::{Digest, Label, MergeError, WitnessBuilder};
+use ic_crypto_tree_hash::{Digest, Label, WitnessBuilder, WitnessGenerationError};
+use ic_crypto_tree_hash_test_utils::MAX_HASH_TREE_DEPTH;
 use proptest::prelude::*;
 
 mod mixed_hash_tree {
@@ -70,10 +71,12 @@ mod mixed_hash_tree {
         let pruned1 = Pruned(Digest([0u8; Sha256::DIGEST_LEN]));
         let pruned2 = Pruned(Digest([1u8; Sha256::DIGEST_LEN]));
         assert_eq!(
-            Err(MergeError::<MixedHashTree>::InconsistentWitnesses(
-                pruned1.clone(),
-                pruned2.clone()
-            )),
+            Err(
+                WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(
+                    pruned1.clone(),
+                    pruned2.clone()
+                )
+            ),
             MixedHashTree::merge_trees(pruned1, pruned2)
         );
     }
@@ -83,10 +86,12 @@ mod mixed_hash_tree {
         let labeled1 = Labeled(Label::from(vec![0]), Box::new(Empty));
         let labeled2 = Labeled(Label::from(vec![1]), Box::new(Empty));
         assert_eq!(
-            Err(MergeError::<MixedHashTree>::InconsistentWitnesses(
-                labeled1.clone(),
-                labeled2.clone()
-            )),
+            Err(
+                WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(
+                    labeled1.clone(),
+                    labeled2.clone()
+                )
+            ),
             MixedHashTree::merge_trees(labeled1, labeled2)
         );
     }
@@ -97,10 +102,12 @@ mod mixed_hash_tree {
         let fork1 = Fork(Box::new((Empty, mismatching.0.clone())));
         let fork2 = Fork(Box::new((Empty, mismatching.1.clone())));
         assert_eq!(
-            Err(MergeError::<MixedHashTree>::InconsistentWitnesses(
-                mismatching.0,
-                mismatching.1,
-            )),
+            Err(
+                WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(
+                    mismatching.0,
+                    mismatching.1,
+                )
+            ),
             MixedHashTree::merge_trees(fork1, fork2)
         );
     }
@@ -164,7 +171,9 @@ mod mixed_hash_tree {
         // should fail
         assert_eq!(
             MixedHashTree::merge_trees(w.clone(), w.clone()),
-            Err(MergeError::TooDeepRecursion(128))
+            Err(WitnessGenerationError::TooDeepRecursion(
+                MAX_HASH_TREE_DEPTH + 1
+            ))
         );
         assert_eq!(
             MixedHashTree::merge_trees(w.clone(), w.clone()),
@@ -209,11 +218,13 @@ mod mixed_hash_tree {
     fn inconsistent_witnesses(
         l: &MixedHashTree,
         r: &MixedHashTree,
-    ) -> Result<MixedHashTree, MergeError<MixedHashTree>> {
-        Err(MergeError::<MixedHashTree>::InconsistentWitnesses(
-            l.clone(),
-            r.clone(),
-        ))
+    ) -> Result<MixedHashTree, WitnessGenerationError<MixedHashTree>> {
+        Err(
+            WitnessGenerationError::<MixedHashTree>::MergingInconsistentWitnesses(
+                l.clone(),
+                r.clone(),
+            ),
+        )
     }
 }
 
@@ -296,10 +307,12 @@ mod witness {
             digest: Digest([1u8; 32]),
         };
         assert_eq!(
-            Err(MergeError::<Witness>::InconsistentWitnesses(
-                pruned1.clone(),
-                pruned2.clone()
-            )),
+            Err(
+                WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(
+                    pruned1.clone(),
+                    pruned2.clone()
+                )
+            ),
             Witness::merge_trees(pruned1, pruned2)
         );
     }
@@ -315,10 +328,12 @@ mod witness {
             sub_witness: Box::new(Known()),
         };
         assert_eq!(
-            Err(MergeError::<Witness>::InconsistentWitnesses(
-                node1.clone(),
-                node2.clone()
-            )),
+            Err(
+                WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(
+                    node1.clone(),
+                    node2.clone()
+                )
+            ),
             Witness::merge_trees(node1, node2)
         );
     }
@@ -371,10 +386,12 @@ mod witness {
             right_tree: Box::new(mismatching.1.clone()),
         };
         assert_eq!(
-            Err(MergeError::<Witness>::InconsistentWitnesses(
-                mismatching.0,
-                mismatching.1,
-            )),
+            Err(
+                WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(
+                    mismatching.0,
+                    mismatching.1,
+                )
+            ),
             Witness::merge_trees(fork1, fork2)
         );
     }
@@ -397,10 +414,12 @@ mod witness {
             sub_witness: Box::new(mismatching.1.clone()),
         };
         assert_eq!(
-            Err(MergeError::<Witness>::InconsistentWitnesses(
-                mismatching.0,
-                mismatching.1,
-            )),
+            Err(
+                WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(
+                    mismatching.0,
+                    mismatching.1,
+                )
+            ),
             Witness::merge_trees(node1, node2)
         );
     }
@@ -408,7 +427,7 @@ mod witness {
     #[test]
     fn merge_with_too_deep_recursion_is_error() {
         let mut w = Witness::Known();
-        for depth in 0..127 {
+        for depth in 1..MAX_HASH_TREE_DEPTH {
             assert_matches!(
                 Witness::merge_trees(w.clone(), w.clone()),
                 Ok(_),
@@ -442,7 +461,9 @@ mod witness {
         // should fail
         assert_eq!(
             Witness::merge_trees(w.clone(), w.clone()),
-            Err(MergeError::TooDeepRecursion(128))
+            Err(WitnessGenerationError::TooDeepRecursion(
+                MAX_HASH_TREE_DEPTH + 1
+            ))
         );
         assert_eq!(
             Witness::merge_trees(w.clone(), w.clone()),
@@ -450,10 +471,10 @@ mod witness {
         );
     }
 
-    fn inconsistent_witnesses(l: &Witness, r: &Witness) -> Result<Witness, MergeError<Witness>> {
-        Err(MergeError::<Witness>::InconsistentWitnesses(
-            l.clone(),
-            r.clone(),
-        ))
+    fn inconsistent_witnesses(
+        l: &Witness,
+        r: &Witness,
+    ) -> Result<Witness, WitnessGenerationError<Witness>> {
+        Err(WitnessGenerationError::<Witness>::MergingInconsistentWitnesses(l.clone(), r.clone()))
     }
 }

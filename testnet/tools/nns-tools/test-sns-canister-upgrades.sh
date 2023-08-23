@@ -15,8 +15,6 @@ Usage: $0 <VERSION> <SNS_CANISTER_TYPE> (<SNS_CANISTER_TYPE>...)
     Using \"source \$YOUR_WORKING_DIRECTORY/output_vars_nns_state_deployment.sh\" will give you the needed
     variables in your shell.
 
-  NOTE: archive is not currently supported by this script
-
   This script will test upgrading the canisters to a particular version, and will test doing so
     in all possible permutations of the upgrades.
   "
@@ -105,7 +103,25 @@ echo "$PERMUTATIONS" \
         cat $PWD/sns_canister_ids.json | tee -a $LOG_FILE
 
         GOV_CANISTER_ID=$(sns_canister_id_for_sns_canister_type governance)
+        ROOT_CANISTER_ID=$(sns_canister_id_for_sns_canister_type root)
         SWAP_CANISTER_ID=$(sns_canister_id_for_sns_canister_type swap)
+        LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
+
+        # Open the Swap so we can participate in it and trigger an archive spawn
+        test_propose_to_open_sns_token_swap_pem "${NNS_URL}" "${NEURON_ID}" "${PEM}" "${SWAP_CANISTER_ID}"
+
+        # Participate in Swap to commit it (this spawns the archive canister)
+        sns_quill_participate_in_sale "${NNS_URL}" "${SUBNET_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 30000
+
+        # Wait for finalization to complete
+        if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
+            print_red "Swap finalization failed, cannot continue with upgrade testing"
+            exit 1
+        fi
+
+        # Add the archive canister to sns_canister_ids.json for use during upgrade testing
+        ARCHIVE_CANISTER_ID=$(sns_get_archive "${SUBNET_URL}" "${LEDGER_CANISTER_ID}")
+        add_archive_to_sns_canister_ids "$PWD/sns_canister_ids.json" "${ARCHIVE_CANISTER_ID}"
 
         # Assert that all canisters have the mainnet hashes so our test is legitimate
         canister_has_hash_installed $SUBNET_URL \
@@ -118,6 +134,8 @@ echo "$PERMUTATIONS" \
             $(sns_canister_id_for_sns_canister_type index) $(sns_mainnet_latest_wasm_hash index)
         canister_has_hash_installed $SUBNET_URL \
             $(sns_canister_id_for_sns_canister_type swap) $(sns_mainnet_latest_wasm_hash swap)
+        canister_has_hash_installed $SUBNET_URL \
+            $(sns_canister_id_for_sns_canister_type archive) $(sns_mainnet_latest_wasm_hash archive)
 
         # Archive is not going to be available for testing in this way because it is spawned after a certain
         # threshold of activity
@@ -165,9 +183,15 @@ echo "$PERMUTATIONS" \
             fi
         done
 
+        # After all upgrade testing, make sure an SNS can still be deployed
+        # Add principal to whitelist
+        add_sns_wasms_allowed_principal "$NNS_URL" "$NEURON_ID" "$PEM" "$WALLET_CANISTER"
+        # Deploy new SNS
+        echo "Deploying new SNS!" | tee -a $LOG_FILE
+        deploy_new_sns "$SUBNET_URL" "$WALLET_CANISTER"
+
         print_green "Finished testing 'Upgrade Order: $ORDERING' but check for failures" | tee -a $LOG_FILE
         # Log finished with ordering
-
     done
 
 echo "$PERMUTATIONS" \
@@ -197,8 +221,23 @@ echo "$PERMUTATIONS" \
 
         echo "${SNS}" | tee -a $LOG_FILE
 
-        GOV_CANISTER_ID=$(echo "$SNS" | jq -r '.governance_canister_id[0]')
-        SWAP_CANISTER_ID=$(echo "$SNS" | jq -r '.swap_canister_id[0]')
+        GOV_CANISTER_ID=$(sns_canister_id_for_sns_canister_type governance)
+        ROOT_CANISTER_ID=$(sns_canister_id_for_sns_canister_type root)
+        SWAP_CANISTER_ID=$(sns_canister_id_for_sns_canister_type swap)
+        LEDGER_CANISTER_ID=$(sns_canister_id_for_sns_canister_type ledger)
+
+        # Participate in Swap to commit it (this spawns the archive canister)
+        sns_quill_participate_in_sale "${NNS_URL}" "${SUBNET_URL}" "${PEM}" "${ROOT_CANISTER_ID}" 30000
+
+        # Wait for finalization to complete
+        if ! wait_for_sns_governance_to_be_in_normal_mode "${SUBNET_URL}" "${GOV_CANISTER_ID}"; then
+            print_red "Swap finalization failed, cannot continue with upgrade testing"
+            exit 1
+        fi
+
+        # Add the archive canister to sns_canister_ids.json for use during upgrade testing
+        ARCHIVE_CANISTER_ID=$(sns_get_archive "${SUBNET_URL}" "${LEDGER_CANISTER_ID}")
+        add_archive_to_sns_canister_ids "$PWD/sns_canister_ids.json" "${ARCHIVE_CANISTER_ID}"
 
         # Assert that all canisters have the mainnet hashes so our test is legitimate
         canister_has_hash_installed $SUBNET_URL \
@@ -211,6 +250,8 @@ echo "$PERMUTATIONS" \
             $(sns_canister_id_for_sns_canister_type index) $(sns_mainnet_latest_wasm_hash index)
         canister_has_hash_installed $SUBNET_URL \
             $(sns_canister_id_for_sns_canister_type swap) $(sns_mainnet_latest_wasm_hash swap)
+        canister_has_hash_installed $SUBNET_URL \
+            $(sns_canister_id_for_sns_canister_type archive) $(sns_mainnet_latest_wasm_hash archive)
 
         # Archive is not going to be available for testing in this way because it is spawned after a certain
         # threshold of activity
@@ -257,6 +298,29 @@ echo "$PERMUTATIONS" \
                 break
             fi
         done
+
+        # After all the upgrade testing is done, check that a new SNS could still be deployed
+        # propose new SNS
+        echo "Proposing new SNS!" | tee -a "${LOG_FILE}"
+
+        if ! propose_new_sns "$NNS_URL" "$NEURON_ID"; then
+            print_red "Failed to create a new SNS via 1-proposal initialization"
+            exit 1
+        fi
+        # get the canister ID for the new SNS Governance
+        echo "Proposed new SNS" | tee -a $LOG_FILE
+
+        # Get the latest SNS canisters and create the sns_canister_ids.json file
+        SNS=$(list_deployed_snses "${NNS_URL}" | $IDL2JSON | jq '.instances[-1]')
+        echo "$SNS" | jq '{
+            governance_canister_id: .governance_canister_id[0],
+            ledger_canister_id: .ledger_canister_id[0],
+            root_canister_id: .root_canister_id[0],
+            swap_canister_id: .swap_canister_id[0],
+            index_canister_id: .index_canister_id[0]
+        }' >$PWD/sns_canister_ids.json
+
+        echo "${SNS}" | tee -a $LOG_FILE
 
         print_green "Finished testing 'Upgrade Order: $ORDERING' but check for failures" | tee -a $LOG_FILE
         # Log finished with ordering

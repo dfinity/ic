@@ -11,7 +11,7 @@ use ic_protobuf::{
     state::queues::v1 as pb_queues,
     types::v1 as pb_types,
 };
-use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrTruncate};
+use ic_utils::{byte_slice_fmt::truncate_and_format, str::StrEllipsize, str::StrTruncate};
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -176,33 +176,18 @@ impl RejectContext {
     pub fn new_with_message_length_limit(
         code: RejectCode,
         message: impl ToString,
-        mut max_msg_len: usize,
+        max_msg_len: usize,
     ) -> Self {
-        // Ensure `max_msg_len` is within reasonable bounds.
-        if max_msg_len < MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES {
-            max_msg_len = MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES;
-        } else if max_msg_len > MAX_REJECT_MESSAGE_LEN_BYTES {
-            max_msg_len = MAX_REJECT_MESSAGE_LEN_BYTES;
-        }
-
-        let message = message.to_string();
-        if message.len() <= max_msg_len {
-            return Self { code, message };
-        }
-
-        // Use 1/4 of maximum length for suffix.
-        let suffix_len = max_msg_len / 4;
-        // And the rest (minus the space required by the ellipsis) for prefix.
-        let prefix_len = max_msg_len - suffix_len - 3;
-
-        let mut truncated = String::with_capacity(max_msg_len);
-        truncated.push_str(message.safe_truncate(prefix_len));
-        truncated.push_str("...");
-        truncated.push_str(message.safe_truncate_right(suffix_len));
-
         Self {
             code,
-            message: truncated,
+            message: message.to_string().ellipsize(
+                // Ensure `max_msg_len` is within reasonable bounds.
+                max_msg_len.clamp(
+                    MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES,
+                    MAX_REJECT_MESSAGE_LEN_BYTES,
+                ),
+                75,
+            ),
         }
     }
 
@@ -276,11 +261,7 @@ impl std::fmt::Debug for Payload {
                 if context.message.len() <= 8 * KB {
                     write!(f, "message: {:?} ", context.message)?;
                 } else {
-                    let mut message = String::with_capacity(8 * KB);
-                    message.push_str(context.message.safe_truncate(5 * KB));
-                    message.push_str("...");
-                    message.push_str(context.message.safe_truncate_right(2 * KB));
-                    write!(f, "message: {:?} ", message)?;
+                    write!(f, "message: {:?} ", context.message.ellipsize(8 * KB, 75))?;
                 }
                 write!(f, "}})")
             }

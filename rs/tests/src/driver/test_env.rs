@@ -58,6 +58,13 @@ impl TestEnv {
         })
     }
 
+    pub fn new_without_duplicating_logger<P: AsRef<Path>>(path: P, logger: Logger) -> TestEnv {
+        let base_path = PathBuf::from(path.as_ref());
+        Self {
+            inner: Arc::new(TestEnvInner { base_path, logger }),
+        }
+    }
+
     pub fn read_json_object<T: DeserializeOwned, P: AsRef<Path>>(&self, p: P) -> Result<T> {
         let path = self.get_json_path(&p);
         let file = File::open(&path).with_context(|| format!("Could not open: {:?}", path))?;

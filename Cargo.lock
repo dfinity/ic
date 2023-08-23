@@ -2438,7 +2438,6 @@ dependencies = [
  "clap 2.34.0",
  "criterion-plot 0.4.5",
  "csv",
- "futures",
  "itertools 0.10.5",
  "lazy_static",
  "num-traits",
@@ -2451,7 +2450,6 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "tinytemplate",
- "tokio",
  "walkdir",
 ]
 
@@ -2466,6 +2464,7 @@ dependencies = [
  "ciborium",
  "clap 4.3.3",
  "criterion-plot 0.5.0",
+ "futures",
  "is-terminal",
  "itertools 0.10.5",
  "num-traits",
@@ -2478,6 +2477,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "tinytemplate",
+ "tokio",
  "walkdir",
 ]
 
@@ -2505,7 +2505,7 @@ dependencies = [
 name = "criterion-time"
 version = "0.8.0"
 dependencies = [
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "libc",
 ]
 
@@ -3412,7 +3412,7 @@ version = "0.8.0"
 dependencies = [
  "candid 0.8.4",
  "canister-test",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-types",
@@ -4890,7 +4890,7 @@ dependencies = [
  "bincode",
  "byteorder",
  "clap 3.2.23",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "ic-config",
  "ic-constants",
  "ic-crypto-test-utils-canister-threshold-sigs",
@@ -5601,7 +5601,7 @@ name = "ic-certification"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "hex",
  "ic-base-types",
  "ic-certification-test-utils",
@@ -5813,7 +5813,7 @@ name = "ic-consensus"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "ic-artifact-pool",
  "ic-btc-types-internal",
  "ic-config",
@@ -6263,7 +6263,7 @@ dependencies = [
 name = "ic-crypto-internal-bls12-381-type"
 version = "0.1.0"
 dependencies = [
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "hex",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-test-utils-reproducible-rng",
@@ -6283,7 +6283,7 @@ dependencies = [
 name = "ic-crypto-internal-bls12-381-vetkd"
 version = "0.1.0"
 dependencies = [
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-test-utils-reproducible-rng",
@@ -6536,7 +6536,7 @@ version = "0.1.0"
 dependencies = [
  "assert_matches",
  "bip32",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "fe-derive",
  "hex",
  "hex-literal 0.3.4",
@@ -7010,7 +7010,7 @@ name = "ic-crypto-tree-hash"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "ic-crypto-internal-types",
  "ic-crypto-sha2",
  "ic-crypto-test-utils-reproducible-rng",
@@ -7216,7 +7216,7 @@ dependencies = [
  "assert_matches",
  "candid 0.8.4",
  "canister-test",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "embedders_bench",
  "ic-config",
  "ic-cycles-account-manager",
@@ -8044,7 +8044,7 @@ name = "ic-ingress-manager"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "ic-artifact-pool",
  "ic-config",
  "ic-constants",
@@ -8290,6 +8290,28 @@ dependencies = [
  "slog-json",
  "slog-scope",
  "slog-term",
+]
+
+[[package]]
+name = "ic-mainnet-nns-recovery"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "ic-canister-client",
+ "ic-canister-client-sender",
+ "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-test-utils",
+ "ic-recovery",
+ "ic-registry-subnet-type",
+ "ic-replay",
+ "ic-types",
+ "serde",
+ "slog",
+ "ssh2",
+ "tests",
+ "url",
 ]
 
 [[package]]
@@ -8643,7 +8665,7 @@ dependencies = [
  "bytes",
  "candid 0.8.4",
  "comparable",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "csv",
  "cycles-minting-canister",
  "dfn_candid",
@@ -9745,7 +9767,7 @@ dependencies = [
  "base64 0.11.0",
  "canister-test",
  "clap 3.2.23",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "crossbeam-channel",
  "hex",
  "ic-artifact-pool",
@@ -9821,6 +9843,7 @@ name = "ic-replica-setup-ic-network"
 version = "0.8.0"
 dependencies = [
  "crossbeam-channel",
+ "either",
  "ic-artifact-manager",
  "ic-artifact-pool",
  "ic-config",
@@ -9841,7 +9864,9 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-p2p",
+ "ic-peer-manager",
  "ic-protobuf",
+ "ic-quic-transport",
  "ic-registry-client-helpers",
  "ic-replicated-state",
  "ic-state-manager",
@@ -9916,7 +9941,7 @@ name = "ic-replicated-state"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "criterion-time",
  "cvt",
  "ic-base-types",
@@ -10196,7 +10221,7 @@ dependencies = [
  "candid 0.8.4",
  "clap 3.2.23",
  "comparable",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "csv",
  "dfn_candid",
  "dfn_core",
@@ -10426,7 +10451,7 @@ dependencies = [
  "bytes",
  "candid 0.8.4",
  "comparable",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "dfn_candid",
  "dfn_core",
  "dfn_http_metrics",
@@ -10722,7 +10747,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "bit-vec 0.6.3",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "criterion-time",
  "crossbeam-channel",
  "hex",
@@ -11028,6 +11053,7 @@ dependencies = [
  "strum 0.23.0",
  "tempfile",
  "tokio",
+ "tokio-rustls 0.24.0",
  "tower",
  "wasmprinter",
  "wat",
@@ -11150,7 +11176,7 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "bytes",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "futures",
  "h2",
  "http",
@@ -12965,7 +12991,7 @@ name = "memory_tracker"
 version = "0.8.0"
 dependencies = [
  "bit-vec 0.5.1",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "ic-config",
  "ic-logger",
  "ic-replicated-state",
@@ -15590,7 +15616,7 @@ dependencies = [
  "assert_matches",
  "candid 0.8.4",
  "canister-test",
- "criterion 0.3.6",
+ "criterion 0.5.1",
  "dfn_candid",
  "dfn_core",
  "dfn_json",
@@ -15756,9 +15782,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.100.1"
+version = "0.100.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6207cd5ed3d8dca7816f8f3725513a34609c0c765bf652b8c3cb4cfd87db46b"
+checksum = "e98ff011474fa39949b7e5c0428f9b4937eda7da7848bbb947786b7be0b27dab"
 dependencies = [
  "ring",
  "untrusted",
@@ -17246,6 +17272,17 @@ dependencies = [
  "getopts",
  "libc",
  "term 0.6.1",
+]
+
+[[package]]
+name = "testnets"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "ic-mainnet-nns-recovery",
+ "ic-registry-subnet-type",
+ "slog",
+ "tests",
 ]
 
 [[package]]

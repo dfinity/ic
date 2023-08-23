@@ -263,6 +263,7 @@ pub fn construct_ic_stack(
         subnet_id,
         None,
         Arc::clone(&crypto) as Arc<_>,
+        Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         consensus_pool,

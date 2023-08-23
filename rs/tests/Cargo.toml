@@ -73,7 +73,7 @@ ic-nns-test-utils = { path = "../nns/test_utils" }
 ic-prep = { path = "../prep" }
 ic-protobuf = { path = "../protobuf" }
 ic-recovery = { path = "../recovery" }
-ic-subnet-splitting= { path = "../recovery/subnet_splitting" }
+ic-subnet-splitting = { path = "../recovery/subnet_splitting" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
@@ -323,10 +323,6 @@ name = "ic-systest-icrc1-agent-test"
 path = "financial_integrations/icrc1_agent_test.rs"
 
 [[bin]]
-name = "ic-systest-create-subnet-pre-master-test"
-path = "nns/create_subnet_pre_master_test.rs"
-
-[[bin]]
 name = "ic-systest-node-assign-test"
 path = "consensus/orchestrator/node_assign_test.rs"
 
@@ -357,14 +353,6 @@ path = "consensus/liveness_with_equivocation_test.rs"
 [[bin]]
 name = "ic-systest-system-subnets-test"
 path = "execution/system_subnets_test.rs"
-
-[[bin]]
-name = "ic-systest-single-large-node"
-path = "testing_verification/testnets/single_large_node.rs"
-
-[[bin]]
-name = "ic-systest-single-app-large-node"
-path = "testing_verification/testnets/single_app_large_node.rs"
 
 [[bin]]
 name = "ic-systest-cow-safety-test"

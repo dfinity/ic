@@ -73,7 +73,7 @@ fn convert_malformed_tree() {
 
 #[test]
 fn convert_too_deep_tree() {
-    fn dummy_mixed_hash_tree_of_depth(depth: usize) -> M {
+    fn dummy_mixed_hash_tree_of_depth(depth: u8) -> M {
         let mut result = M::Empty;
         assert!(depth > 0);
         for _ in 0..depth - 1 {
@@ -82,7 +82,7 @@ fn convert_too_deep_tree() {
         result
     }
 
-    const LIMIT: usize = MAX_HASH_TREE_DEPTH;
+    const LIMIT: u8 = MAX_HASH_TREE_DEPTH;
 
     for depth in [1, 2, LIMIT - 1, LIMIT] {
         let result: Result<T, MixedHashTreeConversionError> =

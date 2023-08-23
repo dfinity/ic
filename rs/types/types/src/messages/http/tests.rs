@@ -750,6 +750,135 @@ mod cbor_serialization {
     }
 }
 
+mod to_authentication {
+    use crate::messages::{
+        http::to_authentication, Authentication, Blob, Delegation, HttpQueryContent,
+        HttpRequestEnvelope, HttpRequestError, HttpUserQuery, SignedDelegation, UserSignature,
+    };
+    use crate::Time;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn should_successfully_convert_user_signature_with_delegation() {
+        let sender_delegation = dummy_delegation();
+        let setup = Setup::new(sender_delegation.clone());
+        let envelope = construct_envelope(
+            Some(setup.sender_pubkey),
+            Some(setup.sender_sig),
+            sender_delegation,
+        );
+
+        assert_eq!(to_authentication(&envelope), Ok(setup.authentication));
+    }
+
+    #[test]
+    fn should_successfully_convert_user_signature_without_delegation() {
+        let setup = Setup::new(None);
+        let envelope = construct_envelope(Some(setup.sender_pubkey), Some(setup.sender_sig), None);
+
+        assert_eq!(to_authentication(&envelope), Ok(setup.authentication));
+    }
+
+    #[test]
+    fn should_successfully_convert_anonymous_request() {
+        let envelope = construct_envelope(None, None, None);
+
+        assert_eq!(to_authentication(&envelope), Ok(Authentication::Anonymous));
+    }
+
+    #[test]
+    fn should_return_error_if_insufficient_subset_of_parameters_specified() {
+        for sender_pubkey in &[Some(dummy_sender_pubkey()), None] {
+            for sender_sig in &[Some(dummy_signature()), None] {
+                for sender_delegation in &[dummy_delegation(), None] {
+                    if !((sender_pubkey.is_some() && sender_sig.is_some())
+                        || (sender_pubkey.is_none()
+                            && sender_sig.is_none()
+                            && sender_delegation.is_none()))
+                    {
+                        let envelope = construct_envelope(
+                            sender_pubkey.clone(),
+                            sender_sig.clone(),
+                            sender_delegation.clone(),
+                        );
+
+                        assert_matches!(
+                            to_authentication(&envelope),
+                            Err(HttpRequestError::MissingPubkeyOrSignature(err))
+                            if err.starts_with("Got ")
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    struct Setup {
+        sender_pubkey: Blob,
+        sender_sig: Blob,
+        authentication: Authentication,
+    }
+
+    impl Setup {
+        fn new(sender_delegation: Option<Vec<SignedDelegation>>) -> Setup {
+            let signature = dummy_signature();
+            let signer_pubkey = dummy_sender_pubkey();
+            let authentication = Authentication::Authenticated(UserSignature {
+                signature: signature.to_vec(),
+                signer_pubkey: signer_pubkey.to_vec(),
+                sender_delegation: sender_delegation.clone(),
+            });
+            Setup {
+                sender_pubkey: signer_pubkey,
+                sender_sig: signature,
+                authentication,
+            }
+        }
+    }
+
+    fn construct_envelope(
+        sender_pubkey: Option<Blob>,
+        sender_sig: Option<Blob>,
+        sender_delegation: Option<Vec<SignedDelegation>>,
+    ) -> HttpRequestEnvelope<HttpQueryContent> {
+        HttpRequestEnvelope {
+            content: HttpQueryContent::Query {
+                query: HttpUserQuery {
+                    canister_id: Blob(vec![]),
+                    method_name: "query".to_string(),
+                    arg: Blob(vec![]),
+                    sender: Blob(vec![4]),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
+            },
+            sender_delegation,
+            sender_pubkey,
+            sender_sig,
+        }
+    }
+
+    fn dummy_signature() -> Blob {
+        Blob(vec![1, 2, 3])
+    }
+    fn dummy_sender_pubkey() -> Blob {
+        Blob(vec![4, 5, 6])
+    }
+
+    fn dummy_delegation() -> Option<Vec<SignedDelegation>> {
+        let delegation_pubkey = Blob(vec![7, 8, 9]);
+        let delegation_signature = Blob(vec![10, 11, 12]);
+        let expiration = 54378u64;
+        Some(vec![SignedDelegation::new(
+            Delegation::new(
+                delegation_pubkey.to_vec(),
+                Time::from_nanos_since_unix_epoch(expiration),
+            ),
+            delegation_signature.to_vec(),
+        )])
+    }
+}
+
 fn to_blob(id: crate::CanisterId) -> crate::messages::Blob {
     crate::messages::Blob(id.get().to_vec())
 }

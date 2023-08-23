@@ -412,7 +412,7 @@ fn remove_empty_subtree_in_path(tree: &mut LabeledTree<Vec<u8>>, path: &[Label])
         LabeledTree::SubTree(children) => {
             if path.len() == 1 {
                 let result = children.remove(&path[0]);
-                if let Some(LabeledTree::SubTree(children)) = result {
+                if let Some(LabeledTree::SubTree(children)) = &result {
                     assert!(children.is_empty());
                     true
                 } else {

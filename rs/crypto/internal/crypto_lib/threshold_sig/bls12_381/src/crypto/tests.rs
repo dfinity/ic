@@ -10,6 +10,7 @@ use crate::crypto::hash_message_to_g1;
 use crate::types::PublicKey;
 use ic_crypto_internal_bls12_381_type::{G2Projective, LagrangeCoefficients, Scalar};
 use ic_crypto_internal_seed::Seed;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::{NodeIndex, NumberOfNodes};
 use proptest::prelude::*;
@@ -238,7 +239,7 @@ fn omnipotent_dealer() {
 
 #[test]
 fn test_combined_secret_key() {
-    let mut rng = rand::thread_rng();
+    let mut rng = reproducible_rng();
     for _trial in 0..3 {
         let num_receivers = rng.gen::<u8>() as NodeIndex;
         let poly_degree = rng.gen::<u8>() as usize;

@@ -17,16 +17,19 @@ ic-metrics = { path = "../monitoring/metrics" }
 futures = "0.3.25"
 h2 = "0.3.14"
 http = "0.2.8"
-prometheus = { version = "0.12.0", features = [ "process" ] }
-serde = { version = "1.0.99", features = [ "derive" ] }
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+prometheus = { version = "0.12.0", features = ["process"] }
+serde = { version = "1.0.99", features = ["derive"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 strum = { version = "0.24", features = ["derive"] }
 tokio = { version = "1.15.0", features = ["full"] }
 tokio-util = { version = "0.7.4", features = ["io"] }
 tower = "0.4.12"
 
 [dev-dependencies]
-criterion = { version = "0.3", features = ["async_tokio"] }
+criterion = { version = "0.5", features = ["async_tokio"] }
 ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
 ic-icos-sev = { path = "../ic_os/sev" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }

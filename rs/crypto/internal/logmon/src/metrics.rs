@@ -5,7 +5,7 @@ mod bls12_381_sig_cache;
 use convert_case::{Case, Casing};
 use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGaugeVec};
+use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
 use std::time::Instant;
@@ -118,6 +118,12 @@ impl CryptoMetrics {
                 .crypto_idkg_dealing_encryption_pubkey_count
                 .with_label_values(&[&format!("{}", result)])
                 .set(idkg_dealing_encryption_pubkey_count as i64);
+        }
+    }
+
+    pub fn observe_idkg_load_transcript_error(&self, id: u64) {
+        if let Some(metrics) = &self.metrics {
+            metrics.crypto_idkg_load_transcript_error.set(id as i64);
         }
     }
 
@@ -466,6 +472,9 @@ struct Metrics {
     /// A gauge vector for the number of iDKG dealing encryption public keys stored locally.
     pub crypto_idkg_dealing_encryption_pubkey_count: IntGaugeVec,
 
+    /// A gauge for the transcript ID in iDKG load_transcript errors that may cause the loss of the key.
+    pub crypto_idkg_load_transcript_error: IntGauge,
+
     /// A gauge vector for the different types of keys and certificates of a node. The keys and
     /// certificates that are kept track of are:
     ///  - Node signing keys
@@ -645,6 +654,10 @@ impl Metrics {
                 &["result"],
             ),
             crypto_idkg_dealing_encryption_pubkey_count: idkg_dealing_encryption_pubkey_count,
+            crypto_idkg_load_transcript_error: r.int_gauge(
+                "crypto_idkg_load_transcript_error",
+                "Error while loading iDKG transcript",
+            ),
             crypto_key_counts: key_counts,
             crypto_key_rotation_results: rotation_results,
             crypto_keys_in_registry_missing_locally_total: r.int_counter(

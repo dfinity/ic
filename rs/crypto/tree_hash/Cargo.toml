@@ -13,7 +13,7 @@ serde_bytes = "0.11"
 thiserror = "1.0"
 
 [dev-dependencies]
-criterion = "0.3"
+criterion = "0.5"
 ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-crypto-tree-hash-test-utils = { path = "test_utils" }
 maplit = "1.0.2"

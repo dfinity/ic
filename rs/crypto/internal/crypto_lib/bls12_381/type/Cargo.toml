@@ -6,7 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ic_bls12_381 = { version = "0.8.0", default-features = false, features = ["groups", "pairings", "alloc", "experimental", "zeroize"] }
+ic_bls12_381 = { version = "0.8.0", default-features = false, features = [
+    "groups",
+    "pairings",
+    "alloc",
+    "experimental",
+    "zeroize",
+] }
 itertools = "0.10.5"
 pairing = "0.22"
 paste = "1.0.7"
@@ -20,7 +26,7 @@ zeroize = { version = "1", features = ["zeroize_derive"] }
 ic-crypto-getrandom-for-wasm = { path = "../../../../getrandom_for_wasm" }
 
 [dev-dependencies]
-criterion = { version = "0.3", features = ["html_reports"] }
+criterion = { version = "0.5", features = ["html_reports"] }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 
 [[bench]]

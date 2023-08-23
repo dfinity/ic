@@ -13,7 +13,7 @@ use ic_registry_client_helpers::{
 use std::{collections::HashMap, fmt, net::IpAddr, str::FromStr, sync::Arc};
 use x509_parser::{certificate::X509Certificate, prelude::FromDer};
 
-use crate::Run;
+use crate::core::Run;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Node {

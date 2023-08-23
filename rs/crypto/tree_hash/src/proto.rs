@@ -24,11 +24,13 @@ fn sub_tree_proto_from(map: FlatMap<Label, LabeledTreeOfBytes>) -> labeled_tree:
     }
 }
 impl From<LabeledTreeOfBytes> for pb::LabeledTree {
-    fn from(tree: LabeledTreeOfBytes) -> Self {
+    fn from(mut tree: LabeledTreeOfBytes) -> Self {
         Self {
-            node_enum: match tree {
-                LabeledTree::Leaf(leaf) => Some(NodeEnum::Leaf(leaf)),
-                LabeledTree::SubTree(map) => Some(NodeEnum::SubTree(sub_tree_proto_from(map))),
+            node_enum: match &mut tree {
+                LabeledTree::Leaf(leaf) => Some(NodeEnum::Leaf(std::mem::take(leaf))),
+                LabeledTree::SubTree(children) => Some(NodeEnum::SubTree(sub_tree_proto_from(
+                    std::mem::take(children),
+                ))),
             },
         }
     }
