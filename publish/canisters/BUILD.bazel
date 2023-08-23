@@ -20,6 +20,7 @@ CANISTERS = {
     "ic-icrc1-ledger.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "ic-icrc1-ledger-u256.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister_u256",
     "ic-nervous-system-common-test-canister.wasm": "//rs/nervous_system/common/test_canister",
+    "ic-icp-index-canister.wasm": "//rs/rosetta-api/icp_ledger/index:ic-icp-index-canister",
     "identity-canister.wasm": "//rs/nns/identity:identity-canister",
     "inter_canister_error_handling.wasm": "//rs/rust_canisters/tests:inter_canister_error_handling",
     "kv_store.wasm": "//rs/tests/test_canisters/kv_store",
