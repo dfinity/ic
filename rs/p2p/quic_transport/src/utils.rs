@@ -28,7 +28,7 @@ fn bincode_config() -> impl Options {
 }
 
 pub(crate) async fn read_request(
-    recv_stream: &mut RecvStream,
+    mut recv_stream: RecvStream,
 ) -> Result<Request<Body>, std::io::Error> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)

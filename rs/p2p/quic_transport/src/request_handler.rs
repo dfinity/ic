@@ -100,33 +100,29 @@ pub(crate) async fn start_request_handler(
             cmd = cmd_rx.recv() => {
                 match cmd {
                     Some(ConnCmd::Rpc(request, rpc_tx)) => {
-                        match connection.open_bi().await.map_err(|e| {
-                            metrics
-                                .connection_handle_errors_total
-                                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
-                            e
-                        }) {
+                        match connection.open_bi().await {
                             Ok((s, r)) => {
                                 inflight_cmds.spawn(handle_rpc(request, rpc_tx, s, r, metrics.clone()));
                             },
                             Err(err) => {
-                                rpc_tx.send(Err(err.into())).unwrap();
+                                metrics
+                                    .connection_handle_errors_total
+                                    .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
+                                let _  = rpc_tx.send(Err(err.into()));
                             }
                         };
 
                     },
                     Some(ConnCmd::Push(request, push_tx)) => {
-                        match connection.open_uni().await.map_err(|e| {
-                            metrics
-                                .connection_handle_errors_total
-                                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
-                            e
-                        }) {
+                        match connection.open_uni().await {
                             Ok(s,) => {
                                 inflight_cmds.spawn(handle_push(request, push_tx, s, metrics.clone()));
                             },
                             Err(err) => {
-                                push_tx.send(Err(err.into())).unwrap();
+                                metrics
+                                .connection_handle_errors_total
+                                .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
+                                let _ = push_tx.send(Err(err.into()));
                             }
                         };
                     },
@@ -227,9 +223,9 @@ async fn handle_bi_stream(
     metrics: QuicTransportMetrics,
     router: Router,
     mut bi_tx: SendStream,
-    mut bi_rx: RecvStream,
+    bi_rx: RecvStream,
 ) {
-    let mut request = match read_request(&mut bi_rx).await {
+    let mut request = match read_request(bi_rx).await {
         Ok(request) => request,
         Err(e) => {
             info!(
@@ -288,9 +284,9 @@ async fn handle_uni_stream(
     log: ReplicaLogger,
     metrics: QuicTransportMetrics,
     router: Router,
-    mut uni_rx: RecvStream,
+    uni_rx: RecvStream,
 ) {
-    let mut request = match read_request(&mut uni_rx).await {
+    let mut request = match read_request(uni_rx).await {
         Ok(request) => request,
         Err(e) => {
             info!(
