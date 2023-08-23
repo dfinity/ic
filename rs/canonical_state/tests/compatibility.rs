@@ -1,9 +1,9 @@
 use ic_base_types::PrincipalId;
 use ic_canonical_state::{
     encoding::{
-        old_types::{RequestOrResponseV3, StreamHeaderV6, SystemMetadataV9},
+        old_types::{RequestOrResponseV13, RequestOrResponseV3, StreamHeaderV6, SystemMetadataV9},
         types::{
-            RequestOrResponse as RequestOrResponseV4, StreamHeader as StreamHeaderV8,
+            RequestOrResponse as RequestOrResponseV14, StreamHeader as StreamHeaderV8,
             SystemMetadata as SystemMetadataV10,
         },
         CborProxyDecoder, CborProxyEncoder,
@@ -186,10 +186,24 @@ proptest! {
 /// Produces a `RequestOrResponse` valid at all certification versions in the range.
 pub(crate) fn arb_valid_versioned_message(
 ) -> impl Strategy<Value = (RequestOrResponse, RangeInclusive<CertificationVersion>)> {
-    prop_oneof![(
-        arbitrary::request_or_response(),
-        Just(CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION)
-    ),]
+    prop_oneof![
+        (
+            arbitrary::valid_request_or_response_for_certification_version(
+                // Version 14 introduces a new field `metadata` for `Request`. For version 13 and
+                // below, this field is always `None`, which guarantees compatibility for all
+                // certification versions.
+                CertificationVersion::V13
+            ),
+            Just(CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+        (
+            arbitrary::valid_request_or_response_for_certification_version(
+                // From version 14 and on, pairwise comparisons must support the case of `metadata.is_some()`.
+                MAX_SUPPORTED_CERTIFICATION_VERSION
+            ),
+            Just(CertificationVersion::V14..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+    ]
 }
 
 lazy_static! {
@@ -205,10 +219,17 @@ lazy_static! {
         ),
         #[allow(clippy::redundant_closure)]
         VersionedEncoding::new(
+            CertificationVersion::V0..=CertificationVersion::V13,
+            "RequestOrResponseV13",
+            |v| RequestOrResponseV13::proxy_encode(v),
+            |v| RequestOrResponseV13::proxy_decode(v),
+        ),
+        #[allow(clippy::redundant_closure)]
+        VersionedEncoding::new(
             CertificationVersion::V0..=MAX_SUPPORTED_CERTIFICATION_VERSION,
             "RequestOrResponse",
-            |v| RequestOrResponseV4::proxy_encode(v),
-            |v| RequestOrResponseV4::proxy_decode(v),
+            |v| RequestOrResponseV14::proxy_encode(v),
+            |v| RequestOrResponseV14::proxy_decode(v),
         ),
     ];
 }

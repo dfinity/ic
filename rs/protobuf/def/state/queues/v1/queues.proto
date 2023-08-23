@@ -31,6 +31,12 @@ message StreamEntry {
   Stream subnet_stream = 2;
 }
 
+message RequestMetadata {
+  optional uint64 call_tree_depth = 1;
+  optional uint64 call_tree_start_time_nanos = 2;
+  optional uint64 call_subtree_deadline_nanos = 3;
+}
+
 message Request {
   types.v1.CanisterId receiver = 1;
   types.v1.CanisterId sender = 2;
@@ -39,6 +45,7 @@ message Request {
   string method_name = 5;
   bytes method_payload = 6;
   Cycles cycles_payment = 7;
+  RequestMetadata metadata = 8;
 }
 
 message RejectContext {
