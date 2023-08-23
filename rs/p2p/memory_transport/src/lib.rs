@@ -282,7 +282,7 @@ impl Transport for PeerTransport {
     ) -> Result<Response<Bytes>, TransportError> {
         if peer_id == &self.node_id {
             return Err(TransportError::Disconnected {
-                connection_error: "Can't connect to self".to_string(),
+                reason: "Can't connect to self".to_string(),
             });
         }
 
@@ -299,7 +299,7 @@ impl Transport for PeerTransport {
         Ok(())
     }
 
-    fn peers(&self) -> Vec<NodeId> {
+    async fn peers(&self) -> Vec<NodeId> {
         self.global.peers.read().unwrap().keys().cloned().collect()
     }
 }

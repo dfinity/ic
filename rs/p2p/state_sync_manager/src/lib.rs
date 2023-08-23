@@ -114,7 +114,7 @@ impl StateSyncManager {
         loop {
             select! {
                 _ = interval.tick() => {
-                    self.handle_advert_tick();
+                    self.handle_advert_tick().await;
                 },
                 Some((advert, peer_id)) = self.advert_receiver.recv() =>{
                     self.handle_advert(advert, peer_id).await;
@@ -169,7 +169,7 @@ impl StateSyncManager {
         }
     }
 
-    fn handle_advert_tick(&mut self) {
+    async fn handle_advert_tick(&mut self) {
         let available_states = self.state_sync.available_states();
         self.metrics.lowest_state_broadcasted.set(
             available_states
@@ -188,7 +188,7 @@ impl StateSyncManager {
 
         for state_id in available_states {
             // Unreliable broadcast of adverts to all current peers.
-            for peer_id in self.transport.peers() {
+            for peer_id in self.transport.peers().await {
                 let request = build_advert_handler_request(state_id.clone());
                 let transport_c = self.transport.clone();
 

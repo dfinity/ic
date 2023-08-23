@@ -30,13 +30,7 @@
 //!          calls `get_peer_handle` for each rpc and therefore always has the latest
 //!          possible handle to a peer.
 
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    io,
-    net::SocketAddr,
-    sync::{Arc, RwLock},
-};
+use std::{collections::HashMap, fmt::Debug, io, net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
 use axum::Router;
@@ -52,7 +46,7 @@ use ic_peer_manager::SubnetTopology;
 use ic_types::NodeId;
 use quinn::{AsyncUdpSocket, Connection};
 use tokio::sync::mpsc::Sender;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, RwLock};
 
 use crate::connection_manager::start_connection_manager;
 
@@ -98,22 +92,6 @@ impl QuicTransport {
 
         QuicTransport(peer_map)
     }
-
-    pub(crate) fn get_peer_handle(
-        &self,
-        peer_id: &NodeId,
-    ) -> Result<ConnectionHandle, TransportError> {
-        let conn = self
-            .0
-            .read()
-            .unwrap()
-            .get(peer_id)
-            .ok_or(TransportError::Disconnected {
-                reason: String::from("Currently not connected to this peer"),
-            })?
-            .clone();
-        Ok(conn)
-    }
 }
 
 enum ConnCmd {
@@ -131,19 +109,27 @@ impl Transport for QuicTransport {
         peer_id: &NodeId,
         mut request: Request<Bytes>,
     ) -> Result<Response<Bytes>, TransportError> {
-        let peer = self.get_peer_handle(peer_id)?;
+        let rpc_rx = {
+            let peers_guard = self.0.read().await;
 
-        // Propagate PeerId from this connection to lower layers.
-        request.extensions_mut().insert(peer_id.clone());
+            let peer = peers_guard
+                .get(peer_id)
+                .ok_or(TransportError::Disconnected {
+                    reason: String::from("Currently not connected to this peer"),
+                })?;
 
-        let (rpc_tx, rpc_rx) = oneshot::channel();
-        peer.0
-            .send(ConnCmd::Rpc(request, rpc_tx))
-            .await
-            .map_err(|_err| TransportError::Disconnected {
-                reason: "no existing connection event loop".to_string(),
-            })?;
+            // Propagate PeerId from this connection to lower layers.
+            request.extensions_mut().insert(peer_id.clone());
 
+            let (rpc_tx, rpc_rx) = oneshot::channel();
+            peer.0
+                .send(ConnCmd::Rpc(request, rpc_tx))
+                .await
+                .map_err(|_err| TransportError::Disconnected {
+                    reason: "no existing connection event loop".to_string(),
+                })?;
+            rpc_rx
+        };
         let mut response = rpc_rx.await.map_err(|_err| TransportError::Disconnected {
             reason: "no existing connection event loop".to_string(),
         })??;
@@ -159,25 +145,34 @@ impl Transport for QuicTransport {
         peer_id: &NodeId,
         mut request: Request<Bytes>,
     ) -> Result<(), TransportError> {
-        let peer = self.get_peer_handle(peer_id)?;
+        let push_rx = {
+            let peers_guard = self.0.read().await;
+            let peer = peers_guard
+                .get(peer_id)
+                .ok_or(TransportError::Disconnected {
+                    reason: String::from("Currently not connected to this peer"),
+                })?;
 
-        // Propagate PeerId from this connection to lower layers.
-        request.extensions_mut().insert(peer_id.clone());
+            // Propagate PeerId from this connection to lower layers.
+            request.extensions_mut().insert(peer_id.clone());
 
-        let (push_tx, push_rx) = oneshot::channel();
-        peer.0
-            .send(ConnCmd::Push(request, push_tx))
-            .await
-            .map_err(|_err| TransportError::Disconnected {
-                reason: "no existing connection event loop".to_string(),
-            })?;
+            let (push_tx, push_rx) = oneshot::channel();
+            peer.0
+                .send(ConnCmd::Push(request, push_tx))
+                .await
+                .map_err(|_err| TransportError::Disconnected {
+                    reason: "no existing connection event loop".to_string(),
+                })?;
+            push_rx
+        };
+
         push_rx.await.map_err(|_err| TransportError::Disconnected {
             reason: "no existing connection event loop".to_string(),
         })?
     }
 
-    fn peers(&self) -> Vec<NodeId> {
-        self.0.read().unwrap().keys().cloned().collect()
+    async fn peers(&self) -> Vec<NodeId> {
+        self.0.read().await.keys().cloned().collect()
     }
 }
 
@@ -228,7 +223,13 @@ impl From<quinn::ConnectionError> for TransportError {
     }
 }
 
-#[derive(Debug, Clone)]
+impl From<io::Error> for TransportError {
+    fn from(value: io::Error) -> Self {
+        TransportError::Io { error: value }
+    }
+}
+
+#[derive(Debug)]
 pub(crate) struct ConnectionHandle(Sender<ConnCmd>);
 
 #[derive(Debug)]
@@ -271,5 +272,5 @@ pub trait Transport: Send + Sync {
 
     async fn push(&self, peer_id: &NodeId, request: Request<Bytes>) -> Result<(), TransportError>;
 
-    fn peers(&self) -> Vec<NodeId>;
+    async fn peers(&self) -> Vec<NodeId>;
 }

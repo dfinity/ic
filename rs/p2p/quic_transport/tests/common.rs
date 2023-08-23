@@ -66,7 +66,7 @@ impl ConnectivityChecker {
     async fn check(&self, this_peer: NodeId, transport: Arc<dyn Transport>) {
         // Collect rpc futures to all peers
         let mut futs = vec![];
-        for peer in transport.peers() {
+        for peer in transport.peers().await {
             let request = Request::builder().uri("/Ping").body(Bytes::new()).unwrap();
             let transport_clone = transport.clone();
             futs.push(async move {

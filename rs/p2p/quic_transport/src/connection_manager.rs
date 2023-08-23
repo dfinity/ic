@@ -28,13 +28,7 @@
 //!       it needs to repair broken connections.
 //!     - Currently there is a periodic check that checks the status of the connection
 //!       and reconnects if necessary.
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    pin::Pin,
-    sync::{Arc, RwLock},
-    time::Duration,
-};
+use std::{collections::HashMap, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
 
 use axum::Router;
 use either::Either;
@@ -63,6 +57,7 @@ use tokio::{
     runtime::Handle,
     select,
     sync::mpsc::channel,
+    sync::RwLock,
     task::JoinSet,
 };
 use tokio_util::time::DelayQueue;
@@ -308,7 +303,7 @@ impl ConnectionManager {
                     self.set_metric_gauges();
                     match topology {
                         Ok(_) => {
-                            self.handle_topology_change();
+                            self.handle_topology_change().await;
                         },
                         Err(_) => {
                             error!(self.log, "Transport disconnected from peer manager. Shutting down.");
@@ -329,7 +324,7 @@ impl ConnectionManager {
                 Some(conn_res) = self.outbound_connecting.join_next() => {
                     self.set_metric_gauges();
                     match conn_res {
-                        Ok((conn_out, peer_id)) => self.handle_connecting_result(conn_out, Some(peer_id)),
+                        Ok((conn_out, peer_id)) => self.handle_connecting_result(conn_out, Some(peer_id)).await,
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -341,7 +336,7 @@ impl ConnectionManager {
                 Some(conn_res) = self.inbound_connecting.join_next() => {
                     self.set_metric_gauges();
                     match conn_res {
-                        Ok(conn_out) => self.handle_connecting_result(conn_out, None),
+                        Ok(conn_out) => self.handle_connecting_result(conn_out, None).await,
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -353,7 +348,7 @@ impl ConnectionManager {
                 Some(active_result) = self.active_connections.join_next() => {
                     self.set_metric_gauges();
                     match active_result {
-                        Ok((_, peer_id)) => self.handled_closed_conn(peer_id),
+                        Ok((_, peer_id)) => self.handled_closed_conn(peer_id).await,
                         Err(err) => {
                             // Cancelling tasks is ok. Panicking tasks are not.
                             if err.is_panic() {
@@ -374,13 +369,13 @@ impl ConnectionManager {
     }
 
     // Removes connection and sets peer status to disconnected
-    fn handled_closed_conn(&mut self, peer_id: NodeId) {
-        self.peer_map.write().unwrap().remove(&peer_id);
+    async fn handled_closed_conn(&mut self, peer_id: NodeId) {
+        self.peer_map.write().await.remove(&peer_id);
         self.connect_queue.insert(peer_id, Duration::from_secs(0));
         self.metrics.closed_request_handlers_total.inc();
     }
 
-    fn handle_topology_change(&mut self) {
+    async fn handle_topology_change(&mut self) {
         self.metrics.topology_changes_total.inc();
         self.topology = self.watcher.borrow_and_update().clone();
 
@@ -423,7 +418,7 @@ impl ConnectionManager {
 
         // Remove peer connections that are not part of subnet anymore.
         // Also remove peer connections that have closed connections.
-        let mut peer_map = self.peer_map.write().unwrap();
+        let mut peer_map = self.peer_map.write().await;
         peer_map.retain(|peer_id, _| {
             let peer_left_topology = !self.topology.is_member(peer_id);
             let node_left_topology = !self.topology.is_member(&self.node_id);
@@ -534,7 +529,7 @@ impl ConnectionManager {
     /// added to peer map. If unsuccessful and this node is dialer the
     /// connection will be retried. `peer` is `Some` if this node was
     /// the dialer. I.e lower node id.
-    fn handle_connecting_result(
+    async fn handle_connecting_result(
         &mut self,
         conn_res: Result<QuicConnWithPeerId, ConnectionEstablishError>,
         peer_id: Option<NodeId>,
@@ -550,10 +545,7 @@ impl ConnectionManager {
 
                 let (cmd_tx, cmd_rx) = channel(10);
                 let new_conn_handle = ConnectionHandle(cmd_tx);
-                self.peer_map
-                    .write()
-                    .unwrap()
-                    .insert(peer_id, new_conn_handle);
+                self.peer_map.write().await.insert(peer_id, new_conn_handle);
 
                 info!(
                     self.log,

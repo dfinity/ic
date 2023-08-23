@@ -49,8 +49,8 @@ mock! {
             request: Request<Bytes>,
         ) -> Result<(), TransportError>;
 
-        fn peers(&self) -> Vec<NodeId>;
-    }
+       async fn peers(&self) -> Vec<NodeId>;
+    }   
 }
 
 mock! {
