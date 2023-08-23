@@ -163,22 +163,18 @@ async fn handle_rpc(
     recv_stream: RecvStream,
     metrics: QuicTransportMetrics,
 ) {
-    if let Err(err) = write_request(&mut send_stream, request).await.map_err(|e| {
+    if let Err(err) = write_request(&mut send_stream, request).await {
         metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE]);
-        TransportError::Io { error: e }
-    }) {
-        let _ = rpc_tx.send(Err(err));
+        let _ = rpc_tx.send(Err(err.into()));
         return;
     }
 
-    if let Err(err) = send_stream.finish().await.map_err(|e| {
+    if let Err(err) = send_stream.finish().await {
         metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH]);
-        e
-    }) {
         let _ = rpc_tx.send(Err(err.into()));
         return;
     }
@@ -187,7 +183,7 @@ async fn handle_rpc(
         metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ]);
-        TransportError::Io { error: e }
+        e.into()
     });
 
     let _ = rpc_tx.send(response);
@@ -199,22 +195,21 @@ async fn handle_push(
     mut send_stream: SendStream,
     metrics: QuicTransportMetrics,
 ) {
-    if let Err(err) = write_request(&mut send_stream, request).await.map_err(|e| {
-        metrics
-            .connection_handle_errors_total
-            .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE]);
-        TransportError::Io { error: e }
-    }) {
-        push_tx.send(Err(err)).unwrap();
-        return;
-    }
-
-    let _ = push_tx.send(send_stream.finish().await.map_err(|e| {
-        metrics
-            .connection_handle_errors_total
-            .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH]);
-        e.into()
-    }));
+    let resp = match write_request(&mut send_stream, request).await {
+        Err(err) => {
+            metrics
+                .connection_handle_errors_total
+                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE]);
+            Err(err.into())
+        }
+        Ok(()) => send_stream.finish().await.map_err(|e| {
+            metrics
+                .connection_handle_errors_total
+                .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH]);
+            e.into()
+        }),
+    };
+    let _ = push_tx.send(resp);
 }
 
 async fn handle_bi_stream(
