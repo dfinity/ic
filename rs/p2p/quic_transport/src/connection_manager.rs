@@ -29,7 +29,7 @@
 //!     - Currently there is a periodic check that checks the status of the connection
 //!       and reconnects if necessary.
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::HashMap,
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, RwLock},
@@ -424,7 +424,7 @@ impl ConnectionManager {
         // Remove peer connections that are not part of subnet anymore.
         // Also remove peer connections that have closed connections.
         let mut peer_map = self.peer_map.write().unwrap();
-        peer_map.retain(|peer_id, conn_handle| {
+        peer_map.retain(|peer_id, _| {
             let peer_left_topology = !self.topology.is_member(peer_id);
             let node_left_topology = !self.topology.is_member(&self.node_id);
             // If peer is not member anymore or this node not part of subnet close connection.
@@ -489,7 +489,6 @@ impl ConnectionManager {
         let transport_config = self.transport_config.clone();
         let earliest_registry_version = self.topology.earliest_registry_version();
         let last_registry_version = self.topology.latest_registry_version();
-        let metrics = self.metrics.clone();
         let conn_fut = async move {
             let mut quinn_client_config = quinn::ClientConfig::new(Arc::new(client_config?));
             quinn_client_config.transport_config(transport_config);
@@ -594,7 +593,6 @@ impl ConnectionManager {
         let node_id = self.node_id;
         let earliest_registry_version = self.topology.earliest_registry_version();
         let last_registry_version = self.topology.latest_registry_version();
-        let metrics = self.metrics.clone();
         let conn_fut = async move {
             let established =
                 connecting

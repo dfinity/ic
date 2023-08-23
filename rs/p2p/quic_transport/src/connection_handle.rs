@@ -12,10 +12,7 @@ use quinn::Connection;
 use tokio::sync::{mpsc::Sender, oneshot};
 
 use crate::{
-    metrics::{
-        QuicTransportMetrics, ERROR_TYPE_FINISH, ERROR_TYPE_OPEN, ERROR_TYPE_READ,
-        ERROR_TYPE_WRITE, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC,
-    },
+    metrics::{QuicTransportMetrics, REQUEST_TYPE_PUSH, REQUEST_TYPE_RPC},
     ConnCmd, TransportError,
 };
 
@@ -108,8 +105,8 @@ impl ConnectionHandle {
         self.cmd_tx
             .send(ConnCmd::Rpc(request, rpc_tx))
             .await
-            .map_err(|err| TransportError::Disconnected {
-                connection_error: "".to_string(),
+            .map_err(|_err| TransportError::Disconnected {
+                connection_error: "no existing connection event loop".to_string(),
             })?;
 
         let mut response = rpc_rx.await.unwrap()?;
@@ -133,8 +130,8 @@ impl ConnectionHandle {
         self.cmd_tx
             .send(ConnCmd::Push(request, push_tx))
             .await
-            .map_err(|err| TransportError::Disconnected {
-                connection_error: "".to_string(),
+            .map_err(|_err| TransportError::Disconnected {
+                connection_error: "no existing connection event loop".to_string(),
             })?;
         push_rx.await.unwrap()
     }

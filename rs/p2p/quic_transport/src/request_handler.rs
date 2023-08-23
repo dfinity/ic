@@ -173,7 +173,7 @@ async fn handle_rpc(
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE]);
         TransportError::Io { error: e }
     }) {
-        rpc_tx.send(Err(err)).unwrap();
+        let _ = rpc_tx.send(Err(err));
         return;
     }
 
@@ -183,18 +183,18 @@ async fn handle_rpc(
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_FINISH]);
         e
     }) {
-        rpc_tx.send(Err(err.into())).unwrap();
+        let _ = rpc_tx.send(Err(err.into()));
         return;
     }
 
-    let mut response = read_response(&mut recv_stream).await.map_err(|e| {
+    let response = read_response(&mut recv_stream).await.map_err(|e| {
         metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ]);
         TransportError::Io { error: e }
     });
 
-    rpc_tx.send(response);
+    let _ = rpc_tx.send(response);
 }
 
 async fn handle_push(
@@ -213,7 +213,7 @@ async fn handle_push(
         return;
     }
 
-    push_tx.send(send_stream.finish().await.map_err(|e| {
+    let _ = push_tx.send(send_stream.finish().await.map_err(|e| {
         metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_FINISH]);
