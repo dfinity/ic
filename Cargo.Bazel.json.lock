@@ -1,5 +1,5 @@
 {
-  "checksum": "8a764cb9d482d28812eddd4a96edd19016967cbc4a18cfca0594641a0a1d5be9",
+  "checksum": "ab9132f4f83db516a8f9e0f40fd1f088b147f87439963e27408b39d62ba1ebec",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -42644,7 +42644,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustls-webpki 0.101.1",
+              "id": "rustls-webpki 0.101.4",
               "target": "webpki"
             },
             {
@@ -42770,13 +42770,13 @@
       },
       "license": "Apache-2.0 OR ISC OR MIT"
     },
-    "rustls-webpki 0.101.1": {
+    "rustls-webpki 0.101.4": {
       "name": "rustls-webpki",
-      "version": "0.101.1",
+      "version": "0.101.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustls-webpki/0.101.1/download",
-          "sha256": "15f36a6828982f422756984e47912a7a51dcbc2a197aa791158f8ca61cd8204e"
+          "url": "https://crates.io/api/v1/crates/rustls-webpki/0.101.4/download",
+          "sha256": "7d93931baf2d282fff8d3a532bbfd7653f734643161b87e3e01e59a04439bf0d"
         }
       },
       "targets": [
@@ -42817,7 +42817,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.101.1"
+        "version": "0.101.4"
       },
       "license": "ISC"
     },
