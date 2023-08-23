@@ -39,6 +39,8 @@ The fields are:
 
 - `chip_id` - an optional value to register as the node's chip id.
 
+- `node_operator_principal_id` - an optional Principal to use as the node's NO.
+
 === Example
 
 This example defines two nodes, with index 1 and 2, on the same subnet,

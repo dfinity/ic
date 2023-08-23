@@ -1,9 +1,11 @@
 use std::{
+    fmt::Display,
     io,
     path::{Path, PathBuf},
 };
 
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::util::{write_proto_to_file_raw, write_registry_entry};
@@ -181,8 +183,44 @@ impl InitializedNode {
     }
 }
 
-/// Internal version of proto:registry.node.v1.NodeRecord
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Node {
+    /// Node index
+    pub idx: u64,
+
+    /// Index of the subnet to add the node to. If the index is not set, the key
+    /// material and registry entries for the node will be generated, but the
+    /// node will not be added to a subnet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subnet_idx: Option<u64>,
+
+    #[serde(flatten)]
+    pub config: NodeConfiguration,
+}
+
+impl Node {
+    pub fn from_json5_without_braces(s: &str) -> Result<Self, json5::Error> {
+        json5::from_str(&format!("{{ {} }}", s))
+    }
+}
+
+impl Display for Node {
+    /// Displays the node in a format that will be accepted by the `--node`
+    /// flag.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let json = json5::to_string(self).map_err(|_| std::fmt::Error)?;
+
+        // Clear out the outermost braces.
+        let stripped = &json[1..json.len() - 1];
+
+        write!(f, "{}", stripped)
+    }
+}
+
+/// Structured definition of a node provided by the `--node` flag.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
     pub xnet_api: SocketAddr,
@@ -194,6 +232,7 @@ pub struct NodeConfiguration {
     pub p2p_addr: SocketAddr,
 
     /// The principal id of the node operator that operates this node.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub node_operator_principal_id: Option<PrincipalId>,
 
     /// If set, the specified secret key store will be used. Otherwise, a new
@@ -205,9 +244,11 @@ pub struct NodeConfiguration {
     ///
     /// **Note**: The path of the secret key store will be *copied* to a new
     /// directory chosen by ic-prep.
+    #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
 
     /// The SEV-SNP chip_identifier for this node.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub chip_id: Vec<u8>,
 }
 
