@@ -332,7 +332,7 @@ where
         let subnet_id = subnet_ids[0];
         config.transport = TransportConfig {
             node_ip: "0.0.0.0".to_string(),
-            listening_port: 1234,
+            listening_port: 0,
             send_queue_size: 0,
             ..Default::default()
         };

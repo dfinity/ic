@@ -4,6 +4,7 @@
 //! time source.
 
 use crossbeam_channel::{bounded, Sender};
+use either::Either;
 use ic_artifact_manager::{manager, *};
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl,
@@ -22,7 +23,7 @@ use ic_consensus::{
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
 };
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::{TlsConfig, TlsHandshake};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_https_outcalls_consensus::{
     gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
@@ -47,6 +48,7 @@ use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{start_p2p, MAX_ADVERT_BUFFER};
+use ic_quic_transport::DummyUdpSocket;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::{StateSync, StateSyncArtifact};
@@ -70,6 +72,8 @@ use ic_types::{
 };
 use std::{
     collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
     sync::{Arc, Mutex, RwLock},
 };
 
@@ -127,6 +131,7 @@ pub fn setup_consensus_and_p2p(
     // For testing purposes the caller can pass a transport object instead. Otherwise, the callee
     // constructs it from the 'transport_config'.
     transport: Option<Arc<dyn Transport>>,
+    tls_config: Arc<dyn TlsConfig + Send + Sync>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
@@ -247,8 +252,38 @@ pub fn setup_consensus_and_p2p(
         }
         P2PStateSyncClient::TestClient() => (),
     }
-    //
+
     let sev_handshake = Arc::new(Sev::new(node_id, registry_client.clone()));
+
+    // Quic transport
+    let (_, topology_watcher) = ic_peer_manager::start_peer_manager(
+        log.clone(),
+        metrics_registry,
+        rt_handle,
+        subnet_id,
+        consensus_pool_cache.clone(),
+        registry_client.clone(),
+    );
+
+    let transport_addr: SocketAddr = (
+        IpAddr::from_str(&transport_config.node_ip).expect("Invalid IP"),
+        transport_config.listening_port,
+    )
+        .into();
+    let _quic_transport = Arc::new(ic_quic_transport::QuicTransport::build(
+        log,
+        metrics_registry,
+        rt_handle.clone(),
+        tls_config,
+        registry_client.clone(),
+        sev_handshake.clone(),
+        node_id,
+        topology_watcher,
+        Either::<_, DummyUdpSocket>::Left(transport_addr),
+        None,
+    ));
+
+    // Tcp transport
     let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
     let transport = transport.unwrap_or_else(|| {
         create_transport(

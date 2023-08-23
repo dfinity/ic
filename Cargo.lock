@@ -9818,6 +9818,7 @@ name = "ic-replica-setup-ic-network"
 version = "0.8.0"
 dependencies = [
  "crossbeam-channel",
+ "either",
  "ic-artifact-manager",
  "ic-artifact-pool",
  "ic-config",
@@ -9838,7 +9839,9 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-p2p",
+ "ic-peer-manager",
  "ic-protobuf",
+ "ic-quic-transport",
  "ic-registry-client-helpers",
  "ic-replicated-state",
  "ic-state-manager",
@@ -11025,6 +11028,7 @@ dependencies = [
  "strum 0.23.0",
  "tempfile",
  "tokio",
+ "tokio-rustls 0.24.0",
  "tower",
  "wasmprinter",
  "wat",

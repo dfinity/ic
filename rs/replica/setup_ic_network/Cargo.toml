@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 crossbeam-channel = "0.5.5"
+either = "1.6.0"
 ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
@@ -25,7 +26,9 @@ ic-interfaces-transport = { path = "../../interfaces/transport" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-p2p = { path = "../../p2p" }
+ic-peer-manager = { path = "../../p2p/peer_manager" }
 ic-protobuf = { path = "../../protobuf" }
+ic-quic-transport = { path = "../../p2p/quic_transport" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-manager = { path = "../../state_manager" }
