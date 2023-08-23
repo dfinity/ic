@@ -1903,7 +1903,7 @@ fn sparse_labeled_tree_multiple_paths_with_prefixes() {
 }
 
 /// Recursive implementation of `prune_labeled_tree()`.
-fn prune_labeled_tree_impl<T, U>(
+fn prune_labeled_tree_impl<T: Clone, U>(
     tree: LabeledTree<T>,
     selection: &LabeledTree<U>,
     path: &mut Vec<Label>,
@@ -1915,8 +1915,8 @@ fn prune_labeled_tree_impl<T, U>(
             LabeledTree::SubTree(_) => Ok(LabeledTree::SubTree(Default::default())),
         },
         LabeledTree::SubTree(selection_children) => {
-            if let LabeledTree::SubTree(children) = tree {
-                let mut children: BTreeMap<_, _> = children.into_iter().collect();
+            if let LabeledTree::SubTree(children) = &tree {
+                let mut children: BTreeMap<_, _> = children.iter().collect();
                 let mut res = BTreeMap::new();
                 for (k, sel_v) in selection_children.iter() {
                     path.push(k.to_owned());
@@ -1925,11 +1925,11 @@ fn prune_labeled_tree_impl<T, U>(
                             offending_path: path.to_owned(),
                         }
                     })?;
-                    res.insert(k, prune_labeled_tree_impl(v, sel_v, path)?);
+                    res.insert(k, prune_labeled_tree_impl(v.clone(), sel_v, path)?);
                     path.pop();
                 }
                 Ok(LabeledTree::SubTree(FlatMap::from_key_values(
-                    res.into_iter().collect(),
+                    res.into_iter().map(|(l, t)| (l.clone(), t)).collect(),
                 )))
             } else {
                 err_inconsistent_partial_tree(path.to_owned())
@@ -1947,7 +1947,7 @@ fn prune_labeled_tree_impl<T, U>(
 /// path covered by `selection` does not exist in `tree`, an error is returned.
 ///
 /// Never panics.
-fn prune_labeled_tree<T, U>(
+fn prune_labeled_tree<T: Clone, U>(
     tree: LabeledTree<T>,
     selection: &LabeledTree<U>,
 ) -> Result<LabeledTree<T>, TreeHashError> {
@@ -3233,4 +3233,17 @@ fn witness_for_a_subtree_returns_pruned_for_a_leaf() {
         }),
     });
     assert_eq!(res, expected_result);
+}
+
+#[test]
+fn labeled_tree_does_not_produce_stack_overflow_for_deep_trees() {
+    let mut tree = LabeledTree::Leaf(vec![0u8; 32]);
+    for _ in 0..100_000 {
+        tree = LabeledTree::SubTree(flatmap! {
+            Label::from("a") => tree
+        });
+    }
+    println!("dropping tree");
+    std::mem::drop(tree);
+    println!("tree dropped");
 }

@@ -279,7 +279,7 @@ fn labeled_tree_without_leaf_or_empty_subtree_impl(
             let tree_child_has_become_empty_subtree =
                 matches!(tree_child, LabeledTree::SubTree(children) if children.is_empty());
             if tree_child_has_become_empty_subtree {
-                assert_matches!(tree_children.remove(&path_children.keys()[0]), Some(LabeledTree::SubTree(children)) if children.is_empty());
+                assert_matches!(tree_children.remove(&path_children.keys()[0]), Some(LabeledTree::SubTree(ref children)) if children.is_empty());
             }
         }
         (LabeledTree::Leaf(_), LabeledTree::Leaf(_)) => {
