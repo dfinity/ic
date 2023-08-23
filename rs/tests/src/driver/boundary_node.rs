@@ -95,7 +95,6 @@ pub struct BoundaryNodeWithVm {
     pub use_ipv6_certs: bool,
     pub nns_node_urls: Vec<Url>,
     pub nns_public_key: Option<PathBuf>,
-    pub registry_local_store: Option<PathBuf>,
     pub replica_ipv6_rule: String,
     pub has_ipv4: bool,
     pub custom_domains_config: Option<BoundaryNodeCustomDomainsConfig>,
@@ -147,11 +146,6 @@ impl BoundaryNodeWithVm {
 
     pub fn with_replica_ipv6_rule(mut self, replica_ipv6_rule: String) -> Self {
         self.replica_ipv6_rule = replica_ipv6_rule;
-        self
-    }
-
-    pub fn with_registry_local_store(mut self, registry_local_store: PathBuf) -> Self {
-        self.registry_local_store = Some(registry_local_store);
         self
     }
 
@@ -447,7 +441,6 @@ impl BoundaryNode {
             ipv6_nameservers: Default::default(),
             nns_node_urls: Default::default(),
             nns_public_key: Default::default(),
-            registry_local_store: Default::default(),
             replica_ipv6_rule: Default::default(),
             use_real_certs_and_dns: false,
             use_ipv6_certs: false,
@@ -586,11 +579,6 @@ fn create_and_upload_config_disk_image(
             .arg(identity_file)
             .arg("--certificate_issuer_encryption_key")
             .arg(key_file);
-    }
-
-    if let Some(ic_registry_local_store) = boundary_node.registry_local_store.clone() {
-        cmd.arg("--ic_registry_local_store")
-            .arg(ic_registry_local_store);
     }
 
     let key = "PATH";
