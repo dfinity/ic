@@ -163,7 +163,8 @@ struct WasmMemoryInfo {
 /// Explicitly disable Wasm features which aren't handled in validation and
 /// instrumentation.
 fn disable_unused_features(config: &mut wasmtime::Config) {
-    config.wasm_function_references(false);
+    // TODO: FOLLOW-1201: Uncomment after the `wasmtime` is upgraded again from `9.0.3`
+    // config.wasm_function_references(false);
     config.wasm_relaxed_simd(false);
 }
 
