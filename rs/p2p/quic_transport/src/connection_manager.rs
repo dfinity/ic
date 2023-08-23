@@ -64,7 +64,7 @@ use tokio_util::time::DelayQueue;
 use crate::{metrics::QuicTransportMetrics, request_handler::start_request_handler};
 use crate::{
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
-    ConnCmd, ConnectionHandle, MngCmd, QuicConnWithPeerId, TransportError,
+    ConnCmd, ConnectionHandle, MngCmd, QuicConnWithPeerId,
 };
 
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
@@ -302,28 +302,11 @@ impl ConnectionManager {
                             let _ = peers_tx.send(Ok(self.peer_map.keys().cloned().collect()));
                         }
                         MngCmd::ConnCmd((peer_id, conn_cmd)) => {
-                            info!(self.log, "received cmd");
-                            match conn_cmd {
-                                ConnCmd::Push(req, push_tx) => {
-                                    match self.peer_map.get(&peer_id) {
-                                        Some(conn_handle) => {
-                                            let _ = conn_handle.0.send(ConnCmd::Push(req, push_tx));
-                                        },
-                                        None => {
-                                           let _ = push_tx.send(Err(TransportError::Disconnected { reason: "".to_string()}));
-                                        }
-                                    }
-                                },
-                                ConnCmd::Rpc(req, rpc_tx) => {
-                                    match self.peer_map.get(&peer_id) {
-                                        Some(conn_handle) => {
-                                            let _ = conn_handle.0.send(ConnCmd::Rpc(req, rpc_tx));
-                                        },
-                                        None => {
-                                           let _ = rpc_tx.send(Err(TransportError::Disconnected { reason: "".to_string()}));
-                                        }
-                                    }
-                                }
+                            if let Some(conn_handle) = self.peer_map.get(&peer_id) {
+                                let _ = match conn_cmd {
+                                    ConnCmd::Push(req, push_tx) => conn_handle.0.send(ConnCmd::Push(req, push_tx)).await,
+                                    ConnCmd::Rpc(req, rpc_tx) => conn_handle.0.send(ConnCmd::Rpc(req, rpc_tx)).await,
+                                };
                             }
                         }
                     }
