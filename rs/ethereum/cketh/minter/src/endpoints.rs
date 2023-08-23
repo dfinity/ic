@@ -12,13 +12,6 @@ pub enum MinterArg {
     UpgradeArg,
 }
 
-#[derive(CandidType, Deserialize, Clone, Debug)]
-pub struct DisplayLogsRequest {
-    pub address: String,
-    pub from: String,
-    pub to: String,
-}
-
 #[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct ReceivedEthEvent {
     pub transaction_hash: String,
@@ -35,12 +28,6 @@ pub struct Eip1559TransactionPrice {
     pub base_fee_of_next_finalized_block: Nat,
     pub max_priority_fee_per_gas: Nat,
     pub max_fee_per_gas: Nat,
-    pub gas_limit: Nat,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug)]
-pub struct Eip2930TransactionPrice {
-    pub gas_price: Nat,
     pub gas_limit: Nat,
 }
 
