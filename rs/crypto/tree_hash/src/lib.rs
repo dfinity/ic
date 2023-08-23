@@ -289,6 +289,38 @@ pub enum LabeledTree<T> {
     SubTree(FlatMap<Label, LabeledTree<T>>),
 }
 
+impl<T> Default for LabeledTree<T> {
+    fn default() -> Self {
+        Self::SubTree(FlatMap::new())
+    }
+}
+
+impl<T> Drop for LabeledTree<T> {
+    fn drop(&mut self) {
+        #[inline]
+        fn take_if_subtree<T>(t: &mut LabeledTree<T>, to_drop: &mut Vec<LabeledTree<T>>) {
+            match t {
+                LabeledTree::Leaf(_) => {}
+                LabeledTree::SubTree(children) => {
+                    for (_, child) in std::mem::take(children) {
+                        if matches!(child, LabeledTree::SubTree(_)) {
+                            to_drop.push(child);
+                        }
+                    }
+                }
+            }
+        }
+
+        //  allocate a vector of a small constant size to not have many reallocations
+        //  for small trees
+        let mut to_drop = Vec::with_capacity(100);
+        take_if_subtree(self, &mut to_drop);
+        while let Some(ref mut t) = to_drop.pop() {
+            take_if_subtree(t, &mut to_drop);
+        }
+    }
+}
+
 /// Descends into the subtree of `t` following the given `path`.
 /// Returns the reference to the corresponding subtree.
 pub fn lookup_path<'a>(

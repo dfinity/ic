@@ -1,4 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{
+    black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput,
+};
 use ic_crypto_tree_hash::{
     flatmap, lookup_path, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, LabeledTree::*,
     MixedHashTree, WitnessGenerator,
@@ -47,6 +49,21 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         let witness = witness_generator
             .witness(&labeled_tree)
             .expect("failed to create Witness");
+
+        {
+            let mut g: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+                c.benchmark_group("drop");
+
+            g.throughput(Throughput::Elements(num_subtrees as u64));
+
+            g.bench_function(BenchmarkId::new("labeled_tree", num_subtrees), |b| {
+                b.iter_batched(
+                    || labeled_tree.clone(),
+                    |t| std::mem::drop(t),
+                    BatchSize::SmallInput,
+                )
+            });
+        }
 
         {
             let mut g: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
