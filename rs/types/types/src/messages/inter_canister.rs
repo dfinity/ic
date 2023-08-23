@@ -176,23 +176,18 @@ impl RejectContext {
     pub fn new_with_message_length_limit(
         code: RejectCode,
         message: impl ToString,
-        mut max_msg_len: usize,
+        max_msg_len: usize,
     ) -> Self {
-        // Ensure `max_msg_len` is within reasonable bounds.
-        if max_msg_len < MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES {
-            max_msg_len = MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES;
-        } else if max_msg_len > MAX_REJECT_MESSAGE_LEN_BYTES {
-            max_msg_len = MAX_REJECT_MESSAGE_LEN_BYTES;
-        }
-
-        let message = message.to_string();
-        if message.len() <= max_msg_len {
-            return Self { code, message };
-        }
-
         Self {
             code,
-            message: message.ellipsize(max_msg_len, 75),
+            message: message.to_string().ellipsize(
+                // Ensure `max_msg_len` is within reasonable bounds.
+                max_msg_len.clamp(
+                    MIN_REJECT_MESSAGE_LEN_LIMIT_BYTES,
+                    MAX_REJECT_MESSAGE_LEN_BYTES,
+                ),
+                75,
+            ),
         }
     }
 
