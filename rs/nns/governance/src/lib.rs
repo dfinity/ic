@@ -392,13 +392,19 @@ pub fn encode_metrics(
         w.encode_gauge(
             "governance_community_fund_total_staked_e8s",
             metrics.community_fund_total_staked_e8s as f64,
-            "The amount of Neurons' stake committed to the Internet Computer's community fund",
+            "The amount of Neurons' stake committed to the Internet Computer's Neurons' Fund",
         )?;
 
         w.encode_gauge(
             "governance_community_fund_total_maturity_e8s_equivalent",
             metrics.community_fund_total_maturity_e8s_equivalent as f64,
-            "The amount of Neurons' maturity committed to the Internet Computer's community fund",
+            "The amount of Neurons' maturity committed to the Internet Computer's Neurons' Fund",
+        )?;
+
+        w.encode_gauge(
+            "governance_neurons_fund_total_active_neurons",
+            metrics.neurons_fund_total_active_neurons as f64,
+            "The number of active Neurons that have joined the Internet Computer's Neurons' Fund",
         )?;
 
         w.encode_gauge(
