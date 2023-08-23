@@ -571,7 +571,7 @@ impl fmt::Display for UserError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum CallError {
     Reject(String),
     UserError(UserError),

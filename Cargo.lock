@@ -14278,6 +14278,7 @@ dependencies = [
  "clap 3.2.23",
  "file-lock",
  "hex",
+ "ic-cdk 0.10.0",
  "ic-config",
  "ic-crypto",
  "ic-crypto-iccsa",
@@ -14288,8 +14289,10 @@ dependencies = [
  "itertools 0.11.0",
  "pocket-ic",
  "rand 0.8.5",
+ "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 

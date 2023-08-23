@@ -18,7 +18,12 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-crypto = { path = "../crypto" }
 ic-types = { path = "../types/types" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
+ic-cdk = "0.10"
 hex = "0.4.2"
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 file-lock = "*"
 clap = { version = "3.1.6", features = ["derive"] }
+tempfile = "*"
+
+[dev-dependencies]
+reqwest = "*"

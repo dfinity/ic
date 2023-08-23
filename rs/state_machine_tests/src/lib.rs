@@ -306,7 +306,7 @@ pub struct StateMachine {
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     _runtime: Runtime,
-    state_dir: TempDir,
+    pub state_dir: TempDir,
     checkpoints_enabled: std::sync::atomic::AtomicBool,
     nonce: std::sync::atomic::AtomicU64,
     time: std::sync::atomic::AtomicU64,
@@ -370,7 +370,7 @@ impl StateMachineBuilder {
         }
     }
 
-    fn with_state_dir(self, state_dir: TempDir) -> Self {
+    pub fn with_state_dir(self, state_dir: TempDir) -> Self {
         Self { state_dir, ..self }
     }
 
