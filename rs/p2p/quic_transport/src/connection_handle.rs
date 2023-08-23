@@ -109,7 +109,9 @@ impl ConnectionHandle {
                 connection_error: "no existing connection event loop".to_string(),
             })?;
 
-        let mut response = rpc_rx.await.unwrap()?;
+        let mut response = rpc_rx.await.map_err(|_err| TransportError::Disconnected {
+            connection_error: "no existing connection event loop".to_string(),
+        })??;
 
         // Propagate PeerId from this request to upper layers.
         response.extensions_mut().insert(self.peer_id);
@@ -133,6 +135,8 @@ impl ConnectionHandle {
             .map_err(|_err| TransportError::Disconnected {
                 connection_error: "no existing connection event loop".to_string(),
             })?;
-        push_rx.await.unwrap()
+        push_rx.await.map_err(|_err| TransportError::Disconnected {
+            connection_error: "no existing connection event loop".to_string(),
+        })?
     }
 }
