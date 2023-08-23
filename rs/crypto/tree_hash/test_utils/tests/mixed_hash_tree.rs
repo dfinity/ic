@@ -1,8 +1,8 @@
 use assert_matches::assert_matches;
 use ic_crypto_tree_hash::MixedHashTree;
-use ic_crypto_tree_hash_test_utils::{mixed_hash_tree_digest_recursive, TooDeepRecursion};
-
-const MAX_HASH_TREE_DEPTH: usize = 128;
+use ic_crypto_tree_hash_test_utils::{
+    mixed_hash_tree_digest_recursive, TooDeepRecursion, MAX_HASH_TREE_DEPTH,
+};
 
 #[test]
 fn mixed_hash_tree_recursive_digest_errors_on_too_deep_trees() {
@@ -16,6 +16,6 @@ fn mixed_hash_tree_recursive_digest_errors_on_too_deep_trees() {
     tree = MixedHashTree::Fork(Box::new((tree.clone(), MixedHashTree::Empty)));
     assert_eq!(
         mixed_hash_tree_digest_recursive(&tree),
-        Err(TooDeepRecursion(MAX_HASH_TREE_DEPTH as u32 + 1))
+        Err(TooDeepRecursion(MAX_HASH_TREE_DEPTH + 1))
     );
 }

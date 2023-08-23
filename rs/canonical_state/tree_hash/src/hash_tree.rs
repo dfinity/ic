@@ -1,4 +1,5 @@
 use crate::lazy_tree::{LazyFork, LazyTree};
+use crypto::WitnessGenerationError;
 use ic_crypto_tree_hash::{
     self as crypto, hasher::Hasher, Digest, Label, LabeledTree, WitnessBuilder,
 };
@@ -481,14 +482,14 @@ impl HashTree {
     pub fn witness<B: WitnessBuilder>(
         &self,
         partial_tree: &LabeledTree<Vec<u8>>,
-    ) -> Result<B::Tree, B::MergeError> {
+    ) -> Result<B, WitnessGenerationError<B>> {
         fn add_forks<B: WitnessBuilder>(
             ht: &HashTree,
             pos: NodeId,
             offset: usize,
             size: usize,
-            subwitness: B::Tree,
-        ) -> B::Tree {
+            subwitness: B,
+        ) -> B {
             // WARNING: FANCY DISCRETE MATH AHEAD
             //
             // The hash trees we build have a particular structure not reflected
@@ -571,7 +572,7 @@ impl HashTree {
             pos: NodeId,
             l: &Label,
             subtree: &LabeledTree<Vec<u8>>,
-        ) -> Result<B::Tree, B::MergeError> {
+        ) -> Result<B, WitnessGenerationError<B>> {
             let NodeIndexRange {
                 bucket,
                 index_range: label_range,
@@ -657,7 +658,7 @@ impl HashTree {
             parent: NodeId,
             pos: NodeId,
             t: &LabeledTree<Vec<u8>>,
-        ) -> Result<B::Tree, B::MergeError> {
+        ) -> Result<B, WitnessGenerationError<B>> {
             match t {
                 LabeledTree::Leaf(data) => Ok(match ht.view(pos) {
                     HashTreeView::Leaf(_) => B::make_leaf(&data[..]),

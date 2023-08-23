@@ -4,7 +4,7 @@ use ic_crypto_tree_hash::*;
 
 pub mod arbitrary;
 
-pub const MAX_HASH_TREE_DEPTH: usize = 128;
+pub const MAX_HASH_TREE_DEPTH: u8 = 128;
 
 const DOMAIN_HASHTREE_LEAF: &str = "ic-hashtree-leaf";
 const DOMAIN_HASHTREE_EMPTY_SUBTREE: &str = "ic-hashtree-empty";
@@ -463,13 +463,13 @@ pub fn empty_subtree_hash() -> Digest {
 /// This error indicates that the algorithm exceeded the recursion depth limit.
 #[derive(thiserror::Error, Debug, PartialEq)]
 #[error("The algorithm failed due to too deep recursion (depth={0})")]
-pub struct TooDeepRecursion(pub u32);
+pub struct TooDeepRecursion(pub u8);
 
 /// Recomputes root hash of the full tree that this mixed tree was
 /// constructed from.
 pub fn mixed_hash_tree_digest_recursive(tree: &MixedHashTree) -> Result<Digest, TooDeepRecursion> {
-    fn digest_impl(t: &MixedHashTree, depth: u32) -> Result<Digest, TooDeepRecursion> {
-        if depth as usize > MAX_HASH_TREE_DEPTH {
+    fn digest_impl(t: &MixedHashTree, depth: u8) -> Result<Digest, TooDeepRecursion> {
+        if depth > MAX_HASH_TREE_DEPTH {
             return Err(TooDeepRecursion(depth));
         }
         let result = match t {
