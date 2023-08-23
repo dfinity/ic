@@ -80,6 +80,7 @@ rust_bench(
     srcs = ["benches/dealings.rs"],
     deps = [
         ":tecdsa",
+        "//rs/crypto/test_utils/reproducible_rng",
         "//rs/rust_canisters/canister_test",
         "//rs/types/types",
         "@crate_index//:criterion",
@@ -103,6 +104,7 @@ rust_bench(
     srcs = ["benches/group_ops.rs"],
     deps = [
         ":tecdsa",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
         "@crate_index//:rand_0_8_4",
     ],
@@ -124,6 +126,7 @@ rust_bench(
     srcs = ["benches/poly.rs"],
     deps = [
         ":tecdsa",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
         "@crate_index//:rand_0_8_4",
     ],
@@ -135,6 +138,7 @@ rust_bench(
     srcs = ["benches/zk.rs"],
     deps = [
         ":tecdsa",
+        "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:criterion",
         "@crate_index//:rand_0_8_4",
     ],

@@ -1,16 +1,17 @@
 use criterion::*;
 use ic_crypto_internal_threshold_sig_ecdsa::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
 fn zk_proofs(c: &mut Criterion) {
     let curve = EccCurveType::K256;
-    let mut rng = rand::thread_rng();
+    let rng = &mut reproducible_rng();
     let ad = rng.gen::<[u8; 32]>();
 
-    let seed = Seed::from_rng(&mut rng);
+    let seed = Seed::from_rng(rng);
 
-    let secret = EccScalar::random(curve, &mut rng);
-    let masking = EccScalar::random(curve, &mut rng);
+    let secret = EccScalar::random(curve, rng);
+    let masking = EccScalar::random(curve, rng);
 
     let pedersen = EccPoint::pedersen(&secret, &masking).unwrap();
     let simple = EccPoint::mul_by_g(&secret);
@@ -25,11 +26,11 @@ fn zk_proofs(c: &mut Criterion) {
         b.iter(|| proof.verify(&pedersen, &simple, &ad).unwrap())
     });
 
-    let lhs = EccScalar::random(curve, &mut rng);
-    let rhs = EccScalar::random(curve, &mut rng);
-    let rhs_masking = EccScalar::random(curve, &mut rng);
+    let lhs = EccScalar::random(curve, rng);
+    let rhs = EccScalar::random(curve, rng);
+    let rhs_masking = EccScalar::random(curve, rng);
     let product = lhs.mul(&rhs).unwrap();
-    let product_masking = EccScalar::random(curve, &mut rng);
+    let product_masking = EccScalar::random(curve, rng);
 
     c.bench_function("ProofOfProduct::create", |b| {
         b.iter(|| {
@@ -65,7 +66,7 @@ fn zk_proofs(c: &mut Criterion) {
         b.iter(|| proof.verify(&lhs_c, &rhs_c, &product_c, &ad).unwrap());
     });
 
-    let secret = EccScalar::random(curve, &mut rng);
+    let secret = EccScalar::random(curve, rng);
     let base1 = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"domain").unwrap();
     let base2 = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), b"domain").unwrap();
 
