@@ -164,7 +164,7 @@ async fn handle_rpc(
     request: Request<Bytes>,
     rpc_tx: oneshot::Sender<Result<Response<Bytes>, TransportError>>,
     mut send_stream: SendStream,
-    mut recv_stream: RecvStream,
+    recv_stream: RecvStream,
     metrics: QuicTransportMetrics,
 ) {
     if let Err(err) = write_request(&mut send_stream, request).await.map_err(|e| {
@@ -187,7 +187,7 @@ async fn handle_rpc(
         return;
     }
 
-    let response = read_response(&mut recv_stream).await.map_err(|e| {
+    let response = read_response(recv_stream).await.map_err(|e| {
         metrics
             .connection_handle_errors_total
             .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ]);

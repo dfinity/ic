@@ -47,7 +47,7 @@ pub(crate) async fn read_request(
 }
 
 pub(crate) async fn read_response(
-    recv_stream: &mut RecvStream,
+    mut recv_stream: RecvStream,
 ) -> Result<Response<Bytes>, std::io::Error> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)

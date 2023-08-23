@@ -549,11 +549,7 @@ impl ConnectionManager {
                 let peer_id = connection.peer_id;
 
                 let (cmd_tx, cmd_rx) = channel(10);
-                let new_conn_handle = ConnectionHandle {
-                    peer_id,
-                    cmd_tx,
-                };
-
+                let new_conn_handle = ConnectionHandle(cmd_tx);
                 self.peer_map
                     .write()
                     .unwrap()

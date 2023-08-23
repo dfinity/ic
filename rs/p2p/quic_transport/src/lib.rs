@@ -137,7 +137,7 @@ impl Transport for QuicTransport {
         request.extensions_mut().insert(peer_id.clone());
 
         let (rpc_tx, rpc_rx) = oneshot::channel();
-        peer.cmd_tx
+        peer.0
             .send(ConnCmd::Rpc(request, rpc_tx))
             .await
             .map_err(|_err| TransportError::Disconnected {
@@ -165,7 +165,7 @@ impl Transport for QuicTransport {
         request.extensions_mut().insert(peer_id.clone());
 
         let (push_tx, push_rx) = oneshot::channel();
-        peer.cmd_tx
+        peer.0
             .send(ConnCmd::Push(request, push_tx))
             .await
             .map_err(|_err| TransportError::Disconnected {
@@ -229,10 +229,7 @@ impl From<quinn::ConnectionError> for TransportError {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ConnectionHandle {
-    pub peer_id: NodeId,
-    pub cmd_tx: Sender<ConnCmd>,
-}
+pub(crate) struct ConnectionHandle(Sender<ConnCmd>);
 
 #[derive(Debug)]
 pub(crate) struct QuicConnWithPeerId {
