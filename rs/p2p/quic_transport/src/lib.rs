@@ -299,36 +299,3 @@ impl AsyncUdpSocket for DummyUdpSocket {
         todo!()
     }
 }
-
-/// This is a workaround for being able to iniate quic transport
-/// with both a real and virtual udp socket. This is needed due
-/// to an inconsistency with the quinn API. This is fixed upstream
-/// and can be removed with quinn 0.11.0.
-/// https://github.com/quinn-rs/quinn/pull/1595
-#[derive(Debug)]
-pub struct DummyUdpSocket;
-
-impl AsyncUdpSocket for DummyUdpSocket {
-    fn poll_send(
-        &self,
-        _state: &quinn::udp::UdpState,
-        _cx: &mut std::task::Context,
-        _transmits: &[quinn::udp::Transmit],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        todo!()
-    }
-    fn poll_recv(
-        &self,
-        _cx: &mut std::task::Context,
-        _bufs: &mut [std::io::IoSliceMut<'_>],
-        _meta: &mut [quinn::udp::RecvMeta],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        todo!()
-    }
-    fn local_addr(&self) -> std::io::Result<SocketAddr> {
-        todo!()
-    }
-    fn may_fragment(&self) -> bool {
-        todo!()
-    }
-}

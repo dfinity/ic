@@ -100,7 +100,7 @@ fn bench_transport(criterion: &mut Criterion) {
                 for _ in 0..PARALLEL_REQUESTS {
                     let transport_c = transport.clone();
                     futs.push(async move {
-                        for peer in transport_c.peers() {
+                        for peer in transport_c.peers().await {
                             let t = transport_c.clone();
                             t.rpc(
                                 &peer,
