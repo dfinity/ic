@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic_mainnet_nns_recovery",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_mainnet_nns_recovery",
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = [
+        "//rs/canister_client",
+        "//rs/canister_client/sender",
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/common",
+        "//rs/nns/test_utils",
+        "//rs/recovery",
+        "//rs/registry/subnet_type",
+        "//rs/replay",
+        "//rs/tests",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
+        "@crate_index//:url",
+    ],
+)

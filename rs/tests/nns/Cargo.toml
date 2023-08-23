@@ -1,0 +1,48 @@
+[package]
+name = "nns-system-tests"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.31"
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
+tests = { path = ".." }
+ic-mainnet-nns-recovery = { path = "ic_mainnet_nns_recovery" }
+slog = { version = "2.5.2", features = ["release_max_level_trace"] }
+
+[[bin]]
+name = "nns_upgrade_test"
+path = "nns_upgrade_test.rs"
+
+[[bin]]
+name = "certified_registry_test"
+path = "certified_registry_test.rs"
+
+[[bin]]
+name = "create_subnet_pre_master_test"
+path = "create_subnet_pre_master_test.rs"
+
+[[bin]]
+name = "nns_canister_uninstall_test"
+path = "nns_canister_uninstall_test.rs"
+
+[[bin]]
+name = "nns_cycles_minting_multi_app_subnets_test"
+path = "nns_cycles_minting_multi_app_subnets_test.rs"
+
+[[bin]]
+name = "nns_cycles_minting_test"
+path = "nns_cycles_minting_test.rs"
+
+[[bin]]
+name = "nns_token_balance_test"
+path = "nns_token_balance_test.rs"
+
+[[bin]]
+name = "nns_upgrade_test"
+path = "nns_upgrade_test.rs"
+
+[[bin]]
+name = "node_removal_from_registry_test"
+path = "node_removal_from_registry_test.rs"

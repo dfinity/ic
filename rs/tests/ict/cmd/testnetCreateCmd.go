@@ -70,12 +70,13 @@ func NewOutputFilepath(outputDir string, time time.Time) *OutputFilepath {
 }
 
 type TestnetConfig struct {
-	isDetached   bool
-	outputDir    string
-	verbose      bool
-	lifetimeMins int
-	isFuzzyMatch bool
-	isDryRun     bool
+	isDetached           bool
+	outputDir            string
+	verbose              bool
+	lifetimeMins         int
+	isFuzzyMatch         bool
+	isDryRun             bool
+	requiredHostFeatures string
 }
 
 // Testnet config summary published to json file.
@@ -153,6 +154,9 @@ func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) 
 		// We let the test-driver (and Bazel command) finish without deleting Farm group.
 		// Afterwards, we interact with the group's ttl via Farm API.
 		command = append(command, "--test_arg=--no-delete-farm-group")
+		if len(cfg.requiredHostFeatures) > 0 {
+			command = append(command, "--test_arg=--set-required-host-features="+cfg.requiredHostFeatures)
+		}
 		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations --test_timeout=20 ..."
 		// Note: arguments provided by the user might override the ones above, i.e. test_timeout, cache_test_results, etc.
 		command = append(command, args[1:]...)
@@ -230,6 +234,7 @@ func NewTestnetCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&cfg.isFuzzyMatch, "fuzzy", "", false, "Use fuzzy matching to find similar testnet names. Default: substring match")
 	cmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution")
 	cmd.Flags().BoolVarP(&cfg.isDetached, "experimental-detached", "", false, fmt.Sprintf("Create a testnet without blocking the console\nNOTE: extending testnet lifetime (ttl) should be done manually\nSee Farm API %s", FARM_API))
+	cmd.PersistentFlags().StringVarP(&cfg.requiredHostFeatures, "set-required-host-features", "", "", "Set and override required host features of all hosts spawned.\nFeatures must be one or more of [dc=<dc-name>, host=<host-name>, AMD-SEV-SNP, SNS-load-test, performance], separated by comma (see Examples).")
 	cmd.SetOut(os.Stdout)
 	return cmd
 }
