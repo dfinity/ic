@@ -10,7 +10,6 @@ exports_files([
 # nns_upgrade_test is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
 system_test(
     name = "nns_upgrade_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "local",
         "manual",
@@ -28,7 +27,11 @@ system_test(
             "//rs/tests:recovery/binaries",
             ":secret_key.pem",
         ],
-    deps = DEPENDENCIES + ["//rs/tests"],
+    deps = [
+        "//rs/tests",
+        "//rs/tests/nns/ic_mainnet_nns_recovery",
+        "@crate_index//:anyhow",
+    ],
 )
 
 system_test(

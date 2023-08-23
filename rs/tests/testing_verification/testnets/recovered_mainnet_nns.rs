@@ -1,10 +1,10 @@
-// nns_upgrade_test is a manual system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
+// recovered_mainnet_nns is a system-test that deploys an IC with a NNS that is recovered from the latest mainnet state.
 //
 // To run the test you need to be authorised to SSH into zh1-pyr07.zh1.dfinity.network which contains the NNS backups.
 //
-// Run the test using:
+// Create the testnet using:
 //
-//   rm -rf test_tmpdir; ict test nns_upgrade_test --set-required-host-features=dc=zh1 -- --test_env=SSH_AUTH_SOCK --test_tmpdir=test_tmpdir --flaky_test_attempts=1
+//   ict testnet create recovered_mainnet_nns --lifetime-mins 10  --set-required-host-features=dc=zh1 --verbose -- --test_env=SSH_AUTH_SOCK
 //
 // Make sure to pick a DC in --set-required-host-features=dc=zh1 which is close to
 // where you are running the test from. Shipping state across the Atlantic can double the

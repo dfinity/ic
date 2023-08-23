@@ -8293,6 +8293,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-mainnet-nns-recovery"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "ic-canister-client",
+ "ic-canister-client-sender",
+ "ic-nervous-system-common",
+ "ic-nervous-system-common-test-keys",
+ "ic-nns-common",
+ "ic-nns-test-utils",
+ "ic-recovery",
+ "ic-registry-subnet-type",
+ "ic-replay",
+ "ic-types",
+ "serde",
+ "slog",
+ "ssh2",
+ "tests",
+ "url",
+]
+
+[[package]]
 name = "ic-memory-transport"
 version = "0.1.0"
 dependencies = [
@@ -17247,6 +17269,17 @@ dependencies = [
  "getopts",
  "libc",
  "term 0.6.1",
+]
+
+[[package]]
+name = "testnets"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "ic-mainnet-nns-recovery",
+ "ic-registry-subnet-type",
+ "slog",
+ "tests",
 ]
 
 [[package]]
