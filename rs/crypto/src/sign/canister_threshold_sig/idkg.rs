@@ -2,7 +2,7 @@ use crate::sign::{get_log_id, log_err, log_ok_content};
 use crate::CryptoComponentImpl;
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::IDkgProtocol;
-use ic_logger::{debug, new_logger};
+use ic_logger::{debug, new_logger, warn};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
     IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
@@ -465,6 +465,34 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
             self.registry_client.as_ref(),
             transcript,
         );
+        if let Err(error) = &result {
+            match error {
+                IDkgLoadTranscriptError::PrivateKeyNotFound { .. }
+                | IDkgLoadTranscriptError::InvalidArguments { .. }
+                | IDkgLoadTranscriptError::MalformedPublicKey { .. }
+                | IDkgLoadTranscriptError::SerializationError { .. }
+                | IDkgLoadTranscriptError::PublicKeyNotFound { .. } => {
+                    // Errors that may lead to the key being lost.
+                    // If enough nodes on the same subnet report a failure, raise an alert.
+                    warn!(
+                        logger,
+                        "iDKG load_transcript error: transcript_id={:?}, transcript_type={:?}, error={:?}",
+                        transcript.transcript_id,
+                        transcript.transcript_type,
+                        error
+                    );
+                    self.metrics
+                        .observe_idkg_load_transcript_error(transcript.transcript_id.id());
+                }
+                IDkgLoadTranscriptError::InsufficientOpenings { .. }
+                | IDkgLoadTranscriptError::InternalError { .. }
+                | IDkgLoadTranscriptError::UnsupportedAlgorithm { .. }
+                | IDkgLoadTranscriptError::RegistryError(_)
+                | IDkgLoadTranscriptError::TransientInternalError { .. } => {
+                    // Errors that should not lead to the key being lost
+                }
+            }
+        }
         self.metrics.observe_parameter_size(
             MetricsDomain::IdkgProtocol,
             "load_transcript",
