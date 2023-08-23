@@ -5,12 +5,12 @@ use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::Address;
 use ic_cketh_minter::endpoints::{
-    DebugState, DisplayLogsRequest, Eip1559TransactionPrice, Eip2930TransactionPrice,
-    EthTransaction, MinterArg, ReceivedEthEvent, RetrieveEthRequest, RetrieveEthStatus,
+    DebugState, Eip1559TransactionPrice, EthTransaction, MinterArg, RetrieveEthRequest,
+    RetrieveEthStatus,
 };
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
 use ic_cketh_minter::eth_rpc::JsonRpcResult;
-use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash, ResponseSizeEstimate};
+use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
 use ic_cketh_minter::eth_rpc_client::EthereumChain;
 use ic_cketh_minter::guard::{retrieve_eth_guard, retrieve_eth_timer_guard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
@@ -25,7 +25,6 @@ use ic_cketh_minter::{eth_logs, eth_rpc, RPC_CLIENT};
 use std::cmp::{min, Ordering};
 use std::str::FromStr;
 
-const TRANSACTION_GAS_LIMIT: u32 = 21_000;
 const SCRAPPING_ETH_LOGS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3 * 60);
 const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: std::time::Duration =
     std::time::Duration::from_secs(15);
@@ -201,49 +200,6 @@ async fn minter_address() -> String {
     Address::from_pubkey(&pubkey).to_string()
 }
 
-#[update]
-#[candid_method(update)]
-async fn display_logs(req: DisplayLogsRequest) -> Vec<ReceivedEthEvent> {
-    use candid::Nat;
-    use eth_rpc::{Data, GetLogsParam, LogEntry};
-    use ethabi::param_type::ParamType;
-
-    let result: Vec<LogEntry> = eth_rpc::call(
-        "https://rpc.sepolia.org",
-        "eth_getLogs",
-        vec![GetLogsParam {
-            from_block: req.from.parse().expect("failed to parse 'from' block"),
-            to_block: req.to.parse().expect("failed to parse 'to' block"),
-            address: vec![req.address.parse().expect("failed to parse 'address'")],
-            topics: vec![],
-        }],
-        ResponseSizeEstimate::new(1024),
-    )
-    .await
-    .expect("HTTP call failed")
-    .unwrap();
-    result
-        .into_iter()
-        .map(|entry| {
-            let Data(data) = entry.data;
-            let args = ethabi::decode(
-                &[ParamType::Address, ParamType::Uint(256), ParamType::String],
-                &data,
-            )
-            .expect("failed to parse event payload");
-            assert_eq!(args.len(), 3);
-            ReceivedEthEvent {
-                transaction_hash: entry.transaction_hash.expect("finalized block").to_string(),
-                block_number: candid::Nat::from(entry.block_number.expect("finalized block")),
-                log_index: into_nat(entry.log_index.expect("finalized block")),
-                from_address: Address::new(args[0].clone().into_address().unwrap().0).to_string(),
-                value: Nat::from(args[1].clone().into_uint().unwrap().as_u128()),
-                principal: args[2].clone().into_string().unwrap().parse().unwrap(),
-            }
-        })
-        .collect()
-}
-
 type TransferResult = ic_cketh_minter::eth_rpc::JsonRpcResult<String>;
 #[update]
 #[candid_method(update)]
@@ -302,32 +258,6 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
         max_priority_fee_per_gas: price.max_priority_fee_per_gas.into(),
         max_fee_per_gas: price.max_fee_per_gas.into(),
         gas_limit: into_nat(price.gas_limit),
-    }
-}
-
-/// Estimate price of EIP-2930 or legacy transactions based on the value returned by
-/// `eth_gasPrice` JSON-RPC call.
-#[update]
-#[candid_method(update)]
-async fn eip_2930_transaction_price() -> Eip2930TransactionPrice {
-    use ic_cketh_minter::numeric::Wei;
-
-    let gas_price: Wei = eth_rpc::call(
-        "https://rpc.sepolia.org",
-        "eth_gasPrice",
-        (),
-        ResponseSizeEstimate::new(100),
-    )
-    .await
-    .expect("HTTP call failed")
-    .unwrap();
-
-    let gas_price = candid::Nat::from(gas_price);
-    let gas_limit = candid::Nat::from(TRANSACTION_GAS_LIMIT);
-
-    Eip2930TransactionPrice {
-        gas_price,
-        gas_limit,
     }
 }
 
