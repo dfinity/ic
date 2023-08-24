@@ -1,26 +1,20 @@
 use crate::{
     driver::{
-        api_boundary_node::{ApiBoundaryNode, ApiBoundaryNodeVm},
-        ic::{InternetComputer, Subnet},
+        api_boundary_node::ApiBoundaryNodeVm,
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-            NnsInstallationBuilder, RetrieveIpv4Addr, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::{assert_create_agent, block_on},
 };
-use std::{convert::TryFrom, net::SocketAddrV6, time::Duration};
+use std::{net::SocketAddrV6, time::Duration};
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{anyhow, bail, Error};
 use futures::stream::FuturesUnordered;
 use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
-use ic_interfaces_registry::RegistryValue;
-use ic_protobuf::registry::routing_table::v1::RoutingTable as PbRoutingTable;
-use ic_registry_keys::make_routing_table_record_key;
-use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_type::SubnetType;
+
 use serde::Deserialize;
 use slog::{error, info};
 use tokio::runtime::Runtime;
@@ -28,9 +22,8 @@ use tokio::runtime::Runtime;
 use crate::boundary_nodes::{
     constants::{API_BOUNDARY_NODE_NAME, COUNTER_CANISTER_WAT},
     helpers::{
-        create_canister, exec_ssh_command, get_install_url, install_canisters,
-        read_counters_on_counter_canisters, set_counters_on_counter_canisters,
-        ApiBoundaryNodeHttpsConfig,
+        create_canister, get_install_url, install_canisters, read_counters_on_counter_canisters,
+        set_counters_on_counter_canisters,
     },
 };
 
@@ -69,113 +62,17 @@ impl Drop for PanicHandler {
             .get_snapshot()
             .unwrap();
 
-        let (list_dependencies, exit_status) = exec_ssh_command(
-            &boundary_node,
-            "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
-        )
-        .unwrap();
+        let list_dependencies = boundary_node
+            .block_on_bash_script(
+                "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
+            )
+            .unwrap();
 
         info!(
             logger,
-            "systemctl {API_BOUNDARY_NODE_NAME} = '{list_dependencies}'. Exit status = {}",
-            exit_status,
+            "systemctl {API_BOUNDARY_NODE_NAME} = '{list_dependencies}'"
         );
     }
-}
-
-pub fn mk_setup(api_bn_https_config: ApiBoundaryNodeHttpsConfig) -> impl Fn(TestEnv) {
-    move |env: TestEnv| {
-        setup(api_bn_https_config, env);
-    }
-}
-
-fn setup(api_bn_https_config: ApiBoundaryNodeHttpsConfig, env: TestEnv) {
-    let logger = env.logger();
-
-    InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-    let nns_node = env
-        .topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap();
-    NnsInstallationBuilder::new()
-        .install(&nns_node, &env)
-        .expect("Could not install NNS canisters");
-
-    let api_bn = ApiBoundaryNode::new(String::from(API_BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .unwrap()
-        .for_ic(&env, "");
-    let api_bn = match api_bn_https_config {
-        ApiBoundaryNodeHttpsConfig::UseRealCertsAndDns => api_bn.use_real_certs_and_dns(),
-        ApiBoundaryNodeHttpsConfig::AcceptInvalidCertsAndResolveClientSide => api_bn,
-    };
-    api_bn
-        .start(&env)
-        .expect("failed to setup ApiBoundaryNode VM");
-
-    // Await Replicas
-    info!(&logger, "Checking readiness of all replica nodes...");
-    for subnet in env.topology_snapshot().subnets() {
-        for node in subnet.nodes() {
-            node.await_status_is_healthy()
-                .expect("Replica did not come up healthy.");
-        }
-    }
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    info!(&logger, "Polling registry");
-    let registry = RegistryCanister::new(api_bn.nns_node_urls);
-    let (latest, routes) = rt.block_on(retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
-        let (bytes, latest) = registry.get_value(make_routing_table_record_key().into(), None).await
-            .context("Failed to `get_value` from registry")?;
-        let routes = PbRoutingTable::decode(bytes.as_slice())
-            .context("Failed to decode registry routes")?;
-        let routes = RoutingTable::try_from(routes)
-            .context("Failed to convert registry routes")?;
-        Ok((latest, routes))
-    }))
-    .expect("Failed to poll registry. This is not an API Boundary Node error. It is a test environment issue.");
-    info!(&logger, "Latest registry {latest}: {routes:?}");
-
-    // Await API Boundary Node
-    let api_boundary_node = env
-        .get_deployed_api_boundary_node(API_BOUNDARY_NODE_NAME)
-        .unwrap()
-        .get_snapshot()
-        .unwrap();
-
-    info!(
-        &logger,
-        "API Boundary node {API_BOUNDARY_NODE_NAME} has IPv6 {:?}",
-        api_boundary_node.ipv6()
-    );
-    info!(
-        &logger,
-        "API Boundary node {API_BOUNDARY_NODE_NAME} has IPv4 {:?}",
-        api_boundary_node.block_on_ipv4().unwrap()
-    );
-
-    info!(&logger, "Waiting for routes file");
-    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
-    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-    let (cmd_output, exit_status) = exec_ssh_command(&api_boundary_node, &sleep_command).unwrap();
-    info!(
-        logger,
-        "{API_BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",
-        cmd_output.trim(),
-    );
-
-    info!(&logger, "Checking API BN health");
-    api_boundary_node
-        .await_status_is_healthy()
-        .expect("Boundary node did not come up healthy.");
 }
 
 /* tag::catalog[]
@@ -348,15 +245,11 @@ pub fn nginx_valid_config_test(env: TestEnv) {
         .get_snapshot()
         .unwrap();
 
-    let (cmd_output, exit_status) =
-        exec_ssh_command(&api_boundary_node, "sudo nginx -t 2>&1").unwrap();
+    let cmd_output = api_boundary_node
+        .block_on_bash_script("sudo nginx -t 2>&1")
+        .unwrap();
 
-    info!(
-        logger,
-        "nginx test result = '{}'. Exit status = {}",
-        cmd_output.trim(),
-        exit_status,
-    );
+    info!(logger, "nginx test result = '{}'", cmd_output.trim());
 
     if !cmd_output.trim().contains("test is successful") {
         panic!("nginx config failed validation");
@@ -829,10 +722,12 @@ pub fn reboot_test(env: TestEnv) {
     info!(&logger, "Waiting for routes file");
     let routes_path = "/var/opt/nginx/ic/ic_routes.js";
     let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-    let (cmd_output, exit_status) = exec_ssh_command(&api_boundary_node, &sleep_command).unwrap();
+    let cmd_output = api_boundary_node
+        .block_on_bash_script(&sleep_command)
+        .unwrap();
     info!(
         logger,
-        "{API_BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",
+        "{API_BOUNDARY_NODE_NAME} ran `{sleep_command}`: '{}'",
         cmd_output.trim(),
     );
 
