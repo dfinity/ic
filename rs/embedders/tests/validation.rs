@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use assert_matches::assert_matches;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
@@ -635,16 +637,16 @@ fn can_reject_module_with_too_many_functions() {
 fn can_validate_module_with_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private name1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private name1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public name2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "name3",
-        data: &[0, 2],
+        name: Cow::Borrowed("name3"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -670,16 +672,16 @@ fn can_validate_module_with_custom_sections() {
 fn can_reject_module_with_too_many_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private name1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private name1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public name2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "name3",
-        data: &[0, 2],
+        name: Cow::Borrowed("name3"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -705,13 +707,13 @@ fn can_reject_module_with_custom_sections_too_big() {
     let mut module = wasm_encoder::Module::new();
     // Size of this custom section is 12 bytes.
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public name",
-        data: &content,
+        name: Cow::Borrowed("icp:public name"),
+        data: Cow::Borrowed(&content),
     });
     // Adding the size of this custom section will exceed the `max_custom_sections_size`.
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom_section",
-        data: &content,
+        name: Cow::Borrowed("icp:private custom_section"),
+        data: Cow::Borrowed(&content),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -736,16 +738,16 @@ fn can_reject_module_with_custom_sections_too_big() {
 fn can_reject_module_with_duplicate_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private custom1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public custom2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom1",
-        data: &[0, 3],
+        name: Cow::Borrowed("icp:public custom1"),
+        data: Cow::Borrowed(&[0, 3]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
@@ -768,16 +770,16 @@ fn can_reject_module_with_duplicate_custom_sections() {
 fn can_reject_module_with_invalid_custom_sections() {
     let mut module = wasm_encoder::Module::new();
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:private custom1",
-        data: &[0, 1],
+        name: Cow::Borrowed("icp:private custom1"),
+        data: Cow::Borrowed(&[0, 1]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:public custom2",
-        data: &[0, 2],
+        name: Cow::Borrowed("icp:public custom2"),
+        data: Cow::Borrowed(&[0, 2]),
     });
     module.section(&wasm_encoder::CustomSection {
-        name: "icp:dummy custom3",
-        data: &[0, 3],
+        name: Cow::Borrowed("icp:dummy custom3"),
+        data: Cow::Borrowed(&[0, 3]),
     });
     let wasm = BinaryEncodedWasm::new(module.finish());
 
