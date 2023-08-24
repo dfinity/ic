@@ -104,6 +104,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:mockall_0_8_3",
     "@crate_index//:proptest",
     "@crate_index//:rsa",
+    "@crate_index//:sha2",
     "@crate_index//:slog-async",
 ]
 

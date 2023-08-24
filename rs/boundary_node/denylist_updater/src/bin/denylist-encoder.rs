@@ -14,7 +14,7 @@ use flate2::{write::GzEncoder, Compression};
 use rsa::{
     pkcs8::DecodePublicKey,
     rand_core::{OsRng, RngCore},
-    PaddingScheme, PublicKey, RsaPublicKey,
+    RsaPublicKey,
 };
 use sha2::Sha256;
 use tar::{Builder, Header};
@@ -65,7 +65,7 @@ async fn main() -> Result<(), Error> {
     let public_key_pem = std::fs::read_to_string(cli.public_key_path)?;
     let public_key = RsaPublicKey::from_public_key_pem(&public_key_pem)?;
 
-    let padding = PaddingScheme::new_oaep::<Sha256>();
+    let padding = rsa::oaep::Oaep::new::<Sha256>();
     let sym_key_enc = public_key.encrypt(&mut OsRng, padding, &sym_key)?;
 
     // Generate payload
