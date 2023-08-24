@@ -2,32 +2,14 @@ use super::*;
 
 use crate::pb::v1::Vote;
 use ic_nns_common::pb::v1::ProposalId;
+use lazy_static::lazy_static;
 use pretty_assertions::assert_eq;
 
 // TODO(NNS1-2497): Add tests that fail if our BoundedStorage types grow. This
 // way, people are very aware of how they might be eating into our headroom.
 
-/// Summary:
-///
-///   1. create
-///   2. bad create
-///   3. read to verify create
-///   4. bad read
-///
-///   5. update
-///   6. read to verify the update
-///   7. bad update
-///   8. read to verify bad update
-///
-///   9. delete
-///   10. bad delete: repeat
-///   11. read to verify.
-#[test]
-fn test_store_simplest_nontrivial_case() {
-    let mut store = new_heap_based();
-
-    // 1. Create a Neuron.
-    let neuron_1 = Neuron {
+lazy_static! {
+    static ref MODEL_NEURON: Neuron = Neuron {
         id: Some(NeuronId { id: 42 }),
         cached_neuron_stake_e8s: 0xCAFE, // Yummy.
 
@@ -64,6 +46,29 @@ fn test_store_simplest_nontrivial_case() {
 
         ..Default::default()
     };
+}
+
+/// Summary:
+///
+///   1. create
+///   2. bad create
+///   3. read to verify create
+///   4. bad read
+///
+///   5. update
+///   6. read to verify the update
+///   7. bad update
+///   8. read to verify bad update
+///
+///   9. delete
+///   10. bad delete: repeat
+///   11. read to verify.
+#[test]
+fn test_store_simplest_nontrivial_case() {
+    let mut store = new_heap_based();
+
+    // 1. Create a Neuron.
+    let neuron_1 = MODEL_NEURON.clone();
     assert_eq!(store.create(neuron_1.clone()), Ok(()));
 
     // 2. Bad create: use an existing NeuronId. This should result in an
@@ -133,13 +138,17 @@ fn test_store_simplest_nontrivial_case() {
     // Derive neuron_5 from neuron_1 by adding entries to collections (to make
     // sure the updating collections works).
     let neuron_5 = {
-        /* TODO(NNS1-2503): Uncomment.
         let mut hot_keys = neuron_1.hot_keys;
         hot_keys.push(PrincipalId::new_user_test_id(102));
 
         let mut followees = neuron_1.followees;
         assert_eq!(
-            followees.insert(7, Followees { followees: vec![NeuronId { id: 220 }] }),
+            followees.insert(
+                7,
+                Followees {
+                    followees: vec![NeuronId { id: 220 }]
+                }
+            ),
             None,
         );
 
@@ -148,13 +157,12 @@ fn test_store_simplest_nontrivial_case() {
             proposal_id: Some(ProposalId { id: 303 }),
             vote: Vote::Yes as i32,
         });
-        */
 
         Neuron {
             cached_neuron_stake_e8s: 0xFEED, // After drink, we eat.
-            // TODO(NNS1-2503): hot_keys,
-            // TODO(NNS1-2503): followees,
-            // TODO(NNS1-2503): recent_ballots,
+            hot_keys,
+            followees,
+            recent_ballots,
             ..neuron_1
         }
     };
@@ -279,6 +287,13 @@ fn test_store_simplest_nontrivial_case() {
 
         _ => panic!("read did not return Err: {:?}", read_result),
     }
+
+    // Make sure delete is actually thorough. I.e. no dangling references.
+    // Here, we access privates. Elsewhere, we do not do this. I suppose
+    // StableNeuronStore could have a pub is_internally_consistent method.
+    assert!(store.hot_keys_map.is_empty());
+    assert!(store.followees_map.is_empty());
+    assert!(store.recent_ballots_map.is_empty());
 }
 
 /// Summary:
@@ -291,27 +306,48 @@ fn test_store_simplest_nontrivial_case() {
 fn test_store_upsert() {
     let mut store = new_heap_based();
 
-    let neuron = Neuron {
-        id: Some(NeuronId { id: 0xF00D }),
-        cached_neuron_stake_e8s: 0xBEEF,
-        ..Default::default()
-    };
+    let neuron = MODEL_NEURON.clone();
+    let neuron_id = neuron.id.unwrap();
 
     // 1. upsert (entry not already present)
     assert_eq!(store.upsert(neuron.clone()), Ok(()));
 
     // 2. read to verify
-    assert_eq!(store.read(NeuronId { id: 0xF00D }), Ok(neuron.clone()));
+    assert_eq!(store.read(neuron_id), Ok(neuron.clone()));
 
     // Modify neuron.
-    let neuron = Neuron {
-        cached_neuron_stake_e8s: 0xCAFE,
-        ..neuron
+    let updated_neuron = {
+        let mut hot_keys = neuron.hot_keys;
+        hot_keys.push(PrincipalId::new_user_test_id(999_000));
+
+        let mut followees = neuron.followees;
+        followees
+            .entry(0)
+            .or_default()
+            .followees
+            .push(NeuronId { id: 999_001 });
+
+        let mut recent_ballots = neuron.recent_ballots;
+        recent_ballots.insert(
+            0,
+            BallotInfo {
+                proposal_id: Some(ProposalId { id: 999_002 }),
+                vote: Vote::No as i32,
+            },
+        );
+
+        Neuron {
+            cached_neuron_stake_e8s: 0xCAFE,
+            hot_keys,
+            followees,
+            recent_ballots,
+            ..neuron
+        }
     };
 
     // 3. upsert (change an existing entry)
-    assert_eq!(store.upsert(neuron.clone()), Ok(()));
+    assert_eq!(store.upsert(updated_neuron.clone()), Ok(()));
 
     // 4. read to verify
-    assert_eq!(store.read(NeuronId { id: 0xF00D }), Ok(neuron));
+    assert_eq!(store.read(neuron_id), Ok(updated_neuron));
 }

@@ -73,15 +73,17 @@ thread_local! {
 }
 
 // Implement BoundedStorable
-// -------------------------
+// =========================
+
+// Signed32
+// --------
 
 // ic_stable_structures should implement (Bounded)Storable on i32, but does
 // not. Therefore, we do it here. Unfortunately, we must wrap it first, because
-// only ic_stable_structures can implement their traits on foreign types (and
-// i32 does not blong to us either).
+// only ic_stable_structures can implement their traits on foreign types, such
+// as i32.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Signed32(pub i32);
-
 impl Signed32 {
     const MIN: Signed32 = Signed32(i32::MIN);
     const MAX: Signed32 = Signed32(i32::MAX);
