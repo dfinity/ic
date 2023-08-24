@@ -43,6 +43,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/ic_os/sev",
+    "//rs/criterion_time",
     "//rs/interfaces/registry/mocks",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
