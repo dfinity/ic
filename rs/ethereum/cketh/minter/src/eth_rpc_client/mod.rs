@@ -71,15 +71,14 @@ impl EthRpcClient {
             match result {
                 Ok(JsonRpcResult::Result(value)) => return Ok(JsonRpcResult::Result(value)),
                 Ok(json_rpc_error @ JsonRpcResult::Error { .. }) => {
-                    ic_cdk::println!(
-                        "Provider {:?} returned JSON-RPC error {:?}",
-                        provider,
-                        json_rpc_error
+                    log!(
+                        INFO,
+                        "Provider {provider:?} returned JSON-RPC error {json_rpc_error:?}",
                     );
                     last_result = Some(Ok(json_rpc_error));
                 }
                 Err(e) => {
-                    ic_cdk::println!("Querying provider {:?} returned error {:?}", provider, e);
+                    log!(INFO, "Querying provider {provider:?} returned error {e:?}");
                     last_result = Some(Err(e));
                 }
             };

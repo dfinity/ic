@@ -4,7 +4,9 @@
 mod tests;
 
 use crate::eth_rpc::Quantity;
+use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Wei is the smallest denomination of ether.
 /// 1 wei == 10^(-18) ether
@@ -38,6 +40,12 @@ impl From<u64> for Wei {
     }
 }
 
+impl From<u128> for Wei {
+    fn from(value: u128) -> Self {
+        Wei(ethnum::u256::from(value))
+    }
+}
+
 impl From<Quantity> for Wei {
     fn from(value: Quantity) -> Self {
         Wei(value)
@@ -54,6 +62,12 @@ impl From<Wei> for candid::Nat {
     fn from(value: Wei) -> Self {
         use num_bigint::BigUint;
         candid::Nat::from(BigUint::from_bytes_be(&value.0.to_be_bytes()))
+    }
+}
+
+impl fmt::Display for Wei {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
@@ -107,11 +121,8 @@ impl From<TransactionNonce> for candid::Nat {
     }
 }
 
-#[derive(Clone, Copy, Serialize, Deserialize, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct LedgerBurnIndex(pub u64);
+pub enum BurnIndexTag {}
+pub type LedgerBurnIndex = Id<BurnIndexTag, u64>;
 
-impl From<LedgerBurnIndex> for candid::Nat {
-    fn from(value: LedgerBurnIndex) -> Self {
-        candid::Nat::from(value.0)
-    }
-}
+pub enum MintIndexTag {}
+pub type LedgerMintIndex = Id<MintIndexTag, u64>;

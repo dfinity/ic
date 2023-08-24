@@ -16,7 +16,7 @@ mod pending_eth_transactions_insert {
 
         assert_eq!(
             transactions.insert(
-                LedgerBurnIndex(0),
+                LedgerBurnIndex::new(0),
                 eip_1559_transaction_request_with_nonce(nonce_tx_1)
             ),
             Ok(())
@@ -29,7 +29,7 @@ mod pending_eth_transactions_insert {
         let nonce_tx_2 = TransactionNonce::from(11);
         assert_eq!(
             transactions.insert(
-                LedgerBurnIndex(1),
+                LedgerBurnIndex::new(1),
                 eip_1559_transaction_request_with_nonce(nonce_tx_2)
             ),
             Ok(())
@@ -43,7 +43,7 @@ mod pending_eth_transactions_insert {
     #[test]
     fn should_fail_when_duplicate_ledger_burn_index() {
         let mut transactions = PendingEthTransactions::new(TransactionNonce::from(1));
-        let duplicate_index = LedgerBurnIndex(10);
+        let duplicate_index = LedgerBurnIndex::new(10);
         assert_eq!(
             transactions.insert(
                 duplicate_index,
@@ -53,7 +53,7 @@ mod pending_eth_transactions_insert {
         );
         assert_eq!(
             transactions.insert(
-                LedgerBurnIndex(20),
+                LedgerBurnIndex::new(20),
                 eip_1559_transaction_request_with_nonce(TransactionNonce::from(2))
             ),
             Ok(())
@@ -74,7 +74,7 @@ mod pending_eth_transactions_insert {
         for nonce in 0..=3 {
             assert_eq!(
                 transactions.insert(
-                    LedgerBurnIndex(10 + nonce),
+                    LedgerBurnIndex::new(10 + nonce),
                     eip_1559_transaction_request_with_nonce(TransactionNonce::from(nonce))
                 ),
                 Ok(())
@@ -82,13 +82,13 @@ mod pending_eth_transactions_insert {
         }
 
         let result_with_skipped_nonce = transactions.insert(
-            LedgerBurnIndex(20),
+            LedgerBurnIndex::new(20),
             eip_1559_transaction_request_with_nonce(TransactionNonce::from(5)),
         );
         assert_matches!(result_with_skipped_nonce, Err(msg) if msg.contains("nonce"));
 
         let result_with_duplicate_nonce = transactions.insert(
-            LedgerBurnIndex(20),
+            LedgerBurnIndex::new(20),
             eip_1559_transaction_request_with_nonce(TransactionNonce::from(3)),
         );
         assert_matches!(result_with_duplicate_nonce, Err(msg) if msg.contains("nonce"));
@@ -101,7 +101,7 @@ mod pending_eth_transactions_insert {
         for nonce in 0..=3 {
             assert_eq!(
                 transactions.insert(
-                    LedgerBurnIndex(10 + nonce),
+                    LedgerBurnIndex::new(10 + nonce),
                     eip_1559_transaction_request_with_nonce(TransactionNonce::from(nonce))
                 ),
                 Ok(())
@@ -110,7 +110,7 @@ mod pending_eth_transactions_insert {
 
         assert_eq!(transactions.next_nonce, TransactionNonce::from(4));
         //TODO: FI-867 use public method to remove finalized transactions
-        transactions.by_burn_index.remove(&LedgerBurnIndex(13));
+        transactions.by_burn_index.remove(&LedgerBurnIndex::new(13));
         assert_eq!(transactions.next_nonce, TransactionNonce::from(4));
     }
 }
@@ -137,15 +137,15 @@ mod transactions_to_sign {
         let tx_2 = eip_1559_transaction_request_with_nonce(TransactionNonce::from(11));
         let tx_3 = eip_1559_transaction_request_with_nonce(TransactionNonce::from(12));
         assert_eq!(
-            transactions.insert(LedgerBurnIndex(100), tx_1.clone()),
+            transactions.insert(LedgerBurnIndex::new(100), tx_1.clone()),
             Ok(())
         );
         assert_eq!(
-            transactions.insert(LedgerBurnIndex(10), tx_2.clone()),
+            transactions.insert(LedgerBurnIndex::new(10), tx_2.clone()),
             Ok(())
         );
         assert_eq!(
-            transactions.insert(LedgerBurnIndex(1000), tx_3.clone()),
+            transactions.insert(LedgerBurnIndex::new(1000), tx_3.clone()),
             Ok(())
         );
 
@@ -164,18 +164,21 @@ mod find_by_burn_index {
     #[test]
     fn should_return_none_when_empty() {
         let transactions = PendingEthTransactions::new(TransactionNonce::from(0));
-        assert_eq!(transactions.find_by_burn_index(LedgerBurnIndex(0)), None);
+        assert_eq!(
+            transactions.find_by_burn_index(LedgerBurnIndex::new(0)),
+            None
+        );
     }
 
     #[test]
     fn should_find_transaction() {
         let mut transactions = PendingEthTransactions::new(TransactionNonce::from(1));
         let (index_1, tx_1) = (
-            LedgerBurnIndex(10),
+            LedgerBurnIndex::new(10),
             eip_1559_transaction_request_with_nonce(TransactionNonce::from(1)),
         );
         let (index_2, tx_2) = (
-            LedgerBurnIndex(20),
+            LedgerBurnIndex::new(20),
             eip_1559_transaction_request_with_nonce(TransactionNonce::from(2)),
         );
         assert_eq!(transactions.insert(index_1, tx_1.clone()), Ok(()));
@@ -192,14 +195,14 @@ mod find_by_burn_index {
         let index = 10;
         assert_eq!(
             transactions.insert(
-                LedgerBurnIndex(index),
+                LedgerBurnIndex::new(index),
                 eip_1559_transaction_request_with_nonce(TransactionNonce::from(0))
             ),
             Ok(())
         );
 
         assert_eq!(
-            transactions.find_by_burn_index(LedgerBurnIndex(index + 1)),
+            transactions.find_by_burn_index(LedgerBurnIndex::new(index + 1)),
             None
         );
     }
@@ -208,7 +211,7 @@ mod find_by_burn_index {
     fn should_find_transaction_with_same_burn_index_after_being_replaced_with_signed_transaction() {
         let nonce = TransactionNonce::from(1);
         let mut transactions = PendingEthTransactions::new(nonce);
-        let index = LedgerBurnIndex(10);
+        let index = LedgerBurnIndex::new(10);
         let tx = eip_1559_transaction_request_with_nonce(nonce);
         assert_eq!(transactions.insert(index, tx.clone()), Ok(()));
 

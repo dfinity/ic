@@ -1,77 +1,100 @@
 mod mint_transaction {
-    use crate::endpoints::ReceivedEthEvent;
-    use crate::eth_logs::mint_transaction;
-    use crate::eth_rpc::Hash;
+    use crate::endpoints::InitArg;
+    use crate::eth_logs::{LogIndex, ReceivedEthEvent};
+    use crate::eth_rpc::BlockNumber;
+    use crate::numeric::{LedgerMintIndex, Wei};
+    use crate::state::State;
     use candid::{Nat, Principal};
-    use std::collections::BTreeSet;
-    use std::str::FromStr;
+    use ethnum::u256;
 
     #[test]
-    fn should_mint_new_transaction_from_event() {
-        let mut minted_transactions = BTreeSet::new();
+    fn should_record_mint_task_from_event() {
+        let mut state = dummy_state();
         let event = received_eth_event();
 
-        mint_transaction(&mut minted_transactions, event.clone());
+        state.record_event_to_mint(event.clone());
 
-        assert!(minted_transactions.contains(&Hash::from_str(&event.transaction_hash).unwrap()));
+        assert!(state.events_to_mint.contains(&event));
+
+        let block_index = LedgerMintIndex::new(1u64);
+
+        state.record_successful_mint(&event, block_index);
+
+        assert!(!state.events_to_mint.contains(&event));
+        assert_eq!(state.minted_events.get(&event.source()), Some(&block_index));
     }
 
     #[test]
-    fn should_ignore_events_with_same_transaction_hash() {
-        let mut minted_transactions = BTreeSet::new();
-        let event = received_eth_event();
-        let invalid_event_with_same_hash = ReceivedEthEvent {
-            value: Nat::from(50_000_000_000_000_000_u128),
-            ..event.clone()
+    fn should_allow_minting_events_with_equal_txhash() {
+        let mut state = dummy_state();
+        let event_1 = ReceivedEthEvent {
+            log_index: LogIndex::new(u256::from(1u128)),
+            ..received_eth_event()
         };
-        assert_ne!(event, invalid_event_with_same_hash);
-        assert_eq!(
-            event.transaction_hash,
-            invalid_event_with_same_hash.transaction_hash
-        );
-        mint_transaction(&mut minted_transactions, event);
+        let event_2 = ReceivedEthEvent {
+            log_index: LogIndex::new(u256::from(2u128)),
+            ..received_eth_event()
+        };
 
-        let minted_transactions_before = minted_transactions.clone();
-        mint_transaction(&mut minted_transactions, invalid_event_with_same_hash);
-        let minted_transactions_after = minted_transactions.clone();
+        assert_ne!(event_1, event_2);
 
-        assert_eq!(minted_transactions_before, minted_transactions_after);
+        state.record_event_to_mint(event_1.clone());
+
+        assert!(state.events_to_mint.contains(&event_1));
+
+        state.record_event_to_mint(event_2.clone());
+
+        assert!(state.events_to_mint.contains(&event_2));
+
+        assert_eq!(2, state.events_to_mint.len());
     }
 
     #[test]
-    fn should_process_events_after_event_with_duplicated_transaction_hash() {
-        let mut minted_transactions = BTreeSet::new();
+    #[should_panic = "unknown event"]
+    fn should_not_allow_unknown_mints() {
+        let mut state = dummy_state();
         let event = received_eth_event();
-        let other_event = ReceivedEthEvent {
-            transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89ccA"
-                .to_string(),
-            ..event.clone()
-        };
-        assert_ne!(event.transaction_hash, other_event.transaction_hash);
 
-        mint_transaction(&mut minted_transactions, event.clone());
-        mint_transaction(&mut minted_transactions, event.clone());
-        mint_transaction(&mut minted_transactions, other_event.clone());
+        assert!(!state.events_to_mint.contains(&event));
+        state.record_successful_mint(&event, LedgerMintIndex::new(1));
+    }
 
-        assert_eq!(minted_transactions.len(), 2);
-        assert!(minted_transactions.contains(&Hash::from_str(&event.transaction_hash).unwrap()));
-        assert!(
-            minted_transactions.contains(&Hash::from_str(&other_event.transaction_hash).unwrap())
-        );
+    #[test]
+    #[should_panic = "invalid"]
+    fn should_not_record_invalid_deposit_already_recorded_as_valid() {
+        let mut state = dummy_state();
+        let event = received_eth_event();
+
+        state.record_event_to_mint(event.clone());
+
+        assert!(state.events_to_mint.contains(&event));
+
+        state.record_invalid_deposit(event.source());
+    }
+
+    fn dummy_state() -> State {
+        State::from(InitArg {
+            ecdsa_key_name: "test_key_1".to_string(),
+            ledger_id: Principal::anonymous(),
+            ethereum_network: Default::default(),
+            next_transaction_nonce: Nat::from(0u64),
+        })
     }
 
     fn received_eth_event() -> ReceivedEthEvent {
         ReceivedEthEvent {
             transaction_hash: "0xf1ac37d920fa57d9caeebc7136fea591191250309ffca95ae0e8a7739de89cc2"
-                .to_string(),
-            block_number: Nat::from(3960623),
-            log_index: Nat::from(29),
-            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string(),
-            value: Nat::from(10_000_000_000_000_000_u128),
-            principal: Principal::from_slice(&[
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0,
-            ]),
+                .parse()
+                .unwrap(),
+            block_number: BlockNumber::new(3960623u128),
+            log_index: LogIndex::new(u256::from(29u128)),
+            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
+                .parse()
+                .unwrap(),
+            value: Wei::from(10_000_000_000_000_000_u128),
+            principal: "k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae"
+                .parse()
+                .unwrap(),
         }
     }
 }

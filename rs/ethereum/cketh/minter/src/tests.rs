@@ -48,10 +48,12 @@ fn deserialize_json_reply() {
 
 mod eth_get_logs {
     use crate::address::Address;
-    use crate::endpoints::ReceivedEthEvent;
-    use crate::eth_rpc::{FixedSizeData, LogEntry};
+    use crate::eth_logs::{LogIndex, ReceivedEthEvent};
+    use crate::eth_rpc::{BlockNumber, FixedSizeData, LogEntry};
+    use crate::numeric::Wei;
     use assert_matches::assert_matches;
-    use candid::{Nat, Principal};
+    use candid::Principal;
+    use ethnum::u256;
     use ic_crypto_sha3::Keccak256;
     use std::str::FromStr;
 
@@ -126,11 +128,14 @@ mod eth_get_logs {
             ReceivedEthEvent::try_from(serde_json::from_str::<LogEntry>(event).unwrap()).unwrap();
         let expected_event = ReceivedEthEvent {
             transaction_hash: "0x705f826861c802b407843e99af986cfde8749b669e5e0a5a150f4350bcaa9bc3"
-                .to_string(),
-            block_number: Nat::from(3974279),
-            log_index: Nat::from(39),
-            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d".to_string(),
-            value: Nat::from(10_000_000_000_000_000_u128),
+                .parse()
+                .unwrap(),
+            block_number: BlockNumber::new(3974279),
+            log_index: LogIndex::new(u256::from(39u64)),
+            from_address: "0xdd2851cdd40ae6536831558dd46db62fac7a844d"
+                .parse()
+                .unwrap(),
+            value: Wei::from(10_000_000_000_000_000_u128),
             principal: Principal::from_str("2chl6-4hpzw-vqaaa-aaaaa-c").unwrap(),
         };
 
