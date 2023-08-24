@@ -89,8 +89,9 @@ pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
 
 /// The principal with all bytes set to zero. The main property
-/// of this principal is that for any principal p != FIRST_PRINCIPAL_BYTES
-/// then p.as_slice() < FIRST_PRINCIPAL_BYTES.as_slice().
+/// of this principal is that for any principal p, the following condition holds:
+/// (p != FIRST_PRINCIPAL_BYTES) ==> FIRST_PRINCIPAL_BYTES.as_slice() < p.as_slice()
+/// Here, the `<` symbol means lexicographical comparison of sequences of bytes.
 pub const FIRST_PRINCIPAL_BYTES: [u8; PrincipalId::MAX_LENGTH_IN_BYTES] =
     [0; PrincipalId::MAX_LENGTH_IN_BYTES];
 
