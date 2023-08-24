@@ -1,4 +1,4 @@
-use anyhow::Error;
+use anyhow::{Context, Error};
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::{
@@ -52,7 +52,7 @@ impl fmt::Display for RequestType {
 
 // Categorized possible causes for request processing failures
 // Use String and not Error since it's not cloneable
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub enum ErrorCause {
     #[default]
     NoError,
@@ -119,13 +119,6 @@ pub struct RequestContext {
     pub request_type: RequestType,
     pub error_cause: ErrorCause,
     pub request_size: u32,
-}
-
-impl RequestContext {
-    fn respond(&mut self, cause: ErrorCause) -> Response {
-        self.error_cause = cause.clone();
-        (Extension(self.clone()), cause.status_code()).into_response()
-    }
 }
 
 // This is a subset of the fields.
@@ -333,33 +326,59 @@ pub fn parse_body(ctx: &mut RequestContext, body: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum ApiError {
+    #[error("status {0}: {1}")]
+    _Custom(StatusCode, String),
+
+    #[error("proxy error: {0}")]
+    ProxyError(ErrorCause),
+
+    #[error(transparent)]
+    Unspecified(#[from] anyhow::Error),
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (match self {
+            ApiError::_Custom(c, b) => (c, b),
+            ApiError::ProxyError(c) => (c.status_code(), c.to_string()),
+            ApiError::Unspecified(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
+        })
+        .into_response()
+    }
+}
+
+impl From<ErrorCause> for ApiError {
+    fn from(c: ErrorCause) -> Self {
+        ApiError::ProxyError(c)
+    }
+}
+
 // Preprocess the request before handing it over to handlers
 pub async fn preprocess_request(
     State(lk): State<Arc<dyn Lookup>>,
     Path(canister_id): Path<String>,
     request: Request<Body>,
     next: Next<Body>,
-) -> Result<Response, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     let mut ctx = RequestContext::default();
 
     // Consume body
-    let (parts, body) = read_body(request).await.map_err(|e| ctx.respond(e))?;
+    let (parts, body) = read_body(request).await?;
     ctx.request_size = body.len() as u32;
 
     // Get canister_id from URL
-    let canister_id = Principal::from_text(canister_id).map_err(|e| {
-        ctx.respond(ErrorCause::MalformedRequest(format!(
-            "Unable to decode canister_id from URL: {e}"
-        )))
+    let canister_id = Principal::from_text(canister_id).map_err(|err| {
+        ErrorCause::MalformedRequest(format!("Unable to decode canister_id from URL: {err}"))
     })?;
 
     ctx.canister_id = Some(canister_id);
 
-    parse_body(&mut ctx, &body)
-        .map_err(|e| ctx.respond(ErrorCause::UnableToParseCBOR(e.to_string())))?;
+    parse_body(&mut ctx, &body).map_err(|err| ErrorCause::UnableToParseCBOR(err.to_string()))?;
 
     // Try to look up a target node using canister id
-    ctx.node = Some(lk.lookup(&canister_id).await.map_err(|e| ctx.respond(e))?);
+    ctx.node = Some(lk.lookup(&canister_id).await?);
 
     // Reconstruct request back from parts
     let mut request = Request::from_parts(parts, hyper::Body::from(body));
@@ -367,11 +386,14 @@ pub async fn preprocess_request(
 
     // Pass request to the next processor
     let resp = next.run(request).await;
+
     Ok(resp)
 }
 
 // Handles IC status call
-pub async fn status(State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>) -> Response {
+pub async fn status(
+    State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>,
+) -> Result<impl IntoResponse, ApiError> {
     let response = HttpStatusResponse {
         // TODO which one to use?
         ic_api_version: "0.18.0".to_string(),
@@ -383,7 +405,9 @@ pub async fn status(State((rk, h)): State<(Arc<dyn RootKey>, Arc<dyn Health>)>) 
     };
 
     // This shouldn't fail
-    serde_cbor::to_vec(&response).unwrap().into_response()
+    Ok(serde_cbor::to_vec(&response)
+        .context("failed to cbor-encode response")?
+        .into_response())
 }
 
 // Handler for query calls
@@ -391,7 +415,7 @@ pub async fn query(
     State(p): State<Arc<dyn Proxy>>,
     Extension(mut ctx): Extension<RequestContext>,
     request: Request<Body>,
-) -> Result<Response, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     // These will be Some() if we got here, otherwise middleware would refuse request earlier
     ctx.request_type = RequestType::Query;
     let canister_id = ctx.canister_id.unwrap();
@@ -400,8 +424,7 @@ pub async fn query(
     // Proxy the request
     let mut resp = p
         .proxy(RequestType::Query, request, node, canister_id)
-        .await
-        .map_err(|e| ctx.respond(e))?;
+        .await?;
 
     // Inject context into response
     resp.extensions_mut().insert(ctx);
@@ -414,7 +437,7 @@ pub async fn call(
     State(p): State<Arc<dyn Proxy>>,
     Extension(mut ctx): Extension<RequestContext>,
     request: Request<Body>,
-) -> Result<Response, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     ctx.request_type = RequestType::Call;
     // These will be Some() if we got here, otherwise middleware would refuse request earlier
     let canister_id = ctx.canister_id.unwrap();
@@ -423,8 +446,7 @@ pub async fn call(
     // Proxy the request
     let mut resp = p
         .proxy(RequestType::Call, request, node, canister_id)
-        .await
-        .map_err(|e| ctx.respond(e))?;
+        .await?;
 
     // Inject context into response
     resp.extensions_mut().insert(ctx);
@@ -437,7 +459,7 @@ pub async fn read_state(
     State(p): State<Arc<dyn Proxy>>,
     Extension(mut ctx): Extension<RequestContext>,
     request: Request<Body>,
-) -> Result<Response, Response> {
+) -> Result<impl IntoResponse, ApiError> {
     ctx.request_type = RequestType::ReadState;
     // These will be Some() if we got here, otherwise middleware would refuse request earlier
     let canister_id = ctx.canister_id.unwrap();
@@ -446,8 +468,7 @@ pub async fn read_state(
     // Proxy the request
     let mut resp = p
         .proxy(RequestType::ReadState, request, node, canister_id)
-        .await
-        .map_err(|e| ctx.respond(e))?;
+        .await?;
 
     // Inject context into response
     resp.extensions_mut().insert(ctx);
