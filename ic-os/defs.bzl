@@ -425,51 +425,10 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
                     ":update-img-test.tar.gz",
                 ],
                 remote_subdir = upload_prefix + "/update-img" + upload_suffix,
-            )
-
-        # -------------------- Bazel ergonomics --------------------
-
-        native.filegroup(
-            name = "hash_and_upload_disk-img",
-            srcs = [
-                ":upload_disk-img",
-                ":disk-img.tar.zst.sha256",
-            ],
-            visibility = ["//visibility:public"],
-            tags = ["manual"],
-        )
-
-        if upgrades:
-            native.filegroup(
-                name = "hash_and_upload_update-img",
-                srcs = [
-                    ":upload_update-img",
-                    ":update-img.tar.zst.sha256",
-                ],
-                visibility = ["//visibility:public"],
-                tags = ["manual"],
+                visibility = visibility,
             )
 
     # end if upload_prefix != None
-
-    if upgrades:
-        upgrade_outputs = [
-            ":update-img.tar.zst",
-            ":update-img.tar.gz",
-            ":update-img-test.tar.zst",
-            ":update-img-test.tar.gz",
-        ]
-    else:
-        upgrade_outputs = []
-
-    native.filegroup(
-        name = name,
-        srcs = [
-            ":disk-img.tar.zst",
-            ":disk-img.tar.gz",
-        ] + upgrade_outputs,
-        visibility = visibility,
-    )
 
     # -------------------- Vulnerability scanning --------------------
 
@@ -488,6 +447,26 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
                 "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },
         )
+
+    # -------------------- final "return" target --------------------
+    # The good practice is to have the last target in the macro with `name = name`.
+    # This allows users to just do `bazel build //some/path:macro_instance` without need to know internals of the macro
+
+    native.filegroup(
+        name = name,
+        srcs = [
+            ":disk-img.tar.zst",
+            ":disk-img.tar.gz",
+        ] + ([
+            ":update-img.tar.zst",
+            ":update-img.tar.gz",
+            ":update-img-test.tar.zst",
+            ":update-img-test.tar.gz",
+        ] if upgrades else []),
+        visibility = visibility,
+    )
+
+# end def icos_build
 
 def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibility = None, ic_version = "//bazel:version.txt"):
     """
@@ -696,16 +675,6 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         remote_subdir = "boundary-os/disk-img" + upload_suffix,
     )
 
-    native.filegroup(
-        name = "hash_and_upload_disk-img",
-        srcs = [
-            ":upload_disk-img",
-            ":disk-img.tar.zst.sha256",
-        ],
-        visibility = visibility,
-        tags = ["manual"],
-    )
-
     output_files(
         name = "disk-img-url",
         target = ":upload_disk-img",
@@ -906,16 +875,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None,
             ":disk-img.tar.gz",
         ],
         remote_subdir = "boundary-api-os/disk-img" + upload_suffix,
-    )
-
-    native.filegroup(
-        name = "hash_and_upload_disk-img",
-        srcs = [
-            ":upload_disk-img",
-            ":disk-img.tar.zst.sha256",
-        ],
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
+        visibility = visibility,
     )
 
     output_files(

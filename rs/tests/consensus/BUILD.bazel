@@ -114,7 +114,8 @@ system_test(
         NNS_CANISTER_RUNTIME_DEPS +
         MAINNET_REVISION_RUNTIME_DEPS + [
             "//rs/tests:recovery/binaries",
-            "//ic-os/guestos/envs/prod:hash_and_upload_update-img",
+            "//ic-os/guestos/envs/prod:update-img.tar.zst.sha256",
+            "//ic-os/guestos/envs/prod:upload_update-img",
         ],
     deps = DEPENDENCIES + ["//rs/tests"],
 )
