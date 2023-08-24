@@ -1932,6 +1932,19 @@ message GetMaturityModulationResponse {
   Governance.MaturityModulation maturity_modulation = 1;
 }
 
+// A request to add maturity to a neuron. The associated endpoint is only
+// available when governance is compiled with the `test` feature enabled.
+message AddMaturityRequest {
+  optional NeuronId id = 1;
+  optional uint64 amount_e8s = 2;
+}
+
+// The response to a request to add maturity to a neuron. The associated endpoint is only
+// available when governance is compiled with the `test` feature enabled.
+message AddMaturityResponse {
+  optional uint64 new_maturity_e8s = 1;
+}
+
 // A Ledger subaccount.
 message Subaccount {
   option (ic_base_types.pb.v1.tui_signed_message) = true;

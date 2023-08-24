@@ -2813,6 +2813,36 @@ pub struct GetMaturityModulationResponse {
     #[prost(message, optional, tag = "1")]
     pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
 }
+/// A request to add maturity to a neuron. The associated endpoint is only
+/// available when governance is compiled with the `test` feature enabled.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AddMaturityRequest {
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<NeuronId>,
+    #[prost(uint64, optional, tag = "2")]
+    pub amount_e8s: ::core::option::Option<u64>,
+}
+/// The response to a request to add maturity to a neuron. The associated endpoint is only
+/// available when governance is compiled with the `test` feature enabled.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct AddMaturityResponse {
+    #[prost(uint64, optional, tag = "1")]
+    pub new_maturity_e8s: ::core::option::Option<u64>,
+}
 /// A Ledger subaccount.
 #[derive(
     candid::CandidType,

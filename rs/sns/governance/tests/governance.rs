@@ -32,11 +32,11 @@ use ic_sns_governance::{
             neuron,
             neuron::{DissolveState, Followees},
             proposal::Action,
-            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty,
-            GovernanceError, ManageNeuronResponse, Motion, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
-            RegisterDappCanisters, Vote, WaitForQuietState,
+            Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
+            ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse, Motion, Neuron,
+            NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
+            ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
     types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
@@ -2649,5 +2649,31 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     assert_eq!(
         account_balance_after_disbursal,
         expected_amount_disbursed_e8s
+    );
+}
+
+#[test]
+fn test_add_maturity() {
+    let (mut canister_fixture, _user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    const MATURITY_TO_ADD: u64 = 100_000;
+
+    let neuron_original = canister_fixture.get_neuron(&neuron_id);
+    let add_maturity_result = canister_fixture
+        .governance
+        .add_maturity(AddMaturityRequest {
+            id: Some(neuron_id.clone()),
+            amount_e8s: Some(MATURITY_TO_ADD),
+        });
+    let neuron_new = canister_fixture.get_neuron(&neuron_id);
+
+    assert_eq!(
+        neuron_original.maturity_e8s_equivalent + MATURITY_TO_ADD,
+        neuron_new.maturity_e8s_equivalent
+    );
+    assert_eq!(
+        add_maturity_result.new_maturity_e8s,
+        Some(neuron_new.maturity_e8s_equivalent)
     );
 }
