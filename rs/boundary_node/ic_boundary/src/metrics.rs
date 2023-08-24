@@ -4,7 +4,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use axum::{
     body::Body,
-    extract::{FromRef, State},
+    extract::State,
     http::{Request, StatusCode},
     middleware::Next,
     response::Response,
@@ -23,7 +23,7 @@ use tracing::{error, info};
 use crate::{
     check::{Check, CheckError, CheckResult},
     persist::{Persist, PersistStatus},
-    routes::{MiddlewareState, RequestContext},
+    routes::RequestContext,
     snapshot::{Node, RoutingTable},
 };
 
@@ -264,13 +264,6 @@ pub async fn with_metrics_middleware(
     );
 
     Ok(response)
-}
-
-// Get the metric_params from the combined state
-impl<T> FromRef<MiddlewareState<T>> for HttpMetricParams {
-    fn from_ref(state: &MiddlewareState<T>) -> HttpMetricParams {
-        state.metric_params.clone()
-    }
 }
 
 #[derive(Clone)]
