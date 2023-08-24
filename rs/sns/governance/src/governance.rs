@@ -5026,10 +5026,9 @@ impl Governance {
         let max_number_of_neurons = self
             .nervous_system_parameters_or_panic()
             .max_number_of_neurons
-            .expect("NervousSystemParameters must have max_number_of_neurons")
-            as usize;
+            .expect("NervousSystemParameters must have max_number_of_neurons");
 
-        if self.proto.neurons.len() + 1 > max_number_of_neurons {
+        if (self.proto.neurons.len() as u64) + 1 > max_number_of_neurons {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot add neuron. Max number of neurons reached.",
