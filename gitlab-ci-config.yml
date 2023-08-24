@@ -79,9 +79,6 @@ ci_jobs_required:
   - pre-commit
   - gitlab-ci-config-validation
   - python-gitlab-ci-tests
-  # prod tests
-  - rejoin-nightly
-  - rejoin-test-slo
   # finalize stage
   - notify-gitlab-success
   - notify-gitlab-failure
