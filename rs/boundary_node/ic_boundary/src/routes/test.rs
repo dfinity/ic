@@ -57,7 +57,7 @@ async fn test_status() -> Result<(), Error> {
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let resp = status(State((rk, h))).await;
+    let resp: Response = status(State((rk, h))).await?.into_response();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let (_parts, body) = resp.into_parts();
@@ -112,10 +112,11 @@ async fn test_query() -> Result<(), Error> {
 
     let request = Request::builder().body(Body::from(body)).unwrap();
 
-    let resp = query(State(Arc::new(state)), Extension(ctx), request).await;
+    let resp = query(State(Arc::new(state)), Extension(ctx), request)
+        .await
+        .unwrap()
+        .into_response();
 
-    assert!(resp.is_ok());
-    let resp = resp.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let (_parts, body) = resp.into_parts();
