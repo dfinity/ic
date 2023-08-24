@@ -9,7 +9,7 @@ const NOMINAL_SECONDS_PER_YEAR: u64 = 365 * SECONDS_PER_DAY + SECONDS_PER_DAY / 
 fn test_parse() {
     let input_path = {
         let mut result = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        result.push("example_sns_init_v2.yaml");
+        result.push("test_sns_init_v2.yaml");
         result
     };
 
@@ -21,7 +21,7 @@ fn test_parse() {
         name: "Daniel".to_string(),
         description: "The best software engineer you ever did saw.\n".to_string(),
         logo: PathBuf::from("test.png"),
-        url: "https://forum.dfinity.org/thread-where-this-sns-is-discussed".to_string(),
+        url: "https://some-link-to-a-project.org".to_string(),
 
         principals: vec![
             PrincipalAlias {
@@ -178,7 +178,7 @@ fn test_parse() {
         nns_proposal: NnsProposal {
             title: "Proposal to Create an SNS named Daniel".to_string(),
             summary: "This is just a short summary, but I think it's pretty good.".to_string(),
-            url: Some("https://forum.dfinity.org/".to_string()),
+            url: Some("https://forum.dfinity.org/thread-where-this-sns-is-discussed".to_string()),
         },
     };
 
@@ -192,7 +192,7 @@ fn test_parse() {
 fn test_parse_no_start_time() {
     let input_path = {
         let mut result = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        result.push("example_sns_init_v2.yaml");
+        result.push("test_sns_init_v2.yaml");
         result
     };
 
@@ -214,7 +214,7 @@ fn test_parse_no_start_time() {
 fn test_parse_no_restricted_countries() {
     let input_path = {
         let mut result = std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        result.push("example_sns_init_v2.yaml");
+        result.push("test_sns_init_v2.yaml");
         result
     };
 
@@ -241,7 +241,7 @@ fn test_convert_to_create_service_nervous_system() {
     let test_root_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let test_root_dir = Path::new(&test_root_dir);
 
-    let contents = std::fs::read_to_string(test_root_dir.join("example_sns_init_v2.yaml")).unwrap();
+    let contents = std::fs::read_to_string(test_root_dir.join("test_sns_init_v2.yaml")).unwrap();
     let sns_configuration_file = serde_yaml::from_str::<SnsConfigurationFile>(&contents).unwrap();
 
     // Step 2: Call code under test.
@@ -265,7 +265,7 @@ fn test_convert_to_create_service_nervous_system() {
         CreateServiceNervousSystem {
             name: Some("Daniel".to_string()),
             description: Some("The best software engineer you ever did saw.\n".to_string()),
-            url: Some("https://forum.dfinity.org/thread-where-this-sns-is-discussed".to_string()),
+            url: Some("https://some-link-to-a-project.org".to_string()),
 
             fallback_controller_principal_ids: vec![PrincipalId::from_str(
                 "5zxxw-63ouu-faaaa-aaaap-4ai"

@@ -137,9 +137,9 @@ rust_test(
     ],
     crate_root = "src/lib.rs",
     data = [
-        "example_sns_init_v1.yaml",
-        "example_sns_init_v2.yaml",
         "test.png",
+        "test_sns_init_v1.yaml",
+        "test_sns_init_v2.yaml",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/sns/cli",
