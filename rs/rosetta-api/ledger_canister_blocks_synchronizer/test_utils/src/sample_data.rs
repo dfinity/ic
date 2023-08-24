@@ -146,7 +146,11 @@ impl Scribe {
         *balance = (*balance).checked_sub(&amount).unwrap();
         let memo = self.next_message();
         let transaction = Transaction {
-            operation: Operation::Burn { from: uid, amount },
+            operation: Operation::Burn {
+                from: uid,
+                amount,
+                spender: None,
+            },
             memo,
             icrc1_memo: None,
             created_at_time: Some(self.time().into()),

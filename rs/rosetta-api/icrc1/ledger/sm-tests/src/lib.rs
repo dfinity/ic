@@ -195,7 +195,7 @@ fn send_transfer(
     .map(|n| n.0.to_u64().unwrap())
 }
 
-fn system_time_to_nanos(t: SystemTime) -> u64 {
+pub fn system_time_to_nanos(t: SystemTime) -> u64 {
     t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
 }
 
@@ -411,7 +411,7 @@ pub fn send_approval(
     .map(|n| n.0.to_u64().unwrap())
 }
 
-fn send_transfer_from(
+pub fn send_transfer_from(
     env: &StateMachine,
     ledger: CanisterId,
     from: Principal,
@@ -1960,7 +1960,7 @@ pub fn default_approve_args(spender: impl Into<Account>, amount: u64) -> Approve
     }
 }
 
-fn default_transfer_from_args(
+pub fn default_transfer_from_args(
     from: impl Into<Account>,
     to: impl Into<Account>,
     amount: u64,
@@ -2330,7 +2330,7 @@ pub fn expect_icrc2_disabled(
     canister_id: CanisterId,
     approve_args: &ApproveArgs,
     allowance_args: &AllowanceArgs,
-    transfer_from_args: Option<&TransferFromArgs>,
+    transfer_from_args: &TransferFromArgs,
 ) {
     let err = env
         .execute_ingress_as(
@@ -2362,23 +2362,21 @@ pub fn expect_icrc2_disabled(
         "Expected ICRC-2 disabled error, got: {}",
         err.description()
     );
-    if let Some(transfer_from_args) = transfer_from_args {
-        let err = env
-            .execute_ingress_as(
-                from,
-                canister_id,
-                "icrc2_transfer_from",
-                Encode!(&transfer_from_args).unwrap(),
-            )
-            .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-        assert!(
-            err.description()
-                .ends_with("ICRC-2 features are not enabled on the ledger."),
-            "Expected ICRC-2 disabled error, got: {}",
-            err.description()
-        );
-    }
+    let err = env
+        .execute_ingress_as(
+            from,
+            canister_id,
+            "icrc2_transfer_from",
+            Encode!(&transfer_from_args).unwrap(),
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+    assert!(
+        err.description()
+            .ends_with("ICRC-2 features are not enabled on the ledger."),
+        "Expected ICRC-2 disabled error, got: {}",
+        err.description()
+    );
     let standards = supported_standards(env, canister_id);
     assert_eq!(standards.len(), 1);
     assert_eq!(standards[0].name, "ICRC-1");
@@ -2416,7 +2414,7 @@ where
         canister_id,
         &approve_args,
         &allowance_args,
-        Some(&transfer_from_args),
+        &transfer_from_args,
     );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
@@ -2437,7 +2435,7 @@ where
         canister_id,
         &approve_args,
         &allowance_args,
-        Some(&transfer_from_args),
+        &transfer_from_args,
     );
 
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {

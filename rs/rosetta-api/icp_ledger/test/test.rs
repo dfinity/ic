@@ -1486,7 +1486,8 @@ fn transaction_test() {
             burn_transaction,
             Operation::Burn {
                 from: acc2.get_principal_id().into(),
-                amount: Tokens::from_e8s(burn_amount)
+                amount: Tokens::from_e8s(burn_amount),
+                spender: None,
             }
         );
 

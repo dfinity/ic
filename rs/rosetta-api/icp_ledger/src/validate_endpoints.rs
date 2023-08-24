@@ -578,9 +578,14 @@ impl ToProto for Transaction {
             PTransfer::Burn(protobuf::Burn {
                 from: Some(from),
                 amount: Some(amount),
+                spender,
             }) => Operation::Burn {
                 from: AccountIdentifier::from_proto(from)?,
                 amount: tokens_from_proto(amount),
+                spender: match spender {
+                    Some(spender) => Some(AccountIdentifier::from_proto(spender)?),
+                    None => None,
+                },
             },
             PTransfer::Mint(protobuf::Mint {
                 to: Some(to),
@@ -662,9 +667,14 @@ impl ToProto for Transaction {
         } = self;
         let icrc1_memo_proto = icrc1_memo.map(|b| protobuf::Icrc1Memo { memo: b.to_vec() });
         let transfer = match operation {
-            Operation::Burn { from, amount } => PTransfer::Burn(protobuf::Burn {
+            Operation::Burn {
+                from,
+                amount,
+                spender,
+            } => PTransfer::Burn(protobuf::Burn {
                 from: Some(from.into_proto()),
                 amount: Some(tokens_into_proto(amount)),
+                spender: spender.map(|s| s.into_proto()),
             }),
 
             Operation::Mint { to, amount } => PTransfer::Mint(protobuf::Mint {

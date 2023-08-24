@@ -79,7 +79,7 @@ mod database_access {
         let icrc1_memo = tx.icrc1_memo.as_ref().map(|memo| memo.to_vec());
         let operation_type = tx.operation.clone();
         match operation_type {
-            Operation::Burn { from, amount } => {
+            Operation::Burn { from, amount, .. } => {
                 let op_string: &str = operation_type.into();
                 let from_account = from.to_hex();
                 let tokens = amount.get_e8s();
@@ -444,7 +444,7 @@ mod database_access {
                 Ok(account_balance_opt)
             };
         match operation_type {
-            Operation::Burn { from, amount } => {
+            Operation::Burn { from, amount, .. } => {
                 let account_balance_opt = extract_latest_balance(from)?;
                 match account_balance_opt {
                     Some(mut balance) => {

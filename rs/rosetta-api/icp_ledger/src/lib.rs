@@ -84,6 +84,7 @@ pub enum Operation {
     Burn {
         from: AccountIdentifier,
         amount: Tokens,
+        spender: Option<AccountIdentifier>,
     },
     Mint {
         to: AccountIdentifier,
@@ -115,7 +116,27 @@ where
     C: LedgerContext<AccountId = AccountIdentifier, Tokens = Tokens>,
 {
     match operation {
-        Operation::Burn { from, amount, .. } => context.balances_mut().burn(from, *amount)?,
+        Operation::Burn {
+            from,
+            amount,
+            spender,
+        } => {
+            if let Some(spender) = spender.as_ref() {
+                let allowance = context.approvals().allowance(from, spender, now);
+                if allowance.amount < *amount {
+                    return Err(TxApplyError::InsufficientAllowance {
+                        allowance: allowance.amount,
+                    });
+                }
+            }
+            context.balances_mut().burn(from, *amount)?;
+            if spender.is_some() && from != &spender.unwrap() {
+                context
+                    .approvals_mut()
+                    .use_allowance(from, &spender.unwrap(), *amount, now)
+                    .expect("bug: cannot use allowance");
+            }
+        }
         Operation::Mint { to, amount, .. } => context.balances_mut().mint(to, *amount)?,
         Operation::Approve {
             from,
@@ -217,13 +238,17 @@ impl LedgerTransaction for Transaction {
 
     fn burn(
         from: Self::AccountId,
-        _spender: Option<Self::AccountId>,
+        spender: Option<Self::AccountId>,
         amount: Tokens,
         created_at_time: Option<TimeStamp>,
         memo: Option<u64>,
     ) -> Self {
         Self {
-            operation: Operation::Burn { from, amount },
+            operation: Operation::Burn {
+                from,
+                amount,
+                spender,
+            },
             memo: memo.map(Memo).unwrap_or_default(),
             icrc1_memo: None,
             created_at_time,
@@ -231,13 +256,25 @@ impl LedgerTransaction for Transaction {
     }
 
     fn approve(
-        _from: Self::AccountId,
-        _spender: Self::AccountId,
-        _amount: Self::Tokens,
-        _created_at_time: Option<TimeStamp>,
-        _memo: Option<u64>,
+        from: Self::AccountId,
+        spender: Self::AccountId,
+        amount: Self::Tokens,
+        created_at_time: Option<TimeStamp>,
+        memo: Option<u64>,
     ) -> Self {
-        todo!()
+        Self {
+            operation: Operation::Approve {
+                from,
+                spender,
+                allowance: amount,
+                expected_allowance: None,
+                expires_at: None,
+                fee: Tokens::ZERO,
+            },
+            memo: memo.map(Memo).unwrap_or_default(),
+            icrc1_memo: None,
+            created_at_time,
+        }
     }
 
     fn created_at_time(&self) -> Option<TimeStamp> {
@@ -451,6 +488,8 @@ pub struct InitArgs {
     pub token_symbol: Option<String>,
     pub token_name: Option<String>,
     pub feature_flags: Option<FeatureFlags>,
+    pub maximum_number_of_accounts: Option<usize>,
+    pub accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayload {
@@ -483,6 +522,8 @@ pub struct LedgerCanisterInitPayloadBuilder {
     token_symbol: Option<String>,
     token_name: Option<String>,
     feature_flags: Option<FeatureFlags>,
+    maximum_number_of_accounts: Option<usize>,
+    accounts_overflow_trim_quantity: Option<usize>,
 }
 
 impl LedgerCanisterInitPayloadBuilder {
@@ -499,6 +540,8 @@ impl LedgerCanisterInitPayloadBuilder {
             token_symbol: None,
             token_name: None,
             feature_flags: None,
+            maximum_number_of_accounts: None,
+            accounts_overflow_trim_quantity: None,
         }
     }
 
@@ -553,6 +596,23 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: Option<u64>) -> Self {
+        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
+            self.maximum_number_of_accounts = Some(maximum_number_of_accounts as usize);
+        }
+        self
+    }
+
+    pub fn accounts_overflow_trim_quantity(
+        mut self,
+        accounts_overflow_trim_quantity: Option<u64>,
+    ) -> Self {
+        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
+            self.accounts_overflow_trim_quantity = Some(accounts_overflow_trim_quantity as usize);
+        }
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterInitPayload, String> {
         let minting_account = self
             .minting_account
@@ -586,6 +646,8 @@ impl LedgerCanisterInitPayloadBuilder {
                 token_symbol: self.token_symbol,
                 token_name: self.token_name,
                 feature_flags: self.feature_flags,
+                maximum_number_of_accounts: self.maximum_number_of_accounts,
+                accounts_overflow_trim_quantity: self.accounts_overflow_trim_quantity,
             },
         )))
     }
@@ -791,6 +853,7 @@ pub enum CandidOperation {
     Burn {
         from: AccountIdBlob,
         amount: Tokens,
+        spender: Option<AccountIdBlob>,
     },
     Mint {
         to: AccountIdBlob,
@@ -818,9 +881,14 @@ pub enum CandidOperation {
 impl From<Operation> for CandidOperation {
     fn from(op: Operation) -> Self {
         match op {
-            Operation::Burn { from, amount } => Self::Burn {
+            Operation::Burn {
+                from,
+                amount,
+                spender,
+            } => Self::Burn {
                 from: from.to_address(),
                 amount,
+                spender: spender.map(|s| s.to_address()),
             },
             Operation::Mint { to, amount } => Self::Mint {
                 to: to.to_address(),
@@ -867,10 +935,22 @@ impl TryFrom<CandidOperation> for Operation {
             AccountIdentifier::from_address(acc).map_err(|err| err.to_string())
         };
         Ok(match value {
-            CandidOperation::Burn { from, amount } => Operation::Burn {
-                from: address_to_accountidentifier(from)?,
+            CandidOperation::Burn {
+                from,
                 amount,
-            },
+                spender,
+            } => {
+                let spender = if spender.is_some() {
+                    Some(address_to_accountidentifier(spender.unwrap())?)
+                } else {
+                    None
+                };
+                Operation::Burn {
+                    from: address_to_accountidentifier(from)?,
+                    amount,
+                    spender,
+                }
+            }
             CandidOperation::Mint { to, amount } => Operation::Mint {
                 to: address_to_accountidentifier(to)?,
                 amount,

@@ -381,6 +381,8 @@ pub struct Burn {
     pub from: ::core::option::Option<AccountIdentifier>,
     #[prost(message, optional, tag = "3")]
     pub amount: ::core::option::Option<Tokens>,
+    #[prost(message, optional, tag = "4")]
+    pub spender: ::core::option::Option<AccountIdentifier>,
 }
 #[derive(
     candid::CandidType,
