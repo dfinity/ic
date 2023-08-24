@@ -18,5 +18,3 @@ mod tests;
 use serde_bytes::ByteBuf;
 
 pub const MAIN_DERIVATION_PATH: Vec<ByteBuf> = vec![];
-pub const RPC_CLIENT: eth_rpc_client::EthRpcClient =
-    eth_rpc_client::EthRpcClient::new(eth_rpc_client::EthereumChain::Sepolia);

@@ -1,4 +1,4 @@
-use crate::endpoints::InitArg;
+use crate::endpoints::{EthereumNetwork, InitArg};
 use crate::eth_rpc::BlockNumber;
 use crate::eth_rpc::Hash;
 use crate::numeric::{LedgerBurnIndex, TransactionNonce};
@@ -17,6 +17,7 @@ thread_local! {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct State {
+    pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub last_seen_block_number: BlockNumber,
@@ -34,7 +35,9 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         let next_transaction_nonce = TransactionNonce::ZERO;
+        let ethereum_network = EthereumNetwork::default();
         Self {
+            ethereum_network,
             ecdsa_key_name: "test_key_1".to_string(),
             ecdsa_public_key: None,
             // Note that the default block to start from for logs scrapping
@@ -55,6 +58,7 @@ impl Default for State {
 impl From<InitArg> for State {
     fn from(
         InitArg {
+            ethereum_network,
             ecdsa_key_name,
             next_transaction_nonce,
         }: InitArg,
@@ -62,6 +66,7 @@ impl From<InitArg> for State {
         let initial_nonce = TransactionNonce::try_from(next_transaction_nonce)
             .expect("BUG: initial nonce must be less than U256::MAX");
         Self {
+            ethereum_network,
             ecdsa_key_name,
             next_transaction_nonce: initial_nonce,
             pending_retrieve_eth_requests: PendingEthTransactions::new(initial_nonce),
@@ -90,6 +95,10 @@ impl State {
                 .insert(leder_burn_index, transaction),
             Ok(())
         );
+    }
+
+    pub const fn ethereum_network(&self) -> EthereumNetwork {
+        self.ethereum_network
     }
 }
 
