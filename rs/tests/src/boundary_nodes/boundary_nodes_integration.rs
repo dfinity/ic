@@ -42,54 +42,6 @@ use serde::Deserialize;
 use slog::{error, info, Logger};
 use tokio::runtime::Runtime;
 
-struct PanicHandler {
-    env: TestEnv,
-    is_enabled: bool,
-}
-
-impl PanicHandler {
-    fn new(env: TestEnv) -> Self {
-        Self {
-            env,
-            is_enabled: true,
-        }
-    }
-
-    fn disable(&mut self) {
-        self.is_enabled = false;
-    }
-}
-
-impl Drop for PanicHandler {
-    fn drop(&mut self) {
-        if !self.is_enabled {
-            return;
-        }
-
-        std::thread::sleep(Duration::from_secs(60));
-
-        let logger = self.env.logger();
-
-        let boundary_node = self
-            .env
-            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
-            .unwrap()
-            .get_snapshot()
-            .unwrap();
-
-        let list_dependencies = boundary_node
-            .block_on_bash_script(
-                "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
-            )
-            .unwrap();
-
-        info!(
-            logger,
-            "systemctl {BOUNDARY_NODE_NAME} = '{list_dependencies}'"
-        );
-    }
-}
-
 async fn install_canister(env: TestEnv, logger: Logger, path: &str) -> Result<Principal, Error> {
     let install_node = env
         .topology_snapshot()
@@ -140,8 +92,6 @@ end::catalog[] */
 
 pub fn canister_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let mut install_node = None;
     for subnet in env.topology_snapshot().subnets() {
@@ -196,8 +146,6 @@ pub fn canister_test(env: TestEnv) {
 
         assert_eq!(read_result, [0; 4]);
     });
-
-    panic_handler.disable();
 }
 
 /* tag::catalog[]
@@ -217,8 +165,6 @@ end::catalog[] */
 
 pub fn http_canister_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let mut install_node = None;
     for subnet in env.topology_snapshot().subnets() {
@@ -365,8 +311,6 @@ pub fn http_canister_test(env: TestEnv) {
         .await
         .unwrap();
     });
-
-    panic_handler.disable();
 }
 
 /* tag::catalog[]
@@ -422,8 +366,6 @@ end::catalog[] */
 
 pub fn denylist_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let mut install_node = None;
     for subnet in env.topology_snapshot().subnets() {
@@ -496,8 +438,6 @@ pub fn denylist_test(env: TestEnv) {
             Ok(())
         }).await.unwrap();
     });
-
-    panic_handler.disable();
 }
 
 /* tag::catalog[]
@@ -513,8 +453,6 @@ end::catalog[] */
 
 pub fn canister_allowlist_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let mut install_node = None;
     for subnet in env.topology_snapshot().subnets() {
@@ -644,14 +582,10 @@ pub fn canister_allowlist_test(env: TestEnv) {
 
         assert_eq!(res, reqwest::StatusCode::OK, "expected OK, got {}", res);
     });
-
-    panic_handler.disable();
 }
 
 pub fn redirect_http_to_https_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -745,14 +679,10 @@ pub fn redirect_http_to_https_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 pub fn redirect_to_dashboard_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -847,14 +777,10 @@ pub fn redirect_to_dashboard_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 pub fn redirect_to_non_raw_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -1006,14 +932,10 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 pub fn sw_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -1221,14 +1143,10 @@ pub fn sw_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 pub fn icx_proxy_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -1340,14 +1258,10 @@ pub fn icx_proxy_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 pub fn direct_to_replica_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -1532,14 +1446,10 @@ pub fn direct_to_replica_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 pub fn direct_to_replica_options_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -1689,14 +1599,10 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 pub fn direct_to_replica_rosetta_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -1875,14 +1781,10 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 pub fn seo_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -1990,8 +1892,6 @@ pub fn seo_test(env: TestEnv) {
         }
     })
     .expect("test suite failed");
-
-    panic_handler.disable();
 }
 
 /* tag::catalog[]
@@ -2010,8 +1910,6 @@ end::catalog[] */
 
 pub fn reboot_test(env: TestEnv) {
     let logger = env.logger();
-
-    let mut panic_handler = PanicHandler::new(env.clone());
 
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
@@ -2046,6 +1944,4 @@ pub fn reboot_test(env: TestEnv) {
     boundary_node
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
-
-    panic_handler.disable();
 }

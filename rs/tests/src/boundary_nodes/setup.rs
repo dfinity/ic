@@ -23,7 +23,7 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 
-use slog::info;
+use slog::{debug, info};
 
 use crate::boundary_nodes::helpers::BoundaryNodeHttpsConfig;
 
@@ -130,6 +130,12 @@ pub fn setup_ic_with_bn(
             info!(log, "Checking BN health");
             bn.await_status_is_healthy()
                 .expect("Boundary node did not come up healthy.");
+            let list_dependencies = bn
+            .block_on_bash_script(
+                "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
+            )
+            .unwrap();
+            debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
         }
         BoundaryNodeType::ApiBoundaryNode => {
             let bn = env
@@ -152,6 +158,12 @@ pub fn setup_ic_with_bn(
             info!(log, "Checking API BN health");
             bn.await_status_is_healthy()
                 .expect("Api Boundary node did not come up healthy.");
+            let list_dependencies = bn
+                .block_on_bash_script(
+                    "systemctl list-dependencies systemd-sysusers.service --all --reverse --no-pager",
+                )
+                .unwrap();
+            debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
         }
     };
 }
