@@ -11,7 +11,7 @@
 pub(super) mod parser_to_internal {
     use crate::wasm_utils::wasm_transform;
 
-    fn const_expr(
+    pub(crate) fn const_expr(
         const_expr: wasmparser::ConstExpr,
     ) -> Result<Vec<wasmparser::Operator>, wasmparser::BinaryReaderError> {
         const_expr
@@ -77,12 +77,15 @@ pub(super) mod parser_to_internal {
                 let functions = reader.into_iter().collect::<Result<Vec<_>, _>>()?;
                 Ok(wasm_transform::ElementItems::Functions(functions))
             }
-            wasmparser::ElementItems::Expressions(reader) => {
+            wasmparser::ElementItems::Expressions(ref_type, reader) => {
                 let exprs = reader
                     .into_iter()
                     .map(|expr| const_expr(expr?))
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok(wasm_transform::ElementItems::ConstExprs(exprs))
+                Ok(wasm_transform::ElementItems::ConstExprs {
+                    ty: ref_type,
+                    exprs,
+                })
             }
         }
     }
@@ -116,14 +119,79 @@ pub(super) mod internal_to_encoder {
             wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
             wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
             wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-            wasmparser::ValType::FuncRef => wasm_encoder::ValType::FuncRef,
-            wasmparser::ValType::ExternRef => wasm_encoder::ValType::ExternRef,
+            wasmparser::ValType::Ref(r) => wasm_encoder::ValType::Ref(ref_type(r)),
+        }
+    }
+
+    fn ref_type(v: &wasmparser::RefType) -> wasm_encoder::RefType {
+        wasm_encoder::RefType {
+            nullable: v.is_nullable(),
+            heap_type: heap_type(&v.heap_type()),
+        }
+    }
+
+    fn heap_type(v: &wasmparser::HeapType) -> wasm_encoder::HeapType {
+        match v {
+            wasmparser::HeapType::Indexed(i) => wasm_encoder::HeapType::Indexed(*i),
+            wasmparser::HeapType::Func => wasm_encoder::HeapType::Func,
+            wasmparser::HeapType::Extern => wasm_encoder::HeapType::Extern,
+            wasmparser::HeapType::Any => wasm_encoder::HeapType::Any,
+            wasmparser::HeapType::None => wasm_encoder::HeapType::None,
+            wasmparser::HeapType::NoExtern => wasm_encoder::HeapType::NoExtern,
+            wasmparser::HeapType::NoFunc => wasm_encoder::HeapType::NoFunc,
+            wasmparser::HeapType::Eq => wasm_encoder::HeapType::Eq,
+            wasmparser::HeapType::Struct => wasm_encoder::HeapType::Struct,
+            wasmparser::HeapType::Array => wasm_encoder::HeapType::Array,
+            wasmparser::HeapType::I31 => wasm_encoder::HeapType::I31,
+        }
+    }
+
+    fn structural_type(v: &wasmparser::StructuralType) -> wasm_encoder::StructuralType {
+        fn field_type(f: &wasmparser::FieldType) -> wasm_encoder::FieldType {
+            let element_type = match &f.element_type {
+                wasmparser::StorageType::I8 => wasm_encoder::StorageType::I8,
+                wasmparser::StorageType::I16 => wasm_encoder::StorageType::I16,
+                wasmparser::StorageType::Val(v) => wasm_encoder::StorageType::Val(val_type(v)),
+            };
+            wasm_encoder::FieldType {
+                element_type,
+                mutable: f.mutable,
+            }
+        }
+
+        match v {
+            wasmparser::StructuralType::Func(f) => {
+                wasm_encoder::StructuralType::Func(wasm_encoder::FuncType::new(
+                    f.params().iter().map(val_type),
+                    f.results().iter().map(val_type),
+                ))
+            }
+            wasmparser::StructuralType::Array(wasmparser::ArrayType(f)) => {
+                wasm_encoder::StructuralType::Array(wasm_encoder::ArrayType(field_type(f)))
+            }
+            wasmparser::StructuralType::Struct(wasmparser::StructType { fields }) => {
+                wasm_encoder::StructuralType::Struct(wasm_encoder::StructType {
+                    fields: fields
+                        .iter()
+                        .map(field_type)
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                })
+            }
+        }
+    }
+
+    pub(crate) fn subtype(v: &wasmparser::SubType) -> wasm_encoder::SubType {
+        wasm_encoder::SubType {
+            is_final: v.is_final,
+            supertype_idx: v.supertype_idx,
+            structural_type: structural_type(&v.structural_type),
         }
     }
 
     pub(crate) fn table_type(t: wasmparser::TableType) -> wasm_encoder::TableType {
         wasm_encoder::TableType {
-            element_type: val_type(&t.element_type),
+            element_type: ref_type(&t.element_type),
             minimum: t.initial,
             maximum: t.maximum,
         }
@@ -267,11 +335,14 @@ pub(super) mod internal_to_encoder {
             wasm_transform::ElementItems::Functions(funcs) => {
                 Ok(wasm_encoder::Elements::Functions(funcs))
             }
-            wasm_transform::ElementItems::ConstExprs(exprs) => {
+            wasm_transform::ElementItems::ConstExprs { ty, exprs } => {
                 for e in exprs {
                     temp_const_exprs.push(const_expr(e)?);
                 }
-                Ok(wasm_encoder::Elements::Expressions(temp_const_exprs))
+                Ok(wasm_encoder::Elements::Expressions(
+                    ref_type(ty),
+                    temp_const_exprs,
+                ))
             }
         }
     }
@@ -311,6 +382,7 @@ pub(super) mod internal_to_encoder {
                 $arg.default(),
             ));
             (map $arg:ident ty) => (val_type($arg));
+            (map $arg:ident hty) => (heap_type($arg));
             (map $arg:ident memarg) => (memarg($arg));
             (map $arg:ident table_byte) => (());
             (map $arg:ident mem_byte) => (());

@@ -2907,9 +2907,9 @@ dependencies = [
  "walrus",
  "warp",
  "wasm-bindgen",
- "wasm-encoder 0.23.0",
+ "wasm-encoder 0.31.0",
  "wasm-smith",
- "wasmparser 0.100.0",
+ "wasmparser 0.109.0",
  "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
@@ -10566,6 +10566,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06a3d1b4a575ffb873679402b2aedb3117555eb65c27b1b86c8a91e574bc2a2a"
+dependencies = [
+ "leb128",
+]
+
+[[package]]
 name = "wasm-smith"
 version = "0.12.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10600,16 +10609,6 @@ checksum = "5fe3d5405e9ea6c1317a656d6e0820912d8b7b3607823a7596117c8f666daf6f"
 
 [[package]]
 name = "wasmparser"
-version = "0.100.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64b20236ab624147dfbb62cf12a19aaf66af0e41b8398838b66e997d07d269d4"
-dependencies = [
- "indexmap 1.9.3",
- "url",
-]
-
-[[package]]
-name = "wasmparser"
 version = "0.103.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c437373cac5ea84f1113d648d51f71751ffbe3d90c00ae67618cf20d0b5ee7b"
@@ -10623,6 +10622,16 @@ name = "wasmparser"
 version = "0.108.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76c956109dcb41436a39391139d9b6e2d0a5e0b158e1293ef352ec977e5e36c5"
+dependencies = [
+ "indexmap 2.0.0",
+ "semver",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.109.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bf9564f29de2890ee34406af52d2a92dec6ef044c8ddfc5add5db8dcfd36e6c"
 dependencies = [
  "indexmap 2.0.0",
  "semver",

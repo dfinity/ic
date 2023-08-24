@@ -37,8 +37,8 @@ wasmtime = { version = "10.0.1", default-features = false, features = [
 ] }
 wasmtime-environ = "10.0.1"
 wasmtime-runtime = "10.0.1"
-wasm-encoder = "0.23.0"
-wasmparser = "0.100.0"
+wasm-encoder = "0.31.0"
+wasmparser = "0.109.0"
 rayon = "1.5.1"
 
 

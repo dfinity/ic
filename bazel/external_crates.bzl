@@ -1236,13 +1236,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.23.0",
+                version = "^0.31.0",
             ),
             "wasm-smith": crate.spec(
                 version = "^0.12.4",
             ),
             "wasmparser": crate.spec(
-                version = "^0.100.0",
+                version = "^0.109.0",
             ),
             "wasmprinter": crate.spec(
                 version = "^0.2.50",
