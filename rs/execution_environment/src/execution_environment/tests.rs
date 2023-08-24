@@ -928,6 +928,135 @@ fn stop_canister_creates_entry_in_subnet_call_context_manager() {
 }
 
 #[test]
+fn clean_in_progress_stop_canister_calls_from_subnet_call_context_manager() {
+    let own_subnet = subnet_test_id(1);
+    let caller_canister = canister_test_id(1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_own_subnet_id(own_subnet)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .with_caller(own_subnet, caller_canister)
+        .build();
+
+    let ingress_memory_capacity = test.ingress_memory_capacity();
+
+    // Create two canisters.
+    let canister_id_1 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+    let canister_id_2 = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    // Set controllers.
+    let controllers = vec![caller_canister.get(), test.user_id().get()];
+    test.canister_update_controller(canister_id_1, controllers.clone())
+        .unwrap();
+    test.canister_update_controller(canister_id_2, controllers)
+        .unwrap();
+
+    let canister_states = test
+        .state()
+        .canister_states
+        .keys()
+        .cloned()
+        .collect::<Vec<_>>();
+
+    // SubnetCallContextManager does not contain any entries before executing the messages.
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+
+    //
+    // Test stop canister call with canister request origin.
+    //
+    test.inject_call_to_ic00(
+        Method::StopCanister,
+        Encode!(&CanisterIdRecord::from(canister_id_1)).unwrap(),
+        Cycles::new(1_000_000_000),
+    );
+    test.execute_subnet_message();
+
+    // SubnetCallContextManager contains a stop canister call after executing the message.
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id_1).status()
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    // Will keep the entry from the SubnetCallContextManager and does not produce a response.
+    let is_local_canister = |canister_id: CanisterId| canister_states.contains(&canister_id);
+    test.state_mut()
+        .reject_in_progress_management_calls(is_local_canister, ingress_memory_capacity);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+    assert!(!test.state().subnet_queues().has_output());
+
+    // Faking canister migration to another subnet.
+    // Will remove the entry from the SubnetCallContextManager and produce a response.
+    let is_not_local_canister = |canister_id: CanisterId| !canister_states.contains(&canister_id);
+    test.state_mut()
+        .reject_in_progress_management_calls(is_not_local_canister, ingress_memory_capacity);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+    assert!(test.state().subnet_queues().has_output());
+
+    //
+    // Test stop canister call with ingress origin.
+    //
+    let ingress_id = test.stop_canister(canister_id_2);
+    assert_eq!(
+        CanisterStatusType::Stopping,
+        test.canister_state(canister_id_1).status()
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        1
+    );
+
+    // Will remove the entry from the SubnetCallContextManager and reject the message.
+    test.state_mut()
+        .reject_in_progress_management_calls(is_not_local_canister, ingress_memory_capacity);
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_call_context_manager
+            .stop_canister_calls_len(),
+        0
+    );
+    assert_eq!(
+        check_ingress_status(test.ingress_status(&ingress_id)),
+        Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {} migrated during a subnet split", canister_id_2),
+        ))
+    );
+}
+
+#[test]
 fn starting_a_stopping_canister_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
