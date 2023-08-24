@@ -184,6 +184,7 @@ pub struct ExecutionTest {
     install_code_instruction_limits: InstructionLimits,
     instruction_limit_without_dts: NumInstructions,
     initial_canister_cycles: Cycles,
+    ingress_memory_capacity: NumBytes,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     caller_canister_id: Option<CanisterId>,
@@ -272,6 +273,10 @@ impl ExecutionTest {
 
     pub fn executed_instructions(&self) -> NumInstructions {
         self.executed_instructions.values().sum()
+    }
+
+    pub fn ingress_memory_capacity(&self) -> NumBytes {
+        self.ingress_memory_capacity
     }
 
     pub fn canister_executed_instructions(&self, canister_id: CanisterId) -> NumInstructions {
@@ -1868,7 +1873,7 @@ impl ExecutionTestBuilder {
             self.log.clone(),
             hypervisor,
             self.subnet_type,
-            config,
+            config.clone(),
             &metrics_registry,
             self.instruction_limit_without_dts,
             Arc::clone(&cycles_account_manager),
@@ -1901,6 +1906,7 @@ impl ExecutionTestBuilder {
                 self.install_code_instruction_limit,
                 self.install_code_slice_instruction_limit,
             ),
+            ingress_memory_capacity: config.ingress_history_memory_capacity,
             instruction_limit_without_dts: self.instruction_limit_without_dts,
             initial_canister_cycles: self.initial_canister_cycles,
             registry_settings: self.registry_settings,

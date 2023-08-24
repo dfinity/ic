@@ -138,27 +138,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         let current_status = state.get_ingress_status(&message_id);
 
         // Guard against an invalid state transition
-        use IngressState::*;
-        use IngressStatus::*;
-        if match (&current_status, &status) {
-            (Unknown, _) => false,
-            (Known { .. }, Unknown) => true,
-            (
-                Known {
-                    state: current_state,
-                    ..
-                },
-                Known { state, .. },
-            ) => !matches!(
-                (&current_state, &state),
-                (Received, Processing)
-                    | (Received, Completed(_))
-                    | (Received, Failed(_))
-                    | (Processing, Processing)
-                    | (Processing, Completed(_))
-                    | (Processing, Failed(_))
-            ),
-        } {
+        if !current_status.is_valid_state_transition(&status) {
             fatal!(
                 self.log,
                 "message (id='{}', current_status='{:?}') cannot be transitioned to '{:?}'",
@@ -167,6 +147,8 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 status
             );
         }
+        use IngressState::*;
+        use IngressStatus::*;
         match &status {
             Known {
                 state: Received, ..

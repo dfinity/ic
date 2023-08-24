@@ -6,7 +6,8 @@ use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::{
-    CanisterHistory, CyclesUseCase, MAX_CANISTER_HISTORY_CHANGES,
+    CallContextManager, CanisterHistory, CanisterStatus, CyclesUseCase,
+    MAX_CANISTER_HISTORY_CHANGES,
 };
 use crate::CallOrigin;
 use crate::Memory;
@@ -16,18 +17,19 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
     ids::canister_test_id,
+    ids::message_test_id,
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
-use ic_types::messages::CallContextId;
 use ic_types::{
-    messages::CallbackId,
+    messages::{
+        CallContextId, CallbackId, CanisterCall, StopCanisterCallId, StopCanisterContext,
+        MAX_RESPONSE_COUNT_BYTES,
+    },
     methods::{Callback, WasmClosure},
-    Time,
-};
-use ic_types::{
-    messages::MAX_RESPONSE_COUNT_BYTES, nominal_cycles::NominalCycles, xnet::QueueId, CountBytes,
-    Cycles,
+    nominal_cycles::NominalCycles,
+    xnet::QueueId,
+    CountBytes, Cycles, Time,
 };
 use ic_wasm_types::CanisterModule;
 
@@ -763,4 +765,56 @@ fn canister_history_operations() {
         total_num_changes += 1;
         assert_eq!(canister_history.get_total_num_changes(), total_num_changes);
     }
+}
+
+#[test]
+fn canister_state_after_split_has_no_abort_install_code() {
+    let mut fixture = CanisterStateFixture::new();
+    fixture
+        .canister_state
+        .system_state
+        .task_queue
+        .push_back(ExecutionTask::Heartbeat);
+    fixture
+        .canister_state
+        .system_state
+        .task_queue
+        .push_back(ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
+            call_id: None,
+            prepaid_execution_cycles: Cycles::from(0u128),
+        });
+
+    let canister = fixture.canister_state.after_split();
+
+    assert_eq!(canister.next_task(), Some(&ExecutionTask::Heartbeat));
+    assert_eq!(canister.system_state.task_queue.len(), 1);
+}
+
+#[test]
+fn canister_state_after_split_is_running() {
+    let mut call_context_manager = CallContextManager::default();
+    call_context_manager.new_call_context(
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        Cycles::from(0u128),
+        Time::from_nanos_since_unix_epoch(0),
+    );
+    let mut fixture = CanisterStateFixture::new();
+    fixture.canister_state.system_state.status = CanisterStatus::Stopping {
+        call_context_manager: call_context_manager.clone(),
+        stop_contexts: vec![StopCanisterContext::Ingress {
+            sender: user_test_id(1),
+            message_id: message_test_id(1),
+            call_id: Some(StopCanisterCallId::new(0)),
+        }],
+    };
+
+    let canister = fixture.canister_state.after_split();
+
+    assert_eq!(
+        canister.system_state.status,
+        CanisterStatus::Running {
+            call_context_manager
+        }
+    );
 }
