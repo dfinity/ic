@@ -1,6 +1,6 @@
 use crate::webauthn::validate_webauthn_sig;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
-use ic_crypto::{user_public_key_from_bytes, KeyBytesContentType};
+use ic_crypto_standalone_sig_verifier::{user_public_key_from_bytes, KeyBytesContentType};
 use ic_crypto_tree_hash::Path;
 use ic_interfaces::crypto::IngressSigVerifier;
 use ic_types::crypto::threshold_sig::RootOfTrustProvider;
