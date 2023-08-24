@@ -11,17 +11,14 @@ use ic_cketh_minter::endpoints::{
 use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
 use ic_cketh_minter::eth_rpc::JsonRpcResult;
 use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
-use ic_cketh_minter::eth_rpc_client::EthereumChain;
+use ic_cketh_minter::eth_rpc_client::EthRpcClient;
 use ic_cketh_minter::guard::{retrieve_eth_guard, retrieve_eth_timer_guard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
-use ic_cketh_minter::state::mutate_state;
-use ic_cketh_minter::state::read_state;
-use ic_cketh_minter::state::State;
-use ic_cketh_minter::state::STATE;
+use ic_cketh_minter::state::{mutate_state, read_state, State, STATE};
 use ic_cketh_minter::transactions::PendingEthTransaction;
 use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
-use ic_cketh_minter::{eth_logs, eth_rpc, RPC_CLIENT};
+use ic_cketh_minter::{eth_logs, eth_rpc};
 use std::cmp::{min, Ordering};
 use std::str::FromStr;
 
@@ -62,7 +59,7 @@ async fn scrap_eth_logs() {
 
     let last_seen_block_number = read_state(|s| s.last_seen_block_number.clone());
 
-    let finalized_block: Block = RPC_CLIENT
+    let finalized_block: Block = read_state(EthRpcClient::from_state)
         .eth_get_last_finalized_block()
         .await
         .expect("HTTP call failed");
@@ -158,7 +155,7 @@ async fn send_signed_eth_transactions() {
     let tx_to_send = read_state(|s| s.pending_retrieve_eth_requests.transactions_to_send());
 
     for tx in tx_to_send {
-        let result = RPC_CLIENT
+        let result = read_state(EthRpcClient::from_state)
             .eth_send_raw_transaction(tx.raw_transaction_hex())
             .await
             .expect("HTTP call failed");
@@ -218,7 +215,7 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
     .sign()
     .await
     .expect("signing failed");
-    match RPC_CLIENT
+    match read_state(EthRpcClient::from_state)
         .eth_send_raw_transaction(signed_transaction.raw_transaction_hex())
         .await
         .expect("HTTP call failed")
@@ -237,7 +234,7 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
     use candid::Nat;
     use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
 
-    let fee_history = RPC_CLIENT
+    let fee_history = read_state(EthRpcClient::from_state)
         .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
             highest_block: BlockSpec::Tag(BlockTag::Finalized),
@@ -306,8 +303,7 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
 
     let nonce = mutate_state(|s| s.get_and_increment_nonce());
     let transaction = Eip1559TransactionRequest {
-        //TODO FI-867: add chain id to InitArgs, read it from state and pass it as parameter of that function
-        chain_id: EthereumChain::Sepolia.chain_id(),
+        chain_id: read_state(State::ethereum_network).chain_id(),
         nonce,
         max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
         max_fee_per_gas: transaction_price.max_fee_per_gas,
@@ -339,7 +335,7 @@ fn validate_caller_not_anonymous() -> candid::Principal {
 
 async fn eth_fee_history() -> FeeHistory {
     use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
-    RPC_CLIENT
+    read_state(EthRpcClient::from_state)
         .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
             highest_block: BlockSpec::Tag(BlockTag::Finalized),

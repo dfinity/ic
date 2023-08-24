@@ -1,9 +1,27 @@
 use candid::{CandidType, Deserialize, Nat};
+use serde::Serialize;
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct InitArg {
+    pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
     pub next_transaction_nonce: Nat,
+}
+
+#[derive(CandidType, Clone, Copy, Default, Serialize, Deserialize, Debug, Eq, PartialEq, Hash)]
+pub enum EthereumNetwork {
+    Mainnet,
+    #[default]
+    Sepolia,
+}
+
+impl EthereumNetwork {
+    pub fn chain_id(&self) -> u64 {
+        match self {
+            EthereumNetwork::Mainnet => 1,
+            EthereumNetwork::Sepolia => 11155111,
+        }
+    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
