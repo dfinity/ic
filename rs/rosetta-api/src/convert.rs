@@ -124,6 +124,12 @@ pub fn operations_to_requests(
                 let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
                 state.transaction(account, amount)?;
             }
+            OperationType::Approve => {
+                return Err(ApiError::InvalidRequest(
+                    false,
+                    "OperationType Approve is not supported for Requests".into(),
+                ))
+            }
             OperationType::Fee => {
                 let amount = o
                     .amount
