@@ -84,9 +84,9 @@ const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
 /// Range of allowed memos for neurons distributed via an SNS swap. This range is used to choose
-/// the memos of Swap neurons, and to enforce that other memos (e.g. for Airdrop neurons) do not
-/// conflict with the memos of Swap neurons.
-pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
+/// the memos of neurons in the neuron basket, and to enforce that other memos (e.g. for Airdrop
+/// neurons) do not conflict with the neuron basket memos.
+pub const NEURON_BASKET_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
 
 /// The principal with all bytes set to zero. The main property
@@ -591,7 +591,7 @@ impl Swap {
                     &parsed_principal,
                     amount_sns_e8s,
                     neuron_basket_construction_parameters,
-                    SALE_NEURON_MEMO_RANGE_START,
+                    NEURON_BASKET_MEMO_RANGE_START,
                 );
             neurons.extend(direct_participant_sns_neuron_recipes);
 
@@ -604,7 +604,7 @@ impl Swap {
         // investors in the swap use the NNS Governance principal_id, there can be
         // neuron id collisions, so there must be a global memo used for all baskets
         // for all CF investors.
-        let mut global_cf_memo: u64 = SALE_NEURON_MEMO_RANGE_START;
+        let mut global_cf_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
         for cf_participant in self.cf_participants.iter() {
             for cf_neuron in cf_participant.cf_neurons.iter() {
                 let amount_sns_e8s = Swap::scale(

@@ -51,7 +51,7 @@ use ic_sns_swap::{
     },
     swap::{
         apportion_approximately_equally, principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE,
-        FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START,
+        FIRST_PRINCIPAL_BYTES, NEURON_BASKET_MEMO_RANGE_START,
     },
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
@@ -1047,7 +1047,7 @@ fn test_scenario_happy() {
 
                 let starting_memo = match investor {
                     TestInvestor::CommunityFund(starting_memo) => starting_memo,
-                    TestInvestor::Direct(_) => SALE_NEURON_MEMO_RANGE_START,
+                    TestInvestor::Direct(_) => NEURON_BASKET_MEMO_RANGE_START,
                 };
 
                 split_amount
@@ -1097,17 +1097,17 @@ fn test_scenario_happy() {
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             5_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START),
+            TestInvestor::CommunityFund(/* memo */ NEURON_BASKET_MEMO_RANGE_START),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             3_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START + 3),
+            TestInvestor::CommunityFund(/* memo */ NEURON_BASKET_MEMO_RANGE_START + 3),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             2_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START + 6),
+            TestInvestor::CommunityFund(/* memo */ NEURON_BASKET_MEMO_RANGE_START + 6),
         ));
 
         let SweepResult {
@@ -1423,7 +1423,7 @@ async fn test_finalize_swap_ok() {
                         owner: SNS_GOVERNANCE_CANISTER_ID.into(),
                         subaccount: Some(compute_neuron_staking_subaccount_bytes(
                             buyer_principal_id,
-                            ledger_account_memo as u64 + SALE_NEURON_MEMO_RANGE_START,
+                            ledger_account_memo as u64 + NEURON_BASKET_MEMO_RANGE_START,
                         )),
                     };
                     LedgerCall::TransferFundsICRC1 {
