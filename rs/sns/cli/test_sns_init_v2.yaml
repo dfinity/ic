@@ -6,11 +6,10 @@ description: >
     The best software engineer you ever did saw.
 
 logo: test.png
-url: https://forum.dfinity.org/thread-where-this-sns-is-discussed
-
+url: https://some-link-to-a-project.org
 NnsProposal:
     title: "Proposal to Create an SNS named Daniel"
-    url: "https://forum.dfinity.org/"
+    url: "https://forum.dfinity.org/thread-where-this-sns-is-discussed"
     summary: "This is just a short summary, but I think it's pretty good."
 
 
