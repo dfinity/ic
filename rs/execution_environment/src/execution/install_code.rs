@@ -517,17 +517,28 @@ impl InstallCodeHelper {
     }
 
     /// Checks the result of Wasm execution and applies the state changes.
+    ///
+    /// Returns the amount of instructions consumed along with the result of
+    /// applying the state changes.
     pub fn handle_wasm_execution(
         &mut self,
         canister_state_changes: Option<CanisterStateChanges>,
         output: WasmExecutionOutput,
         original: &OriginalContext,
         round: &RoundContext,
-    ) -> Result<(), CanisterManagerError> {
+    ) -> (NumInstructions, Result<(), CanisterManagerError>) {
         self.steps.push(InstallCodeStep::HandleWasmExecution {
             canister_state_changes: canister_state_changes.clone(),
             output: output.clone(),
         });
+
+        let instructions_consumed = NumInstructions::from(
+            self.execution_parameters
+                .instruction_limits
+                .message()
+                .get()
+                .saturating_sub(output.num_instructions_left.get()),
+        );
 
         self.execution_parameters
             .instruction_limits
@@ -552,7 +563,10 @@ impl InstallCodeHelper {
                         limit
                     );
                 }
-                return Err((self.canister().canister_id(), err).into());
+                return (
+                    instructions_consumed,
+                    Err((self.canister().canister_id(), err).into()),
+                );
             }
         };
 
@@ -592,7 +606,10 @@ impl InstallCodeHelper {
                         )
                     }
                 }
-                return Err((self.canister.canister_id(), err).into());
+                return (
+                    instructions_consumed,
+                    Err((self.canister.canister_id(), err).into()),
+                );
             }
             let execution_state = self.canister.execution_state.as_mut().unwrap();
             execution_state.wasm_memory = wasm_memory;
@@ -608,7 +625,7 @@ impl InstallCodeHelper {
             self.total_heap_delta +=
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
         }
-        Ok(())
+        (instructions_consumed, Ok(()))
     }
 
     // A helper method to replay the given step.
@@ -634,7 +651,11 @@ impl InstallCodeHelper {
             InstallCodeStep::HandleWasmExecution {
                 canister_state_changes,
                 output,
-            } => self.handle_wasm_execution(canister_state_changes, output, original, round),
+            } => {
+                let (_, result) =
+                    self.handle_wasm_execution(canister_state_changes, output, original, round);
+                result
+            }
         }
     }
 }
