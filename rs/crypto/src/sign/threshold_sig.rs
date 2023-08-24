@@ -87,10 +87,16 @@ fn map_threshold_sign_error_or_panic(
 ) -> ThresholdSignError {
     match error {
         CspThresholdSignError::SecretKeyNotFound { algorithm, key_id } => {
-            // If the secret key was not found, reloading the transcript will not help
-            // because we are sure at this point that the transcript was already
-            // successfully loaded. Thus, we don't return a ThresholdSigDataNotFound error
-            // here.
+            // If the secret key was not found, reloading the transcript will not generally help
+            // because we are sure at this point that the transcript was already successfully
+            // loaded. Thus a missing key indicates that the key was already removed. However,
+            // if a call to `load_transcript`, which inserts a key in the secret key store,
+            // runs concurrently with an invocation of `retain_active_keys`, which removes keys
+            // associated with past epochs, it could happen that the inserted key is immediately
+            // removed after insertion, even though it releates to a future epoch. In this case
+            // calling again `load_transcript` may help reinserting the key in the key store.
+            // Note that this is unexpected since consensus waits for past calls to
+            // `retain_active_keys` to terminate before loading new transcripts.
             ThresholdSignError::SecretKeyNotFound {
                 dkg_id,
                 algorithm,
