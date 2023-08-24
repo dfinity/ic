@@ -17,7 +17,7 @@ use ic_sns_governance::{
     pb::v1::{neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission},
     types::ONE_MONTH_SECONDS,
 };
-use ic_sns_swap::swap::{SALE_NEURON_MEMO_RANGE_END, SALE_NEURON_MEMO_RANGE_START};
+use ic_sns_swap::swap::{NEURON_BASKET_MEMO_RANGE_START, SALE_NEURON_MEMO_RANGE_END};
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
 use std::collections::BTreeMap;
@@ -256,11 +256,11 @@ impl FractionalDeveloperVotingPower {
         }
 
         for (controller, memo) in deduped_dev_neurons.keys() {
-            if SALE_NEURON_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
+            if NEURON_BASKET_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
                 return Err(format!(
                     "Error: Developer neuron with controller {} cannot have a memo in the range {} to {}",
                     controller.unwrap(),
-                    SALE_NEURON_MEMO_RANGE_START,
+                    NEURON_BASKET_MEMO_RANGE_START,
                     SALE_NEURON_MEMO_RANGE_END
                 ));
             }
@@ -306,11 +306,11 @@ impl FractionalDeveloperVotingPower {
         }
 
         for (controller, memo) in deduped_airdrop_neurons.keys() {
-            if SALE_NEURON_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
+            if NEURON_BASKET_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
                 return Err(format!(
                     "Error: Airdrop neuron with controller {} cannot have a memo in the range {} to {}",
                     controller.unwrap(),
-                    SALE_NEURON_MEMO_RANGE_START,
+                    NEURON_BASKET_MEMO_RANGE_START,
                     SALE_NEURON_MEMO_RANGE_END
                 ));
             }
@@ -614,7 +614,7 @@ mod test {
         pb::v1::{neuron::DissolveState, NervousSystemParameters, NeuronId, NeuronPermission},
         types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
     };
-    use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
+    use ic_sns_swap::swap::NEURON_BASKET_MEMO_RANGE_START;
     use icrc_ledger_types::icrc1::account::Account;
     use std::str::FromStr;
 
@@ -1441,7 +1441,7 @@ mod test {
             .expect("initial_token_distribution is invalid");
 
         // A developer distribution with a memo in the Sale neuron memo range should fail validation
-        distribution1.memo = SALE_NEURON_MEMO_RANGE_START + 10;
+        distribution1.memo = NEURON_BASKET_MEMO_RANGE_START + 10;
         initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
             developer_neurons: vec![distribution1.clone()],
         });
@@ -1457,7 +1457,7 @@ mod test {
         });
 
         // An airdrop distribution with a memo in the Sale neuron memo range should fail validation
-        distribution2.memo = SALE_NEURON_MEMO_RANGE_START + 888;
+        distribution2.memo = NEURON_BASKET_MEMO_RANGE_START + 888;
         initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
             airdrop_neurons: vec![distribution2],
         });
