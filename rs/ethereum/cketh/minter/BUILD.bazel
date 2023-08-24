@@ -32,6 +32,7 @@ rust_library(
     deps = [
         "//rs/crypto/ecdsa_secp256k1",
         "//rs/crypto/sha3",
+        "//rs/phantom_newtype",
         "//rs/types/ic00_types",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
@@ -72,7 +73,9 @@ rust_canister(
     service_file = "cketh_minter.did",
     deps = [
         ":minter",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/ecdsa_secp256k1",
+        "//rs/rosetta-api/icrc1/client/cdk",
         "//rs/rust_canisters/http_types",
         "@crate_index//:candid",
         "@crate_index//:ciborium",

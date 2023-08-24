@@ -1,10 +1,11 @@
-use candid::{CandidType, Deserialize, Nat};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use serde::Serialize;
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct InitArg {
     pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
+    pub ledger_id: Principal,
     pub next_transaction_nonce: Nat,
 }
 
@@ -28,16 +29,6 @@ impl EthereumNetwork {
 pub enum MinterArg {
     InitArg(InitArg),
     UpgradeArg,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, Eq, PartialEq)]
-pub struct ReceivedEthEvent {
-    pub transaction_hash: String,
-    pub block_number: Nat,
-    pub log_index: Nat,
-    pub from_address: String,
-    pub value: Nat,
-    pub principal: candid::Principal,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]

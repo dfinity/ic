@@ -84,10 +84,10 @@ pub enum TimerGuardError {
 impl RetrieveEthTimerGuard {
     fn new() -> Result<Self, TimerGuardError> {
         mutate_state(|s| {
-            if s.is_retrieve_eth_timer_running {
+            if s.retrieve_eth_guarded {
                 return Err(TimerGuardError::AlreadyProcessing);
             }
-            s.is_retrieve_eth_timer_running = true;
+            s.retrieve_eth_guarded = true;
             Ok(RetrieveEthTimerGuard(()))
         })
     }
@@ -96,11 +96,40 @@ impl RetrieveEthTimerGuard {
 impl Drop for RetrieveEthTimerGuard {
     fn drop(&mut self) {
         mutate_state(|s| {
-            s.is_retrieve_eth_timer_running = false;
+            s.retrieve_eth_guarded = false;
         });
     }
 }
 
 pub fn retrieve_eth_timer_guard() -> Result<RetrieveEthTimerGuard, TimerGuardError> {
     RetrieveEthTimerGuard::new()
+}
+
+/// Guards the ckETH mintingnlogic to prevent concurrent execution.
+#[must_use]
+#[derive(Debug, PartialEq, Eq)]
+pub struct MintCkEthGuard(());
+
+impl MintCkEthGuard {
+    pub fn new() -> Result<Self, TimerGuardError> {
+        mutate_state(|s| {
+            if s.cketh_mint_guarded {
+                return Err(TimerGuardError::AlreadyProcessing);
+            }
+            s.cketh_mint_guarded = true;
+            Ok(MintCkEthGuard(()))
+        })
+    }
+}
+
+impl Drop for MintCkEthGuard {
+    fn drop(&mut self) {
+        mutate_state(|s| {
+            s.cketh_mint_guarded = false;
+        });
+    }
+}
+
+pub fn mint_cketh_guard() -> Result<MintCkEthGuard, TimerGuardError> {
+    MintCkEthGuard::new()
 }

@@ -2,7 +2,7 @@
 //! interface.
 
 use crate::address::Address;
-use crate::logs::TRACE_HTTP;
+use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{TransactionNonce, Wei};
 use candid::{candid_method, CandidType, Principal};
 use ethnum::u256;
@@ -99,7 +99,7 @@ impl UpperHex for FixedSizeData {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, Ord, PartialOrd)]
 #[serde(transparent)]
 pub struct Hash(#[serde(with = "crate::serde_data")] pub [u8; 32]);
 
@@ -657,7 +657,7 @@ where
                 if response_size_estimate == new_estimate {
                     return Err(HttpOutcallError::IcError { code, message });
                 }
-                ic_cdk::println!("The {} response didn't fit into {response_size_estimate} bytes, retrying with {new_estimate}", eth_method);
+                log!(DEBUG, "The {eth_method} response didn't fit into {response_size_estimate} bytes, retrying with {new_estimate}");
                 response_size_estimate = new_estimate;
                 continue;
             }

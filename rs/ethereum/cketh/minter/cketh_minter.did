@@ -7,8 +7,9 @@ type EthereumNetwork = variant {
 };
 type InitArg = record {
     // The minter will interact with this Ethereum network.
-    eth_network: EthereumNetwork;
+    eth_network : EthereumNetwork;
     ecdsa_key_name : text;
+    ledger_id : principal;
     next_transaction_nonce: nat
 };
 type JsonRpcRawTxResult = record { id : nat32; result : text; jsonrpc : text };
@@ -17,11 +18,6 @@ type JsonRpcResult = variant {
   Result : JsonRpcRawTxResult;
 };
 type MinterArg = variant { UpgradeArg; InitArg : InitArg };
-type ReceivedEthEvent = record {
-  "principal" : principal;
-  value : nat;
-  from_address : text;
-};
 type RetrieveEthStatus = variant {
     NotFound;
     PendingSigning;

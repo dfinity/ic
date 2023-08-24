@@ -2,20 +2,57 @@
 mod tests;
 
 use crate::address::Address;
-use crate::endpoints::ReceivedEthEvent;
-use crate::eth_rpc::{into_nat, BlockNumber, FixedSizeData, Hash, LogEntry};
+use crate::eth_rpc::{BlockNumber, FixedSizeData, Hash, LogEntry};
 use crate::eth_rpc_client::EthRpcClient;
 use crate::logs::{DEBUG, INFO};
-use crate::state::read_state;
+use crate::numeric::Wei;
+use crate::state::{read_state, State};
 use candid::Principal;
+use ethnum::u256;
 use hex_literal::hex;
 use ic_canister_log::log;
-use num_bigint::BigUint;
-use std::collections::BTreeSet;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 pub(crate) const RECEIVED_ETH_EVENT_TOPIC: [u8; 32] =
     hex!("257e057bb61920d8d0ed2cb7b720ac7f9c513cd1110bc9fa543079154f45f435");
 pub const SMART_CONTRACT_ADDRESS: [u8; 20] = hex!("b44B5e756A894775FC32EDdf3314Bb1B1944dC34");
+
+pub enum EthLogIndexTag {}
+pub type LogIndex = phantom_newtype::Id<EthLogIndexTag, u256>;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ReceivedEthEvent {
+    pub transaction_hash: Hash,
+    pub block_number: BlockNumber,
+    pub log_index: LogIndex,
+    pub from_address: Address,
+    pub value: Wei,
+    pub principal: Principal,
+}
+
+/// A unique identifier of the event source: the source transaction hash and the log
+/// entry index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct EventSource(Hash, LogIndex);
+
+impl EventSource {
+    pub fn txhash(&self) -> &Hash {
+        &self.0
+    }
+}
+
+impl fmt::Display for EventSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{}:{}", self.0, self.1)
+    }
+}
+
+impl ReceivedEthEvent {
+    pub fn source(&self) -> EventSource {
+        EventSource(self.transaction_hash, self.log_index)
+    }
+}
 
 pub async fn last_received_eth_events(
     from: BlockNumber,
@@ -49,31 +86,7 @@ pub async fn last_received_eth_events(
     (valid_transactions, errors)
 }
 
-pub fn mint_transaction(minted_transactions: &mut BTreeSet<Hash>, event: ReceivedEthEvent) {
-    use std::str::FromStr;
-
-    let transaction_hash = Hash::from_str(&event.transaction_hash).expect("valid transaction hash");
-    if minted_transactions.insert(transaction_hash) {
-        log!(
-            INFO,
-            "[mint_transaction]: received event: {:?}, minting {} wei to {}",
-            event,
-            event.value,
-            event.principal
-        );
-    } else {
-        log!(
-            DEBUG,
-            "[mint_transaction]: ignoring event: {:?}, since it has already been minted",
-            event,
-        );
-    }
-}
-
-pub fn report_transaction_error(
-    invalid_transactions: &mut BTreeSet<Hash>,
-    error: ReceivedEthEventError,
-) {
+pub fn report_transaction_error(state: &mut State, error: ReceivedEthEventError) {
     match error {
         ReceivedEthEventError::PendingLogEntry => {
             log!(
@@ -89,33 +102,30 @@ pub fn report_transaction_error(
             );
         }
         ReceivedEthEventError::InvalidIcPrincipal {
-            transaction_hash,
+            event_source,
             invalid_principal,
         } => {
-            if invalid_transactions.insert(transaction_hash.clone()) {
+            if state.record_invalid_deposit(event_source) {
                 log!(
                     INFO,
-                    "[report_transaction_error]: cannot process transaction with hash {:?} since the given IC principal {:?} is invalid",
-                    transaction_hash,
-                    invalid_principal
+                    "[report_transaction_error]: cannot process event {event_source} since the given IC principal {invalid_principal:?} is invalid",
                 );
             } else {
                 log!(
                     DEBUG,
-                    "[report_transaction_error]: Ignoring invalid transaction with hash {:?} since it was already reported",
-                    transaction_hash,
+                    "[report_transaction_error]: Ignoring invalid event {event_source} since it was already reported",
                 );
             }
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReceivedEthEventError {
     PendingLogEntry,
     InvalidLogEntry(String),
     InvalidIcPrincipal {
-        transaction_hash: Hash,
+        event_source: EventSource,
         invalid_principal: FixedSizeData,
     },
 }
@@ -138,6 +148,7 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
             .ok_or(ReceivedEthEventError::PendingLogEntry)?;
         let log_index = entry
             .log_index
+            .map(LogIndex::new)
             .ok_or(ReceivedEthEventError::PendingLogEntry)?;
 
         if entry.topics.len() != 3 {
@@ -146,21 +157,29 @@ impl TryFrom<LogEntry> for ReceivedEthEvent {
                 entry.topics.len()
             )));
         }
-        let address = Address::try_from(&entry.topics[1].0).map_err(|err| {
+        let from_address = Address::try_from(&entry.topics[1].0).map_err(|err| {
             ReceivedEthEventError::InvalidLogEntry(format!("Invalid address in log entry: {}", err))
         })?;
         let principal = parse_principal_from_slice(entry.topics[2].as_ref()).map_err(|_err| {
             ReceivedEthEventError::InvalidIcPrincipal {
-                transaction_hash: transaction_hash.clone(),
+                event_source: EventSource(transaction_hash, log_index),
                 invalid_principal: entry.topics[2].clone(),
             }
         })?;
+        let value_bytes: [u8; 32] = entry.data.0.try_into().map_err(|data| {
+            ReceivedEthEventError::InvalidLogEntry(format!(
+                "Invalid data length; expected 32-byte value, got {}",
+                hex::encode(data),
+            ))
+        })?;
+        let value = Wei::from(u256::from_be_bytes(value_bytes));
+
         Ok(ReceivedEthEvent {
-            transaction_hash: transaction_hash.to_string(),
-            block_number: candid::Nat::from(block_number),
-            log_index: into_nat(log_index),
-            from_address: format!("{:x}", address),
-            value: candid::Nat::from(BigUint::from_bytes_be(&entry.data.0)),
+            transaction_hash,
+            block_number,
+            log_index,
+            from_address,
+            value,
             principal,
         })
     }
