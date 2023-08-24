@@ -37,8 +37,8 @@ pub(crate) struct StableNeuronStoreBuilder<Memory> {
 
     // Collections
     pub hot_keys: Memory,
-    pub followees: Memory,
     pub recent_ballots: Memory,
+    pub followees: Memory,
 
     // Singletons
     pub known_neuron_data: Memory,
@@ -55,10 +55,9 @@ where
 
             // Collections
             hot_keys,
-            followees,
             recent_ballots,
+            followees,
 
-            // TODO(NNS1-2485): Use these.
             // Singletons
             known_neuron_data,
             transfer,
@@ -67,11 +66,14 @@ where
         StableNeuronStore {
             main: StableBTreeMap::init(main),
 
+            // Collections
             hot_keys_map: StableBTreeMap::init(hot_keys),
             followees_map: StableBTreeMap::init(followees),
             recent_ballots_map: StableBTreeMap::init(recent_ballots),
-            // known_neuron_data: StableBTreeMap::init(known_neuron_data),
-            // transfer: StableBTreeMap::init(transfer),
+
+            // Singletons
+            known_neuron_data_map: StableBTreeMap::init(known_neuron_data),
+            transfer_map: StableBTreeMap::init(transfer),
         }
     }
 }
@@ -82,19 +84,14 @@ where
 {
     main: StableBTreeMap</* ID */ u64, Neuron, Memory>,
 
-    // Large Auxiliary Fields
-    // ======================
-
     // Collections
-    // -----------
     hot_keys_map: StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), PrincipalId, Memory>,
-    followees_map: StableBTreeMap<FolloweesKey, (), Memory>,
     recent_ballots_map: StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), BallotInfo, Memory>,
+    followees_map: StableBTreeMap<FolloweesKey, (), Memory>,
+
     // Singletons
-    // ----------
-    // TODO(NNS1-2485): Implement
-    // known_neuron_data: StableBTreeMap<, , Memory>,
-    // transfer: StableBTreeMap<, , Memory>,
+    known_neuron_data_map: StableBTreeMap</* Neuron ID */ u64, KnownNeuronData, Memory>,
+    transfer_map: StableBTreeMap</* Neuron ID */ u64, NeuronStakeTransfer, Memory>,
 }
 
 /// A collection of `Neuron`s, backed by some `ic_stable_structure::Memory`s.
@@ -137,15 +134,13 @@ where
     pub fn create(&mut self, mut neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = Self::id_or_err(&neuron)?;
 
-        #[allow(unused)] // TODO(NNS1-2485): Re-enable clippy.
         let DecomposedNeuron {
             main: neuron,
 
             hot_keys,
-            followees,
             recent_ballots,
+            followees,
 
-            // TODO(NNS1-2485): Use these.
             known_neuron_data,
             transfer,
         } = DecomposedNeuron::from(neuron);
@@ -177,11 +172,16 @@ where
         // --------------
 
         let neuron_id = NeuronId { id: neuron_id };
-        self.update_hot_keys(neuron_id, hot_keys);
+        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
+        update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
-        self.update_recent_ballots(neuron_id, recent_ballots);
 
-        // TODO(NNS1-2485): Implement.
+        update_singleton_field(
+            neuron_id,
+            known_neuron_data,
+            &mut self.known_neuron_data_map,
+        );
+        update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
 
         Ok(())
     }
@@ -207,16 +207,12 @@ where
         // TODO(NNS1-2505): Uninline.
 
         // 1.
-        let hot_keys = {
-            let first = (neuron_id, u64::MIN);
-            let last = (neuron_id, u64::MAX);
-            self.hot_keys_map
-                .range(first..=last)
-                .map(|(_key, hot_key)| hot_key)
-                .collect()
-        };
-
+        let hot_keys = read_repeated_field(NeuronId { id: neuron_id }, &self.hot_keys_map);
         // 2.
+        let recent_ballots =
+            read_repeated_field(NeuronId { id: neuron_id }, &self.recent_ballots_map);
+
+        // 3.
         let followees = {
             let follower_id = neuron_id;
             let first = FolloweesKey {
@@ -252,27 +248,26 @@ where
             followees
         };
 
-        // 3.
-        let mut recent_ballots = {
-            // Scan relevant portion of self.recent_ballots.
-            let first = (neuron_id, u64::MIN);
-            let last = (neuron_id, u64::MAX);
-            let range = self.recent_ballots_map.range(first..=last);
+        // 4.
+        let known_neuron_data = self.known_neuron_data_map.get(&neuron_id);
+        // 5.
+        let transfer = self.transfer_map.get(&neuron_id);
 
-            // Convert back to Vec<BallotInfo>.
-            range
-                .map(|(_key, ballot_info)| ballot_info)
-                .collect::<Vec<_>>()
-        };
+        // Final Assembly
+        // --------------
 
-        // TODO(NNS1-2485): Implement.
+        let result = DecomposedNeuron {
+            main: abridged_neuron,
 
-        Ok(Neuron {
             hot_keys,
-            followees,
             recent_ballots,
-            ..abridged_neuron
-        })
+            followees,
+
+            known_neuron_data,
+            transfer,
+        }
+        .reconstitute();
+        Ok(result)
     }
 
     /// Changes an existing entry.
@@ -281,17 +276,15 @@ where
     pub fn update(&mut self, mut neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = Self::id_or_err(&neuron)?;
 
-        #[allow(unused)] // TODO(NNS1-2485): Re-enable clippy.
         let DecomposedNeuron {
             // The original neuron is consumed near the end of this
             // statement. This abridged one takes its place.
             main: neuron,
 
             hot_keys,
-            followees,
             recent_ballots,
+            followees,
 
-            // TODO(NNS1-2485): Use these.
             known_neuron_data,
             transfer,
         } = DecomposedNeuron::from(neuron);
@@ -328,11 +321,16 @@ where
         // --------------
 
         let neuron_id = NeuronId { id: neuron_id };
-        self.update_hot_keys(neuron_id, hot_keys);
+        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
+        update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
-        self.update_recent_ballots(neuron_id, recent_ballots);
 
-        // TODO(NNS1-2485): Implement.
+        update_singleton_field(
+            neuron_id,
+            known_neuron_data,
+            &mut self.known_neuron_data_map,
+        );
+        update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
 
         Ok(())
     }
@@ -363,11 +361,12 @@ where
         // --------------
 
         let neuron_id = NeuronId { id: neuron_id };
-        self.update_hot_keys(neuron_id, vec![]);
+        update_repeated_field(neuron_id, vec![], &mut self.hot_keys_map);
+        update_repeated_field(neuron_id, vec![], &mut self.recent_ballots_map);
         self.update_followees(neuron_id, hashmap![]);
-        self.update_recent_ballots(neuron_id, vec![]);
 
-        // TODO(NNS1-2485): Implement.
+        update_singleton_field(neuron_id, None, &mut self.known_neuron_data_map);
+        update_singleton_field(neuron_id, None, &mut self.transfer_map);
 
         Ok(())
     }
@@ -385,7 +384,6 @@ where
     pub fn upsert(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = Self::id_or_err(&neuron)?;
 
-        #[allow(unused)] // TODO(NNS1-2485): Re-enable clippy.
         let DecomposedNeuron {
             main: neuron,
 
@@ -393,7 +391,6 @@ where
             followees,
             recent_ballots,
 
-            // TODO(NNS1-2485): Use these.
             known_neuron_data,
             transfer,
         } = DecomposedNeuron::from(neuron);
@@ -410,21 +407,22 @@ where
         // --------------
 
         let neuron_id = NeuronId { id: neuron_id };
-        self.update_hot_keys(neuron_id, hot_keys);
+        update_repeated_field(neuron_id, hot_keys, &mut self.hot_keys_map);
+        update_repeated_field(neuron_id, recent_ballots, &mut self.recent_ballots_map);
         self.update_followees(neuron_id, followees);
-        self.update_recent_ballots(neuron_id, recent_ballots);
 
-        // TODO(NNS1-2485): Implement.
+        update_singleton_field(
+            neuron_id,
+            known_neuron_data,
+            &mut self.known_neuron_data_map,
+        );
+        update_singleton_field(neuron_id, transfer, &mut self.transfer_map);
 
         Ok(())
     }
 
     // Misc Private Helper(s)
     // ----------------------
-
-    fn update_hot_keys(&mut self, neuron_id: NeuronId, new_hot_keys: Vec<PrincipalId>) {
-        update_repeated_field(neuron_id, new_hot_keys, &mut self.hot_keys_map);
-    }
 
     fn update_followees(
         &mut self,
@@ -473,10 +471,6 @@ where
         update_range(new_entries, range, &mut self.followees_map);
     }
 
-    fn update_recent_ballots(&mut self, neuron_id: NeuronId, new_recent_ballots: Vec<BallotInfo>) {
-        update_repeated_field(neuron_id, new_recent_ballots, &mut self.recent_ballots_map);
-    }
-
     /// Pulls out u64 id from a Neuron.
     fn id_or_err(neuron: &Neuron) -> Result<u64, GovernanceError> {
         neuron
@@ -501,8 +495,8 @@ pub(crate) fn new_heap_based() -> StableNeuronStore<VectorMemory> {
 
         // Collections
         hot_keys: VectorMemory::default(),
-        followees: VectorMemory::default(),
         recent_ballots: VectorMemory::default(),
+        followees: VectorMemory::default(),
 
         // Singletons
         known_neuron_data: VectorMemory::default(),
@@ -543,17 +537,46 @@ impl Storable for BallotInfo {
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        Self::decode(&bytes[..])
-            // Convert from Result to Self. (Unfortunately, it seems that
-            // panic is unavoid able in the case of Err.)
-            .expect("Unable to deserialize Neuron.")
+        Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
 }
 impl BoundedStorable for BallotInfo {
     const IS_FIXED_SIZE: bool = false;
 
     // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-    const MAX_SIZE: u32 = 44;
+    const MAX_SIZE: u32 = 48;
+}
+
+impl Storable for KnownNeuronData {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::from(self.encode_to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
+    }
+}
+impl BoundedStorable for KnownNeuronData {
+    const IS_FIXED_SIZE: bool = false;
+
+    // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
+    const MAX_SIZE: u32 = 6412;
+}
+
+impl Storable for NeuronStakeTransfer {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        Cow::from(self.encode_to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
+    }
+}
+impl BoundedStorable for NeuronStakeTransfer {
+    const IS_FIXED_SIZE: bool = false;
+
+    // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
+    const MAX_SIZE: u32 = 290;
 }
 
 // Private Helpers
@@ -581,8 +604,8 @@ lazy_static! {
 ///         main: abridged_neuron,
 ///
 ///         hot_keys,
-///         followees,
 ///         recent_ballots,
+///         followees,
 ///
 ///         known_neuron_data,
 ///         transfer,
@@ -601,10 +624,9 @@ struct DecomposedNeuron {
 
     // Collections
     hot_keys: Vec<PrincipalId>,
-    followees: HashMap</* topic ID */ i32, Followees>,
     recent_ballots: Vec<BallotInfo>,
+    followees: HashMap</* topic ID */ i32, Followees>,
 
-    // TODO(NNS1-2485): Use these.
     // Singletons
     known_neuron_data: Option<KnownNeuronData>,
     transfer: Option<NeuronStakeTransfer>,
@@ -613,8 +635,8 @@ struct DecomposedNeuron {
 impl From<Neuron> for DecomposedNeuron {
     fn from(mut source: Neuron) -> Self {
         let hot_keys = std::mem::take(&mut source.hot_keys);
-        let followees = std::mem::take(&mut source.followees);
         let recent_ballots = std::mem::take(&mut source.recent_ballots);
+        let followees = std::mem::take(&mut source.followees);
 
         let known_neuron_data = std::mem::take(&mut source.known_neuron_data);
         let transfer = std::mem::take(&mut source.transfer);
@@ -626,12 +648,37 @@ impl From<Neuron> for DecomposedNeuron {
 
             // Collections
             hot_keys,
-            followees,
             recent_ballots,
+            followees,
 
             // Singletons
             known_neuron_data,
             transfer,
+        }
+    }
+}
+
+impl DecomposedNeuron {
+    fn reconstitute(self) -> Neuron {
+        let Self {
+            main,
+
+            hot_keys,
+            recent_ballots,
+            followees,
+
+            known_neuron_data,
+            transfer,
+        } = self;
+
+        Neuron {
+            hot_keys,
+            recent_ballots,
+            followees,
+
+            known_neuron_data,
+            transfer,
+            ..main
         }
     }
 }
@@ -697,6 +744,37 @@ fn update_range<Key, Value, Memory>(
     for obsolete_key in obsolete_keys {
         map.remove(&obsolete_key);
     }
+}
+
+fn update_singleton_field<Element, Memory>(
+    neuron_id: NeuronId,
+    element: Option<Element>,
+    map: &mut StableBTreeMap</* Neuron ID */ u64, Element, Memory>,
+) where
+    Element: BoundedStorable,
+    Memory: ic_stable_structures::Memory,
+{
+    let neuron_id = neuron_id.id;
+
+    match element {
+        None => map.remove(&neuron_id),
+        Some(element) => map.insert(neuron_id, element),
+    };
+}
+
+fn read_repeated_field<Element, Memory>(
+    neuron_id: NeuronId,
+    map: &StableBTreeMap<(/* Neuron ID */ u64, /* index */ u64), Element, Memory>,
+) -> Vec<Element>
+where
+    Element: BoundedStorable,
+    Memory: ic_stable_structures::Memory,
+{
+    let neuron_id = neuron_id.id;
+    let first = (neuron_id, u64::MIN);
+    let last = (neuron_id, u64::MAX);
+
+    map.range(first..=last).map(|(_key, value)| value).collect()
 }
 
 /// Basically, this just means that all elements have a proper ProposalId,
