@@ -181,6 +181,7 @@ fn balances_remove_accounts_with_zero_balance() {
         &Operation::Burn {
             from: target_canister,
             amount: Tokens::from_e8s(700),
+            spender: None,
         },
         now,
     )
@@ -259,6 +260,8 @@ fn serialize() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
+        None,
+        None,
         None,
     );
 
@@ -597,6 +600,8 @@ fn get_blocks_returns_correct_blocks() {
         Some("ICP".into()),
         Some("icp".into()),
         None,
+        None,
+        None,
     );
 
     for i in 0..10 {
@@ -659,6 +664,8 @@ fn test_purge() {
         None,
         Some("ICP".into()),
         Some("icp".into()),
+        None,
+        None,
         None,
     );
     let little_later = genesis + Duration::from_millis(1);
@@ -1234,4 +1241,132 @@ fn test_approval_allowance_covers_fee() {
     assert_eq!(ctx.balances().account_balance(&from), tokens(0));
     assert_eq!(ctx.balances().account_balance(&to), tokens(10_000));
     assert_eq!(ctx.balances().account_balance(&spender), tokens(0));
+}
+
+#[test]
+fn test_burn_smoke() {
+    let now = ts(12345678);
+
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+
+    apply_operation(
+        &mut ctx,
+        &Operation::Burn {
+            from,
+            amount: Tokens::from_e8s(100_000),
+            spender: None,
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(100_000));
+    assert_eq!(ctx.balances().total_supply(), tokens(100_000));
+}
+
+#[test]
+fn test_approval_burn_from() {
+    let now = ts(12345678);
+
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+    let fee = tokens(10_000);
+
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+
+    assert_eq!(
+        apply_operation(
+            &mut ctx,
+            &Operation::Burn {
+                from,
+                amount: Tokens::from_e8s(100_000),
+                spender: Some(spender),
+            },
+            now,
+        )
+        .unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: Tokens::ZERO
+        }
+    );
+
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 200_000);
+
+    apply_operation(
+        &mut ctx,
+        &Operation::Approve {
+            from,
+            spender,
+            allowance: tokens(150_000),
+            expected_allowance: None,
+            expires_at: None,
+            fee,
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(190_000));
+    assert_eq!(ctx.balances().total_supply(), tokens(190_000));
+
+    apply_operation(
+        &mut ctx,
+        &Operation::Burn {
+            from,
+            amount: Tokens::from_e8s(100_000),
+            spender: Some(spender),
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
+    assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 90_000);
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(50_000),
+            expires_at: None,
+            arrived_at: now,
+        },
+    );
+
+    assert_eq!(
+        apply_operation(
+            &mut ctx,
+            &Operation::Burn {
+                from,
+                amount: Tokens::from_e8s(100_000),
+                spender: Some(spender),
+            },
+            now,
+        )
+        .unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: tokens(50_000)
+        }
+    );
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(50_000),
+            expires_at: None,
+            arrived_at: now,
+        },
+    );
+    assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
+    assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
+    assert_eq!(ctx.balances().total_supply().get_e8s(), 90_000);
 }

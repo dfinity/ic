@@ -40,7 +40,7 @@ prop_compose! {
         from in arb_account_id(),
         amount in arb_tokens(),
     ) -> Operation {
-        Operation::Burn { from, amount }
+        Operation::Burn { from, amount, spender: None }
     }
 }
 

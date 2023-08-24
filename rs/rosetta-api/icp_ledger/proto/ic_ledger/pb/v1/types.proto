@@ -274,6 +274,7 @@ message Mint {
 message Burn {
   AccountIdentifier from = 1;
   Tokens amount = 3;
+  AccountIdentifier spender = 4;
 }
 
 message AccountIdentifier {

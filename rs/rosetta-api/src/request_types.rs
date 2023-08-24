@@ -910,7 +910,7 @@ impl TransactionBuilder {
         };
 
         match operation {
-            LedgerOperation::Burn { from, amount } => {
+            LedgerOperation::Burn { from, amount, .. } => {
                 push_op(
                     OperationType::Burn,
                     Some(to_model_account_identifier(from)),
