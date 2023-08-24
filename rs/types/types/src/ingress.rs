@@ -308,7 +308,7 @@ impl TryFrom<pb_ingress::IngressStatus> for IngressStatus {
                         f.user_id,
                         "IngressStatus::Failed::user_id",
                     )?)?,
-                    state: IngressState::Failed(UserError::new(
+                    state: IngressState::Failed(UserError::from_proto(
                         ErrorCode::try_from(f.err_code).map_err(|err| match err {
                             TryFromError::ValueOutOfRange(code) => {
                                 ProxyDecodeError::ValueOutOfRange {
