@@ -13,6 +13,8 @@ type Action = variant {
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
   Motion : Motion;
 };
+type AddMaturityRequest = record { id : opt NeuronId; amount_e8s : opt nat64 };
+type AddMaturityResponse = record { new_maturity_e8s : opt nat64 };
 type AddNeuronPermissions = record {
   permissions_to_add : opt NeuronPermissionList;
   principal_id : opt principal;
@@ -407,6 +409,7 @@ type VotingRewardsParameters = record {
 };
 type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
 service : (Governance) -> {
+  add_maturity : (AddMaturityRequest) -> (AddMaturityResponse);
   claim_swap_neurons : (ClaimSwapNeuronsRequest) -> (ClaimSwapNeuronsResponse);
   fail_stuck_upgrade_in_progress : (record {}) -> (record {});
   get_build_metadata : () -> (text) query;

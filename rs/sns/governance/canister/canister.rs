@@ -29,7 +29,7 @@ use ic_nervous_system_common::{
 use ic_nervous_system_runtime::DfnRuntime;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 #[cfg(feature = "test")]
-use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
+use ic_sns_governance::pb::v1::{AddMaturityRequest, AddMaturityResponse, GovernanceError, Neuron};
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     ledger::LedgerCanister,
@@ -685,6 +685,19 @@ fn expose_candid() {
     over(candid, |_: ()| {
         include_str!("governance_test.did").to_string()
     })
+}
+
+/// Adds maturity to a neuron for testing
+#[cfg(feature = "test")]
+#[export_name = "canister_update add_maturity"]
+fn add_maturity() {
+    over(candid_one, add_maturity_)
+}
+
+#[cfg(feature = "test")]
+#[candid_method(update, rename = "add_maturity")]
+fn add_maturity_(request: AddMaturityRequest) -> AddMaturityResponse {
+    governance_mut().add_maturity(request)
 }
 
 /// When run on native, this prints the candid service definition of this

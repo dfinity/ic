@@ -1,3 +1,5 @@
+#[cfg(feature = "test")]
+use crate::pb::v1::{AddMaturityRequest, AddMaturityResponse};
 use crate::{
     account_from_proto, account_to_proto,
     canister_control::{
@@ -5148,6 +5150,26 @@ impl Governance {
     ) -> GetMaturityModulationResponse {
         GetMaturityModulationResponse {
             maturity_modulation: self.proto.maturity_modulation.clone(),
+        }
+    }
+
+    #[cfg(feature = "test")]
+    pub fn add_maturity(
+        &mut self,
+        add_maturity_request: AddMaturityRequest,
+    ) -> AddMaturityResponse {
+        let AddMaturityRequest { id, amount_e8s } = add_maturity_request;
+        let id = id.expect("AddMaturityRequest::id is required");
+        let amount_e8s = amount_e8s.expect("AddMaturityRequest::amount_e8s is required");
+
+        // Here, we're getting a mutable reference without a lock, but it's
+        // okay because this is is only callable from test code
+        let neuron = self.get_neuron_mut(&id).expect("neuron did not exist");
+
+        neuron.maturity_e8s_equivalent = neuron.maturity_e8s_equivalent.saturating_add(amount_e8s);
+
+        AddMaturityResponse {
+            new_maturity_e8s: Some(neuron.maturity_e8s_equivalent),
         }
     }
 
