@@ -741,6 +741,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "pico-args": crate.spec(
                 version = "^0.3",
             ),
+            "pkcs8": crate.spec(
+                version = "^0.10.2",
+            ),
             "pkg-config": crate.spec(
                 version = "^0.3",
             ),
@@ -877,11 +880,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "rsa": crate.spec(
-                version = "^0.6.1",
-            ),
-            "rsa-0_4_0": crate.spec(
-                package = "rsa",
-                version = "^0.4.0",
+                version = "^0.9.2",
+                features = ["sha2"],
             ),
             "rstack-self": crate.spec(
                 version = "^0.3",

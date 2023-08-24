@@ -7,7 +7,7 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
 };
 use flate2::read::GzDecoder;
-use rsa::{PaddingScheme, RsaPrivateKey};
+use rsa::RsaPrivateKey;
 use sha2::Sha256;
 use tar::Archive;
 
@@ -71,7 +71,7 @@ impl Decode for Decoder {
         ];
 
         // Decrypt symmetric key
-        let padding = PaddingScheme::new_oaep::<Sha256>();
+        let padding = rsa::oaep::Oaep::new::<Sha256>();
         let sym_key = self
             .key
             .decrypt(padding, &sym_key_enc)

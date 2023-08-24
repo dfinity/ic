@@ -293,7 +293,8 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
 ) -> (Vec<u8>, Vec<u8>) {
     use ic_crypto_internal_basic_sig_rsa_pkcs1 as basic_sig_rsa;
     use ic_crypto_sha2::Sha256;
-    use rsa::{Hash, PaddingScheme, PublicKeyParts, RsaPrivateKey};
+    use rsa::traits::PublicKeyParts;
+    use rsa::{Pkcs1v15Sign, RsaPrivateKey};
 
     let bitlength = 2048; // minimum allowed
 
@@ -309,9 +310,7 @@ fn generate_rsa_key_and_sig<R: Rng + CryptoRng>(
 
     let signature = priv_key
         .sign(
-            PaddingScheme::PKCS1v15Sign {
-                hash: Some(Hash::SHA2_256),
-            },
+            Pkcs1v15Sign::new::<sha2::Sha256>(),
             &Sha256::hash(bytes_to_sign),
         )
         .expect("failed signing with RSA key");
