@@ -38,13 +38,7 @@ After installing the dependencies, you can run
 
 where `X` is the testnet you reserved, and the last part is a commit hash on master for which CI already built an image
 
-To run the rejoin test you can type:
-
-```
-./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 2 2 normal results
-```
-
-Some of the tests are run as part of CD nightly and hourly test runs, defined in link:../pipeline/pipeline.yml[`testnet/tests/pipeline/pipeline.yml`].
+You can then run any manual tests on the testnet you just deployed.
 
 # Troubleshooting
 List the inventory of a testnet
