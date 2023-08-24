@@ -1,5 +1,7 @@
-FROM selenium/standalone-chrome:113.0
+FROM docker.io/selenium/standalone-chrome:113.0
+
 USER root
+
 COPY ./certs/ /etc/certs
 
 RUN apt-get update -y && \
