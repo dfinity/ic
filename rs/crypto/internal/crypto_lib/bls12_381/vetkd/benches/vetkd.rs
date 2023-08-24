@@ -1,19 +1,20 @@
 use criterion::*;
 use ic_crypto_internal_bls12_381_vetkd::*;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 
 fn transport_key_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_transport_key");
 
-    let mut rng = rand::thread_rng();
+    let rng = &mut reproducible_rng();
 
     group.bench_function("TransportSecretKey::generate", |b| {
-        b.iter(|| TransportSecretKey::generate(&mut rng))
+        b.iter(|| TransportSecretKey::generate(rng))
     });
 
     group.bench_function("TransportSecretKey::serialize", |b| {
         b.iter_batched(
-            || TransportSecretKey::generate(&mut rng),
+            || TransportSecretKey::generate(rng),
             |key| key.serialize(),
             BatchSize::SmallInput,
         )
@@ -21,7 +22,7 @@ fn transport_key_bench(c: &mut Criterion) {
 
     group.bench_function("TransportSecretKey::deserialize", |b| {
         b.iter_batched(
-            || TransportSecretKey::generate(&mut rng).serialize(),
+            || TransportSecretKey::generate(rng).serialize(),
             |key| TransportSecretKey::deserialize(&key),
             BatchSize::SmallInput,
         )
@@ -29,7 +30,7 @@ fn transport_key_bench(c: &mut Criterion) {
 
     group.bench_function("TransportSecretKey::public_key", |b| {
         b.iter_batched(
-            || TransportSecretKey::generate(&mut rng),
+            || TransportSecretKey::generate(rng),
             |key| key.public_key(),
             BatchSize::SmallInput,
         )
@@ -37,7 +38,7 @@ fn transport_key_bench(c: &mut Criterion) {
 
     group.bench_function("TransportPublicKey::serialize", |b| {
         b.iter_batched(
-            || TransportSecretKey::generate(&mut rng).public_key(),
+            || TransportSecretKey::generate(rng).public_key(),
             |key| key.serialize(),
             BatchSize::SmallInput,
         )
@@ -45,11 +46,7 @@ fn transport_key_bench(c: &mut Criterion) {
 
     group.bench_function("TransportPublicKey::deserialize", |b| {
         b.iter_batched(
-            || {
-                TransportSecretKey::generate(&mut rng)
-                    .public_key()
-                    .serialize()
-            },
+            || TransportSecretKey::generate(rng).public_key().serialize(),
             |key| TransportPublicKey::deserialize(&key),
             BatchSize::SmallInput,
         )
@@ -59,9 +56,9 @@ fn transport_key_bench(c: &mut Criterion) {
 fn vetkd_bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("crypto_bls12_381_vetkd");
 
-    let mut rng = rand::thread_rng();
+    let rng = &mut reproducible_rng();
 
-    let tsk = TransportSecretKey::generate(&mut rng);
+    let tsk = TransportSecretKey::generate(rng);
     let tpk = tsk.public_key();
 
     let derivation_path = DerivationPath::new(&[1, 2, 3, 4], &[&[1, 2, 3]]);
@@ -70,7 +67,7 @@ fn vetkd_bench(c: &mut Criterion) {
     for threshold in [9, 19] {
         let nodes = threshold + threshold / 2;
 
-        let poly = Polynomial::random(threshold, &mut rng);
+        let poly = Polynomial::random(threshold, rng);
 
         let master_sk = poly.coeff(0);
         let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
@@ -85,7 +82,7 @@ fn vetkd_bench(c: &mut Criterion) {
             group.bench_function("EncryptedKeyShare::create", |b| {
                 b.iter(|| {
                     EncryptedKeyShare::create(
-                        &mut rng,
+                        rng,
                         &master_pk,
                         &node_sk,
                         &tpk,
@@ -95,14 +92,8 @@ fn vetkd_bench(c: &mut Criterion) {
                 })
             });
 
-            let eks = EncryptedKeyShare::create(
-                &mut rng,
-                &master_pk,
-                &node_sk,
-                &tpk,
-                &derivation_path,
-                &did,
-            );
+            let eks =
+                EncryptedKeyShare::create(rng, &master_pk, &node_sk, &tpk, &derivation_path, &did);
 
             group.bench_function("EncryptedKeyShare::serialize", |b| {
                 b.iter(|| eks.serialize())
@@ -127,14 +118,8 @@ fn vetkd_bench(c: &mut Criterion) {
             let node_sk = poly.evaluate_at(&Scalar::from_node_index(node as u32));
             let node_pk = G2Affine::from(G2Affine::generator() * &node_sk);
 
-            let eks = EncryptedKeyShare::create(
-                &mut rng,
-                &master_pk,
-                &node_sk,
-                &tpk,
-                &derivation_path,
-                &did,
-            );
+            let eks =
+                EncryptedKeyShare::create(rng, &master_pk, &node_sk, &tpk, &derivation_path, &did);
 
             node_info.push((node as u32, node_pk, eks));
         }
