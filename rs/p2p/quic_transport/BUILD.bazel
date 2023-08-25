@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = [
     "//rs/p2p/memory_transport:__subpackages__",
@@ -42,9 +42,11 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/ic_os/sev",
     "//rs/p2p/test_utils",
     "//rs/test_utilities/logger",
     "//rs/types/types_test_utils",
+    "@crate_index//:criterion",
     "@crate_index//:turmoil",
 ]
 
@@ -74,5 +76,12 @@ rust_test_suite_with_extra_srcs(
     aliases = ALIASES,
     extra_srcs = ["tests/common.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = [":quic_transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "quic_transport_bench",
+    testonly = True,
+    srcs = ["benches/bench.rs"],
     deps = [":quic_transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )

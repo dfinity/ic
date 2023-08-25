@@ -129,14 +129,7 @@ impl RegistryConsensusHandle {
     }
 }
 
-pub fn create_peer_manager_and_registry_handle(
-    rt: &Handle,
-    log: ReplicaLogger,
-) -> (
-    JoinHandle<()>,
-    Receiver<SubnetTopology>,
-    RegistryConsensusHandle,
-) {
+pub fn create_registry_handle() -> (MockConsensusCache, RegistryConsensusHandle) {
     let oldest_registry_version = Arc::new(AtomicU64::new(0));
     let oldest_registry_version_c = oldest_registry_version.clone();
     let mut mock_cache = MockConsensusCache::new();
@@ -146,18 +139,8 @@ pub fn create_peer_manager_and_registry_handle(
 
     let data_provider_proto = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(data_provider_proto.clone()));
-
-    let (jh, rcv) = start_peer_manager(
-        log,
-        &MetricsRegistry::default(),
-        rt,
-        subnet_test_id(0),
-        Arc::new(mock_cache) as Arc<_>,
-        registry_client.clone() as Arc<_>,
-    );
     (
-        jh,
-        rcv,
+        mock_cache,
         RegistryConsensusHandle {
             membership: Arc::new(Mutex::new(Vec::new())),
             oldest_registry_version: oldest_registry_version_c,
@@ -165,6 +148,26 @@ pub fn create_peer_manager_and_registry_handle(
             data_provider: data_provider_proto,
         },
     )
+}
+
+pub fn create_peer_manager_and_registry_handle(
+    rt: &Handle,
+    log: ReplicaLogger,
+) -> (
+    JoinHandle<()>,
+    Receiver<SubnetTopology>,
+    RegistryConsensusHandle,
+) {
+    let (mock_cache, registry_handle) = create_registry_handle();
+    let (jh, rcv) = start_peer_manager(
+        log,
+        &MetricsRegistry::default(),
+        rt,
+        subnet_test_id(0),
+        Arc::new(mock_cache) as Arc<_>,
+        registry_handle.registry_client.clone() as Arc<_>,
+    );
+    (jh, rcv, registry_handle)
 }
 
 /// Get protobuf-encoded snapshot of the mainnet registry state (around jan. 2022)
