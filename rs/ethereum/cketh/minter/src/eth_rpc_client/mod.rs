@@ -1,3 +1,4 @@
+use crate::endpoints::EthereumNetwork;
 use crate::eth_rpc;
 use crate::eth_rpc::{
     Block, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult,
@@ -5,6 +6,7 @@ use crate::eth_rpc::{
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::logs::{DEBUG, INFO};
+use crate::state::State;
 use ic_canister_log::log;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -16,35 +18,24 @@ mod providers;
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub enum EthereumChain {
-    Mainnet,
-    Sepolia,
-}
-
-impl EthereumChain {
-    pub fn chain_id(&self) -> u64 {
-        match self {
-            EthereumChain::Mainnet => 1,
-            EthereumChain::Sepolia => 11155111,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct EthRpcClient {
-    chain: EthereumChain,
+    chain: EthereumNetwork,
 }
 
 impl EthRpcClient {
-    pub const fn new(chain: EthereumChain) -> Self {
+    pub const fn new(chain: EthereumNetwork) -> Self {
         Self { chain }
+    }
+
+    pub const fn from_state(state: &State) -> Self {
+        Self::new(state.ethereum_network())
     }
 
     fn providers(&self) -> &[RpcNodeProvider] {
         match self.chain {
-            EthereumChain::Mainnet => &MAINNET_PROVIDERS,
-            EthereumChain::Sepolia => &SEPOLIA_PROVIDERS,
+            EthereumNetwork::Mainnet => &MAINNET_PROVIDERS,
+            EthereumNetwork::Sepolia => &SEPOLIA_PROVIDERS,
         }
     }
 
@@ -80,15 +71,14 @@ impl EthRpcClient {
             match result {
                 Ok(JsonRpcResult::Result(value)) => return Ok(JsonRpcResult::Result(value)),
                 Ok(json_rpc_error @ JsonRpcResult::Error { .. }) => {
-                    ic_cdk::println!(
-                        "Provider {:?} returned JSON-RPC error {:?}",
-                        provider,
-                        json_rpc_error
+                    log!(
+                        INFO,
+                        "Provider {provider:?} returned JSON-RPC error {json_rpc_error:?}",
                     );
                     last_result = Some(Ok(json_rpc_error));
                 }
                 Err(e) => {
-                    ic_cdk::println!("Querying provider {:?} returned error {:?}", provider, e);
+                    log!(INFO, "Querying provider {provider:?} returned error {e:?}");
                     last_result = Some(Err(e));
                 }
             };

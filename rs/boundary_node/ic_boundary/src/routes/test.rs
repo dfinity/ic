@@ -9,7 +9,7 @@ struct ProxyRouter {
 }
 
 #[async_trait]
-impl Proxier for ProxyRouter {
+impl Proxy for ProxyRouter {
     async fn proxy(
         &self,
         _request_type: RequestType,
@@ -19,17 +19,26 @@ impl Proxier for ProxyRouter {
     ) -> Result<Response, ErrorCause> {
         Ok("foobar".into_response())
     }
+}
 
-    fn lookup_node(&self, _canister_id: Principal) -> Result<Node, ErrorCause> {
+#[async_trait]
+impl Lookup for ProxyRouter {
+    async fn lookup(&self, _: &Principal) -> Result<Node, ErrorCause> {
         Ok(self.node.clone())
     }
+}
 
-    fn health(&self) -> ReplicaHealthStatus {
-        ReplicaHealthStatus::Healthy
+#[async_trait]
+impl RootKey for ProxyRouter {
+    async fn root_key(&self) -> Vec<u8> {
+        self.root_key.clone()
     }
+}
 
-    fn get_root_key(&self) -> &Vec<u8> {
-        &self.root_key
+#[async_trait]
+impl Health for ProxyRouter {
+    async fn health(&self) -> ReplicaHealthStatus {
+        ReplicaHealthStatus::Healthy
     }
 }
 
@@ -37,12 +46,18 @@ impl Proxier for ProxyRouter {
 async fn test_status() -> Result<(), Error> {
     let node = node(0, Principal::from_text("f7crg-kabae").unwrap());
     let root_key = vec![8, 6, 7, 5, 3, 0, 9];
-    let state = ProxyRouter {
+
+    let proxy_router = Arc::new(ProxyRouter {
         node,
         root_key: root_key.clone(),
-    };
+    });
 
-    let resp = status(State(Arc::new(state))).await;
+    let (rk, h) = (
+        proxy_router.clone() as Arc<dyn RootKey>,
+        proxy_router.clone() as Arc<dyn Health>,
+    );
+
+    let resp: Response = status(State((rk, h))).await?.into_response();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let (_parts, body) = resp.into_parts();
@@ -97,10 +112,11 @@ async fn test_query() -> Result<(), Error> {
 
     let request = Request::builder().body(Body::from(body)).unwrap();
 
-    let resp = query(State(Arc::new(state)), Extension(ctx), request).await;
+    let resp = query(State(Arc::new(state)), Extension(ctx), request)
+        .await
+        .unwrap()
+        .into_response();
 
-    assert!(resp.is_ok());
-    let resp = resp.unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 
     let (_parts, body) = resp.into_parts();

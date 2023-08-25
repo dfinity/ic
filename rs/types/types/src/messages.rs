@@ -28,8 +28,8 @@ pub use ingress_messages::{
     SignedIngressContent,
 };
 pub use inter_canister::{
-    CallContextId, CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response,
-    MAX_REJECT_MESSAGE_LEN_BYTES,
+    CallContextId, CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse,
+    Response, MAX_REJECT_MESSAGE_LEN_BYTES,
 };
 pub use message_id::{MessageId, MessageIdError, EXPECTED_MESSAGE_ID_LENGTH};
 use phantom_newtype::Id;
@@ -461,7 +461,8 @@ impl CanisterCallOrTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::time::expiry_time_from_now;
+    use crate::{time::expiry_time_from_now, Time};
+    use assert_matches::assert_matches;
     use maplit::btreemap;
     use serde_cbor::Value;
     use std::{convert::TryFrom, io::Cursor};
@@ -664,7 +665,57 @@ mod tests {
         let signed_ingress = SignedIngress::try_from(update).unwrap();
         let bytes = bincode::serialize(&signed_ingress).unwrap();
         let signed_ingress1 = bincode::deserialize::<SignedIngress>(&bytes);
-        assert!(signed_ingress1.is_ok());
+        assert_matches!(signed_ingress1, Ok(signed_ingress1) if signed_ingress == signed_ingress1);
+    }
+
+    fn make_request_metadata(
+        call_tree_depth: Option<u64>,
+        call_tree_start_time: Option<u64>,
+        call_subtree_deadline: Option<u64>,
+    ) -> Option<RequestMetadata> {
+        Some(RequestMetadata {
+            call_tree_depth,
+            call_tree_start_time: call_tree_start_time.map(Time::from_nanos_since_unix_epoch),
+            call_subtree_deadline: call_subtree_deadline.map(Time::from_nanos_since_unix_epoch),
+        })
+    }
+
+    #[test]
+    fn serialize_request_via_bincode() {
+        for metadata in [
+            None,
+            make_request_metadata(None, None, None),
+            make_request_metadata(Some(13), None, None),
+            make_request_metadata(None, Some(17), None),
+            make_request_metadata(None, None, Some(19)),
+        ] {
+            let request = Request {
+                receiver: CanisterId::from(13),
+                sender: CanisterId::from(17),
+                sender_reply_callback: CallbackId::from(100),
+                payment: Cycles::from(100_000_000_u128),
+                method_name: "method".into(),
+                method_payload: vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8],
+                metadata,
+            };
+            let bytes = bincode::serialize(&request).unwrap();
+            let request1 = bincode::deserialize::<Request>(&bytes);
+            assert_matches!(request1, Ok(request1) if request == request1);
+        }
+    }
+
+    #[test]
+    fn serialize_response_via_bincode() {
+        let response = Response {
+            originator: CanisterId::from(13),
+            respondent: CanisterId::from(17),
+            originator_reply_callback: CallbackId::from(100),
+            refund: Cycles::from(100_000_000_u128),
+            response_payload: Payload::Data(vec![0_u8, 1_u8, 2_u8, 3_u8, 4_u8, 5_u8]),
+        };
+        let bytes = bincode::serialize(&response).unwrap();
+        let response1 = bincode::deserialize::<Response>(&bytes);
+        assert_matches!(response1, Ok(response1) if response == response1);
     }
 
     #[test]

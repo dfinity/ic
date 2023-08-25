@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use bitcoin::util::psbt::serialize::Deserialize;
 use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
@@ -11,7 +12,10 @@ use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::{Mode, RetrieveBtcStatus};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
-use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
+use ic_ckbtc_minter::updates::retrieve_btc::{
+    RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
+    RetrieveBtcWithApprovalError,
+};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_ckbtc_minter::{
     Log, MinterInfo, CKBTC_LEDGER_MEMO_SIZE, MIN_RELAY_FEE_PER_VBYTE, MIN_RESUBMISSION_DELAY,
@@ -21,6 +25,7 @@ use ic_state_machine_tests::{Cycles, StateMachine, StateMachineBuilder, WasmResu
 use ic_test_utilities_load_wasm::load_wasm;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -483,7 +488,7 @@ struct CkBtcSetup {
     pub bitcoin_id: CanisterId,
     pub ledger_id: CanisterId,
     pub minter_id: CanisterId,
-    pub _kyt_id: CanisterId,
+    pub kyt_id: CanisterId,
 }
 
 impl CkBtcSetup {
@@ -508,6 +513,7 @@ impl CkBtcSetup {
                     .with_minting_account(minter_id.get().0)
                     .with_transfer_fee(TRANSFER_FEE)
                     .with_max_memo_length(CKBTC_LEDGER_MEMO_SIZE)
+                    .with_feature_flags(ic_icrc1_ledger::FeatureFlags { icrc2: true })
                     .build()
             ))
             .unwrap(),
@@ -572,7 +578,7 @@ impl CkBtcSetup {
             bitcoin_id,
             ledger_id,
             minter_id,
-            _kyt_id: kyt_id,
+            kyt_id,
         }
     }
 
@@ -787,6 +793,36 @@ impl CkBtcSetup {
         .expect("token transfer failed")
     }
 
+    pub fn approve_minter(
+        &self,
+        from: Principal,
+        amount: u64,
+        from_subaccount: Option<[u8; 32]>,
+    ) -> Nat {
+        Decode!(&assert_reply(self.env.execute_ingress_as(
+            PrincipalId::from(from),
+            self.ledger_id,
+            "icrc2_approve",
+            Encode!(&ApproveArgs {
+                from_subaccount,
+                spender: Account {
+                    owner: self.minter_id.into(),
+                    subaccount: None
+                },
+                amount: Nat::from(amount),
+                expected_allowance: None,
+                expires_at: None,
+                fee: None,
+                memo: None,
+                created_at_time: None,
+            }).unwrap()
+            ).expect("failed to execute token transfer")),
+            Result<Nat, ApproveError>
+        )
+        .unwrap()
+        .expect("approve failed")
+    }
+
     pub fn retrieve_btc(
         &self,
         address: String,
@@ -801,6 +837,25 @@ impl CkBtcSetup {
                 .expect("failed to execute retrieve_btc request")
             ),
             Result<RetrieveBtcOk, RetrieveBtcError>
+        ).unwrap()
+    }
+
+    pub fn retrieve_btc_with_approval(
+        &self,
+        address: String,
+        amount: u64,
+        from_subaccount: Option<[u8; 32]>,
+    ) -> Result<RetrieveBtcOk, RetrieveBtcWithApprovalError> {
+        Decode!(
+            &assert_reply(
+                self.env.execute_ingress_as(self.caller, self.minter_id, "retrieve_btc_with_approval", Encode!(&RetrieveBtcWithApprovalArgs {
+                    address,
+                    amount,
+                    from_subaccount
+                }).unwrap())
+                .expect("failed to execute retrieve_btc request")
+            ),
+            Result<RetrieveBtcOk, RetrieveBtcWithApprovalError>
         ).unwrap()
     }
 
@@ -1531,4 +1586,275 @@ fn test_filter_logs() {
         serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log");
 
     assert_ne!(logs.entries.len(), logs_filtered.entries.len());
+}
+
+#[test]
+fn test_retrieve_btc_with_approval() {
+    let ckbtc = CkBtcSetup::new();
+
+    // Step 1: deposit ckBTC
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: (1..=32).collect::<Vec<u8>>(),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+
+    ckbtc.deposit_utxo(user, utxo);
+    assert_eq!(ckbtc.balance_of(user), Nat::from(deposit_value - KYT_FEE));
+
+    // Step 2: request a withdrawal
+
+    let withdrawal_amount = 50_000_000;
+    ckbtc.approve_minter(user, withdrawal_amount, None);
+    let fee_estimate = ckbtc.estimate_withdrawal_fee(Some(withdrawal_amount));
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc_with_approval(WITHDRAWAL_ADDRESS.to_string(), withdrawal_amount, None)
+        .expect("retrieve_btc failed");
+
+    let get_transaction_request = GetTransactionsRequest {
+        start: block_index.into(),
+        length: 1.into(),
+    };
+    let res = ckbtc.get_transactions(get_transaction_request);
+    let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
+    use ic_ckbtc_minter::memo::BurnMemo;
+
+    let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
+    assert_eq!(
+        decoded_data,
+        BurnMemo::Convert {
+            address: Some(WITHDRAWAL_ADDRESS),
+            kyt_fee: Some(KYT_FEE),
+            status: None,
+        },
+        "memo not found in burn"
+    );
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    // Step 3: wait for the transaction to be submitted
+
+    let txid = ckbtc.await_btc_transaction(block_index, 10);
+    let mempool = ckbtc.mempool();
+    assert_eq!(
+        mempool.len(),
+        1,
+        "ckbtc transaction did not appear in the mempool"
+    );
+    let tx = mempool
+        .get(&txid)
+        .expect("the mempool does not contain the withdrawal transaction");
+
+    assert_eq!(2, tx.output.len());
+    assert_eq!(
+        tx.output[0].value,
+        withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
+    );
+
+    // Step 4: confirm the transaction
+
+    ckbtc.finalize_transaction(tx);
+    assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+}
+
+#[test]
+fn test_retrieve_btc_with_approval_from_subaccount() {
+    let ckbtc = CkBtcSetup::new();
+
+    // Step 1: deposit ckBTC
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: (1..=32).collect::<Vec<u8>>(),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+    let subaccount: Option<[u8; 32]> = Some([1; 32]);
+    let user_account = Account {
+        owner: user,
+        subaccount,
+    };
+
+    ckbtc.deposit_utxo(user_account, utxo);
+    assert_eq!(
+        ckbtc.balance_of(user_account),
+        Nat::from(deposit_value - KYT_FEE)
+    );
+
+    // Step 2: request a withdrawal
+
+    let withdrawal_amount = 50_000_000;
+    ckbtc.approve_minter(user, withdrawal_amount, subaccount);
+    let fee_estimate = ckbtc.estimate_withdrawal_fee(Some(withdrawal_amount));
+
+    let RetrieveBtcOk { block_index } = ckbtc
+        .retrieve_btc_with_approval(
+            WITHDRAWAL_ADDRESS.to_string(),
+            withdrawal_amount,
+            subaccount,
+        )
+        .expect("retrieve_btc failed");
+
+    let get_transaction_request = GetTransactionsRequest {
+        start: block_index.into(),
+        length: 1.into(),
+    };
+    let res = ckbtc.get_transactions(get_transaction_request);
+    let memo = res.transactions[0].burn.clone().unwrap().memo.unwrap();
+    use ic_ckbtc_minter::memo::BurnMemo;
+
+    let decoded_data = minicbor::decode::<BurnMemo>(&memo.0).expect("failed to decode memo");
+    assert_eq!(
+        decoded_data,
+        BurnMemo::Convert {
+            address: Some(WITHDRAWAL_ADDRESS),
+            kyt_fee: Some(KYT_FEE),
+            status: None,
+        },
+        "memo not found in burn"
+    );
+
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    // Step 3: wait for the transaction to be submitted
+
+    let txid = ckbtc.await_btc_transaction(block_index, 10);
+    let mempool = ckbtc.mempool();
+    assert_eq!(
+        mempool.len(),
+        1,
+        "ckbtc transaction did not appear in the mempool"
+    );
+    let tx = mempool
+        .get(&txid)
+        .expect("the mempool does not contain the withdrawal transaction");
+
+    assert_eq!(2, tx.output.len());
+    assert_eq!(
+        tx.output[0].value,
+        withdrawal_amount - fee_estimate.minter_fee - fee_estimate.bitcoin_fee
+    );
+
+    // Step 4: confirm the transaction
+
+    ckbtc.finalize_transaction(tx);
+    assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+}
+
+#[test]
+fn test_retrieve_btc_with_approval_fail() {
+    let ckbtc = CkBtcSetup::new();
+
+    // Step 1: deposit ckBTC
+
+    let deposit_value = 100_000_000;
+    let utxo = Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: (1..=32).collect::<Vec<u8>>(),
+            vout: 1,
+        },
+        value: deposit_value,
+    };
+
+    let user = Principal::from(ckbtc.caller);
+    let user_account = Account {
+        owner: user,
+        subaccount: Some([1; 32]),
+    };
+
+    ckbtc.deposit_utxo(user_account, utxo);
+    assert_eq!(
+        ckbtc.balance_of(user_account),
+        Nat::from(deposit_value - KYT_FEE)
+    );
+
+    // Step 2: request a withdrawal with ledger stopped
+
+    let withdrawal_amount = 50_000_000;
+    ckbtc.approve_minter(user, u64::MAX, Some([1; 32]));
+
+    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.ledger_id);
+    assert_matches!(stop_canister_result, Ok(_));
+
+    let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
+        WITHDRAWAL_ADDRESS.to_string(),
+        withdrawal_amount,
+        Some([1; 32]),
+    );
+    assert_matches!(
+        retrieve_btc_result,
+        Err(RetrieveBtcWithApprovalError::TemporarilyUnavailable(_))
+    );
+    let start_canister_result = ckbtc.env.start_canister(ckbtc.ledger_id);
+    assert_matches!(start_canister_result, Ok(_));
+
+    assert_eq!(
+        ckbtc.balance_of(user_account),
+        Nat::from(deposit_value - KYT_FEE - TRANSFER_FEE)
+    );
+
+    // Check that we reimburse ckBTC if the KYT check of the address fails
+
+    ckbtc
+        .env
+        .upgrade_canister(
+            ckbtc.kyt_id,
+            kyt_wasm(),
+            Encode!(&LifecycleArg::UpgradeArg(ic_ckbtc_kyt::UpgradeArg {
+                minter_id: None,
+                maintainers: None,
+                mode: Some(KytMode::RejectAll),
+            }))
+            .unwrap(),
+        )
+        .expect("failed to upgrade the KYT canister");
+
+    let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
+        WITHDRAWAL_ADDRESS.to_string(),
+        withdrawal_amount,
+        Some([1; 32]),
+    );
+    assert_matches!(
+        retrieve_btc_result,
+        Err(RetrieveBtcWithApprovalError::GenericError { .. })
+    );
+    ckbtc.env.tick();
+    assert_eq!(
+        ckbtc.balance_of(user_account),
+        Nat::from(deposit_value - 2 * KYT_FEE - TRANSFER_FEE)
+    );
+
+    // Check that we reimburse ckBTC if the call to the KYT canister fails
+
+    let stop_canister_result = ckbtc.env.stop_canister(ckbtc.kyt_id);
+    assert_matches!(stop_canister_result, Ok(_));
+
+    let retrieve_btc_result = ckbtc.retrieve_btc_with_approval(
+        WITHDRAWAL_ADDRESS.to_string(),
+        withdrawal_amount,
+        Some([1; 32]),
+    );
+    assert_matches!(
+        retrieve_btc_result,
+        Err(RetrieveBtcWithApprovalError::GenericError { .. })
+    );
+    ckbtc.env.tick();
+    assert_eq!(
+        ckbtc.balance_of(user_account),
+        Nat::from(deposit_value - 2 * KYT_FEE - TRANSFER_FEE)
+    );
 }

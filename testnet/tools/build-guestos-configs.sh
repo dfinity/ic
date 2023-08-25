@@ -215,14 +215,16 @@ function generate_prep_material() {
         local subnet_type=${NODE["subnet_type"]}
 
         if [[ "${subnet_type}" == "root_subnet" ]]; then
-            NODES_NNS+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
+            NODES_NNS+=("--node")
+            NODES_NNS+=("idx:${node_idx},subnet_idx:${subnet_idx},p2p_addr:\"[${ipv6_address}]:4100\",xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
         elif [[ "${subnet_type}" == "app_subnet" ]]; then
             if [[ "${subnet_idx}" == "x" ]]; then
                 # Unassigned nodes (nodes not assigned to any subnet) have an empty subnet_idx
                 # in the line submitted to ic-prep.
                 subnet_idx=""
             fi
-            NODES_APP+=("${node_idx}-${subnet_idx}-[${ipv6_address}]:4100-[${ipv6_address}]:2497-0-[${ipv6_address}]:8080")
+            NODES_APP+=("--node")
+            NODES_APP+=("idx:${node_idx},subnet_idx:${subnet_idx},p2p_addr:\"[${ipv6_address}]:4100\",xnet_api:\"[${ipv6_address}]:2497\",public_api:\"[${ipv6_address}]:8080\"")
         fi
     done
 
@@ -248,7 +250,7 @@ function generate_prep_material() {
         "--dkg-interval-length" "${DKG_INTERVAL_LENGTH}" \
         "--max-ingress-bytes-per-message" "${MAX_INGRESS_BYTES_PER_MESSAGE}" \
         ${P2P_FLOWS:-} \
-        "--nodes" ${NODES_NNS[*]} ${NODES_APP[*]} \
+        ${NODES_NNS[*]} ${NODES_APP[*]} \
         "--provisional-whitelist" "${WHITELIST}" \
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
         "--initial-node-provider" "${NODE_OPERATOR_ID}" \

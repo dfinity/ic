@@ -1808,6 +1808,7 @@ fn time_out_requests_pushes_correct_reject_responses() {
                     payment: Cycles::from(cycles as u64),
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
+                    metadata: None,
                 }),
                 deadline,
             )

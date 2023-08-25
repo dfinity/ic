@@ -84,14 +84,15 @@ const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
 /// Range of allowed memos for neurons distributed via an SNS swap. This range is used to choose
-/// the memos of Swap neurons, and to enforce that other memos (e.g. for Airdrop neurons) do not
-/// conflict with the memos of Swap neurons.
-pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
+/// the memos of neurons in the neuron basket, and to enforce that other memos (e.g. for Airdrop
+/// neurons) do not conflict with the neuron basket memos.
+pub const NEURON_BASKET_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
 
 /// The principal with all bytes set to zero. The main property
-/// of this principal is that for any principal p != FIRST_PRINCIPAL_BYTES
-/// then p.as_slice() < FIRST_PRINCIPAL_BYTES.as_slice().
+/// of this principal is that for any principal p, the following condition holds:
+/// (p != FIRST_PRINCIPAL_BYTES) ==> FIRST_PRINCIPAL_BYTES.as_slice() < p.as_slice()
+/// Here, the `<` symbol means lexicographical comparison of sequences of bytes.
 pub const FIRST_PRINCIPAL_BYTES: [u8; PrincipalId::MAX_LENGTH_IN_BYTES] =
     [0; PrincipalId::MAX_LENGTH_IN_BYTES];
 
@@ -591,7 +592,7 @@ impl Swap {
                     &parsed_principal,
                     amount_sns_e8s,
                     neuron_basket_construction_parameters,
-                    SALE_NEURON_MEMO_RANGE_START,
+                    NEURON_BASKET_MEMO_RANGE_START,
                 );
             neurons.extend(direct_participant_sns_neuron_recipes);
 
@@ -604,7 +605,7 @@ impl Swap {
         // investors in the swap use the NNS Governance principal_id, there can be
         // neuron id collisions, so there must be a global memo used for all baskets
         // for all CF investors.
-        let mut global_cf_memo: u64 = SALE_NEURON_MEMO_RANGE_START;
+        let mut global_cf_memo: u64 = NEURON_BASKET_MEMO_RANGE_START;
         for cf_participant in self.cf_participants.iter() {
             for cf_neuron in cf_participant.cf_neurons.iter() {
                 let amount_sns_e8s = Swap::scale(
@@ -2682,6 +2683,11 @@ impl Swap {
             .min(LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP) // cap
             as usize;
 
+        // Disallow indexing outside of the bounds of self.cf_participants
+        if offset >= self.cf_participants.len() {
+            return ListCommunityFundParticipantsResponse::default();
+        }
+
         let end = (offset + limit).min(self.cf_participants.len());
         let cf_participants = self.cf_participants[offset..end].to_vec();
 
@@ -2724,15 +2730,19 @@ impl Swap {
         &self,
         request: ListSnsNeuronRecipesRequest,
     ) -> ListSnsNeuronRecipesResponse {
-        let limit = request
-            .limit
+        let ListSnsNeuronRecipesRequest { limit, offset } = request;
+        let offset = offset.unwrap_or_default() as usize;
+        let limit = limit
             .unwrap_or(DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT)
             .min(DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT) as usize;
 
-        let start_at = request.offset.unwrap_or_default() as usize;
-        let end = (start_at + limit).min(self.neuron_recipes.len());
+        // Disallow indexing outside of the bounds of self.neuron_recipes
+        if offset >= self.neuron_recipes.len() {
+            return ListSnsNeuronRecipesResponse::default();
+        }
 
-        let sns_neuron_recipes = self.neuron_recipes[start_at..end].to_vec();
+        let end = (offset + limit).min(self.neuron_recipes.len());
+        let sns_neuron_recipes = self.neuron_recipes[offset..end].to_vec();
 
         ListSnsNeuronRecipesResponse { sns_neuron_recipes }
     }
@@ -2742,15 +2752,15 @@ impl Swap {
 ///
 /// # Arguments
 ///
-/// * `tot_participation` - The current amount of tokens commited to
+/// * `tot_participation` - The current amount of tokens committed to
 ///                         the swap by all users.
 /// * `max_tot_participation` - The maximum amount of tokens that can
-///                             be commited to the swap.
+///                             be committed to the swap.
 /// * `min_user_participation` - The minimum amount of tokens that a
 ///                              user must commit to participate to the swap.
 /// * `max_user_participation` - The maximum amount of tokens that a
 ///                              user can commit to participate to the swap.
-/// * `user_participation` - The current amount of tokens commited to the
+/// * `user_participation` - The current amount of tokens committed to the
 ///                          swap by the user that requested the increment.
 /// * `requested_increment` - The amount of tokens by which the user wants
 ///                           to increase its participation in the swap.
@@ -3513,6 +3523,16 @@ mod tests {
                 cf_participants: cf_participants[2..].to_vec(),
             },
         );
+
+        assert_eq!(
+            swap.list_community_fund_participants(&ListCommunityFundParticipantsRequest {
+                offset: Some((cf_participants.len() + 1) as u64), // Give an offset outside the bounds
+                limit: Some(10),                                  // Limit is irrelevant
+            }),
+            ListCommunityFundParticipantsResponse {
+                cf_participants: vec![],
+            }
+        )
     }
 
     #[test]
@@ -3798,6 +3818,16 @@ mod tests {
                 sns_neuron_recipes: neuron_recipes[1..3].to_vec()
             }
         );
+
+        assert_eq!(
+            swap.list_sns_neuron_recipes(ListSnsNeuronRecipesRequest {
+                limit: Some(2),                                  // Limit is irrelevant
+                offset: Some((neuron_recipes.len() + 1) as u64), // Give an offset outside the bounds
+            }),
+            ListSnsNeuronRecipesResponse {
+                sns_neuron_recipes: vec![],
+            }
+        )
     }
 
     proptest! {

@@ -404,7 +404,7 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) -> Result<(), String> {
 
 fn process_balance_changes(block_index: BlockIndex, block: &Block) -> Result<(), String> {
     match block.transaction.operation {
-        Operation::Burn { from, amount } => debit(block_index, from, amount.get_e8s()),
+        Operation::Burn { from, amount, .. } => debit(block_index, from, amount.get_e8s()),
         Operation::Mint { to, amount } => credit(block_index, to, amount.get_e8s()),
         Operation::Transfer {
             from,

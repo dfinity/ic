@@ -104,6 +104,7 @@ type Operation = variant {
     };
     Burn : record {
         from : AccountIdentifier;
+        spender : opt AccountIdentifier;
         amount : Tokens;
     };
     Transfer : record {
@@ -288,6 +289,10 @@ type AccountBalanceArgsDfx = record {
     account: TextAccountIdentifier;
 };
 
+type FeatureFlags = record {
+    icrc2 : bool;
+};
+
 type InitArgs = record {
     minting_account: TextAccountIdentifier;
     icrc1_minting_account: opt Account;
@@ -299,6 +304,9 @@ type InitArgs = record {
     transfer_fee: opt Tokens;
     token_symbol: opt text;
     token_name: opt text;
+    feature_flags : opt FeatureFlags;
+    maximum_number_of_accounts : opt nat64;
+    accounts_overflow_trim_quantity: opt nat64;
 };
 
 type Icrc1BlockIndex = nat;
@@ -347,6 +355,7 @@ type Value = variant {
 type UpgradeArgs = record {
   maximum_number_of_accounts : opt nat64;
   icrc1_minting_account : opt Account;
+  feature_flags : opt FeatureFlags;
 };
 
 type LedgerCanisterPayload = variant {

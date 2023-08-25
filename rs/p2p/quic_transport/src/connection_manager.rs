@@ -312,11 +312,9 @@ impl ConnectionManager {
                     }
                 }
                 Some(reconnect) = self.connect_queue.next() => {
-                    self.set_metric_gauges();
                     self.handle_dial(reconnect.into_inner())
                 }
                 topology = self.watcher.changed() => {
-                    self.set_metric_gauges();
                     match topology {
                         Ok(_) => {
                             self.handle_topology_change().await;
@@ -328,7 +326,6 @@ impl ConnectionManager {
                     }
                 },
                 connecting = self.endpoint.accept() => {
-                    self.set_metric_gauges();
                     if let Some(connecting) = connecting {
                         self.handle_inbound(connecting);
                     } else {
@@ -338,7 +335,6 @@ impl ConnectionManager {
                     }
                 },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
-                    self.set_metric_gauges();
                     match conn_res {
                         Ok((conn_out, peer_id)) => self.handle_connecting_result(conn_out, Some(peer_id)).await,
                         Err(err) => {
@@ -350,7 +346,6 @@ impl ConnectionManager {
                     }
                 },
                 Some(conn_res) = self.inbound_connecting.join_next() => {
-                    self.set_metric_gauges();
                     match conn_res {
                         Ok(conn_out) => self.handle_connecting_result(conn_out, None).await,
                         Err(err) => {
@@ -362,7 +357,6 @@ impl ConnectionManager {
                     }
                 },
                 Some(active_result) = self.active_connections.join_next() => {
-                    self.set_metric_gauges();
                     match active_result {
                         Ok((_, peer_id)) => self.handled_closed_conn(peer_id).await,
                         Err(err) => {
@@ -374,6 +368,16 @@ impl ConnectionManager {
                     }
                 },
             }
+            // Collect metrics
+            self.metrics
+                .active_connections
+                .set(self.active_connections.len() as i64);
+            self.metrics
+                .connecting_connections
+                .set(self.inbound_connecting.len() as i64 + self.outbound_connecting.len() as i64);
+            self.metrics
+                .delay_queue_size
+                .set(self.connect_queue.len() as i64);
         }
         // This point is reached only in two cases - replica gracefully shutting down or
         // bug which makes the peer manager unavaible.
@@ -388,6 +392,7 @@ impl ConnectionManager {
     async fn handled_closed_conn(&mut self, peer_id: NodeId) {
         self.peer_map.remove(&peer_id);
         self.connect_queue.insert(peer_id, Duration::from_secs(0));
+        self.metrics.peer_map_size.dec();
         self.metrics.closed_request_handlers_total.inc();
     }
 
@@ -447,19 +452,7 @@ impl ConnectionManager {
                 true
             }
         });
-    }
-
-    fn set_metric_gauges(&self) {
-        // Collect metrics
-        self.metrics
-            .active_connections
-            .set(self.active_connections.len() as i64);
-        self.metrics
-            .connecting_connections
-            .set(self.inbound_connecting.len() as i64 + self.outbound_connecting.len() as i64);
-        self.metrics
-            .delay_queue_size
-            .set(self.connect_queue.len() as i64);
+        self.metrics.peer_map_size.set(self.peer_map.len() as i64);
     }
 
     fn handle_dial(&mut self, peer_id: NodeId) {

@@ -1,10 +1,11 @@
 use candid::Principal;
 use candid::{Decode, Encode, Nat};
+use dfn_candid::CandidOne;
 use dfn_protobuf::ProtoBuf;
 use ic_base_types::CanisterId;
 use ic_icrc1_ledger_sm_tests::{
-    default_approve_args, expect_icrc2_disabled, get_allowance, send_approval, supported_standards,
-    transfer, MINTER,
+    balance_of, default_approve_args, default_transfer_from_args, expect_icrc2_disabled,
+    get_allowance, send_approval, send_transfer_from, supported_standards, transfer, MINTER,
 };
 use ic_ledger_core::{block::BlockType, Tokens};
 use ic_state_machine_tests::{ErrorCode, PrincipalId, StateMachine, UserError};
@@ -18,6 +19,7 @@ use icrc_ledger_types::icrc1::{
     transfer::{Memo, TransferArg, TransferError},
 };
 use icrc_ledger_types::icrc2::allowance::AllowanceArgs;
+use num_traits::cast::ToPrimitive;
 use on_wire::{FromWire, IntoWire};
 use serde_bytes::ByteBuf;
 use std::collections::{HashMap, HashSet};
@@ -44,6 +46,8 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterI
         .transfer_fee(Tokens::try_from(args.transfer_fee).unwrap())
         .token_symbol_and_name(&args.token_symbol, &args.token_name)
         .feature_flags(FeatureFlags { icrc2: true })
+        .maximum_number_of_accounts(args.maximum_number_of_accounts)
+        .accounts_overflow_trim_quantity(args.accounts_overflow_trim_quantity)
         .build()
         .unwrap()
 }
@@ -203,6 +207,8 @@ fn check_old_init() {
         token_symbol: Some("ICP".into()),
         token_name: Some("Internet Computer".into()),
         feature_flags: None,
+        maximum_number_of_accounts: None,
+        accounts_overflow_trim_quantity: None,
     })
     .unwrap();
     env.install_canister(ledger_wasm(), old_init, None)
@@ -212,43 +218,36 @@ fn check_old_init() {
 #[test]
 fn check_new_init() {
     let env = StateMachine::new();
-    let new_init = Encode!(&LedgerCanisterPayload::Init(InitArgs {
-        archive_options: None,
-        minting_account: AccountIdentifier::new(PrincipalId::new_user_test_id(1), None),
-        icrc1_minting_account: None,
-        initial_values: HashMap::new(),
-        max_message_size_bytes: None,
-        transaction_window: None,
-        send_whitelist: HashSet::new(),
-        transfer_fee: None,
-        token_symbol: Some("ICP".into()),
-        token_name: Some("Internet Computer".into()),
-        feature_flags: None,
-    }))
-    .unwrap();
-    env.install_canister(ledger_wasm(), new_init, None)
-        .expect("Unable to install the Ledger canister with the new init");
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(AccountIdentifier::new(
+            PrincipalId::new_user_test_id(1),
+            None,
+        ))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
+    env.install_canister(
+        ledger_wasm(),
+        CandidOne(payload).into_bytes().unwrap(),
+        None,
+    )
+    .expect("Unable to install the Ledger canister with the new init");
 }
 
 #[test]
 fn check_memo() {
     let env = StateMachine::new();
-    let new_init = Encode!(&LedgerCanisterPayload::Init(InitArgs {
-        archive_options: None,
-        minting_account: MINTER.into(),
-        icrc1_minting_account: None,
-        initial_values: HashMap::new(),
-        max_message_size_bytes: None,
-        transaction_window: None,
-        send_whitelist: HashSet::new(),
-        transfer_fee: None,
-        token_symbol: Some("ICP".into()),
-        token_name: Some("Internet Computer".into()),
-        feature_flags: None,
-    }))
-    .unwrap();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
     let ledger_id = env
-        .install_canister(ledger_wasm(), new_init, None)
+        .install_canister(
+            ledger_wasm(),
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
         .expect("Unable to install the Ledger canister with the new init");
 
     let mint_with_memo = |memo_size_bytes: usize| -> Result<Result<Nat, TransferError>, UserError> {
@@ -314,30 +313,29 @@ fn check_query_blocks_coherence() {
     initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
     initial_balances.insert(Account::from(p2.0).into(), Tokens::from_e8s(10_000_000));
     initial_balances.insert(Account::from(p3.0).into(), Tokens::from_e8s(10_000_000));
-    let init_args = Encode!(&LedgerCanisterPayload::Init(InitArgs {
-        archive_options: Some(ArchiveOptions {
+    let payload = LedgerCanisterInitPayload::builder()
+        .archive_options(ArchiveOptions {
             trigger_threshold: 5,
             num_blocks_to_archive: 2,
             node_max_memory_size_bytes: None,
             max_message_size_bytes: None,
             controller_id: PrincipalId::new_anonymous(),
             cycles_for_archive_creation: None,
-            max_transactions_per_response: None
-        }),
-        minting_account: MINTER.into(),
-        icrc1_minting_account: Some(MINTER),
-        initial_values: initial_balances,
-        max_message_size_bytes: None,
-        transaction_window: None,
-        send_whitelist: HashSet::new(),
-        transfer_fee: Some(Tokens::from_e8s(10_000)),
-        token_symbol: Some("ICP".into()),
-        token_name: Some("Internet Computer".into()),
-        feature_flags: None,
-    }))
-    .unwrap();
+            max_transactions_per_response: None,
+        })
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
     let canister_id = env
-        .install_canister(ledger_wasm_current, init_args, None)
+        .install_canister(
+            ledger_wasm_current,
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
         .expect("Unable to install the Ledger canister with the new init");
 
     transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
@@ -414,22 +412,21 @@ fn test_block_transformation() {
     initial_balances.insert(Account::from(p1.0).into(), Tokens::from_e8s(10_000_000));
     initial_balances.insert(Account::from(p2.0).into(), Tokens::from_e8s(10_000_000));
     initial_balances.insert(Account::from(p3.0).into(), Tokens::from_e8s(10_000_000));
-    let init_args = Encode!(&LedgerCanisterPayload::Init(InitArgs {
-        archive_options: None,
-        minting_account: MINTER.into(),
-        icrc1_minting_account: Some(MINTER),
-        initial_values: initial_balances,
-        max_message_size_bytes: None,
-        transaction_window: None,
-        send_whitelist: HashSet::new(),
-        transfer_fee: Some(Tokens::from_e8s(10_000)),
-        token_symbol: Some("ICP".into()),
-        token_name: Some("Internet Computer".into()),
-        feature_flags: None,
-    }))
-    .unwrap();
+
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
     let canister_id = env
-        .install_canister(ledger_wasm_mainnet, init_args, None)
+        .install_canister(
+            ledger_wasm_mainnet,
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
         .expect("Unable to install the Ledger canister with the new init");
 
     transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
@@ -535,26 +532,25 @@ fn test_feature_flags() {
 
     let from = PrincipalId::new_user_test_id(1);
     let spender = PrincipalId::new_user_test_id(2);
+    let to = PrincipalId::new_user_test_id(3);
 
     let env = StateMachine::new();
     let mut initial_balances = HashMap::new();
     initial_balances.insert(Account::from(from.0).into(), Tokens::from_e8s(100_000));
-    let init_args = Encode!(&LedgerCanisterPayload::Init(InitArgs {
-        archive_options: None,
-        minting_account: MINTER.into(),
-        icrc1_minting_account: Some(MINTER),
-        initial_values: initial_balances,
-        max_message_size_bytes: None,
-        transaction_window: None,
-        send_whitelist: HashSet::new(),
-        transfer_fee: Some(Tokens::from_e8s(10_000)),
-        token_symbol: Some("ICP".into()),
-        token_name: Some("Internet Computer".into()),
-        feature_flags: None,
-    }))
-    .unwrap();
+    let payload = LedgerCanisterInitPayload::builder()
+        .minting_account(MINTER.into())
+        .icrc1_minting_account(MINTER)
+        .initial_values(initial_balances)
+        .transfer_fee(Tokens::from_e8s(10_000))
+        .token_symbol_and_name("ICP", "Internet Computer")
+        .build()
+        .unwrap();
     let canister_id = env
-        .install_canister(ledger_wasm.clone(), init_args, None)
+        .install_canister(
+            ledger_wasm.clone(),
+            CandidOne(payload).into_bytes().unwrap(),
+            None,
+        )
         .expect("Unable to install the Ledger canister with the new init");
 
     let approve_args = default_approve_args(spender.0, 150_000);
@@ -562,6 +558,7 @@ fn test_feature_flags() {
         account: from.0.into(),
         spender: spender.0.into(),
     };
+    let transfer_from_args = default_transfer_from_args(from.0, to.0, 10_000);
 
     expect_icrc2_disabled(
         &env,
@@ -569,7 +566,7 @@ fn test_feature_flags() {
         canister_id,
         &approve_args,
         &allowance_args,
-        None,
+        &transfer_from_args,
     );
 
     env.upgrade_canister(
@@ -590,7 +587,7 @@ fn test_feature_flags() {
         canister_id,
         &approve_args,
         &allowance_args,
-        None,
+        &transfer_from_args,
     );
 
     env.upgrade_canister(
@@ -616,6 +613,43 @@ fn test_feature_flags() {
         send_approval(&env, canister_id, from.0, &approve_args).expect("approval failed");
     assert_eq!(block_index, 1);
     let allowance = get_allowance(&env, canister_id, from.0, spender.0);
-    use num_traits::cast::ToPrimitive;
     assert_eq!(allowance.allowance.0.to_u64().unwrap(), 150_000);
+    let block_index = send_transfer_from(&env, canister_id, spender.0, &transfer_from_args)
+        .expect("transfer_from failed");
+    assert_eq!(block_index, 2);
+    let allowance = get_allowance(&env, canister_id, from.0, spender.0);
+    assert_eq!(allowance.allowance.0.to_u64().unwrap(), 130_000);
+    assert_eq!(balance_of(&env, canister_id, from.0), 70_000);
+    assert_eq!(balance_of(&env, canister_id, to.0), 10_000);
+    assert_eq!(balance_of(&env, canister_id, spender.0), 0);
+}
+
+#[test]
+fn test_transfer_from_smoke() {
+    ic_icrc1_ledger_sm_tests::test_transfer_from_smoke(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_self() {
+    ic_icrc1_ledger_sm_tests::test_transfer_from_self(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_minter() {
+    ic_icrc1_ledger_sm_tests::test_transfer_from_minter(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_transfer_from_burn() {
+    ic_icrc1_ledger_sm_tests::test_transfer_from_burn(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_balances_overflow() {
+    ic_icrc1_ledger_sm_tests::test_balances_overflow(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn test_approval_trimming() {
+    ic_icrc1_ledger_sm_tests::test_approval_trimming(ledger_wasm(), encode_init_args);
 }

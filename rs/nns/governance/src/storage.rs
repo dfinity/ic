@@ -30,6 +30,12 @@ const KNOWN_NEURON_DATA_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(7);
 #[allow(dead_code)]
 const TRANSFER_NEURONS_MEMORY_ID: MemoryId = MemoryId::new(8);
 
+const NEURON_SUBACCOUNT_INDEX_MEMORY_ID: MemoryId = MemoryId::new(9);
+const NEURON_PRINCIPAL_INDEX_MEMORY_ID: MemoryId = MemoryId::new(10);
+const NEURON_FOLLOWING_INDEX_MEMORY_ID: MemoryId = MemoryId::new(11);
+const NEURON_KNOWN_NEURON_INDEX_MEMORY_ID: MemoryId = MemoryId::new(12);
+
+pub mod neuron_indexes;
 pub mod neurons;
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
@@ -45,10 +51,11 @@ thread_local! {
     // Events for audit purposes.
     pub static AUDIT_EVENTS_LOG: RefCell<StableLog<AuditEvent, VM, VM>> =
         MEMORY_MANAGER.with(|memory_manager| {
+            let memory_manager = memory_manager.borrow();
             RefCell::new(
                 StableLog::init(
-                    memory_manager.borrow().get(AUDIT_EVENTS_INDEX_MEMORY_ID),
-                    memory_manager.borrow().get(AUDIT_EVENTS_DATA_MEMORY_ID),
+                    memory_manager.get(AUDIT_EVENTS_INDEX_MEMORY_ID),
+                    memory_manager.get(AUDIT_EVENTS_DATA_MEMORY_ID),
                 )
                 .expect("Failed to initialize stable log"),
             )
@@ -56,31 +63,49 @@ thread_local! {
 
     pub(crate) static NEURONS: neurons::StableNeuronStore<VM> =
         MEMORY_MANAGER.with(|memory_manager| {
+            let memory_manager = memory_manager.borrow();
             neurons::StableNeuronStoreBuilder {
-                main: memory_manager.borrow().get(MAIN_NEURONS_MEMORY_ID),
+                main: memory_manager.get(MAIN_NEURONS_MEMORY_ID),
 
                 // Collections
-                hot_keys: memory_manager.borrow().get(HOT_KEYS_NEURONS_MEMORY_ID),
-                followees: memory_manager.borrow().get(FOLLOWEES_NEURONS_MEMORY_ID),
-                recent_ballots: memory_manager.borrow().get(RECENT_BALLOTS_NEURONS_MEMORY_ID),
+                hot_keys: memory_manager.get(HOT_KEYS_NEURONS_MEMORY_ID),
+                followees: memory_manager.get(FOLLOWEES_NEURONS_MEMORY_ID),
+                recent_ballots: memory_manager.get(RECENT_BALLOTS_NEURONS_MEMORY_ID),
 
                 // Singletons
-                known_neuron_data: memory_manager.borrow().get(KNOWN_NEURON_DATA_NEURONS_MEMORY_ID),
-                transfer: memory_manager.borrow().get(TRANSFER_NEURONS_MEMORY_ID),
+                known_neuron_data: memory_manager.get(KNOWN_NEURON_DATA_NEURONS_MEMORY_ID),
+                transfer: memory_manager.get(TRANSFER_NEURONS_MEMORY_ID),
             }
             .build()
+        });
+
+    pub(crate) static NEURON_INDEXES: RefCell<neuron_indexes::StableNeuronIndexes<VM>> = MEMORY_MANAGER
+        .with(|memory_manager| {
+            let memory_manager = memory_manager.borrow();
+            RefCell::new(
+                neuron_indexes::StableNeuronIndexesBuilder {
+                    subaccount: memory_manager.get(NEURON_SUBACCOUNT_INDEX_MEMORY_ID),
+                    principal: memory_manager.get(NEURON_PRINCIPAL_INDEX_MEMORY_ID),
+                    following: memory_manager.get(NEURON_FOLLOWING_INDEX_MEMORY_ID),
+                    known_neuron: memory_manager.get(NEURON_KNOWN_NEURON_INDEX_MEMORY_ID),
+                }
+                .build(),
+            )
         });
 }
 
 // Implement BoundedStorable
-// -------------------------
+// =========================
+
+// Signed32
+// --------
 
 // ic_stable_structures should implement (Bounded)Storable on i32, but does
 // not. Therefore, we do it here. Unfortunately, we must wrap it first, because
-// only ic_stable_structures can implement their traits on foreign types (and
-// i32 does not blong to us either).
+// only ic_stable_structures can implement their traits on foreign types, such
+// as i32.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Signed32(pub i32);
+pub(crate) struct Signed32(pub i32);
 
 impl Signed32 {
     const MIN: Signed32 = Signed32(i32::MIN);

@@ -193,13 +193,14 @@ fn upgrade_stage_1_process_pre_upgrade_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let result = helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) =
+        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
 
     info!(
         round.log,
         "Executing (canister_pre_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
         helper.canister().canister_id(),
-        helper.instructions_consumed(),
+        instructions_consumed,
         helper.instructions_left(),
     );
 
@@ -339,13 +340,14 @@ fn upgrade_stage_3b_process_start_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let result = helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) =
+        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
 
     info!(
         round.log,
         "Executing (start) on canister {} consumed {} instructions.  {} instructions are left.",
         helper.canister().canister_id(),
-        helper.instructions_consumed(),
+        instructions_consumed,
         helper.instructions_left(),
     );
 
@@ -445,12 +447,13 @@ fn upgrade_stage_4b_process_post_upgrade_result(
     round: RoundContext,
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
-    let result = helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
+    let (instructions_consumed, result) =
+        helper.handle_wasm_execution(canister_state_changes, output, &original, &round);
     info!(
         round.log,
         "Executing (canister_post_upgrade) on canister {} consumed {} instructions.  {} instructions are left.",
         helper.canister().canister_id(),
-        helper.instructions_consumed(),
+        instructions_consumed,
         helper.instructions_left();
     );
     if let Err(err) = result {

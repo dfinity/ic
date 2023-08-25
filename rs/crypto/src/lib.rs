@@ -18,9 +18,8 @@ mod sign;
 mod tls;
 
 pub use sign::utils::{
-    ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, rsa_signature_from_bytes,
-    threshold_sig_public_key_from_der, threshold_sig_public_key_to_der, user_public_key_from_bytes,
-    verify_combined_threshold_sig, KeyBytesContentType,
+    threshold_sig_public_key_from_der, threshold_sig_public_key_to_der,
+    verify_combined_threshold_sig,
 };
 pub use sign::{
     get_tecdsa_master_public_key, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,

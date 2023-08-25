@@ -1,3 +1,5 @@
+#[cfg(feature = "test")]
+use crate::pb::v1::{AddMaturityRequest, AddMaturityResponse};
 use crate::{
     account_from_proto, account_to_proto,
     canister_control::{
@@ -3446,10 +3448,25 @@ impl Governance {
     /// - the neuron is not in the set of neurons with ongoing operations
     /// - the neuron's balance on the ledger account is at least
     ///   neuron_minimum_stake_e8s as defined in the nervous system parameters
+    /// - the neuron was not created via an NNS Neurons' Fund participation in the
+    ///   decentralization swap
     async fn refresh_neuron(&mut self, nid: &NeuronId) -> Result<(), GovernanceError> {
         let now = self.env.now();
         let subaccount = nid.subaccount()?;
         let account = self.neuron_account_id(subaccount);
+
+        // First ensure that the neuron was not created via an NNS Neurons' Fund participation in the
+        // decentralization swap
+        {
+            let neuron = self.get_neuron_result(nid)?;
+
+            if neuron.is_neurons_fund_controlled() {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Cannot refresh an SNS Neuron controlled by the Neurons' Fund",
+                ));
+            }
+        }
 
         // Get the balance of the neuron from the ledger canister.
         let balance = self.ledger.account_balance(account).await?;
@@ -3464,7 +3481,7 @@ impl Governance {
                     ErrorType::InsufficientFunds,
                     format!(
                         "Account does not have enough funds to refresh a neuron. \
-                     Please make sure that account has at least {:?} e8s (was {:?} e8s)",
+                        Please make sure that account has at least {:?} e8s (was {:?} e8s)",
                         min_stake,
                         balance.get_e8s()
                     ),
@@ -5011,10 +5028,9 @@ impl Governance {
         let max_number_of_neurons = self
             .nervous_system_parameters_or_panic()
             .max_number_of_neurons
-            .expect("NervousSystemParameters must have max_number_of_neurons")
-            as usize;
+            .expect("NervousSystemParameters must have max_number_of_neurons");
 
-        if self.proto.neurons.len() + 1 > max_number_of_neurons {
+        if (self.proto.neurons.len() as u64) + 1 > max_number_of_neurons {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot add neuron. Max number of neurons reached.",
@@ -5134,6 +5150,26 @@ impl Governance {
     ) -> GetMaturityModulationResponse {
         GetMaturityModulationResponse {
             maturity_modulation: self.proto.maturity_modulation.clone(),
+        }
+    }
+
+    #[cfg(feature = "test")]
+    pub fn add_maturity(
+        &mut self,
+        add_maturity_request: AddMaturityRequest,
+    ) -> AddMaturityResponse {
+        let AddMaturityRequest { id, amount_e8s } = add_maturity_request;
+        let id = id.expect("AddMaturityRequest::id is required");
+        let amount_e8s = amount_e8s.expect("AddMaturityRequest::amount_e8s is required");
+
+        // Here, we're getting a mutable reference without a lock, but it's
+        // okay because this is is only callable from test code
+        let neuron = self.get_neuron_mut(&id).expect("neuron did not exist");
+
+        neuron.maturity_e8s_equivalent = neuron.maturity_e8s_equivalent.saturating_add(amount_e8s);
+
+        AddMaturityResponse {
+            new_maturity_e8s: Some(neuron.maturity_e8s_equivalent),
         }
     }
 

@@ -18,19 +18,53 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use itertools::Itertools;
 use pocket_ic::{CanisterCall, RawCanisterId, Request, Request::*};
-use pocket_ic_backend::new_api::{self, AppState, InstanceId, InstanceMap};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
 use std::time::Instant;
+use tempfile::TempDir;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 
-const TTL_SEC: u64 = 30;
+const TTL_SEC: u64 = 60;
 
-// Command line arguments to PocketIC service.
+pub type InstanceId = String;
+// The shared, mutable state of the PocketIC process.
+// In essence, a Map<InstanceId, StateMachine>, but due to shared mutability, some extra layers are needed.
+//
+// The outer RwLock is for concurrent read access to the Map (such as calls to different instances),
+// and exclusive write access (when a new instance is created or destroyed).
+// The inner RwLock should allow safe concurrent calls to the same instance. TODO: Confirm this.
+pub type InstanceMap = Arc<RwLock<HashMap<InstanceId, RwLock<StateMachine>>>>;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub instance_map: InstanceMap,
+    pub last_request: Arc<RwLock<Instant>>,
+    pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
+}
+
+impl axum::extract::FromRef<AppState> for InstanceMap {
+    fn from_ref(app_state: &AppState) -> InstanceMap {
+        app_state.instance_map.clone()
+    }
+}
+
+impl axum::extract::FromRef<AppState> for Arc<RwLock<Instant>> {
+    fn from_ref(app_state: &AppState) -> Arc<RwLock<Instant>> {
+        app_state.last_request.clone()
+    }
+}
+
+impl axum::extract::FromRef<AppState> for Arc<RwLock<HashMap<String, Arc<TempDir>>>> {
+    fn from_ref(app_state: &AppState) -> Arc<RwLock<HashMap<String, Arc<TempDir>>>> {
+        app_state.checkpoints.clone()
+    }
+}
+
+// Command line arguments to PocketIC server.
 #[derive(Parser)]
 struct Args {
     #[clap(long)]
@@ -44,7 +78,7 @@ fn main() {
         // we use the tokio rt to dispatch blocking operations in the background
         .max_blocking_threads(16)
         .build()
-        .expect("Could not create tokio runtime!");
+        .expect("Failed to create tokio runtime!");
     rt.block_on(async { main_().await });
 }
 
@@ -55,42 +89,52 @@ async fn main_() {
     let mut new_port_file = match is_first_daemon(&port_file_path) {
         Ok(f) => f,
         Err(e) => {
-            println!("Existing PocketIc daemon will be reused: {e:?}");
+            println!("Existing PocketIc server will be reused: {e:?}");
             return;
         }
     };
     // This process is the one to start PocketIC.
-    println!("New PocketIC will be started");
+    println!("New PocketIC server will be started");
 
     // The shared, mutable state of the PocketIC process.
     let instance_map: InstanceMap = Arc::new(RwLock::new(HashMap::new()));
     // A time-to-live mechanism: Requests bump this value, and the server
     // gracefully shuts down when the value wasn't bumped for a while
     let last_request = Arc::new(RwLock::new(Instant::now()));
-    let mock_api_state = Default::default();
     let app_state = AppState {
         instance_map,
         last_request,
-        mock_api_state,
+        checkpoints: Arc::new(RwLock::new(HashMap::new())),
     };
 
     let app = Router::new()
-        .nest("/new_api", new_api::new_routes::<AppState>())
         //
         // Get health of service.
         .route("/status", get(status))
         //
         // List all IC instances.
-        .route("/instance", get(list_instances))
+        .route("/instances", get(list_instances))
         //
         // Create a new IC instance. Returns an InstanceId.
         // Body is currently ignored.
-        .route("/instance", post(create_instance))
+        .route("/instances", post(create_instance))
         //
         // Call the specified IC instance.
         // Body contains a Request.
         // Returns the IC's Response.
-        .route("/instance/:id", post(call_instance))
+        .route("/instances/:id", post(call_instance))
+        //
+        // Save this instance to a checkpoint with the given name.
+        // Takes a name:String in the request body.
+        .route("/instances/:id/save_checkpoint", post(save_checkpoint))
+        //
+        // List all checkpoints.
+        .route("/checkpoints", get(list_checkpoints))
+        //
+        // Creates a new instance from an existing checkpoint
+        // Takes a name:String in the request body.
+        // Returns an instance_id.
+        .route("/checkpoints/load", post(load_checkpoint))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             bump_last_request_timestamp,
@@ -110,7 +154,7 @@ async fn main_() {
         .create_new(true)
         .open(&ready_file_path);
     if ready_file.is_ok() {
-        println!("The PocketIC backend port can now be safely read by others");
+        println!("The PocketIC server is listening on port: {}", real_port);
     } else {
         eprintln!("The .ready file already exists; This should not happen unless the PID has been reused, and/or the tmp dir has not been properly cleaned up");
     }
@@ -145,6 +189,67 @@ fn is_first_daemon<P: AsRef<std::path::Path>>(port_file_path: P) -> std::io::Res
         .open(&port_file_path)
 }
 
+async fn bump_last_request_timestamp<B>(
+    State(last_update): State<Arc<RwLock<Instant>>>,
+    request: http::Request<B>,
+    next: Next<B>,
+) -> Response {
+    *last_update.write().await = Instant::now();
+    next.run(request).await
+}
+
+fn create_state_machine(state_dir: Option<TempDir>) -> StateMachine {
+    let hypervisor_config = execution_environment::Config {
+        default_provisional_cycles_balance: Cycles::new(0),
+        ..Default::default()
+    };
+    let config = StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
+    if let Some(state_dir) = state_dir {
+        StateMachineBuilder::new()
+            .with_config(Some(config))
+            .with_checkpoints_enabled(true)
+            .with_state_dir(state_dir)
+            .build()
+    } else {
+        StateMachineBuilder::new()
+            .with_config(Some(config))
+            .with_checkpoints_enabled(true)
+            .build()
+    }
+}
+
+fn rand_string(len: usize) -> String {
+    use rand::distributions::Alphanumeric;
+    use rand::thread_rng;
+    use rand::Rng;
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(len)
+        .map(char::from)
+        .collect::<String>()
+        .to_lowercase()
+}
+
+fn copy_dir(
+    src: impl AsRef<std::path::Path>,
+    dst: impl AsRef<std::path::Path>,
+) -> std::io::Result<()> {
+    std::fs::create_dir_all(&dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        }
+    }
+    Ok(())
+}
+
+// ----------------------------------------------------------------------------------------------------------------- //
+// Route handlers
+
 async fn status() -> StatusCode {
     StatusCode::OK
 }
@@ -153,7 +258,7 @@ async fn status() -> StatusCode {
 /// The new InstanceId will be returned
 async fn create_instance(State(inst_map): State<InstanceMap>) -> String {
     let instance_id = rand_string(6);
-    let sm = tokio::task::spawn_blocking(|| create_state_machine())
+    let sm = tokio::task::spawn_blocking(|| create_state_machine(None))
         .await
         .expect("Failed to launch a state machine");
     let mut guard = inst_map.write().await;
@@ -164,6 +269,14 @@ async fn create_instance(State(inst_map): State<InstanceMap>) -> String {
 async fn list_instances(State(inst_map): State<InstanceMap>) -> String {
     let map_guard = inst_map.read().await;
     map_guard.keys().join(", ")
+}
+
+#[allow(clippy::type_complexity)]
+async fn list_checkpoints(
+    State(checkpoints): State<Arc<RwLock<HashMap<String, Arc<TempDir>>>>>,
+) -> String {
+    let checkpoints = checkpoints.read().await;
+    checkpoints.keys().join(", ")
 }
 
 // Call the IC instance with the given InstanceId
@@ -184,29 +297,63 @@ async fn call_instance(
     }
 }
 
-fn create_state_machine() -> StateMachine {
-    let hypervisor_config = execution_environment::Config {
-        default_provisional_cycles_balance: Cycles::new(0),
-        ..Default::default()
-    };
-    let config = StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
-    StateMachineBuilder::new().with_config(Some(config)).build()
+async fn save_checkpoint(
+    State(AppState {
+        instance_map,
+        last_request: _,
+        checkpoints,
+    }): State<AppState>,
+    Path(id): Path<InstanceId>,
+    axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
+) -> String {
+    let mut checkpoints = checkpoints.write().await;
+    if checkpoints.contains_key(&checkpoint_name) {
+        return format!("Checkpoint {} already exists.", checkpoint_name);
+    }
+    let guard_map = instance_map.read().await;
+    if let Some(rw_lock) = guard_map.get(&id) {
+        let guard_sm = rw_lock.write().await;
+        // copy state directory to named location
+        let checkpoint_dir = TempDir::new().expect("Failed to create tempdir");
+        copy_dir(guard_sm.state_dir.path(), checkpoint_dir.path())
+            .expect("Failed to copy state directory");
+        checkpoints.insert(checkpoint_name, Arc::new(checkpoint_dir));
+        "Success".to_string()
+    } else {
+        // id not found in map; return error
+        // TODO: Result Type for this call
+        format!("Id {} was not found in instance map.", id)
+    }
 }
 
-fn rand_string(len: usize) -> String {
-    use rand::distributions::Alphanumeric;
-    use rand::thread_rng;
-    use rand::Rng;
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(len)
-        .map(char::from)
-        .collect::<String>()
-        .to_lowercase()
+async fn load_checkpoint(
+    State(AppState {
+        instance_map,
+        last_request: _,
+        checkpoints,
+    }): State<AppState>,
+    axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
+) -> String {
+    let checkpoints = checkpoints.read().await;
+    if !checkpoints.contains_key(&checkpoint_name) {
+        return format!("Checkpoint {} does not exist.", checkpoint_name);
+    }
+    let proto_dir = checkpoints.get(&checkpoint_name).unwrap();
+    let new_instance_dir = TempDir::new().expect("Failed to create tempdir");
+    copy_dir(proto_dir.path(), new_instance_dir.path()).expect("Failed to copy state directory");
+    drop(checkpoints);
+    // create instance
+    let instance_id = rand_string(6);
+    let sm = tokio::task::spawn_blocking(|| create_state_machine(Some(new_instance_dir)))
+        .await
+        .expect("Failed to launch a state machine");
+    let mut instance_map = instance_map.write().await;
+    instance_map.insert(instance_id.clone(), RwLock::new(sm));
+    instance_id
 }
 
-// ===================================================================================
-// Code borrowed from rs/state_machine_tests/src/main.rs
+// ----------------------------------------------------------------------------------------------------------------- //
+// Code borrowed and adapted from rs/state_machine_tests/src/main.rs
 
 fn call_sm(sm: &StateMachine, data: Request) -> String {
     match data {
@@ -321,13 +468,4 @@ impl From<CanisterCall> for ParsedCanisterCall {
             arg: call.arg,
         }
     }
-}
-
-async fn bump_last_request_timestamp<B>(
-    State(last_update): State<Arc<RwLock<Instant>>>,
-    request: http::Request<B>,
-    next: Next<B>,
-) -> Response {
-    *last_update.write().await = Instant::now();
-    next.run(request).await
 }

@@ -44,10 +44,13 @@ use crate::{
     },
     dns::DnsResolver,
     http::ReqwestClient,
-    metrics::{self, apply_histogram_definitions, HistogramDefinition, MetricParams, WithMetrics},
+    metrics::{
+        self, apply_histogram_definitions, HistogramDefinition, HttpMetricParams, MetricParams,
+        WithMetrics,
+    },
     nns::{Load, Loader},
     persist,
-    routes::{self, MiddlewareState, ProxyRouter},
+    routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     snapshot::Runner as SnapshotRunner,
     tls_verify::TlsVerifier,
 };
@@ -65,6 +68,9 @@ const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01
 const SECOND: Duration = Duration::from_secs(1);
 #[cfg(feature = "tls")]
 const DAY: Duration = Duration::from_secs(24 * 3600);
+
+const KB: usize = 1024;
+const MB: usize = 1024 * KB;
 
 const HISTOGRAM_DEFINITIONS: &[HistogramDefinition] = &[
     HistogramDefinition("dns_resolve", &[1.0, 2.0, 3.0]),
@@ -209,52 +215,54 @@ pub async fn main(cli: Cli) -> Result<(), Error> {
     let configuration_runner = WithThrottle(configuration_runner, ThrottleParams::new(10 * SECOND));
 
     // Server / API
-    let proxy_router = Arc::new(ProxyRouter::new(
+    let proxy_router = ProxyRouter::new(
         http_client.clone(),
         Arc::clone(&lookup_table),
         [DER_PREFIX.as_slice(), nns_pub_key.into_bytes().as_slice()].concat(),
-    ));
+    );
 
-    let state = MiddlewareState {
-        proxier: proxy_router,
-        metric_params: metrics::HttpMetricParams::new(&meter, "http_request"),
-    };
-    let routers_https: Router<_> = {
-        let router1: Router<_> = Router::new()
-            .route("/api/v2/canister/:canister_id/query", post(routes::query))
-            .route("/api/v2/canister/:canister_id/call", post(routes::call))
-            .route(
-                "/api/v2/canister/:canister_id/read_state",
-                post(routes::read_state),
-            )
+    let proxy_router = Arc::new(proxy_router);
+
+    let (p, lk, rk, h) = (
+        proxy_router.clone() as Arc<dyn Proxy>,
+        proxy_router.clone() as Arc<dyn Lookup>,
+        proxy_router.clone() as Arc<dyn RootKey>,
+        proxy_router.clone() as Arc<dyn Health>,
+    );
+
+    let routers_https = {
+        let r1 = Router::new()
+            .route("/api/v2/canister/:canister_id/query", {
+                post(routes::query).with_state(p.clone())
+            })
+            .route("/api/v2/canister/:canister_id/call", {
+                post(routes::call).with_state(p.clone())
+            })
+            .route("/api/v2/canister/:canister_id/read_state", {
+                post(routes::read_state).with_state(p.clone())
+            })
             .layer(
                 ServiceBuilder::new()
-                    .layer(DefaultBodyLimit::max(2 * 1024 * 1024))
-                    .set_x_request_id(MakeRequestUuid)
-                    .propagate_x_request_id()
+                    .layer(DefaultBodyLimit::max(2 * MB))
                     .layer(middleware::from_fn_with_state(
-                        state.metric_params.clone(),
-                        metrics::with_metrics_middleware,
-                    ))
-                    .layer(middleware::from_fn_with_state(
-                        state.proxier.clone(),
+                        lk.clone(),
                         routes::preprocess_request,
                     )),
-            )
-            .with_state(state.clone());
-        let router2: Router<_> = Router::new()
-            .route("/api/v2/status", get(routes::status))
-            .layer(
-                ServiceBuilder::new()
-                    .set_x_request_id(MakeRequestUuid)
-                    .propagate_x_request_id()
-                    .layer(middleware::from_fn_with_state(
-                        state.metric_params.clone(),
-                        metrics::with_metrics_middleware,
-                    )),
-            )
-            .with_state(state);
-        Router::new().merge(router1).merge(router2)
+            );
+
+        let r2 = Router::new().route("/api/v2/status", {
+            get(routes::status).with_state((rk.clone(), h.clone()))
+        });
+
+        r1.merge(r2).layer(
+            ServiceBuilder::new()
+                .set_x_request_id(MakeRequestUuid)
+                .propagate_x_request_id()
+                .layer(middleware::from_fn_with_state(
+                    HttpMetricParams::new(&meter, "http_request"),
+                    metrics::with_metrics_middleware,
+                )),
+        )
     };
 
     #[cfg(feature = "tls")]

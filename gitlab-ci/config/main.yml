@@ -45,6 +45,9 @@ boundary-node-service-worker:
         # run unit tests
         npm test
 
+        # run e2e tests
+        ./e2e/e2e --add-dependencies --start --run-tests --stop
+
         # build service worker
         npm run build
         npm run build-dev

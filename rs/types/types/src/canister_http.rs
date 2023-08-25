@@ -668,6 +668,7 @@ mod tests {
                 payment: Cycles::new(10),
                 method_name: "tansform".to_string(),
                 method_payload: Vec::new(),
+                metadata: None,
             },
             time: UNIX_EPOCH,
         };
@@ -708,6 +709,7 @@ mod tests {
                 payment: Cycles::new(10),
                 method_name: "tansform".to_string(),
                 method_payload: Vec::new(),
+                metadata: None,
             },
             time: UNIX_EPOCH,
         };

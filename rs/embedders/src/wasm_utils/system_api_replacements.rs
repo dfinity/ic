@@ -20,7 +20,7 @@ use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_types::NumInstructions;
-use wasmparser::{BlockType, FuncType, Operator, Type, ValType};
+use wasmparser::{BlockType, FuncType, Operator, ValType};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
 use super::{instrumentation::SpecialIndices, wasm_transform::Body, SystemApiFunc};
@@ -34,7 +34,7 @@ pub(super) fn replacement_functions(
     subnet_type: SubnetType,
     dirty_page_overhead: NumInstructions,
     metering_type: MeteringType,
-) -> Vec<(SystemApiFunc, (Type, Body<'static>))> {
+) -> Vec<(SystemApiFunc, (FuncType, Body<'static>))> {
     let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
     let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
     let accessed_pages_counter_index = special_indices.accessed_pages_counter_ix.unwrap();
@@ -48,7 +48,7 @@ pub(super) fn replacement_functions(
         (
             SystemApiFunc::StableSize,
             (
-                Type::Func(FuncType::new([], [ValType::I32])),
+                FuncType::new([], [ValType::I32]),
                 Body {
                     locals: vec![],
                     instructions: vec![
@@ -83,7 +83,7 @@ pub(super) fn replacement_functions(
         (
             SystemApiFunc::Stable64Size,
             (
-                Type::Func(FuncType::new([], [ValType::I64])),
+                FuncType::new([], [ValType::I64]),
                 Body {
                     locals: vec![],
                     instructions: vec![
@@ -99,7 +99,7 @@ pub(super) fn replacement_functions(
         (
             SystemApiFunc::StableGrow,
             (
-                Type::Func(FuncType::new([ValType::I32], [ValType::I32])),
+                FuncType::new([ValType::I32], [ValType::I32]),
                 Body {
                     locals: vec![(1, ValType::I64)],
                     instructions: vec![
@@ -161,7 +161,7 @@ pub(super) fn replacement_functions(
         (
             SystemApiFunc::Stable64Grow,
             (
-                Type::Func(FuncType::new([ValType::I64], [ValType::I64])),
+                FuncType::new([ValType::I64], [ValType::I64]),
                 Body {
                     locals: vec![(1, ValType::I64)],
                     instructions: vec![
@@ -218,10 +218,7 @@ pub(super) fn replacement_functions(
         (
             SystemApiFunc::StableRead,
             (
-                Type::Func(FuncType::new(
-                    [ValType::I32, ValType::I32, ValType::I32],
-                    [],
-                )),
+                FuncType::new([ValType::I32, ValType::I32, ValType::I32], []),
                 {
                     const DST: u32 = 0;
                     const SRC: u32 = 1;
@@ -484,10 +481,7 @@ pub(super) fn replacement_functions(
         (
             SystemApiFunc::Stable64Read,
             (
-                Type::Func(FuncType::new(
-                    [ValType::I64, ValType::I64, ValType::I64],
-                    [],
-                )),
+                FuncType::new([ValType::I64, ValType::I64, ValType::I64], []),
                 {
                     const DST: u32 = 0;
                     const SRC: u32 = 1;
@@ -777,10 +771,7 @@ pub(super) fn replacement_functions(
         (
             SystemApiFunc::StableWrite,
             (
-                Type::Func(FuncType::new(
-                    [ValType::I32, ValType::I32, ValType::I32],
-                    [],
-                )),
+                FuncType::new([ValType::I32, ValType::I32, ValType::I32], []),
                 {
                     const DST: u32 = 0;
                     const SRC: u32 = 1;
@@ -1012,10 +1003,7 @@ pub(super) fn replacement_functions(
         (
             SystemApiFunc::Stable64Write,
             (
-                Type::Func(FuncType::new(
-                    [ValType::I64, ValType::I64, ValType::I64],
-                    [],
-                )),
+                FuncType::new([ValType::I64, ValType::I64, ValType::I64], []),
                 {
                     const DST: u32 = 0;
                     const SRC: u32 = 1;

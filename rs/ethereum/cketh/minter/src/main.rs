@@ -1,4 +1,4 @@
-use candid::candid_method;
+use candid::{candid_method, Nat};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
@@ -8,26 +8,24 @@ use ic_cketh_minter::endpoints::{
     DebugState, Eip1559TransactionPrice, EthTransaction, MinterArg, RetrieveEthRequest,
     RetrieveEthStatus,
 };
-use ic_cketh_minter::eth_logs::{mint_transaction, report_transaction_error};
+use ic_cketh_minter::eth_logs::report_transaction_error;
 use ic_cketh_minter::eth_rpc::JsonRpcResult;
 use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
-use ic_cketh_minter::eth_rpc_client::EthereumChain;
-use ic_cketh_minter::guard::{retrieve_eth_guard, retrieve_eth_timer_guard};
+use ic_cketh_minter::eth_rpc_client::EthRpcClient;
+use ic_cketh_minter::guard::{mint_cketh_guard, retrieve_eth_guard, retrieve_eth_timer_guard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
-use ic_cketh_minter::numeric::{LedgerBurnIndex, TransactionNonce, Wei};
-use ic_cketh_minter::state::mutate_state;
-use ic_cketh_minter::state::read_state;
-use ic_cketh_minter::state::State;
-use ic_cketh_minter::state::STATE;
+use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
+use ic_cketh_minter::state::{mutate_state, read_state, State, STATE};
 use ic_cketh_minter::transactions::PendingEthTransaction;
 use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
-use ic_cketh_minter::{eth_logs, eth_rpc, RPC_CLIENT};
+use ic_cketh_minter::{eth_logs, eth_rpc};
 use std::cmp::{min, Ordering};
 use std::str::FromStr;
+use std::time::Duration;
 
-const SCRAPPING_ETH_LOGS_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3 * 60);
-const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: std::time::Duration =
-    std::time::Duration::from_secs(15);
+const SCRAPPING_ETH_LOGS_INTERVAL: Duration = Duration::from_secs(3 * 60);
+const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(15);
+const MINT_RETRY_DELAY: Duration = Duration::from_secs(3 * 60);
 
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
 
@@ -62,7 +60,7 @@ async fn scrap_eth_logs() {
 
     let last_seen_block_number = read_state(|s| s.last_seen_block_number.clone());
 
-    let finalized_block: Block = RPC_CLIENT
+    let finalized_block: Block = read_state(EthRpcClient::from_state)
         .eth_get_last_finalized_block()
         .await
         .expect("HTTP call failed");
@@ -92,11 +90,21 @@ async fn scrap_eth_logs() {
                 max_finalized_block_number.clone(),
             )
             .await;
+            let has_new_events = !transaction_events.is_empty();
             for event in transaction_events {
-                mutate_state(|s| mint_transaction(&mut s.minted_transactions, event));
+                log!(
+                    INFO,
+                    "Received event {event:?}; will mint {} wei to {}",
+                    event.value,
+                    event.principal
+                );
+                mutate_state(|s| s.record_event_to_mint(event));
+            }
+            if has_new_events {
+                ic_cdk_timers::set_timer(Duration::from_secs(0), || ic_cdk::spawn(mint_cketh()));
             }
             for error in errors {
-                mutate_state(|s| report_transaction_error(&mut s.invalid_transactions, error));
+                mutate_state(|s| report_transaction_error(s, error));
             }
             mutate_state(|s| s.last_seen_block_number = max_finalized_block_number);
         }
@@ -115,13 +123,75 @@ async fn scrap_eth_logs() {
     }
 }
 
+async fn mint_cketh() {
+    use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+    use icrc_ledger_types::icrc1::transfer::TransferArg;
+
+    let _guard = match mint_cketh_guard() {
+        Ok(guard) => guard,
+        Err(_) => return,
+    };
+
+    let (ledger_canister_id, events) = read_state(|s| (s.ledger_id, s.events_to_mint.clone()));
+    let client = ICRC1Client {
+        runtime: CdkRuntime,
+        ledger_canister_id,
+    };
+
+    let mut error_count = 0;
+
+    for event in events {
+        let block_index = match client
+            .transfer(TransferArg {
+                from_subaccount: None,
+                to: event.principal.into(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(event.value),
+            })
+            .await
+        {
+            Ok(Ok(block_index)) => block_index,
+            Ok(Err(err)) => {
+                log!(INFO, "Failed to mint ckETH: {event:?} {err}");
+                error_count += 1;
+                continue;
+            }
+            Err(err) => {
+                log!(
+                    INFO,
+                    "Failed to send a message to the ledger ({ledger_canister_id}): {err:?}"
+                );
+                error_count += 1;
+                continue;
+            }
+        };
+        mutate_state(|s| s.record_successful_mint(&event, LedgerMintIndex::new(block_index)));
+        log!(
+            INFO,
+            "Minted {} ckWei to {} in block {block_index}",
+            event.value,
+            event.principal
+        );
+    }
+
+    if error_count > 0 {
+        log!(
+            INFO,
+            "Failed to mint {error_count} events, rescheduling the minting"
+        );
+        ic_cdk_timers::set_timer(MINT_RETRY_DELAY, || ic_cdk::spawn(mint_cketh()));
+    }
+}
+
 async fn process_retrieve_eth_requests() {
     let _guard = match retrieve_eth_timer_guard() {
         Ok(guard) => guard,
         Err(e) => {
-            ic_cdk::println!(
-                "Failed retrieving timer guard to process ETH requests: {:?}",
-                e
+            log!(
+                DEBUG,
+                "Failed retrieving timer guard to process ETH requests: {e:?}",
             );
             return;
         }
@@ -136,19 +206,19 @@ async fn sign_pending_eth_transactions() {
         match tx.sign().await {
             Ok(signed_tx) => {
                 mutate_state(|s| {
-                    ic_cdk::println!("Queueing signed transaction: {:?}", signed_tx);
+                    log!(DEBUG, "Queueing signed transaction: {signed_tx:?}");
                     s.pending_retrieve_eth_requests
                         .replace_with_signed_transaction(signed_tx)
                         .unwrap_or_else(|e| {
-                            ic_cdk::println!(
-                                "BUG: failed to replace transaction with signed one: {:?}",
-                                e
+                            log!(
+                                INFO,
+                                "BUG: failed to replace transaction with signed one: {e}",
                             );
                         })
                 });
             }
             Err(e) => {
-                ic_cdk::println!("Failed to sign transaction: {:?}", e);
+                log!(INFO, "Failed to sign transaction: {e}");
             }
         }
     }
@@ -158,28 +228,26 @@ async fn send_signed_eth_transactions() {
     let tx_to_send = read_state(|s| s.pending_retrieve_eth_requests.transactions_to_send());
 
     for tx in tx_to_send {
-        let result = RPC_CLIENT
+        let result = read_state(EthRpcClient::from_state)
             .eth_send_raw_transaction(tx.raw_transaction_hex())
             .await
             .expect("HTTP call failed");
-        ic_cdk::println!("Sent transaction: {:?}", result);
+        log!(DEBUG, "Sent transaction: {result:?}");
         match result {
             JsonRpcResult::Result(_) => mutate_state(|s| {
                 s.pending_retrieve_eth_requests
                     .replace_with_sent_transaction(tx)
                     .unwrap_or_else(|e| {
-                        ic_cdk::println!(
-                            "BUG: failed to replace transaction with sent one: {:?}",
-                            e
+                        log!(
+                            INFO,
+                            "BUG: failed to replace transaction with sent one: {e:?}",
                         );
                     })
             }),
             JsonRpcResult::Error { code, message } => {
-                ic_cdk::println!(
-                    "Failed to send transaction {:?}: {} (error code = {:?}). Will retry later. ",
-                    tx,
-                    message,
-                    code
+                log!(
+                    INFO,
+                    "Failed to send transaction {tx:?}: {message} (error code = {code}). Will retry later.",
                 );
             }
         }
@@ -218,7 +286,7 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
     .sign()
     .await
     .expect("signing failed");
-    match RPC_CLIENT
+    match read_state(EthRpcClient::from_state)
         .eth_send_raw_transaction(signed_transaction.raw_transaction_hex())
         .await
         .expect("HTTP call failed")
@@ -234,10 +302,9 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
 #[update]
 #[candid_method(update)]
 async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
-    use candid::Nat;
     use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
 
-    let fee_history = RPC_CLIENT
+    let fee_history = read_state(EthRpcClient::from_state)
         .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
             highest_block: BlockSpec::Tag(BlockTag::Finalized),
@@ -301,13 +368,12 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
         .expect("BUG: should not happen due to previous check that amount > max_transaction_fee");
 
     //TODO FI-868: contact ledger to burn funds
-    let ledger_burn_index = LedgerBurnIndex(0);
+    let ledger_burn_index = LedgerBurnIndex::new(0);
     log!(INFO, "[withdraw]: burning {:?}", amount);
 
     let nonce = mutate_state(|s| s.get_and_increment_nonce());
     let transaction = Eip1559TransactionRequest {
-        //TODO FI-867: add chain id to InitArgs, read it from state and pass it as parameter of that function
-        chain_id: EthereumChain::Sepolia.chain_id(),
+        chain_id: read_state(State::ethereum_network).chain_id(),
         nonce,
         max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
         max_fee_per_gas: transaction_price.max_fee_per_gas,
@@ -325,7 +391,7 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
     mutate_state(|s| s.record_retrieve_eth_request(ledger_burn_index, transaction));
 
     RetrieveEthRequest {
-        block_index: candid::Nat::from(ledger_burn_index),
+        block_index: Nat::from(ledger_burn_index.get()),
     }
 }
 
@@ -339,7 +405,7 @@ fn validate_caller_not_anonymous() -> candid::Principal {
 
 async fn eth_fee_history() -> FeeHistory {
     use eth_rpc::{BlockSpec, BlockTag, FeeHistoryParams, Quantity};
-    RPC_CLIENT
+    read_state(EthRpcClient::from_state)
         .eth_fee_history(FeeHistoryParams {
             block_count: Quantity::from(5_u8),
             highest_block: BlockSpec::Tag(BlockTag::Finalized),
@@ -353,7 +419,7 @@ async fn eth_fee_history() -> FeeHistory {
 #[update]
 #[candid_method(update)]
 async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
-    let ledger_burn_index = LedgerBurnIndex(block_index);
+    let ledger_burn_index = LedgerBurnIndex::new(block_index);
     let transaction = read_state(|s| {
         s.pending_retrieve_eth_requests
             .find_by_burn_index(ledger_burn_index)
@@ -411,10 +477,18 @@ fn dump_state_for_debugging() -> DebugState {
 
     read_state(|s| DebugState {
         ecdsa_key_name: s.ecdsa_key_name.clone(),
-        last_seen_block_number: candid::Nat::from(s.last_seen_block_number.clone()),
-        minted_transactions: s.minted_transactions.iter().map(to_tx).collect(),
-        invalid_transactions: s.invalid_transactions.iter().map(to_tx).collect(),
-        next_transaction_nonce: candid::Nat::from(s.next_transaction_nonce),
+        last_seen_block_number: Nat::from(s.last_seen_block_number.clone()),
+        minted_transactions: s
+            .minted_events
+            .keys()
+            .map(|source| to_tx(source.txhash()))
+            .collect(),
+        invalid_transactions: s
+            .invalid_events
+            .iter()
+            .map(|source| to_tx(source.txhash()))
+            .collect(),
+        next_transaction_nonce: Nat::from(s.next_transaction_nonce),
         unapproved_retrieve_eth_requests: vec_debug(
             &s.pending_retrieve_eth_requests.transactions_to_sign(),
         ),
@@ -451,14 +525,8 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     "cketh_minter_accepted_deposits",
                     "The number of deposits the ckETH minter processed, by status.",
                 )?
-                .value(
-                    &[("status", "accepted")],
-                    s.minted_transactions.len() as f64,
-                )?
-                .value(
-                    &[("status", "rejected")],
-                    s.invalid_transactions.len() as f64,
-                )?;
+                .value(&[("status", "accepted")], s.minted_events.len() as f64)?
+                .value(&[("status", "rejected")], s.invalid_events.len() as f64)?;
 
                 Ok(())
             })

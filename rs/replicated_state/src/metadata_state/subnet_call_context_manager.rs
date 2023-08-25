@@ -54,11 +54,11 @@ impl SubnetCallContext {
 pub struct InstallCodeCallIdTag;
 pub type InstallCodeCallId = Id<InstallCodeCallIdTag, u64>;
 
-/// It is responsible for keeping track of all install code messages that
-/// cannot complete execution in a single round.
+/// Collection of install code call messages whose execution is paused at the
+/// end of the round.
 ///
 /// During a subnet split, these messages will be autmatically rejected if
-/// the targeted canister is moved to a new subnet.
+/// the targeted canister has moved to a new subnet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct InstallCodeCallManager {
     next_call_id: u64,
@@ -78,16 +78,32 @@ impl InstallCodeCallManager {
         self.install_code_calls.remove(&call_id)
     }
 
-    fn install_code_calls_len(&self) -> usize {
-        self.install_code_calls.len()
+    /// Removes and returns all `InstallCodeCalls` not targeted to local canisters.
+    ///
+    /// Used for rejecting all calls targeting migrated canisters after a subnet
+    /// split.
+    fn remove_non_local_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<InstallCodeCall> {
+        let mut removed = Vec::new();
+        self.install_code_calls.retain(|_call_id, call| {
+            if is_local_canister(call.effective_canister_id) {
+                true
+            } else {
+                removed.push(call.clone());
+                false
+            }
+        });
+        removed
     }
 }
 
-/// It is responsible for keeping track of all stop context messages that
-/// cannot complete execution in a single round.
+/// Collection of stop canister messages whose execution is paused at the
+/// end of the round.
 ///
 /// During a subnet split, these messages will be autmatically rejected if
-/// the target canister is moved to a new subnet.
+/// the target canister has moved to a new subnet.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct StopCanisterCallManager {
     next_call_id: u64,
@@ -107,8 +123,24 @@ impl StopCanisterCallManager {
         self.stop_canister_calls.remove(&call_id)
     }
 
-    fn stop_canister_calls_len(&self) -> usize {
-        self.stop_canister_calls.len()
+    /// Removes and returns all `StopCanisterCalls` not targeted to local canisters.
+    ///
+    /// Used for rejecting all calls targeting migrated canisters after a subnet
+    /// split.
+    fn remove_non_local_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<StopCanisterCall> {
+        let mut removed = Vec::new();
+        self.stop_canister_calls.retain(|_call_id, call| {
+            if is_local_canister(call.effective_canister_id) {
+                true
+            } else {
+                removed.push(call.clone());
+                false
+            }
+        });
+        removed
     }
 }
 
@@ -142,11 +174,11 @@ impl CanisterManagementCalls {
     }
 
     pub fn install_code_calls_len(&self) -> usize {
-        self.install_code_call_manager.install_code_calls_len()
+        self.install_code_call_manager.install_code_calls.len()
     }
 
     pub fn stop_canister_calls_len(&self) -> usize {
-        self.stop_canister_call_manager.stop_canister_calls_len()
+        self.stop_canister_call_manager.stop_canister_calls.len()
     }
 }
 
@@ -289,6 +321,15 @@ impl SubnetCallContextManager {
             .remove_install_code_call(call_id)
     }
 
+    pub fn remove_non_local_install_code_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<InstallCodeCall> {
+        self.canister_management_calls
+            .install_code_call_manager
+            .remove_non_local_calls(is_local_canister)
+    }
+
     pub fn install_code_calls_len(&self) -> usize {
         self.canister_management_calls.install_code_calls_len()
     }
@@ -303,6 +344,15 @@ impl SubnetCallContextManager {
     ) -> Option<StopCanisterCall> {
         self.canister_management_calls
             .remove_stop_canister_call(call_id)
+    }
+
+    pub fn remove_non_local_stop_canister_calls(
+        &mut self,
+        is_local_canister: impl Fn(CanisterId) -> bool,
+    ) -> Vec<StopCanisterCall> {
+        self.canister_management_calls
+            .stop_canister_call_manager
+            .remove_non_local_calls(is_local_canister)
     }
 
     pub fn stop_canister_calls_len(&self) -> usize {

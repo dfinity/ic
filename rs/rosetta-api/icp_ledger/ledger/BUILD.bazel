@@ -140,6 +140,7 @@ rust_test(
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger/sm-tests",
         "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/dfn_candid",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",

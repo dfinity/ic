@@ -22,7 +22,7 @@ use crate::{
     wasm_utils::wasm_transform::{DataSegment, DataSegmentKind, Module},
     wasmtime_embedder::{STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME},
 };
-use wasmparser::{ExternalKind, Operator, Type, TypeRef, ValType};
+use wasmparser::{ExternalKind, FuncType, Operator, StructuralType, TypeRef, ValType};
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
@@ -677,9 +677,8 @@ fn get_valid_exported_functions() -> HashMap<String, FunctionSignature> {
 fn validate_function_signature(
     expected_signature: &FunctionSignature,
     field: &str,
-    function_type: &Type,
+    function_type: &FuncType,
 ) -> Result<(), WasmValidationError> {
-    let Type::Func(function_type) = function_type;
     if function_type.params() != expected_signature.param_types.as_slice() {
         return Err(WasmValidationError::InvalidFunctionSignature(format!(
             "Expected input params {:?} for '{}', got {:?}.",
@@ -732,6 +731,16 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
             let field = entry.name;
             match &entry.ty {
                 TypeRef::Func(index) => {
+                    let func_ty = if let StructuralType::Func(func_ty) =
+                        &module.types[*index as usize].structural_type
+                    {
+                        func_ty
+                    } else {
+                        return Err(WasmValidationError::InvalidImportSection(format!(
+                            "Function import doesn't have a function type. Type found: {:?}",
+                            &module.types[*index as usize]
+                        )));
+                    };
                     set_imports_details(&mut imports_details, import_module, field);
                     match valid_system_apis.get(field) {
                         Some(signatures) => {
@@ -740,7 +749,7 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
                                     validate_function_signature(
                                         signature,
                                         field,
-                                        &module.types[*index as usize],
+                                        func_ty,
                                     )?;
                                 },
                                 None => {return Err(WasmValidationError::InvalidImportSection(format!(
@@ -874,12 +883,18 @@ fn validate_export_section(
                         });
                     }
                     let actual_fn_index = fn_index - import_count;
-                    let type_index = module.functions[actual_fn_index];
-                    validate_function_signature(
-                        valid_signature,
-                        export.name,
-                        &module.types[type_index as usize],
-                    )?;
+                    let type_index = module.functions[actual_fn_index] as usize;
+                    let func_ty = if let StructuralType::Func(func_ty) =
+                        &module.types[type_index].structural_type
+                    {
+                        func_ty
+                    } else {
+                        return Err(WasmValidationError::InvalidExportSection(format!(
+                            "Function export doesn't have a function type. Type found: {:?}",
+                            &module.types[type_index]
+                        )));
+                    };
+                    validate_function_signature(valid_signature, export.name, func_ty)?;
                 }
             }
         }

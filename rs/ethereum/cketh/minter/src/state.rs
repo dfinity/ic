@@ -1,15 +1,17 @@
-use crate::endpoints::InitArg;
+use crate::endpoints::{EthereumNetwork, InitArg};
+use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::BlockNumber;
-use crate::eth_rpc::Hash;
-use crate::numeric::{LedgerBurnIndex, TransactionNonce};
+use crate::logs::DEBUG;
+use crate::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce};
 use crate::transactions::PendingEthTransactions;
 use crate::tx::Eip1559TransactionRequest;
 use candid::Principal;
+use ic_canister_log::log;
 use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
@@ -17,37 +19,52 @@ thread_local! {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct State {
+    pub ethereum_network: EthereumNetwork,
     pub ecdsa_key_name: String,
+    pub ledger_id: Principal,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
     pub last_seen_block_number: BlockNumber,
-    pub minted_transactions: BTreeSet<Hash>,
-    pub invalid_transactions: BTreeSet<Hash>,
+    pub events_to_mint: BTreeSet<ReceivedEthEvent>,
+    pub minted_events: BTreeMap<EventSource, LedgerMintIndex>,
+    pub invalid_events: BTreeSet<EventSource>,
+    pub pending_retrieve_eth_requests: PendingEthTransactions,
     pub next_transaction_nonce: TransactionNonce,
 
     /// Per-principal lock for pending_retrieve_eth_requests
+    #[serde(skip)]
     pub retrieve_eth_principals: BTreeSet<Principal>,
-    pub pending_retrieve_eth_requests: PendingEthTransactions,
-    /// Process one timer event at a time for withdrawal flow.
-    pub is_retrieve_eth_timer_running: bool,
+
+    /// A lock preventing concurrent execution of the task processing retrieve_eth events.
+    #[serde(skip)]
+    pub retrieve_eth_guarded: bool,
+
+    /// A lock preventing concurrent execution of the task minting ckETH.
+    #[serde(skip)]
+    pub cketh_mint_guarded: bool,
 }
 
 impl Default for State {
     fn default() -> Self {
         let next_transaction_nonce = TransactionNonce::ZERO;
+        let ethereum_network = EthereumNetwork::default();
         Self {
+            ethereum_network,
             ecdsa_key_name: "test_key_1".to_string(),
+            ledger_id: Principal::anonymous(),
             ecdsa_public_key: None,
             // Note that the default block to start from for logs scrapping
             // depends on the chain we are using:
             // Ethereum and Sepolia have for example different block heights at a given time.
             // https://sepolia.etherscan.io/block/3938798
             last_seen_block_number: BlockNumber::new(3_956_206),
-            minted_transactions: BTreeSet::new(),
-            invalid_transactions: BTreeSet::new(),
+            events_to_mint: Default::default(),
+            minted_events: Default::default(),
+            invalid_events: Default::default(),
             next_transaction_nonce,
             retrieve_eth_principals: BTreeSet::new(),
             pending_retrieve_eth_requests: PendingEthTransactions::new(next_transaction_nonce),
-            is_retrieve_eth_timer_running: false,
+            retrieve_eth_guarded: false,
+            cketh_mint_guarded: false,
         }
     }
 }
@@ -55,16 +72,20 @@ impl Default for State {
 impl From<InitArg> for State {
     fn from(
         InitArg {
+            ethereum_network,
             ecdsa_key_name,
+            ledger_id,
             next_transaction_nonce,
         }: InitArg,
     ) -> Self {
         let initial_nonce = TransactionNonce::try_from(next_transaction_nonce)
             .expect("BUG: initial nonce must be less than U256::MAX");
         Self {
+            ethereum_network,
             ecdsa_key_name,
             next_transaction_nonce: initial_nonce,
             pending_retrieve_eth_requests: PendingEthTransactions::new(initial_nonce),
+            ledger_id,
             ..Self::default()
         }
     }
@@ -90,6 +111,58 @@ impl State {
                 .insert(leder_burn_index, transaction),
             Ok(())
         );
+    }
+
+    pub fn record_event_to_mint(&mut self, event: ReceivedEthEvent) {
+        debug_assert!(
+            self.events_to_mint
+                .iter()
+                .all(|e| e == &event || e.source() != event.source()),
+            "there must be no two different events with the same source"
+        );
+
+        debug_assert!(!self.minted_events.contains_key(&event.source()));
+        debug_assert!(!self.invalid_events.contains(&event.source()));
+
+        self.events_to_mint.insert(event);
+    }
+
+    pub fn record_invalid_deposit(&mut self, source: EventSource) -> bool {
+        debug_assert!(
+            self.events_to_mint.iter().all(|e| e.source() != source),
+            "attempted to mark an accepted event as invalid"
+        );
+        assert!(
+            !self.minted_events.contains_key(&source),
+            "attempted to mark a minted event {source:?} as invalid"
+        );
+
+        self.invalid_events.insert(source)
+    }
+
+    pub fn record_successful_mint(
+        &mut self,
+        event: &ReceivedEthEvent,
+        mint_block_index: LedgerMintIndex,
+    ) {
+        debug_assert!(
+            !self.invalid_events.contains(&event.source()),
+            "attempted to mint an event previously marked as invalid {event:?}"
+        );
+
+        assert!(
+            self.events_to_mint.remove(event),
+            "attempted to mint ckETH for an unknown event {event:?}"
+        );
+        assert_eq!(
+            self.minted_events.insert(event.source(), mint_block_index),
+            None,
+            "attempted to mint ckETH twice for the same event {event:?}"
+        );
+    }
+
+    pub const fn ethereum_network(&self) -> EthereumNetwork {
+        self.ethereum_network
     }
 }
 
@@ -126,7 +199,7 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
         return to_public_key(&ecdsa_pk_response);
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    ic_cdk::println!("Fetching the ECDSA public key {}", &key_name);
+    log!(DEBUG, "Fetching the ECDSA public key {key_name}");
     let (response,) = ecdsa_public_key(EcdsaPublicKeyArgument {
         canister_id: None,
         derivation_path: crate::MAIN_DERIVATION_PATH

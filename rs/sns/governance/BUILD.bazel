@@ -224,7 +224,7 @@ rust_test_suite_with_extra_srcs(
         "tests/fixtures/environment_fixture.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":governance--test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 generated_files_check(

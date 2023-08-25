@@ -10,7 +10,10 @@ use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
 use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
-use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
+use ic_ckbtc_minter::updates::retrieve_btc::{
+    RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk, RetrieveBtcWithApprovalArgs,
+    RetrieveBtcWithApprovalError,
+};
 use ic_ckbtc_minter::updates::{
     self,
     get_btc_address::GetBtcAddressArgs,
@@ -145,6 +148,15 @@ async fn get_withdrawal_account() -> Account {
 async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
     check_anonymous_caller();
     check_postcondition(updates::retrieve_btc::retrieve_btc(args).await)
+}
+
+#[candid_method(update)]
+#[update]
+async fn retrieve_btc_with_approval(
+    args: RetrieveBtcWithApprovalArgs,
+) -> Result<RetrieveBtcOk, RetrieveBtcWithApprovalError> {
+    check_anonymous_caller();
+    check_postcondition(updates::retrieve_btc::retrieve_btc_with_approval(args).await)
 }
 
 #[candid_method(query)]

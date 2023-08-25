@@ -3,7 +3,6 @@
 use super::*;
 use crate::api::CspSigner;
 use crate::imported_test_utils::ed25519::csp_testvec;
-use crate::imported_utilities::sign_utils::user_public_key_from_bytes;
 use crate::key_id::KeyId;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
@@ -22,6 +21,7 @@ use ic_crypto_internal_test_vectors::multi_bls12_381::{
 };
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_secrets_containers::SecretArray;
+use ic_crypto_standalone_sig_verifier::user_public_key_from_bytes;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use rand::Rng;
 use std::collections::HashSet;

@@ -1,4 +1,5 @@
 import { html, TemplateResult } from 'lit';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { BaseView } from './base';
 
 export interface ErrorViewProps {
@@ -23,7 +24,7 @@ export class ErrorView extends BaseView {
       <ic-banner
         class="error"
         title="${this.props.title}"
-        subtitle="${this.props.subtitle}"
+        subtitle="${ifDefined(this.props.subtitle)}"
       ></ic-banner>
     `;
   }

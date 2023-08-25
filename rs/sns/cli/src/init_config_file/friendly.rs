@@ -26,7 +26,7 @@ mod nns_governance_pb {
     };
 }
 
-// Implements the format used by example_sns_init_v2.yaml in the root of this
+// Implements the format used by test_sns_init_v2.yaml in the root of this
 // package. Studying that is a much more ergonomic way of becoming familiar with
 // the format that we are trying to implement here.
 //

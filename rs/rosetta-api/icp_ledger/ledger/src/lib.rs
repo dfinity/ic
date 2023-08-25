@@ -325,6 +325,8 @@ impl Ledger {
         token_symbol: Option<String>,
         token_name: Option<String>,
         feature_flags: Option<FeatureFlags>,
+        maximum_number_of_accounts: Option<usize>,
+        accounts_overflow_trim_quantity: Option<usize>,
     ) {
         self.token_symbol = token_symbol.unwrap_or_else(|| "ICP".to_string());
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
@@ -351,6 +353,12 @@ impl Ledger {
         }
         if let Some(feature_flags) = feature_flags {
             self.feature_flags = feature_flags;
+        }
+        if let Some(maximum_number_of_accounts) = maximum_number_of_accounts {
+            self.maximum_number_of_accounts = maximum_number_of_accounts;
+        }
+        if let Some(accounts_overflow_trim_quantity) = accounts_overflow_trim_quantity {
+            self.accounts_overflow_trim_quantity = accounts_overflow_trim_quantity;
         }
     }
 

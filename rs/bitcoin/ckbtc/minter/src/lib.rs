@@ -1,6 +1,8 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
+use crate::memo::Status;
 use crate::queries::WithdrawalFee;
+use crate::state::ReimbursementReason;
 use crate::tasks::schedule_after;
 use candid::{CandidType, Deserialize};
 use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
@@ -429,6 +431,32 @@ fn finalized_txids(
             })
         })
         .collect()
+}
+
+async fn reimburse_failed_kyt() {
+    let try_to_reimburse = state::read_state(|s| s.reimbursement_map.clone());
+    for (burn_block_index, entry) in try_to_reimburse {
+        let memo_status = match entry.reason {
+            ReimbursementReason::TaintedDestination => Status::Rejected,
+            ReimbursementReason::CallFailed => Status::CallFailed,
+        };
+        let reimburse_memo = crate::memo::MintMemo::KytFail {
+            kyt_fee: Some(entry.kyt_fee),
+            status: Some(memo_status),
+            associated_burn_index: Some(burn_block_index),
+        };
+        if let Ok(block_index) = crate::updates::update_balance::mint(
+            entry.amount - entry.kyt_fee,
+            entry.account,
+            crate::memo::encode(&reimburse_memo).into(),
+        )
+        .await
+        {
+            state::mutate_state(|s| {
+                state::audit::reimbursed_failed_deposit(s, burn_block_index, block_index)
+            });
+        }
+    }
 }
 
 async fn finalize_requests() {
@@ -1116,6 +1144,7 @@ pub fn timer() {
 
                 submit_pending_requests().await;
                 finalize_requests().await;
+                reimburse_failed_kyt().await;
             });
         }
         TaskType::RefreshFeePercentiles => {

@@ -8,6 +8,8 @@
 //!     - Calls the router
 //!     - Writes response to wire.
 //!
+use std::time::Duration;
+
 use axum::Router;
 use bytes::Bytes;
 use http::{Request, Response};
@@ -27,6 +29,8 @@ use crate::{
     ConnCmd, TransportError,
 };
 
+const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
+
 pub(crate) async fn start_request_handler(
     peer_id: NodeId,
     connection: Connection,
@@ -37,9 +41,12 @@ pub(crate) async fn start_request_handler(
 ) {
     let mut inflight_requests = tokio::task::JoinSet::new();
     let mut inflight_cmds = tokio::task::JoinSet::new();
-
+    let mut quic_metrics_scrape = tokio::time::interval(QUIC_METRIC_SCRAPE_INTERVAL);
     loop {
         tokio::select! {
+             _ = quic_metrics_scrape.tick() => {
+                metrics.collect_quic_connection_stats(&connection, &peer_id);
+            }
             uni = connection.accept_uni() => {
                 match uni {
                     Ok(uni_rx) => {

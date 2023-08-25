@@ -77,6 +77,7 @@ use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, RestoreDappControllers
 use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
+use ic_stable_structures::{BoundedStorable, Storable};
 use icp_ledger::{
     AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
 };
@@ -85,6 +86,7 @@ use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
 use std::{
+    borrow::Cow,
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
@@ -1249,6 +1251,22 @@ impl Topic {
             _ => 1.0,
         }
     }
+}
+
+impl Storable for Topic {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned((*self as i32).to_be_bytes().to_vec())
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        Self::from_i32(i32::from_be_bytes(bytes.as_ref().try_into().unwrap()))
+            .expect("Failed to read i32 as Topic")
+    }
+}
+
+impl BoundedStorable for Topic {
+    const MAX_SIZE: u32 = std::mem::size_of::<u32>() as u32;
+    const IS_FIXED_SIZE: bool = true;
 }
 
 impl Tally {

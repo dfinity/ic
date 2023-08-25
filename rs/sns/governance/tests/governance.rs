@@ -32,11 +32,11 @@ use ic_sns_governance::{
             neuron,
             neuron::{DissolveState, Followees},
             proposal::Action,
-            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty,
-            GovernanceError, ManageNeuronResponse, Motion, Neuron, NeuronId, NeuronPermission,
-            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
-            RegisterDappCanisters, Vote, WaitForQuietState,
+            Account as AccountProto, AddMaturityRequest, Ballot, ClaimSwapNeuronsError,
+            ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
+            DeregisterDappCanisters, Empty, GovernanceError, ManageNeuronResponse, Motion, Neuron,
+            NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
+            ProposalData, ProposalId, RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
     types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
@@ -782,6 +782,73 @@ fn test_vesting_neuron_manage_neuron_operations() {
     let expected_response = ManageNeuronResponse::register_vote_response();
     let actual_response = gov.manage_neuron(&neuron_id2, command, user_principal2);
     assert_eq!(expected_response, actual_response);
+}
+
+#[test]
+fn test_refresh_neuron() {
+    use manage_neuron::Command;
+
+    let claim_or_refresh = ClaimOrRefresh {
+        by: Some(claim_or_refresh::By::NeuronId(Empty {})),
+    };
+
+    let user_principal1 = PrincipalId::new_user_test_id(1000);
+    let neuron_id1 = neuron_id(user_principal1, /*memo*/ 0);
+
+    let user_principal2 = PrincipalId::new_user_test_id(1002);
+    let neuron_id2 = neuron_id(user_principal2, /*memo*/ 0);
+
+    // Set up the test environment with a single dissolved neuron
+    let mut gov = GovernanceCanisterFixtureBuilder::new()
+        // Add a neuron that will be configured the way a neuron originating from an NNS Neurons' Fund participation
+        // in a decentralization swap will be
+        .add_neuron(
+            NeuronBuilder::new(
+                neuron_id1.clone(),
+                E8,
+                NeuronPermission::all(&PrincipalId::from(ic_nns_constants::GOVERNANCE_CANISTER_ID)),
+            )
+            .add_neuron_permission(NeuronPermission {
+                principal: Some(user_principal1),
+                permission_type: vec![NeuronPermissionType::Vote as i32],
+            }),
+        )
+        // Add a regular neuron for comparison's sake
+        .add_neuron(NeuronBuilder::new(
+            neuron_id2.clone(),
+            E8,
+            NeuronPermission::all(&user_principal2),
+        ))
+        .create();
+
+    {
+        let actual_response = gov.manage_neuron(
+            &neuron_id1,
+            Command::ClaimOrRefresh(claim_or_refresh.clone()),
+            user_principal1,
+        );
+        assert_eq!(
+            ManageNeuronResponse {
+                command: Some(CommandResponse::Error(GovernanceError {
+                    error_type: ErrorType::PreconditionFailed as i32,
+                    error_message: "Cannot refresh an SNS Neuron controlled by the Neurons' Fund"
+                        .to_string()
+                }))
+            },
+            actual_response
+        );
+    }
+    {
+        let actual_response = gov.manage_neuron(
+            &neuron_id2,
+            Command::ClaimOrRefresh(claim_or_refresh),
+            user_principal2,
+        );
+        assert_eq!(
+            ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id2.clone()),
+            actual_response
+        );
+    }
 }
 
 #[test]
@@ -2582,5 +2649,31 @@ async fn assert_disburse_maturity_with_modulation_disburses_correctly(
     assert_eq!(
         account_balance_after_disbursal,
         expected_amount_disbursed_e8s
+    );
+}
+
+#[test]
+fn test_add_maturity() {
+    let (mut canister_fixture, _user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    const MATURITY_TO_ADD: u64 = 100_000;
+
+    let neuron_original = canister_fixture.get_neuron(&neuron_id);
+    let add_maturity_result = canister_fixture
+        .governance
+        .add_maturity(AddMaturityRequest {
+            id: Some(neuron_id.clone()),
+            amount_e8s: Some(MATURITY_TO_ADD),
+        });
+    let neuron_new = canister_fixture.get_neuron(&neuron_id);
+
+    assert_eq!(
+        neuron_original.maturity_e8s_equivalent + MATURITY_TO_ADD,
+        neuron_new.maturity_e8s_equivalent
+    );
+    assert_eq!(
+        add_maturity_result.new_maturity_e8s,
+        Some(neuron_new.maturity_e8s_equivalent)
     );
 }

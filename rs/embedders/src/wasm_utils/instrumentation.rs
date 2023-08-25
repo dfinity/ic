@@ -129,8 +129,8 @@ use crate::wasmtime_embedder::{
     WASM_HEAP_MEMORY_NAME,
 };
 use wasmparser::{
-    BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator, Type,
-    TypeRef, ValType,
+    BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator,
+    StructuralType, SubType, TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -476,14 +476,19 @@ const MAX_STABLE_MEMORY_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_BYTES / (WASM_
 /// There is one byte for each OS page in the stable memory.
 const STABLE_BYTEMAP_SIZE_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_WASM_PAGES / (PAGE_SIZE as u64);
 
-fn add_type(module: &mut Module, ty: Type) -> u32 {
-    let Type::Func(sig) = &ty;
-    for (idx, Type::Func(msig)) in module.types.iter().enumerate() {
-        if *msig == *sig {
-            return idx as u32;
+fn add_func_type(module: &mut Module, ty: FuncType) -> u32 {
+    for (idx, existing_subtype) in module.types.iter().enumerate() {
+        if let StructuralType::Func(existing_ty) = &existing_subtype.structural_type {
+            if *existing_ty == ty {
+                return idx as u32;
+            }
         }
     }
-    module.types.push(ty);
+    module.types.push(SubType {
+        is_final: false,
+        supertype_idx: None,
+        structural_type: StructuralType::Func(ty),
+    });
     (module.types.len() - 1) as u32
 }
 
@@ -511,15 +516,15 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
         }
     }
 
-    for (_, _, elem_items) in &mut module.elements {
+    for (_, elem_items) in &mut module.elements {
         match elem_items {
             wasm_transform::ElementItems::Functions(fun_items) => {
                 for idx in fun_items {
                     *idx = f(*idx);
                 }
             }
-            wasm_transform::ElementItems::ConstExprs(expr) => {
-                for ops in expr {
+            wasm_transform::ElementItems::ConstExprs { ty: _, exprs } => {
+                for ops in exprs {
                     mutate_instructions(&f, ops)
                 }
             }
@@ -558,14 +563,11 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 /// space, but this would be error-prone).
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
-    let ooi_type = Type::Func(FuncType::new([], []));
-    let uam_type = Type::Func(FuncType::new(
-        [ValType::I32, ValType::I32, ValType::I32],
-        [ValType::I32],
-    ));
+    let ooi_type = FuncType::new([], []);
+    let uam_type = FuncType::new([ValType::I32, ValType::I32, ValType::I32], [ValType::I32]);
 
-    let ooi_type_idx = add_type(&mut module, ooi_type);
-    let uam_type_idx = add_type(&mut module, uam_type);
+    let ooi_type_idx = add_func_type(&mut module, ooi_type);
+    let uam_type_idx = add_func_type(&mut module, uam_type);
 
     // push_front imports
     let ooi_imp = Import {
@@ -587,11 +589,8 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
     module.imports.push(uam_imp);
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
-        let tgsm_type = Type::Func(FuncType::new(
-            [ValType::I64, ValType::I64, ValType::I32],
-            [ValType::I64],
-        ));
-        let tgsm_type_idx = add_type(&mut module, tgsm_type);
+        let tgsm_type = FuncType::new([ValType::I64, ValType::I64, ValType::I32], [ValType::I64]);
+        let tgsm_type_idx = add_func_type(&mut module, tgsm_type);
         let tgsm_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: TRY_GROW_STABLE_MEMORY_FUN_NAME,
@@ -599,8 +598,8 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         };
         module.imports.push(tgsm_imp);
 
-        let it_type = Type::Func(FuncType::new([ValType::I32], []));
-        let it_type_idx = add_type(&mut module, it_type);
+        let it_type = FuncType::new([ValType::I32], []);
+        let it_type_idx = add_func_type(&mut module, it_type);
         let it_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: INTERNAL_TRAP_FUN_NAME,
@@ -608,11 +607,8 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         };
         module.imports.push(it_imp);
 
-        let fr_type = Type::Func(FuncType::new(
-            [ValType::I64, ValType::I64, ValType::I64],
-            [],
-        ));
-        let fr_type_idx = add_type(&mut module, fr_type);
+        let fr_type = FuncType::new([ValType::I64, ValType::I64, ValType::I64], []);
+        let fr_type_idx = add_func_type(&mut module, fr_type);
         let fr_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: STABLE_READ_FIRST_ACCESS_NAME,
@@ -747,15 +743,22 @@ pub(super) fn instrument(
     // type) reference to the `code_section`.
     let mut func_types = Vec::new();
     for i in 0..module.code_sections.len() {
-        let Type::Func(t) = &module.types[module.functions[i] as usize];
-        func_types.push(t.clone());
+        if let StructuralType::Func(t) = &module.types[module.functions[i] as usize].structural_type
+        {
+            func_types.push((i, t.clone()));
+        } else {
+            return Err(WasmInstrumentationError::InvalidFunctionType(format!(
+                "Function has type which is not a function type. Found type: {:?}",
+                &module.types[module.functions[i] as usize].structural_type
+            )));
+        }
     }
 
     // Inject `update_available_memory` to functions with `memory.grow`
     // instructions.
     if !func_types.is_empty() {
         let func_bodies = &mut module.code_sections;
-        for (func_ix, func_type) in func_types.into_iter().enumerate() {
+        for (func_ix, func_type) in func_types.into_iter() {
             inject_update_available_memory(&mut func_bodies[func_ix], &func_type);
             if write_barrier == FlagStatus::Enabled {
                 inject_mem_barrier(&mut func_bodies[func_ix], &func_type);
@@ -869,7 +872,7 @@ fn replace_system_api_functions(
         metering_type,
     ) {
         if let Some(old_index) = api_indexes.get(&api) {
-            let type_idx = add_type(module, ty);
+            let type_idx = add_func_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
             module.functions.push(type_idx);
             module.code_sections.push(body);
@@ -893,7 +896,7 @@ fn export_additional_symbols<'a>(
 ) -> Module<'a> {
     // push function to decrement the instruction counter
 
-    let func_type = Type::Func(FuncType::new([ValType::I64], [ValType::I64]));
+    let func_type = FuncType::new([ValType::I64], [ValType::I64]);
 
     use Operator::*;
 
@@ -945,7 +948,7 @@ fn export_additional_symbols<'a>(
         instructions,
     };
 
-    let type_idx = add_type(&mut module, func_type);
+    let type_idx = add_func_type(&mut module, func_type);
     module.functions.push(type_idx);
     module.code_sections.push(func_body);
 
@@ -955,10 +958,7 @@ fn export_additional_symbols<'a>(
         // Arg 1 - end of the range
         // Return index 0 is the number of pages that haven't been written to in the given range
         // Return index 1 is the number of pages that haven't been accessed in the given range.
-        let func_type = Type::Func(FuncType::new(
-            [ValType::I32, ValType::I32],
-            [ValType::I32, ValType::I32],
-        ));
+        let func_type = FuncType::new([ValType::I32, ValType::I32], [ValType::I32, ValType::I32]);
         let it = 2; // iterator index
         let tmp = 3;
         let acc_w = 4; // accumulator index
@@ -1035,7 +1035,7 @@ fn export_additional_symbols<'a>(
             locals: vec![(4, ValType::I32)],
             instructions,
         };
-        let type_idx = add_type(&mut module, func_type);
+        let type_idx = add_func_type(&mut module, func_type);
         module.functions.push(type_idx);
         module.code_sections.push(func_body);
     }

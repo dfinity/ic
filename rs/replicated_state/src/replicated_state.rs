@@ -10,13 +10,16 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_btc_types_internal::BitcoinAdapterResponse;
-use ic_error_types::{ErrorCode, UserError};
+use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    ingress::IngressStatus,
-    messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
+    ingress::{IngressState, IngressStatus},
+    messages::{
+        CallbackId, CanisterCall, CanisterMessage, Ingress, MessageId, Payload, RejectContext,
+        RequestOrResponse, Response,
+    },
     xnet::QueueId,
     CanisterId, MemoryAllocation, NumBytes, SubnetId, Time,
 };
@@ -924,6 +927,97 @@ impl ReplicatedState {
         };
         res.update_stream_responses_size_bytes();
         res
+    }
+
+    /// Removes and rejects all in-progress subnet messages whose target canisters
+    /// are no longer on this subnet, in the second phase of a subnet split.
+    ///
+    /// On the other subnet (which must be *subnet B*), the execution of these same
+    /// messages, now without matching subnet call contexts, will be silently
+    /// aborted / rolled back (without producing a response). This is the only way
+    /// to ensure consistency for a message that must execute on one subnet, but for
+    /// which a response may only be produced by another subnet.
+    pub fn reject_in_progress_management_calls<F>(
+        &mut self,
+        is_local_canister: F,
+        ingress_memory_capacity: NumBytes,
+    ) where
+        F: Fn(CanisterId) -> bool,
+    {
+        for install_code_call in self
+            .metadata
+            .subnet_call_context_manager
+            .remove_non_local_install_code_calls(&is_local_canister)
+        {
+            self.reject_management_call_after_split(
+                install_code_call.call,
+                install_code_call.effective_canister_id,
+                ingress_memory_capacity,
+            );
+        }
+
+        for stop_canister_call in self
+            .metadata
+            .subnet_call_context_manager
+            .remove_non_local_stop_canister_calls(&is_local_canister)
+        {
+            self.reject_management_call_after_split(
+                stop_canister_call.call,
+                stop_canister_call.effective_canister_id,
+                ingress_memory_capacity,
+            );
+        }
+    }
+
+    /// Rejects the given subnet call, targeting the given `canister_id`, which has
+    /// migrated to a new subnet following a subnet split, producing:
+    ///
+    ///  * a reject response, if the call originated from a canister; or
+    ///  * a failed ingress state, if the call originated from an ingress message.
+    fn reject_management_call_after_split(
+        &mut self,
+        call: CanisterCall,
+        canister_id: CanisterId,
+        ingress_memory_capacity: NumBytes,
+    ) {
+        match call {
+            CanisterCall::Request(request) => {
+                // Rejecting a request from a canister.
+                let response = Response {
+                    originator: request.sender(),
+                    respondent: request.receiver,
+                    originator_reply_callback: request.sender_reply_callback,
+                    refund: request.payment,
+                    response_payload: Payload::Reject(RejectContext::new(
+                        RejectCode::SysTransient,
+                        format!("Canister {} migrated during a subnet split", canister_id),
+                    )),
+                };
+                self.push_subnet_output_response(response.into());
+            }
+            CanisterCall::Ingress(ingress) => {
+                let status = IngressStatus::Known {
+                    receiver: ingress.receiver.get(),
+                    user_id: ingress.source,
+                    time: self.time(),
+                    state: IngressState::Failed(UserError::new(
+                        ErrorCode::CanisterNotFound,
+                        format!("Canister {} migrated during a subnet split", canister_id),
+                    )),
+                };
+
+                let current_status = self.get_ingress_status(&ingress.message_id);
+                assert!(
+                    current_status.is_valid_state_transition(&status),
+                    "Invalid ingress status transition."
+                );
+                self.set_ingress_status(
+                    ingress.message_id.clone(),
+                    status,
+                    ingress_memory_capacity,
+                );
+            }
+        }
     }
 }
 

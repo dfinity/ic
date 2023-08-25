@@ -57,6 +57,7 @@ BINARIES = {
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
     "drun": "//rs/drun:drun",
+    "pocket-ic": "//rs/pocket_ic_backend:pocket-ic-backend",
 }
 
 [release_nostrip_binary(

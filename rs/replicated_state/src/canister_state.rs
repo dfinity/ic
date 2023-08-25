@@ -491,6 +491,50 @@ impl CanisterState {
             execution_state.next_scheduled_method.inc();
         }
     }
+
+    #[allow(dead_code)]
+    pub fn after_split(self) -> Self {
+        // Take apart `self` and put it back together, in order for the compiler to
+        // enforce an explicit decision whenever new fields are added.
+        let CanisterState {
+            mut system_state,
+            execution_state,
+            scheduler_state,
+        } = self;
+
+        // Remove aborted install code task.
+        system_state.task_queue.retain(|task| match task {
+            ExecutionTask::AbortedInstallCode { .. } => false,
+            ExecutionTask::Heartbeat
+            | ExecutionTask::GlobalTimer
+            | ExecutionTask::PausedExecution(_)
+            | ExecutionTask::PausedInstallCode(_)
+            | ExecutionTask::AbortedExecution { .. } => true,
+        });
+
+        // Roll back canister state `Stopping` to `Running` and drop all stop contexts.
+        // The calls corresponding to the dropped stop contexts will be rejected by
+        // subnet A'.
+        let canister_status = match system_state.status {
+            CanisterStatus::Running {
+                call_context_manager,
+            }
+            | CanisterStatus::Stopping {
+                call_context_manager,
+                ..
+            } => CanisterStatus::Running {
+                call_context_manager,
+            },
+            CanisterStatus::Stopped => CanisterStatus::Stopped,
+        };
+        system_state.status = canister_status;
+
+        CanisterState {
+            system_state,
+            execution_state,
+            scheduler_state,
+        }
+    }
 }
 
 /// The result of `next_execution()` function.
