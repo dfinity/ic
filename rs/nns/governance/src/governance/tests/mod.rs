@@ -22,7 +22,7 @@ use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSns
 use lazy_static::lazy_static;
 use maplit::btreemap;
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::VecDeque,
     convert::TryFrom,
     string::ToString,
     sync::{Arc, Mutex},
@@ -485,7 +485,7 @@ async fn validate_open_sns_token_swap_community_fund_investment_e8s() {
 }
 
 lazy_static! {
-    static ref ID_TO_NEURON: BTreeMap<u64, Neuron> = craft_id_to_neuron(&[
+    static ref NEURON_STORE: NeuronStore = craft_neuron_store(&[
         // (maturity, controller, joined cf at)
 
         // CF neurons.
@@ -499,52 +499,56 @@ lazy_static! {
     ]);
 
     static ref ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT: u64 = {
-        let result = total_community_fund_maturity_e8s_equivalent(&ID_TO_NEURON);
+        let result = total_community_fund_maturity_e8s_equivalent(&NEURON_STORE);
         assert_eq!(result, 600 * E8);
         result
     };
 }
 
-fn craft_id_to_neuron(
+fn craft_neuron_store(
     values: &[(
         /* maturity: */ u64,
         /* controller: */ PrincipalId,
         /* joined cf at: */ Option<u64>,
     )],
-) -> BTreeMap<u64, Neuron> {
-    values
-        .iter()
-        .enumerate()
-        .map(|(i, arg)| {
-            let i = i as u64;
-            let (maturity_e8s_equivalent, controller, joined_community_fund_timestamp_seconds) =
-                *arg;
+) -> NeuronStore {
+    NeuronStore::new(
+        values
+            .iter()
+            .enumerate()
+            .map(|(i, arg)| {
+                let i = i as u64;
+                let (maturity_e8s_equivalent, controller, joined_community_fund_timestamp_seconds) =
+                    *arg;
 
-            let id = i + 1;
-            let neuron = Neuron {
-                id: Some(NeuronId { id }),
-                controller: Some(controller),
-                maturity_e8s_equivalent,
-                joined_community_fund_timestamp_seconds,
-                ..Default::default()
-            };
+                let id = i + 1;
+                let neuron = Neuron {
+                    id: Some(NeuronId { id }),
+                    controller: Some(controller),
+                    maturity_e8s_equivalent,
+                    joined_community_fund_timestamp_seconds,
+                    ..Default::default()
+                };
 
-            (id, neuron)
-        })
-        .collect()
+                (id, neuron)
+            })
+            .collect(),
+    )
 }
 
 fn assert_clean_refund(
-    id_to_neuron: &mut BTreeMap<u64, Neuron>,
+    neuron_store: &mut NeuronStore,
     cf_participants: &Vec<sns_swap_pb::CfParticipant>,
-    expected_id_to_neuron: &BTreeMap<u64, Neuron>,
+    expected_neuron_store: &NeuronStore,
 ) {
-    let mut original_id_to_neuron = id_to_neuron.clone();
-    let failed_refunds = refund_community_fund_maturity(id_to_neuron, cf_participants);
+    let original_id_to_neuron = neuron_store.clone_neurons();
+    let mut original_neuron_store = NeuronStore::new(original_id_to_neuron);
+
+    let failed_refunds = refund_community_fund_maturity(neuron_store, cf_participants);
     assert!(failed_refunds.is_empty(), "{:#?}", failed_refunds);
 
     // Assert that neurons have been restored to the way they were originally.
-    assert_eq!(id_to_neuron, expected_id_to_neuron);
+    assert_eq!(neuron_store, expected_neuron_store);
 
     // Assert that inserting extraneous elements into cf_participants does
     // not change the result, but it does result in failed refunds.
@@ -587,15 +591,15 @@ fn assert_clean_refund(
     expected_failed_refunds.push(cf_participant);
 
     assert_eq!(
-        refund_community_fund_maturity(&mut original_id_to_neuron, &extra_cf_participants),
+        refund_community_fund_maturity(&mut original_neuron_store, &extra_cf_participants),
         expected_failed_refunds,
     );
-    assert_eq!(original_id_to_neuron, *expected_id_to_neuron);
+    assert_eq!(original_neuron_store, *expected_neuron_store);
 }
 
 #[test]
 fn draw_funds_from_the_community_fund_all_cf_neurons_have_zero_maturity() {
-    let mut id_to_neuron = craft_id_to_neuron(&[
+    let mut neuron_store = craft_neuron_store(&[
         // (maturity, controller, joined cf at)
 
         // CF neurons.
@@ -606,10 +610,10 @@ fn draw_funds_from_the_community_fund_all_cf_neurons_have_zero_maturity() {
         (400, *PRINCIPAL_ID_1, None),
         (500, *PRINCIPAL_ID_2, None),
     ]);
-    let original_id_to_neuron = id_to_neuron.clone();
+    let original_neuron_store = neuron_store.clone();
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60,
         &PARAMS,
@@ -617,17 +621,17 @@ fn draw_funds_from_the_community_fund_all_cf_neurons_have_zero_maturity() {
 
     // Inspect results.
     assert_eq!(observed_cf_neurons, vec![]);
-    assert_eq!(id_to_neuron, original_id_to_neuron);
+    assert_eq!(neuron_store, original_neuron_store);
     assert_clean_refund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         &observed_cf_neurons,
-        &original_id_to_neuron,
+        &original_neuron_store,
     );
 }
 
 #[test]
 fn draw_funds_from_the_community_fund_zero_withdrawal_amount() {
-    let mut id_to_neuron = craft_id_to_neuron(&[
+    let mut neuron_store = craft_neuron_store(&[
         // (maturity, controller, joined cf at)
 
         // CF neurons.
@@ -638,10 +642,10 @@ fn draw_funds_from_the_community_fund_zero_withdrawal_amount() {
         (400, *PRINCIPAL_ID_1, None),
         (500, *PRINCIPAL_ID_2, None),
     ]);
-    let original_id_to_neuron = id_to_neuron.clone();
+    let original_neuron_store = neuron_store.clone();
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 0,
         &PARAMS,
@@ -649,20 +653,19 @@ fn draw_funds_from_the_community_fund_zero_withdrawal_amount() {
 
     // Inspect results.
     assert_eq!(observed_cf_neurons, vec![]);
-    assert_eq!(id_to_neuron, original_id_to_neuron);
+    assert_eq!(neuron_store, original_neuron_store);
     assert_clean_refund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         &observed_cf_neurons,
-        &original_id_to_neuron,
+        &original_neuron_store,
     );
 }
 
 #[test]
 fn draw_funds_from_the_community_fund_typical() {
-    let mut id_to_neuron = ID_TO_NEURON.clone();
-
+    let mut neuron_store = NEURON_STORE.clone();
     let observed_cf_neurons = draw_funds_from_the_community_fund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
@@ -696,8 +699,8 @@ fn draw_funds_from_the_community_fund_typical() {
     assert_eq!(observed_cf_neurons, expected_cf_neurons);
 
     assert_eq!(
-        id_to_neuron,
-        craft_id_to_neuron(&[
+        neuron_store,
+        craft_neuron_store(&[
             // CF neurons less 10% of their maturity.
             (90 * E8, *PRINCIPAL_ID_1, Some(1)),
             (180 * E8, *PRINCIPAL_ID_2, Some(1)),
@@ -708,15 +711,15 @@ fn draw_funds_from_the_community_fund_typical() {
         ]),
     );
 
-    assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
+    assert_clean_refund(&mut neuron_store, &observed_cf_neurons, &NEURON_STORE);
 }
 
 #[test]
 fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
-    let mut id_to_neuron = ID_TO_NEURON.clone();
+    let mut neuron_store = NEURON_STORE.clone();
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         2 * *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
@@ -750,8 +753,8 @@ fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
     assert_eq!(observed_cf_neurons, expected_cf_neurons);
 
     assert_eq!(
-        id_to_neuron,
-        craft_id_to_neuron(&[
+        neuron_store,
+        craft_neuron_store(&[
             // CF neurons less 10% of their maturity.
             (95 * E8, *PRINCIPAL_ID_1, Some(1)),
             (190 * E8, *PRINCIPAL_ID_2, Some(1)),
@@ -762,15 +765,15 @@ fn draw_funds_from_the_community_fund_cf_shrank_during_voting_period() {
         ]),
     );
 
-    assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
+    assert_clean_refund(&mut neuron_store, &observed_cf_neurons, &NEURON_STORE);
 }
 
 #[test]
 fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
-    let mut id_to_neuron = ID_TO_NEURON.clone();
+    let mut neuron_store = NEURON_STORE.clone();
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT / 2,
         /* withdrawal_amount_e8s = */ 60 * E8,
         &PARAMS,
@@ -804,8 +807,8 @@ fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
     assert_eq!(observed_cf_neurons, expected_cf_neurons);
 
     assert_eq!(
-        id_to_neuron,
-        craft_id_to_neuron(&[
+        neuron_store,
+        craft_neuron_store(&[
             // CF neurons less 10% of their maturity.
             (90 * E8, *PRINCIPAL_ID_1, Some(1)),
             (180 * E8, *PRINCIPAL_ID_2, Some(1)),
@@ -816,16 +819,16 @@ fn draw_funds_from_the_community_fund_cf_grew_during_voting_period() {
         ]),
     );
 
-    assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
+    assert_clean_refund(&mut neuron_store, &observed_cf_neurons, &NEURON_STORE);
 }
 
 #[test]
 fn draw_funds_from_the_community_fund_trivial() {
-    let mut id_to_neuron = btreemap! {};
+    let mut neuron_store = NeuronStore::new(btreemap! {});
     let original_total_community_fund_maturity_e8s_equivalent = 0;
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         original_total_community_fund_maturity_e8s_equivalent,
         /* withdrawal_amount_e8s = */ 60,
         &PARAMS,
@@ -833,17 +836,21 @@ fn draw_funds_from_the_community_fund_trivial() {
 
     // Inspect results.
     assert_eq!(observed_cf_neurons, vec![]);
-    assert_eq!(id_to_neuron, btreemap! {});
+    assert_eq!(neuron_store, NeuronStore::new(btreemap! {}));
 
-    assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &btreemap! {});
+    assert_clean_refund(
+        &mut neuron_store,
+        &observed_cf_neurons,
+        &NeuronStore::new(btreemap! {}),
+    );
 }
 
 #[test]
 fn draw_funds_from_the_community_fund_cf_not_large_enough() {
-    let mut id_to_neuron = ID_TO_NEURON.clone();
+    let mut neuron_store = NEURON_STORE.clone();
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 1000 * E8,
         &PARAMS,
@@ -877,8 +884,8 @@ fn draw_funds_from_the_community_fund_cf_not_large_enough() {
     assert_eq!(observed_cf_neurons, expected_cf_neurons);
 
     assert_eq!(
-        id_to_neuron,
-        craft_id_to_neuron(&[
+        neuron_store,
+        craft_neuron_store(&[
             // CF neurons have been completely depleted.
             (0, *PRINCIPAL_ID_1, Some(1)),
             (0, *PRINCIPAL_ID_2, Some(1)),
@@ -889,7 +896,7 @@ fn draw_funds_from_the_community_fund_cf_not_large_enough() {
         ]),
     );
 
-    assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
+    assert_clean_refund(&mut neuron_store, &observed_cf_neurons, &NEURON_STORE);
 }
 
 #[test]
@@ -899,10 +906,10 @@ fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
         max_participant_icp_e8s: 225 * E8,
         ..PARAMS.clone()
     };
-    let mut id_to_neuron = ID_TO_NEURON.clone();
+    let mut neuron_store = NEURON_STORE.clone();
 
     let observed_cf_neurons = draw_funds_from_the_community_fund(
-        &mut id_to_neuron,
+        &mut neuron_store,
         *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
         /* withdrawal_amount_e8s = */ 600 * E8,
         &params,
@@ -930,8 +937,8 @@ fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
     assert_eq!(observed_cf_neurons, expected_cf_neurons);
 
     assert_eq!(
-        id_to_neuron,
-        craft_id_to_neuron(&[
+        neuron_store,
+        craft_neuron_store(&[
             // CF neurons.
             (100 * E8, *PRINCIPAL_ID_1, Some(1)), // Does not participate, because too small.
             (0, *PRINCIPAL_ID_2, Some(1)),        // Fully participates.
@@ -942,7 +949,7 @@ fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
         ]),
     );
 
-    assert_clean_refund(&mut id_to_neuron, &observed_cf_neurons, &ID_TO_NEURON);
+    assert_clean_refund(&mut neuron_store, &observed_cf_neurons, &NEURON_STORE);
 }
 
 #[test]

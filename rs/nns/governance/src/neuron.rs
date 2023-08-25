@@ -5,12 +5,8 @@ use crate::{
         MAX_NEURON_RECENT_BALLOTS, MAX_NUM_HOT_KEYS_PER_NEURON,
     },
     pb::v1::{
-        audit_event::{Payload, ResetAging},
-        governance_error::ErrorType,
-        manage_neuron,
-        neuron::DissolveState,
-        AuditEvent, Ballot, BallotInfo, GovernanceError, Neuron, NeuronInfo, NeuronState, Topic,
-        Vote,
+        governance_error::ErrorType, manage_neuron, neuron::DissolveState, Ballot, BallotInfo,
+        GovernanceError, Neuron, NeuronInfo, NeuronState, Topic, Vote,
     },
 };
 use dfn_core::println;
@@ -18,12 +14,6 @@ use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::Subaccount;
 use std::collections::{BTreeSet, HashMap};
-
-// Use the same logic as GTC canister for resetting the aging timestamp.
-const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
-const ONE_YEAR_SECONDS: u64 = (4 * 365 + 1) * ONE_DAY_SECONDS / 4;
-const ONE_MONTH_SECONDS: u64 = ONE_YEAR_SECONDS / 12;
-const GTC_NEURON_PRE_AGE_DURATION_SECONDS: u64 = 18 * ONE_MONTH_SECONDS;
 
 impl Neuron {
     // --- Utility methods on neurons: mostly not for public consumption.
@@ -246,6 +236,18 @@ impl Neuron {
         // the maximum allowed length of the vector.
         while self.recent_ballots.len() > MAX_NEURON_RECENT_BALLOTS {
             self.recent_ballots.pop();
+        }
+    }
+
+    pub(crate) fn unstake_maturity_if_dissolved(&mut self, now_seconds: u64) {
+        if self.state(now_seconds) == NeuronState::Dissolved
+            && self.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
+        {
+            self.maturity_e8s_equivalent = self
+                .maturity_e8s_equivalent
+                .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0));
+
+            self.staked_maturity_e8s_equivalent = None;
         }
     }
 
@@ -715,84 +717,14 @@ impl Neuron {
                 }
         }
     }
-
-    /// If the aging timestamp is earlier than GENESIS - PRE_AGE, reset it to GENISIS.
-    pub fn maybe_reset_aging_timestamp(&mut self, now: u64) -> Option<AuditEvent> {
-        let genesis_timestamp_seconds = ic_types::time::GENESIS.as_secs_since_unix_epoch();
-        let aging_limit_timestamp_seconds =
-            genesis_timestamp_seconds.saturating_sub(GTC_NEURON_PRE_AGE_DURATION_SECONDS);
-        let should_reset = self.aging_since_timestamp_seconds < aging_limit_timestamp_seconds;
-        if should_reset {
-            let event = AuditEvent {
-                timestamp_seconds: now,
-                payload: Some(Payload::ResetAging(ResetAging {
-                    neuron_id: self.id.as_ref().map(|id| id.id).unwrap_or_default(),
-                    previous_aging_since_timestamp_seconds: self.aging_since_timestamp_seconds,
-                    new_aging_since_timestamp_seconds: genesis_timestamp_seconds,
-                    neuron_dissolve_state: self
-                        .dissolve_state
-                        .clone()
-                        .map(|dissolve_state| dissolve_state.into()),
-                    neuron_stake_e8s: self.minted_stake_e8s(),
-                })),
-            };
-            self.aging_since_timestamp_seconds = genesis_timestamp_seconds;
-            Some(event)
-        } else {
-            None
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::pb::v1::{
-        audit_event::{Payload, ResetAging},
-        neuron::DissolveState,
-        AuditEvent, Neuron, NeuronState,
-    };
+    use crate::pb::v1::{neuron::DissolveState, Neuron, NeuronState};
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 
     const NOW: u64 = 123_456_789;
-
-    #[test]
-    fn reset_aging_timestamp_should_reset() {
-        let mut neuron = Neuron {
-            aging_since_timestamp_seconds: 1_572_992_229, // Tue, 05 Nov 2019 22:17:09 GMT
-            ..Default::default()
-        };
-
-        assert_eq!(
-            neuron.maybe_reset_aging_timestamp(NOW),
-            Some(AuditEvent {
-                timestamp_seconds: 123_456_789,
-                payload: Some(Payload::ResetAging(ResetAging {
-                    neuron_id: 0,
-                    previous_aging_since_timestamp_seconds: 1_572_992_229,
-                    new_aging_since_timestamp_seconds: 1_620_328_630,
-                    neuron_dissolve_state: neuron.dissolve_state.clone().map(|state| state.into()),
-                    neuron_stake_e8s: neuron.minted_stake_e8s(),
-                }))
-            })
-        );
-
-        assert_eq!(
-            neuron.aging_since_timestamp_seconds,
-            1_620_328_630 // Thu, 06 May 2021 19:17:10 GMT (Genesis)
-        );
-    }
-
-    #[test]
-    fn reset_aging_timestamp_no_op() {
-        let mut neuron = Neuron {
-            aging_since_timestamp_seconds: 1_572_992_230, // Tue, 05 Nov 2019 22:17:10 GMT
-            ..Default::default()
-        };
-
-        assert!(neuron.maybe_reset_aging_timestamp(NOW).is_none());
-
-        assert_eq!(neuron.aging_since_timestamp_seconds, 1_572_992_230);
-    }
 
     const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 

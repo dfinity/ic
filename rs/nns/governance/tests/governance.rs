@@ -102,7 +102,7 @@ use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashSet, VecDeque},
     convert::{TryFrom, TryInto},
     iter::{self, once},
     path::PathBuf,
@@ -1426,10 +1426,10 @@ async fn test_sufficient_stake() {
     );
     // Set stake to 0.5 ICP.
     gov.neuron_store
-        .heap_neurons_mut()
-        .get_mut(&1)
-        .unwrap()
-        .cached_neuron_stake_e8s = 50_000_000;
+        .with_neuron_mut(&NeuronId { id: 1 }, |n| {
+            n.cached_neuron_stake_e8s = 50_000_000;
+        })
+        .expect("Neuron not found");
     // This should fail because the reject_cost_e8s is 1 ICP.
     assert_eq!(
         ErrorType::PreconditionFailed as i32,
@@ -1452,10 +1452,10 @@ async fn test_sufficient_stake() {
     );
     // Set stake to 1 ICP.
     gov.neuron_store
-        .heap_neurons_mut()
-        .get_mut(&1)
-        .unwrap()
-        .cached_neuron_stake_e8s = 100_000_000;
+        .with_neuron_mut(&NeuronId { id: 1 }, |n| {
+            n.cached_neuron_stake_e8s = 100_000_000;
+        })
+        .expect("Neuron not found.");
     // This should succeed because the reject_cost_e8s is 1 ICP (same as stake).
     gov.make_proposal(
         &NeuronId { id: 1 },
@@ -1592,10 +1592,10 @@ async fn test_follow_negative() {
             if err.error_type == ErrorType::NotAuthorized as i32
     );
     gov.neuron_store
-        .heap_neurons_mut()
-        .get_mut(&4)
-        .unwrap()
-        .controller = Some(principal(4));
+        .with_neuron_mut(&NeuronId { id: 4 }, |n| {
+            n.controller = Some(principal(4));
+        })
+        .expect("Neuron not found");
     fake::register_vote_assert_success(
         &mut gov,
         principal(4),
@@ -2069,29 +2069,29 @@ async fn test_manage_neuron() {
     assert_eq!(
         1,
         gov.neuron_store
-            .heap_neurons_mut()
-            .get_mut(&1)
-            .unwrap()
-            .followees
-            .get(&(Topic::NeuronManagement as i32))
-            .unwrap()
-            .followees
-            .len()
+            .with_neuron(&NeuronId { id: 1 }, |n| {
+                n.followees
+                    .get(&(Topic::NeuronManagement as i32))
+                    .unwrap()
+                    .followees
+                    .len()
+            })
+            .expect("Neuron not found.")
     );
     // ... viz., neuron 2.
     assert_eq!(
         2,
         gov.neuron_store
-            .heap_neurons_mut()
-            .get_mut(&1)
-            .unwrap()
-            .followees
-            .get(&(Topic::NeuronManagement as i32))
-            .unwrap()
-            .followees
-            .get(0)
-            .unwrap()
-            .id
+            .with_neuron(&NeuronId { id: 1 }, |n| {
+                n.followees
+                    .get(&(Topic::NeuronManagement as i32))
+                    .unwrap()
+                    .followees
+                    .get(0)
+                    .unwrap()
+                    .id
+            })
+            .expect("Neuron not found.")
     );
     // Make a proposal to change this list of followees back.
     gov.make_proposal(
@@ -2128,23 +2128,21 @@ async fn test_manage_neuron() {
     assert_eq!(
         3,
         gov.neuron_store
-            .heap_neurons_mut()
-            .get_mut(&1)
-            .unwrap()
-            .followees
-            .get(&(Topic::NeuronManagement as i32))
-            .unwrap()
-            .followees
-            .len()
+            .with_neuron(&NeuronId { id: 1 }, |n| {
+                n.followees
+                    .get(&(Topic::NeuronManagement as i32))
+                    .unwrap()
+                    .followees
+                    .len()
+            })
+            .expect("Neuron not found")
     );
     // Make sure that the neuron has been changed an additional fee
     // for manage neuron proposals.
     assert_eq!(
         gov.neuron_store
-            .heap_neurons()
-            .get(&2)
-            .unwrap()
-            .neuron_fees_e8s,
+            .with_neuron(&NeuronId { id: 2 }, |n| n.neuron_fees_e8s)
+            .expect("Neuron not found"),
         2 * gov
             .heap_data
             .economics
@@ -2168,10 +2166,10 @@ async fn test_sufficient_stake_for_manage_neuron() {
     // Set stake to less than 0.01 ICP (same as
     // neuron_management_fee_per_proposal_e8s).
     gov.neuron_store
-        .heap_neurons_mut()
-        .get_mut(&2)
-        .unwrap()
-        .cached_neuron_stake_e8s = 999_999;
+        .with_neuron_mut(&NeuronId { id: 2 }, |n| {
+            n.cached_neuron_stake_e8s = 999_999;
+        })
+        .expect("Neuron not found.");
     // Try to make a proposal... This should fail because the
     // neuron_management_fee_per_proposal_e8s is 0.01 ICP.
     assert_eq!(
@@ -2201,10 +2199,10 @@ async fn test_sufficient_stake_for_manage_neuron() {
     );
     // Set stake to 2 ICP.
     gov.neuron_store
-        .heap_neurons_mut()
-        .get_mut(&2)
-        .unwrap()
-        .cached_neuron_stake_e8s = 200_000_000;
+        .with_neuron_mut(&NeuronId { id: 2 }, |n| {
+            n.cached_neuron_stake_e8s = 200_000_000;
+        })
+        .expect("Neuron not found.");
     // This should now succeed.
     gov.make_proposal(
         &NeuronId { id: 2 },
@@ -3953,23 +3951,20 @@ fn governance_with_staked_neuron(
 
     assert_eq!(gov.neuron_store.heap_neurons().len(), 1);
 
-    let neuron = gov
-        .neuron_store
-        .heap_neurons_mut()
-        .get_mut(&nid.id)
-        .unwrap();
-    neuron
-        .configure(
-            &from,
-            driver.now(),
-            &Configure {
-                operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
-                    additional_dissolve_delay_seconds: dissolve_delay_seconds as u32,
-                })),
-            },
-        )
-        .unwrap();
-
+    gov.neuron_store
+        .with_neuron_mut(&nid, |neuron| {
+            neuron.configure(
+                &from,
+                driver.now(),
+                &Configure {
+                    operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
+                        additional_dissolve_delay_seconds: dissolve_delay_seconds as u32,
+                    })),
+                },
+            )
+        })
+        .expect("Neuron not found")
+        .expect("Configure failed");
     (driver, gov, nid, to_subaccount)
 }
 
@@ -4011,24 +4006,29 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     );
     assert_eq!(gov.get_neuron_ids_by_principal(&from), vec![id]);
 
-    let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
-
     // Dissolve the neuron if `dissolved` is true
     if dissolved {
-        neuron
-            .configure(
-                &from,
-                driver.now(),
-                &Configure {
-                    operation: Some(Operation::StartDissolving(StartDissolving {})),
-                },
-            )
-            .unwrap();
+        gov.neuron_store
+            .with_neuron_mut(&id, |neuron| {
+                neuron.configure(
+                    &from,
+                    driver.now(),
+                    &Configure {
+                        operation: Some(Operation::StartDissolving(StartDissolving {})),
+                    },
+                )
+            })
+            .expect("Neuron not found")
+            .expect("Configure neuron failed.");
         // Advance the time in the env
         driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
 
         // The neuron state should now be "Dissolved", meaning we can
         // now disburse the neuron.
+        let neuron = gov
+            .neuron_store
+            .with_neuron(&id, |neuron| neuron.clone())
+            .expect("Neuron not found");
         assert_eq!(
             neuron.get_neuron_info(driver.now()).state(),
             NeuronState::Dissolved
@@ -4036,17 +4036,21 @@ fn create_mature_neuron(dissolved: bool) -> (fake::FakeDriver, Governance, Neuro
     } else {
         driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
     }
+    let neuron = gov
+        .neuron_store
+        .with_neuron_mut(&id, |neuron| {
+            let neuron_fees_e8s = 50_000_000; // 0.5 ICP
+            let neuron_maturity = 25_000_000;
+            // Pretend the neuron has some rewards and fees to pay.
+            neuron.neuron_fees_e8s = neuron_fees_e8s;
+            // .. and some maturity to collect.
+            neuron.maturity_e8s_equivalent = neuron_maturity;
 
-    let neuron_fees_e8s = 50_000_000; // 0.5 ICP
-    let neuron_maturity = 25_000_000;
-    // Pretend the neuron has some rewards and fees to pay.
-    neuron.neuron_fees_e8s = neuron_fees_e8s;
-    // .. and some maturity to collect.
-    neuron.maturity_e8s_equivalent = neuron_maturity;
+            neuron.clone()
+        })
+        .expect("Neuron not found");
 
-    let n = neuron.clone();
-
-    (driver, gov, n)
+    (driver, gov, neuron)
 }
 
 #[test]
@@ -4877,7 +4881,11 @@ fn test_neuron_split_fails() {
         nonce,
     );
 
-    let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
+    let neuron = gov
+        .neuron_store
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("Neuron not found");
+
     let transaction_fee = gov
         .heap_data
         .economics
@@ -4993,7 +5001,11 @@ fn test_neuron_split() {
         nonce,
     );
 
-    let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
+    let neuron = gov
+        .neuron_store
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("Neuron did not exist");
+
     let transaction_fee = gov
         .heap_data
         .economics
@@ -5625,24 +5637,26 @@ fn test_staked_maturity() {
     );
 
     {
-        let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
-        assert_eq!(neuron.maturity_e8s_equivalent, 0);
-        assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
+        gov.neuron_store
+            .with_neuron_mut(&id, |neuron| {
+                assert_eq!(neuron.maturity_e8s_equivalent, 0);
+                assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
 
-        // Configure the neuron to auto-stake any future maturity.
-        neuron
-            .configure(
-                &from,
-                driver.now(),
-                &Configure {
-                    operation: Some(Operation::ChangeAutoStakeMaturity(
-                        ChangeAutoStakeMaturity {
-                            requested_setting_for_auto_stake_maturity: true,
-                        },
-                    )),
-                },
-            )
-            .unwrap();
+                // Configure the neuron to auto-stake any future maturity.
+                neuron.configure(
+                    &from,
+                    driver.now(),
+                    &Configure {
+                        operation: Some(Operation::ChangeAutoStakeMaturity(
+                            ChangeAutoStakeMaturity {
+                                requested_setting_for_auto_stake_maturity: true,
+                            },
+                        )),
+                    },
+                )
+            })
+            .expect("Neuron not found")
+            .expect("Configuring neuron failed");
     }
 
     // Now make a proposal and have it be accepted.
@@ -5678,10 +5692,8 @@ fn test_staked_maturity() {
 
     let neuron = gov
         .neuron_store
-        .heap_neurons_mut()
-        .get_mut(&id.id)
-        .unwrap()
-        .clone();
+        .with_neuron(&id, |neuron| neuron.clone())
+        .unwrap();
     assert!(neuron.staked_maturity_e8s_equivalent.is_some());
     // Neuron should get the maturity equivalent of 5 days as staked maturity.
     assert_eq!(
@@ -5717,30 +5729,35 @@ fn test_staked_maturity() {
 
     // Nowset the neuron to dissolve and advance time
     {
-        let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
-        assert_eq!(neuron.maturity_e8s_equivalent, 0);
-        assert_eq!(
-            neuron.staked_maturity_e8s_equivalent,
-            Some(54719555847781u64)
-        );
+        gov.neuron_store
+            .with_neuron_mut(&id, |neuron| {
+                assert_eq!(neuron.maturity_e8s_equivalent, 0);
+                assert_eq!(
+                    neuron.staked_maturity_e8s_equivalent,
+                    Some(54719555847781u64)
+                );
 
-        // Configure the neuron to auto-stake any future maturity.
-        neuron
-            .configure(
-                &from,
-                driver.now(),
-                &Configure {
-                    operation: Some(Operation::StartDissolving(StartDissolving {})),
-                },
-            )
-            .unwrap();
+                // Configure the neuron to auto-stake any future maturity.
+                neuron.configure(
+                    &from,
+                    driver.now(),
+                    &Configure {
+                        operation: Some(Operation::StartDissolving(StartDissolving {})),
+                    },
+                )
+            })
+            .expect("Neuron not found")
+            .expect("Configuring neuron failed");
     }
 
     driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS);
     gov.run_periodic_tasks().now_or_never();
 
     // All the maturity should now be regular maturity
-    let neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
+    let neuron = gov
+        .neuron_store
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("Neuron not found");
     assert_eq!(neuron.maturity_e8s_equivalent, 54719555847781u64);
     assert_eq!(neuron.staked_maturity_e8s_equivalent, None);
 }
@@ -5763,7 +5780,6 @@ fn test_disburse_to_neuron() {
         nonce,
     );
 
-    let parent_neuron = gov.neuron_store.heap_neurons_mut().get_mut(&id.id).unwrap();
     let transaction_fee = gov
         .heap_data
         .economics
@@ -5771,34 +5787,42 @@ fn test_disburse_to_neuron() {
         .unwrap()
         .transaction_fee_e8s;
 
-    // Now Set the neuron to start dissolving
-    parent_neuron
-        .configure(
+    gov.with_neuron_mut(&id, |parent_neuron| {
+        // Now Set the neuron to start dissolving
+        parent_neuron.configure(
             &from,
             driver.now(),
             &Configure {
                 operation: Some(Operation::StartDissolving(StartDissolving {})),
             },
-        )
-        .unwrap();
+        )?;
+        Ok::<(), GovernanceError>(())
+    })
+    .expect("Could not find neuron")
+    .expect("Configure did not work");
+
     // Add a followee. Later, it is asserted that child neurons do not inherit this.
     {
-        let topic = Topic::Unspecified as i32;
-        assert!(
-            parent_neuron
-                .followees
-                .insert(topic, Followees { followees: vec![] })
-                .is_none(),
-            "{:#?}",
-            parent_neuron,
-        );
-        let followees = parent_neuron.followees.get_mut(&topic).unwrap();
-        followees.followees.push(NeuronId { id: 42 });
+        gov.with_neuron_mut(&id, |parent_neuron| {
+            let topic = Topic::Unspecified as i32;
+            assert!(
+                parent_neuron
+                    .followees
+                    .insert(topic, Followees { followees: vec![] })
+                    .is_none(),
+                "{:#?}",
+                parent_neuron,
+            );
+            let followees = parent_neuron.followees.get_mut(&topic).unwrap();
+            followees.followees.push(NeuronId { id: 42 });
+        })
+        .expect("Could not find neuron");
     }
 
     // Advance the time in the env
     driver.advance_time_by(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1);
 
+    let parent_neuron = gov.with_neuron(&id, |neuron| neuron.clone()).unwrap();
     // The neuron state should now be "Dissolved", meaning we can
     // now disburse the neuron.
     assert_eq!(
@@ -5832,7 +5856,9 @@ fn test_disburse_to_neuron() {
     let child_neuron = gov
         .get_neuron(&child_nid)
         .expect("The child neuron is missing");
-    let parent_neuron = gov.get_neuron(&id).expect("The parent neuron is missing");
+    let parent_neuron = gov
+        .with_neuron(&id, |neuron| neuron.clone())
+        .expect("The parent neuron is missing");
     let child_subaccount = child_neuron.account.clone();
 
     assert_eq!(
@@ -13024,54 +13050,6 @@ fn swap_start_and_due_timestamps_if_start_time_is_when_swap_approved() {
         start
     );
     assert_eq!(start + duration.seconds.unwrap(), due)
-}
-
-#[test]
-fn test_maybe_reset_aging_timestamps() {
-    fn neuron_with_aging_timestamp(id: u64, aging_since_timestamp_seconds: u64) -> Neuron {
-        Neuron {
-            id: Some(NeuronId { id }),
-            controller: Some(principal(id)),
-            aging_since_timestamp_seconds,
-            ..Default::default()
-        }
-    }
-    let proto = GovernanceProto {
-        wait_for_quiet_threshold_seconds: 100,
-        economics: Some(NetworkEconomics::with_default_values()),
-        neurons: btreemap! {
-            1 => neuron_with_aging_timestamp(1, 1_572_992_229), // Tue, 05 Nov 2019 22:17:09 GMT
-            2 => neuron_with_aging_timestamp(2, 1_572_992_230), // Tue, 05 Nov 2019 22:17:10 GMT
-            3 => neuron_with_aging_timestamp(3, 1_572_992_231), // Tue, 05 Nov 2019 22:17:11 GMT
-            4 => neuron_with_aging_timestamp(4, 1_620_328_630), // Thu, 06 May 2021 19:17:10 GMT (Genesis)
-            5 => neuron_with_aging_timestamp(5, 1_672_531_200), // Sun, 01 Jan 2023 00:00:00 GMT
-        },
-        ..Default::default()
-    };
-    let driver = fake::FakeDriver::default();
-    let mut gov = Governance::new(
-        proto,
-        driver.get_fake_env(),
-        driver.get_fake_ledger(),
-        driver.get_fake_cmc(),
-    );
-
-    gov.maybe_reset_aging_timestamps();
-
-    assert_eq!(
-        gov.neuron_store
-            .heap_neurons()
-            .iter()
-            .map(|(id, neuron)| (*id, neuron.aging_since_timestamp_seconds))
-            .collect::<HashMap<u64, u64>>(),
-        hashmap! {
-            1 => 1_620_328_630, // Thu, 06 May 2021 19:17:10 GMT (Genesis)
-            2 => 1_572_992_230, // Tue, 05 Nov 2019 22:17:10 GMT
-            3 => 1_572_992_231, // Tue, 05 Nov 2019 22:17:11 GMT
-            4 => 1_620_328_630, // Thu, 06 May 2021 19:17:10 GMT (Genesis)
-            5 => 1_672_531_200, // Sun, 01 Jan 2023 00:00:00 GMT
-        }
-    );
 }
 
 #[test]

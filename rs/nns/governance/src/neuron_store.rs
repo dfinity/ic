@@ -1,9 +1,44 @@
-use crate::{pb::v1::Neuron, storage::NEURON_INDEXES};
+use crate::{
+    pb::v1::{governance_error::ErrorType, GovernanceError, Neuron},
+    storage::NEURON_INDEXES,
+};
 use ic_nns_common::pb::v1::NeuronId;
 use std::collections::BTreeMap;
 
+#[derive(Debug)]
+pub enum NeuronStoreError {
+    NeuronNotFound(NeuronNotFound),
+}
+
+impl NeuronStoreError {
+    fn not_found(neuron_id: &NeuronId) -> Self {
+        NeuronStoreError::NeuronNotFound(NeuronNotFound {
+            neuron_id: *neuron_id,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct NeuronNotFound {
+    neuron_id: NeuronId,
+}
+
+impl From<NeuronStoreError> for GovernanceError {
+    fn from(value: NeuronStoreError) -> Self {
+        match value {
+            NeuronStoreError::NeuronNotFound(neuron_not_found) => {
+                GovernanceError::new_with_message(
+                    ErrorType::NotFound,
+                    format!("Neuron not found: {:?}", neuron_not_found.neuron_id),
+                )
+            }
+        }
+    }
+}
+
 /// This struct stores and provides access to all neurons within NNS Governance, which can live
 /// in either heap memory or stable memory.
+#[cfg_attr(test, derive(Clone, Debug, PartialEq))]
 pub struct NeuronStore {
     heap_neurons: BTreeMap<u64, Neuron>,
 }
@@ -52,10 +87,60 @@ impl NeuronStore {
         &self.heap_neurons
     }
 
-    /// Get a mutable reference to heap neurons.  Temporary method to allow
-    /// access to the heap neurons during transition to better data hiding.
-    pub fn heap_neurons_mut(&mut self) -> &mut BTreeMap<u64, Neuron> {
-        &mut self.heap_neurons
+    /// Private method - not intended to be used externally, as we want to over-time hide from
+    /// application logic the storage location of the neurons, and only expose operations that
+    /// can be done in a performant manner from here.
+    fn heap_neurons_filtered(&self, filter: impl Fn(&Neuron) -> bool) -> Vec<&Neuron> {
+        self.heap_neurons.values().filter(|n| filter(n)).collect()
+    }
+
+    fn heap_neuron_ids_filtered(&self, filter: impl Fn(&Neuron) -> bool) -> Vec<NeuronId> {
+        self.heap_neurons_filtered(filter)
+            .into_iter()
+            .flat_map(|n| n.id)
+            .collect()
+    }
+
+    /// List all neuron ids that are in the community fund.
+    pub fn list_community_fund_neuron_ids(&self) -> Vec<NeuronId> {
+        self.heap_neuron_ids_filtered(|n| {
+            n.joined_community_fund_timestamp_seconds
+                .unwrap_or_default()
+                > 0
+        })
+    }
+
+    /// List all neuron ids whose neurons have staked maturity greater than 0.
+    pub fn list_staked_maturity_neuron_ids(&self) -> Vec<NeuronId> {
+        self.heap_neuron_ids_filtered(|n| n.staked_maturity_e8s_equivalent.unwrap_or_default() > 0)
+    }
+
+    /// Execute a function with a mutable reference to a neuron, returning the result of the function,
+    /// unless the neuron is not found
+    pub fn with_neuron_mut<R>(
+        &mut self,
+        nid: &NeuronId,
+        f: impl FnOnce(&mut Neuron) -> R,
+    ) -> Result<R, NeuronStoreError> {
+        let neuron = self
+            .heap_neurons
+            .get_mut(&nid.id)
+            .ok_or_else(|| NeuronStoreError::not_found(nid))?;
+        Ok(f(neuron))
+    }
+
+    /// Execute a function with a reference to a neuron, returning the result of the function,
+    /// unless the neuron is not found
+    pub fn with_neuron<R>(
+        &self,
+        nid: &NeuronId,
+        f: impl FnOnce(&Neuron) -> R,
+    ) -> Result<R, GovernanceError> {
+        let neuron = self
+            .heap_neurons
+            .get(&nid.id)
+            .ok_or_else(|| NeuronStoreError::not_found(nid))?;
+        Ok(f(neuron))
     }
 
     /// For heap neurons starting from `last_neuron_id + 1` where `last_neuron_id` is the last neuron id that has been

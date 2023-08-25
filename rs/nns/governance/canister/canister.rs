@@ -371,10 +371,6 @@ fn canister_post_upgrade() {
     };
 
     canister_init_(proto);
-
-    // TODO: remove this after the incident is fully resolved.
-    // Reset aging timestamps for https://forum.dfinity.org/t/icp-neuron-age-is-52-years/21261/26
-    governance_mut().maybe_reset_aging_timestamps()
 }
 
 #[cfg(feature = "test")]

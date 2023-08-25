@@ -1,5 +1,4 @@
 use crate::{
-    audit_event::add_audit_event,
     governance::manage_neuron_request::{
         execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
     },
@@ -1866,21 +1865,11 @@ impl Governance {
         nid: &NeuronId,
         modifier: impl FnOnce(&mut Neuron) -> R,
     ) -> Result<R, GovernanceError> {
-        let neuron = self
-            .neuron_store
-            .heap_neurons_mut()
-            .get_mut(&nid.id)
-            .ok_or_else(|| Self::neuron_not_found_error(nid))?;
-        Ok(modifier(neuron))
+        Ok(self.neuron_store.with_neuron_mut(nid, modifier)?)
     }
 
     pub fn list_heap_neurons(&self) -> impl Iterator<Item = &Neuron> {
         self.neuron_store.heap_neurons().values()
-    }
-
-    // TODO remove this function once we add pattern for this in NeuronStore
-    pub fn list_heap_neurons_mut(&mut self) -> impl Iterator<Item = &mut Neuron> {
-        self.neuron_store.heap_neurons_mut().values_mut()
     }
 
     // The following functions should be deprecated before migrating any neuron to stable storage
@@ -4472,7 +4461,7 @@ impl Governance {
             .clone();
 
         let cf_participants = draw_funds_from_the_community_fund(
-            self.neuron_store.heap_neurons_mut(),
+            &mut self.neuron_store,
             original_total_community_fund_maturity_e8s_equivalent,
             open_sns_token_swap
                 .community_fund_investment_e8s
@@ -4486,10 +4475,8 @@ impl Governance {
                 proposal_data.cf_participants = cf_participants.clone();
             }
             None => {
-                let failed_refunds = refund_community_fund_maturity(
-                    self.neuron_store.heap_neurons_mut(),
-                    &cf_participants,
-                );
+                let failed_refunds =
+                    refund_community_fund_maturity(&mut self.neuron_store, &cf_participants);
                 self.set_proposal_execution_status(
                     proposal_id,
                     Err(GovernanceError::new_with_message(
@@ -4528,10 +4515,8 @@ impl Governance {
             .await;
 
         if let Err(err) = result {
-            let failed_refunds = refund_community_fund_maturity(
-                self.neuron_store.heap_neurons_mut(),
-                &cf_participants,
-            );
+            let failed_refunds =
+                refund_community_fund_maturity(&mut self.neuron_store, &cf_participants);
 
             self.set_proposal_execution_status(proposal_id, Err(GovernanceError::new_with_message(
                 ErrorType::External,
@@ -4558,7 +4543,7 @@ impl Governance {
             LOG_PREFIX, proposal_id,
         );
         let failed_refunds =
-            refund_community_fund_maturity(self.neuron_store.heap_neurons_mut(), &cf_participants);
+            refund_community_fund_maturity(&mut self.neuron_store, &cf_participants);
         let result = Err(GovernanceError::new_with_message(
             ErrorType::NotFound,
             format!(
@@ -4667,7 +4652,7 @@ impl Governance {
             ))?;
 
         let neurons_fund_participants = draw_funds_from_the_community_fund(
-            self.neuron_store.heap_neurons_mut(),
+            &mut self.neuron_store,
             original_total_community_fund_maturity_e8s_equivalent,
             withdrawal_amount_e8s,
             &sns_swap_pb::Params {
@@ -4685,7 +4670,7 @@ impl Governance {
             }
             None => {
                 let failed_refunds = refund_community_fund_maturity(
-                    self.neuron_store.heap_neurons_mut(),
+                    &mut self.neuron_store,
                     &neurons_fund_participants,
                 );
                 return Err(GovernanceError::new_with_message(
@@ -4829,7 +4814,7 @@ impl Governance {
 
         if deploy_new_sns_response.error.is_some() {
             let failed_refunds = refund_community_fund_maturity(
-                self.neuron_store.heap_neurons_mut(),
+                &mut self.neuron_store,
                 &executed_create_service_nervous_system_proposal.neurons_fund_participants,
             );
 
@@ -5654,7 +5639,7 @@ impl Governance {
         let original_total_community_fund_maturity_e8s_equivalent = match proposal.action {
             Some(Action::OpenSnsTokenSwap(_)) | Some(Action::CreateServiceNervousSystem(_)) => {
                 Some(total_community_fund_maturity_e8s_equivalent(
-                    self.neuron_store.heap_neurons(),
+                    &self.neuron_store,
                 ))
             }
             _ => None,
@@ -5703,7 +5688,7 @@ impl Governance {
             Vote::Yes,
             topic,
             &self.topic_followee_index,
-            self.neuron_store.heap_neurons_mut(),
+            &mut self.neuron_store,
         );
         // Finally, add this proposal as an open proposal.
         self.insert_proposal(proposal_num, info);
@@ -5724,7 +5709,7 @@ impl Governance {
         vote_of_neuron: Vote,
         topic: Topic,
         topic_followee_index: &impl NeuronFollowingIndex<NeuronId, Topic>,
-        neurons: &mut BTreeMap<u64, Neuron>,
+        neuron_store: &mut NeuronStore,
     ) {
         assert!(topic != Topic::NeuronManagement && topic != Topic::Unspecified);
         // This is the induction variable of the loop: a map from
@@ -5743,11 +5728,11 @@ impl Governance {
                 if let Some(k_ballot) = ballots.get_mut(&k.id) {
                     // Neuron with ID k is eligible to vote.
                     if k_ballot.vote == (Vote::Unspecified as i32) {
-                        if let Some(k_neuron) = neurons.get_mut(&k.id) {
-                            // Only update a vote if it was previously
-                            // unspecified. Following can trigger votes
-                            // for neurons that have already voted
-                            // (manually) and we don't change these votes.
+                        // Only update a vote if it was previously
+                        // unspecified. Following can trigger votes
+                        // for neurons that have already voted
+                        // (manually) and we don't change these votes.
+                        match neuron_store.with_neuron_mut(&NeuronId { id: k.id }, |k_neuron| {
                             k_ballot.vote = *v as i32;
                             // Register the neuron's ballot in the
                             // neuron itself.
@@ -5777,12 +5762,16 @@ impl Governance {
                                     ),
                                 );
                             }
-                        } else {
-                            // The voting neuron not found in the
-                            // neurons table. This is a bad
-                            // inconsistency, but there is nothing
-                            // that can be done about it at this
-                            // place.
+                        }) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                // The voting neuron not found in the
+                                // neurons table. This is a bad
+                                // inconsistency, but there is nothing
+                                // that can be done about it at this
+                                // place.
+                                eprintln!("error in cast_vote_and_cascade_follow when attempting to cast ballot: {:?}", e);
+                            }
                         }
                     }
                 } else {
@@ -5796,14 +5785,23 @@ impl Governance {
             // new set now.
             induction_votes.clear();
             for f in all_followers.iter() {
-                if let Some(f_neuron) = neurons.get(&f.id) {
-                    let f_vote = f_neuron.would_follow_ballots(topic, ballots);
-                    if f_vote != Vote::Unspecified {
-                        // f_vote is yes or no, i.e., f_neuron's
-                        // followee relations indicates that it should
-                        // vote now.
-                        induction_votes.insert(*f, f_vote);
+                let f_vote = match neuron_store.with_neuron(&NeuronId { id: f.id }, |n| {
+                    n.would_follow_ballots(topic, ballots)
+                }) {
+                    Ok(vote) => vote,
+                    Err(e) => {
+                        // This is a bad inconsistency, but there is
+                        // nothing that can be done about it at this
+                        // place.  We somehow have followers recorded that don't exist.
+                        eprintln!("error in cast_vote_and_cascade_follow when gathering induction votes: {:?}", e);
+                        Vote::Unspecified
                     }
+                };
+                if f_vote != Vote::Unspecified {
+                    // f_vote is yes or no, i.e., f_neuron's
+                    // followee relations indicates that it should
+                    // vote now.
+                    induction_votes.insert(*f, f_vote);
                 }
             }
             // If induction_votes is empty, the loop will terminate
@@ -5931,7 +5929,7 @@ impl Governance {
                 vote,
                 topic,
                 &self.topic_followee_index,
-                self.neuron_store.heap_neurons_mut(),
+                &mut self.neuron_store,
             );
         }
 
@@ -6629,7 +6627,7 @@ impl Governance {
             self.spawn_neurons().await;
         }
 
-        self.maybe_move_staked_maturity();
+        self.unstake_maturity_of_dissolved_neurons();
         self.maybe_gc();
     }
 
@@ -6669,18 +6667,22 @@ impl Governance {
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
     /// which can be spawned (and is modulated).
-    fn maybe_move_staked_maturity(&mut self) {
+    fn unstake_maturity_of_dissolved_neurons(&mut self) {
         let now_seconds = self.env.now();
         // Filter all the neurons that are currently in "dissolved" state and have some staked maturity.
         // No neuron in stable storage should have staked maturity.
-        for neuron in self.list_heap_neurons_mut().filter(|n| {
-            n.state(now_seconds) == NeuronState::Dissolved
-                && n.staked_maturity_e8s_equivalent.unwrap_or(0) > 0
-        }) {
-            neuron.maturity_e8s_equivalent = neuron
-                .maturity_e8s_equivalent
-                .saturating_add(neuron.staked_maturity_e8s_equivalent.unwrap_or(0));
-            neuron.staked_maturity_e8s_equivalent = None;
+        for nid in self.neuron_store.list_staked_maturity_neuron_ids() {
+            match self.neuron_store.with_neuron_mut(&nid, |neuron| {
+                neuron.unstake_maturity_if_dissolved(now_seconds)
+            }) {
+                Ok(_) => {}
+                Err(e) => {
+                    println!(
+                        "{}Error in heartbeat when moving staked maturity for neuron {:?}: {:?}",
+                        LOG_PREFIX, nid, e
+                    );
+                }
+            };
         }
     }
 
@@ -7227,7 +7229,7 @@ impl Governance {
 
             settle_community_fund_participation::Result::Aborted(_aborted) => {
                 let missing_neurons = refund_community_fund_maturity(
-                    self.neuron_store.heap_neurons_mut(),
+                    &mut self.neuron_store,
                     &proposal_data.cf_participants,
                 );
                 if !missing_neurons.is_empty() {
@@ -7321,22 +7323,6 @@ impl Governance {
             )),
             Some(m) => Ok(m.clone()),
         }
-    }
-
-    pub fn maybe_reset_aging_timestamps(&mut self) {
-        let mut reset_count = 0;
-        let now = self.env.now();
-        // This should be cleaned up before migrating neurons.
-        for neuron in self.list_heap_neurons_mut() {
-            if let Some(event) = neuron.maybe_reset_aging_timestamp(now) {
-                reset_count += 1;
-                add_audit_event(event);
-            }
-        }
-        println!(
-            "Successfully reset aging timestamps for {} neurons",
-            reset_count
-        );
     }
 
     /// Picks a value at random in [00:00, 23:45] that is a multiple of 15
@@ -7547,16 +7533,11 @@ pub fn validate_proposal_url(url: &String) -> Result<(), String> {
 /// Returns the amount of maturity held by all Community Fund neurons
 /// (i.e. neurons with joined_community_fund_timestamp_seconds > 0).
 #[must_use]
-fn total_community_fund_maturity_e8s_equivalent(id_to_neuron: &BTreeMap<u64, Neuron>) -> u64 {
-    id_to_neuron
-        .values()
-        .filter(|neuron| {
-            neuron
-                .joined_community_fund_timestamp_seconds
-                .unwrap_or_default()
-                > 0
-        })
-        .map(|neuron| neuron.maturity_e8s_equivalent)
+fn total_community_fund_maturity_e8s_equivalent(neuron_store: &NeuronStore) -> u64 {
+    neuron_store
+        .list_community_fund_neuron_ids()
+        .iter()
+        .flat_map(|nid| neuron_store.with_neuron(nid, |neuron| neuron.maturity_e8s_equivalent))
         .sum()
 }
 
@@ -7583,7 +7564,7 @@ fn community_fund_total_joined_neurons(neuron_store: &NeuronStore) -> u64 {
 /// value, which can be used as part of an OpenRequest sent to a SNS token
 /// swap canister.
 fn draw_funds_from_the_community_fund(
-    id_to_neuron: &mut BTreeMap<u64, Neuron>,
+    neuron_store: &mut NeuronStore,
     original_total_community_fund_maturity_e8s_equivalent: u64,
     mut withdrawal_amount_e8s: u64,
     limits: &sns_swap_pb::Params,
@@ -7592,7 +7573,7 @@ fn draw_funds_from_the_community_fund(
         return vec![];
     }
 
-    let total_cf_maturity_e8s = total_community_fund_maturity_e8s_equivalent(id_to_neuron);
+    let total_cf_maturity_e8s = total_community_fund_maturity_e8s_equivalent(neuron_store);
     if total_cf_maturity_e8s == 0 {
         return vec![];
     }
@@ -7626,71 +7607,75 @@ fn draw_funds_from_the_community_fund(
     // maturity. Because we round down, there will almost certainly be some
     // short changing going on here. We could try to "fully top up", but it
     // doesn't seem worth the extra complexity, at least not for the time being.
+
+    let cf_neuron_ids = neuron_store.list_community_fund_neuron_ids();
     let mut principal_id_to_cf_neurons = HashMap::<PrincipalId, Vec<sns_swap_pb::CfNeuron>>::new();
     let mut captured_withdrawal_amount_e8s = 0;
-    for neuron in id_to_neuron.values_mut() {
-        let not_cf = neuron
-            .joined_community_fund_timestamp_seconds
-            .unwrap_or_default()
-            == 0;
-        if not_cf {
-            continue;
-        }
+    for nid in cf_neuron_ids {
+        match neuron_store.with_neuron_mut(&nid, |neuron| {
+            // Make the current neuron's contribution proportional to its maturity.
+            let neuron_contribution_e8s = (withdrawal_amount_e8s as u128)
+                .saturating_mul(neuron.maturity_e8s_equivalent as u128)
+                .saturating_div(total_cf_maturity_e8s as u128);
 
-        // Make the current neuron's contribution proportional to its maturity.
-        let neuron_contribution_e8s = (withdrawal_amount_e8s as u128)
-            .saturating_mul(neuron.maturity_e8s_equivalent as u128)
-            .saturating_div(total_cf_maturity_e8s as u128);
-        assert!(
-            neuron_contribution_e8s < (u64::MAX as u128),
-            "{}",
-            neuron_contribution_e8s
-        );
-        let mut neuron_contribution_e8s = neuron_contribution_e8s as u64;
-
-        // Skip neurons that are too small. This can cause significant short
-        // changing, much more so than rounding down.
-        if neuron_contribution_e8s < limits.min_participant_icp_e8s {
-            println!(
-                "{}WARNING: Neuron {:?} is does not have enough maturity to participate \
-                 in the current Community Fund investment.",
-                LOG_PREFIX, &neuron.id,
+            assert!(
+                neuron_contribution_e8s < (u64::MAX as u128),
+                "{}",
+                neuron_contribution_e8s
             );
-            continue;
-        }
+            let mut neuron_contribution_e8s = neuron_contribution_e8s as u64;
 
-        // On the other extreme, don't let big CF neurons contribute too much
-        // (by capping instead of skipping).
-        if neuron_contribution_e8s > limits.max_participant_icp_e8s {
-            let diff = neuron_contribution_e8s - limits.max_participant_icp_e8s;
-            println!(
-                "{}WARNING: Neuron {:?} has too much maturity to fully participate \
+            // Skip neurons that are too small. This can cause significant short
+            // changing, much more so than rounding down.
+            if neuron_contribution_e8s < limits.min_participant_icp_e8s {
+                println!(
+                    "{}WARNING: Neuron {:?} is does not have enough maturity to participate \
+                 in the current Community Fund investment.",
+                    LOG_PREFIX, &neuron.id,
+                );
+                return;
+            }
+
+            // On the other extreme, don't let big CF neurons contribute too much
+            // (by capping instead of skipping).
+            if neuron_contribution_e8s > limits.max_participant_icp_e8s {
+                let diff = neuron_contribution_e8s - limits.max_participant_icp_e8s;
+                println!(
+                    "{}WARNING: Neuron {:?} has too much maturity to fully participate \
                  in the current SNS token swap. Therefore, its participation is \
                  being capped from {} to {} (a difference of {} or {}%).",
-                LOG_PREFIX,
-                &neuron.id,
-                neuron_contribution_e8s,
-                limits.max_participant_icp_e8s,
-                diff,
-                (diff as f64) / (neuron_contribution_e8s as f64),
-            );
-            neuron_contribution_e8s = limits.max_participant_icp_e8s;
+                    LOG_PREFIX,
+                    &neuron.id,
+                    neuron_contribution_e8s,
+                    limits.max_participant_icp_e8s,
+                    diff,
+                    (diff as f64) / (neuron_contribution_e8s as f64),
+                );
+                neuron_contribution_e8s = limits.max_participant_icp_e8s;
+            }
+
+            // Create a record of this contribution.
+            principal_id_to_cf_neurons
+                .entry(neuron.controller.expect("Neuron has no controller."))
+                .or_insert_with(Vec::new)
+                .push(sns_swap_pb::CfNeuron {
+                    nns_neuron_id: neuron.id.as_ref().expect("Neuron lacks an id.").id,
+                    amount_icp_e8s: neuron_contribution_e8s,
+                });
+
+            // Deduct contribution from maturity.
+            neuron.maturity_e8s_equivalent -= neuron_contribution_e8s;
+
+            // Update running total.
+            captured_withdrawal_amount_e8s += neuron_contribution_e8s;
+        }) {
+            Ok(_) => {
+                // Nothing to do, neuron was found and nothing went wrong.
+            }
+            Err(e) => {
+                eprintln!("Error in finding CF neuron listed by NeuronStore.list_community_fund_neuron_ids: {:?}", e);
+            }
         }
-
-        // Create a record of this contribution.
-        principal_id_to_cf_neurons
-            .entry(neuron.controller.expect("Neuron has no controller."))
-            .or_insert_with(Vec::new)
-            .push(sns_swap_pb::CfNeuron {
-                nns_neuron_id: neuron.id.as_ref().expect("Neuron lacks an id.").id,
-                amount_icp_e8s: neuron_contribution_e8s,
-            });
-
-        // Deduct contribution from maturity.
-        neuron.maturity_e8s_equivalent -= neuron_contribution_e8s;
-
-        // Update running total.
-        captured_withdrawal_amount_e8s += neuron_contribution_e8s;
     }
 
     // Convert principal_id_to_cf_neurons to the return type.
@@ -7735,7 +7720,7 @@ fn draw_funds_from_the_community_fund(
 /// caller might not want to make.
 #[must_use]
 fn refund_community_fund_maturity(
-    id_to_neuron: &mut BTreeMap<u64, Neuron>,
+    neuron_store: &mut NeuronStore,
     cf_participants: &Vec<sns_swap_pb::CfParticipant>,
 ) -> Vec<sns_swap_pb::CfParticipant> {
     let mut result = vec![];
@@ -7747,16 +7732,20 @@ fn refund_community_fund_maturity(
         };
 
         for cf_neuron in &original_cf_participant.cf_neurons {
-            match id_to_neuron.get_mut(&cf_neuron.nns_neuron_id) {
-                Some(nns_neuron) => {
-                    nns_neuron.maturity_e8s_equivalent += cf_neuron.amount_icp_e8s;
-                    continue;
-                }
-                None => {
+            let cf_neuron_id = NeuronId {
+                id: cf_neuron.nns_neuron_id,
+            };
+            let update_result = neuron_store.with_neuron_mut(&cf_neuron_id, |nns_neuron| {
+                nns_neuron.maturity_e8s_equivalent += cf_neuron.amount_icp_e8s;
+            });
+            match update_result {
+                Ok(_) => continue,
+                Err(e) => {
                     println!(
                         "{}WARNING: Refunding CF maturity is not proceeding cleanly, \
-                         because a neuron has disappeared in the meantime. cf_neuron = {:#?}",
-                        LOG_PREFIX, cf_neuron,
+                         because a neuron has disappeared in the meantime. cf_neuron = {:#?}. \
+                         NeuronStore error: {:?}",
+                        LOG_PREFIX, cf_neuron, e
                     );
                     failed_cf_participant.cf_neurons.push(cf_neuron.clone());
                 }
