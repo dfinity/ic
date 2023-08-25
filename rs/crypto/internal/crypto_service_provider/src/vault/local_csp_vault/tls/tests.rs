@@ -408,20 +408,25 @@ mod sign {
     use crate::vault::api::TlsHandshakeCspVault;
     use crate::vault::test_utils::ed25519_csp_pubkey_from_tls_pubkey_cert;
     use crate::Csp;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::AlgorithmId;
-    use rand::Rng;
+    use rand::{CryptoRng, Rng, SeedableRng};
+    use rand_chacha::ChaCha20Rng;
 
     const NOT_AFTER: &str = "99991231235959Z";
     #[test]
     fn should_sign_with_valid_key() {
-        let csp_vault = LocalCspVault::builder_for_test().build();
+        let rng = &mut reproducible_rng();
+        let csp_vault = LocalCspVault::builder_for_test()
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .build();
         let public_key_cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
 
         assert!(csp_vault
             .tls_sign(
-                &random_message(),
+                &random_message(rng),
                 &KeyId::try_from(&public_key_cert).expect("Cannot instantiate KeyId")
             )
             .is_ok());
@@ -429,12 +434,15 @@ mod sign {
 
     #[test]
     fn should_sign_verifiably() {
-        let csp_vault = LocalCspVault::builder_for_test().build();
+        let rng = &mut reproducible_rng();
+        let csp_vault = LocalCspVault::builder_for_test()
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .build();
         let verifier = Csp::builder_for_test().build();
         let public_key_cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("Generation of TLS keys failed.");
-        let msg = random_message();
+        let msg = random_message(rng);
 
         let sig = csp_vault
             .tls_sign(
@@ -466,11 +474,14 @@ mod sign {
 
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
-        let csp_vault = LocalCspVault::builder_for_test().build();
+        let rng = &mut reproducible_rng();
+        let csp_vault = LocalCspVault::builder_for_test()
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .build();
         let wrong_csp_pub_key = csp_vault
             .gen_node_signing_key_pair()
             .expect("failed to generate keys");
-        let msg = random_message();
+        let msg = random_message(rng);
 
         let result = csp_vault.tls_sign(&msg, &KeyId::try_from(&wrong_csp_pub_key).unwrap());
 
@@ -485,14 +496,16 @@ mod sign {
 
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_encoding() {
+        let rng = &mut reproducible_rng();
         let key_id = KeyId::from([42; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_encoding(key_id);
         let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
             .build();
 
         assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
-        let result = csp_vault.tls_sign(&random_message(), &key_id);
+        let result = csp_vault.tls_sign(&random_message(rng), &key_id);
         assert_eq!(
             result.expect_err("Unexpected success."),
             CspTlsSignError::MalformedSecretKey {
@@ -504,15 +517,17 @@ mod sign {
 
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length() {
+        let rng = &mut reproducible_rng();
         use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_length;
 
         let key_id = KeyId::from([43; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_length(key_id);
         let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
+            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
             .build();
 
-        let result = csp_vault.tls_sign(&random_message(), &key_id);
+        let result = csp_vault.tls_sign(&random_message(rng), &key_id);
         assert_eq!(
             result.expect_err("Unexpected success."),
             CspTlsSignError::MalformedSecretKey {
@@ -522,9 +537,7 @@ mod sign {
         );
     }
 
-    fn random_message() -> Vec<u8> {
-        use rand::thread_rng;
-        let mut rng = thread_rng();
+    fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
         let msg_len: usize = rng.gen_range(0..1024);
         (0..msg_len).map(|_| rng.gen::<u8>()).collect()
     }
