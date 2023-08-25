@@ -5687,6 +5687,7 @@ dependencies = [
 name = "ic-ckbtc-minter"
 version = "0.1.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "bech32 0.9.1",
  "bitcoin 0.28.2",

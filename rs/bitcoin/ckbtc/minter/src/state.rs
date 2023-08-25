@@ -347,6 +347,24 @@ pub struct CkBtcMinterState {
 
     /// UTXOs that the KYT provider considered tainted.
     pub quarantined_utxos: BTreeSet<Utxo>,
+
+    /// Map from burn block index to amount to reimburse because of
+    /// KYT fees.
+    pub reimbursement_map: BTreeMap<u64, ReimburseDepositTask>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+pub struct ReimburseDepositTask {
+    pub account: Account,
+    pub amount: u64,
+    pub kyt_fee: u64,
+    pub reason: ReimbursementReason,
+}
+
+#[derive(Debug, Deserialize, Eq, PartialEq, Clone, Serialize, candid::CandidType, Copy)]
+pub enum ReimbursementReason {
+    TaintedDestination,
+    CallFailed,
 }
 
 impl CkBtcMinterState {
@@ -1106,6 +1124,7 @@ impl From<InitArgs> for CkBtcMinterState {
             checked_utxos: Default::default(),
             ignored_utxos: Default::default(),
             quarantined_utxos: Default::default(),
+            reimbursement_map: Default::default(),
         }
     }
 }

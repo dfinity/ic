@@ -3,13 +3,18 @@ type Account = record { owner : principal; subaccount : opt blob };
 
 type RetrieveBtcArgs = record {
     // The address to which the ckBTC minter should deposit BTC.
-    // Currently, the minter understands only the following types of addresses:
-    //   * P2WPKH addresses (they start with the "bc1q" prefix on the Bitcoin mainnet).
-    //   * P2PKH addresses (they start with the "1" prefix on the Bitcoin mainnet).
-    //   * P2SH addresses (they start with the "3" prefix on the Bitcoin mainnet).
     address : text;
     // The amount of BTC in Satoshis that the client wants to withdraw.
     amount : nat64;
+};
+
+type RetrieveBtcWithApprovalArgs = record {
+    // The address to which the ckBTC minter should deposit BTC.
+    address : text;
+    // The amount of BTC in Satoshis that the client wants to withdraw.
+    amount : nat64;
+    // The subaccount to burn ckBTC from.
+    from_subaccount : opt blob;
 };
 
 type RetrieveBtcError = variant {
@@ -23,6 +28,26 @@ type RetrieveBtcError = variant {
     AmountTooLow : nat64;
     // The ckBTC balance of the withdrawal account is too low.
     InsufficientFunds : record { balance : nat64 };
+    // The minter is overloaded, retry the request.
+    // The payload contains a human-readable message explaining what caused the unavailability.
+    TemporarilyUnavailable : text;
+    // A generic error reserved for future extensions.
+    GenericError : record { error_message : text; error_code : nat64 };
+};
+
+type RetrieveBtcWithApprovalError = variant {
+    // The minter failed to parse the destination address.
+    MalformedAddress : text;
+    // The minter is already processing another retrieval request for the same
+    // principal.
+    AlreadyProcessing;
+    // The withdrawal amount is too low.
+    // The payload contains the minimal withdrawal amount.
+    AmountTooLow : nat64;
+    // The ckBTC balance of the withdrawal account is too low.
+    InsufficientFunds : record { balance : nat64 };
+    // The allowance given to the minter is too low.
+    InsufficientAllowance : record { allowance : nat64 };
     // The minter is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
     TemporarilyUnavailable : text;
@@ -201,6 +226,8 @@ type MinterInfo = record {
     kyt_fee : nat64;
 };
 
+type ReimbursementReason = variant { CallFailed; TaintedDestination };
+
 type Event = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
@@ -248,6 +275,14 @@ type Event = variant {
         uuid : text;
         block_index : nat64;
     };
+    schedule_deposit_reimbursement : record {
+        kyt_fee : nat64;
+        account : Account;
+        burn_block_index : nat64;
+        amount : nat64;
+        reason : ReimbursementReason;
+    };
+    reimbursed_failed_deposit : record { burn_block_index : nat64 };
 };
 
 type MinterArg = variant {
@@ -305,6 +340,21 @@ service : (minter_arg : MinterArg) -> {
     // * The caller deposited the requested amount in ckBTC to the account
     //   that the [get_withdrawal_account] endpoint returns.
     retrieve_btc : (RetrieveBtcArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcError });
+
+    // Submits a request to convert ckBTC to BTC.
+    //
+    // # Note
+    //
+    // The BTC retrieval process is slow.  Instead of
+    // synchronously waiting for a BTC transaction to settle, this
+    // method returns a request ([block_index]) that the caller can use
+    // to query the request status.
+    //
+    // # Preconditions
+    //
+    // * The caller allowed the minter's principal to spend its funds
+    //   using [icrc2_approve] on the ckBTC ledger.
+    retrieve_btc_with_approval : (RetrieveBtcArgs) -> (variant { Ok : RetrieveBtcOk; Err : RetrieveBtcWithApprovalError });
 
     /// Returns the status of a [retrieve_btc] request.
     retrieve_btc_status : (record { block_index : nat64 }) -> (RetrieveBtcStatus) query;
