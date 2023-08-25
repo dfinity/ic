@@ -1,14 +1,18 @@
+use std::default::Default;
+use std::str::FromStr;
+
 use crate::mutations::common::encode_or_panic;
 use crate::{common::LOG_PREFIX, mutations::common::decode_registry_value, registry::Registry};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::{
     node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
     make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
     make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
-    FirewallRulesScope,
+    FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
 };
 use ic_registry_transport::pb::v1::{RegistryMutation, RegistryValue};
 use ic_registry_transport::{delete, insert, update};
@@ -189,4 +193,44 @@ pub fn make_remove_node_registry_mutations(
         .collect::<Vec<_>>();
 
     mutations
+}
+
+/// Scan through the registry, returning a list of any nodes with the given IP.
+pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
+    get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
+        .into_iter()
+        .filter_map(|(k, v)| {
+            v.http.and_then(|v| {
+                (v.ip_addr == ip_addr).then(|| NodeId::from(PrincipalId::from_str(&k).unwrap()))
+            })
+        })
+        .collect()
+}
+
+/// Similar to `get_key_family` on the `RegistryClient`, return a list of
+/// tuples, (ID, value).
+fn get_key_family<T: prost::Message + Default>(
+    registry: &Registry,
+    prefix: &str,
+) -> Vec<(String, T)> {
+    registry
+        .store
+        .iter()
+        // Get the most recent value for all keys that start with this prefix...
+        .filter(|(k, _)| k.starts_with(prefix.as_bytes()))
+        .map(|(k, v)| (k, v.back().unwrap()))
+        // ...skipping any that have been deleted...
+        .filter(|(_, v)| !v.deletion_marker)
+        // ...and repack them into a tuple of (ID, value).
+        .map(|(k, v)| {
+            let id = k
+                .strip_prefix(prefix.as_bytes())
+                .and_then(|v| std::str::from_utf8(v).ok())
+                .unwrap()
+                .to_string();
+            let value = decode_or_panic::<T>(v.value.clone());
+
+            (id, value)
+        })
+        .collect()
 }
