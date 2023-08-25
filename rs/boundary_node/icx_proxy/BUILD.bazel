@@ -19,7 +19,6 @@ DEPENDENCIES = [
     "@crate_index//:itertools",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
-    "@crate_index//:lazy-regex",
     "@crate_index//:opentelemetry_0_20_0_metrics",
     "@crate_index//:opentelemetry_prometheus_0_13_0",
     "@crate_index//:prometheus",

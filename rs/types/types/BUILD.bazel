@@ -15,15 +15,11 @@ DEPENDENCIES = [
     "//rs/types/error_types",
     "//rs/types/ic00_types",
     "//rs/utils",
-    "@crate_index//:base32",
     "@crate_index//:base64",
     "@crate_index//:bincode",
-    "@crate_index//:byte-unit",
     "@crate_index//:candid",
     "@crate_index//:hex",
-    "@crate_index//:http",
     "@crate_index//:maplit",
-    "@crate_index//:num-traits",
     "@crate_index//:once_cell",
     "@crate_index//:prost",
     "@crate_index//:serde",
@@ -34,13 +30,11 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:thiserror",
     "@crate_index//:thousands",
-    "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/crypto/test_utils/canister_threshold_sigs",
-    "@crate_index//:anyhow",
     "@crate_index//:assert_matches",
     "@crate_index//:hex-literal",
     "@crate_index//:pretty_assertions",

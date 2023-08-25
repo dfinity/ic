@@ -10,7 +10,6 @@ DEPENDENCIES = [
     "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:httptest",
-    "@crate_index//:humantime",
     "@crate_index//:mockall",
     "@crate_index//:nix",
     "@crate_index//:opentelemetry_0_20_0_metrics",
