@@ -20,7 +20,7 @@ use std::{
 
 pub enum SubnetCallContext {
     SetupInitialDKG(SetupInitialDkgContext),
-    SignWithEcsda(SignWithEcdsaContext),
+    SignWithEcdsa(SignWithEcdsaContext),
     CanisterHttpRequest(CanisterHttpRequestContext),
     EcdsaDealings(EcdsaDealingsContext),
     BitcoinGetSuccessors(BitcoinGetSuccessorsContext),
@@ -31,7 +31,7 @@ impl SubnetCallContext {
     pub fn get_request(&self) -> &Request {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => &context.request,
-            SubnetCallContext::SignWithEcsda(context) => &context.request,
+            SubnetCallContext::SignWithEcdsa(context) => &context.request,
             SubnetCallContext::CanisterHttpRequest(context) => &context.request,
             SubnetCallContext::EcdsaDealings(context) => &context.request,
             SubnetCallContext::BitcoinGetSuccessors(context) => &context.request,
@@ -42,7 +42,7 @@ impl SubnetCallContext {
     pub fn get_time(&self) -> Time {
         match &self {
             SubnetCallContext::SetupInitialDKG(context) => context.time,
-            SubnetCallContext::SignWithEcsda(context) => context.batch_time,
+            SubnetCallContext::SignWithEcdsa(context) => context.batch_time,
             SubnetCallContext::CanisterHttpRequest(context) => context.time,
             SubnetCallContext::EcdsaDealings(context) => context.time,
             SubnetCallContext::BitcoinGetSuccessors(context) => context.time,
@@ -204,7 +204,7 @@ impl SubnetCallContextManager {
             SubnetCallContext::SetupInitialDKG(context) => {
                 self.setup_initial_dkg_contexts.insert(callback_id, context);
             }
-            SubnetCallContext::SignWithEcsda(context) => {
+            SubnetCallContext::SignWithEcdsa(context) => {
                 self.sign_with_ecdsa_contexts.insert(callback_id, context);
             }
             SubnetCallContext::CanisterHttpRequest(context) => {
@@ -252,7 +252,7 @@ impl SubnetCallContextManager {
                             context.pseudo_random_id,
                             context.request.sender
                         );
-                        SubnetCallContext::SignWithEcsda(context)
+                        SubnetCallContext::SignWithEcdsa(context)
                     })
             })
             .or_else(|| {
