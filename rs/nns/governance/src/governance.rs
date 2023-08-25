@@ -1795,32 +1795,6 @@ impl Governance {
         self.economics().transaction_fee_e8s
     }
 
-    /// Generates a new, unused, nonzero NeuronId.
-    fn new_neuron_id(&mut self) -> NeuronId {
-        loop {
-            let id = self
-                .env
-                .random_u64()
-                // Let there be no question that id was chosen
-                // intentionally, not just 0 by default.
-                .saturating_add(1);
-            let neuron_id = NeuronId { id };
-
-            let is_unique = !self.contains_neuron(neuron_id);
-
-            if is_unique {
-                return neuron_id;
-            }
-
-            println!(
-                "{}WARNING: A suspiciously near-impossible event has just occurred: \
-                 we randomly picked a NeuronId, but it's already used: \
-                 {:?}. Trying again...",
-                LOG_PREFIX, neuron_id,
-            );
-        }
-    }
-
     fn neuron_not_found_error(nid: &NeuronId) -> GovernanceError {
         GovernanceError::new_with_message(
             ErrorType::NotFound,
@@ -2668,7 +2642,7 @@ impl Governance {
         }
 
         let creation_timestamp_seconds = self.env.now();
-        let child_nid = self.new_neuron_id();
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
 
         let from_subaccount = parent_neuron.subaccount()?;
 
@@ -2952,7 +2926,7 @@ impl Governance {
             ));
         }
 
-        let child_nid = self.new_neuron_id();
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
 
         // use provided sub-account if any, otherwise generate a random one.
         let to_subaccount = match spawn.nonce {
@@ -3252,7 +3226,7 @@ impl Governance {
             ));
         }
 
-        let child_nid = self.new_neuron_id();
+        let child_nid = self.neuron_store.new_neuron_id(&mut *self.env);
         let from_subaccount = parent_neuron.subaccount()?;
 
         // The account is derived from the new owner's principal so it can be found by
@@ -4069,7 +4043,7 @@ impl Governance {
                         now,
                     )
                     .await?;
-                let nid = self.new_neuron_id();
+                let nid = self.neuron_store.new_neuron_id(&mut *self.env);
                 let dissolve_delay_seconds = std::cmp::min(
                     reward_to_neuron.dissolve_delay_seconds,
                     MAX_DISSOLVE_DELAY_SECONDS,
@@ -6299,7 +6273,7 @@ impl Governance {
         controller: PrincipalId,
         claim_or_refresh: &ClaimOrRefresh,
     ) -> Result<NeuronId, GovernanceError> {
-        let nid = self.new_neuron_id();
+        let nid = self.neuron_store.new_neuron_id(&mut *self.env);
         let now = self.env.now();
         let neuron = Neuron {
             id: Some(nid),
