@@ -1,6 +1,7 @@
 use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::wasm_utils::compile;
 use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
@@ -92,8 +93,7 @@ fn test_api_for_update(
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
-            subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
-            subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+            subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
         EmbeddersConfig::default()

@@ -4,6 +4,7 @@ use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
@@ -64,8 +65,7 @@ fn test_wasmtime_system_api() {
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
-            subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
-            subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+            subnet_memory_saturation: ResourceSaturation::default(),
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
         EmbeddersConfig::default()

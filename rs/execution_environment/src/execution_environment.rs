@@ -22,7 +22,7 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_tecdsa::derive_tecdsa_public_key;
-use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
+use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
@@ -1115,6 +1115,8 @@ impl ExecutionEnvironment {
                     &canister,
                     instruction_limits,
                     ExecutionMode::Replicated,
+                    // Effectively disable subnet memory resource reservation for queries.
+                    ResourceSaturation::default(),
                 );
                 let request_cycles = req.cycles();
                 let result = execute_replicated_query(
@@ -1143,6 +1145,7 @@ impl ExecutionEnvironment {
                     &canister,
                     instruction_limits,
                     ExecutionMode::Replicated,
+                    self.subnet_memory_saturation(&round_limits.subnet_available_memory),
                 );
                 execute_update(
                     canister,
@@ -1173,8 +1176,13 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> ExecuteMessageResult {
-        let execution_parameters =
-            self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            instruction_limits,
+            ExecutionMode::Replicated,
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+        );
+
         execute_update(
             canister,
             CanisterCallOrTask::Task(task.clone()),
@@ -1206,6 +1214,7 @@ impl ExecutionEnvironment {
         canister: &CanisterState,
         instruction_limits: InstructionLimits,
         execution_mode: ExecutionMode,
+        subnet_memory_saturation: ResourceSaturation,
     ) -> ExecutionParameters {
         ExecutionParameters {
             instruction_limits,
@@ -1214,8 +1223,7 @@ impl ExecutionEnvironment {
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode,
-            subnet_memory_capacity: self.config.subnet_memory_capacity,
-            subnet_memory_threshold: self.config.subnet_memory_threshold,
+            subnet_memory_saturation,
         }
     }
 
@@ -1431,8 +1439,12 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> ExecuteMessageResult {
-        let execution_parameters =
-            self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
+        let execution_parameters = self.execution_parameters(
+            &canister,
+            instruction_limits,
+            ExecutionMode::Replicated,
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+        );
         let round = RoundContext {
             network_topology: &network_topology,
             hypervisor: &self.hypervisor,
@@ -1533,12 +1545,17 @@ impl ExecutionEnvironment {
             self.config.max_instructions_for_message_acceptance_calls,
             self.config.max_instructions_for_message_acceptance_calls,
         );
-        let execution_parameters =
-            self.execution_parameters(canister_state, instruction_limits, execution_mode);
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
         let subnet_available_memory = subnet_memory_capacity(&self.config);
+        let execution_parameters = self.execution_parameters(
+            canister_state,
+            instruction_limits,
+            execution_mode,
+            // Effectively disable subnet memory resource reservation for queries.
+            ResourceSaturation::default(),
+        );
 
         inspect_message::execute_inspect_message(
             state.time(),
@@ -1571,9 +1588,14 @@ impl ExecutionEnvironment {
             max_instructions_per_query,
             max_instructions_per_query,
         );
-        let execution_parameters =
-            self.execution_parameters(canister, instruction_limits, ExecutionMode::NonReplicated);
         let subnet_available_memory = subnet_memory_capacity(&self.config);
+        let execution_parameters = self.execution_parameters(
+            canister,
+            instruction_limits,
+            ExecutionMode::NonReplicated,
+            // Effectively disable subnet memory resource reservation for queries.
+            ResourceSaturation::default(),
+        );
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_query),
             execution_complexity: ExecutionComplexity::with_cpu(max_instructions_per_query),
@@ -1999,8 +2021,12 @@ impl ExecutionEnvironment {
             install_context.wasm_module.is_empty().to_string(),
         );
 
-        let execution_parameters =
-            self.execution_parameters(&old_canister, instruction_limits, ExecutionMode::Replicated);
+        let execution_parameters = self.execution_parameters(
+            &old_canister,
+            instruction_limits,
+            ExecutionMode::Replicated,
+            self.subnet_memory_saturation(&round_limits.subnet_available_memory),
+        );
 
         let dts_result = self.canister_manager.install_code_dts(
             install_context,
@@ -2368,6 +2394,33 @@ impl ExecutionEnvironment {
             )),
             Cycles::zero(),
         ))
+    }
+
+    // Returns the subnet memory saturation based on the given subnet available
+    // memory, which may have been scaled for the current thread.
+    fn subnet_memory_saturation(
+        &self,
+        subnet_available_memory: &SubnetAvailableMemory,
+    ) -> ResourceSaturation {
+        // Compute the total subnet available memory based on the scaled subnet
+        // available memory. In other words, un-scale the scaled value.
+        let subnet_available_memory = subnet_available_memory
+            .get_execution_memory()
+            .saturating_mul(subnet_available_memory.get_scaling_factor())
+            .max(0) as u64;
+
+        // Compute the memory usage as the capacity minus the available memory.
+        let subnet_memory_usage = self
+            .config
+            .subnet_memory_capacity
+            .get()
+            .saturating_sub(subnet_available_memory);
+
+        ResourceSaturation::new(
+            subnet_memory_usage,
+            self.config.subnet_memory_threshold.get(),
+            self.config.subnet_memory_capacity.get(),
+        )
     }
 
     /// For testing purposes only.
