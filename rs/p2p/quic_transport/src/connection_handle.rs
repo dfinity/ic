@@ -1,8 +1,9 @@
 //! Quic Transport connection handle.
 //!
-//! Contains the handle returned by transport `get_peer_handle` API.
-//! The connection handler implements the tower service trait so it
-//! can be wrapped with layers if needed.
+//! Contains a wrapper, called `ConnectionHandle`, around quinn's Connection.
+//! The `ConnectionHandle` implements `rpc` and `push` methods for the given
+//! connection.
+//!
 use std::io;
 
 use bytes::Bytes;
@@ -66,6 +67,12 @@ impl From<quinn::ConnectionError> for TransportError {
     }
 }
 
+impl From<io::Error> for TransportError {
+    fn from(value: io::Error) -> Self {
+        TransportError::Io { error: value }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct ConnectionHandle {
     pub peer_id: NodeId,
@@ -98,7 +105,7 @@ impl ConnectionHandle {
         // Propagate PeerId from this connection to lower layers.
         request.extensions_mut().insert(self.peer_id);
 
-        let (mut send_stream, mut recv_stream) = self.connection.open_bi().await.map_err(|e| {
+        let (mut send_stream, recv_stream) = self.connection.open_bi().await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_OPEN]);
@@ -111,7 +118,7 @@ impl ConnectionHandle {
                 self.metrics
                     .connection_handle_errors_total
                     .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_WRITE]);
-                TransportError::Io { error: e }
+                e
             })?;
 
         send_stream.finish().await.map_err(|e| {
@@ -121,11 +128,11 @@ impl ConnectionHandle {
             e
         })?;
 
-        let mut response = read_response(&mut recv_stream).await.map_err(|e| {
+        let mut response = read_response(recv_stream).await.map_err(|e| {
             self.metrics
                 .connection_handle_errors_total
                 .with_label_values(&[REQUEST_TYPE_RPC, ERROR_TYPE_READ]);
-            TransportError::Io { error: e }
+            e
         })?;
 
         // Propagate PeerId from this request to upper layers.
@@ -156,7 +163,7 @@ impl ConnectionHandle {
                 self.metrics
                     .connection_handle_errors_total
                     .with_label_values(&[REQUEST_TYPE_PUSH, ERROR_TYPE_WRITE]);
-                TransportError::Io { error: e }
+                e
             })?;
 
         send_stream.finish().await.map_err(|e| {

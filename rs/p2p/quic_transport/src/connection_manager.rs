@@ -29,7 +29,7 @@
 //!     - Currently there is a periodic check that checks the status of the connection
 //!       and reconnects if necessary.
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::HashMap,
     net::SocketAddr,
     pin::Pin,
     sync::{Arc, RwLock},
@@ -70,7 +70,7 @@ use crate::{
     connection_handle::ConnectionHandle,
     metrics::{CONNECTION_RESULT_FAILED_LABEL, CONNECTION_RESULT_SUCCESS_LABEL},
 };
-use crate::{metrics::QuicTransportMetrics, request_handler::start_request_handler};
+use crate::{metrics::QuicTransportMetrics, request_handler::run_stream_acceptor};
 
 /// Interval of quic heartbeats. They are only sent if the connection is idle for more than 200ms.
 const KEEP_ALIVE_INTERVAL: Duration = Duration::from_millis(200);
@@ -296,6 +296,10 @@ pub(crate) fn start_connection_manager(
 }
 
 impl ConnectionManager {
+    fn am_i_dialer(&self, dst: &NodeId) -> bool {
+        self.node_id < *dst
+    }
+
     pub async fn run(mut self) {
         loop {
             select! {
@@ -411,7 +415,7 @@ impl ConnectionManager {
 
         // Connect/Disconnect from peers according to new topology
         for (peer_id, _) in self.topology.iter() {
-            let dialer = self.node_id < *peer_id;
+            let dialer = self.am_i_dialer(peer_id);
             let no_active_connection_attempt = !self.outbound_connecting.contains(peer_id);
             let no_active_connection = !self.active_connections.contains(peer_id);
             let node_in_subnet = self.topology.is_member(&self.node_id);
@@ -448,7 +452,7 @@ impl ConnectionManager {
     }
 
     fn handle_dial(&mut self, peer_id: NodeId) {
-        let not_dialer = self.node_id >= peer_id;
+        let not_dialer = !self.am_i_dialer(&peer_id);
         let peer_not_in_subnet = self.topology.get_addr(&peer_id).is_none();
         let active_connection_attempt = self.outbound_connecting.contains(&peer_id);
         let active_connection = self.active_connections.contains(&peer_id);
@@ -540,23 +544,17 @@ impl ConnectionManager {
                     .inc();
                 let req_handler_connection = connection.clone();
                 let peer_id = connection.peer_id;
-                match self.peer_map.write().unwrap().entry(connection.peer_id) {
-                    Entry::Occupied(mut entry) => {
-                        info!(
-                            self.log,
-                            "Replacing old connection to {}  with newer", peer_id
-                        );
-                        // This can happen if peer closes and tries to reconnect and we didn't notice the closed connection
-                        let old_connection = entry.insert(connection);
-                        old_connection
-                            .connection
-                            .close(VarInt::from_u32(0), b"using newer connection");
-                    }
-                    Entry::Vacant(entry) => {
-                        info!(self.log, "Adding connection for node {}", peer_id);
-                        self.metrics.peer_map_size.inc();
-                        entry.insert(connection);
-                    }
+                // dropping the old connection will result in closing it
+                if let Some(old_conn) = self.peer_map.write().unwrap().insert(peer_id, connection) {
+                    old_conn
+                        .connection
+                        .close(VarInt::from_u32(0), b"using newer connection");
+                    info!(
+                        self.log,
+                        "Replacing old connection to {}  with newer", peer_id
+                    );
+                } else {
+                    self.metrics.peer_map_size.inc();
                 }
 
                 info!(
@@ -565,11 +563,11 @@ impl ConnectionManager {
                 );
                 self.active_connections.spawn_on(
                     peer_id,
-                    start_request_handler(
+                    run_stream_acceptor(
+                        self.log.clone(),
                         req_handler_connection.peer_id,
                         req_handler_connection.connection,
-                        req_handler_connection.metrics,
-                        self.log.clone(),
+                        self.metrics.clone(),
                         self.router.clone(),
                     ),
                     &self.rt,
