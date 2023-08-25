@@ -1,7 +1,7 @@
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SubnetConfig;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::IngressInductionCost;
+use ic_cycles_account_manager::{IngressInductionCost, ResourceSaturation};
 use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
 use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::replica_logger::no_op_logger;
@@ -891,4 +891,37 @@ fn freezing_threshold_uses_reserved_balance() {
         threshold_without_reserved,
         threshold_with_reserved + Cycles::new(1_000)
     );
+}
+
+#[test]
+fn scaling_of_resource_saturation() {
+    let rs = ResourceSaturation::default();
+    assert_eq!(0, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(99, 100, 200);
+    assert_eq!(0, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(100, 100, 200);
+    assert_eq!(0, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(101, 100, 200);
+    assert_eq!(10, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(150, 100, 200);
+    assert_eq!(500, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(200, 100, 200);
+    assert_eq!(1000, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(201, 100, 200);
+    assert_eq!(1000, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(0, 200, 200);
+    assert_eq!(0, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(0, 201, 200);
+    assert_eq!(0, rs.reservation_factor(1000));
+
+    let rs = ResourceSaturation::new(201, 201, 200);
+    assert_eq!(0, rs.reservation_factor(1000));
 }

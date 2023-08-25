@@ -149,7 +149,7 @@ mod tests {
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
     use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-    use ic_cycles_account_manager::CyclesAccountManager;
+    use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
     use ic_logger::replica_logger::no_op_logger;
     use ic_registry_subnet_type::SubnetType;
@@ -185,8 +185,7 @@ mod tests {
             compute_allocation: ComputeAllocation::default(),
             subnet_type: SubnetType::Application,
             execution_mode: ExecutionMode::Replicated,
-            subnet_memory_capacity: NumBytes::new(1_000_000_000),
-            subnet_memory_threshold: NumBytes::new(1_000_000_000),
+            subnet_memory_saturation: ResourceSaturation::default(),
         }
     }
 

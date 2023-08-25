@@ -9,7 +9,7 @@ use crate::{
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
@@ -96,7 +96,6 @@ pub(super) struct QueryContext<'a> {
     query_critical_error: &'a IntCounter,
     // Number of instructions used in total
     pub total_instructions_used: NumInstructions,
-    subnet_memory_capacity: NumBytes,
 }
 
 impl<'a> QueryContext<'a> {
@@ -108,7 +107,6 @@ impl<'a> QueryContext<'a> {
         state: Arc<ReplicatedState>,
         data_certificate: Vec<u8>,
         subnet_available_memory: SubnetAvailableMemory,
-        subnet_memory_capacity: NumBytes,
         max_canister_memory_size: NumBytes,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
@@ -146,7 +144,6 @@ impl<'a> QueryContext<'a> {
             query_context_time_limit: max_query_call_walltime,
             query_critical_error,
             total_instructions_used: NumInstructions::from(0),
-            subnet_memory_capacity,
         }
     }
 
@@ -905,9 +902,8 @@ impl<'a> QueryContext<'a> {
             compute_allocation: canister.compute_allocation(),
             subnet_type: self.own_subnet_type,
             execution_mode: ExecutionMode::NonReplicated,
-            subnet_memory_capacity: self.subnet_memory_capacity,
             // Effectively disable subnet memory resource reservation for queries.
-            subnet_memory_threshold: self.subnet_memory_capacity,
+            subnet_memory_saturation: ResourceSaturation::default(),
         }
     }
 

@@ -24,6 +24,7 @@ rust_fuzz_test_binary(
 
 WASM_EXECUTOR_FUZZER_DEPENDENCIES = [
     "//rs/config",
+    "//rs/cycles_account_manager",
     "//rs/embedders",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",

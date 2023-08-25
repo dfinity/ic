@@ -7,6 +7,7 @@ pub mod system_api_empty;
 
 use ic_base_types::PrincipalIdBlobParseError;
 use ic_config::flag_status::FlagStatus;
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode,
@@ -158,8 +159,7 @@ pub struct ExecutionParameters {
     pub compute_allocation: ComputeAllocation,
     pub subnet_type: SubnetType,
     pub execution_mode: ExecutionMode,
-    pub subnet_memory_capacity: NumBytes,
-    pub subnet_memory_threshold: NumBytes,
+    pub subnet_memory_saturation: ResourceSaturation,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]

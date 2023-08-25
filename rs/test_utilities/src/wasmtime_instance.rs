@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use ic_base_types::NumBytes;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
 use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
@@ -154,8 +155,7 @@ impl WasmtimeInstanceBuilder {
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,
-                subnet_memory_capacity: NumBytes::new(subnet_memory_capacity as u64),
-                subnet_memory_threshold: NumBytes::new(subnet_memory_capacity as u64),
+                subnet_memory_saturation: ResourceSaturation::default(),
             },
             SubnetAvailableMemory::new(
                 subnet_memory_capacity,

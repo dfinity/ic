@@ -6,7 +6,7 @@ use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_error_types::RejectCode;
 use ic_execution_environment::{
     as_round_instructions, CompilationCostHandling, ExecutionEnvironment, Hypervisor,
@@ -149,8 +149,7 @@ where
         compute_allocation: canister_state.compute_allocation(),
         subnet_type: hypervisor.subnet_type(),
         execution_mode: ExecutionMode::Replicated,
-        subnet_memory_capacity: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
-        subnet_memory_threshold: NumBytes::new(SUBNET_MEMORY_CAPACITY as u64),
+        subnet_memory_saturation: ResourceSaturation::default(),
     };
 
     let subnets = vec![own_subnet_id, nns_subnet_id];

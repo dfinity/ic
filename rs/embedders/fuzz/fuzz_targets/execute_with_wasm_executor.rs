@@ -1,4 +1,5 @@
 use ic_config::{embedders::Config, flag_status::FlagStatus, subnet_config::SchedulerConfig};
+use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
     wasm_executor::{WasmExecutor, WasmExecutorImpl},
     CompilationCache, WasmExecutionInput, WasmtimeEmbedder,
@@ -94,8 +95,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
         compute_allocation: ComputeAllocation::default(),
         subnet_type: SubnetType::Application,
         execution_mode: ExecutionMode::Replicated,
-        subnet_memory_capacity: NumBytes::new(subnet_memory_capacity as u64),
-        subnet_memory_threshold: NumBytes::new(subnet_memory_capacity as u64),
+        subnet_memory_saturation: ResourceSaturation::default(),
     };
 
     let subnet_available_memory = SubnetAvailableMemory::new(
