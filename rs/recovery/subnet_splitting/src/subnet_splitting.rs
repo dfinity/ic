@@ -279,7 +279,6 @@ impl SubnetSplitting {
         SplitStateStep {
             subnet_id: self.subnet_id(target_subnet),
             state_split_strategy,
-            state_tool_helper: self.state_tool_helper.clone(),
             layout: self.layout.clone(),
             target_subnet,
             logger: self.recovery.logger.clone(),

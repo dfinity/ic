@@ -149,6 +149,10 @@ pub fn write_bytes(file: &Path, bytes: Vec<u8>) -> RecoveryResult<()> {
     fs::write(file, bytes).map_err(|e| RecoveryError::file_error(file, e))
 }
 
+pub fn read_bytes(file: &Path) -> RecoveryResult<Vec<u8>> {
+    fs::read(file).map_err(|e| RecoveryError::file_error(file, e))
+}
+
 pub fn read_file(file: &Path) -> RecoveryResult<String> {
     fs::read_to_string(file).map_err(|e| RecoveryError::file_error(file, e))
 }

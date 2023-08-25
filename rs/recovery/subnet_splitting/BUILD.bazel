@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 DEPENDENCIES = [
+    "//rs/crypto/utils/threshold_sig",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/monitoring/metrics",
     "//rs/protobuf",
@@ -9,6 +10,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/replay",
     "//rs/state_manager",
+    "//rs/state_tool:state_tool_lib",
     "//rs/types/base_types",
     "//rs/types/types",
     "@crate_index//:ic-agent",
