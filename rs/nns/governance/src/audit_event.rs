@@ -30,6 +30,7 @@ impl Storable for AuditEvent {
     }
 }
 
+#[allow(dead_code)]
 pub fn add_audit_event(event: AuditEvent) {
     AUDIT_EVENTS_LOG.with(|log| {
         log.borrow()
