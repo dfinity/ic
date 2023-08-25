@@ -4,7 +4,7 @@ use criterion::{
     criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, SamplingMode,
 };
 
-use rand::{thread_rng, CryptoRng};
+use rand::CryptoRng;
 
 use ic_base_types::RegistryVersion;
 use ic_crypto_test_utils_ni_dkg::{
@@ -99,7 +99,7 @@ fn bench_verify_dealing<M: Measurement, R: Rng + CryptoRng>(
         bench.iter_batched_ref(
             || {
                 let (dealer_id, dealing) = dealings
-                    .get(thread_rng().gen_range(0..test_case.num_of_dealers))
+                    .get(rng.gen_range(0..test_case.num_of_dealers))
                     .unwrap();
 
                 let receiver_id = config.random_receiver_id(rng);

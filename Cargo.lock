@@ -6813,6 +6813,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "serde",
  "serde_cbor",
 ]
@@ -6910,6 +6911,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-types",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]

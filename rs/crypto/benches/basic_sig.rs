@@ -1,7 +1,8 @@
 use criterion::measurement::Measurement;
 use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion};
 
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, KeyManager,
 };
@@ -24,6 +25,7 @@ use openssl::nid::Nid;
 use openssl::sha::sha256;
 
 use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
 
 const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(3);
@@ -33,11 +35,13 @@ fn crypto_basicsig_ed25519(criterion: &mut Criterion) {
 
     let group = &mut criterion.benchmark_group(format!("crypto_basicsig/{:?}", algorithm_id));
 
-    crypto_basicsig_verifybypubkey(group, algorithm_id);
+    let rng = &mut reproducible_rng();
 
-    crypto_ed25519_basicsig_verify(group);
+    crypto_basicsig_verifybypubkey(group, algorithm_id, rng);
 
-    crypto_ed25519_basicsig_sign(group);
+    crypto_ed25519_basicsig_verify(group, rng);
+
+    crypto_ed25519_basicsig_sign(group, rng);
 }
 
 fn crypto_basicsig_p256(criterion: &mut Criterion) {
@@ -45,7 +49,9 @@ fn crypto_basicsig_p256(criterion: &mut Criterion) {
 
     let group = &mut criterion.benchmark_group(format!("crypto_basicsig/{:?}", algorithm_id));
 
-    crypto_basicsig_verifybypubkey(group, algorithm_id);
+    let rng = &mut reproducible_rng();
+
+    crypto_basicsig_verifybypubkey(group, algorithm_id, rng);
 }
 
 fn crypto_basicsig_secp256k1(criterion: &mut Criterion) {
@@ -53,7 +59,9 @@ fn crypto_basicsig_secp256k1(criterion: &mut Criterion) {
 
     let group = &mut criterion.benchmark_group(format!("crypto_basicsig/{:?}", algorithm_id));
 
-    crypto_basicsig_verifybypubkey(group, algorithm_id);
+    let rng = &mut reproducible_rng();
+
+    crypto_basicsig_verifybypubkey(group, algorithm_id, rng);
 }
 
 fn crypto_basicsig_rsasha256(criterion: &mut Criterion) {
@@ -61,25 +69,29 @@ fn crypto_basicsig_rsasha256(criterion: &mut Criterion) {
 
     let group = &mut criterion.benchmark_group(format!("crypto_basicsig/{:?}", algorithm_id));
 
-    crypto_basicsig_verifybypubkey(group, algorithm_id);
+    let rng = &mut reproducible_rng();
+
+    crypto_basicsig_verifybypubkey(group, algorithm_id, rng);
 }
 
-fn crypto_ed25519_basicsig_verify<M: Measurement>(group: &mut BenchmarkGroup<'_, M>) {
+fn crypto_ed25519_basicsig_verify<M: Measurement, R: Rng + CryptoRng>(
+    group: &mut BenchmarkGroup<'_, M>,
+    rng: &mut R,
+) {
     // NOTE: Only Ed25519 can use verify
     // (other basic-sig key types aren't held in the registry).
-    let mut rng = thread_rng();
-    let (temp_crypto, registry_data, registry) = temp_crypto(NODE_1);
+    let (temp_crypto, registry_data, registry) = temp_crypto(NODE_1, rng);
 
     let request_id = MessageId::from(rng.gen::<[u8; 32]>());
     let (signature, public_key) =
-        request_id_signature_from_random_keypair(&request_id, AlgorithmId::Ed25519);
+        request_id_signature_from_random_keypair(&request_id, AlgorithmId::Ed25519, rng);
 
     add_node_signing_pubkey_to_registry(NODE_2, &public_key.key, &registry, &registry_data);
 
     struct BenchData {
         signature: BasicSigOf<MessageId>,
         request_id: MessageId,
-        temp_crypto: TempCryptoComponent,
+        temp_crypto: TempCryptoComponentGeneric<ChaCha20Rng>,
     }
     let data = BenchData {
         signature,
@@ -97,18 +109,20 @@ fn crypto_ed25519_basicsig_verify<M: Measurement>(group: &mut BenchmarkGroup<'_,
     });
 }
 
-fn crypto_ed25519_basicsig_sign<M: Measurement>(group: &mut BenchmarkGroup<'_, M>) {
+fn crypto_ed25519_basicsig_sign<M: Measurement, R: Rng + CryptoRng>(
+    group: &mut BenchmarkGroup<'_, M>,
+    rng: &mut R,
+) {
     // NOTE: Only Ed25519 can use sign
     // (other basic-sig key types aren't held in the secret key store).
 
-    let mut rng = thread_rng();
-    let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1);
+    let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1, rng);
 
     let message = SignableMock::new(rng.gen::<[u8; 32]>().to_vec());
 
     struct BenchData {
         message: SignableMock,
-        temp_crypto: TempCryptoComponent,
+        temp_crypto: TempCryptoComponentGeneric<ChaCha20Rng>,
     }
     let data = BenchData {
         message,
@@ -125,22 +139,22 @@ fn crypto_ed25519_basicsig_sign<M: Measurement>(group: &mut BenchmarkGroup<'_, M
     });
 }
 
-fn crypto_basicsig_verifybypubkey<M: Measurement>(
+fn crypto_basicsig_verifybypubkey<M: Measurement, R: Rng + CryptoRng>(
     group: &mut BenchmarkGroup<'_, M>,
     algorithm_id: AlgorithmId,
+    rng: &mut R,
 ) {
-    let mut rng = thread_rng();
-    let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1);
+    let (temp_crypto, _registry_data, _registry) = temp_crypto(NODE_1, rng);
 
     let request_id = MessageId::from(rng.gen::<[u8; 32]>());
     let (signature, public_key) =
-        request_id_signature_from_random_keypair(&request_id, algorithm_id);
+        request_id_signature_from_random_keypair(&request_id, algorithm_id, rng);
 
     struct BenchData {
         signature: BasicSigOf<MessageId>,
         request_id: MessageId,
         public_key: UserPublicKey,
-        temp_crypto: TempCryptoComponent,
+        temp_crypto: TempCryptoComponentGeneric<ChaCha20Rng>,
     }
     let data = BenchData {
         signature,
@@ -176,10 +190,11 @@ criterion_group! {
 
 criterion_main!(benches);
 
-fn temp_crypto(
+fn temp_crypto<R: Rng + CryptoRng>(
     node_id: NodeId,
+    rng: &mut R,
 ) -> (
-    TempCryptoComponent,
+    TempCryptoComponentGeneric<ChaCha20Rng>,
     Arc<ProtoRegistryDataProvider>,
     Arc<FakeRegistryClient>,
 ) {
@@ -190,6 +205,7 @@ fn temp_crypto(
         .with_registry(Arc::clone(&registry) as Arc<_>)
         .with_node_id(node_id)
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
+        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
         .build();
     let node_pubkeys = crypto_component.current_node_public_keys().unwrap();
 
@@ -228,9 +244,10 @@ fn add_node_signing_pubkey_to_registry(
     registry.reload();
 }
 
-fn request_id_signature_from_random_keypair(
+fn request_id_signature_from_random_keypair<R: Rng + CryptoRng>(
     request_id: &MessageId,
     algorithm_id: AlgorithmId,
+    rng: &mut R,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
     let bytes_to_sign = {
         let mut buf = vec![];
@@ -239,18 +256,16 @@ fn request_id_signature_from_random_keypair(
         buf
     };
 
-    let mut rng = thread_rng();
-
     let (signature_bytes, public_key_bytes) = match algorithm_id {
         AlgorithmId::Ed25519 => {
-            let signing_key = ed25519_consensus::SigningKey::new(&mut rng);
+            let signing_key = ed25519_consensus::SigningKey::new(rng);
             let signature_bytes = signing_key.sign(&bytes_to_sign).to_bytes().to_vec();
             let public_key_bytes = signing_key.verification_key().to_bytes().to_vec();
             (signature_bytes, public_key_bytes)
         }
         AlgorithmId::EcdsaP256 => generate_ecdsa_key_and_sig(Nid::X9_62_PRIME256V1, &bytes_to_sign),
         AlgorithmId::EcdsaSecp256k1 => generate_ecdsa_key_and_sig(Nid::SECP256K1, &bytes_to_sign),
-        AlgorithmId::RsaSha256 => generate_rsa_key_and_sig(&mut rng, &bytes_to_sign),
+        AlgorithmId::RsaSha256 => generate_rsa_key_and_sig(rng, &bytes_to_sign),
         _ => panic!("Unexpected signature algorithm"),
     };
 
