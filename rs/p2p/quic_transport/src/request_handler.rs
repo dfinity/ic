@@ -1,12 +1,14 @@
-//! Quic Transport request handler.
+//! Quic Transport incoming request handler.
 //!
-//! The actual handler for incoming request.
-//! We spawn a new tokio task for each request that does the following steps:
-//!     - Reads the request from the substream
+//! The handler is an event loop that accepts streams and spawns a tokio task for each stream
+//! Each task does the following:
+//!     - Reads a request from the stream. (A single stream carries a single request.)
 //!     - Adds metadata to the request based on the underlying connection.
-//!       I.e add the NodeId of the peer as an extension.
-//!     - Calls the router
-//!     - Writes response to wire.
+//!       E.g. adds the NodeId of the peer as an extension.
+//!     - Calls the router.
+//!     - Writes the response to the wire.
+//!
+//! Please note that the connection manager is responsible for closing connections.
 //!
 use std::time::Duration;
 
@@ -26,11 +28,11 @@ use crate::{
 
 const QUIC_METRIC_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);
 
-pub(crate) async fn start_request_handler(
+pub(crate) async fn run_stream_acceptor(
+    log: ReplicaLogger,
     peer_id: NodeId,
     connection: Connection,
     metrics: QuicTransportMetrics,
-    log: ReplicaLogger,
     router: Router,
 ) {
     let mut inflight_requests = tokio::task::JoinSet::new();
@@ -46,8 +48,8 @@ pub(crate) async fn start_request_handler(
                         inflight_requests.spawn(
                             metrics.request_task_monitor.instrument(
                                 handle_uni_stream(
-                                    peer_id,
                                     log.clone(),
+                                    peer_id,
                                     metrics.clone(),
                                     router.clone(),
                                     uni_rx,
@@ -74,8 +76,8 @@ pub(crate) async fn start_request_handler(
                         inflight_requests.spawn(
                             metrics.request_task_monitor.instrument(
                                 handle_bi_stream(
-                                    peer_id,
                                     log.clone(),
+                                    peer_id,
                                     metrics.clone(),
                                     router.clone(),
                                     bi_tx,
@@ -114,14 +116,14 @@ pub(crate) async fn start_request_handler(
 }
 
 async fn handle_bi_stream(
-    peer_id: NodeId,
     log: ReplicaLogger,
+    peer_id: NodeId,
     metrics: QuicTransportMetrics,
     router: Router,
     mut bi_tx: SendStream,
-    mut bi_rx: RecvStream,
+    bi_rx: RecvStream,
 ) {
-    let mut request = match read_request(&mut bi_rx).await {
+    let mut request = match read_request(bi_rx).await {
         Ok(request) => request,
         Err(e) => {
             info!(
@@ -176,13 +178,13 @@ async fn handle_bi_stream(
 }
 
 async fn handle_uni_stream(
-    peer_id: NodeId,
     log: ReplicaLogger,
+    peer_id: NodeId,
     metrics: QuicTransportMetrics,
     router: Router,
-    mut uni_rx: RecvStream,
+    uni_rx: RecvStream,
 ) {
-    let mut request = match read_request(&mut uni_rx).await {
+    let mut request = match read_request(uni_rx).await {
         Ok(request) => request,
         Err(e) => {
             info!(

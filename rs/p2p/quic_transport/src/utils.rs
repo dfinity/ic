@@ -12,6 +12,8 @@
 //!       encoded header and body and reconstructing it into a typed request.
 //! Response encoding Response<Bytes>:
 //!     - Same as request expect that the header contains a HeaderMap and a Statuscode.
+use std::io;
+
 use axum::body::{Body, BoxBody, HttpBody};
 use bincode::Options;
 use bytes::{Buf, BufMut, Bytes};
@@ -27,19 +29,27 @@ fn bincode_config() -> impl Options {
         .with_limit(MAX_MESSAGE_SIZE_BYTES as u64)
 }
 
-pub(crate) async fn read_request(
-    recv_stream: &mut RecvStream,
-) -> Result<Request<Body>, std::io::Error> {
+fn bincode_error_to_std_io_error(err: bincode::Error) -> io::Error {
+    match *err {
+        bincode::ErrorKind::Io(io) => io,
+        _ => io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Bincode request wire header deserialization failed: {}",
+                err
+            ),
+        ),
+    }
+}
+
+pub(crate) async fn read_request(mut recv_stream: RecvStream) -> Result<Request<Body>, io::Error> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::OutOfMemory, e.to_string()))?;
-    let msg: WireRequest = bincode_config().deserialize(&raw_msg).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Bincode request wire header deserialization failed: {}", e),
-        )
-    })?;
+        .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e.to_string()))?;
+    let msg: WireRequest = bincode_config()
+        .deserialize(&raw_msg)
+        .map_err(bincode_error_to_std_io_error)?;
 
     let mut request = Request::new(Body::from(Bytes::copy_from_slice(msg.body)));
     let _ = std::mem::replace(request.uri_mut(), msg.uri);
@@ -47,18 +57,15 @@ pub(crate) async fn read_request(
 }
 
 pub(crate) async fn read_response(
-    recv_stream: &mut RecvStream,
-) -> Result<Response<Bytes>, std::io::Error> {
+    mut recv_stream: RecvStream,
+) -> Result<Response<Bytes>, io::Error> {
     let raw_msg = recv_stream
         .read_to_end(MAX_MESSAGE_SIZE_BYTES)
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::OutOfMemory, e.to_string()))?;
-    let msg: WireResponse = bincode_config().deserialize(&raw_msg).map_err(|e| {
-        std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            format!("Bincode request wire header deserialization failed: {}", e),
-        )
-    })?;
+        .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e.to_string()))?;
+    let msg: WireResponse = bincode_config()
+        .deserialize(&raw_msg)
+        .map_err(bincode_error_to_std_io_error)?;
 
     let mut response = Response::new(Bytes::copy_from_slice(msg.body));
     let _ = std::mem::replace(response.status_mut(), msg.status);
@@ -68,7 +75,7 @@ pub(crate) async fn read_response(
 pub(crate) async fn write_request(
     send_stream: &mut SendStream,
     request: Request<Bytes>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     let (parts, body) = request.into_parts();
 
     let msg = WireRequest {
@@ -78,7 +85,7 @@ pub(crate) async fn write_request(
 
     let res = bincode_config()
         .serialize(&msg)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+        .map_err(bincode_error_to_std_io_error)?;
     send_stream.write_all(&res).await?;
 
     Ok(())
@@ -87,13 +94,13 @@ pub(crate) async fn write_request(
 pub(crate) async fn write_response(
     send_stream: &mut SendStream,
     response: Response<BoxBody>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), io::Error> {
     let (parts, body) = response.into_parts();
     // Check for axum error in body
     // TODO: Think about this. What is the error that can happen here?
     let b = to_bytes(body)
         .await
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
     let msg = WireResponse {
         status: parts.status,
@@ -102,7 +109,7 @@ pub(crate) async fn write_response(
 
     let res = bincode_config()
         .serialize(&msg)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))?;
+        .map_err(bincode_error_to_std_io_error)?;
     send_stream.write_all(&res).await?;
 
     Ok(())
