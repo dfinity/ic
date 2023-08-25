@@ -88,13 +88,11 @@ async fn main_() {
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
     let mut new_port_file = match is_first_daemon(&port_file_path) {
         Ok(f) => f,
-        Err(e) => {
-            println!("Existing PocketIc server will be reused: {e:?}");
+        Err(_) => {
             return;
         }
     };
     // This process is the one to start PocketIC.
-    println!("New PocketIC server will be started");
 
     // The shared, mutable state of the PocketIC process.
     let instance_map: InstanceMap = Arc::new(RwLock::new(HashMap::new()));
@@ -154,7 +152,7 @@ async fn main_() {
         .create_new(true)
         .open(&ready_file_path);
     if ready_file.is_ok() {
-        println!("The PocketIC server is listening on port: {}", real_port);
+        println!("The PocketIC server is listening on port {}", real_port);
     } else {
         eprintln!("The .ready file already exists; This should not happen unless the PID has been reused, and/or the tmp dir has not been properly cleaned up");
     }
@@ -169,13 +167,13 @@ async fn main_() {
             drop(guard);
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        println!("PocketIC process will exit");
+        println!("The PocketIC server will terminate");
         // Clean up tmpfiles.
         let _ = std::fs::remove_file(ready_file_path);
         let _ = std::fs::remove_file(port_file_path);
     };
     let server = server.with_graceful_shutdown(shutdown_signal);
-    server.await.expect("Failed to launch PocketIC");
+    server.await.expect("Failed to launch the PocketIC server");
 }
 
 /// Returns the opened file if it was successfully created and is readable, writeable. Otherwise,
