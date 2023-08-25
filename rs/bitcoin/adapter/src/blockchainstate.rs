@@ -410,10 +410,8 @@ mod test {
     use ic_metrics::MetricsRegistry;
 
     use super::*;
-    use crate::{
-        common::test_common::{block_1, block_2, generate_header, generate_headers, TestState},
-        config::test::ConfigBuilder,
-    };
+    use crate::{common::test_common::TestState, config::test::ConfigBuilder};
+    use ic_btc_adapter_test_utils::{block_1, block_2, generate_header, generate_headers};
     use std::collections::HashSet;
 
     #[test]

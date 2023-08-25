@@ -279,11 +279,9 @@ mod test {
     use ic_metrics::MetricsRegistry;
     use tokio::sync::{mpsc::channel, Mutex};
 
-    use crate::{
-        common::test_common::{
-            generate_headers, generate_large_block_blockchain, headers_to_hashes,
-        },
-        config::test::ConfigBuilder,
+    use crate::config::test::ConfigBuilder;
+    use ic_btc_adapter_test_utils::{
+        generate_headers, generate_large_block_blockchain, headers_to_hashes,
     };
 
     /// This tests ensures that `BlockchainManager::get_successors(...)` will return relevant blocks

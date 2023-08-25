@@ -5100,6 +5100,7 @@ dependencies = [
  "bitcoincore-rpc",
  "bitcoind",
  "clap 3.2.23",
+ "criterion 0.5.1",
  "futures",
  "hashlink",
  "hex",
@@ -5107,6 +5108,7 @@ dependencies = [
  "ic-adapter-metrics-server",
  "ic-async-utils",
  "ic-btc-adapter-client",
+ "ic-btc-adapter-test-utils",
  "ic-btc-interface",
  "ic-btc-service",
  "ic-btc-types-internal",
@@ -5151,6 +5153,15 @@ dependencies = [
  "tokio",
  "tonic",
  "tower",
+]
+
+[[package]]
+name = "ic-btc-adapter-test-utils"
+version = "0.1.0"
+dependencies = [
+ "bitcoin 0.28.2",
+ "hex",
+ "rand 0.8.5",
 ]
 
 [[package]]
