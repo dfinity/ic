@@ -768,12 +768,10 @@ fn get_next_block_hash_to_sync(
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::common::test_common::{
-        generate_headers, generate_large_block_blockchain, TestChannel, TestState, BLOCK_1_ENCODED,
-        BLOCK_2_ENCODED,
+    use crate::{
+        common::test_common::{TestChannel, TestState},
+        config::{test::ConfigBuilder, Config},
     };
-    use crate::config::test::ConfigBuilder;
-    use crate::config::Config;
     use bitcoin::blockdata::constants::genesis_block;
     use bitcoin::consensus::deserialize;
     use bitcoin::Network;
@@ -781,6 +779,9 @@ pub mod test {
         network::message::NetworkMessage, network::message_blockdata::Inventory, BlockHash,
     };
     use hex::FromHex;
+    use ic_btc_adapter_test_utils::{
+        generate_headers, generate_large_block_blockchain, BLOCK_1_ENCODED, BLOCK_2_ENCODED,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use std::net::SocketAddr;
