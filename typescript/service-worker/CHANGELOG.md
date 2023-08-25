@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 1.8.7
+
+- Button added to the main error page to uninstall the active service worker and reload all associated client windows
+- Added theme color to the main error page and service worker installation page
+
 ## 1.8.6
 
 - Revert usage of DecompressionStreams API, it is not yet widely supported by Safari or Firefox

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <title>Error</title>
+    <meta name="theme-color" content="rgb(241, 238, 245)" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
       html {
@@ -50,9 +51,15 @@
       .container {
         border-color: transparent;
         padding: 2rem;
+        padding-bottom: 0;
+        overflow: hidden;
         background-color: hsla(0, 0%, 100%, 0.8);
         border-radius: 8px;
         margin-bottom: 16px;
+      }
+
+      .container hr {
+        border: 1px solid #e5e3e9;
       }
 
       h1 {
@@ -128,6 +135,17 @@
         display: none;
       }
 
+      .anchor {
+        color: #7045cb;
+        text-decoration: underline;
+      }
+
+      button.reload-btn {
+        margin: 0;
+        padding: 0;
+        font-size: 14px;
+      }
+
       textarea {
         box-sizing: border-box;
         width: 100%;
@@ -201,6 +219,8 @@
         <div class="container">
           <h1>Page failed to load.</h1>
           <!--{{content}}-->
+
+          <!--{{afterContent}}-->
         </div>
 
         <!--{{extraDetailsContent}}-->
@@ -208,6 +228,31 @@
     </main>
 
     <script>
+      function isSafari() {
+        return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      }
+
+      async function reloadServiceWorker() {
+        const worker = navigator.serviceWorker.controller;
+        const shouldReloadFromServiceWorker = !isSafari();
+
+        if (worker) {
+          worker.postMessage({
+            action: 'ResetServiceWorker',
+            data: { reloadFromWorker: shouldReloadFromServiceWorker },
+          });
+
+          if (!shouldReloadFromServiceWorker) {
+            // give the service worker a chance to uninstall itself before reloading
+            setTimeout(() => window.location.reload(), 250);
+          }
+
+          return;
+        }
+
+        window.location.reload();
+      }
+
       document.addEventListener('DOMContentLoaded', () => {
         const collapsibleTrigger = document.querySelector(
           '.collapsible-trigger'
