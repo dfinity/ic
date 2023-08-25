@@ -378,7 +378,7 @@ impl ExecutionEnvironment {
 
                         if matches!(
                             (&context, &response.response_payload),
-                            (&SubnetCallContext::SignWithEcsda(_), &Payload::Data(_))
+                            (&SubnetCallContext::SignWithEcdsa(_), &Payload::Data(_))
                         ) {
                             state.metadata.subnet_metrics.ecdsa_signature_agreements += 1;
                         }
@@ -1863,7 +1863,7 @@ impl ExecutionEnvironment {
         state
             .metadata
             .subnet_call_context_manager
-            .push_context(SubnetCallContext::SignWithEcsda(SignWithEcdsaContext {
+            .push_context(SubnetCallContext::SignWithEcdsa(SignWithEcdsaContext {
                 request,
                 key_id,
                 message_hash,
