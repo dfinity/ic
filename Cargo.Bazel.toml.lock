@@ -2739,9 +2739,7 @@ dependencies = [
  "json-patch",
  "json5",
  "k256 0.13.1",
- "lazy-regex",
  "lazy_static",
- "leaky-bucket",
  "leb128",
  "libc",
  "libflate",
@@ -5133,29 +5131,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4345964bb142484797b161f473a503a434de77149dd8c7427788c6e13379388"
 
 [[package]]
-name = "lazy-regex"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff63c423c68ea6814b7da9e88ce585f793c87ddd9e78f646970891769c8235d4"
-dependencies = [
- "lazy-regex-proc_macros",
- "once_cell",
- "regex",
-]
-
-[[package]]
-name = "lazy-regex-proc_macros"
-version = "2.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8edfc11b8f56ce85e207e62ea21557cfa09bb24a8f6b04ae181b086ff8611c22"
-dependencies = [
- "proc-macro2 1.0.66",
- "quote 1.0.31",
- "regex",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5169,17 +5144,6 @@ name = "lazycell"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
-
-[[package]]
-name = "leaky-bucket"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "73fec97a5ac23f00d097097c6c0b91618fcfb43ec46acdba5e636d8afed5fb62"
-dependencies = [
- "parking_lot 0.11.2",
- "tokio",
- "tracing",
-]
 
 [[package]]
 name = "leb128"

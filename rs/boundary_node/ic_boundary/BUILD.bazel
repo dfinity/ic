@@ -36,7 +36,6 @@ DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-rustls",
     "@crate_index//:instant-acme",
-    "@crate_index//:lazy_static",
     "@crate_index//:mockall",
     "@crate_index//:opentelemetry_0_20_0_metrics",
     "@crate_index//:opentelemetry_prometheus_0_13_0",

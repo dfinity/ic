@@ -37,7 +37,6 @@ ic-agent = { workspace = true, default-features = false, features = [
     "reqwest",
 ] }
 ic-utils = { workspace = true, features = ["raw"] }
-lazy-regex = "2"
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"
 prometheus = "0.13.3"

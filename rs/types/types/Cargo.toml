@@ -4,13 +4,11 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-base32 = "0.4.0"
 base64 = "0.11.0"
 bincode = "1.2.1"
 candid = { workspace = true }
 derive_more = { git = "https://github.com/dfinity-lab/derive_more", branch = "master" }
 hex = "0.4.2"
-http = "0.2.5"
 ic-base-types = { path = "../base_types" }
 ic-btc-types-internal = { path = "../../bitcoin/types/internal" }
 ic-constants = { path = "../../constants" }
@@ -22,7 +20,6 @@ ic-ic00-types = { path = "../ic00_types" }
 ic-protobuf = { path = "../../protobuf" }
 ic-utils = { path = "../../utils" }
 maplit = "1.0.2"
-num-traits = "0.2.12"
 once_cell = "1.8"
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = "0.11.0"
@@ -35,13 +32,11 @@ strum = "0.23.0"
 strum_macros = "0.23.0"
 thiserror = "1.0"
 thousands = "0.2.0"
-url = { version = "2", features = ["serde"] }
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 chrono = "0.4"
 
 [dev-dependencies]
-anyhow = "1"
 assert_matches = "1.5.0"
 hex-literal = "0.2.1"
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../../crypto/test_utils/canister_threshold_sigs" }

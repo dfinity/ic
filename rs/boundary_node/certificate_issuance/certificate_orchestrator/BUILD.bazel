@@ -18,7 +18,6 @@ DEPENDENCIES = [
     "@crate_index//:priority-queue",
     "@crate_index//:prometheus",
     "@crate_index//:publicsuffix",
-    "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde",
     "@crate_index//:sha2",

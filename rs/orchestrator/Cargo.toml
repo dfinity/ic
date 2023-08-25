@@ -37,13 +37,16 @@ ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
 nix = "0.23.0"
-prometheus = { version = "0.12.0", features = [ "process" ] }
+prometheus = { version = "0.12.0", features = ["process"] }
 rand = "0.8"
 prost = "0.11.0"
 registry-canister = { path = "../registry/canister" }
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { version = "1.0.99", features = ["derive"] }
 serde_cbor = "0.11.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 strum = "0.23.0"
 strum_macros = "0.23.0"
@@ -52,7 +55,6 @@ tokio = { version = "1.15.0", features = ["full"] }
 url = "2.1.1"
 
 [dev-dependencies]
-assert_cmd = "0.12"
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }

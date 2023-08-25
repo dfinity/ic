@@ -14,7 +14,6 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
-ic-constants = { path = "../constants" }
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
 ic-crypto-sha2 = { path = "../crypto/sha2" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
@@ -24,8 +23,6 @@ ic-crypto-tls-interfaces = { path = "../crypto/tls_interfaces" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-embedders = { path = "../embedders" }
-ic-error-types = { path = "../types/error_types" }
-ic-execution-environment = { path = "../execution_environment" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
@@ -36,19 +33,14 @@ ic-interfaces-transport = { path = "../interfaces/transport" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
-ic-registry-client = { path = "../registry/client" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
-ic-registry-provisional-whitelist = { path = "../registry/provisional_whitelist" }
 ic-registry-routing-table = { path = "../registry/routing_table" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-replicated-state = { path = "../replicated_state" }
-ic-p2p = { path = "../p2p" }
-ic-replica-setup-ic-network = { path = "../replica/setup_ic_network" }
-ic-sys = { path = "../sys" }
 ic-system-api = { path = "../system_api" }
 ic-test-utilities-logger = { path = "./logger" }
 ic-test-utilities-registry = { path = "./registry" }
@@ -57,7 +49,6 @@ ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
-maplit = "1.0.2"
 mockall = "0.7.2"
 nix = "0.23.0"
 parking_lot = "0.12.1"
@@ -72,10 +63,7 @@ slog = { version = "2.5.2", features = [
     "nested-values",
     "release_max_level_debug",
 ] }
-slog-scope = "4.1.2"
-slog-term = "2.6.0"
 socket2 = { version = "0.5", features = ["all"] }
-strum = "0.23.0"
 tempfile = "3.1.0"
 tokio = { version = "1.15.0" }
 tokio-rustls = "0.24.0"

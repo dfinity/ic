@@ -39,7 +39,6 @@ ic-registry-local-store = { path = "../../registry/local_store" }
 ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
 ic-types = { path = "../../types/types" }
 instant-acme = "0.3.2"
-lazy_static = "1.4.0"
 mockall = "0.11.4"
 opentelemetry = { version = "0.20", features = ["metrics"] }
 opentelemetry-prometheus = "0.13.0"

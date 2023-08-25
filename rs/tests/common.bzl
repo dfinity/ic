@@ -139,7 +139,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
-    "@crate_index//:serde_millis",
     "@crate_index//:slog",
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",

@@ -577,12 +577,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "lazy_static": crate.spec(
                 version = "^1.4.0",
             ),
-            "lazy-regex": crate.spec(
-                version = "^2",
-            ),
-            "leaky-bucket": crate.spec(
-                version = "^0.11.0",
-            ),
             "leb128": crate.spec(
                 version = "^0.2.5",
             ),
