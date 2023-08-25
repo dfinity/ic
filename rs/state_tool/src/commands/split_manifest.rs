@@ -31,7 +31,8 @@ pub fn do_split_manifest(
     let (version, files, chunks, hash) = parse_manifest(
         File::open(&path)
             .map_err(|e| format!("Failed to parse manifest at {}: {}", path.display(), e))?,
-    );
+    )
+    .map_err(|e| format!("Failed to parse manifest at {}: {}", path.display(), e))?;
     let manifest = Manifest::new(version, files, chunks);
 
     // Sanity check: ensure that the parsed manifest is internally consistent; and

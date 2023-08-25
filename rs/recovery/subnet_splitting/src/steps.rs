@@ -3,9 +3,8 @@ use crate::{
     layout::Layout,
     state_tool_helper::StateToolHelper,
     target_subnet::TargetSubnet,
-    utils::{
-        find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_cup, get_state_hash,
-    },
+    utils::{find_expected_state_hash_for_subnet_id, get_batch_time_from_cup, get_state_hash},
+    validation::validate_artifacts,
 };
 
 use ic_base_types::SubnetId;
@@ -15,9 +14,8 @@ use ic_recovery::{
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::rsync,
     registry_helper::VersionedRecoveryResult,
-    replay_helper,
     steps::Step,
-    util::{block_on, parse_hex_str},
+    util::parse_hex_str,
     Recovery, CUPS_DIR, IC_REGISTRY_LOCAL_STORE,
 };
 use ic_registry_routing_table::CanisterIdRange;
@@ -88,7 +86,6 @@ impl StateSplitStrategy {
 pub(crate) struct SplitStateStep {
     pub(crate) subnet_id: SubnetId,
     pub(crate) state_split_strategy: StateSplitStrategy,
-    pub(crate) state_tool_helper: StateToolHelper,
     pub(crate) layout: Layout,
     pub(crate) target_subnet: TargetSubnet,
     pub(crate) logger: Logger,
@@ -138,13 +135,11 @@ impl Step for SplitStateStep {
         let latest_checkpoint_dir = self.layout.latest_checkpoint_dir(self.target_subnet)?;
         let manifest_path = self.layout.actual_manifest_file(self.subnet_id);
 
-        self.state_tool_helper
-            .compute_manifest(&latest_checkpoint_dir, &manifest_path)?;
+        StateToolHelper::compute_manifest(&latest_checkpoint_dir, &manifest_path)?;
 
         // 3. Validate the manifest
         info!(self.logger, "Validating the manifest");
-        self.state_tool_helper
-            .verify_manifest(&manifest_path)
+        StateToolHelper::verify_manifest(&manifest_path)
             .map_err(|err| RecoveryError::validation_failed("Manifest verification failed", err))?;
 
         let expected_state_hash = find_expected_state_hash_for_subnet_id(
@@ -200,11 +195,6 @@ impl Step for ComputeExpectedManifestsStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        self.state_tool_helper.compute_manifest(
-            &self.layout.latest_checkpoint_dir(TargetSubnet::Source)?,
-            self.layout.original_state_manifest_file(),
-        )?;
-
         self.state_tool_helper.split_manifest(
             self.layout.original_state_manifest_file(),
             self.source_subnet_id,
@@ -235,69 +225,37 @@ impl Step for ValidateCUPStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let work_dir = self.layout.work_dir(TargetSubnet::Source);
-
         // 1. Get the subnet's public key using `ic-agent` and persist it at the disk
+        info!(self.logger, "Getting the NNS signed State Tree");
         let agent_helper = AgentHelper::new(
             &self.nns_url,
-            self.layout.nns_public_key_file(),
+            Some(self.layout.nns_public_key_file()),
             self.logger.clone(),
         )?;
 
         let pruned_state_tree = agent_helper.read_subnet_data(self.subnet_id)?;
-        agent_helper
-            .validate_state_tree(&pruned_state_tree)
-            .map_err(|err| {
-                RecoveryError::validation_failed("Failed to validate the state tree", err)
-            })?;
-
         pruned_state_tree.save_to_file(self.layout.pruned_state_tree_file())?;
         pruned_state_tree
             .save_public_key_to_file(&self.layout.subnet_public_key_file(self.subnet_id))?;
 
-        // 2. Run ic-replay to verify the CUP
-        block_on(replay_helper::replay(
+        // 2. Compute the state manifest
+        info!(self.logger, "Computing the state manifest");
+        let latest_checkpoint_dir = self.layout.latest_checkpoint_dir(TargetSubnet::Source)?;
+
+        StateToolHelper::compute_manifest(
+            &latest_checkpoint_dir,
+            self.layout.original_state_manifest_file(),
+        )?;
+
+        // 3. Validate all the artifacts (state tree, CUP, state manifest)
+        validate_artifacts(
+            self.layout.pruned_state_tree_file(),
+            Some(self.layout.nns_public_key_file()),
+            self.layout.pre_split_source_cup_file(),
+            self.layout.original_state_manifest_file(),
             self.subnet_id,
-            work_dir.join("ic.json5"),
-            /*canister_caller_id=*/ None,
-            self.layout.data_dir(TargetSubnet::Source),
-            Some(ic_replay::cmd::SubCommand::VerifySubnetCUP(
-                ic_replay::cmd::VerifySubnetCUPCmd {
-                    cup_file: self.layout.pre_split_source_cup_file(),
-                    public_key_file: self.layout.subnet_public_key_file(self.subnet_id),
-                },
-            )),
-            work_dir.join("cup_validation_result.txt"),
-        ))
-        .map_err(|err| RecoveryError::validation_failed("Failed to validate CUP", err))?;
-
-        // 3. Check if the state hash in the CUP matches the hash of the downloaded state.
-        info!(
-            self.logger,
-            "Checking that the state hash in the CUP matches the hash of the downloaded state"
-        );
-
-        let downloaded_state_hash = self
-            .layout
-            .latest_checkpoint_dir(TargetSubnet::Source)
-            .and_then(get_state_hash)?;
-
-        let cup_state_hash = hex::encode(
-            get_cup(&self.layout.pre_split_source_cup_file())?
-                .content
-                .state_hash
-                .get()
-                .0,
-        );
-
-        if cup_state_hash != downloaded_state_hash {
-            return Err(RecoveryError::ValidationFailed(format!(
-                "State hash from the CUP {} doesn't match the downloaded state hash {}",
-                cup_state_hash, downloaded_state_hash,
-            )));
-        }
-
-        Ok(())
+            &self.logger,
+        )
     }
 }
 

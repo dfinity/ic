@@ -26,11 +26,7 @@ use ic_types::consensus::CatchUpPackage;
 use ic_types::ReplicaVersion;
 use prost::Message;
 use std::cell::RefCell;
-use std::convert::{TryFrom, TryInto};
-use std::error::Error;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use std::convert::TryFrom;
 use std::rc::Rc;
 
 mod backup;
@@ -77,15 +73,6 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
     let res_clone = Rc::clone(&result);
     Config::run_with_temp_config(|default_config| {
         let subcmd = &args.subcmd;
-        if let Some(SubCommand::VerifySubnetCUP(cmd)) = subcmd {
-            if let Err(err) = verify_cup_signature(&cmd.cup_file, &cmd.public_key_file) {
-                println!("CUP signature verification failed: {}", err);
-                std::process::exit(1);
-            } else {
-                println!("CUP signature verification succeeded!");
-                return;
-            }
-        }
 
         let source = ConfigSource::File(args.config.unwrap_or_else(|| {
             println!("Config file is required!");
@@ -306,41 +293,5 @@ fn cmd_get_recovery_cup(
     use std::io::Write;
     file.write_all(&bytes)
         .expect("Failed to write to output file");
-    Ok(())
-}
-
-fn verify_cup_signature(cup_file: &Path, public_key_file: &Path) -> Result<(), Box<dyn Error>> {
-    let mut file = File::open(cup_file)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-
-    let cup: ic_types::consensus::CatchUpPackage =
-        (&ic_protobuf::types::v1::CatchUpPackage::decode(buffer.as_slice())?).try_into()?;
-    let pk = ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key(public_key_file)?;
-
-    use ic_types::consensus::HasHeight;
-    if let Some((_, transcript)) = &cup
-        .content
-        .block
-        .as_ref()
-        .payload
-        .as_ref()
-        .as_summary()
-        .dkg
-        .current_transcripts()
-        .iter()
-        .next()
-    {
-        println!("Dealer subnet: {}", transcript.dkg_id.dealer_subnet);
-    }
-    println!("CUP height: {}", &cup.content.height());
-    println!(
-        "State hash: {}",
-        hex::encode(cup.content.clone().state_hash.get().0)
-    );
-    println!();
-
-    ic_crypto_utils_threshold_sig::verify_combined(&cup.content, &cup.signature.signature, &pk)?;
-
     Ok(())
 }

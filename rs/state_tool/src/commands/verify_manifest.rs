@@ -12,7 +12,9 @@ use std::{
     str::FromStr,
 };
 
-fn parse_hash(hash: &str) -> [u8; 32] {
+type StateHash = [u8; 32];
+
+fn parse_hash(hash: &str) -> StateHash {
     let hash = hex::decode(hash).unwrap();
     assert_eq!(hash.len(), 32);
     hash.try_into().unwrap()
@@ -80,22 +82,22 @@ fn extract_chunk_table(lines: &[String]) -> Vec<ChunkInfo> {
         .collect::<Vec<_>>()
 }
 
-fn extract_root_hash(lines: &[String]) -> [u8; 32] {
+fn extract_root_hash(lines: &[String]) -> Result<StateHash, String> {
     hex::decode(
         lines
             .iter()
             .find(|line| line.starts_with("ROOT HASH: "))
-            .unwrap()
+            .ok_or_else(|| String::from("Failed to find the root hash in the manifest"))?
             .replace("ROOT HASH: ", ""),
     )
-    .unwrap()
+    .map_err(|err| format!("Failed to decode the root hash: {}", err))?
     .try_into()
-    .unwrap()
+    .map_err(|err| format!("Failed to decode the root hash: {:?}", err))
 }
 
 pub(crate) fn parse_manifest(
     file: File,
-) -> (StateSyncVersion, Vec<FileInfo>, Vec<ChunkInfo>, [u8; 32]) {
+) -> Result<(StateSyncVersion, Vec<FileInfo>, Vec<ChunkInfo>, StateHash), String> {
     let manifest_lines: Vec<String> = BufReader::new(file)
         .lines()
         .map(|line| line.unwrap())
@@ -106,13 +108,13 @@ pub(crate) fn parse_manifest(
     let file_table = extract_file_table(&manifest_lines);
     let chunk_table = extract_chunk_table(&manifest_lines);
 
-    let root_hash = extract_root_hash(&manifest_lines);
+    let root_hash = extract_root_hash(&manifest_lines)?;
 
-    (manifest_version, file_table, chunk_table, root_hash)
+    Ok((manifest_version, file_table, chunk_table, root_hash))
 }
 
-fn verify_manifest(file: File) -> Result<(), String> {
-    let (version, file_table, chunk_table, root_hash) = parse_manifest(file);
+pub fn verify_manifest(file: File) -> Result<StateHash, String> {
+    let (version, file_table, chunk_table, root_hash) = parse_manifest(file)?;
     if version > MAX_SUPPORTED_STATE_SYNC_VERSION {
         panic!(
             "Unsupported state sync version provided {:?}. Max supported version {:?}",
@@ -125,10 +127,9 @@ fn verify_manifest(file: File) -> Result<(), String> {
         &manifest,
         &CryptoHashOfState::from(CryptoHash(root_hash.to_vec())),
     )
-    .unwrap();
-    println!("Root hash: {}", hex::encode(root_hash));
+    .map_err(|err| format!("Failed to validate the manifest: {}", err))?;
 
-    Ok(())
+    Ok(root_hash)
 }
 
 // Parses a manifest in its textual representation as output by manifest
@@ -137,7 +138,11 @@ fn verify_manifest(file: File) -> Result<(), String> {
 // Note that this means that it doesn't recompute the chunk hashes as
 // recomputing these would require to have the respective files at hand.
 pub fn do_verify_manifest(file: &Path) -> Result<(), String> {
-    verify_manifest(File::open(file).unwrap())
+    let root_hash = verify_manifest(File::open(file).unwrap())?;
+
+    println!("Root hash: {}", hex::encode(root_hash));
+
+    Ok(())
 }
 
 #[cfg(test)]
