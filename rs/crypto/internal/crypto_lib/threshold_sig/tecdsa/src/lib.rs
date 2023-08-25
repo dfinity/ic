@@ -1106,9 +1106,10 @@ pub fn verify_dealing_opening(
     opener_index: NodeIndex,
     opening: &CommitmentOpening,
 ) -> Result<(), ThresholdVerifyOpeningInternalError> {
-    let is_invalid = !verified_dealing
+    let is_invalid = verified_dealing
         .commitment
-        .check_opening(opener_index, opening)?;
+        .check_opening(opener_index, opening)
+        .is_err();
     if is_invalid {
         return Err(ThresholdVerifyOpeningInternalError::InvalidOpening);
     }

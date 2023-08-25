@@ -152,7 +152,10 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
         )
         .expect("Unable to open dealing");
 
-        assert!(verify_dealing_opening(dealing, opener_index, &opening).is_ok());
+        assert_eq!(
+            verify_dealing_opening(dealing, opener_index, &opening),
+            Ok(())
+        );
 
         let corrupted_opening = test_utils::corrupt_opening(&opening)?;
 
