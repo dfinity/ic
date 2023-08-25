@@ -16,7 +16,9 @@ use ic_protobuf::registry::{
 
 use crate::mutations::node_management::common::{
     get_node_operator_record, make_add_node_registry_mutations, make_update_node_operator_mutation,
+    scan_for_nodes_by_ip,
 };
+use crate::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::time::Time;
 use prost::Message;
@@ -27,30 +29,57 @@ impl Registry {
     /// This method is called directly by the node or tool that needs to
     /// add a node.
     pub fn do_add_node(&mut self, payload: AddNodePayload) -> Result<NodeId, String> {
-        println!("{}do_add_node started: {:?}", LOG_PREFIX, payload);
+        println!(
+            "{}do_add_node started: {:?} caller: {:?}",
+            LOG_PREFIX,
+            payload,
+            dfn_core::api::caller()
+        );
 
         // The steps are now:
         // 1. get the caller ID and check if it is in the registry
         let caller = dfn_core::api::caller();
 
-        let node_operator_record = get_node_operator_record(self, caller)
+        let mut node_operator_record = get_node_operator_record(self, caller)
             .map_err(|err| format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err))
             .unwrap();
 
-        // 2. check if adding one more node will get us over the cap for the Node
+        // 2. Clear out any nodes that already exist at this IP.
+        // This will only succeed if:
+        // - the same NO was in control of the original nodes.
+        // - the nodes are no longer in subnets.
+        //
+        // (We use the http endpoint to be in line with what is used by the
+        // release dashboard.)
+        let http_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
+        let nodes_with_same_ip = scan_for_nodes_by_ip(self, &http_endpoint.ip_addr);
+        if !nodes_with_same_ip.is_empty() {
+            for node_id in nodes_with_same_ip {
+                self.do_remove_node_directly(RemoveNodeDirectlyPayload { node_id });
+            }
+
+            // Update the NO record, as the available allowance may have changed.
+            node_operator_record = get_node_operator_record(self, caller)
+                .map_err(|err| {
+                    format!("{}do_add_node: Aborting node addition: {}", LOG_PREFIX, err)
+                })
+                .unwrap();
+        }
+
+        // 3. check if adding one more node will get us over the cap for the Node
         // Operator
         if node_operator_record.node_allowance == 0 {
             return Err("Node allowance for this Node Operator is exhausted".to_string());
         }
 
-        // 3. Validate keys and get the node id
+        // 4. Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)?;
 
         println!("{}do_add_node: The node id is {:?}", LOG_PREFIX, node_id);
 
         let mut p2p_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
         p2p_endpoint.port = 4100;
-        // 4. create the Node Record
+        // 5. create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
@@ -62,7 +91,7 @@ impl Registry {
             hostos_version_id: None,
         };
 
-        // 5. Insert node, public keys, and crypto keys
+        // 6. Insert node, public keys, and crypto keys
         let mut mutations = make_add_node_registry_mutations(node_id, node_record, valid_pks);
 
         // Update the Node Operator record
