@@ -327,7 +327,7 @@ mod loading {
         lockable_threshold_sig_data_store
             .write()
             .insert_transcript_data(
-                DkgId::NiDkgId(dkg_id),
+                dkg_id,
                 CspPublicCoefficients::from(csp_transcript),
                 indices(committee),
             );

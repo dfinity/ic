@@ -12,7 +12,7 @@ use ic_types::{
     state_sync::{ChunkInfo, FileInfo},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
-    CanisterId, Cycles, Height, IDkgId, NodeId, RegistryVersion, SubnetId, Time, UserId,
+    CanisterId, Cycles, Height, NodeId, RegistryVersion, SubnetId, Time, UserId,
 };
 use proptest::prelude::*;
 use std::{convert::TryInto, time::Duration};
@@ -97,19 +97,6 @@ prop_compose! {
       subnet_id in any::<u64>(),
     ) -> SubnetId {
         subnet_test_id(subnet_id)
-    }
-}
-
-prop_compose! {
-    /// Returns an arbitrary [`IDkgId`].
-    pub fn dkg_id() (
-      instance_id in height(),
-      subnet_id in subnet_id()
-    ) -> IDkgId {
-        IDkgId {
-            instance_id,
-            subnet_id,
-        }
     }
 }
 

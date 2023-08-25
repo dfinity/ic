@@ -28,7 +28,7 @@ use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRe
 use ic_types::crypto::threshold_sig::ni_dkg::errors::load_transcript_error::DkgLoadTranscriptError;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::verify_dealing_error::DkgVerifyDealingError;
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    config::NiDkgConfig, DkgId, NiDkgDealing, NiDkgId, NiDkgTranscript,
+    config::NiDkgConfig, NiDkgDealing, NiDkgId, NiDkgTranscript,
 };
 use ic_types::crypto::{
     AlgorithmId, BasicSig, BasicSigOf, CanisterSigOf, CombinedMultiSig, CombinedMultiSigOf,
@@ -181,7 +181,11 @@ impl<T: Signable> MultiSigVerifier<T> for CryptoReturningOk {
 }
 
 impl<T: Signable> ThresholdSigner<T> for CryptoReturningOk {
-    fn sign_threshold(&self, _message: &T, _dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
+    fn sign_threshold(
+        &self,
+        _message: &T,
+        _dkg_id: NiDkgId,
+    ) -> CryptoResult<ThresholdSigShareOf<T>> {
         Ok(ThresholdSigShareOf::new(ThresholdSigShare(vec![])))
     }
 }
@@ -191,7 +195,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &ThresholdSigShareOf<T>,
         _message: &T,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
         _signer: NodeId,
     ) -> CryptoResult<()> {
         Ok(())
@@ -200,7 +204,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
     fn combine_threshold_sig_shares(
         &self,
         _shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
     ) -> CryptoResult<CombinedThresholdSigOf<T>> {
         Ok(CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])))
     }
@@ -209,7 +213,7 @@ impl<T: Signable> ThresholdSigVerifier<T> for CryptoReturningOk {
         &self,
         _signature: &CombinedThresholdSigOf<T>,
         _message: &T,
-        _dkg_id: DkgId,
+        _dkg_id: NiDkgId,
     ) -> CryptoResult<()> {
         Ok(())
     }

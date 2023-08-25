@@ -13,7 +13,7 @@ use ic_interfaces::crypto::{
 };
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_dealing_error::DkgCreateDealingError;
-use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgTag, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::{
     CombinedThresholdSigOf, CryptoError, Signable, SignableMock, ThresholdSigShareOf,
 };
@@ -215,14 +215,14 @@ fn setup_with_random_ni_dkg_config<R: Rng + CryptoRng>(
     rng: &mut R,
 ) -> (
     NiDkgConfig,
-    DkgId,
+    NiDkgId,
     BTreeMap<NodeId, TempCryptoComponentGeneric<ChaCha20Rng>>,
 ) {
     let config = RandomNiDkgConfig::builder()
         .subnet_size(subnet_size)
         .build(rng)
         .into_config();
-    let dkg_id = DkgId::NiDkgId(config.dkg_id());
+    let dkg_id = config.dkg_id();
     let crypto_components = NiDkgTestEnvironment::new_for_config(&config, rng).crypto_components;
     (config, dkg_id, crypto_components)
 }
@@ -282,7 +282,7 @@ struct SignersAndCombiner {
 fn threshold_sign_and_combine<H: Signable, C: CryptoComponentRng>(
     signers_and_combiner: SignersAndCombiner,
     msg: &H,
-    dkg_id: DkgId,
+    dkg_id: NiDkgId,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
 ) -> CombinedThresholdSigOf<H> {
     let sig_shares = sign_threshold_for_each(
@@ -299,7 +299,7 @@ fn threshold_sign_and_combine<H: Signable, C: CryptoComponentRng>(
 fn sign_threshold_for_each<H: Signable, C: CryptoComponentRng>(
     signers: &[NodeId],
     msg: &H,
-    dkg_id: DkgId,
+    dkg_id: NiDkgId,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponentGeneric<C>>,
 ) -> BTreeMap<NodeId, ThresholdSigShareOf<H>> {
     signers
@@ -725,14 +725,14 @@ mod non_interactive_distributed_key_generation {
         config: &RandomNiDkgConfig,
         env: &mut NiDkgTestEnvironment,
         rng: &mut R,
-    ) -> (NiDkgTranscript, DkgId, HashSet<NodeId>) {
+    ) -> (NiDkgTranscript, NiDkgId, HashSet<NodeId>) {
         env.update_for_config(config.get(), rng);
         let transcript =
             run_ni_dkg_and_create_single_transcript(config.get(), &env.crypto_components);
 
         load_transcript_for_receivers(config.get(), &transcript, &env.crypto_components);
 
-        let dkg_id = DkgId::NiDkgId(config.get().dkg_id());
+        let dkg_id = config.get().dkg_id();
         let nodes = config.receiver_ids();
 
         (transcript, dkg_id, nodes)
@@ -740,7 +740,7 @@ mod non_interactive_distributed_key_generation {
 
     fn nodes_can_sign_in_epoch(
         nodes: &HashSet<NodeId>,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         env: &NiDkgTestEnvironment,
     ) -> bool {
         let msg = message();
@@ -757,7 +757,7 @@ mod non_interactive_distributed_key_generation {
 
     fn nodes_cannot_sign_in_epoch_due_to_missing_secret_key(
         nodes: &HashSet<NodeId>,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         env: &NiDkgTestEnvironment,
     ) -> bool {
         let msg = message();
@@ -781,7 +781,7 @@ mod non_interactive_distributed_key_generation {
 
     fn nodes_cannot_sign_in_epoch_due_to_missing_threshold_sig_data(
         nodes: &HashSet<NodeId>,
-        dkg_id: DkgId,
+        dkg_id: NiDkgId,
         env: &NiDkgTestEnvironment,
     ) -> bool {
         let msg = message();

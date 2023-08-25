@@ -11,7 +11,7 @@ use ic_crypto_test_utils_ni_dkg::{
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::crypto::{NiDkgAlgorithm, ThresholdSigVerifier, ThresholdSigner};
 use ic_types::consensus::Threshold;
-use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgId, NiDkgTag, NiDkgTranscript};
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::SignableMock;
 use ic_types::{Height, NodeId};
 use rand::prelude::*;
@@ -122,9 +122,7 @@ fn bench_threshold_sign<M: Measurement, R: Rng + CryptoRng>(
                 (message, signer)
             },
             |(message, signer)| {
-                assert!(signer
-                    .sign_threshold(&message, DkgId::NiDkgId(dkg_id))
-                    .is_ok());
+                assert!(signer.sign_threshold(&message, dkg_id).is_ok());
             },
             SmallInput,
         )
@@ -146,7 +144,7 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement, R: Rng +
                 let signer_node_id = random_node(nodes_in_subnet, rng);
                 let signer = crypto_for(signer_node_id, crypto_components);
                 let sig_share = signer
-                    .sign_threshold(&message, DkgId::NiDkgId(dkg_id))
+                    .sign_threshold(&message, dkg_id)
                     .expect("failed to threshold sign");
 
                 let verifier_node_id = random_node(nodes_in_subnet, rng);
@@ -165,12 +163,7 @@ fn bench_verify_threshold_sig_share_incl_loading_pubkey<M: Measurement, R: Rng +
             },
             |(sig_share, message, verifier, signer_node_id)| {
                 assert!(verifier
-                    .verify_threshold_sig_share(
-                        &sig_share,
-                        &message,
-                        DkgId::NiDkgId(dkg_id),
-                        signer_node_id
-                    )
+                    .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
                     .is_ok());
             },
             SmallInput,
@@ -192,7 +185,7 @@ fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement, R: Rng +
                 let signer_node_id = random_node(nodes_in_subnet, rng);
                 let signer = crypto_for(signer_node_id, crypto_components);
                 let sig_share = signer
-                    .sign_threshold(&message, DkgId::NiDkgId(dkg_id))
+                    .sign_threshold(&message, dkg_id)
                     .expect("failed to threshold sign");
                 let verifier = crypto_for(random_node(nodes_in_subnet, rng), crypto_components);
 
@@ -202,24 +195,14 @@ fn bench_verify_threshold_sig_share_excl_loading_pubkey<M: Measurement, R: Rng +
                 // the benchmark is performed to ensure the public key is available
                 // in the data store during the benchmark.
                 assert!(verifier
-                    .verify_threshold_sig_share(
-                        &sig_share,
-                        &message,
-                        DkgId::NiDkgId(dkg_id),
-                        signer_node_id
-                    )
+                    .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
                     .is_ok());
 
                 (sig_share, message, verifier, signer_node_id)
             },
             |(sig_share, message, verifier, signer_node_id)| {
                 assert!(verifier
-                    .verify_threshold_sig_share(
-                        &sig_share,
-                        &message,
-                        DkgId::NiDkgId(dkg_id),
-                        signer_node_id
-                    )
+                    .verify_threshold_sig_share(&sig_share, &message, dkg_id, signer_node_id)
                     .is_ok());
             },
             SmallInput,
@@ -245,7 +228,7 @@ fn bench_combine_threshold_sig_shares<M: Measurement, R: Rng + CryptoRng>(
             },
             |(sig_shares, combiner)| {
                 assert!(combiner
-                    .combine_threshold_sig_shares(sig_shares, DkgId::NiDkgId(dkg_id))
+                    .combine_threshold_sig_shares(sig_shares, dkg_id)
                     .is_ok());
             },
             SmallInput,
@@ -267,14 +250,14 @@ fn bench_verify_threshold_sig_combined<M: Measurement, R: Rng + CryptoRng>(
                 let sig_shares =
                     sign_threshold_for_each(nodes, &message, dkg_id, crypto_components);
                 let threshold_sig = crypto_for(random_node(nodes, rng), crypto_components)
-                    .combine_threshold_sig_shares(sig_shares, DkgId::NiDkgId(dkg_id))
+                    .combine_threshold_sig_shares(sig_shares, dkg_id)
                     .expect("failed to combine threshold signature shares");
                 let verifier = crypto_for(random_node(nodes, rng), crypto_components);
                 (threshold_sig, message, verifier)
             },
             |(threshold_sig, message, verifier)| {
                 assert!(verifier
-                    .verify_threshold_sig_combined(&threshold_sig, &message, DkgId::NiDkgId(dkg_id))
+                    .verify_threshold_sig_combined(&threshold_sig, &message, dkg_id)
                     .is_ok());
             },
             SmallInput,
