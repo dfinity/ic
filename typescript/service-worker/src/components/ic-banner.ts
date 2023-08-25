@@ -27,6 +27,18 @@ export class BannerElement extends LitElement {
       margin-bottom: 1rem;
     }
 
+    [role='doc-message'] {
+      margin-bottom: 1rem;
+    }
+
+    .info-message {
+      text-align: center;
+      display: flex;
+      align-items: center;
+      flex-direction: column;
+      justify-content: center;
+    }
+
     @media only screen and (max-width: 600px) {
       :host {
         margin: 0;
@@ -46,6 +58,9 @@ export class BannerElement extends LitElement {
         <div class="container">
           <h1>${this.title}</h1>
           <div role="doc-subtitle">${this.subtitle}</div>
+          <div class="info-message">
+            <slot></slot>
+          </div>
         </div>
       `;
     }
@@ -53,6 +68,9 @@ export class BannerElement extends LitElement {
     return html`
       <div class="container">
         <h1>${this.title}</h1>
+        <div class="info-message">
+          <slot></slot>
+        </div>
       </div>
     `;
   }

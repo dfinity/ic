@@ -81,13 +81,6 @@ const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
               return !resourcePath.endsWith('.html');
             },
           },
-          {
-            from: path.join(
-              __dirname,
-              'node_modules',
-              '@dfinity/response-verification/dist/web/web_bg.wasm'
-            ),
-          },
         ],
       }),
       new webpack.EnvironmentPlugin({

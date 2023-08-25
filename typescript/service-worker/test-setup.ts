@@ -6,6 +6,9 @@
 import { mockBrowserCacheAPI } from './src/mocks/browser-cache';
 import path from 'path';
 import fs from 'fs';
+import { Crypto } from '@peculiar/webcrypto';
+
+const webcrypto = new Crypto();
 
 if (!process.env.DEBUG_LOGS) {
   jest.mock('./src/logger');
@@ -25,11 +28,32 @@ Object.defineProperty(self, 'location', {
   writable: true,
 });
 process.env.FORCE_FETCH_ROOT_KEY = 'true';
-const crypto = require('crypto');
+
+// web crypto mock implementation for tests
+
+const getRandomValuesMockFn = (array: ArrayBufferView) => {
+  const view = new Uint8Array(
+    array.buffer,
+    array.byteOffset,
+    array.byteLength
+  );
+  for (let i = 0; i < view.length; i++) {
+    view[i] = Math.floor(Math.random() * 256);
+  }
+  return array;
+};
+
+Object.defineProperty(global.window, 'crypto', {
+  value: {
+    subtle: webcrypto.subtle,
+    getRandomValues: getRandomValuesMockFn,
+  },
+});
+
 Object.defineProperty(global.self, 'crypto', {
   value: {
-    subtle: require('crypto').webcrypto.subtle,
-    getRandomValues: (arr: any[]) => crypto.randomBytes(arr.length),
+    subtle: webcrypto.subtle,
+    getRandomValues: getRandomValuesMockFn,
   },
 });
 

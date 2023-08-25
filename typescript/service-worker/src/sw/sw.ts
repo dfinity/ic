@@ -1,10 +1,12 @@
 import { AgentHTTPResponseError } from '@dfinity/agent/lib/cjs/agent/http/errors';
-import { ServiceWorkerEvents } from '../typings';
+import { ServiceWorkerEvents, ServiceWorkerMessages } from '../typings';
 import { CanisterResolver } from './domains';
 import { RequestProcessor } from './requests';
 import {
   getBoundaryNodeRequestId,
   loadResponseVerification,
+  reloadServiceWorkerClients,
+  uninstallServiceWorker,
 } from './requests/utils';
 import { handleErrorResponse } from './views/error';
 
@@ -60,11 +62,18 @@ self.addEventListener('fetch', (event) => {
 
 // handle events from the client messages
 self.addEventListener('message', async (event) => {
-  const body = event.data;
+  const body = event.data as ServiceWorkerMessages;
   switch (body?.action) {
     case ServiceWorkerEvents.SaveICHostInfo: {
       const resolver = await CanisterResolver.setup();
       await resolver.saveICHostInfo(body.data);
+      break;
+    }
+    case ServiceWorkerEvents.ResetServiceWorker: {
+      await uninstallServiceWorker();
+      if (body.data.reloadFromWorker) {
+        await reloadServiceWorkerClients();
+      }
       break;
     }
   }

@@ -5,7 +5,10 @@ import {
   responseVerification,
   streamBody,
 } from '../response';
-import { VerifiedResponse } from './typings';
+import {
+  VerifiedResponse,
+  responseVerificationFailedResponse,
+} from './typings';
 import {
   HttpRequest,
   HttpResponse,
@@ -66,8 +69,8 @@ export async function queryCallHandler(
     if (error instanceof ResponseVerificationError) {
       return {
         response: new Response('Response verification failed', {
-          status: 500,
-          statusText: 'Response verification failed',
+          status: responseVerificationFailedResponse.status,
+          statusText: responseVerificationFailedResponse.statusText,
         }),
         certifiedHeaders: new Headers(),
       };

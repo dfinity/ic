@@ -1,5 +1,6 @@
 import errorPageHtml from 'html-loader?{"minimize":{"removeComments":false}}!./error.html';
 import logger from '../../logger';
+import { responseVerificationFailedResponse } from '../requests';
 
 export interface ErrorResponseProps {
   isNavigation: boolean;
@@ -21,14 +22,31 @@ const couldNotConnectMsg = `
 <div role="doc-subtitle">
   <p>
     There was an issue connecting to the Internet Computer network.
+    <br />
     Please check your Internet connection and try again.  
   </p>
-
-  <p>
-    If this issue persists, please feel free to reach out on
-    <a href="https://forum.dfinity.org/" target="_blank" rel="noopener noreferrer">the Internet Computer forum</a>.
-  </p>
 </div>
+`;
+
+const reloadServiceWorkerSection = `
+<hr />
+<p>
+  Click
+  <button
+    class="anchor reload-btn"
+    href="#"
+    onclick="this.disabled=true;reloadServiceWorker()"
+  >
+    here
+  </button>
+  to reload the page, if this issue persists, please feel free to reach out on
+  <a
+    href="https://forum.dfinity.org/"
+    target="_blank"
+    rel="noopener noreferrer"
+    class="anchor"
+  >the Internet Computer forum</a>.
+</p>
 `;
 
 const getDisplayMessage = (err: unknown): string => {
@@ -115,6 +133,21 @@ const logProps = (props: ErrorResponseProps): void => {
   }
 };
 
+const afterContentSection = (props: ErrorResponseProps): string => {
+  if (!props.response) {
+    return reloadServiceWorkerSection;
+  }
+
+  if (
+    props.response.status !== responseVerificationFailedResponse.status &&
+    props.response.statusText !== responseVerificationFailedResponse.statusText
+  ) {
+    return reloadServiceWorkerSection;
+  }
+
+  return '';
+};
+
 export const handleErrorResponse = async (
   props: ErrorResponseProps
 ): Promise<Response> => {
@@ -123,10 +156,12 @@ export const handleErrorResponse = async (
   if (props.isNavigation) {
     const displayMessage = getDisplayMessage(props.error);
     const extraDetails = await getErrorDetails(props);
+    const afterContent = afterContentSection(props);
 
     return new Response(
       errorPageHtml
         .replace('<!--{{content}}-->', displayMessage)
+        .replace('<!--{{afterContent}}-->', afterContent)
         .replace('<!--{{extraDetailsContent}}-->', extraDetails),
       {
         status: 502,
