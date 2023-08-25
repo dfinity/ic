@@ -83,7 +83,7 @@ pub mod internal {
         create_transcript_error::DkgCreateTranscriptError, key_removal_error::DkgKeyRemovalError,
         load_transcript_error::DkgLoadTranscriptError, verify_dealing_error::DkgVerifyDealingError,
     };
-    use ic_types::crypto::threshold_sig::ni_dkg::{DkgId, NiDkgDealing, NiDkgTranscript};
+    use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgDealing, NiDkgId, NiDkgTranscript};
     use ic_types::crypto::threshold_sig::IcRootOfTrust;
     use ic_types::crypto::{
         BasicSigOf, CanisterSigOf, CombinedMultiSigOf, CombinedThresholdSigOf, CryptoResult,
@@ -825,7 +825,7 @@ pub mod internal {
             &self,
             signature: &ThresholdSigShareOf<T>,
             message: &T,
-            dkg_id: DkgId,
+            dkg_id: NiDkgId,
             signer: NodeId,
         ) -> CryptoResult<()> {
             self.crypto_component
@@ -835,7 +835,7 @@ pub mod internal {
         fn combine_threshold_sig_shares(
             &self,
             shares: BTreeMap<NodeId, ThresholdSigShareOf<T>>,
-            dkg_id: DkgId,
+            dkg_id: NiDkgId,
         ) -> CryptoResult<CombinedThresholdSigOf<T>> {
             self.crypto_component
                 .combine_threshold_sig_shares(shares, dkg_id)
@@ -845,7 +845,7 @@ pub mod internal {
             &self,
             signature: &CombinedThresholdSigOf<T>,
             message: &T,
-            dkg_id: DkgId,
+            dkg_id: NiDkgId,
         ) -> CryptoResult<()> {
             self.crypto_component
                 .verify_threshold_sig_combined(signature, message, dkg_id)
@@ -947,7 +947,7 @@ pub mod internal {
         fn sign_threshold(
             &self,
             message: &T,
-            dkg_id: DkgId,
+            dkg_id: NiDkgId,
         ) -> CryptoResult<ThresholdSigShareOf<T>> {
             self.crypto_component.sign_threshold(message, dkg_id)
         }

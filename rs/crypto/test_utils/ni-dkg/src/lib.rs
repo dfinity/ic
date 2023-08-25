@@ -11,7 +11,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::consensus::get_faults_tolerated;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfig, NiDkgConfigData};
 use ic_types::crypto::threshold_sig::ni_dkg::{
-    DkgId, NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
+    NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
 };
 use ic_types::crypto::{KeyPurpose, Signable, ThresholdSigShareOf};
 use ic_types::{Height, NodeId, NumberOfNodes, PrincipalId, RegistryVersion, SubnetId};
@@ -171,7 +171,7 @@ pub fn sign_threshold_for_each<H: Signable, R: CryptoComponentRng>(
         .iter()
         .map(|signer| {
             let sig_share = crypto_for(*signer, crypto_components)
-                .sign_threshold(msg, DkgId::NiDkgId(dkg_id))
+                .sign_threshold(msg, dkg_id)
                 .unwrap_or_else(|_| panic!("signing by node {:?} failed", signer));
             (*signer, sig_share)
         })

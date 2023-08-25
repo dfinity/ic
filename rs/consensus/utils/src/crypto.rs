@@ -10,7 +10,7 @@ use ic_types::{
     },
     crypto::{
         canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
-        threshold_sig::ni_dkg::{DkgId, NiDkgId},
+        threshold_sig::ni_dkg::NiDkgId,
         CryptoError, CryptoHashOf, CryptoHashable, CryptoResult, Signable, Signed,
     },
     signature::{
@@ -226,7 +226,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
         signer: NodeId,
         dkg_id: NiDkgId,
     ) -> CryptoResult<ThresholdSignatureShare<Message>> {
-        self.sign_threshold(message, DkgId::NiDkgId(dkg_id))
+        self.sign_threshold(message, dkg_id)
             .map(|signature| ThresholdSignatureShare { signature, signer })
     }
 
@@ -239,7 +239,7 @@ where {
         self.verify_threshold_sig_share(
             &message.signature.signature,
             &message.content,
-            DkgId::NiDkgId(dkg_id),
+            dkg_id,
             message.signature.signer,
         )
     }
@@ -433,7 +433,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
                 .iter()
                 .map(|share| (share.signer, share.signature.clone()))
                 .collect(),
-            DkgId::NiDkgId(dkg_id),
+            dkg_id,
         )
         .map(|signature| ThresholdSignature {
             signer: dkg_id,
@@ -449,7 +449,7 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
         self.verify_threshold_sig_combined(
             &message.signature.signature,
             &message.content,
-            DkgId::NiDkgId(message.signature.signer),
+            message.signature.signer,
         )
     }
 }

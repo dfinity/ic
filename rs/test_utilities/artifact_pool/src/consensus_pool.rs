@@ -18,10 +18,12 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
-use ic_types::artifact_kind::ConsensusArtifact;
 use ic_types::batch::ValidationContext;
-use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
 use ic_types::signature::*;
+use ic_types::{
+    artifact_kind::ConsensusArtifact,
+    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
+};
 use ic_types::{consensus::*, crypto::*, *};
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -436,9 +438,11 @@ impl TestConsensusPool {
         );
         let mut rand_num = [0; 32].iter().cycle();
         let node_id = node_test_id(0);
-        let dkg_id = IDkgId {
-            instance_id: Height::from(0),
-            subnet_id: subnet_test_id(0),
+        let dkg_id = NiDkgId {
+            start_block_height: Height::from(0),
+            dealer_subnet: subnet_test_id(0),
+            dkg_tag: NiDkgTag::HighThreshold,
+            target_subnet: NiDkgTargetSubnet::Local,
         };
         let crypto = CryptoReturningOk::default();
 
@@ -510,7 +514,7 @@ impl TestConsensusPool {
             let content = RandomBeaconContent::new(height, ic_types::crypto::crypto_hash(&beacon));
             let share = RandomBeaconShare {
                 signature: crypto
-                    .sign_threshold(&content, DkgId::IDkgId(dkg_id))
+                    .sign_threshold(&content, dkg_id)
                     .map(|signature| ThresholdSignatureShare {
                         signature,
                         signer: node_id,

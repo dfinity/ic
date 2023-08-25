@@ -16,7 +16,7 @@ pub use sign::{Signable, SignableMock};
 pub mod error;
 pub mod threshold_sig;
 
-use crate::crypto::threshold_sig::ni_dkg::DkgId;
+use crate::crypto::threshold_sig::ni_dkg::NiDkgId;
 use crate::registry::RegistryClientError;
 use crate::{CountBytes, NodeId, RegistryVersion, SubnetId};
 use core::fmt::Formatter;
@@ -310,7 +310,7 @@ pub enum CryptoError {
     RegistryClient(RegistryClientError),
     /// Threshold signature data store did not contain the expected data (public
     /// coefficients and node indices)
-    ThresholdSigDataNotFound { dkg_id: DkgId },
+    ThresholdSigDataNotFound { dkg_id: NiDkgId },
     /// DKG transcript for given subnet ID not found at given registry version.
     DkgTranscriptNotFound {
         subnet_id: SubnetId,

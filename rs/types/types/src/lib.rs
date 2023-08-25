@@ -106,7 +106,6 @@ use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
-use std::fmt::Display;
 use std::sync::Arc;
 
 pub struct UserTag {}
@@ -130,29 +129,6 @@ pub fn user_id_try_from_protobuf(value: pb::UserId) -> Result<UserId, PrincipalI
     // `Option`.  We simply treat them as required here though.
     let principal_id = PrincipalId::try_from(value.principal_id.unwrap())?;
     Ok(UserId::from(principal_id))
-}
-
-/// The ID for interactive DKG.
-#[derive(Copy, Clone, Debug, Deserialize, Eq, PartialOrd, Ord, Hash, PartialEq, Serialize)]
-pub struct IDkgId {
-    pub instance_id: Height,
-    pub subnet_id: SubnetId,
-}
-
-impl Display for IDkgId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "instance_id: '{}', subnet_id: '{}'",
-            self.instance_id, self.subnet_id
-        )
-    }
-}
-
-impl IDkgId {
-    pub fn start_height(&self) -> Height {
-        self.instance_id
-    }
 }
 
 /// A non-negative amount of nodes, typically used in DKG.

@@ -16,10 +16,10 @@ const NODE_2_INDEX: NodeIndex = 2;
 
 #[test]
 fn should_contain_transcript_data_after_insertion_with_nidkg_id() {
-    should_contain_transcript_data_after_insertion_with_dkg_id(DkgId::NiDkgId(NI_DKG_ID_1));
+    should_contain_transcript_data_after_insertion_with_dkg_id(NI_DKG_ID_1);
 }
 
-fn should_contain_transcript_data_after_insertion_with_dkg_id(dkg_id: DkgId) {
+fn should_contain_transcript_data_after_insertion_with_dkg_id(dkg_id: NiDkgId) {
     let mut store = ThresholdSigDataStoreImpl::new();
     let indices = indices_with(vec![
         (node_test_id(NODE_1), NODE_1_INDEX),
@@ -45,12 +45,12 @@ fn should_contain_transcript_data_after_insertion_with_dkg_id(dkg_id: DkgId) {
 fn should_not_contain_nonexistent_transcript_data() {
     let store = ThresholdSigDataStoreImpl::new();
 
-    assert!(store.transcript_data(DkgId::NiDkgId(NI_DKG_ID_1)).is_none());
+    assert!(store.transcript_data(NI_DKG_ID_1).is_none());
 }
 
 #[test]
 fn should_contain_individual_public_keys_after_insertion_with_nidkg_id() {
-    let dkg_id = DkgId::NiDkgId(NI_DKG_ID_1);
+    let dkg_id = NI_DKG_ID_1;
     let mut store = ThresholdSigDataStoreImpl::new();
     let csp_pubkey = csp_public_key();
 
@@ -69,32 +69,20 @@ fn should_insert_multiple_individual_public_keys() {
     let csp_pubkey_2 = csp_public_key();
 
     assert_ne!(NI_DKG_ID_1, NI_DKG_ID_2);
-    store.insert_individual_public_key(
-        DkgId::NiDkgId(NI_DKG_ID_1),
-        node_test_id(NODE_1),
-        csp_pubkey_1,
-    );
-    store.insert_individual_public_key(
-        DkgId::NiDkgId(NI_DKG_ID_1),
-        node_test_id(NODE_2),
-        csp_pubkey_2,
-    );
-    store.insert_individual_public_key(
-        DkgId::NiDkgId(NI_DKG_ID_2),
-        node_test_id(NODE_1),
-        csp_pubkey_2,
-    );
+    store.insert_individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_1);
+    store.insert_individual_public_key(NI_DKG_ID_1, node_test_id(NODE_2), csp_pubkey_2);
+    store.insert_individual_public_key(NI_DKG_ID_2, node_test_id(NODE_1), csp_pubkey_2);
 
     assert_eq!(
-        store.individual_public_key(DkgId::NiDkgId(NI_DKG_ID_1), node_test_id(NODE_1)),
+        store.individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1)),
         Some(&csp_pubkey_1)
     );
     assert_eq!(
-        store.individual_public_key(DkgId::NiDkgId(NI_DKG_ID_1), node_test_id(NODE_2)),
+        store.individual_public_key(NI_DKG_ID_1, node_test_id(NODE_2)),
         Some(&csp_pubkey_2)
     );
     assert_eq!(
-        store.individual_public_key(DkgId::NiDkgId(NI_DKG_ID_2), node_test_id(NODE_1)),
+        store.individual_public_key(NI_DKG_ID_2, node_test_id(NODE_1)),
         Some(&csp_pubkey_2)
     );
 }
@@ -104,7 +92,7 @@ fn should_not_contain_nonexistent_individual_public_key() {
     let store = ThresholdSigDataStoreImpl::new();
 
     assert_eq!(
-        store.individual_public_key(DkgId::NiDkgId(NI_DKG_ID_1), node_test_id(NODE_1)),
+        store.individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1)),
         None
     );
 }
@@ -115,18 +103,10 @@ fn should_overwrite_existing_public_coefficients() {
     let (public_coeffs_1, public_coeffs_2) = (public_coeffs_1(), public_coeffs_2());
     assert_ne!(public_coeffs_1, public_coeffs_2);
 
-    store.insert_transcript_data(
-        DkgId::NiDkgId(NI_DKG_ID_1),
-        public_coeffs_1,
-        BTreeMap::new(),
-    );
-    store.insert_transcript_data(
-        DkgId::NiDkgId(NI_DKG_ID_1),
-        public_coeffs_2.clone(),
-        BTreeMap::new(),
-    );
+    store.insert_transcript_data(NI_DKG_ID_1, public_coeffs_1, BTreeMap::new());
+    store.insert_transcript_data(NI_DKG_ID_1, public_coeffs_2.clone(), BTreeMap::new());
 
-    let transcript_data = store.transcript_data(DkgId::NiDkgId(NI_DKG_ID_1)).unwrap();
+    let transcript_data = store.transcript_data(NI_DKG_ID_1).unwrap();
     assert_eq!(transcript_data.public_coefficients(), &public_coeffs_2);
 }
 
@@ -137,14 +117,10 @@ fn should_overwrite_existing_indices() {
     let indices_2 = indices_with(vec![(node_test_id(NODE_2), NODE_2_INDEX)]);
     let public_coeffs = public_coeffs();
 
-    store.insert_transcript_data(
-        DkgId::NiDkgId(NI_DKG_ID_1),
-        public_coeffs.clone(),
-        indices_1,
-    );
-    store.insert_transcript_data(DkgId::NiDkgId(NI_DKG_ID_1), public_coeffs, indices_2);
+    store.insert_transcript_data(NI_DKG_ID_1, public_coeffs.clone(), indices_1);
+    store.insert_transcript_data(NI_DKG_ID_1, public_coeffs, indices_2);
 
-    let transcript_data = store.transcript_data(DkgId::NiDkgId(NI_DKG_ID_1)).unwrap();
+    let transcript_data = store.transcript_data(NI_DKG_ID_1).unwrap();
     assert_eq!(transcript_data.index(node_test_id(NODE_1)), None);
     assert_eq!(
         transcript_data.index(node_test_id(NODE_2)),
@@ -159,19 +135,11 @@ fn should_overwrite_existing_individual_public_keys() {
     let csp_pubkey_2 = other_csp_public_key();
     assert_ne!(csp_pubkey_1, csp_pubkey_2);
 
-    store.insert_individual_public_key(
-        DkgId::NiDkgId(NI_DKG_ID_1),
-        node_test_id(NODE_1),
-        csp_pubkey_1,
-    );
-    store.insert_individual_public_key(
-        DkgId::NiDkgId(NI_DKG_ID_1),
-        node_test_id(NODE_1),
-        csp_pubkey_2,
-    );
+    store.insert_individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_1);
+    store.insert_individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1), csp_pubkey_2);
 
     assert_eq!(
-        store.individual_public_key(DkgId::NiDkgId(NI_DKG_ID_1), node_test_id(NODE_1)),
+        store.individual_public_key(NI_DKG_ID_1, node_test_id(NODE_1)),
         Some(&csp_pubkey_2)
     );
 }
@@ -314,7 +282,7 @@ fn public_coeffs_2() -> CspPublicCoefficients {
 
 fn pub_coeffs_from_store(
     store: &ThresholdSigDataStoreImpl,
-    dkg_id: DkgId,
+    dkg_id: NiDkgId,
 ) -> CspPublicCoefficients {
     store
         .transcript_data(dkg_id)
@@ -323,11 +291,11 @@ fn pub_coeffs_from_store(
         .clone()
 }
 
-fn ni_dkg_id(i: usize) -> DkgId {
-    DkgId::NiDkgId(NiDkgId {
+fn ni_dkg_id(i: usize) -> NiDkgId {
+    NiDkgId {
         start_block_height: Height::new(i as u64),
         dealer_subnet: SUBNET_1,
         dkg_tag: NiDkgTag::HighThreshold,
         target_subnet: NI_DKG_ID_1.target_subnet,
-    })
+    }
 }

@@ -369,10 +369,10 @@ mod crypto_error {
     use crate::common::{arb_key_purpose, arb_node_id, arb_registry_version, arb_subnet_id};
     use crate::registry_client_error::arb_registry_client_error;
     use ic_types::crypto::threshold_sig::ni_dkg::{
-        DkgId, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+        NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
     };
     use ic_types::crypto::CryptoError;
-    use ic_types::{Height, IDkgId};
+    use ic_types::Height;
     use proptest::collection::btree_set;
     use proptest::prelude::{BoxedStrategy, Just, Strategy};
     use proptest::prop_oneof;
@@ -392,29 +392,12 @@ mod crypto_error {
         InconsistentAlgorithms => {algorithms in btree_set(arb_algorithm_id(), 0..10), key_purpose in arb_key_purpose(), registry_version in arb_registry_version()},
         AlgorithmNotSupported => {algorithm in arb_algorithm_id(), reason in ".*"},
         RegistryClient => (error in arb_registry_client_error()),
-        ThresholdSigDataNotFound => {dkg_id in arb_dkg_id()},
+        ThresholdSigDataNotFound => {dkg_id in arb_nidkg_id()},
         DkgTranscriptNotFound => {subnet_id in arb_subnet_id(), registry_version in arb_registry_version()},
         RootSubnetPublicKeyNotFound => {registry_version in arb_registry_version()},
         InternalError => {internal_error in ".*"},
         TransientInternalError => {internal_error in ".*"},
     );
-
-    fn arb_dkg_id() -> BoxedStrategy<DkgId> {
-        prop_oneof![
-            arb_idkg_id().prop_map(DkgId::IDkgId),
-            arb_nidkg_id().prop_map(DkgId::NiDkgId)
-        ]
-        .boxed()
-    }
-
-    prop_compose! {
-        fn arb_idkg_id()(height in any::<u64>(), subnet_id in arb_subnet_id()) -> IDkgId {
-            IDkgId {
-                instance_id: Height::new(height),
-                subnet_id
-            }
-        }
-    }
 
     prop_compose! {
         fn arb_nidkg_id()(height in any::<u64>(), dealer_subnet in arb_subnet_id(), dkg_tag in arb_nidkg_tag(), target_subnet in arb_nidkg_target_subnet()) -> NiDkgId {
