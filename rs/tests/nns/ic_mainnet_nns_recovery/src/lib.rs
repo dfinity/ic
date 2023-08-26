@@ -21,6 +21,7 @@ use ic_replay::cmd::{
     ClapSubnetId, ReplayToolArgs, SubCommand, WithTrustedNeuronsFollowingNeuronCmd,
 };
 use ic_replay::replay;
+use ic_tests::driver::boundary_node::BoundaryNodeVm;
 use ic_tests::driver::constants::SSH_USERNAME;
 use ic_tests::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_tests::driver::universal_vm::DeployedUniversalVm;
@@ -30,9 +31,9 @@ use ic_tests::driver::{
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{
-        retry, HasDependencies, HasIcDependencies, HasPublicApiUrl, HasTopologySnapshot,
-        IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy, NnsCustomizations, SshSession,
-        TopologySnapshot,
+        await_boundary_node_healthy, retry, HasDependencies, HasIcDependencies, HasPublicApiUrl,
+        HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsCanisterWasmStrategy,
+        NnsCustomizations, SshSession, TopologySnapshot,
     },
     universal_vm::UniversalVms,
 };
@@ -132,7 +133,7 @@ pub fn setup(env: TestEnv) {
 
         let topology = rx_topology.recv().unwrap();
         let nns_node = topology.root_subnet().nodes().next().unwrap();
-        let unassigned_node = topology.unassigned_nodes().next().unwrap();
+        let recovered_nns_node = topology.unassigned_nodes().next().unwrap();
         fetch_ic_config(env_clone.clone(), nns_node.clone());
 
         let neuron_id: NeuronId = prepare_nns_state(env_clone.clone());
@@ -141,10 +142,58 @@ pub fn setup(env: TestEnv) {
         recover_nns_subnet(
             env_clone.clone(),
             nns_node,
-            unassigned_node.clone(),
+            recovered_nns_node.clone(),
             aux_node,
         );
-        test_recovered_nns(env_clone, neuron_id, unassigned_node);
+        test_recovered_nns(env_clone.clone(), neuron_id, recovered_nns_node.clone());
+
+        let ic_admin_path = env_clone
+            .clone()
+            .get_dependency_path("rs/tests/recovery/binaries/ic-admin");
+        let recovered_nns_url = recovered_nns_node.get_public_url();
+        let recovered_nns_nns_public_key = env_clone.clone().get_path("recovered_nns_pubkey.pem");
+        Command::new(ic_admin_path)
+            .arg("--nns-url")
+            .arg(recovered_nns_url.to_string())
+            .arg("get-subnet-public-key")
+            .arg(ORIGINAL_NNS_ID)
+            .arg(recovered_nns_nns_public_key.clone())
+            .output()
+            .unwrap_or_else(|e| {
+                panic!("Could not get the public key of the recovered NNS because {e:?}",)
+            });
+
+        BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+            .allocate_vm(&env_clone)
+            .expect("Allocation of BoundaryNode failed.")
+            .for_ic(&env_clone, "")
+            .with_nns_public_key(recovered_nns_nns_public_key)
+            .with_nns_urls(vec![recovered_nns_url])
+            .use_real_certs_and_dns()
+            .start(&env_clone)
+            .expect("failed to setup BoundaryNode VM");
+
+        let boundary_node = env_clone
+            .clone()
+            .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
+            .unwrap()
+            .get_snapshot()
+            .unwrap();
+
+        await_boundary_node_healthy(&env_clone, BOUNDARY_NODE_NAME);
+
+        let recovered_nns_node_id = recovered_nns_node.node_id;
+        boundary_node.block_on_bash_script(&format!(r#"
+            set -e
+            cp /etc/nginx/conf.d/002-mainnet-nginx.conf /tmp/
+            sed 's/set $subnet_id "$random_route_subnet_id";/set $subnet_id "{ORIGINAL_NNS_ID}";/' -i /tmp/002-mainnet-nginx.conf
+            sed 's/set $subnet_type "$random_route_subnet_type";/set $subnet_type "system";/' -i /tmp/002-mainnet-nginx.conf
+            sed 's/set $node_id "$random_route_node_id";/set $node_id "{recovered_nns_node_id}";/' -i /tmp/002-mainnet-nginx.conf
+            sudo mount --bind /tmp/002-mainnet-nginx.conf /etc/nginx/conf.d/002-mainnet-nginx.conf
+            sudo systemctl reload nginx
+        "#)).unwrap_or_else(|e| {
+            panic!("Could not reconfigure nginx on {BOUNDARY_NODE_NAME} to only route to the recovered NNS because {e:?}",)
+        });
     });
 
     // Start a p8s VM concurrently:
@@ -224,21 +273,12 @@ pub fn setup(env: TestEnv) {
         tx_aux_node.send(deployed_universal_vm).unwrap();
     });
 
-    BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
-        .allocate_vm(&env)
-        .expect("Allocation of BoundaryNode failed.")
-        .for_ic(&env, "")
-        .use_real_certs_and_dns()
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
-
     prometheus_thread.join().unwrap();
     env.sync_prometheus_config_with_topology();
 
     nns_state_thread
         .join()
         .unwrap_or_else(|e| std::panic::resume_unwind(e));
-    // await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }
 
 fn get_ssh_session_to_backup_pod() -> Result<Session> {
@@ -419,7 +459,7 @@ fn prepare_nns_state(env: TestEnv) -> NeuronId {
 fn recover_nns_subnet(
     env: TestEnv,
     nns_node: IcNodeSnapshot,
-    unassigned_node: IcNodeSnapshot,
+    recovered_nns_node: IcNodeSnapshot,
     aux_node: DeployedUniversalVm,
 ) {
     let logger = env.logger();
@@ -445,7 +485,7 @@ fn recover_nns_subnet(
         .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
         .join(SSH_USERNAME);
     let nns_ip = nns_node.get_ip_addr();
-    let upload_ip = unassigned_node.get_ip_addr();
+    let upload_ip = recovered_nns_node.get_ip_addr();
 
     let recovery_args = RecoveryArgs {
         dir,
@@ -465,7 +505,7 @@ fn recover_nns_subnet(
         download_node: None,
         upload_node: Some(upload_ip),
         parent_nns_host_ip: Some(nns_ip),
-        replacement_nodes: Some(vec![unassigned_node.node_id]),
+        replacement_nodes: Some(vec![recovered_nns_node.node_id]),
         next_step: None,
     };
 
@@ -500,7 +540,7 @@ fn recover_nns_subnet(
         logger.clone(),
         Duration::from_secs(500),
         Duration::from_secs(5),
-        || unassigned_node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'"),
+        || recovered_nns_node.block_on_bash_script("journalctl | grep -q 'Ready for interaction'"),
     )
     .expect("NNS didn't start up!");
 
