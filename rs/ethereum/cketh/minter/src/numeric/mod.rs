@@ -4,6 +4,8 @@
 mod tests;
 
 use crate::eth_rpc::Quantity;
+use candid::Nat;
+use ethnum::u256;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -13,6 +15,17 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[serde(transparent)]
 pub struct Wei(ethnum::u256);
+
+fn nat_into_u256(value: Nat) -> Result<u256, String> {
+    let value_bytes = value.0.to_bytes_be();
+    let mut value_u256 = [0u8; 32];
+    if value_bytes.len() <= 32 {
+        value_u256[32 - value_bytes.len()..].copy_from_slice(&value_bytes);
+    } else {
+        return Err(format!("Nat does not fit in a U256: {}", value));
+    }
+    Ok(u256::from_be_bytes(value_u256))
+}
 
 impl Wei {
     pub const TWO: Wei = Wei::new(2);
@@ -58,6 +71,17 @@ impl From<Wei> for ethnum::u256 {
     }
 }
 
+impl TryFrom<Nat> for Wei {
+    type Error = String;
+
+    fn try_from(value: candid::Nat) -> Result<Self, Self::Error> {
+        match nat_into_u256(value) {
+            Ok(value_u256) => Ok(Wei(value_u256)),
+            Err(error) => Err(error),
+        }
+    }
+}
+
 impl From<Wei> for candid::Nat {
     fn from(value: Wei) -> Self {
         use num_bigint::BigUint;
@@ -94,17 +118,14 @@ impl From<u64> for TransactionNonce {
     }
 }
 
-impl TryFrom<candid::Nat> for TransactionNonce {
+impl TryFrom<Nat> for TransactionNonce {
     type Error = String;
 
     fn try_from(value: candid::Nat) -> Result<Self, Self::Error> {
-        let bytes = value.0.to_bytes_be();
-        if bytes.len() > 32 {
-            return Err(format!("Nat does not fit in a U256: {}", value));
+        match nat_into_u256(value) {
+            Ok(value_u256) => Ok(TransactionNonce(value_u256)),
+            Err(error) => Err(error),
         }
-        let mut u256_bytes = [0u8; 32];
-        u256_bytes[32 - bytes.len()..].copy_from_slice(&bytes);
-        Ok(Self(ethnum::u256::from_be_bytes(u256_bytes)))
     }
 }
 

@@ -30,6 +30,7 @@ rust_library(
     ],
     version = "0.1.0",
     deps = [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/ecdsa_secp256k1",
         "//rs/crypto/sha3",
         "//rs/phantom_newtype",
@@ -53,7 +54,7 @@ rust_library(
 )
 
 rust_test(
-    name = "lib_test",
+    name = "lib_tests",
     crate = ":minter",
     deps = [
         ":minter",
@@ -61,6 +62,15 @@ rust_test(
         "@crate_index//:ethers-core",
         "@crate_index//:proptest",
     ],
+)
+
+rust_test(
+    name = "unit_tests",
+    crate = ":_wasm_cketh_minter",
+    data = [":cketh_minter.did"],
+    env = {
+        "CARGO_MANIFEST_DIR": "rs/ethereum/cketh/minter",
+    },
 )
 
 rust_canister(
