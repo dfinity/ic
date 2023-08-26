@@ -4,6 +4,7 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_cketh_minter::address::Address;
+use ic_cketh_minter::endpoints::WithdrawalError;
 use ic_cketh_minter::endpoints::{
     DebugState, Eip1559TransactionPrice, EthTransaction, MinterArg, RetrieveEthRequest,
     RetrieveEthStatus,
@@ -19,6 +20,8 @@ use ic_cketh_minter::state::{mutate_state, read_state, State, STATE};
 use ic_cketh_minter::transactions::PendingEthTransaction;
 use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
 use ic_cketh_minter::{eth_logs, eth_rpc};
+use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::icrc2::transfer_from::TransferFromArgs;
 use std::cmp::{min, Ordering};
 use std::str::FromStr;
 use std::time::Duration;
@@ -28,6 +31,7 @@ const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs
 const MINT_RETRY_DELAY: Duration = Duration::from_secs(3 * 60);
 
 pub const SEPOLIA_TEST_CHAIN_ID: u64 = 11155111;
+pub const MINIMUM_WITHDRAWAL_AMOUNT: Wei = Wei::new(10_000_000_000_000_000_128); // 0.01 ETH
 
 #[init]
 #[candid_method(init)]
@@ -124,7 +128,6 @@ async fn scrap_eth_logs() {
 }
 
 async fn mint_cketh() {
-    use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
     let _guard = match mint_cketh_guard() {
@@ -330,7 +333,7 @@ async fn eip_1559_transaction_price() -> Eip1559TransactionPrice {
 
 #[update]
 #[candid_method(update)]
-async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
+async fn withdraw(amount: Nat, recipient: String) -> Result<RetrieveEthRequest, WithdrawalError> {
     let caller = validate_caller_not_anonymous();
     let _guard = retrieve_eth_guard(caller).unwrap_or_else(|e| {
         ic_cdk::trap(&format!(
@@ -338,60 +341,107 @@ async fn withdraw(amount: u64, recipient: String) -> RetrieveEthRequest {
             caller, e
         ))
     });
-    let amount = Wei::from(amount);
+
+    let amount = Wei::try_from(amount).expect("failed to convert Nat to u256");
+
+    if amount < MINIMUM_WITHDRAWAL_AMOUNT {
+        return Err(WithdrawalError::AmountTooLow {
+            min_withdrawal_amount: MINIMUM_WITHDRAWAL_AMOUNT.into(),
+        });
+    }
+
     let destination = Address::from_str(&recipient)
         .unwrap_or_else(|e| ic_cdk::trap(&format!("failed to parse recipient address: {:?}", e)));
-    //TODO FI-868: verify that the source account has enough funds on the ledger
-    log!(
-        INFO,
-        "[withdraw]: {} withdrawing {:?} wei to {:?}",
-        caller,
-        amount,
-        destination
-    );
 
-    let transaction_price = estimate_transaction_price(&eth_fee_history().await);
-    let max_transaction_fee = transaction_price.max_transaction_fee();
-    log!(
-        INFO,
-        "[withdraw]: Estimated max transaction fee: {:?}",
-        max_transaction_fee,
-    );
-    if max_transaction_fee >= amount {
-        ic_cdk::trap(&format!(
-            "WARN: skipping transaction since fee {:?} is at least the amount {:?} to be withdrawn",
-            max_transaction_fee, amount
-        ));
-    }
-    let tx_amount = amount
-        .checked_sub(max_transaction_fee)
-        .expect("BUG: should not happen due to previous check that amount > max_transaction_fee");
-
-    //TODO FI-868: contact ledger to burn funds
-    let ledger_burn_index = LedgerBurnIndex::new(0);
-    log!(INFO, "[withdraw]: burning {:?}", amount);
-
-    let nonce = mutate_state(|s| s.get_and_increment_nonce());
-    let transaction = Eip1559TransactionRequest {
-        chain_id: read_state(State::ethereum_network).chain_id(),
-        nonce,
-        max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
-        max_fee_per_gas: transaction_price.max_fee_per_gas,
-        gas_limit: transaction_price.gas_limit,
-        destination,
-        amount: tx_amount,
-        data: Vec::new(),
-        access_list: AccessList::new(),
+    let ledger_canister_id = read_state(|s| s.ledger_id);
+    let client = ICRC1Client {
+        runtime: CdkRuntime,
+        ledger_canister_id,
     };
-    log!(
-        INFO,
-        "[withdraw]: queuing transaction: {:?} for signing",
-        transaction,
-    );
-    mutate_state(|s| s.record_retrieve_eth_request(ledger_burn_index, transaction));
 
-    RetrieveEthRequest {
-        block_index: Nat::from(ledger_burn_index.get()),
+    log!(INFO, "[withdraw]: burning {:?}", amount);
+    match client
+        .transfer_from(TransferFromArgs {
+            spender_subaccount: None,
+            from: caller.into(),
+            to: ic_cdk::id().into(),
+            amount: Nat::from(amount),
+            fee: None,
+            memo: None,
+            created_at_time: None,
+        })
+        .await
+    {
+        Ok(Ok(block_index)) => {
+            let ledger_burn_index = LedgerBurnIndex::new(block_index);
+
+            log!(
+                INFO,
+                "[withdraw]: {} withdrawing {:?} wei to {:?}",
+                caller,
+                amount,
+                destination
+            );
+
+            let transaction_price = estimate_transaction_price(&eth_fee_history().await);
+            let max_transaction_fee = transaction_price.max_transaction_fee();
+            log!(
+                INFO,
+                "[withdraw]: Estimated max transaction fee: {:?}",
+                max_transaction_fee,
+            );
+
+            if max_transaction_fee >= amount {
+                ic_cdk::trap(&format!(
+                    "WARN: skipping transaction since fee {:?} is at least the amount {:?} to be withdrawn",
+                    max_transaction_fee, amount
+                ));
+            }
+            let tx_amount = amount.checked_sub(max_transaction_fee).expect(
+                "BUG: should not happen due to previous check that amount > max_transaction_fee",
+            );
+
+            let (nonce, chain_id) =
+                mutate_state(|s| (s.get_and_increment_nonce(), s.ethereum_network.chain_id()));
+            let transaction = Eip1559TransactionRequest {
+                chain_id,
+                nonce,
+                max_priority_fee_per_gas: transaction_price.max_priority_fee_per_gas,
+                max_fee_per_gas: transaction_price.max_fee_per_gas,
+                gas_limit: transaction_price.gas_limit,
+                destination,
+                amount: tx_amount,
+                data: Vec::new(),
+                access_list: AccessList::new(),
+            };
+            log!(
+                INFO,
+                "[withdraw]: queuing transaction: {:?} for signing",
+                transaction,
+            );
+            mutate_state(|s| s.record_retrieve_eth_request(ledger_burn_index, transaction));
+
+            Ok(RetrieveEthRequest {
+                block_index: candid::Nat::from(block_index),
+            })
+        }
+        Ok(Err(error)) => {
+            log!(
+                DEBUG,
+                "[withdraw]: failed to transfer_from with error: {error:?}"
+            );
+            Err(WithdrawalError::from(error))
+        }
+        Err((error_code, message)) => {
+            log!(
+                DEBUG,
+                "[withdraw]: failed to call ledger with error_code: {error_code} and message: {message}",
+            );
+            Err(WithdrawalError::TemporarilyUnavailable(
+                "failed to call ledger with error_code: {error_code} and message: {message}"
+                    .to_string(),
+            ))
+        }
     }
 }
 
@@ -586,3 +636,55 @@ fn http_request(req: HttpRequest) -> HttpResponse {
 }
 
 fn main() {}
+
+/// Checks the real candid interface against the one declared in the did file
+#[test]
+fn check_candid_interface_compatibility() {
+    fn source_to_str(source: &candid::utils::CandidSource) -> String {
+        match source {
+            candid::utils::CandidSource::File(f) => {
+                std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string())
+            }
+            candid::utils::CandidSource::Text(t) => t.to_string(),
+        }
+    }
+
+    fn check_service_compatible(
+        new_name: &str,
+        new: candid::utils::CandidSource,
+        old_name: &str,
+        old: candid::utils::CandidSource,
+    ) {
+        let new_str = source_to_str(&new);
+        let old_str = source_to_str(&old);
+        match candid::utils::service_compatible(new, old) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!(
+                    "{} is not compatible with {}!\n\n\
+            {}:\n\
+            {}\n\n\
+            {}:\n\
+            {}\n",
+                    new_name, old_name, new_name, new_str, old_name, old_str
+                );
+                panic!("{:?}", e);
+            }
+        }
+    }
+
+    candid::export_service!();
+
+    let new_interface = __export_service();
+
+    // check the public interface against the actual one
+    let old_interface = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join("cketh_minter.did");
+
+    check_service_compatible(
+        "actual ledger candid interface",
+        candid::utils::CandidSource::Text(&new_interface),
+        "declared candid interface in cketh_minter.did file",
+        candid::utils::CandidSource::File(old_interface.as_path()),
+    );
+}
