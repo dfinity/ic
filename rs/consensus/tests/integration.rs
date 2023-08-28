@@ -39,7 +39,6 @@ fn single_node_is_live() {
     run_n_rounds_and_collect_hashes(config, Vec::new(), true);
 }
 
-#[ignore]
 #[test]
 fn multiple_nodes_are_deterministic() {
     let run = || {
