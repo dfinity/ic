@@ -133,22 +133,22 @@ impl<T: ServerCertVerifier> ServerCertVerifier for WithMetrics<T> {
 
         let duration = start_time.elapsed().as_secs_f64();
 
-        let labels = &[
-            KeyValue::new("status", status),
-            KeyValue::new("server_name", format!("{server_name:?}")),
-        ];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
 
+        let labels = &[
+            KeyValue::new("status", status.clone()),
+            KeyValue::new("server_name", format!("{server_name:?}")),
+        ];
+
         counter.add(1, labels);
         recorder.record(duration, labels);
 
         info!(
-            action = action.as_str(),
+            action,
             server_name = ?server_name,
             status,
             duration,

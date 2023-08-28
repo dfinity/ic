@@ -1,13 +1,19 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use anyhow::Error;
 use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
+use opentelemetry::KeyValue;
+use tracing::{error, info};
 
-use crate::snapshot::{Node, RoutingTable};
+use crate::{
+    metrics::{MetricParams, WithMetrics},
+    snapshot::{Node, RoutingTable},
+};
 
+#[derive(Copy, Clone)]
 pub struct PersistResults {
     pub ranges_old: u32,
     pub ranges_new: u32,
@@ -15,6 +21,7 @@ pub struct PersistResults {
     pub nodes_new: u32,
 }
 
+#[derive(Copy, Clone)]
 pub enum PersistStatus {
     Completed(PersistResults),
     SkippedEmpty,
@@ -165,6 +172,53 @@ impl Persist for Persister {
         self.published_routes.store(Some(rt));
 
         Ok(PersistStatus::Completed(results))
+    }
+}
+
+#[async_trait]
+impl<T: Persist> Persist for WithMetrics<T> {
+    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
+        let start_time = Instant::now();
+        let out = self.0.persist(rt).await;
+        let duration = start_time.elapsed().as_secs_f64();
+
+        match out {
+            Ok(PersistStatus::SkippedEmpty) => {
+                error!("Lookup table is empty!");
+            }
+            Ok(PersistStatus::Completed(s)) => {
+                info!(
+                    "Lookup table published: subnet ranges: {:?} -> {:?}, nodes: {:?} -> {:?}",
+                    s.ranges_old, s.ranges_new, s.nodes_old, s.nodes_new,
+                );
+            }
+            Err(_) => {}
+        }
+
+        let status = match &out {
+            Ok(_) => "ok".to_string(),
+            Err(e) => format!("error_{}", e),
+        };
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let labels = &[KeyValue::new("status", status.clone())];
+
+        counter.add(1, labels);
+        recorder.record(duration, labels);
+
+        info!(
+            action,
+            status,
+            error = ?out.as_ref().err(),
+            duration,
+        );
+
+        out
     }
 }
 
