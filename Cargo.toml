@@ -203,7 +203,7 @@ members = [
   "rs/prep",
   "rs/protobuf",
   "rs/protobuf/generator",
-  "rs/pocket_ic_backend",
+  "rs/pocket_ic_server",
   "rs/registry/admin",
   "rs/registry/admin-derive",
   "rs/registry/canister",

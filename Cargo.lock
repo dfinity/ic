@@ -14157,7 +14157,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pocket-ic-backend"
+name = "pocket-ic-server"
 version = "0.0.1"
 dependencies = [
  "axum",

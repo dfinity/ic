@@ -86,7 +86,7 @@ async fn main_() {
     let args = Args::parse();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
-    let mut new_port_file = match is_first_daemon(&port_file_path) {
+    let mut new_port_file = match is_first_server(&port_file_path) {
         Ok(f) => f,
         Err(_) => {
             return;
@@ -178,7 +178,7 @@ async fn main_() {
 
 /// Returns the opened file if it was successfully created and is readable, writeable. Otherwise,
 /// returns an error. Used to determine if this is the first process creating this file.
-fn is_first_daemon<P: AsRef<std::path::Path>>(port_file_path: P) -> std::io::Result<File> {
+fn is_first_server<P: AsRef<std::path::Path>>(port_file_path: P) -> std::io::Result<File> {
     // .create_new(true) ensures atomically that this file was created newly, and gives an error otherwise.
     File::options()
         .read(true)
