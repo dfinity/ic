@@ -1908,6 +1908,11 @@ message ListProposalInfo {
   // proposal to the caller principal. Note that exclude_topic is still
   // respected even when this option is set to true.
   optional bool include_all_manage_neuron_proposals = 6;
+  // Omits "large fields" from the response. Currently only omits the
+  // `logo` and `token_logo` field of CreateServiceNervousSystem proposals. This
+  // is useful to improve download times and to ensure that the response to the
+  // request doesn't exceed the message size limit.
+  optional bool omit_large_fields = 7;
 }
 
 message ListProposalInfoResponse {

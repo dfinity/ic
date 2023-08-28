@@ -2677,6 +2677,12 @@ pub struct ListProposalInfo {
     /// respected even when this option is set to true.
     #[prost(bool, optional, tag = "6")]
     pub include_all_manage_neuron_proposals: ::core::option::Option<bool>,
+    /// Omits "large fields" from the response. Currently only omits the
+    /// `logo` and `token_logo` field of CreateServiceNervousSystem proposals. This
+    /// is useful to improve download times and to ensure that the response to the
+    /// request doesn't exceed the message size limit.
+    #[prost(bool, optional, tag = "7")]
+    pub omit_large_fields: ::core::option::Option<bool>,
 }
 #[derive(
     candid::CandidType,

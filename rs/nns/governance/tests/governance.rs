@@ -28,7 +28,7 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
 use ic_nervous_system_governance::index::neuron_principal::NeuronPrincipalIndex;
-use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
+use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay, Image};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -8050,6 +8050,155 @@ fn test_filter_proposal_ballots() {
                 },
         }
     );
+}
+
+#[test]
+fn test_omit_large_fields() {
+    let principal1 = principal(1);
+
+    let mut driver = fake::FakeDriver::default();
+
+    let proposal = Proposal {
+        action: Some(Action::CreateServiceNervousSystem(
+            CREATE_SERVICE_NERVOUS_SYSTEM.clone(),
+        )),
+        // Fill in the rest of the fields with those of a motion proposal.
+        // (They are not relevant to this test.)
+        ..new_motion_proposal()
+    };
+
+    // Check that `logo` is in the proposal
+    // This is required if to be meaningful when we check that the response contains no logo.
+    {
+        let Action::CreateServiceNervousSystem(create_service_nervous_system) =
+            proposal.clone().action.unwrap()
+        else {
+            // should be impossible
+            panic!(
+                "expected a CreateServiceNervousSystem proposal, was {:?}",
+                proposal
+            )
+        };
+        // panic if `logo` isn't present
+        assert!(
+            create_service_nervous_system.logo.is_some(),
+            "Expected logo: {:#?}",
+            create_service_nervous_system
+        );
+    }
+
+    let proto = GovernanceProto {
+        wait_for_quiet_threshold_seconds: 100,
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: btreemap! {
+            1 => Neuron {
+                id: Some(NeuronId { id: 1 }),
+                controller: Some(principal1),
+                hot_keys: vec![],
+                cached_neuron_stake_e8s: 10 * E8,
+                account: driver.random_byte_array().to_vec(),
+                ..Default::default()
+            },
+        },
+        proposals: btreemap! {
+            3 => ProposalData {
+                id: Some(ProposalId { id: 3 }),
+                proposer: Some(NeuronId { id: 1 }),
+                proposal: Some(proposal),
+                ballots: hashmap!{
+                        1 => Ballot {
+                            vote: Vote::Yes as i32,
+                            voting_power: 1,
+                        },
+                        2 => Ballot {
+                            vote: Vote::Yes as i32,
+                            voting_power: 2,
+                        },
+                },
+                ..Default::default()
+            },
+        },
+        ..Default::default()
+    };
+
+    let gov = Governance::new(
+        proto,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    fn get_logo(list_proposals_response: ListProposalInfoResponse) -> Option<Image> {
+        let Action::CreateServiceNervousSystem(create_service_nervous_system) =
+            list_proposals_response.proposal_info[0]
+                .proposal
+                .clone()
+                .unwrap()
+                .action
+                .unwrap()
+        else {
+            panic!(
+                "expected a CreateServiceNervousSystem proposal, response was {:?}",
+                list_proposals_response
+            )
+        };
+        create_service_nervous_system.logo
+    }
+
+    // `omit_large_fields: Some(false)` should cause the logo to be present
+    {
+        let list_proposals_response = gov.list_proposals(
+            &principal1,
+            &ListProposalInfo {
+                omit_large_fields: Some(false),
+                ..ListProposalInfo::default()
+            },
+        );
+        let logo = get_logo(list_proposals_response.clone());
+        // panic if `logo` isn't present
+        assert!(
+            logo.is_some(),
+            "Expected logo: {:#?}",
+            list_proposals_response
+        );
+    }
+
+    // `omit_large_fields: None` should cause the logo to be present, same
+    // as if the `Some(false)` was passed
+    {
+        let list_proposals_response = gov.list_proposals(
+            &principal1,
+            &ListProposalInfo {
+                omit_large_fields: None,
+                ..ListProposalInfo::default()
+            },
+        );
+        let logo = get_logo(list_proposals_response.clone());
+        // panic if `logo` isn't present
+        assert!(
+            logo.is_some(),
+            "Expected logo: {:#?}",
+            list_proposals_response
+        );
+    }
+
+    // `omit_large_fields: Some(true)` should cause the logo to be omitted
+    {
+        let list_proposals_response = gov.list_proposals(
+            &principal1,
+            &ListProposalInfo {
+                omit_large_fields: Some(true),
+                ..ListProposalInfo::default()
+            },
+        );
+        let logo = get_logo(list_proposals_response.clone());
+        // panic if `logo` is present
+        assert!(
+            logo.is_none(),
+            "Expected no logo: {:#?}",
+            list_proposals_response
+        );
+    }
 }
 
 // Test that listing of neurons satisfies the following properties:

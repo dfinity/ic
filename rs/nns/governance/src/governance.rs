@@ -7,6 +7,7 @@ use crate::{
     },
     pb::v1::{
         add_or_remove_node_provider::Change,
+        create_service_nervous_system::LedgerParameters,
         governance::{
             neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
             GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand,
@@ -730,6 +731,13 @@ impl Proposal {
             .as_ref()
             .map_or(false, |a| a.allowed_when_resources_are_low())
     }
+
+    fn omit_large_fields(self) -> Self {
+        Proposal {
+            action: self.action.map(|action| action.omit_large_fields()),
+            ..self
+        }
+    }
 }
 
 impl Action {
@@ -744,6 +752,32 @@ impl Action {
                 }
             }
             _ => false,
+        }
+    }
+
+    fn omit_large_fields(self) -> Self {
+        match self {
+            Action::CreateServiceNervousSystem(create_service_nervous_system) => {
+                Action::CreateServiceNervousSystem(CreateServiceNervousSystem {
+                    ledger_parameters: create_service_nervous_system.ledger_parameters.map(
+                        |ledger_parameters| LedgerParameters {
+                            token_logo: None,
+                            ..ledger_parameters
+                        },
+                    ),
+                    logo: None,
+                    ..create_service_nervous_system
+                })
+            }
+            Action::ExecuteNnsFunction(mut execute_nns_function) => {
+                if execute_nns_function.payload.len()
+                    > EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX
+                {
+                    execute_nns_function.payload.clear();
+                }
+                Action::ExecuteNnsFunction(execute_nns_function)
+            }
+            action => action,
         }
     }
 }
@@ -1151,6 +1185,15 @@ impl ProposalData {
             settle_community_fund_participation::Result::Aborted(_) => {
                 self.set_sns_token_swap_lifecycle(Lifecycle::Aborted)
             }
+        }
+    }
+}
+
+impl ProposalInfo {
+    fn omit_large_fields(self) -> Self {
+        ProposalInfo {
+            proposal: self.proposal.map(|proposal| proposal.omit_large_fields()),
+            ..self
         }
     }
 }
@@ -3540,16 +3583,21 @@ impl Governance {
         // If this is part of a "multi" query and an ExecuteNnsFunction
         // proposal then remove the payload if the payload is larger
         // than EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX.
-        let mut new_proposal = data.proposal.clone();
-        if multi_query {
-            if let Some(proposal) = &mut new_proposal {
-                if let Some(proposal::Action::ExecuteNnsFunction(m)) = &mut proposal.action {
-                    if m.payload.len() > EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX {
-                        m.payload.clear();
-                    }
-                }
+        let proposal = if multi_query {
+            if let Some(
+                proposal @ Proposal {
+                    action: Some(proposal::Action::ExecuteNnsFunction(_)),
+                    ..
+                },
+            ) = data.proposal.clone()
+            {
+                Some(proposal.omit_large_fields())
+            } else {
+                data.proposal.clone()
             }
-        }
+        } else {
+            data.proposal.clone()
+        };
 
         /// Remove all ballots except the ballots belonging to a neuron present
         /// in `except_from`.
@@ -3570,7 +3618,7 @@ impl Governance {
             id: data.id,
             proposer: data.proposer,
             reject_cost_e8s: data.reject_cost_e8s,
-            proposal: new_proposal,
+            proposal,
             proposal_timestamp_seconds: data.proposal_timestamp_seconds,
             ballots: remove_ballots_not_cast_by(&data.ballots, caller_neurons),
             latest_tally: data.latest_tally.clone(),
@@ -3652,6 +3700,13 @@ impl Governance {
     /// EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX.  The caller can
     /// retrieve dropped payloads by calling `get_proposal_info` for
     /// each proposal of interest.
+    ///
+    /// - If `omit_large_fields` is set to true, some "large fields" such as
+    /// CreateServiceNervousSystem's logo and token_logo are omitted (set to
+    /// none) from each proposal before returning. This is useful when these
+    /// fields would cause the message to exceed the maximum message size.
+    /// Consider using this field and then calling `get_proposal_info` for each
+    /// proposal of interest.
     pub fn list_proposals(
         &self,
         caller: &PrincipalId,
@@ -3664,7 +3719,7 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let now = self.env.now();
-        let filter_all = |data: &ProposalData| -> bool {
+        let proposal_matches_request = |data: &ProposalData| -> bool {
             let topic = data.topic();
             let voting_period_seconds = self.voting_period_seconds()(topic);
             // Filter out proposals by topic.
@@ -3694,23 +3749,35 @@ impl Governance {
         } else {
             req.limit
         } as usize;
-        let props = &self.heap_data.proposals;
+        let proposals = &self.heap_data.proposals;
         // Proposals are stored in a sorted map. If 'before_proposal'
         // is provided, grab all proposals before that, else grab the
         // whole range.
-        let rng = if let Some(n) = req.before_proposal {
-            props.range(..(n.id))
+        let proposals = if let Some(n) = req.before_proposal {
+            proposals.range(..(n.id))
         } else {
-            props.range(..)
+            proposals.range(..)
         };
         // Now reverse the range, filter, and restrict to 'limit'.
-        let limited_rng = rng.rev().filter(|(_, x)| filter_all(x)).take(limit);
-        //
-        let proposal_info = limited_rng
+        let proposals = proposals
+            .rev()
+            .filter(|(_, x)| proposal_matches_request(x))
+            .take(limit);
+
+        let proposal_info = proposals
             .map(|(_, y)| y)
             .map(|pd| self.proposal_data_to_info(pd, &caller_neurons, now, true))
-            .collect();
-        // Ignore the keys and clone to a vector.
+            .collect::<Vec<_>>();
+
+        let proposal_info = if req.omit_large_fields() {
+            proposal_info
+                .into_iter()
+                .map(|data| data.omit_large_fields())
+                .collect()
+        } else {
+            proposal_info
+        };
+
         ListProposalInfoResponse { proposal_info }
     }
 
