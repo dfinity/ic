@@ -4,6 +4,7 @@
 
 ## 1.8.7
 
+- Upgrade response verification package to version 1.1.0. Fixing an issue with query param decoding on asset URLs.
 - Button added to the main error page to uninstall the active service worker and reload all associated client windows
 - Added theme color to the main error page and service worker installation page
 
