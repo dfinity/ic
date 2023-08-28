@@ -3,7 +3,7 @@ use ic_error_types::{RejectCode, TryFromError, UserError};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgs, Method, Payload as _,
+    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgsV2, Method, Payload as _,
     ProvisionalTopUpCanisterArgs, SetControllerArgs, UpdateSettingsArgs,
 };
 use ic_protobuf::{
@@ -116,7 +116,7 @@ impl Request {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },
-            Ok(Method::InstallCode) => match InstallCodeArgs::decode(&self.method_payload) {
+            Ok(Method::InstallCode) => match InstallCodeArgsV2::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
                 Err(_) => None,
             },

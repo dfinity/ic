@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use ic_error_types::ErrorCode;
-use ic_ic00_types::{EmptyBlob, Payload};
+use ic_ic00_types::{EmptyBlob, Payload, SkipPreUpgrade};
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
@@ -328,6 +328,68 @@ fn upgrade_fails_on_short_pre_upgrade_trap() {
     let result = test.upgrade_canister(canister_id, new_empty_binary());
     assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
     assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn test_install_and_reinstall_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+    let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
+    let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+    // test install
+    assert_eq!(test.install_canister_v2(canister_id, old_binary), Ok(()));
+    // test reinstall
+    let canister_state_before = test.canister_state(canister_id).clone();
+    let result = test.reinstall_canister_v2(canister_id, new_empty_binary());
+    assert_eq!(result, Ok(()));
+    assert_ne!(&canister_state_before, test.canister_state(canister_id));
+}
+
+#[test]
+fn test_pre_upgrade_execution_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+
+    for skip_pre_upgrade in [
+        None,
+        Some(SkipPreUpgrade(None)),
+        Some(SkipPreUpgrade(Some(false))),
+        Some(SkipPreUpgrade(Some(true))),
+    ] {
+        let old_binary = binary(&[(Function::PreUpgrade, Execution::ShortTrap)]);
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        test.install_canister_v2(canister_id, old_binary).unwrap();
+        let canister_state_before = test.canister_state(canister_id).clone();
+
+        let result = test.upgrade_canister_v2(canister_id, new_empty_binary(), skip_pre_upgrade);
+
+        assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
+        assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+    }
+}
+
+#[test]
+fn test_upgrade_execution_with_canister_install_mode_v2() {
+    let mut test = execution_test_with_max_rounds(1);
+
+    for skip_pre_upgrade in [
+        None,
+        Some(SkipPreUpgrade(None)),
+        Some(SkipPreUpgrade(Some(false))),
+        Some(SkipPreUpgrade(Some(true))),
+    ] {
+        let old_binary = binary(&[(Function::PreUpgrade, Execution::Short)]);
+        let canister_id = test.create_canister(Cycles::from(1_000_000_000_000u128));
+        test.install_canister_v2(canister_id, old_binary).unwrap();
+        let canister_state_before = test.canister_state(canister_id).clone();
+
+        let result = test.upgrade_canister_v2(
+            canister_id,
+            binary(&[(Function::PostUpgrade, Execution::ShortTrap)]),
+            skip_pre_upgrade,
+        );
+
+        assert_eq!(result.unwrap_err().code(), ErrorCode::CanisterTrapped);
+        assert_canister_state_after_err(&canister_state_before, test.canister_state(canister_id));
+    }
 }
 
 #[test]

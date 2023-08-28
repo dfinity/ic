@@ -13,8 +13,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, CanisterStatusResultV2,
-    CanisterStatusType, InstallCodeArgs, Method as Ic00Method,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterStatusResultV2,
+    CanisterStatusType, InstallCodeArgsV2, Method as Ic00Method,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -134,7 +134,7 @@ impl CanisterMgrConfig {
 #[derive(Clone, Debug)]
 pub struct InstallCodeContext {
     pub origin: CanisterChangeOrigin,
-    pub mode: CanisterInstallMode,
+    pub mode: CanisterInstallModeV2,
     pub canister_id: CanisterId,
     pub wasm_module: CanisterModule,
     pub arg: Vec<u8>,
@@ -149,7 +149,7 @@ impl InstallCodeContext {
     }
 }
 
-/// Errors that can occur when converting from (sender, [`InstallCodeArgs`]) to
+/// Errors that can occur when converting from (sender, [`InstallCodeArgsV2`]) to
 /// an [`InstallCodeContext`].
 #[derive(Debug)]
 pub enum InstallCodeContextError {
@@ -214,10 +214,10 @@ impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
     }
 }
 
-impl TryFrom<(CanisterChangeOrigin, InstallCodeArgs)> for InstallCodeContext {
+impl TryFrom<(CanisterChangeOrigin, InstallCodeArgsV2)> for InstallCodeContext {
     type Error = InstallCodeContextError;
 
-    fn try_from(input: (CanisterChangeOrigin, InstallCodeArgs)) -> Result<Self, Self::Error> {
+    fn try_from(input: (CanisterChangeOrigin, InstallCodeArgsV2)) -> Result<Self, Self::Error> {
         let (origin, args) = input;
         let canister_id = CanisterId::new(args.canister_id).map_err(|err| {
             InstallCodeContextError::InvalidCanisterId(format!(
@@ -775,10 +775,11 @@ impl CanisterManager {
         };
 
         match context.mode {
-            CanisterInstallMode::Install | CanisterInstallMode::Reinstall => {
+            CanisterInstallModeV2::Install | CanisterInstallModeV2::Reinstall => {
                 execute_install(context, canister, original, round.clone(), round_limits)
             }
-            CanisterInstallMode::Upgrade => {
+            // SkipPreUpgrade field will be used in the follow up.
+            CanisterInstallModeV2::Upgrade(..) => {
                 execute_upgrade(context, canister, original, round.clone(), round_limits)
             }
         }
