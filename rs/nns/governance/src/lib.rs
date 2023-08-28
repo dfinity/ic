@@ -134,6 +134,7 @@ pub mod governance;
 mod heap_governance_data;
 pub mod init;
 mod known_neuron_index;
+mod migrations;
 mod neuron;
 mod neuron_store;
 pub mod pb;

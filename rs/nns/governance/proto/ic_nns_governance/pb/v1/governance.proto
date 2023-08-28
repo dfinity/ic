@@ -1870,6 +1870,43 @@ message Governance {
 
   MakingSnsProposal making_sns_proposal = 20;
 
+  // Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
+  message Migration {
+    enum MigrationStatus {
+      // Unspecified.
+      MIGRATION_STATUS_UNSPECIFIED = 0;
+      // Migration is in progress.
+      MIGRATION_STATUS_IN_PROGRESS = 1;
+      // Migration succeeded.
+      MIGRATION_STATUS_SUCCEEDED = 2;
+      // Migration failed.
+      MIGRATION_STATUS_FAILED = 3;
+    }
+
+    // Migration status.
+    optional MigrationStatus status = 1;
+
+    // The reason why it failed. Should only be present when the status is FAILED.
+    // This is only for debugging and it should not be used programmatically (other than its presence).
+    optional string failure_reason = 2;
+
+    // Migration progress (cursor).
+    oneof progress {
+      // Last neuron id migrated.
+      ic_nns_common.pb.v1.NeuronId last_neuron_id = 3;
+    }
+  }
+
+  // All migrations. Each migration uses one tag.
+  // After a migration is finished, it should be OK to reserve the tag and lose the data.
+  message Migrations {
+    // Migrates neuron indexes to stable storage.
+    Migration neuron_indexes_migration = 1;
+  }
+
+  // Migration related data.
+  Migrations migrations = 21;
+
   reserved 6;
   reserved "authz";
 }
