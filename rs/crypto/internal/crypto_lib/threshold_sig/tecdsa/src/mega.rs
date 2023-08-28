@@ -296,11 +296,7 @@ impl MEGaCiphertext {
             }
         };
 
-        if commitment.check_opening(receiver_index, &opening)? {
-            Ok(opening)
-        } else {
-            Err(ThresholdEcdsaError::InvalidCommitment)
-        }
+        commitment.return_opening_if_consistent(receiver_index, &opening)
     }
 }
 
