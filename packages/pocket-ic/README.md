@@ -1,4 +1,4 @@
-# Pocket IC
+# PocketIC
 
 ## A Canister Testing Framework for Community Developers
 

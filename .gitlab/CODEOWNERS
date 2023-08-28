@@ -165,7 +165,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/observability/                                      @dfinity-lab/teams/DRE
 /rs/orchestrator/                                       @dfinity-lab/teams/consensus-owners
 /rs/p2p/                                                @dfinity-lab/teams/networking-team
-/rs/pocket_ic_backend/                                  @dfinity-lab/teams/ic-testing-verification
+/rs/pocket_ic_server/                                   @dfinity-lab/teams/ic-testing-verification
 /rs/prep/                                               @dfinity-lab/teams/ic-testing-verification
 /rs/protobuf/                                           @dfinity-lab/teams/interface-owners
 /rs/protobuf/def/bitcoin/                               @dfinity-lab/teams/execution-team

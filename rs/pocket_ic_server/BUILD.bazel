@@ -38,7 +38,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 rust_binary(
-    name = "pocket-ic-backend",
+    name = "pocket-ic-server",
     srcs = ["src/main.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = BIN_DEPENDENCIES,
@@ -48,10 +48,10 @@ rust_binary(
 #     name = "pocket-ic-tests",
 #     srcs = ["tests/api_test.rs"],
 #     data = [
-#         ":pocket-ic-backend",
+#         ":pocket-ic-server",
 #     ],
 #     env = {
-#         "POCKET_IC_BIN_PATH": "$(rootpath //rs/pocket_ic_backend:pocket-ic-backend)",
+#         "POCKET_IC_BIN_PATH": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
 #     },
 #     deps = TEST_DEPENDENCIES,
 # )

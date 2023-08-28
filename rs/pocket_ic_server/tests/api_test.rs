@@ -12,7 +12,7 @@ use std::process::Command;
 use std::time::Duration;
 use std::time::Instant;
 
-const POCKET_IC_BIN_PATH: &str = "../../target/debug/pocket-ic-backend";
+const POCKET_IC_BIN_PATH: &str = "../../target/debug/pocket-ic-server";
 const LOCALHOST: &str = "127.0.0.1";
 
 // TODO: use asserts. best achieved with a uniform reponse type from the rest-api.
@@ -125,9 +125,9 @@ fn start_server() -> Url {
                 let port_string = std::fs::read_to_string(port_file_path)
                     .expect("Failed to read port from port file");
                 let port: u16 = port_string.parse().expect("Failed to parse port to number");
-                let daemon_url = Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
-                println!("Found PocketIC running at {}", daemon_url);
-                return daemon_url;
+                let server_url = Url::parse(&format!("http://{}:{}/", LOCALHOST, port)).unwrap();
+                println!("Found PocketIC running at {}", server_url);
+                return server_url;
             }
             _ => std::thread::sleep(Duration::from_millis(20)),
         }
