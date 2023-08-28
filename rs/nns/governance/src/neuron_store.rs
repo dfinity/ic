@@ -154,20 +154,20 @@ impl NeuronStore {
     ///
     #[allow(dead_code)] // TODO(NNS1-2409): Re-enable clippy.
     pub(crate) fn batch_add_heap_neurons_to_stable_indexes(
-        &self,
-        last_neuron_id: u64,
+        &mut self,
+        last_neuron_id: NeuronId,
         batch_size: usize,
-    ) -> Result<Option<u64>, String> {
+    ) -> Result<Option<NeuronId>, String> {
         let mut new_last_neuron_id = None;
         let mut count = 0;
         for (neuron_id, neuron) in self
             .heap_neurons
-            .range(last_neuron_id + 1..)
+            .range(last_neuron_id.id + 1..)
             .take(batch_size)
         {
             NEURON_INDEXES.with(|indexes| indexes.borrow_mut().add_neuron(neuron))?;
             count += 1;
-            new_last_neuron_id = Some(*neuron_id);
+            new_last_neuron_id = Some(NeuronId { id: *neuron_id });
         }
 
         if count < batch_size {

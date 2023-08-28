@@ -2469,6 +2469,9 @@ pub struct Governance {
     pub spawning_neurons: ::core::option::Option<bool>,
     #[prost(message, optional, tag = "20")]
     pub making_sns_proposal: ::core::option::Option<governance::MakingSnsProposal>,
+    /// Migration related data.
+    #[prost(message, optional, tag = "21")]
+    pub migrations: ::core::option::Option<governance::Migrations>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -2626,6 +2629,102 @@ pub mod governance {
         pub caller: ::core::option::Option<::ic_base_types::PrincipalId>,
         #[prost(message, optional, tag = "3")]
         pub proposal: ::core::option::Option<super::Proposal>,
+    }
+    /// Progress of a migration that (potentially) is performed over the course of more than one heartbeat call.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Migration {
+        /// Migration status.
+        #[prost(enumeration = "migration::MigrationStatus", optional, tag = "1")]
+        pub status: ::core::option::Option<i32>,
+        /// The reason why it failed. Should only be present when the status is FAILED.
+        /// This is only for debugging and it should not be used programmatically (other than its presence).
+        #[prost(string, optional, tag = "2")]
+        pub failure_reason: ::core::option::Option<::prost::alloc::string::String>,
+        /// Migration progress (cursor).
+        #[prost(oneof = "migration::Progress", tags = "3")]
+        pub progress: ::core::option::Option<migration::Progress>,
+    }
+    /// Nested message and enum types in `Migration`.
+    pub mod migration {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            Hash,
+            PartialOrd,
+            Ord,
+            ::prost::Enumeration,
+        )]
+        #[repr(i32)]
+        pub enum MigrationStatus {
+            /// Unspecified.
+            Unspecified = 0,
+            /// Migration is in progress.
+            InProgress = 1,
+            /// Migration succeeded.
+            Succeeded = 2,
+            /// Migration failed.
+            Failed = 3,
+        }
+        impl MigrationStatus {
+            /// String value of the enum field names used in the ProtoBuf definition.
+            ///
+            /// The values are not transformed in any way and thus are considered stable
+            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+            pub fn as_str_name(&self) -> &'static str {
+                match self {
+                    MigrationStatus::Unspecified => "MIGRATION_STATUS_UNSPECIFIED",
+                    MigrationStatus::InProgress => "MIGRATION_STATUS_IN_PROGRESS",
+                    MigrationStatus::Succeeded => "MIGRATION_STATUS_SUCCEEDED",
+                    MigrationStatus::Failed => "MIGRATION_STATUS_FAILED",
+                }
+            }
+        }
+        /// Migration progress (cursor).
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Oneof,
+        )]
+        pub enum Progress {
+            /// Last neuron id migrated.
+            #[prost(message, tag = "3")]
+            LastNeuronId(::ic_nns_common::pb::v1::NeuronId),
+        }
+    }
+    /// All migrations. Each migration uses one tag.
+    /// After a migration is finished, it should be OK to reserve the tag and lose the data.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Migrations {
+        /// Migrates neuron indexes to stable storage.
+        #[prost(message, optional, tag = "1")]
+        pub neuron_indexes_migration: ::core::option::Option<Migration>,
     }
 }
 /// Proposals with restricted voting are not included unless the caller

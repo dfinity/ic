@@ -151,6 +151,7 @@ type Governance = record {
   latest_reward_event : opt RewardEvent;
   to_claim_transfers : vec NeuronStakeTransfer;
   short_voting_period_seconds : nat64;
+  migrations : opt Migrations;
   proposals : vec record { nat64; ProposalData };
   in_flight_commands : vec record { nat64; NeuronInFlightCommand };
   neurons : vec record { nat64; Neuron };
@@ -266,6 +267,12 @@ type MergeResponse = record {
   target_neuron_info : opt NeuronInfo;
   source_neuron_info : opt NeuronInfo;
 };
+type Migration = record {
+  status : opt int32;
+  failure_reason : opt text;
+  progress : opt Progress;
+};
+type Migrations = record { neuron_indexes_migration : opt Migration };
 type MostRecentMonthlyNodeProviderRewards = record {
   timestamp : nat64;
   rewards : vec RewardNodeProvider;
@@ -380,6 +387,7 @@ type Params = record {
   min_icp_e8s : nat64;
 };
 type Percentage = record { basis_points : opt nat64 };
+type Progress = variant { LastNeuronId : NeuronId };
 type Proposal = record {
   url : text;
   title : opt text;

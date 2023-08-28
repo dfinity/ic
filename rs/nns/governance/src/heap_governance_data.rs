@@ -1,5 +1,5 @@
 use crate::pb::v1::{
-    governance::{GovernanceCachedMetrics, MakingSnsProposal, NeuronInFlightCommand},
+    governance::{GovernanceCachedMetrics, MakingSnsProposal, Migrations, NeuronInFlightCommand},
     neuron::Followees,
     Governance as GovernanceProto, MostRecentMonthlyNodeProviderRewards, NetworkEconomics, Neuron,
     NeuronStakeTransfer, NodeProvider, ProposalData, RewardEvent,
@@ -27,6 +27,7 @@ pub struct HeapGovernanceData {
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     pub spawning_neurons: Option<bool>,
     pub making_sns_proposal: Option<MakingSnsProposal>,
+    pub migrations: Option<Migrations>,
 }
 
 /// Splits the governance proto (from UPGRADES_MEMORY) into HeapGovernanceData and neurons, because
@@ -57,6 +58,7 @@ pub fn split_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
+        migrations,
     } = governance_proto;
     (
         neurons,
@@ -77,6 +79,7 @@ pub fn split_governance_proto(
             maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons,
             making_sns_proposal,
+            migrations,
         },
     )
 }
@@ -109,6 +112,7 @@ pub fn reassemble_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
+        migrations,
     } = heap_governance_proto;
 
     GovernanceProto {
@@ -129,5 +133,6 @@ pub fn reassemble_governance_proto(
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
         making_sns_proposal,
+        migrations,
     }
 }
