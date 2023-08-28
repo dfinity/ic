@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use opentelemetry::KeyValue;
 use std::time::Instant;
 use tracing::info;
 
@@ -50,7 +51,16 @@ impl<T: Configure> Configure for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let MetricParams { action, .. } = &self.1;
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let labels = &[KeyValue::new("status", status.clone())];
+
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 

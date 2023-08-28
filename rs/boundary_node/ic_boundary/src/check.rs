@@ -18,11 +18,13 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use mockall::automock;
 use opentelemetry::{baggage::BaggageExt, trace::FutureExt, Context as TlmContext, KeyValue};
 use simple_moving_average::{SingleSumSMA, SMA};
+use tracing::info;
 use url::Url;
 
 use crate::{
     core::{Run, WithRetryLimited},
     http::HttpClient,
+    metrics::{MetricParams, WithMetrics},
     persist::Persist,
     snapshot::RoutingTable,
     snapshot::{Node, Subnet},
@@ -416,6 +418,57 @@ impl<T: Check> Check for WithRetryLimited<T> {
                 tokio::time::sleep(attempt_interval - duration).await;
             }
         }
+    }
+}
+
+#[async_trait]
+impl<T: Check> Check for WithMetrics<T> {
+    async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
+        let start_time = Instant::now();
+        let out = self.0.check(node).await;
+        let duration = start_time.elapsed().as_secs_f64();
+
+        let status = match &out {
+            Ok(_) => "ok".to_string(),
+            Err(e) => format!("error_{}", e.short()),
+        };
+
+        let (block_height, replica_version) = out.as_ref().map_or((-1, "unknown"), |out| {
+            (out.height as i64, out.replica_version.as_str())
+        });
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let cx = TlmContext::current();
+        let bgg = cx.baggage();
+
+        let labels = &[
+            KeyValue::new("status", status.clone()),
+            KeyValue::new("subnet_id", bgg.get("subnet_id").unwrap().to_string()),
+            KeyValue::new("node_id", bgg.get("node_id").unwrap().to_string()),
+            KeyValue::new("addr", bgg.get("addr").unwrap().to_string()),
+        ];
+
+        counter.add(1, labels);
+        recorder.record(duration, labels);
+
+        info!(
+            action,
+            status,
+            error = ?out.as_ref().err(),
+            duration,
+            block_height,
+            replica_version,
+            subnet_id = %bgg.get("subnet_id").unwrap(),
+            node_id = %bgg.get("node_id").unwrap(),
+            addr = %bgg.get("addr").unwrap(),
+        );
+
+        out
     }
 }
 

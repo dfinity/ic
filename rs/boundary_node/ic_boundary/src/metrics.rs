@@ -1,7 +1,6 @@
 use std::time::Instant;
 
 use anyhow::Error;
-use async_trait::async_trait;
 use axum::{
     body::Body,
     extract::State,
@@ -11,21 +10,15 @@ use axum::{
 };
 use http::header;
 use opentelemetry::{
-    baggage::BaggageExt,
     metrics::{Counter, Histogram, Meter},
     sdk::metrics::{new_view, Aggregation, Instrument, MeterProviderBuilder, Stream},
-    Context, KeyValue,
+    KeyValue,
 };
 use prometheus::{Encoder, Registry, TextEncoder};
 use tower_http::request_id::RequestId;
-use tracing::{error, info};
+use tracing::info;
 
-use crate::{
-    check::{Check, CheckError, CheckResult},
-    persist::{Persist, PersistStatus},
-    routes::RequestContext,
-    snapshot::{Node, RoutingTable},
-};
+use crate::routes::RequestContext;
 
 pub struct HistogramDefinition(
     pub &'static str,   // action
@@ -110,64 +103,6 @@ impl HttpMetricParams {
     }
 }
 
-#[async_trait]
-impl<T: Persist> Persist for WithMetrics<T> {
-    async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
-        let result = self.0.persist(rt).await?;
-
-        match &result {
-            PersistStatus::SkippedEmpty => {
-                error!("Lookup table is empty!");
-            }
-
-            PersistStatus::Completed(s) => {
-                info!(
-                    "Lookup table published: subnet ranges: {:?} -> {:?}, nodes: {:?} -> {:?}",
-                    s.ranges_old, s.ranges_new, s.nodes_old, s.nodes_new,
-                );
-            }
-        }
-
-        Ok(result)
-    }
-}
-
-#[async_trait]
-impl<T: Check> Check for WithMetrics<T> {
-    // TODO add metrics
-    async fn check(&self, node: &Node) -> Result<CheckResult, CheckError> {
-        let start_time = Instant::now();
-        let out = self.0.check(node).await;
-        let duration = start_time.elapsed().as_secs_f32();
-
-        let status = match &out {
-            Ok(_) => "ok".to_string(),
-            Err(e) => format!("error_{}", e.short()),
-        };
-
-        let (block_height, replica_version) = out.as_ref().map_or((-1, "unknown"), |out| {
-            (out.height as i64, out.replica_version.as_str())
-        });
-
-        let cx = Context::current();
-        let bgg = cx.baggage();
-
-        info!(
-            action = self.1.action,
-            subnet_id = %bgg.get("subnet_id").unwrap(),
-            node_id = %bgg.get("node_id").unwrap(),
-            addr = %bgg.get("addr").unwrap(),
-            status,
-            duration,
-            block_height,
-            replica_version,
-            error = ?out.as_ref().err(),
-        );
-
-        out
-    }
-}
-
 // for http calls through axum we do axum middleware instead of WithMetrics
 pub async fn with_metrics_middleware(
     State(metric_params): State<HttpMetricParams>,
@@ -204,9 +139,17 @@ pub async fn with_metrics_middleware(
     let error_cause = format!("{}", routes_ctx.error_cause);
     let sender = routes_ctx.sender.map(|x| x.to_string());
 
+    let HttpMetricParams {
+        action,
+        counter,
+        durationer,
+        request_sizer,
+        response_sizer,
+    } = metric_params;
+
     let labels = &[
         KeyValue::new("request_type", routes_ctx.request_type.to_string()),
-        KeyValue::new("status_code", response.status().to_string()),
+        KeyValue::new("status_code", response.status().as_str().to_owned()),
         KeyValue::new("subnet_id", subnet_id.clone().unwrap_or(String::from("-"))),
         KeyValue::new("node_id", node_id.clone().unwrap_or(String::from("-"))),
         KeyValue::new("error_cause", error_cause.clone()),
@@ -225,14 +168,6 @@ pub async fn with_metrics_middleware(
         ),
     ];
 
-    let HttpMetricParams {
-        action: _,
-        counter,
-        durationer,
-        request_sizer,
-        response_sizer,
-    } = metric_params;
-
     let response_size = response
         .headers()
         .get(header::CONTENT_LENGTH)
@@ -240,13 +175,13 @@ pub async fn with_metrics_middleware(
         .and_then(|v| v.parse::<u32>().ok())
         .unwrap_or(0);
 
-    let _ctx = Context::current();
     counter.add(1, labels);
     durationer.record(duration, labels);
     request_sizer.record(request_size.into(), labels);
     response_sizer.record(response_size.into(), labels);
 
     info!(
+        action,
         request_id,
         request_type = format!("{}", routes_ctx.request_type),
         error_cause,

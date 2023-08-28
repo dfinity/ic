@@ -62,20 +62,19 @@ impl<T: HttpClient> HttpClient for WithMetrics<T> {
             Err(_) => "".to_string(),
         };
 
-        let labels = &[
-            KeyValue::new("status", status),
-            // Attributes
-            KeyValue::new("method", method.clone()),
-            KeyValue::new("scheme", scheme.clone()),
-            KeyValue::new("host", host.clone()),
-            KeyValue::new("status_code", status_code.clone()),
-        ];
-
         let MetricParams {
             action,
             counter,
             recorder,
         } = &self.1;
+
+        let labels = &[
+            KeyValue::new("status", status),
+            KeyValue::new("method", method.clone()),
+            KeyValue::new("scheme", scheme.clone()),
+            KeyValue::new("host", host.clone()),
+            KeyValue::new("status_code", status_code.clone()),
+        ];
 
         counter.add(1, labels);
         recorder.record(duration, labels);

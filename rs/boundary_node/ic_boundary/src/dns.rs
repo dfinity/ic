@@ -3,10 +3,11 @@ use std::{net::SocketAddr, sync::Arc, time::Instant};
 use arc_swap::ArcSwapOption;
 use futures_util::{future::ready, FutureExt};
 use hyper::client::connect::dns::Name;
+use opentelemetry::KeyValue;
 use reqwest::dns::{Addrs, Resolve, Resolving};
 use tracing::info;
 
-use crate::{metrics::WithMetrics, snapshot::RoutingTable};
+use crate::{metrics::MetricParams, metrics::WithMetrics, snapshot::RoutingTable};
 
 const UNUSED_PORT: u16 = 0;
 
@@ -52,22 +53,28 @@ impl Resolve for DnsResolver {
 impl<T: Resolve> Resolve for WithMetrics<T> {
     fn resolve(&self, name: Name) -> Resolving {
         let start_time = Instant::now();
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = self.1.clone();
 
         self.0
             .resolve(name.clone())
             .map(move |out| {
+                let duration = start_time.elapsed().as_secs_f64();
                 let status = match out {
                     Ok(_) => "ok",
                     Err(_) => "fail",
                 };
-
-                let duration = start_time.elapsed().as_secs_f64();
+                let labels = &[KeyValue::new("status", status)];
+                counter.add(1, labels);
+                recorder.record(duration, labels);
 
                 // Examine IPs
                 let out = out.map(|addrs| Vec::from_iter(addrs.map(|addr| addr.ip())));
-
                 info!(
-                    action = "resolve",
+                    action,
                     name = name.as_str(),
                     status,
                     duration,

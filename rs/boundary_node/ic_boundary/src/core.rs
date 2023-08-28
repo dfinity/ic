@@ -19,7 +19,7 @@ use futures::TryFutureExt;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
-use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider};
+use opentelemetry::{metrics::MeterProvider as _, sdk::metrics::MeterProvider, KeyValue};
 use opentelemetry_prometheus::exporter;
 use prometheus::{labels, Registry};
 use tower::ServiceBuilder;
@@ -471,7 +471,16 @@ impl<T: Run> Run for WithMetrics<T> {
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
-        let MetricParams { action, .. } = &self.1;
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let labels = &[KeyValue::new("status", status.clone())];
+
+        counter.add(1, labels);
+        recorder.record(duration, labels);
 
         info!(action, status, duration, error = ?out.as_ref().err());
 
