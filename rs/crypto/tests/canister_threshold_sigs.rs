@@ -982,6 +982,7 @@ mod verify_complaint {
 
 mod verify_transcript {
     use super::*;
+    use ic_crypto_test_utils_canister_threshold_sigs::IntoBuilder;
 
     #[test]
     fn should_run_idkg_successfully_for_random_dealing() {
@@ -1421,13 +1422,19 @@ mod verify_transcript {
             &mut rng,
         );
 
-        let mut transcript = env
+        let transcript = env
             .nodes
             .run_idkg_and_create_and_verify_transcript(&params, &mut rng);
 
-        while transcript.verified_dealings.len() >= params.collection_threshold().get() as usize {
-            transcript.verified_dealings.pop_first();
-        }
+        let dealings_to_remove =
+            1 + (transcript.verified_dealings.len() - params.collection_threshold().get() as usize);
+
+        let transcript = transcript
+            .into_builder()
+            .remove_some_dealings(dealings_to_remove)
+            .build();
+
+        assert!(transcript.verified_dealings.len() < params.collection_threshold().get() as usize);
 
         let r = env
             .nodes
@@ -1438,32 +1445,46 @@ mod verify_transcript {
                         if msg.starts_with("failed to verify transcript against params: insufficient number of dealings"));
     }
 
-    #[test]
-    fn should_verify_transcript_reject_transcript_with_corrupted_internal_data() {
-        let mut rng = reproducible_rng();
-        let subnet_size = rng.gen_range(4..10);
-        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, &mut rng);
-        let (dealers, receivers) =
-            env.choose_dealers_and_receivers(&IDkgParticipants::Random, &mut rng);
+    fn setup_for_verify_transcript(
+        rng: &mut ReproducibleRng,
+        subnet_size: usize,
+    ) -> (
+        CanisterThresholdSigTestEnvironment,
+        IDkgTranscriptParams,
+        IDkgTranscript,
+    ) {
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
 
         let params = env.params_for_random_sharing(
             &dealers,
             &receivers,
             AlgorithmId::ThresholdEcdsaSecp256k1,
-            &mut rng,
+            rng,
         );
 
-        let mut transcript = env
+        let transcript = env
             .nodes
-            .run_idkg_and_create_and_verify_transcript(&params, &mut rng);
+            .run_idkg_and_create_and_verify_transcript(&params, rng);
 
-        let raw_len = transcript.internal_transcript_raw.len();
-        let corrupted_idx = rng.gen::<usize>() % raw_len;
-        transcript.internal_transcript_raw[corrupted_idx] ^= 1;
+        (env, params, transcript)
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_corrupted_internal_data() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(4..10);
+
+        let (env, params, transcript) = setup_for_verify_transcript(&mut rng, subnet_size);
+
+        let transcript = transcript
+            .into_builder()
+            .corrupt_internal_transcript_raw(&mut rng)
+            .build();
 
         let r = env
             .nodes
-            .random_receiver(params.receivers(), &mut rng)
+            .random_node(&mut rng)
             .verify_transcript(&params, &transcript);
 
         // Since the corruption is randomized, we might corrupt the CBOR or the commitments
@@ -1477,6 +1498,120 @@ mod verify_transcript {
             Err(e) => panic!("Unexpected error {:?}", e),
             Ok(()) => panic!("Unexpected success"),
         }
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_wrong_transcript_id() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(4..10);
+
+        let (env, params, transcript) = setup_for_verify_transcript(&mut rng, subnet_size);
+
+        let transcript = transcript.into_builder().corrupt_transcript_id().build();
+
+        let r = env
+            .nodes
+            .random_node(&mut rng)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r,
+                        Err(IDkgVerifyTranscriptError::InvalidArgument(e))
+                        if e.contains("mismatching transcript IDs in transcript"));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_wrong_registry_version() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(4..10);
+
+        let (env, params, transcript) = setup_for_verify_transcript(&mut rng, subnet_size);
+
+        let transcript = transcript.into_builder().corrupt_registry_version().build();
+
+        let r = env
+            .nodes
+            .random_node(&mut rng)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r,
+                        Err(IDkgVerifyTranscriptError::InvalidArgument(e))
+                        if e.contains("mismatching registry versions in transcript"));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_wrong_algorithm_id() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(4..10);
+
+        let (env, params, transcript) = setup_for_verify_transcript(&mut rng, subnet_size);
+
+        let transcript = transcript.into_builder().corrupt_algorithm_id().build();
+
+        let r = env
+            .nodes
+            .random_node(&mut rng)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r,
+                        Err(IDkgVerifyTranscriptError::InvalidArgument(e))
+                        if e.contains("mismatching algorithm IDs in transcript"));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_an_extra_receiver() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(4..10);
+
+        let (env, params, transcript) = setup_for_verify_transcript(&mut rng, subnet_size);
+
+        let transcript = transcript.into_builder().add_a_new_receiver().build();
+
+        let r = env
+            .nodes
+            .random_node(&mut rng)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r,
+                        Err(IDkgVerifyTranscriptError::InvalidArgument(e))
+                        if e.contains("mismatching receivers in transcript"));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_a_missing_receiver() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(6..10);
+
+        let (env, params, transcript) = setup_for_verify_transcript(&mut rng, subnet_size);
+
+        let transcript = transcript.into_builder().remove_a_receiver().build();
+
+        let r = env
+            .nodes
+            .random_node(&mut rng)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r,
+                        Err(IDkgVerifyTranscriptError::InvalidArgument(e))
+                        if e.contains("mismatching receivers in transcript"));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_wrong_transcript_type() {
+        let mut rng = reproducible_rng();
+        let subnet_size = rng.gen_range(4..10);
+
+        let (env, params, transcript) = setup_for_verify_transcript(&mut rng, subnet_size);
+
+        let transcript = transcript.into_builder().corrupt_transcript_type().build();
+
+        let r = env
+            .nodes
+            .random_node(&mut rng)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r,
+                        Err(IDkgVerifyTranscriptError::InvalidArgument(e))
+                        if e.contains("failed to verify transcript against params: transcript's type"));
     }
 }
 
