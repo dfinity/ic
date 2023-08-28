@@ -649,6 +649,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic-counter"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62f447d68cfa5a9ab0c1c862a703da2a65b5ed1b7ce1153c9eb0169506d56019"
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14160,6 +14166,7 @@ dependencies = [
 name = "pocket-ic-backend"
 version = "0.0.1"
 dependencies = [
+ "atomic-counter",
  "axum",
  "candid 0.9.1",
  "clap 3.2.23",

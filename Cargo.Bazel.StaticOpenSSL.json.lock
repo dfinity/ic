@@ -1,5 +1,5 @@
 {
-  "checksum": "37ca12626db5beda6ae9cfd5d3fd2b1b2bf14fa4ace97a38715b8d632613f69d",
+  "checksum": "119f041ea3106b2b013017ad125470d63aa6013181b5b652e9e08e83334efc53",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3210,6 +3210,36 @@
         ]
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "atomic-counter 1.0.1": {
+      "name": "atomic-counter",
+      "version": "1.0.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/atomic-counter/1.0.1/download",
+          "sha256": "62f447d68cfa5a9ab0c1c862a703da2a65b5ed1b7ce1153c9eb0169506d56019"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "atomic_counter",
+            "crate_root": "src/lib.rs",
+            "srcs": [
+              "**/*.rs"
+            ]
+          }
+        }
+      ],
+      "library_target_name": "atomic_counter",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "1.0.1"
+      },
+      "license": "MIT"
     },
     "atty 0.2.14": {
       "name": "atty",
@@ -13312,6 +13342,10 @@
             {
               "id": "async-stream 0.3.5",
               "target": "async_stream"
+            },
+            {
+              "id": "atomic-counter 1.0.1",
+              "target": "atomic_counter"
             },
             {
               "id": "axum 0.6.19",
