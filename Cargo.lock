@@ -6330,6 +6330,7 @@ dependencies = [
  "prost",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rsa",
  "serde",
  "serde_cbor",
  "simple_asn1 0.6.2",
