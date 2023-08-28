@@ -11,8 +11,8 @@ use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
-    IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealers, IDkgDealing, IDkgMaskedTranscriptOrigin,
+    IDkgReceivers, IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
@@ -1833,6 +1833,117 @@ impl IntoBuilder for ThresholdEcdsaSigInputs {
             nonce: *self.nonce(),
             presig_quadruple: self.presig_quadruple().clone(),
             key_transcript: self.key_transcript().clone(),
+        }
+    }
+}
+
+pub struct IDkgTranscriptBuilder {
+    transcript_id: IDkgTranscriptId,
+    receivers: IDkgReceivers,
+    registry_version: RegistryVersion,
+    verified_dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+    transcript_type: IDkgTranscriptType,
+    algorithm_id: AlgorithmId,
+    internal_transcript_raw: Vec<u8>,
+}
+
+impl IDkgTranscriptBuilder {
+    pub fn build(self) -> IDkgTranscript {
+        IDkgTranscript {
+            transcript_id: self.transcript_id,
+            receivers: self.receivers,
+            registry_version: self.registry_version,
+            verified_dealings: self.verified_dealings,
+            transcript_type: self.transcript_type,
+            algorithm_id: self.algorithm_id,
+            internal_transcript_raw: self.internal_transcript_raw,
+        }
+    }
+
+    pub fn corrupt_transcript_id(mut self) -> Self {
+        self.transcript_id = self.transcript_id.increment();
+        self
+    }
+
+    pub fn corrupt_registry_version(mut self) -> Self {
+        self.registry_version += 1.into();
+        self
+    }
+
+    pub fn corrupt_algorithm_id(mut self) -> Self {
+        self.algorithm_id = AlgorithmId::Placeholder;
+        self
+    }
+
+    pub fn remove_some_dealings(mut self, n: usize) -> Self {
+        assert!(n <= self.verified_dealings.len());
+
+        for _ in 0..n {
+            self.verified_dealings
+                .pop_first()
+                .expect("No more dealings remaining");
+        }
+
+        self
+    }
+
+    pub fn remove_a_receiver(mut self) -> Self {
+        let mut receivers = self.receivers.get().clone();
+        receivers.pop_first().expect("have a least 1 receiver");
+        self.receivers = IDkgReceivers::new(receivers).unwrap();
+        self
+    }
+
+    pub fn add_a_new_receiver(mut self) -> Self {
+        let mut receivers = self.receivers.get().clone();
+        let extra_receiver = NodeId::from(PrincipalId::new_node_test_id(i64::MAX as u64));
+        receivers.insert(extra_receiver);
+        self.receivers = IDkgReceivers::new(receivers).unwrap();
+        self
+    }
+
+    pub fn corrupt_transcript_type(mut self) -> Self {
+        self.transcript_type = match self.transcript_type {
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(
+                    self.transcript_id,
+                ))
+            }
+            IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(
+                _id1,
+                id2,
+            )) => IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(id2)),
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(id)) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(id))
+            }
+            IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareUnmasked(id)) => {
+                IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(id))
+            }
+        };
+
+        self
+    }
+
+    pub fn corrupt_internal_transcript_raw<R: CryptoRng + RngCore>(mut self, rng: &mut R) -> Self {
+        let raw_len = self.internal_transcript_raw.len();
+        let corrupted_idx = rng.gen::<usize>() % raw_len;
+        self.internal_transcript_raw[corrupted_idx] ^= 1;
+        self
+    }
+}
+
+impl IntoBuilder for IDkgTranscript {
+    type BuilderType = IDkgTranscriptBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        IDkgTranscriptBuilder {
+            transcript_id: self.transcript_id,
+            receivers: self.receivers,
+            registry_version: self.registry_version,
+            verified_dealings: self.verified_dealings,
+            transcript_type: self.transcript_type,
+            algorithm_id: self.algorithm_id,
+            internal_transcript_raw: self.internal_transcript_raw,
         }
     }
 }
