@@ -22,7 +22,10 @@ rust_library(
     name = "minter",
     srcs = glob(
         ["src/**/*.rs"],
-        exclude = ["src/main.rs"],
+        exclude = [
+            "src/main.rs",
+            "src/dashboard.rs",
+        ],
     ),
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
@@ -75,7 +78,13 @@ rust_test(
 
 rust_canister(
     name = "cketh_minter",
-    srcs = ["src/main.rs"],
+    srcs = [
+        "src/dashboard.rs",
+        "src/main.rs",
+    ],
+    compile_data = [
+        "templates/dashboard.html",
+    ],
     crate_name = "ic_cketh_minter_canister",
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
@@ -87,6 +96,7 @@ rust_canister(
         "//rs/crypto/ecdsa_secp256k1",
         "//rs/rosetta-api/icrc1/client/cdk",
         "//rs/rust_canisters/http_types",
+        "@crate_index//:askama",
         "@crate_index//:candid",
         "@crate_index//:ciborium",
         "@crate_index//:ethabi",

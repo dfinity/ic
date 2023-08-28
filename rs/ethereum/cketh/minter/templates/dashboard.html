@@ -1,0 +1,129 @@
+{% macro etherscan_address_link(address) %}
+{% match ethereum_network %}
+  {% when Sepolia %}
+  <a href="https://sepolia.etherscan.io/address/{{address}}"><code>{{address}}</code></a>
+  {% when Mainnet %}
+  <a href="https://etherscan.io/address/{{address}}"><code>{{address}}</code></a>
+{% endmatch %}
+{% endmacro %}
+
+{% macro etherscan_block_link(block_number) %}
+{% match ethereum_network %}
+  {% when Sepolia %}
+  <a href="https://sepolia.etherscan.io/block/{{block_number}}"><code>{{block_number}}</code></a>
+  {% when Mainnet %}
+  <a href="https://etherscan.io/block/{{block_number}}"><code>{{block_number}}</code></a>
+{% endmatch %}
+{% endmacro %}
+
+{% macro etherscan_tx_link(txhash) %}
+{% match ethereum_network %}
+  {% when Sepolia %}
+  <a href="https://sepolia.etherscan.io/tx/{{txhash}}"><code>{{txhash}}</code></a>
+  {% when Mainnet %}
+  <a href="https://etherscan.io/tx/{{txhash}}"><code>{{txhash}}</code></a>
+{% endmatch %}
+{% endmacro %}
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <title>ckETH Minter Dashboard</title>
+    <style>
+        table {
+            border: solid;
+            text-align: left;
+            width: 100%;
+            border-width: thin;
+        }
+
+        h3 {
+            font-variant: small-caps;
+            margin-top: 30px;
+            margin-bottom: 5px;
+        }
+
+        table table {
+            font-size: small;
+        }
+
+        .background {
+            margin: 0;
+            padding: 0;
+        }
+
+        .content {
+            max-width: 100vw;
+            width: fit-content;
+            margin: 0 auto;
+        }
+
+        tbody tr:nth-child(odd) {
+            background-color: #eeeeee;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background">
+        <div class="content">
+            <h3>Metadata</h3>
+            <table>
+                <tbody>
+                    <tr>
+                        <th>Minter address</th>
+                        <td>{% call etherscan_address_link(minter_address) %}</td>
+                    </tr>
+                    <tr>
+                        <th>Helper contract address</th>
+                        <td>{% call etherscan_address_link(contract_address) %}</td>
+                    </tr>
+                    <tr>
+                        <th>Ledger canister ID</th>
+                        <td><code>{{ ledger_id }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>tECDSA key name</th>
+                        <td><code>{{ ecdsa_key_name }}</code></td>
+                    </tr>
+                    <tr>
+                        <th>Next nonce</th>
+                        <td>{{ next_transaction_nonce }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Block sync</h3>
+            <table>
+                <tbody>
+                    <tr>
+                        <th>Last synced block number</th>
+                        <td>{% call etherscan_block_link(last_synced_block) %}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Minted events</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Transaction</th>
+                        <th>Log Index</th>
+                        <th>Mint block index</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mint in mints %}
+                    <tr>
+                        <td>{% call etherscan_tx_link(mint.txhash) %}</td>
+                        <td>{{ mint.log_index }}</td>
+                        <td>{{ mint.mint_block_index }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <body>
+</html>
