@@ -234,6 +234,7 @@ type ListNeuronsResponse = record {
 type ListNodeProvidersResponse = record { node_providers : vec NodeProvider };
 type ListProposalInfo = record {
   include_reward_status : vec int32;
+  omit_large_fields : opt bool;
   before_proposal : opt NeuronId;
   limit : nat32;
   exclude_topic : vec int32;
