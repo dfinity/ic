@@ -20,9 +20,10 @@ use ic_execution_environment::{
     InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
-    CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method, Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInstallMode, CanisterInstallModeV2, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs,
+    InstallCodeArgsV2, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs, SkipPreUpgrade,
+    UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
@@ -530,6 +531,10 @@ impl ExecutionTest {
         self.subnet_message(Method::InstallCode, args.encode())
     }
 
+    pub fn install_code_v2(&mut self, args: InstallCodeArgsV2) -> Result<WasmResult, UserError> {
+        self.subnet_message(Method::InstallCode, args.encode())
+    }
+
     /// Sends an `install_code` message to the IC management canister with DTS.
     /// Similar to `subnet_message()`but does not check the ingress status of
     /// the response as the subnet message execution may not finish immediately.
@@ -633,6 +638,26 @@ impl ExecutionTest {
         Ok(())
     }
 
+    /// Installs the given Wasm binary in the given canister using `InstallCodeArgsV2`
+    pub fn install_canister_v2(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Install,
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        let result = self.install_code_v2(args)?;
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
+        Ok(())
+    }
+
     pub fn install_canister_with_allocation(
         &mut self,
         canister_id: CanisterId,
@@ -674,6 +699,25 @@ impl ExecutionTest {
         Ok(())
     }
 
+    pub fn reinstall_canister_v2(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Reinstall,
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        let result = self.install_code_v2(args)?;
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
+        Ok(())
+    }
+
     /// Installs the given canister with the given Wasm binary.
     pub fn upgrade_canister(
         &mut self,
@@ -690,6 +734,28 @@ impl ExecutionTest {
             None,
         );
         let result = self.install_code(args)?;
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
+        Ok(())
+    }
+
+    /// Upgrades the given canister with the given Wasm binary,
+    /// in the mode specified by value of 'skip_pre_upgrade' field.
+    pub fn upgrade_canister_v2(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+        skip_pre_upgrade: Option<SkipPreUpgrade>,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgsV2::new(
+            CanisterInstallModeV2::Upgrade(skip_pre_upgrade),
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+        );
+        let result = self.install_code_v2(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
     }
@@ -1994,7 +2060,7 @@ fn get_canister_id_if_install_code(message: CanisterMessage) -> Option<CanisterI
     if message.method_name() != "install_code" {
         return None;
     }
-    match InstallCodeArgs::decode(message.method_payload()) {
+    match InstallCodeArgsV2::decode(message.method_payload()) {
         Err(_) => None,
         Ok(args) => Some(CanisterId::try_from(args.canister_id).unwrap()),
     }
