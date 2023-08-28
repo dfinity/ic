@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
+    net::Ipv6Addr,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -12,7 +13,10 @@ use serde_json::json;
 use slog::{debug, info};
 
 use crate::driver::{
-    constants::SSH_USERNAME,
+    constants::{
+        BN_EXPORTER_PROMETHEUS_TARGET_FILE, BN_NGINX_PROMETHEUS_TARGET_FILE,
+        BN_PROMETHEUS_TARGET_FILE, SSH_USERNAME,
+    },
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
     log_events,
@@ -54,6 +58,8 @@ const PROMETHEUS_SCRAPING_TARGETS_DIR: &str = "/etc/prometheus";
 const REPLICA_METRICS_PORT: u16 = 9090;
 const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 const NODE_EXPORTER_METRICS_PORT: u16 = 9100;
+const IC_BOUNDARY_METRICS_PORT: u16 = 9324;
+const BOUNDARY_NODE_NGINX_PORT: u16 = 9316;
 
 const PROMETHEUS_DOMAIN_NAME: &str = "prometheus";
 const GRAFANA_DOMAIN_NAME: &str = "grafana";
@@ -185,6 +191,9 @@ chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
     }
 }
 
+/// A simple alias for representing both ApiBoundaryNode and BoundaryNode: (bn_name, ipv6).
+type BoundaryNode<'a> = (&'a str, Ipv6Addr);
+
 /// The Prometheus trait allows starting a Prometheus VM,
 /// configuring its scraping targets based on the latest IC topology
 /// and finally downloading its data directory.
@@ -192,6 +201,9 @@ pub trait HasPrometheus {
     /// Retrieves a topology snapshot, converts it into p8s scraping target
     /// JSON files and scps them to the prometheus VM.
     fn sync_prometheus_config_with_topology(&self);
+
+    /// Converts boundary nodes into p8s scraping target JSON file and scps it to the prometheus VM.
+    fn sync_prometheus_config_with_boundary_nodes(&self, boundary_nodes: &[BoundaryNode]);
 
     /// Downloads prometheus' data directory to the test artifacts
     /// such that we can run a local p8s on that later.
@@ -203,6 +215,44 @@ pub trait HasPrometheus {
 }
 
 impl HasPrometheus for TestEnv {
+    fn sync_prometheus_config_with_boundary_nodes(&self, boundary_nodes: &[BoundaryNode]) {
+        let vm_name = PROMETHEUS_VM_NAME.to_string();
+        // Write the scraping target JSON file to the local prometheus config directory.
+        let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);
+        let group_setup = GroupSetup::read_attribute(self);
+        sync_prometheus_config_dir_with_boundary_nodes(
+            prometheus_config_dir.clone(),
+            group_setup.farm_group_name,
+            boundary_nodes,
+        )
+        .expect("Failed to synchronize prometheus config with the boundary nodes");
+        // Setup an SSH session to the prometheus VM which we'll use to scp the JSON files.
+        let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
+        let session = deployed_prometheus_vm
+            .block_on_ssh_session()
+            .unwrap_or_else(|e| panic!("Failed to setup SSH session to {vm_name} because: {e:?}!"));
+        // scp the scraping target JSON file to prometheus VM.
+        for name in &[
+            BN_PROMETHEUS_TARGET_FILE,
+            BN_EXPORTER_PROMETHEUS_TARGET_FILE,
+            BN_NGINX_PROMETHEUS_TARGET_FILE,
+        ] {
+            let from_pathbuf = prometheus_config_dir.join(name);
+            let from = from_pathbuf.as_path();
+            let to = &Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(name);
+            let size = fs::metadata(from).unwrap().len();
+            retry(self.logger(), SCP_RETRY_TIMEOUT, SCP_RETRY_BACKOFF, || {
+                let mut remote_file = session.scp_send(to, 0o644, size, None)?;
+                let mut from_file = File::open(from)?;
+                std::io::copy(&mut from_file, &mut remote_file)?;
+                Ok(())
+            })
+            .unwrap_or_else(|e| {
+                panic!("Failed to scp {from:?} to {vm_name}:{to:?} because: {e:?}!")
+            });
+        }
+    }
+
     fn sync_prometheus_config_with_topology(&self) {
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
@@ -214,7 +264,7 @@ impl HasPrometheus for TestEnv {
             group_setup.farm_group_name,
             topology_snapshot,
         )
-        .expect("Failed to synchronise prometheus config with the latest IC topology!");
+        .expect("Failed to synchronize prometheus config with the latest IC topology!");
 
         // Setup an SSH session to the prometheus VM which we'll use to scp the JSON files.
         let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
@@ -308,6 +358,12 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let prometheus_config_dir = config_dir.join(PROMETHEUS_CONFIG_DIR_NAME);
     fs::create_dir_all(prometheus_config_dir.clone())?;
 
+    let boundary_nodes_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_PROMETHEUS_TARGET_FILE);
+    let boundary_nodes_exporter_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_EXPORTER_PROMETHEUS_TARGET_FILE);
+    let boundary_nodes_nginx_scraping_targets_path =
+        Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join(BN_NGINX_PROMETHEUS_TARGET_FILE);
     let replica_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join("replica.json");
     let orchestrator_scraping_targets_path =
@@ -318,6 +374,18 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let prometheus_config = json!({
         "global": {"scrape_interval": scrape_interval_str},
         "scrape_configs": [
+            {
+                "job_name": "boundary_nodes",
+                "file_sd_configs": [{"files": [boundary_nodes_scraping_targets_path]}],
+            },
+            {
+                "job_name": "boundary_nodes_exporter",
+                "file_sd_configs": [{"files": [boundary_nodes_exporter_scraping_targets_path]}],
+            },
+            {
+                "job_name": "boundary_nodes_nginx",
+                "file_sd_configs": [{"files": [boundary_nodes_nginx_scraping_targets_path]}],
+            },
             {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
             {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},
             {
@@ -331,6 +399,54 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
     let prometheus_config_path = prometheus_config_dir.join("prometheus.yml");
     let prometheus_config_file = File::create(prometheus_config_path)?;
     serde_json::to_writer(prometheus_config_file, &prometheus_config)?;
+    Ok(())
+}
+
+fn sync_prometheus_config_dir_with_boundary_nodes(
+    prometheus_config_dir: PathBuf,
+    group_name: String,
+    boundary_nodes: &[BoundaryNode],
+) -> Result<()> {
+    let mut boundary_nodes_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
+    let mut boundary_nodes_exporter_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
+    let mut boundary_nodes_nginx_p8s_static_configs: Vec<PrometheusStaticConfig> = Vec::new();
+    for (name, ipv6) in boundary_nodes {
+        let labels: HashMap<String, String> = [
+            ("ic".to_string(), group_name.clone()),
+            ("ic_boundary_node".to_string(), name.to_string()),
+        ]
+        .iter()
+        .cloned()
+        .collect();
+        boundary_nodes_p8s_static_configs.push(PrometheusStaticConfig {
+            targets: vec![format!("[{:?}]:{:?}", ipv6, IC_BOUNDARY_METRICS_PORT)],
+            labels: labels.clone(),
+        });
+        boundary_nodes_exporter_p8s_static_configs.push(PrometheusStaticConfig {
+            targets: vec![format!("[{:?}]:{:?}", ipv6, NODE_EXPORTER_METRICS_PORT)],
+            labels: labels.clone(),
+        });
+        boundary_nodes_nginx_p8s_static_configs.push(PrometheusStaticConfig {
+            targets: vec![format!("[{:?}]:{:?}", ipv6, BOUNDARY_NODE_NGINX_PORT)],
+            labels: labels.clone(),
+        });
+    }
+    for (name, p8s_static_configs) in &[
+        (BN_PROMETHEUS_TARGET_FILE, boundary_nodes_p8s_static_configs),
+        (
+            BN_EXPORTER_PROMETHEUS_TARGET_FILE,
+            boundary_nodes_exporter_p8s_static_configs,
+        ),
+        (
+            BN_NGINX_PROMETHEUS_TARGET_FILE,
+            boundary_nodes_nginx_p8s_static_configs,
+        ),
+    ] {
+        ::serde_json::to_writer(
+            &File::create(prometheus_config_dir.join(name))?,
+            &p8s_static_configs,
+        )?;
+    }
     Ok(())
 }
 

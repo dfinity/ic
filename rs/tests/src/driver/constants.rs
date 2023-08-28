@@ -55,3 +55,7 @@ pub fn kibana_link(farm_group_name: &str) -> String {
 
 pub const PANIC_LOG_PREFIX: &str = "[Function panicked]: ";
 pub const SUBREPORT_LOG_PREFIX: &str = "[SubReport]: ";
+
+pub const BN_PROMETHEUS_TARGET_FILE: &str = "boundary_nodes.json";
+pub const BN_EXPORTER_PROMETHEUS_TARGET_FILE: &str = "boundary_nodes_exporter.json";
+pub const BN_NGINX_PROMETHEUS_TARGET_FILE: &str = "boundary_nodes_nginx.json";

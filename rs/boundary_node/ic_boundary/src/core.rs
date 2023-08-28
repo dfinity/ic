@@ -61,7 +61,7 @@ use crate::{
     tls::{CustomAcceptor, Loader as TlsLoader, Provisioner, TokenSetter, WithLoad, WithStore},
 };
 
-pub const SERVICE_NAME: &str = "ic-boundary";
+pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
 const DER_PREFIX: &[u8; 37] = b"\x30\x81\x82\x30\x1d\x06\x0d\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x01\x02\x01\x06\x0c\x2b\x06\x01\x04\x01\x82\xdc\x7c\x05\x03\x02\x01\x03\x61\x00";
 
