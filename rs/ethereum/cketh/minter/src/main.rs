@@ -26,6 +26,8 @@ use std::cmp::{min, Ordering};
 use std::str::FromStr;
 use std::time::Duration;
 
+mod dashboard;
+
 const SCRAPPING_ETH_LOGS_INTERVAL: Duration = Duration::from_secs(3 * 60);
 const PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL: Duration = Duration::from_secs(15);
 const MINT_RETRY_DELAY: Duration = Duration::from_secs(3 * 60);
@@ -62,7 +64,7 @@ async fn scrap_eth_logs() {
 
     const MAX_BLOCK_SPREAD: u128 = 1024;
 
-    let last_seen_block_number = read_state(|s| s.last_seen_block_number.clone());
+    let last_seen_block_number = read_state(|s| s.last_seen_block_number);
 
     let finalized_block: Block = read_state(EthRpcClient::from_state)
         .eth_get_last_finalized_block()
@@ -78,7 +80,7 @@ async fn scrap_eth_logs() {
     match last_seen_block_number.cmp(&finalized_block.number) {
         Ordering::Less => {
             let max_finalized_block_number = min(
-                last_seen_block_number.clone() + MAX_BLOCK_SPREAD,
+                last_seen_block_number + MAX_BLOCK_SPREAD,
                 finalized_block.number,
             );
 
@@ -90,8 +92,8 @@ async fn scrap_eth_logs() {
             );
 
             let (transaction_events, errors) = eth_logs::last_received_eth_events(
-                last_seen_block_number.clone(),
-                max_finalized_block_number.clone(),
+                last_seen_block_number,
+                max_finalized_block_number,
             )
             .await;
             let has_new_events = !transaction_events.is_empty();
@@ -538,7 +540,7 @@ fn dump_state_for_debugging() -> DebugState {
 
     read_state(|s| DebugState {
         ecdsa_key_name: s.ecdsa_key_name.clone(),
-        last_seen_block_number: Nat::from(s.last_seen_block_number.clone()),
+        last_seen_block_number: Nat::from(s.last_seen_block_number),
         minted_transactions: s
             .minted_events
             .keys()
@@ -603,6 +605,13 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     .build()
             }
         }
+    } else if req.path() == "/dashboard" {
+        use askama::Template;
+        let dashboard = read_state(dashboard::DashboardTemplate::from_state);
+        HttpResponseBuilder::ok()
+            .header("Content-Type", "text/html; charset=utf-8")
+            .with_body_and_content_length(dashboard.render().unwrap())
+            .build()
     } else if req.path() == "/logs" {
         use ic_cketh_minter::logs::{Log, Priority};
         use serde_json;

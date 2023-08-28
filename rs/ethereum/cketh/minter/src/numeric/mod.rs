@@ -129,6 +129,12 @@ impl TryFrom<Nat> for TransactionNonce {
     }
 }
 
+impl fmt::Display for TransactionNonce {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl From<TransactionNonce> for ethnum::u256 {
     fn from(value: TransactionNonce) -> Self {
         value.0

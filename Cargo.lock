@@ -5743,6 +5743,7 @@ dependencies = [
 name = "ic-cketh-minter"
 version = "0.1.0"
 dependencies = [
+ "askama",
  "assert_matches",
  "candid 0.8.4",
  "ciborium",

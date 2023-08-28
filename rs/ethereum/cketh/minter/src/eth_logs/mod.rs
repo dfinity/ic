@@ -40,6 +40,10 @@ impl EventSource {
     pub fn txhash(&self) -> &Hash {
         &self.0
     }
+
+    pub fn log_index(&self) -> LogIndex {
+        self.1
+    }
 }
 
 impl fmt::Display for EventSource {

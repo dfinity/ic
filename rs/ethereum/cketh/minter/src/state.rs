@@ -1,3 +1,4 @@
+use crate::address::Address;
 use crate::endpoints::{EthereumNetwork, InitArg};
 use crate::eth_logs::{EventSource, ReceivedEthEvent};
 use crate::eth_rpc::BlockNumber;
@@ -92,6 +93,14 @@ impl From<InitArg> for State {
 }
 
 impl State {
+    pub fn minter_address(&self) -> Option<Address> {
+        let pubkey = PublicKey::deserialize_sec1(&self.ecdsa_public_key.as_ref()?.public_key)
+            .unwrap_or_else(|e| {
+                ic_cdk::trap(&format!("failed to decode minter's public key: {:?}", e))
+            });
+        Some(Address::from_pubkey(&pubkey))
+    }
+
     pub fn record_event_to_mint(&mut self, event: ReceivedEthEvent) {
         debug_assert!(
             self.events_to_mint
