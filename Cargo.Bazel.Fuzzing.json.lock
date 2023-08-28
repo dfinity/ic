@@ -23122,7 +23122,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/bitcoin-canister",
           "commitish": {
-            "Rev": "0e996988693f2d55fc9533c44dc20ae5310a1894"
+            "Rev": "b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
           },
           "strip_prefix": "validation"
         }

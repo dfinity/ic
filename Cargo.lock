@@ -5310,7 +5310,7 @@ dependencies = [
 [[package]]
 name = "ic-btc-validation"
 version = "0.1.0"
-source = "git+https://github.com/dfinity/bitcoin-canister?rev=0e996988693f2d55fc9533c44dc20ae5310a1894#0e996988693f2d55fc9533c44dc20ae5310a1894"
+source = "git+https://github.com/dfinity/bitcoin-canister?rev=b1693619e3d4dbc00d8c79e9b6886e1db48b21f7#b1693619e3d4dbc00d8c79e9b6886e1db48b21f7"
 dependencies = [
  "bitcoin 0.28.2",
 ]
