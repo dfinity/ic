@@ -74,6 +74,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:lazy_static",
     "@crate_index//:mockall_0_7_2",
     "@crate_index//:proptest",
+    "@crate_index//:rsa",
     "@crate_index//:slog-async",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
