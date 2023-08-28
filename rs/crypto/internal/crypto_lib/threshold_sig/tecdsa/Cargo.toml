@@ -59,3 +59,7 @@ harness = false
 [[bench]]
 name = "group_ops"
 harness = false
+
+[[bench]]
+name = "key_derivation"
+harness = false
