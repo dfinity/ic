@@ -4355,6 +4355,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-cbor"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ea3e22289cb2b7d8afa98f9a42d3ee559841edf84a2e9116a2971d89cf38d40"
+dependencies = [
+ "candid 0.9.3",
+ "ic-certification 0.26.1",
+ "leb128",
+ "nom",
+ "thiserror",
+]
+
+[[package]]
 name = "ic-cdk"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4409,6 +4422,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-certificate-verification"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff07d2f6f19f9a986a24234994fe3e76733fe760b2a63a3b515b785026c2f467"
+dependencies = [
+ "candid 0.9.3",
+ "ic-cbor",
+ "ic-certification 0.26.1",
+ "leb128",
+ "miracl_core_bls12381",
+ "nom",
+ "thiserror",
+]
+
+[[package]]
 name = "ic-certification"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4422,9 +4450,9 @@ dependencies = [
 
 [[package]]
 name = "ic-certification"
-version = "0.25.0"
+version = "0.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6561f6ae522da62b6fb89c0594337c18e96a69fa1f89baae8542f3634023635b"
+checksum = "3d423020cc19ee52cb7fde4f64000d3dd6e8c5703947bf6d7911db5fb3428a8e"
 dependencies = [
  "hex",
  "sha2 0.10.7",
@@ -4449,9 +4477,9 @@ checksum = "7cb321e571828d64d62319deeaaec4c8e68cdf93144dd6fe248e7a51ab2d3b5d"
 
 [[package]]
 name = "ic-representation-independent-hash"
-version = "1.0.2"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab64ba650b76df61e8566ebecae1d51388e01894d4a429a20ce8862f07118f8a"
+checksum = "ed17f7c50c497229594763c92a2f98fef73bdfe34c9c2210e557dbc90a00d97c"
 dependencies = [
  "leb128",
  "sha2 0.10.7",
@@ -4459,20 +4487,21 @@ dependencies = [
 
 [[package]]
 name = "ic-response-verification"
-version = "1.0.2"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61afc21ecaf6af2f55d27944a9f306cee970409f73ed97a133391a597be80b25"
+checksum = "fa988769b9f4586db83f3a57c4c074405700df67b6e7d70d5505ee84c5657fa9"
 dependencies = [
  "base64 0.21.2",
  "candid 0.9.3",
  "flate2",
  "hex",
  "http",
- "ic-certification 0.25.0",
+ "ic-cbor",
+ "ic-certificate-verification",
+ "ic-certification 0.26.1",
  "ic-representation-independent-hash",
  "leb128",
  "log",
- "miracl_core_bls12381",
  "nom",
  "sha2 0.10.7",
  "thiserror",
