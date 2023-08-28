@@ -12,7 +12,8 @@ Restart=always
 ExecStart=/opt/ic/bin/ic-boundary \
     --local-store-path "/var/opt/registry/store" \
     --nns-pub-key-pem "/run/ic-node/etc/default/nns_public_key.pem" \
-    --http-port "4444"
+    --http-port "4444" \
+    --metrics-addr "[::]:9324"
 
 [Install]
 WantedBy=multi-user.target

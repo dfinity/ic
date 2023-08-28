@@ -3,6 +3,7 @@ use crate::{
         api_boundary_node::{ApiBoundaryNode, ApiBoundaryNodeVm},
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
+        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
@@ -40,6 +41,9 @@ pub fn setup_ic_with_bn(
     env: TestEnv,
 ) {
     let log = env.logger();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
@@ -108,7 +112,7 @@ pub fn setup_ic_with_bn(
     info!(log, "Waiting for routes file");
     let routes_path = "/var/opt/nginx/ic/ic_routes.js";
     let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
-    match bn_type {
+    let ipv6 = match bn_type {
         BoundaryNodeType::BoundaryNode => {
             let bn = env
                 .get_deployed_boundary_node(bn_name)
@@ -136,6 +140,7 @@ pub fn setup_ic_with_bn(
             )
             .unwrap();
             debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
+            bn.ipv6()
         }
         BoundaryNodeType::ApiBoundaryNode => {
             let bn = env
@@ -164,6 +169,9 @@ pub fn setup_ic_with_bn(
                 )
                 .unwrap();
             debug!(log, "systemctl {bn_name} = '{list_dependencies}'");
+            bn.ipv6()
         }
     };
+    env.sync_prometheus_config_with_topology();
+    env.sync_prometheus_config_with_boundary_nodes(&[(bn_name, ipv6)]);
 }
