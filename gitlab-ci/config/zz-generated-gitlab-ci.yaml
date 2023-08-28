@@ -5574,41 +5574,6 @@ test-push-branch:
     GIT_STRATEGY: fetch
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic -C link-arg=-s"
     SHELL_WRAPPER: "/usr/bin/time"
-test-testnet-deployment:
-  artifacts:
-    expire_in: 3 days
-    paths:
-      - junit_data/*
-      - coredumps/*.txt
-      - coredumps/*.gz
-    when: always
-  extends:
-    - ".ubuntu-k8s"
-  image:
-    name: registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:32e500a2f4a3e049975e2593b8276b02f420ac8965a894b83e9a96c7ab7b05e4
-  needs:
-    - artifacts: false
-      job: bazel-test-all
-  resource_group: "$TESTNET"
-  rules:
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"
-    - if: $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_BRANCH =~ /^rc--/
-  script:
-    - |
-      set -eExou pipefail
-      export ANSIBLE_REMOTE_USER=gitlab-runner
-      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "${CI_COMMIT_SHA}")
-      "$CI_PROJECT_DIR/testnet/tools/icos_deploy.sh" $TESTNET --git-revision "$GIT_REVISION" --boundary-dev-image
-  tags:
-    - dfinity-ic
-  timeout: 30 minutes
-  variables:
-    GET_SOURCES_ATTEMPTS: 5
-    GIT_CLONE_PATH: "$CI_BUILDS_DIR/clean/$CI_PROJECT_NAME"
-    GIT_DEPTH: 0
-    GIT_STRATEGY: fetch
-    SHELL_WRAPPER: "/usr/bin/time"
-    TESTNET: small14
 variables:
   TEST_ES_HOSTNAMES: elasticsearch.testnet.dfinity.network:443
 xnet-nightly:
