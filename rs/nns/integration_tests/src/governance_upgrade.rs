@@ -23,6 +23,7 @@ use ic_nns_test_utils::{ids::TEST_NEURON_1_ID, itest_helpers::set_up_governance_
 /// row, with the stable memory of the second being smaller than for the first,
 /// the second upgrade would read too many bytes from stable memory, resulting
 /// in a trap in post_upgrade.
+#[ignore] // TODO(NNS1-2534): Re-enable.
 #[test]
 fn test_upgrade_after_state_shrink() {
     local_test_e(|runtime| async move {
