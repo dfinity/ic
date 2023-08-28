@@ -17,6 +17,7 @@ use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
 
 use ic_crypto_test_utils::ed25519_utils::ed25519_signature_and_public_key;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_interfaces::time_source::SysTimeSource;
 use openssl::ec::{EcGroup, EcKey};
 use openssl::ecdsa::EcdsaSig;
@@ -26,8 +27,9 @@ use openssl::sha::sha256;
 
 #[test]
 fn should_verify_request_id_ed25519_signature() {
+    let rng = &mut reproducible_rng();
     let request_id = MessageId::from([42; 32]);
-    let (signature, public_key) = ed25519_signature_and_public_key(&request_id);
+    let (signature, public_key) = ed25519_signature_and_public_key(&request_id, rng);
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
         assert!(crypto

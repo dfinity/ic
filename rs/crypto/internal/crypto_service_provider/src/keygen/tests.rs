@@ -465,6 +465,7 @@ mod tls {
                 .with_vault(
                     LocalCspVault::builder_for_test()
                         .with_time_source(Arc::clone(&time_source) as _)
+                        .with_rng(ChaCha20Rng::from_seed(rng.gen()))
                         .build(),
                 )
                 .build();

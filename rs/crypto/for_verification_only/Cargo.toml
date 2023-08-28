@@ -11,6 +11,7 @@ ic-crypto-tls-interfaces = { path = "../tls_interfaces" }
 
 [dev-dependencies]
 ic-crypto-test-utils = { path = "../test_utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../test_utils/reproducible_rng" }
 ic-registry-client-fake = { path = "../../registry/fake" }
 ic-registry-proto-data-provider = { path = "../../registry/proto_data_provider" }
 ic-types = { path = "../../types/types" }
