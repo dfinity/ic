@@ -6047,6 +6047,7 @@ version = "0.1.0"
 dependencies = [
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -6767,6 +6768,7 @@ dependencies = [
  "ic-types-test-utils",
  "openssl",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
  "serde",
  "strum_macros 0.23.1",
  "tokio",
