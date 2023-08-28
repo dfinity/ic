@@ -2,6 +2,7 @@
 //! interface.
 
 use crate::address::Address;
+use crate::eth_rpc_error::{sanitize_send_raw_transaction_result, Parser};
 use crate::logs::{DEBUG, TRACE_HTTP};
 use crate::numeric::{TransactionNonce, Wei};
 use candid::{candid_method, CandidType, Principal};
@@ -96,6 +97,20 @@ impl LowerHex for FixedSizeData {
 impl UpperHex for FixedSizeData {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{}", hex::encode_upper(self.0))
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum SendRawTransactionResult {
+    Ok,
+    InsufficientFunds,
+    NonceTooLow,
+    NonceTooHigh,
+}
+
+impl HttpResponsePayload for SendRawTransactionResult {
+    fn response_transform() -> Option<ResponseTransform> {
+        Some(ResponseTransform::SendRawTransaction)
     }
 }
 
@@ -483,6 +498,7 @@ pub enum ResponseTransform {
     Block,
     Transaction,
     FeeHistory,
+    SendRawTransaction,
 }
 
 impl ResponseTransform {
@@ -504,6 +520,9 @@ impl ResponseTransform {
             Self::Block => redact_response::<Block>(body_bytes),
             Self::Transaction => redact_response::<Transaction>(body_bytes),
             Self::FeeHistory => redact_response::<FeeHistory>(body_bytes),
+            Self::SendRawTransaction => {
+                sanitize_send_raw_transaction_result(body_bytes, Parser::new())
+            }
         }
     }
 }
@@ -513,7 +532,7 @@ impl ResponseTransform {
 fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
     args.response.headers.clear();
     ic_cdk::println!(
-        "RAW RESPONSE:\nstatus: {:?}\nbody:{:?}",
+        "RAW RESPONSE BEFORE TRANSFORM:\nstatus: {:?}\nbody:{:?}",
         args.response.status,
         String::from_utf8_lossy(&args.response.body).to_string()
     );
@@ -525,6 +544,11 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
             transform.apply(&mut args.response.body);
         }
     }
+    ic_cdk::println!(
+        "RAW RESPONSE AFTER TRANSFORM:\nstatus: {:?}\nbody:{:?}",
+        args.response.status,
+        String::from_utf8_lossy(&args.response.body).to_string()
+    );
     args.response
 }
 

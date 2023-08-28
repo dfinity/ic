@@ -67,7 +67,8 @@ pub struct RetrieveEthRequest {
 pub enum RetrieveEthStatus {
     NotFound,
     PendingSigning,
-    Found(EthTransaction),
+    Signed(EthTransaction),
+    Sent(EthTransaction),
 }
 
 #[derive(CandidType)]

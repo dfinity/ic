@@ -92,27 +92,6 @@ impl From<InitArg> for State {
 }
 
 impl State {
-    pub fn get_and_increment_nonce(&mut self) -> TransactionNonce {
-        let current_nonce = self.next_transaction_nonce;
-        self.next_transaction_nonce = self
-            .next_transaction_nonce
-            .checked_increment()
-            .expect("transaction nonce overflow only possible after U256::MAX transactions");
-        current_nonce
-    }
-
-    pub fn record_retrieve_eth_request(
-        &mut self,
-        leder_burn_index: LedgerBurnIndex,
-        transaction: Eip1559TransactionRequest,
-    ) {
-        debug_assert_eq!(
-            self.pending_retrieve_eth_requests
-                .insert(leder_burn_index, transaction),
-            Ok(())
-        );
-    }
-
     pub fn record_event_to_mint(&mut self, event: ReceivedEthEvent) {
         debug_assert!(
             self.events_to_mint
@@ -159,6 +138,25 @@ impl State {
             None,
             "attempted to mint ckETH twice for the same event {event:?}"
         );
+    }
+
+    pub fn get_and_increment_nonce(&mut self) -> TransactionNonce {
+        let current_nonce = self.next_transaction_nonce;
+        self.next_transaction_nonce = self
+            .next_transaction_nonce
+            .checked_increment()
+            .expect("transaction nonce overflow only possible after U256::MAX transactions");
+        current_nonce
+    }
+
+    pub fn record_retrieve_eth_request(
+        &mut self,
+        leder_burn_index: LedgerBurnIndex,
+        transaction: Eip1559TransactionRequest,
+    ) {
+        self.pending_retrieve_eth_requests
+            .insert(leder_burn_index, transaction)
+            .expect("failed to insert retrieve eth request");
     }
 
     pub const fn ethereum_network(&self) -> EthereumNetwork {

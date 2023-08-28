@@ -7,7 +7,7 @@ type EthereumNetwork = variant {
 };
 type InitArg = record {
     // The minter will interact with this Ethereum network.
-    eth_network : EthereumNetwork;
+    ethereum_network : EthereumNetwork;
     ecdsa_key_name : text;
     ledger_id : principal;
     next_transaction_nonce: nat
@@ -20,7 +20,8 @@ type MinterArg = variant { UpgradeArg; InitArg : InitArg };
 type RetrieveEthStatus = variant {
     NotFound;
     PendingSigning;
-    Found: record {transaction_hash : text};
+    Signed: record {transaction_hash : text};
+    Sent: record {transaction_hash : text};
 };
 type RetrieveEthRequest = record { block_index : nat };
 type WithdrawalError = variant {
