@@ -91,6 +91,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "assert_approx_eq": crate.spec(
                 version = "^1.1.0",
             ),
+            "atomic-counter": crate.spec(
+                version = "^1.0.1",
+            ),
             "anyhow": crate.spec(
                 version = "^1",
             ),

@@ -1,3 +1,4 @@
+use atomic_counter::{AtomicCounter, ConsistentCounter};
 use axum::extract::State;
 use axum::routing::post;
 use axum::{extract::Path, http::StatusCode, routing::get, Router, Server};
@@ -44,6 +45,7 @@ pub struct AppState {
     pub instance_map: InstanceMap,
     pub last_request: Arc<RwLock<Instant>>,
     pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
+    pub instances_sequence_counter: Arc<ConsistentCounter>,
 }
 
 impl axum::extract::FromRef<AppState> for InstanceMap {
@@ -103,6 +105,7 @@ async fn main_() {
         instance_map,
         last_request,
         checkpoints: Arc::new(RwLock::new(HashMap::new())),
+        instances_sequence_counter: ConsistentCounter::new(0).into(),
     };
 
     let app = Router::new()
@@ -216,18 +219,6 @@ fn create_state_machine(state_dir: Option<TempDir>) -> StateMachine {
     }
 }
 
-fn rand_string(len: usize) -> String {
-    use rand::distributions::Alphanumeric;
-    use rand::thread_rng;
-    use rand::Rng;
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(len)
-        .map(char::from)
-        .collect::<String>()
-        .to_lowercase()
-}
-
 fn copy_dir(
     src: impl AsRef<std::path::Path>,
     dst: impl AsRef<std::path::Path>,
@@ -254,12 +245,19 @@ async fn status() -> StatusCode {
 
 /// Create a new IC instance.
 /// The new InstanceId will be returned
-async fn create_instance(State(inst_map): State<InstanceMap>) -> String {
-    let instance_id = rand_string(6);
+async fn create_instance(
+    State(AppState {
+        instance_map,
+        last_request: _,
+        checkpoints: _,
+        instances_sequence_counter: counter,
+    }): State<AppState>,
+) -> String {
     let sm = tokio::task::spawn_blocking(|| create_state_machine(None))
         .await
         .expect("Failed to launch a state machine");
-    let mut guard = inst_map.write().await;
+    let mut guard = instance_map.write().await;
+    let instance_id = counter.inc().to_string();
     guard.insert(instance_id.clone(), RwLock::new(sm));
     instance_id
 }
@@ -300,6 +298,7 @@ async fn save_checkpoint(
         instance_map,
         last_request: _,
         checkpoints,
+        instances_sequence_counter: _,
     }): State<AppState>,
     Path(id): Path<InstanceId>,
     axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
@@ -329,6 +328,7 @@ async fn load_checkpoint(
         instance_map,
         last_request: _,
         checkpoints,
+        instances_sequence_counter: counter,
     }): State<AppState>,
     axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
 ) -> String {
@@ -341,11 +341,11 @@ async fn load_checkpoint(
     copy_dir(proto_dir.path(), new_instance_dir.path()).expect("Failed to copy state directory");
     drop(checkpoints);
     // create instance
-    let instance_id = rand_string(6);
     let sm = tokio::task::spawn_blocking(|| create_state_machine(Some(new_instance_dir)))
         .await
         .expect("Failed to launch a state machine");
     let mut instance_map = instance_map.write().await;
+    let instance_id = counter.inc().to_string();
     instance_map.insert(instance_id.clone(), RwLock::new(sm));
     instance_id
 }
