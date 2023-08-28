@@ -11,7 +11,7 @@ use ic_cketh_minter::endpoints::{
 };
 use ic_cketh_minter::eth_logs::report_transaction_error;
 use ic_cketh_minter::eth_rpc::JsonRpcResult;
-use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
+use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::EthRpcClient;
 use ic_cketh_minter::guard::{mint_cketh_guard, retrieve_eth_guard, retrieve_eth_timer_guard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
@@ -205,6 +205,7 @@ async fn process_retrieve_eth_requests() {
 
 async fn sign_pending_eth_transactions() {
     let tx_to_sign = read_state(|s| s.pending_retrieve_eth_requests.transactions_to_sign());
+    log!(DEBUG, "{} transactions to sign", tx_to_sign.len());
     for tx in tx_to_sign {
         match tx.sign().await {
             Ok(signed_tx) => {
@@ -229,24 +230,33 @@ async fn sign_pending_eth_transactions() {
 
 async fn send_signed_eth_transactions() {
     let tx_to_send = read_state(|s| s.pending_retrieve_eth_requests.transactions_to_send());
+    log!(DEBUG, "{} transactions to send", tx_to_send.len());
 
     for tx in tx_to_send {
         let result = read_state(EthRpcClient::from_state)
             .eth_send_raw_transaction(tx.raw_transaction_hex())
             .await
             .expect("HTTP call failed");
-        log!(DEBUG, "Sent transaction: {result:?}");
+        log!(DEBUG, "Sent transaction {tx:?}: {result:?}");
         match result {
-            JsonRpcResult::Result(_) => mutate_state(|s| {
-                s.pending_retrieve_eth_requests
-                    .replace_with_sent_transaction(tx)
-                    .unwrap_or_else(|e| {
-                        log!(
-                            INFO,
-                            "BUG: failed to replace transaction with sent one: {e:?}",
-                        );
-                    })
-            }),
+            JsonRpcResult::Result(tx_result) if tx_result == SendRawTransactionResult::Ok => {
+                mutate_state(|s| {
+                    s.pending_retrieve_eth_requests
+                        .replace_with_sent_transaction(tx)
+                        .unwrap_or_else(|e| {
+                            log!(
+                                INFO,
+                                "BUG: failed to replace transaction with sent one: {e:?}",
+                            );
+                        })
+                })
+            }
+            JsonRpcResult::Result(tx_result) => {
+                log!(
+                    INFO,
+                    "Failed to send transaction {tx:?}: {tx_result:?}. Will retry later.",
+                );
+            }
             JsonRpcResult::Error { code, message } => {
                 log!(
                     INFO,
@@ -294,7 +304,7 @@ async fn test_transfer(value: u64, nonce: u64, to_string: String) -> TransferRes
         .await
         .expect("HTTP call failed")
     {
-        JsonRpcResult::Result(tx_hash) => JsonRpcResult::Result(tx_hash.to_string()),
+        JsonRpcResult::Result(_) => JsonRpcResult::Result(signed_transaction.hash().to_string()),
         JsonRpcResult::Error { code, message } => JsonRpcResult::Error { code, message },
     }
 }
@@ -476,11 +486,12 @@ async fn retrieve_eth_status(block_index: u64) -> RetrieveEthStatus {
     });
     match transaction {
         Some(PendingEthTransaction::NotSigned(_)) => RetrieveEthStatus::PendingSigning,
-        Some(PendingEthTransaction::Signed(tx)) | Some(PendingEthTransaction::Sent(tx)) => {
-            RetrieveEthStatus::Found(EthTransaction {
-                transaction_hash: tx.hash().to_string(),
-            })
-        }
+        Some(PendingEthTransaction::Signed(tx)) => RetrieveEthStatus::Signed(EthTransaction {
+            transaction_hash: tx.hash().to_string(),
+        }),
+        Some(PendingEthTransaction::Sent(tx)) => RetrieveEthStatus::Sent(EthTransaction {
+            transaction_hash: tx.hash().to_string(),
+        }),
         None => RetrieveEthStatus::NotFound,
     }
 }

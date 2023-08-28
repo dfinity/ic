@@ -2,7 +2,8 @@ use crate::endpoints::EthereumNetwork;
 use crate::eth_rpc;
 use crate::eth_rpc::{
     Block, FeeHistory, FeeHistoryParams, GetLogsParam, Hash, HttpOutcallError, HttpOutcallResult,
-    HttpResponsePayload, JsonRpcResult, LogEntry, ResponseSizeEstimate, Transaction,
+    HttpResponsePayload, JsonRpcResult, LogEntry, ResponseSizeEstimate, SendRawTransactionResult,
+    Transaction,
 };
 use crate::eth_rpc_client::providers::{RpcNodeProvider, MAINNET_PROVIDERS, SEPOLIA_PROVIDERS};
 use crate::logs::{DEBUG, INFO};
@@ -171,7 +172,7 @@ impl EthRpcClient {
     pub async fn eth_send_raw_transaction(
         &self,
         raw_signed_transaction_hex: String,
-    ) -> HttpOutcallResult<JsonRpcResult<Hash>> {
+    ) -> HttpOutcallResult<JsonRpcResult<SendRawTransactionResult>> {
         // A successful reply is under 256 bytes, but we expect most calls to end with an error
         // since we submit the same transaction from multiple nodes.
         self.sequential_call_until_ok(

@@ -3,6 +3,7 @@ pub mod endpoints;
 pub mod eth_logs;
 pub mod eth_rpc;
 pub mod eth_rpc_client;
+pub mod eth_rpc_error;
 pub mod guard;
 pub mod logs;
 pub mod management;
