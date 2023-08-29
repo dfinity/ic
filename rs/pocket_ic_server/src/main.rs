@@ -26,6 +26,7 @@ use std::io::Write;
 use std::sync::Arc;
 use std::time::Instant;
 use tempfile::TempDir;
+use tokio::runtime::Runtime;
 use tokio::sync::RwLock;
 use tokio::time::Duration;
 
@@ -46,6 +47,7 @@ pub struct AppState {
     pub last_request: Arc<RwLock<Instant>>,
     pub checkpoints: Arc<RwLock<HashMap<String, Arc<TempDir>>>>,
     pub instances_sequence_counter: Arc<ConsistentCounter>,
+    pub runtime: Arc<Runtime>,
 }
 
 impl axum::extract::FromRef<AppState> for InstanceMap {
@@ -81,10 +83,11 @@ fn main() {
         .max_blocking_threads(16)
         .build()
         .expect("Failed to create tokio runtime!");
-    rt.block_on(async { main_().await });
+    let runtime_arc = Arc::new(rt);
+    runtime_arc.block_on(async { start(runtime_arc.clone()).await });
 }
 
-async fn main_() {
+async fn start(runtime: Arc<Runtime>) {
     let args = Args::parse();
     let port_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.port", args.pid));
     let ready_file_path = std::env::temp_dir().join(format!("pocket_ic_{}.ready", args.pid));
@@ -106,6 +109,7 @@ async fn main_() {
         last_request,
         checkpoints: Arc::new(RwLock::new(HashMap::new())),
         instances_sequence_counter: ConsistentCounter::new(0).into(),
+        runtime,
     };
 
     let app = Router::new()
@@ -199,7 +203,7 @@ async fn bump_last_request_timestamp<B>(
     next.run(request).await
 }
 
-fn create_state_machine(state_dir: Option<TempDir>) -> StateMachine {
+fn create_state_machine(state_dir: Option<TempDir>, runtime: Arc<Runtime>) -> StateMachine {
     let hypervisor_config = execution_environment::Config {
         default_provisional_cycles_balance: Cycles::new(0),
         ..Default::default()
@@ -210,11 +214,13 @@ fn create_state_machine(state_dir: Option<TempDir>) -> StateMachine {
             .with_config(Some(config))
             .with_checkpoints_enabled(true)
             .with_state_dir(state_dir)
+            .with_runtime(runtime)
             .build()
     } else {
         StateMachineBuilder::new()
             .with_config(Some(config))
             .with_checkpoints_enabled(true)
+            .with_runtime(runtime)
             .build()
     }
 }
@@ -251,9 +257,10 @@ async fn create_instance(
         last_request: _,
         checkpoints: _,
         instances_sequence_counter: counter,
+        runtime,
     }): State<AppState>,
 ) -> String {
-    let sm = tokio::task::spawn_blocking(|| create_state_machine(None))
+    let sm = tokio::task::spawn_blocking(|| create_state_machine(None, runtime))
         .await
         .expect("Failed to launch a state machine");
     let mut guard = instance_map.write().await;
@@ -298,7 +305,7 @@ async fn save_checkpoint(
         instance_map,
         last_request: _,
         checkpoints,
-        instances_sequence_counter: _,
+        ..
     }): State<AppState>,
     Path(id): Path<InstanceId>,
     axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
@@ -329,6 +336,7 @@ async fn load_checkpoint(
         last_request: _,
         checkpoints,
         instances_sequence_counter: counter,
+        runtime,
     }): State<AppState>,
     axum::extract::Json(checkpoint_name): axum::extract::Json<String>,
 ) -> String {
@@ -341,7 +349,7 @@ async fn load_checkpoint(
     copy_dir(proto_dir.path(), new_instance_dir.path()).expect("Failed to copy state directory");
     drop(checkpoints);
     // create instance
-    let sm = tokio::task::spawn_blocking(|| create_state_machine(Some(new_instance_dir)))
+    let sm = tokio::task::spawn_blocking(|| create_state_machine(Some(new_instance_dir), runtime))
         .await
         .expect("Failed to launch a state machine");
     let mut instance_map = instance_map.write().await;

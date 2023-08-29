@@ -305,7 +305,7 @@ pub struct StateMachine {
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
-    _runtime: Runtime,
+    _runtime: Arc<Runtime>,
     pub state_dir: TempDir,
     checkpoints_enabled: std::sync::atomic::AtomicBool,
     nonce: std::sync::atomic::AtomicU64,
@@ -342,6 +342,7 @@ pub struct StateMachineBuilder {
     use_cost_scaling_flag: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
     features: SubnetFeatures,
+    runtime: Option<Arc<Runtime>>,
 }
 
 impl StateMachineBuilder {
@@ -367,6 +368,7 @@ impl StateMachineBuilder {
                 http_requests: true,
                 ..SubnetFeatures::default()
             },
+            runtime: None,
         }
     }
 
@@ -471,6 +473,13 @@ impl StateMachineBuilder {
         Self { features, ..self }
     }
 
+    pub fn with_runtime(self, runtime: Arc<Runtime>) -> Self {
+        Self {
+            runtime: Some(runtime),
+            ..self
+        }
+    }
+
     pub fn build(self) -> StateMachine {
         StateMachine::setup_from_dir(
             self.state_dir,
@@ -486,6 +495,12 @@ impl StateMachineBuilder {
             self.use_cost_scaling_flag,
             self.ecdsa_keys,
             self.features,
+            self.runtime.unwrap_or_else(|| {
+                tokio::runtime::Builder::new_current_thread()
+                    .build()
+                    .expect("failed to create a tokio runtime")
+                    .into()
+            }),
         )
     }
 }
@@ -526,6 +541,7 @@ impl StateMachine {
         use_cost_scaling_flag: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
+        runtime: Arc<Runtime>,
     ) -> Self {
         let replica_logger = replica_logger();
 
@@ -576,10 +592,6 @@ impl StateMachine {
             None,
             ic_types::malicious_flags::MaliciousFlags::default(),
         ));
-
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .build()
-            .expect("failed to create a tokio runtime");
 
         // NOTE: constructing execution services requires tokio context.
         //
