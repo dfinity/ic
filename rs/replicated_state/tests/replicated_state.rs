@@ -690,7 +690,7 @@ fn split() {
     //
     // Split off subnet A', phase 1.
     //
-    let state_a_phase_1 = fixture
+    let mut state_a = fixture
         .state
         .clone()
         .split(SUBNET_A, &routing_table, None)
@@ -703,12 +703,12 @@ fn split() {
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
     // Otherwise, the state shold be the same.
-    assert_eq!(expected, state_a_phase_1);
+    assert_eq!(expected, state_a);
 
     //
     // Subnet A', phase 2.
     //
-    let state_a_phase_2 = state_a_phase_1.after_split();
+    state_a.after_split();
 
     // Ingress history should only contain the message to `CANISTER_1`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
@@ -721,12 +721,12 @@ fn split() {
     // And the split marker should be reset.
     expected.metadata.split_from = None;
     // Everything else shold be the same as in phase 1.
-    assert_eq!(expected, state_a_phase_2);
+    assert_eq!(expected, state_a);
 
     //
     // Split off subnet B, phase 1.
     //
-    let state_b_phase_1 = fixture
+    let mut state_b = fixture
         .state
         .clone()
         .split(SUBNET_B, &routing_table, None)
@@ -744,12 +744,12 @@ fn split() {
     // And the split marker should be set.
     expected.metadata.split_from = Some(SUBNET_A);
     // Otherwise, the state shold be the same.
-    assert_eq!(expected, state_b_phase_1);
+    assert_eq!(expected, state_b);
 
     //
     // Subnet B, phase 2.
     //
-    let state_b_phase_2 = state_b_phase_1.after_split();
+    state_b.after_split();
 
     // Ingress history should only contain the message to `CANISTER_2`.
     expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
@@ -762,7 +762,7 @@ fn split() {
     // And the split marker should be reset.
     expected.metadata.split_from = None;
     // Everything else shold be the same as in phase 1.
-    assert_eq!(expected, state_b_phase_2);
+    assert_eq!(expected, state_b);
 }
 
 proptest! {
