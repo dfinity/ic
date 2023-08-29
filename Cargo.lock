@@ -5656,7 +5656,6 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
- "ic-interfaces",
  "ic-types",
  "leb128",
  "rand 0.8.5",
