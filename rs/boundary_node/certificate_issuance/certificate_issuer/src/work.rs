@@ -1,4 +1,4 @@
-use std::{fmt, iter::once, sync::Arc, time::Duration};
+use std::{fmt, iter::once, sync::atomic::Ordering, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -15,6 +15,7 @@ use crate::{
     check::Check,
     dns::{self, Resolve},
     registration::{Id, Registration, State},
+    TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -108,11 +109,21 @@ pub enum ProcessError {
 impl From<&ProcessError> for Duration {
     fn from(error: &ProcessError) -> Self {
         match error {
-            ProcessError::AwaitingAcmeOrderCreation => Duration::from_secs(60),
-            ProcessError::AwaitingDnsPropagation => Duration::from_secs(60),
-            ProcessError::AwaitingAcmeOrderReady => Duration::from_secs(60),
-            ProcessError::FailedUserConfigurationCheck => Duration::from_secs(10 * 60),
-            ProcessError::UnexpectedError(_) => Duration::from_secs(10 * 60),
+            ProcessError::AwaitingAcmeOrderCreation => {
+                Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
+            }
+            ProcessError::AwaitingDnsPropagation => {
+                Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
+            }
+            ProcessError::AwaitingAcmeOrderReady => {
+                Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
+            }
+            ProcessError::FailedUserConfigurationCheck => {
+                Duration::from_secs(TASK_ERROR_DELAY_SEC.load(Ordering::SeqCst))
+            }
+            ProcessError::UnexpectedError(_) => {
+                Duration::from_secs(TASK_ERROR_DELAY_SEC.load(Ordering::SeqCst))
+            }
         }
     }
 }

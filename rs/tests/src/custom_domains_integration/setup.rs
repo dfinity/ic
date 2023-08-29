@@ -510,6 +510,9 @@ async fn setup_boundary_node(
                 contents: XChaCha20Poly1305::generate_key(&mut ChaChaOsRng).to_vec(),
             })
         },
+        task_delay_sec: Some(5),
+        task_error_delay_sec: Some(10),
+        peek_sleep_sec: Some(5),
     };
 
     // Start Boundary Node

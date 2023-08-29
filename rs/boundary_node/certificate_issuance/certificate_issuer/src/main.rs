@@ -2,7 +2,10 @@ use std::{
     fs::File,
     net::{IpAddr, SocketAddr},
     path::PathBuf,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -72,6 +75,9 @@ mod work;
 
 const SERVICE_NAME: &str = "certificate-issuer";
 
+pub(crate) static TASK_DELAY_SEC: AtomicU64 = AtomicU64::new(60);
+pub(crate) static TASK_ERROR_DELAY_SEC: AtomicU64 = AtomicU64::new(10 * 60);
+
 #[derive(Parser)]
 #[command(name = SERVICE_NAME)]
 struct Cli {
@@ -126,6 +132,12 @@ struct Cli {
 
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
+
+    #[arg(long)]
+    task_delay_sec: Option<u64>,
+
+    #[arg(long)]
+    task_error_delay_sec: Option<u64>,
 }
 
 #[tokio::main]
@@ -153,6 +165,15 @@ async fn main() -> Result<(), Error> {
 
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { registry }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
+
+    // Task delays
+    if let Some(task_delay_sec) = cli.task_delay_sec {
+        TASK_DELAY_SEC.store(task_delay_sec, Ordering::SeqCst);
+    }
+
+    if let Some(task_error_delay_sec) = cli.task_error_delay_sec {
+        TASK_ERROR_DELAY_SEC.store(task_error_delay_sec, Ordering::SeqCst);
+    }
 
     // Orchestrator
     let agent = {
