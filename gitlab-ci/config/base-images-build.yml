@@ -4,7 +4,7 @@
     - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       when: manual
       allow_failure: true
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - gitlab-ci/config/base-images-build.yml
         - ic-os/boundary-guestos/rootfs/Dockerfile.base
@@ -181,6 +181,20 @@ build-base-images-ref-update:
     - .ubuntu-k8s
     - .rules-build-base-images
   needs:
+    - build-guestos-base
+    - build-guestos-base-dev
+    - build-guestos-base-dev-sev
+    - build-boundaryos-base
+    - build-boundaryos-base-snp
+    - build-boundaryos-api-guestos-base
+    - build-boundaryos-api-guestos-base-snp
+    - build-hostos-base
+    - build-hostos-base-dev
+    - build-hostos-base-dev-sev
+    - build-setupos-base
+    - build-setupos-base-dev
+    - build-setupos-base-dev-sev
+  dependencies:
     - build-guestos-base
     - build-guestos-base-dev
     - build-guestos-base-dev-sev
