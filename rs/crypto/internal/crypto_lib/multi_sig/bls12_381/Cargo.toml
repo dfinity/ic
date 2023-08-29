@@ -19,5 +19,6 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 proptest = "1.0"
 serde_cbor = "0.11"

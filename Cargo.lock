@@ -6447,6 +6447,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha2",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-protobuf",
  "ic-types",
  "proptest",
