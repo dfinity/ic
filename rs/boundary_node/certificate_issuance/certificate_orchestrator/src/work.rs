@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use std::{cmp::Reverse, time::Duration};
 
 use certificate_orchestrator_interface::{Id, Registration};
 use ic_cdk::caller;
@@ -226,10 +226,13 @@ impl Dispense for Dispenser {
             };
 
             // Schedule a retry in case the task failed and was not re-queued
+            let retry_delay =
+                Duration::from_secs(IN_PROGRESS_TTL.with(|s| s.borrow().get(&()).unwrap()));
+
             self.retries.with(|retries| {
                 retries.borrow_mut().push(
                     id.to_owned(),
-                    Reverse(time() + IN_PROGRESS_TTL.as_nanos() as u64),
+                    Reverse(time() + retry_delay.as_nanos() as u64),
                 )
             });
 
@@ -352,6 +355,11 @@ mod tests {
 
     #[test]
     fn dispense_ok() {
+        IN_PROGRESS_TTL.with(|s| {
+            let mut s = s.borrow_mut();
+            s.insert((), 10 * 60);
+        });
+
         TASKS.with(|t| {
             t.borrow_mut().push(
                 "id".into(), // item

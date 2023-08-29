@@ -436,6 +436,9 @@ async fn setup_certificate_orchestartor(
                     Encode!(&InitArg {
                         id_seed: 0,
                         root_principals,
+                        registration_expiration_ttl: None,
+                        in_progress_ttl: None,
+                        management_task_interval: None,
                     })
                     .ok(),
                 )

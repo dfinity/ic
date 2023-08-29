@@ -424,6 +424,12 @@ pub struct InitArg {
     pub root_principals: Vec<Principal>,
     #[serde(rename = "idSeed")]
     pub id_seed: u128,
+    #[serde(rename = "registrationExpirationTtl")]
+    pub registration_expiration_ttl: Option<u64>,
+    #[serde(rename = "inProgressTtl")]
+    pub in_progress_ttl: Option<u64>,
+    #[serde(rename = "managementTaskInterval")]
+    pub management_task_interval: Option<u64>,
 }
 
 // Http Interface (for metrics)
