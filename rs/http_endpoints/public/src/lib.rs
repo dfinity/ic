@@ -30,7 +30,10 @@ use crate::{
     },
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
-    metrics::{LABEL_REQUEST_TYPE, LABEL_STATUS, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS},
+    metrics::{
+        LABEL_REQUEST_TYPE, LABEL_STATUS, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS, STATUS_ERROR,
+        STATUS_SUCCESS,
+    },
     pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     query::QueryService,
     read_state::ReadStateService,
@@ -46,7 +49,7 @@ use hyper::{server::conn::Http, Body, Request, Response, StatusCode};
 use ic_async_utils::{receive_body, start_tcp_listener};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
 use ic_crypto_tree_hash::{lookup_path, LabeledTree, Path};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_interfaces::{
@@ -88,6 +91,7 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+use strum::IntoStaticStr;
 use tempfile::NamedTempFile;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
@@ -109,8 +113,7 @@ pub(crate) struct HttpError {
 
 pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>, BoxError>;
 
-/// The struct that handles incoming HTTP requests for the IC replica.
-/// This is collection of thread-safe data members.
+/// Struct that holds all enpoint services.
 #[derive(Clone)]
 struct HttpHandler {
     call_service: EndpointService,
@@ -122,7 +125,6 @@ struct HttpHandler {
     pprof_home_service: EndpointService,
     pprof_profile_service: EndpointService,
     pprof_flamegraph_service: EndpointService,
-    health_status_refresher: HealthStatusRefreshLayer,
 }
 
 // Crates a detached tokio blocking task that initializes the server (reading
@@ -377,9 +379,13 @@ pub fn start_server(
         pprof_home_service,
         pprof_profile_service,
         pprof_flamegraph_service,
-        health_status_refresher,
     };
-    let main_service = create_main_service(metrics.clone(), config.clone(), http_handler);
+    let main_service = create_main_service(
+        metrics.clone(),
+        config.clone(),
+        http_handler,
+        health_status_refresher,
+    );
 
     let port_file_path = config.port_file_path.clone();
     // If addr == 0, then a random port will be assigned. In this case it
@@ -422,7 +428,11 @@ pub fn start_server(
                 Err(err) => {
                     // Don't exit the loop on a connection error. We will want to
                     // continue serving.
-                    metrics.observe_connection_error(ConnectionError::Accept, Instant::now());
+                    metrics
+                        .connection_setup_duration
+                        .with_label_values(&[STATUS_ERROR, ConnError::Io.into()])
+                        .observe(0.0);
+
                     error!(log, "Can't accept TCP connection, error = {}", err);
                 }
             }
@@ -434,8 +444,8 @@ fn create_main_service(
     metrics: HttpHandlerMetrics,
     config: Config,
     http_handler: HttpHandler,
+    health_status_refresher: HealthStatusRefreshLayer,
 ) -> BoxCloneService<Request<Body>, Response<Body>, Infallible> {
-    let health_status_refresher = http_handler.health_status_refresher.clone();
     let route_service = service_fn(move |req: RequestWithTimer| {
         let http_handler = http_handler.clone();
         let config = config.clone();
@@ -479,97 +489,126 @@ async fn handshake_and_serve_connection(
     metrics: HttpHandlerMetrics,
 ) -> Result<(), Infallible> {
     let connection_start_time = Instant::now();
-    let mut http = Http::new();
-    http.http2_max_concurrent_streams(config.http_max_concurrent_streams);
-
-    let mut b = [0_u8; 1];
-    let app_layer = match timeout(
-        Duration::from_secs(config.connection_read_timeout_seconds),
-        tcp_stream.peek(&mut b),
+    let peer_addr = tcp_stream.peer_addr();
+    let conn_after_handshake = stream_after_handshake(
+        &log,
+        config.connection_read_timeout_seconds,
+        tcp_stream,
+        tls_handshake,
+        registry_client,
     )
-    .await
-    {
-        // The peek operation didn't timeout, and the peek oparation didn't return
-        // an error.
-        Ok(Ok(_)) => {
-            if b[0] == 22 {
-                AppLayer::Https
-            } else {
-                AppLayer::Http
-            }
-        }
-        Ok(Err(err)) => {
-            error!(log, "Can't peek into TCP stream, error = {}", err);
-            metrics.observe_connection_error(ConnectionError::Peek, connection_start_time);
-            return Ok(());
-        }
+    .await;
+
+    let (connection_result, conn_type_label) = match conn_after_handshake {
         Err(err) => {
             warn!(
                 log,
-                "TCP peeking timeout after {}s, error = {}",
-                config.connection_read_timeout_seconds,
-                err
+                "Handshake failed, error = {:?}, peer_addr = {:?}", err, peer_addr,
             );
-            metrics.observe_connection_error(ConnectionError::PeekTimeout, connection_start_time);
+            metrics
+                .connection_setup_duration
+                .with_label_values(&[STATUS_ERROR, err.into()])
+                .observe(connection_start_time.elapsed().as_secs_f64());
             return Ok(());
         }
-    };
-
-    let connection_result = match app_layer {
-        AppLayer::Https => {
-            let peer_addr = tcp_stream.peer_addr();
-            let tls_stream = match tls_handshake
-                .perform_tls_server_handshake_without_client_auth(
-                    tcp_stream,
-                    registry_client.get_latest_version(),
-                )
-                .await
-            {
-                Err(err) => {
-                    metrics.observe_connection_error(
-                        ConnectionError::TlsHandshake,
-                        connection_start_time,
-                    );
-                    warn!(
-                        log,
-                        "TLS handshake failed, error = {}, peer_addr = {:?}", err, peer_addr,
-                    );
-                    return Ok(());
-                }
-                Ok(tls_stream) => tls_stream,
-            };
-            metrics.observe_successful_connection_setup(app_layer, connection_start_time);
+        Ok(ConnType::Secure(tls_stream)) => (
             serve_connection_with_read_timeout(
                 tls_stream,
                 service,
                 config.connection_read_timeout_seconds,
             )
-            .await
-        }
-        AppLayer::Http => {
-            metrics.observe_successful_connection_setup(app_layer, connection_start_time);
+            .await,
+            "https",
+        ),
+        Ok(ConnType::Insecure(tcp_stream)) => (
             serve_connection_with_read_timeout(
                 tcp_stream,
                 service,
                 config.connection_read_timeout_seconds,
             )
-            .await
-        }
+            .await,
+            "http",
+        ),
     };
-
+    metrics
+        .connection_setup_duration
+        .with_label_values(&[STATUS_SUCCESS, conn_type_label])
+        .observe(connection_start_time.elapsed().as_secs_f64());
     match connection_result {
         Err(err) => {
-            metrics.observe_abrupt_conn_termination(app_layer, connection_start_time);
             info!(
                 log,
                 "The connection was closed abruptly after {:?}, error = {}",
                 connection_start_time.elapsed(),
                 err
             );
+            metrics
+                .connection_duration
+                .with_label_values(&[STATUS_ERROR, conn_type_label])
+                .observe(connection_start_time.elapsed().as_secs_f64())
         }
-        Ok(()) => metrics.observe_graceful_conn_termination(app_layer, connection_start_time),
+        Ok(()) => metrics
+            .connection_duration
+            .with_label_values(&[STATUS_SUCCESS, conn_type_label])
+            .observe(connection_start_time.elapsed().as_secs_f64()),
     }
     Ok(())
+}
+
+enum ConnType {
+    Secure(Box<dyn TlsStream>),
+    Insecure(TcpStream),
+}
+
+#[derive(IntoStaticStr, Debug)]
+#[strum(serialize_all = "snake_case")]
+pub(crate) enum ConnError {
+    #[strum(serialize = "tls_handshake")]
+    TlsHandshake,
+    Io,
+    Timeout,
+}
+
+async fn stream_after_handshake(
+    log: &ReplicaLogger,
+    connection_read_timeout_seconds: u64,
+    tcp_stream: TcpStream,
+    tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    registry_client: Arc<dyn RegistryClient>,
+) -> Result<ConnType, ConnError> {
+    let mut b = [0_u8; 1];
+    match timeout(
+        Duration::from_secs(connection_read_timeout_seconds),
+        tcp_stream.peek(&mut b),
+    )
+    .await
+    {
+        // The peek operation was successful within the timeout.
+        Ok(Ok(_)) => {
+            if b[0] == 22 {
+                match tls_handshake
+                    .perform_tls_server_handshake_without_client_auth(
+                        tcp_stream,
+                        registry_client.get_latest_version(),
+                    )
+                    .await
+                {
+                    Err(err) => {
+                        warn!(log, "TLS handshaked failed with: {:?}", err);
+                        Err(ConnError::TlsHandshake)
+                    }
+                    Ok(tls_stream) => Ok(ConnType::Secure(tls_stream)),
+                }
+            } else {
+                Ok(ConnType::Insecure(tcp_stream))
+            }
+        }
+        Ok(Err(err)) => {
+            warn!(log, "Peeking TCP stream failed with: {:?}", err);
+            Err(ConnError::Io)
+        }
+        Err(_) => Err(ConnError::Timeout),
+    }
 }
 
 async fn serve_connection_with_read_timeout<T: AsyncRead + AsyncWrite + 'static>(
