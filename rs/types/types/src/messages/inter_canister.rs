@@ -168,10 +168,10 @@ impl std::fmt::Debug for Request {
         }
         write!(
             f,
-            "method_payload: [{}] }}",
+            "method_payload: [{}], ",
             truncate_and_format(&self.method_payload, 1024)
         )?;
-        write!(f, "metadata: {:?}, ", self.metadata)?;
+        write!(f, "metadata: {:?} }}", self.metadata)?;
         Ok(())
     }
 }
