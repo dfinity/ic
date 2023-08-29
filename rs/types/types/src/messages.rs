@@ -124,6 +124,13 @@ impl StopCanisterContext {
             StopCanisterContext::Canister { cycles, .. } => cycles.take(),
         }
     }
+
+    pub fn call_id(&self) -> &Option<StopCanisterCallId> {
+        match &self {
+            StopCanisterContext::Ingress { call_id, .. } => call_id,
+            StopCanisterContext::Canister { call_id, .. } => call_id,
+        }
+    }
 }
 
 impl From<(CanisterCall, StopCanisterCallId)> for StopCanisterContext {

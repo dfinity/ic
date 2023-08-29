@@ -90,6 +90,10 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
     pub(super) ecdsa_signature_agreements: IntGauge,
+    // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
+    pub(super) aborted_install_code_calls_without_call_id: IntGauge,
+    // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
+    pub(super) stop_canister_calls_without_call_id: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -575,6 +579,14 @@ impl SchedulerMetrics {
                 "scheduler_inducted_messages_total",
                 "Number of messages inducted, by destination.",
                 &["destination"],
+            ),
+            aborted_install_code_calls_without_call_id:  metrics_registry.int_gauge(
+                "scheduler_aborted_install_code_calls_without_call_id",
+                "Number of aborted install code calls with missing call ID.",
+            ),
+            stop_canister_calls_without_call_id:  metrics_registry.int_gauge(
+                "scheduler_stop_canister_calls_without_call_id",
+                "Number of stop canister calls with missing call ID.",
             ),
         }
     }

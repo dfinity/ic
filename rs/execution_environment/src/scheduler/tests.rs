@@ -44,7 +44,10 @@ use ic_test_utilities::{
 use ic_test_utilities_metrics::{
     fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
-use ic_types::messages::{CallbackId, Payload, RejectContext, Response, MAX_RESPONSE_COUNT_BYTES};
+use ic_types::messages::{
+    CallbackId, CanisterCall, Payload, RejectContext, Response, StopCanisterCallId,
+    MAX_RESPONSE_COUNT_BYTES,
+};
 use ic_types::methods::SystemMethod;
 use ic_types::methods::WasmMethod;
 use ic_types::time::expiry_time_from_now;
@@ -2740,6 +2743,44 @@ fn replicated_state_metrics_all_canisters_in_routing_table() {
 }
 
 #[test]
+fn replicated_state_metrics_stop_contexts_with_missing_call_ids() {
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    let mut canister = get_stopping_canister(canister_test_id(2));
+    // Add old fake stop canister context with no call ID provided.
+    canister
+        .system_state
+        .add_stop_context(StopCanisterContext::Ingress {
+            sender: user_test_id(2),
+            message_id: message_test_id(2),
+            call_id: None,
+        });
+    // Add another stop canister context with call ID.
+    canister
+        .system_state
+        .add_stop_context(StopCanisterContext::Ingress {
+            sender: user_test_id(2),
+            message_id: message_test_id(2),
+            call_id: Some(StopCanisterCallId::new(2)),
+        });
+    state.put_canister_state(canister);
+
+    let registry = MetricsRegistry::new();
+    let scheduler_metrics = SchedulerMetrics::new(&registry);
+    observe_replicated_state_metrics(
+        subnet_test_id(1),
+        &state,
+        0.into(),
+        &scheduler_metrics,
+        &no_op_logger(),
+    );
+
+    assert_eq!(
+        scheduler_metrics.stop_canister_calls_without_call_id.get(),
+        1
+    );
+}
+
+#[test]
 fn replicated_state_metrics_some_canisters_not_in_routing_table() {
     let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
 
@@ -4269,6 +4310,78 @@ fn dts_resume_install_code_after_abort() {
             .canister_aborted_install_code
             .get_sample_sum(),
         1.0
+    );
+}
+
+#[test]
+fn dts_aborted_install_code_metrics() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            max_instructions_per_round: NumInstructions::from(1000),
+            max_instructions_per_install_code: NumInstructions::new(1000),
+            max_instructions_per_install_code_slice: NumInstructions::new(10),
+            ..SchedulerConfig::application_subnet()
+        })
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister = test.create_canister();
+    let install_code = TestInstallCode::Upgrade {
+        post_upgrade: instructions(100),
+    };
+    test.inject_install_code_call_to_ic00(canister, install_code);
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert!(test.canister_state(canister).has_paused_install_code());
+    test.abort_all_paused_executions();
+
+    // Call to update metric.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_aborted_install_code
+            .get_sample_sum(),
+        1.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .aborted_install_code_calls_without_call_id
+            .get(),
+        0
+    );
+
+    // Add a fake aborted install code call with missing call_id.
+    let canister_id = test.create_canister();
+    let canister = test.canister_state_mut(canister_id);
+    canister
+        .system_state
+        .task_queue
+        .push_front(ExecutionTask::AbortedInstallCode {
+            message: CanisterCall::Request(Arc::new(RequestBuilder::new().build())),
+            call_id: None,
+            prepaid_execution_cycles: Cycles::zero(),
+        });
+    // Call to update metric.
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .canister_aborted_install_code
+            .get_sample_sum(),
+        2.0
+    );
+    assert_eq!(
+        test.scheduler()
+            .metrics
+            .aborted_install_code_calls_without_call_id
+            .get(),
+        1
     );
 }
 
