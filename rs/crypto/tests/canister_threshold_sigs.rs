@@ -1445,16 +1445,23 @@ mod verify_transcript {
                         if msg.starts_with("failed to verify transcript against params: insufficient number of dealings"));
     }
 
-    fn setup_for_verify_transcript(
+    fn setup_for_verify_transcript_with_min_num_receivers(
         rng: &mut ReproducibleRng,
         subnet_size: usize,
+        min_num_receivers: usize,
     ) -> (
         CanisterThresholdSigTestEnvironment,
         IDkgTranscriptParams,
         IDkgTranscript,
     ) {
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size, rng);
-        let (dealers, receivers) = env.choose_dealers_and_receivers(&IDkgParticipants::Random, rng);
+        let (dealers, receivers) = env.choose_dealers_and_receivers(
+            &IDkgParticipants::RandomWithAtLeast {
+                min_num_dealers: 1,
+                min_num_receivers,
+            },
+            rng,
+        );
 
         let params = env.params_for_random_sharing(
             &dealers,
@@ -1468,6 +1475,17 @@ mod verify_transcript {
             .run_idkg_and_create_and_verify_transcript(&params, rng);
 
         (env, params, transcript)
+    }
+
+    fn setup_for_verify_transcript(
+        rng: &mut ReproducibleRng,
+        subnet_size: usize,
+    ) -> (
+        CanisterThresholdSigTestEnvironment,
+        IDkgTranscriptParams,
+        IDkgTranscript,
+    ) {
+        setup_for_verify_transcript_with_min_num_receivers(rng, subnet_size, 1)
     }
 
     #[test]
@@ -1581,7 +1599,8 @@ mod verify_transcript {
         let mut rng = reproducible_rng();
         let subnet_size = rng.gen_range(6..10);
 
-        let (env, params, transcript) = setup_for_verify_transcript(&mut rng, subnet_size);
+        let (env, params, transcript) =
+            setup_for_verify_transcript_with_min_num_receivers(&mut rng, subnet_size, 2);
 
         let transcript = transcript.into_builder().remove_a_receiver().build();
 
