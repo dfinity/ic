@@ -1,5 +1,4 @@
 import { setTimeout } from 'node:timers/promises';
-import assert from 'node:assert';
 
 export async function waitForServiceWorkerUpgrade(
   browser: WebdriverIO.Browser
@@ -22,5 +21,5 @@ export async function expectSampleAssetLoaded(
   await contentElem.waitForDisplayed();
 
   const elementText = await contentElem.getText();
-  assert.equal(elementText, 'This is a sample asset!');
+  expect(elementText).toBe('This is a sample asset!');
 }

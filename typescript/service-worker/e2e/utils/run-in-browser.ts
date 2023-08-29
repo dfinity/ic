@@ -1,5 +1,4 @@
 import { remote } from 'webdriverio';
-import { ChromeOptions } from '@wdio/types/build/Capabilities';
 
 export interface RunConfig {
   currentSwPath: string;
@@ -12,13 +11,10 @@ export async function runInBrowser(
   baseUrl: string,
   test: (browser: WebdriverIO.Browser) => Promise<void>
 ): Promise<void> {
-  const chromeOptions: ChromeOptions = { args: [] };
-
   console.log('Getting remote browser...');
   const browser = await remote({
     capabilities: {
       browserName: 'chrome',
-      'goog:chromeOptions': chromeOptions,
     },
     automationProtocol: 'webdriver',
     path: '/wd/hub',
