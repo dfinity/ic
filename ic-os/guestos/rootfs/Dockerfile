@@ -158,7 +158,7 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
-# The "journalbeat" account. Used to run journalbeat binary to send logs of the
+# The "filebeat" account. Used to run filebeat binary to send logs of the
 # GuestOS.
 RUN addgroup journalbeat && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "Journalbeat" journalbeat && \
