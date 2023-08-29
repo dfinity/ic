@@ -796,20 +796,27 @@ impl SnsInitPayload {
         &self,
         validation_fns: &[Result<(), String>],
     ) -> Result<Self, String> {
-        let defect_msg = validation_fns
+        let mut seen_messages = HashSet::new();
+        let defect_messages = validation_fns
             .iter()
             .filter_map(|validation_fn| match validation_fn {
                 Err(msg) => Some(msg),
                 Ok(_) => None,
             })
             .cloned()
+            // Because we validate the same fields multiple times, usually
+            // to check that the field is not set to None, we get many duplicate
+            // error messages. So here we're filtering out duplicate messages.
+            .filter(|x|
+                // returns true iff the set did not already contain the value
+                seen_messages.insert(x.clone()))
             .collect::<Vec<String>>()
             .join("\n");
 
-        if defect_msg.is_empty() {
+        if defect_messages.is_empty() {
             Ok(self.clone())
         } else {
-            Err(defect_msg)
+            Err(defect_messages)
         }
     }
 
@@ -1783,7 +1790,10 @@ mod test {
     use ic_sns_swap::pb::v1::NeuronBasketConstructionParameters;
     use icrc_ledger_types::{icrc::generic_metadata_value::MetadataValue, icrc1::account::Account};
     use isocountry::CountryCode;
-    use std::{collections::BTreeMap, convert::TryInto};
+    use std::{
+        collections::{BTreeMap, HashSet},
+        convert::TryInto,
+    };
 
     #[track_caller]
     fn assert_error<T, E1, E2>(result: Result<T, E1>, expected_error: E2)
@@ -3057,5 +3067,48 @@ mod test {
         sns_init_payload
             .validate_all_post_execution_swap_parameters_are_set()
             .unwrap_err();
+    }
+
+    #[test]
+    fn test_errors_not_thrown_twice() {
+        // Build an sns_init_payload with an invalid initial_token_distribution
+        let sns_init_payload = SnsInitPayload {
+            initial_token_distribution: None,
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+
+        // Assert that this payload is invalid
+        let post_execution_error = sns_init_payload.validate_post_execution().unwrap_err();
+        let pre_execution_error = sns_init_payload.validate_pre_execution().unwrap_err();
+        let legacy_init_error = sns_init_payload.validate_legacy_init().unwrap_err();
+
+        // Check the error messages to make sure there are no duplicate lines
+        {
+            let errors = post_execution_error.split("Error: ").collect::<Vec<_>>();
+            let errors_set = errors.clone().into_iter().collect::<HashSet<_>>();
+            assert!(
+                errors.len() == errors_set.len(),
+                "Errors not unique: {:?}",
+                errors
+            );
+        }
+        {
+            let errors = pre_execution_error.split("Error: ").collect::<Vec<_>>();
+            let errors_set = errors.clone().into_iter().collect::<HashSet<_>>();
+            assert!(
+                errors.len() == errors_set.len(),
+                "Errors not unique: {:?}",
+                errors
+            );
+        }
+        {
+            let errors = legacy_init_error.split("Error: ").collect::<Vec<_>>();
+            let errors_set = errors.clone().into_iter().collect::<HashSet<_>>();
+            assert!(
+                errors.len() == errors_set.len(),
+                "Errors not unique: {:?}",
+                errors
+            );
+        }
     }
 }
