@@ -2,10 +2,8 @@ pub mod subnet_call_context_manager;
 #[cfg(test)]
 mod tests;
 
-use crate::{
-    canister_state::system_state::CyclesUseCase,
-    metadata_state::subnet_call_context_manager::SubnetCallContextManager,
-};
+use crate::canister_state::system_state::CyclesUseCase;
+use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
 use ic_base_types::CanisterId;
 use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
@@ -876,77 +874,59 @@ impl SystemMetadata {
     ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
     ///    empty/zero.
     #[allow(dead_code)]
-    pub(crate) fn after_split<F>(self, is_local_canister: F) -> Self
+    pub(crate) fn after_split<F>(&mut self, is_local_canister: F)
     where
-        F: Fn(&CanisterId) -> bool,
+        F: Fn(CanisterId) -> bool,
     {
-        // Take apart `self` and put it back together, in order for the compiler to
-        // enforce an explicit decision whenever new fields are added.
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let SystemMetadata {
-            mut ingress_history,
-            streams,
-            canister_allocation_ranges,
-            last_generated_canister_id,
-            prev_state_hash,
+            ref mut ingress_history,
+            streams: _,
+            canister_allocation_ranges: _,
+            last_generated_canister_id: _,
+            prev_state_hash: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            batch_time,
+            batch_time: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            network_topology,
-            own_subnet_id,
+            network_topology: _,
+            ref own_subnet_id,
             // `own_subnet_type` has been set by `load_checkpoint()` based on the subnet
             // registry record of B, do not touch it.
-            own_subnet_type,
+            own_subnet_type: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            own_subnet_features,
+            own_subnet_features: _,
             // Overwritten as soon as the round begins, no explicit action needed.
-            node_public_keys,
-            split_from,
-            subnet_call_context_manager,
+            node_public_keys: _,
+            ref mut split_from,
+            subnet_call_context_manager: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
-            state_sync_version,
+            state_sync_version: _,
             // Set by `commit_and_certify()` at the end of the round. Not used before.
-            certification_version,
-            heap_delta_estimate,
-            subnet_metrics,
-            expected_compiled_wasms,
-            bitcoin_get_successors_follow_up_responses,
+            certification_version: _,
+            ref heap_delta_estimate,
+            subnet_metrics: _,
+            ref expected_compiled_wasms,
+            bitcoin_get_successors_follow_up_responses: _,
         } = self;
 
-        let split_from = split_from.expect("Not a state resulting from a subnet split");
+        let split_from_subnet = split_from.expect("Not a state resulting from a subnet split");
 
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
         // Prune the ingress history.
-        ingress_history = ingress_history.prune_after_split(|canister_id: &CanisterId| {
+        ingress_history.prune_after_split(|canister_id: CanisterId| {
             // An actual local canister.
             is_local_canister(canister_id)
                 // Or this is subnet A' and message is addressed to the management canister.
-                || split_from == own_subnet_id && is_subnet_id(*canister_id, own_subnet_id)
+                || split_from_subnet == *own_subnet_id && is_subnet_id(canister_id, *own_subnet_id)
         });
 
-        SystemMetadata {
-            ingress_history,
-            streams,
-            canister_allocation_ranges,
-            last_generated_canister_id,
-            prev_state_hash,
-            batch_time,
-            network_topology,
-            own_subnet_id,
-            own_subnet_type,
-            own_subnet_features,
-            node_public_keys,
-            // Split complete, reset split marker.
-            split_from: None,
-            subnet_call_context_manager,
-            state_sync_version,
-            certification_version,
-            heap_delta_estimate,
-            subnet_metrics,
-            expected_compiled_wasms,
-            bitcoin_get_successors_follow_up_responses,
-        }
+        // Split complete, reset split marker.
+        *split_from = None;
     }
 }
 
@@ -1697,44 +1677,39 @@ impl IngressHistoryState {
     ///  * all terminal states (since they are immutable and will get pruned); and
     ///  * all non-terminal states for ingress messages addressed to local receivers
     ///    (canisters or subnet; as determined by the provided predicate).
-    fn prune_after_split<F>(self, is_local_receiver: F) -> Self
+    fn prune_after_split<F>(&mut self, is_local_receiver: F)
     where
-        F: Fn(&CanisterId) -> bool,
+        F: Fn(CanisterId) -> bool,
     {
-        // Take apart `self` and put it back together, in order for the compiler to
-        // enforce an explicit decision whenever any structural changes are made.
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let Self {
-            mut statuses,
-            pruning_times,
-            next_terminal_time,
-            memory_usage: _,
+            ref mut statuses,
+            pruning_times: _,
+            next_terminal_time: _,
+            ref mut memory_usage,
         } = self;
 
         // Filters for messages in terminal states or addressed to local canisters.
         let should_retain = |status: &IngressStatus| match status {
             IngressStatus::Known {
                 receiver, state, ..
-            } => state.is_terminal() || is_local_receiver(&CanisterId::new(*receiver).unwrap()),
+            } => state.is_terminal() || is_local_receiver(CanisterId::new(*receiver).unwrap()),
             IngressStatus::Unknown => false,
         };
 
         // Filter `statuses`. `pruning_times` stay the same on both subnets because we
         // preserved all messages in terminal states, regardless of canister.
-        let mut_statuses = Arc::make_mut(&mut statuses);
+        let mut_statuses = Arc::make_mut(statuses);
         let message_ids_to_retain: BTreeSet<_> = mut_statuses
             .iter()
             .filter(|(_, status)| should_retain(status.as_ref()))
             .map(|(message_id, _)| message_id.clone())
             .collect();
         mut_statuses.retain(|message_id, _| message_ids_to_retain.contains(message_id));
-        let memory_usage = Self::compute_memory_usage(mut_statuses);
-
-        Self {
-            statuses,
-            pruning_times,
-            next_terminal_time,
-            memory_usage,
-        }
+        *memory_usage = Self::compute_memory_usage(mut_statuses);
     }
 }
 

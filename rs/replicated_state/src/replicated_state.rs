@@ -839,7 +839,7 @@ impl ReplicatedState {
         routing_table: &RoutingTable,
         new_subnet_batch_time: Option<Time>,
     ) -> Result<Self, String> {
-        // Take apart `self` and put it back together, in order for the compiler to
+        // Destructure `self` and put it back together, in order for the compiler to
         // enforce an explicit decision whenever new fields are added.
         let Self {
             mut canister_states,
@@ -891,14 +891,16 @@ impl ReplicatedState {
     /// * Updates canisters' input schedules, based on `self.canister_states`.
     /// * Prunes the ingress history, retaining only messages addressed to this
     ///   subnet and messages in terminal states (which will time out).
-    pub fn after_split(self) -> Self {
-        // Take apart `self` and put it back together, in order for the compiler to
-        // enforce an explicit decision whenever new fields are added.
+    pub fn after_split(&mut self) {
+        // Destructure `self` in order for the compiler to enforce an explicit decision
+        // whenever new fields are added.
+        //
+        // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let Self {
-            mut canister_states,
-            mut metadata,
-            subnet_queues,
-            consensus_queue,
+            ref mut canister_states,
+            ref mut metadata,
+            subnet_queues: _,
+            consensus_queue: _,
         } = self;
 
         metadata
@@ -912,21 +914,13 @@ impl ReplicatedState {
             let mut canister_state = canister_states.remove(canister_id).unwrap();
             canister_state
                 .system_state
-                .split_input_schedules(canister_id, &canister_states);
+                .split_input_schedules(canister_id, canister_states);
             canister_states.insert(*canister_id, canister_state);
         }
 
-        // Prune ingress history.
-        metadata = metadata.after_split(|canister_id| canister_states.contains_key(canister_id));
-
-        let mut res = Self {
-            canister_states,
-            metadata,
-            subnet_queues,
-            consensus_queue,
-        };
-        res.update_stream_responses_size_bytes();
-        res
+        // Prune the ingress history. And reject in-progress subnet messages being
+        // executed by canisters no longer on this subnet.
+        metadata.after_split(|canister_id| canister_states.contains_key(&canister_id));
     }
 
     /// Removes and rejects all in-progress subnet messages whose target canisters

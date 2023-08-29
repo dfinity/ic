@@ -874,7 +874,7 @@ impl BatchProcessor for BatchProcessorImpl {
                 "State has resulted from splitting subnet {}, running phase 2 of state splitting",
                 split_from
             );
-            state = state.after_split();
+            state.after_split();
         }
         self.observe_phase_duration(PHASE_LOAD_STATE, &timer);
 

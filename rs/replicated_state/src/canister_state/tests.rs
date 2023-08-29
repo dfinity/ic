@@ -769,14 +769,13 @@ fn canister_history_operations() {
 
 #[test]
 fn canister_state_after_split_has_no_abort_install_code() {
-    let mut fixture = CanisterStateFixture::new();
-    fixture
-        .canister_state
+    let mut canister_state = CanisterStateFixture::new().canister_state;
+    canister_state
         .system_state
         .task_queue
         .push_back(ExecutionTask::Heartbeat);
-    fixture
-        .canister_state
+
+    canister_state
         .system_state
         .task_queue
         .push_back(ExecutionTask::AbortedInstallCode {
@@ -785,22 +784,25 @@ fn canister_state_after_split_has_no_abort_install_code() {
             prepaid_execution_cycles: Cycles::from(0u128),
         });
 
-    let canister = fixture.canister_state.after_split();
+    // Expected canister state is identical, minus the `AbortedInstallCode` task.
+    let mut expected_state = canister_state.clone();
+    expected_state.system_state.task_queue.pop_back();
 
-    assert_eq!(canister.next_task(), Some(&ExecutionTask::Heartbeat));
-    assert_eq!(canister.system_state.task_queue.len(), 1);
+    canister_state.after_split();
+
+    assert_eq!(expected_state, canister_state);
 }
 
 #[test]
 fn canister_state_after_split_is_running() {
+    let mut canister_state = CanisterStateFixture::new().canister_state;
     let mut call_context_manager = CallContextManager::default();
     call_context_manager.new_call_context(
         CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
         Cycles::from(0u128),
         Time::from_nanos_since_unix_epoch(0),
     );
-    let mut fixture = CanisterStateFixture::new();
-    fixture.canister_state.system_state.status = CanisterStatus::Stopping {
+    canister_state.system_state.status = CanisterStatus::Stopping {
         call_context_manager: call_context_manager.clone(),
         stop_contexts: vec![StopCanisterContext::Ingress {
             sender: user_test_id(1),
@@ -809,12 +811,13 @@ fn canister_state_after_split_is_running() {
         }],
     };
 
-    let canister = fixture.canister_state.after_split();
+    // Expected canister state is identical, except it is `Running`.
+    let mut expected_state = canister_state.clone();
+    expected_state.system_state.status = CanisterStatus::Running {
+        call_context_manager,
+    };
 
-    assert_eq!(
-        canister.system_state.status,
-        CanisterStatus::Running {
-            call_context_manager
-        }
-    );
+    canister_state.after_split();
+
+    assert_eq!(expected_state, canister_state);
 }
