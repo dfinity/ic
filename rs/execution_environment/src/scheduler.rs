@@ -30,7 +30,7 @@ use ic_system_api::InstructionLimits;
 use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
-    messages::{CanisterMessage, Ingress, MessageId},
+    messages::{CanisterMessage, Ingress, MessageId, StopCanisterContext},
     AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
     MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };
@@ -1233,6 +1233,7 @@ impl SchedulerImpl {
         state: &ReplicatedState,
         current_round_type: ExecutionRoundType,
     ) {
+        let mut num_aborted_install_code_without_call_id = 0;
         let canisters_with_tasks = state
             .canister_states
             .iter()
@@ -1246,8 +1247,12 @@ impl SchedulerImpl {
         for (id, canister) in canisters_with_tasks {
             for task in canister.system_state.task_queue.iter() {
                 match task {
-                    ExecutionTask::AbortedExecution { .. }
-                    | ExecutionTask::AbortedInstallCode { .. } => {}
+                    ExecutionTask::AbortedExecution { .. } => {}
+                    ExecutionTask::AbortedInstallCode { call_id, .. } => {
+                        if call_id.is_none() {
+                            num_aborted_install_code_without_call_id += 1;
+                        }
+                    }
                     ExecutionTask::Heartbeat => {
                         panic!(
                             "Unexpected heartbeat task after a round in canister {:?}",
@@ -1279,6 +1284,9 @@ impl SchedulerImpl {
                 }
             }
         }
+        self.metrics
+            .aborted_install_code_calls_without_call_id
+            .set(num_aborted_install_code_without_call_id);
     }
 }
 
@@ -1899,13 +1907,22 @@ fn observe_replicated_state_metrics(
     let mut canisters_not_in_routing_table = 0;
     let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
+    let mut num_stop_canister_calls_without_call_id = 0;
 
     let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
-        match canister.status() {
-            CanisterStatusType::Running => num_running_canisters += 1,
-            CanisterStatusType::Stopping { .. } => num_stopping_canisters += 1,
-            CanisterStatusType::Stopped => num_stopped_canisters += 1,
+        match &canister.system_state.status {
+            CanisterStatus::Running { .. } => num_running_canisters += 1,
+            CanisterStatus::Stopping { stop_contexts, .. } => {
+                num_stopping_canisters += 1;
+                // TODO(EXC-1466): Remove once all calls have `call_id` present.
+                let stop_contexts_with_missing_call_id: Vec<&StopCanisterContext> = stop_contexts
+                    .iter()
+                    .take_while(|stop_context| stop_context.call_id().is_none())
+                    .collect();
+                num_stop_canister_calls_without_call_id += stop_contexts_with_missing_call_id.len();
+            }
+            CanisterStatus::Stopped { .. } => num_stopped_canisters += 1,
         }
         match canister.next_task() {
             Some(&ExecutionTask::PausedExecution(_)) => {
@@ -2055,6 +2072,9 @@ fn observe_replicated_state_metrics(
     metrics
         .canisters_not_in_routing_table
         .set(canisters_not_in_routing_table);
+    metrics
+        .stop_canister_calls_without_call_id
+        .set(num_stop_canister_calls_without_call_id as i64);
 }
 
 fn join_consumed_cycles_by_use_case(
