@@ -63,6 +63,71 @@ lazy_static! {
     };
 }
 
+fn new_red_herring_neuron(seed: u64) -> Neuron {
+    // Here, we use MODEL_NEURON, simply because this is a little bit more
+    // convenient, and it doesn't particularly matter what the result looks like
+    // exactly. What matters is that it is distinct.
+    let mut result = MODEL_NEURON.clone();
+
+    // To make the result distinct, we have to make some perturbations.
+    result.id.as_mut().unwrap().id = seed;
+    result.neuron_fees_e8s = seed;
+
+    // We must also make the auxiliary fields distinct.
+
+    result.hot_keys.push(PrincipalId::new_user_test_id(seed));
+    result.followees.insert(
+        2,
+        Followees {
+            followees: vec![NeuronId { id: seed }],
+        },
+    );
+    result.recent_ballots.push(BallotInfo {
+        proposal_id: Some(ProposalId { id: seed }),
+        vote: Vote::No as i32,
+    });
+
+    result.known_neuron_data.as_mut().unwrap().name = format!("Red Herring {}", seed,);
+
+    result.transfer.as_mut().unwrap().memo = seed;
+
+    // Done!
+    result
+}
+
+lazy_static! {
+    // These are to make sure that modifying the main neuron in
+    // StableNeuronStore does not spill over to these other neurons.
+    static ref RED_HERRING_NEURONS: Vec<Neuron> = vec![
+        // These are "adjacent" to MODEL_NEURON.
+        new_red_herring_neuron(41),
+        new_red_herring_neuron(43),
+
+        // More random neurons.
+        new_red_herring_neuron(958_288),
+        new_red_herring_neuron(965_006),
+        new_red_herring_neuron(488_725),
+    ];
+}
+
+fn create_red_herring_neurons(store: &mut StableNeuronStore<VectorMemory>) {
+    for red_herring_neuron in RED_HERRING_NEURONS.iter() {
+        assert_eq!(
+            store.create(red_herring_neuron.clone()),
+            Ok(()),
+            "{:#?}",
+            red_herring_neuron,
+        );
+    }
+}
+
+fn assert_that_red_herring_neurons_are_untouched(store: &StableNeuronStore<VectorMemory>) {
+    for red_herring_neuron in &*RED_HERRING_NEURONS {
+        let id = *red_herring_neuron.id.as_ref().unwrap();
+        assert_eq!(store.read(id), Ok(red_herring_neuron.clone()));
+    }
+}
+
 /// Summary:
 ///
 ///   1. create
@@ -87,6 +152,9 @@ fn test_store_simplest_nontrivial_case() {
     // 1. Create a Neuron.
     let neuron_1 = MODEL_NEURON.clone();
     assert_eq!(store.create(neuron_1.clone()), Ok(()));
+
+    create_red_herring_neurons(&mut store);
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // 2. Bad create: use an existing NeuronId. This should result in an
     // InvalidCommand Err.
@@ -195,6 +263,7 @@ fn test_store_simplest_nontrivial_case() {
         }
     };
     assert_eq!(store.update(neuron_5.clone()), Ok(()));
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // 6. Read to verify update.
     assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_5.clone()));
@@ -239,6 +308,7 @@ fn test_store_simplest_nontrivial_case() {
         // Any other result is bad.
         _ => panic!("{:#?}", update_result),
     }
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // 8. Read to verify bad update.
     let read_result = store.read(NeuronId { id: 0xDEAD_BEEF });
@@ -271,12 +341,14 @@ fn test_store_simplest_nontrivial_case() {
         ..neuron_5
     };
     assert_eq!(store.update(neuron_9.clone()), Ok(()));
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // 10. Read to verify second update.
     assert_eq!(store.read(NeuronId { id: 42 }), Ok(neuron_9));
 
     // 11. Delete.
     assert_eq!(store.delete(NeuronId { id: 42 }), Ok(()));
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // 12. Bad delete: repeat.
     let delete_result = store.delete(NeuronId { id: 42 });
@@ -301,6 +373,7 @@ fn test_store_simplest_nontrivial_case() {
 
         _ => panic!("second delete did not return Err: {:?}", delete_result),
     }
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // 13. Read to verify delete.
     let read_result = store.read(NeuronId { id: 42 });
@@ -325,15 +398,71 @@ fn test_store_simplest_nontrivial_case() {
 
         _ => panic!("read did not return Err: {:?}", read_result),
     }
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // Make sure delete is actually thorough. I.e. no dangling references.
     // Here, we access privates. Elsewhere, we do not do this. I suppose
     // StableNeuronStore could have a pub is_internally_consistent method.
-    assert!(store.hot_keys_map.is_empty());
-    assert!(store.followees_map.is_empty());
-    assert!(store.recent_ballots_map.is_empty());
-    assert!(store.known_neuron_data_map.is_empty());
-    assert!(store.transfer_map.is_empty());
+    fn assert_no_zombie_references_in<Key, Value, Memory>(
+        map_name: &str,
+        map: &StableBTreeMap<Key, Value, Memory>,
+        key_to_neuron_id: impl Fn(Key) -> NeuronId,
+        bad_neuron_id: NeuronId,
+    ) where
+        Key: BoundedStorable + Ord + Copy + std::fmt::Debug,
+        Value: BoundedStorable + std::fmt::Debug,
+        Memory: ic_stable_structures::Memory,
+    {
+        for (key, value) in map.iter() {
+            assert_ne!(
+                key_to_neuron_id(key),
+                bad_neuron_id,
+                "{} {:?}: {:#?}",
+                map_name,
+                key,
+                value
+            );
+        }
+    }
+
+    // No zombies. This requires looking at privates. Normally, we try to avoid
+    // this, but APIs normally assume internal consistency, but that is exactly
+    // what we're trying to to verify here.
+    let original_neuron_id = *MODEL_NEURON.id.as_ref().unwrap();
+
+    assert_no_zombie_references_in(
+        "hot_keys",
+        &store.hot_keys_map,
+        |key| NeuronId { id: key.0 },
+        original_neuron_id,
+    );
+    assert_no_zombie_references_in(
+        "recent_ballots",
+        &store.recent_ballots_map,
+        |key| NeuronId { id: key.0 },
+        original_neuron_id,
+    );
+    assert_no_zombie_references_in(
+        "followees",
+        &store.followees_map,
+        |key: FolloweesKey| NeuronId {
+            id: key.followee_id,
+        },
+        original_neuron_id,
+    );
+
+    assert_no_zombie_references_in(
+        "known_neuron_data",
+        &store.known_neuron_data_map,
+        |key| NeuronId { id: key },
+        original_neuron_id,
+    );
+    assert_no_zombie_references_in(
+        "transfer",
+        &store.transfer_map,
+        |key| NeuronId { id: key },
+        original_neuron_id,
+    );
 }
 
 /// Summary:
@@ -349,8 +478,12 @@ fn test_store_upsert() {
     let neuron = MODEL_NEURON.clone();
     let neuron_id = neuron.id.unwrap();
 
+    // 0. create red herrings
+    create_red_herring_neurons(&mut store);
+
     // 1. upsert (entry not already present)
     assert_eq!(store.upsert(neuron.clone()), Ok(()));
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // 2. read to verify
     assert_eq!(store.read(neuron_id), Ok(neuron.clone()));
@@ -398,6 +531,7 @@ fn test_store_upsert() {
 
     // 3. upsert (change an existing entry)
     assert_eq!(store.upsert(updated_neuron.clone()), Ok(()));
+    assert_that_red_herring_neurons_are_untouched(&store);
 
     // 4. read to verify
     assert_eq!(store.read(neuron_id), Ok(updated_neuron));
