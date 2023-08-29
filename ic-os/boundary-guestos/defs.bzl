@@ -59,6 +59,7 @@ def image_deps(mode, sev = False):
             "//publish/binaries:ic-balance-exporter": "/opt/ic/bin/ic-balance-exporter:0755",
             "//publish/binaries:ic-registry-replicator": "/opt/ic/bin/ic-registry-replicator:0755",
             "//publish/binaries:icx-proxy": "/opt/ic/bin/icx-proxy:0755",
+            "//publish/binaries:systemd-journal-gatewayd-shim": "/opt/ic/bin/systemd-journal-gatewayd-shim:0755",
         },
     }
     deps["rootfs"].update(extra_rootfs_deps[mode])

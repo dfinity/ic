@@ -30,6 +30,7 @@ members = [
   "rs/boundary_node/ic_boundary",
   "rs/boundary_node/icx_proxy",
   "rs/boundary_node/prober",
+  "rs/boundary_node/systemd_journal_gatewayd_shim",
   "rs/canister_client",
   "rs/canister_client/sender",
   "rs/ethereum/cketh/minter",
