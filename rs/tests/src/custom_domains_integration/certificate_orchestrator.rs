@@ -63,7 +63,7 @@ pub fn test_end_to_end_registration(env: TestEnv) {
                     logger,
                     "Registration is still in progress: {registration_status}"
                 );
-                tokio::time::sleep(Duration::from_secs(60)).await;
+                tokio::time::sleep(Duration::from_secs(20)).await;
             }
         } else {
             info!(logger, "Failed to submit the registration request")

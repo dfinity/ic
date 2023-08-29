@@ -147,6 +147,18 @@ options may be specified:
     (and the corresponding private keys) before uploading them to the certificate
     orchestrator canister.
 
+  --certificate_issuer_task_delay_sec
+    delay in seconds that is added to the processing deadline for any task that
+    the certificate issuer submits to the certificate orchestrator.
+
+  --certificate_issuer_task_error_delay_sec
+    delay in seconds that is added to the processing deadline for any task that
+    failed while processing in the certificate issuer.
+
+  --certificate_issuer_peek_sleep_sec
+    time between peeks by the certificate issuer to fetch a new task from the
+    certificate orchestrator.
+
   --ic_registry_local_store
     path to a local registry store to be used instead of the one provided by the
     registry replicator.
@@ -231,6 +243,7 @@ function build_ic_bootstrap_tar() {
     local CERTIFICATE_ORCHESTRATOR_URI CERTIFICATE_ORCHESTRATOR_CANISTER_ID CERTIFICATE_ISSUER_DELEGATION_DOMAIN
     local CERTIFICATE_ISSUER_ACME_PROVIDER_URL CERTIFICATE_ISSUER_CLOUDFLARE_API_URL CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY
     local CERTIFICATE_ISSUER_NAME_SERVERS CERTIFICATE_ISSUER_NAME_SERVERS_PORT CERTIFICATE_ISSUER_IDENTITY CERTIFICATE_ISSUER_ENCRYPTION_KEY
+    local CERTIFICATE_ISSUER_TASK_DELAY_SEC CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC CERTIFICATE_ISSUER_PEEK_SLEEP_SEC
 
     while true; do
         if [ $# == 0 ]; then
@@ -341,6 +354,15 @@ function build_ic_bootstrap_tar() {
                 ;;
             --certificate_issuer_encryption_key)
                 CERTIFICATE_ISSUER_ENCRYPTION_KEY="$2"
+                ;;
+            --certificate_issuer_task_delay_sec)
+                CERTIFICATE_ISSUER_TASK_DELAY_SEC="$2"
+                ;;
+            --certificate_issuer_task_error_delay_sec)
+                CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC="$2"
+                ;;
+            --certificate_issuer_peek_sleep_sec)
+                CERTIFICATE_ISSUER_PEEK_SLEEP_SEC="$2"
                 ;;
             --ic_registry_local_store)
                 IC_REGISTRY_LOCAL_STORE="$2"
@@ -514,6 +536,9 @@ certificate_issuer_name_servers_port=${CERTIFICATE_ISSUER_NAME_SERVERS_PORT}
 certificate_issuer_acme_provider_url=${CERTIFICATE_ISSUER_ACME_PROVIDER_URL}
 certificate_issuer_cloudflare_api_url=${CERTIFICATE_ISSUER_CLOUDFLARE_API_URL}
 certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
+${CERTIFICATE_ISSUER_TASK_DELAY_SEC:+certificate_issuer_task_delay_sec=${CERTIFICATE_ISSUER_TASK_DELAY_SEC}}
+${CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC:+certificate_issuer_task_error_delay_sec=${CERTIFICATE_ISSUER_TASK_ERROR_DELAY_SEC}}
+${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC:+certificate_issuer_peek_sleep_sec=${CERTIFICATE_ISSUER_PEEK_SLEEP_SEC}}
 EOF
     fi
 

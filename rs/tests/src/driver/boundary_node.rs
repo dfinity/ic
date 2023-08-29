@@ -71,6 +71,9 @@ pub struct BoundaryNodeCustomDomainsConfig {
     pub cloudflare_api_key: String,
     pub issuer_identity: String,
     pub issuer_encryption_key: String,
+    pub task_delay_sec: Option<u64>,
+    pub task_error_delay_sec: Option<u64>,
+    pub peek_sleep_sec: Option<u64>,
 }
 
 /// A builder for the initial configuration of an IC boundary node.
@@ -579,6 +582,21 @@ fn create_and_upload_config_disk_image(
             .arg(identity_file)
             .arg("--certificate_issuer_encryption_key")
             .arg(key_file);
+
+        if let Some(task_delay_sec) = cfg.task_delay_sec {
+            cmd.arg("--certificate_issuer_task_delay_sec")
+                .arg(task_delay_sec.to_string());
+        }
+
+        if let Some(task_error_delay_sec) = cfg.task_error_delay_sec {
+            cmd.arg("--certificate_issuer_task_error_delay_sec")
+                .arg(task_error_delay_sec.to_string());
+        }
+
+        if let Some(peek_sleep_sec) = cfg.peek_sleep_sec {
+            cmd.arg("--certificate_issuer_peek_sleep_sec")
+                .arg(peek_sleep_sec.to_string());
+        }
     }
 
     let key = "PATH";

@@ -34,6 +34,9 @@ function read_variables() {
             "certificate_issuer_acme_key") ACME_ACCOUNT_KEY="${value}" ;;
             "certificate_issuer_cloudflare_api_url") CLOUDFLARE_API_URL="${value}" ;;
             "certificate_issuer_cloudflare_api_key") CLOUDFLARE_API_KEY="${value}" ;;
+            "certificate_issuer_task_delay_sec") TASK_DELAY_SEC="${value}" ;;
+            "certificate_issuer_task_error_delay_sec") TASK_ERROR_DELAY_SEC="${value}" ;;
+            "certificate_issuer_peek_sleep_sec") PEEK_SLEEP_SEC="${value}" ;;
         esac
     done <"${BOOT_DIR}/certificate_issuer.conf"
 }
@@ -61,6 +64,9 @@ ACME_ACCOUNT_ID=${ACME_ACCOUNT_ID:-}
 ACME_ACCOUNT_KEY=${ACME_ACCOUNT_KEY:-}
 CLOUDFLARE_API_URL=${CLOUDFLARE_API_URL:-}
 CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY}
+TASK_DELAY_SEC=${TASK_DELAY_SEC:-}
+TASK_ERROR_DELAY_SEC=${TASK_ERROR_DELAY_SEC:-}
+PEEK_SLEEP_SEC=${PEEK_SLEEP_SEC:-}
 EOF
 }
 
