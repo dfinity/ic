@@ -10,10 +10,8 @@ rust_library(
     deps = [
         "//rs/interfaces/registry",
         "//rs/registry/proto",
-        "//rs/registry/transport",
         "//rs/types/types",
         "//rs/utils",
-        "@crate_index//:bytes",
         "@crate_index//:prost",
     ],
 )

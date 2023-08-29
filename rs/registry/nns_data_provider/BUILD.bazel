@@ -7,33 +7,21 @@ DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/certification",
     "//rs/crypto/tree_hash",
-    "//rs/crypto/utils/threshold_sig",
     "//rs/interfaces/registry",
     "//rs/nns/constants",
-    "//rs/protobuf",
-    "//rs/registry/proto",
     "//rs/registry/transport",
     "//rs/tree_deserializer",
     "//rs/types/types",
-    "//rs/utils",
-    "@crate_index//:bytes",
     "@crate_index//:chrono",
-    "@crate_index//:hyper",
-    "@crate_index//:hyper-tls",
-    "@crate_index//:lazy_static",
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:serde",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:tempfile",
-    "@crate_index//:tokio",
     "@crate_index//:url",
 ]
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/certification/test-utils",
-    "//rs/crypto",
     "@crate_index//:leb128",
 ]
 

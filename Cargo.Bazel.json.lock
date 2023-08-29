@@ -1,5 +1,5 @@
 {
-  "checksum": "d016e6af566a8f68c4819f2b6eecd22f2a8aa672fae99b23b381dc08192d3c38",
+  "checksum": "3275f240ec29d30a61e2df059e174a9b0818229b86e8609d10e82e6ab77159ce",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2723,36 +2723,6 @@
         "version": "2.0.2"
       },
       "license": "MIT"
-    },
-    "assert_approx_eq 1.1.0": {
-      "name": "assert_approx_eq",
-      "version": "1.1.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/assert_approx_eq/1.1.0/download",
-          "sha256": "3c07dab4369547dbe5114677b33fbbf724971019f3818172d59a97a61c774ffd"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "assert_approx_eq",
-            "crate_root": "src/lib.rs",
-            "srcs": [
-              "**/*.rs"
-            ]
-          }
-        }
-      ],
-      "library_target_name": "assert_approx_eq",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "1.1.0"
-      },
-      "license": "MIT/Apache-2.0"
     },
     "assert_cmd 0.12.2": {
       "name": "assert_cmd",
@@ -13318,10 +13288,6 @@
             {
               "id": "assert-json-diff 2.0.2",
               "target": "assert_json_diff"
-            },
-            {
-              "id": "assert_approx_eq 1.1.0",
-              "target": "assert_approx_eq"
             },
             {
               "id": "assert_cmd 0.12.2",

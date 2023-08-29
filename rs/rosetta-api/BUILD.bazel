@@ -20,7 +20,6 @@ DEPENDENCIES = [
     "//rs/crypto/sha2",
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
-    "//rs/interfaces",
     "//rs/types/types",
     "//rs/nns/common",
     "//rs/nns/constants",
@@ -50,7 +49,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
     "@crate_index//:strum",
-    "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
 ]
@@ -65,10 +63,6 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
     "//rs/rosetta-api/test_utils",
-    "//rs/types/base_types",
-    "@crate_index//:futures",
-    "@crate_index//:ic-cdk",
-    "@crate_index//:rand_chacha_0_3_1",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

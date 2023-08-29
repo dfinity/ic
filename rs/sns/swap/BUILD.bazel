@@ -14,26 +14,18 @@ filegroup(
 # See rs/nervous_system/feature_test.md
 BASE_DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha2",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
     "//rs/nervous_system/runtime",
     "//rs/nervous_system/proto",
-    "//rs/protobuf",
-    "//rs/registry/canister",
-    "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/ledger_core",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/canister_log",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http_metrics",
-    "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/http_types",
-    "//rs/rust_canisters/on_wire",
     "//rs/types/base_types",
     "@crate_index//:build-info",
-    "@crate_index//:bytes",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:hex",
@@ -45,7 +37,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:rust_decimal",
     "@crate_index//:serde",
-    "@crate_index//:strum",
 ]
 
 # Each target declared in this file may choose either these (release-ready)
@@ -60,7 +51,6 @@ DEPENDENCIES_WITH_TEST_FEATURES = BASE_DEPENDENCIES + [
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
-    "@crate_index//:strum_macros",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -70,13 +60,10 @@ BUILD_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/config",
     "//rs/nervous_system/common/test_keys",
     "//rs/nervous_system/common/test_utils",
-    "//rs/nns/common",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:criterion",
     "@crate_index//:futures",
     "@crate_index//:pretty_assertions",
     "@crate_index//:proptest",
