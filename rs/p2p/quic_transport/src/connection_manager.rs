@@ -245,12 +245,12 @@ pub(crate) fn start_connection_manager(
             // around 2Gb/s.
             // Bandwidth-Delay Product
             // 2Gb/s * 100ms ~ 200M bits = 25MB
-            socket2
-                .set_recv_buffer_size(25_000_000)
-                .expect("Failed to set receive buffer size");
-            socket2
-                .set_send_buffer_size(25_000_000)
-                .expect("Failed to set send buffer size");
+            if let Err(e) = socket2.set_recv_buffer_size(25_000_000) {
+                error!(log, "Failed to set receive udp buffer. {}", e)
+            }
+            if let Err(e) = socket2.set_send_buffer_size(25_000_000) {
+                error!(log, "Failed to set send udp buffer. {}", e)
+            }
             socket2
                 .bind(&SockAddr::from(addr))
                 .expect("Failed to bind to UDP socket");
