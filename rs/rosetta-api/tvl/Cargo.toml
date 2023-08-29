@@ -8,9 +8,7 @@ name = "ic-tvl-canister"
 path = "src/main.rs"
 
 [dependencies]
-async-trait = "0.1.59"
 candid = { workspace = true }
-walkdir = "2.3.2"
 ciborium = { workspace = true }
 futures = "0.3.25"
 ic0 = "0.18.9"

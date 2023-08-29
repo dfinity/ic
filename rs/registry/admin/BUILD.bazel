@@ -63,7 +63,6 @@ BASE_DEPENDENCIES = [
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
     "@crate_index//:url",
-    "@crate_index//:walkdir",
 ]
 
 # Each target declared in this file may choose either these (release-ready)

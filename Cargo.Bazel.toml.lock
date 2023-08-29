@@ -546,12 +546,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "assert_approx_eq"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c07dab4369547dbe5114677b33fbbf724971019f3818172d59a97a61c774ffd"
-
-[[package]]
 name = "assert_cmd"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2616,7 +2610,6 @@ dependencies = [
  "arrayvec 0.5.2",
  "askama",
  "assert-json-diff",
- "assert_approx_eq",
  "assert_cmd",
  "assert_matches",
  "async-recursion",

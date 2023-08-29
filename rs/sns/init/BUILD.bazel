@@ -12,17 +12,13 @@ filegroup(
 BASE_DEPENDENCIES = [
     # Keep sorted.
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/crypto/sha2",
     "//rs/nervous_system/common",
     "//rs/nervous_system/proto",
     "//rs/nns/constants",
-    "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",
-    "//rs/rust_canisters/dfn_candid",
-    "//rs/rust_canisters/dfn_core",
     "//rs/sns/root",
     "//rs/types/base_types",
     "@crate_index//:base64",
@@ -30,11 +26,8 @@ BASE_DEPENDENCIES = [
     "@crate_index//:isocountry",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
-    "@crate_index//:num",
     "@crate_index//:prost",
-    "@crate_index//:regex",
     "@crate_index//:serde",
-    "@crate_index//:serde_json",
     "@crate_index//:serde_yaml",
 ]
 
@@ -59,7 +52,6 @@ DEV_DEPENDENCIES = [
     "//rs/nervous_system/common/test_keys",
     "//rs/sns/init/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",
-    "@crate_index//:assert_approx_eq",
     "@crate_index//:num-traits",
     "@crate_index//:tempfile",
 ]
