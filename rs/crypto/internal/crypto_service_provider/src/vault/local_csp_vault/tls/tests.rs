@@ -67,12 +67,11 @@ mod keygen {
             .with_node_secret_key_store(secret_key_store)
             .build();
 
-        let duplicated_key_id1 = &duplicated_key_id;
         let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
         assert_matches!(
             result,
-            Err(CspTlsKeygenError::DuplicateKeyId { key_id }) if key_id ==  *duplicated_key_id1
+            Err(CspTlsKeygenError::DuplicateKeyId { key_id }) if key_id ==  duplicated_key_id
         );
     }
 
@@ -181,6 +180,61 @@ mod keygen {
             serial_samples.insert(serial_number(&cert));
         }
         assert_eq!(serial_samples.len(), SAMPLE_SIZE);
+    }
+
+    #[test]
+    fn should_set_cert_not_before_correctly() {
+        use chrono::prelude::*;
+        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+        use ic_interfaces::time_source::TimeSource;
+        use ic_types::time::Time;
+        use std::time::{Duration, UNIX_EPOCH};
+
+        const NANOS_PER_SEC: u64 = 1_000_000_000;
+        const MAX_TIME_SECS: u64 = u64::MAX / NANOS_PER_SEC;
+        const GRACE_PERIOD_SECS: u64 = 120;
+
+        let mut rng = reproducible_rng();
+
+        // generate random values
+        let mut inputs: Vec<_> = (0..100).map(|_| rng.gen_range(0..MAX_TIME_SECS)).collect();
+
+        // append edge cases (when time is below `GRACE_PERIOD_SECS`)
+        inputs.push(0);
+        inputs.push(1);
+        inputs.push(2);
+        inputs.push(GRACE_PERIOD_SECS - 1);
+        inputs.push(GRACE_PERIOD_SECS);
+
+        for random_current_time_secs in inputs {
+            let time_source = FastForwardTimeSource::new();
+            time_source
+                .set_time(
+                    Time::from_secs_since_unix_epoch(random_current_time_secs)
+                        .expect("failed to convert time"),
+                )
+                .expect("failed to set time");
+            let csp_vault = LocalCspVault::builder_for_test()
+                .with_time_source(Arc::clone(&time_source) as _)
+                .build();
+
+            let cert = csp_vault
+                .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+                .expect("error generating TLS certificate");
+
+            // We are deliberately not using `Asn1Time::from_unix` used in
+            // production to ensure the right time unit is passed.
+            let expected_not_before = {
+                let secs = time_source
+                    .get_relative_time()
+                    .as_secs_since_unix_epoch()
+                    .saturating_sub(GRACE_PERIOD_SECS);
+                let utc = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_secs(secs));
+                utc.format("%b %e %H:%M:%S %Y GMT").to_string()
+            };
+
+            assert_eq!(cert.as_x509().not_before().to_string(), expected_not_before);
+        }
     }
 
     #[test]
