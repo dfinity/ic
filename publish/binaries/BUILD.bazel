@@ -62,28 +62,34 @@ BINARIES = {
 }
 
 [release_nostrip_binary(
-    name = name,
+    name = name + "_bin",
     binary = BINARIES[name],
-    visibility = [
-        "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs:__subpackages__",
-    ],
 ) for name in BINARIES if name in NO_STRIP]
 
 [release_strip_binary(
-    name = name,
+    name = name + "_bin",
     binary = BINARIES[name],
-    visibility = [
-        "//ic-os/boundary-api-guestos/envs/dev:__pkg__",
-        "//ic-os/boundary-api-guestos/envs/prod:__pkg__",
-        "//ic-os/boundary-guestos/envs/dev:__pkg__",
-        "//ic-os/boundary-guestos/envs/dev-sev:__pkg__",
-        "//ic-os/boundary-guestos/envs/prod:__pkg__",
-        "//ic-os/boundary-guestos/envs/prod-sev:__pkg__",
-        "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs:__subpackages__",
-    ],
 ) for name in BINARIES if name not in NO_STRIP]
+
+[
+    genrule(
+        name = name + "_cleaned",
+        srcs = [name + "_bin"],
+        outs = [name],
+        cmd = select({
+            "@platforms//os:linux": "objcopy -R .comment -R .note -R .note.gnu.build-id $< $@",
+            "@platforms//os:osx": "cp $< $@",
+        }),
+        executable = True,
+        visibility = [
+            "//ic-os/boundary-api-guestos/envs:__subpackages__",
+            "//ic-os/boundary-guestos/envs:__subpackages__",
+            "//ic-os/guestos/envs:__subpackages__",
+            "//ic-os/hostos/envs:__subpackages__",
+        ],
+    )
+    for name in BINARIES
+]
 
 [
     gzip_compress(
