@@ -748,7 +748,7 @@ dependencies = [
  "hyper",
  "openssl",
  "pin-project-lite",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "rustls-pemfile",
  "tokio",
  "tokio-openssl",
@@ -1724,7 +1724,7 @@ dependencies = [
  "candid 0.8.4",
  "certificate_orchestrator_interface",
  "chacha20poly1305",
- "clap 4.4.0",
+ "clap 4.4.1",
  "cloudflare",
  "flate2",
  "futures",
@@ -1761,7 +1761,7 @@ dependencies = [
  "async-trait",
  "axum",
  "candid 0.8.4",
- "clap 4.4.0",
+ "clap 4.4.1",
  "futures",
  "hyper",
  "hyper-rustls 0.24.0",
@@ -1967,9 +1967,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.4.0"
+version = "4.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d5f1946157a96594eb2d2c10eb7ad9a2b27518cb3000209dec700c35df9197d"
+checksum = "7c8d502cbaec4595d2e7d5f61e318f05417bd2b66fdc3809498f0d3fdf0bea27"
 dependencies = [
  "clap_builder",
  "clap_derive 4.4.0",
@@ -1978,9 +1978,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.4.0"
+version = "4.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78116e32a042dd73c2901f0dc30790d20ff3447f3e3472fad359e8c3d282bcd6"
+checksum = "5891c7bc0edb3e1c2204fc5e94009affabeb1821c9e5fdc3959536c5c0bb984d"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2444,7 +2444,7 @@ dependencies = [
  "anes",
  "cast",
  "ciborium",
- "clap 4.4.0",
+ "clap 4.4.1",
  "criterion-plot 0.5.0",
  "futures",
  "is-terminal",
@@ -3029,7 +3029,7 @@ name = "deterministic_ips"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.0",
+ "clap 4.4.1",
  "ic-crypto-sha2",
  "thiserror",
 ]
@@ -4473,8 +4473,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "axum-server",
- "clap 4.4.0",
- "rustls 0.21.6",
+ "clap 4.4.1",
+ "rustls 0.21.7",
  "rustls-pemfile",
  "serde_json",
  "tokio",
@@ -4588,7 +4588,7 @@ dependencies = [
  "http",
  "hyper",
  "log",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "rustls-native-certs",
  "tokio",
  "tokio-rustls 0.24.0",
@@ -5037,7 +5037,7 @@ dependencies = [
  "axum-server",
  "bytes",
  "candid 0.8.4",
- "clap 4.4.0",
+ "clap 4.4.1",
  "dashmap",
  "ethnum",
  "futures",
@@ -5070,7 +5070,7 @@ dependencies = [
  "rand 0.8.5",
  "rcgen",
  "reqwest",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "serde",
  "serde_cbor",
  "serde_json",
@@ -5790,6 +5790,8 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_json",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
 ]
 
 [[package]]
@@ -7650,7 +7652,7 @@ dependencies = [
  "axum",
  "candid 0.8.4",
  "ciborium",
- "clap 4.4.0",
+ "clap 4.4.1",
  "futures",
  "hex",
  "http",
@@ -11601,7 +11603,7 @@ dependencies = [
  "axum",
  "base64 0.11.0",
  "candid 0.8.4",
- "clap 4.4.0",
+ "clap 4.4.1",
  "flate2",
  "form_urlencoded",
  "futures",
@@ -11617,7 +11619,7 @@ dependencies = [
  "opentelemetry 0.20.0",
  "opentelemetry-prometheus",
  "prometheus 0.13.3",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "rustls-native-certs",
  "rustls-pemfile",
  "serde",
@@ -12609,7 +12611,7 @@ name = "log_vector_config_generator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.0",
+ "clap 4.4.1",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",
@@ -13907,9 +13909,9 @@ dependencies = [
 
 [[package]]
 name = "pin-project-lite"
-version = "0.2.12"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12cc1b0bf1727a77a54b6654e7b5f1af8604923edc8b81885f8ec92f9e3f0a05"
+checksum = "8afb450f006bf6385ca15ef45d71d2288452bc3683ce2e2cacc0d18e4be60b58"
 
 [[package]]
 name = "pin-utils"
@@ -14575,7 +14577,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "thiserror",
  "tokio",
  "tracing",
@@ -14591,7 +14593,7 @@ dependencies = [
  "rand 0.8.5",
  "ring",
  "rustc-hash",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "rustls-native-certs",
  "slab",
  "thiserror",
@@ -15086,7 +15088,7 @@ dependencies = [
  "once_cell",
  "percent-encoding 2.3.0",
  "pin-project-lite",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "rustls-pemfile",
  "serde",
  "serde_json",
@@ -15452,9 +15454,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.21.6"
+version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb"
+checksum = "cd8d6c9f025a446bc4d18ad9632e69aec8f287aa84499ee335599fabd20c3fd8"
 dependencies = [
  "log",
  "ring",
@@ -16668,7 +16670,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "clap 4.4.0",
+ "clap 4.4.1",
  "http",
  "itertools 0.11.0",
  "reqwest",
@@ -16979,7 +16981,7 @@ dependencies = [
  "reqwest",
  "ring",
  "rust_decimal",
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "serde",
  "serde_bytes",
  "serde_cbor",
@@ -17259,7 +17261,7 @@ version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0d409377ff5b1e3ca6437aa86c1eb7d40c134bfec254e44c830defa92669db5"
 dependencies = [
- "rustls 0.21.6",
+ "rustls 0.21.7",
  "tokio",
 ]
 
@@ -17898,9 +17900,9 @@ dependencies = [
 
 [[package]]
 name = "url"
-version = "2.4.0"
+version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50bff7831e19200a85b17131d085c25d7811bc4e186efdaf54bbd132994a88cb"
+checksum = "143b538f18257fac9cad154828a57c6bf5157e1aa604d4816b5995bf6de87ae5"
 dependencies = [
  "form_urlencoded",
  "idna 0.4.0",
@@ -17975,7 +17977,7 @@ name = "vector_config_generator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "clap 4.4.0",
+ "clap 4.4.1",
  "config_writer_common",
  "crossbeam",
  "crossbeam-channel",

@@ -30,6 +30,7 @@ rust_library(
     crate_name = "ic_cketh_minter",
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
+        "@crate_index//:strum_macros",
     ],
     version = "0.1.0",
     deps = [
@@ -53,6 +54,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_json",
+        "@crate_index//:strum",
     ],
 )
 

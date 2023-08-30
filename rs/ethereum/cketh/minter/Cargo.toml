@@ -38,6 +38,8 @@ num-traits = "0.2.14"
 serde = "1"
 serde_json = "1"
 serde_bytes = "0.11"
+strum = "0.23.0"
+strum_macros = "0.23.0"
 
 [dev-dependencies]
 assert_matches = "1.5.0"

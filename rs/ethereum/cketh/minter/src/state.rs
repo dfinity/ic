@@ -12,7 +12,8 @@ use ic_cdk::api::management_canister::ecdsa::EcdsaPublicKeyResponse;
 use ic_crypto_ecdsa_secp256k1::PublicKey;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use strum_macros::EnumIter;
 
 thread_local! {
     pub static STATE: RefCell<Option<State>> = RefCell::default();
@@ -24,7 +25,8 @@ pub struct State {
     pub ecdsa_key_name: String,
     pub ledger_id: Principal,
     pub ecdsa_public_key: Option<EcdsaPublicKeyResponse>,
-    pub last_seen_block_number: BlockNumber,
+    pub last_scraped_block_number: BlockNumber,
+    pub last_finalized_block_number: Option<BlockNumber>,
     pub events_to_mint: BTreeSet<ReceivedEthEvent>,
     pub minted_events: BTreeMap<EventSource, LedgerMintIndex>,
     pub invalid_events: BTreeSet<EventSource>,
@@ -35,13 +37,9 @@ pub struct State {
     #[serde(skip)]
     pub retrieve_eth_principals: BTreeSet<Principal>,
 
-    /// A lock preventing concurrent execution of the task processing retrieve_eth events.
+    /// Locks preventing concurrent execution timer tasks
     #[serde(skip)]
-    pub retrieve_eth_guarded: bool,
-
-    /// A lock preventing concurrent execution of the task minting ckETH.
-    #[serde(skip)]
-    pub cketh_mint_guarded: bool,
+    pub active_tasks: HashSet<TaskType>,
 }
 
 impl Default for State {
@@ -57,15 +55,15 @@ impl Default for State {
             // depends on the chain we are using:
             // Ethereum and Sepolia have for example different block heights at a given time.
             // https://sepolia.etherscan.io/block/3938798
-            last_seen_block_number: BlockNumber::new(3_956_206),
+            last_scraped_block_number: BlockNumber::new(3_956_206),
+            last_finalized_block_number: None,
             events_to_mint: Default::default(),
             minted_events: Default::default(),
             invalid_events: Default::default(),
             next_transaction_nonce,
             retrieve_eth_principals: BTreeSet::new(),
             pending_retrieve_eth_requests: PendingEthTransactions::new(next_transaction_nonce),
-            retrieve_eth_guarded: false,
-            cketh_mint_guarded: false,
+            active_tasks: Default::default(),
         }
     }
 }
@@ -227,4 +225,11 @@ pub async fn lazy_call_ecdsa_public_key() -> PublicKey {
     });
     mutate_state(|s| s.ecdsa_public_key = Some(response.clone()));
     to_public_key(&response)
+}
+
+#[derive(Serialize, Deserialize, Debug, Hash, Copy, Clone, PartialEq, Eq, EnumIter)]
+pub enum TaskType {
+    MintCkEth,
+    RetrieveEth,
+    ScrapEthLogs,
 }
