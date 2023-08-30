@@ -1,4 +1,5 @@
 use crate::{
+    governance::{Environment, LOG_PREFIX},
     pb::v1::{governance_error::ErrorType, GovernanceError, Neuron},
     storage::NEURON_INDEXES,
 };
@@ -52,6 +53,31 @@ impl NeuronStore {
     /// it should only be called once at pre_upgrade.
     pub fn take_heap_neurons(&mut self) -> BTreeMap<u64, Neuron> {
         std::mem::take(&mut self.heap_neurons)
+    }
+
+    pub fn new_neuron_id(&self, env: &mut dyn Environment) -> NeuronId {
+        loop {
+            let id = env
+                .random_u64()
+                // Let there be no question that id was chosen
+                // intentionally, not just 0 by default.
+                .saturating_add(1);
+            let neuron_id = NeuronId { id };
+
+            let is_unique = !self.contains(neuron_id);
+
+            if is_unique {
+                return neuron_id;
+            }
+
+            dfn_core::println!(
+                "{}WARNING: A suspiciously near-impossible event has just occurred: \
+                 we randomly picked a NeuronId, but it's already used: \
+                 {:?}. Trying again...",
+                LOG_PREFIX,
+                neuron_id,
+            );
+        }
     }
 
     /// Clones all the neurons. This is only used for testing.
