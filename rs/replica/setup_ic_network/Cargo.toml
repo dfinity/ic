@@ -32,6 +32,7 @@ ic-quic-transport = { path = "../../p2p/quic_transport" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-manager = { path = "../../state_manager" }
+ic-state-sync-manager = { path = "../../p2p/state_sync_manager" }
 ic-transport = { path = "../../transport" }
 ic-types = { path = "../../types/types" }
 parking_lot = "0.12.1"
