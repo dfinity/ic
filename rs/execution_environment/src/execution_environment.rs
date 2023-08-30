@@ -1538,6 +1538,15 @@ impl ExecutionEnvironment {
 
         let canister_state = canister(ingress.canister_id())?;
 
+        // Composite queries are not allowed to be called in replicated mode.
+        let method = WasmMethod::CompositeQuery(ingress.method_name().to_string());
+        if canister_state.exports_method(&method) {
+            return Err(UserError::new(
+                ErrorCode::CompositeQueryCalledInReplicatedMode,
+                "Composite query cannot be called in replicated mode",
+            ));
+        }
+
         // An inspect message is expected to finish quickly, so DTS is not
         // supported for it.
         let instruction_limits = InstructionLimits::new(
