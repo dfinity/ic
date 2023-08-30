@@ -721,30 +721,24 @@ impl Swap {
         // Automatically transition the state
 
         // Auto-open the swap
-        if self.can_open(heartbeat_start_seconds) {
-            if self.try_open_after_delay(heartbeat_start_seconds) {
-                log!(INFO, "Swap opened at timestamp {}", heartbeat_start_seconds);
-            }
+        if self.try_open_after_delay(heartbeat_start_seconds) {
+            log!(INFO, "Swap opened at timestamp {}", heartbeat_start_seconds);
         }
         // Auto-commit the swap
-        else if self.can_commit(heartbeat_start_seconds) {
-            if self.try_commit(heartbeat_start_seconds) {
-                log!(
-                    INFO,
-                    "Swap committed at timestamp {}",
-                    heartbeat_start_seconds
-                );
-            }
+        if self.try_commit(heartbeat_start_seconds) {
+            log!(
+                INFO,
+                "Swap committed at timestamp {}",
+                heartbeat_start_seconds
+            );
         }
         // Auto-abort the swap
-        else if self.can_abort(heartbeat_start_seconds) {
-            if self.try_abort(heartbeat_start_seconds) {
-                log!(
-                    INFO,
-                    "Swap aborted at timestamp {}",
-                    heartbeat_start_seconds
-                );
-            }
+        else if self.try_abort(heartbeat_start_seconds) {
+            log!(
+                INFO,
+                "Swap aborted at timestamp {}",
+                heartbeat_start_seconds
+            );
         }
         // Auto-finalize the swap
         // We discard the error, if there is one, because to log it would mean
