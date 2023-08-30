@@ -884,10 +884,10 @@ mod insert_or_replace {
     proptest! {
         #[test]
         fn should_insert_secret_key(seed: [u8; 32], scope in option::of(arb_scope())) {
-            let mut rng = ChaCha20Rng::from_seed(seed);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
-            let secret_key = secret_key(&mut rng);
+            let secret_key = secret_key(rng);
 
             assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope).is_ok());
 
@@ -901,13 +901,13 @@ mod insert_or_replace {
             scope_first_key in option::of(arb_scope()),
             scope_second_key in option::of(arb_scope())
         ) {
-            let mut rng = ChaCha20Rng::from_seed(seed);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
-            let first_secret_key = secret_key(&mut rng);
+            let first_secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, first_secret_key.clone(), scope_first_key).is_ok());
 
-            let second_secret_key = secret_key(&mut rng);
+            let second_secret_key = secret_key(rng);
             assert_ne!(first_secret_key, second_secret_key);
             assert!(key_store.insert_or_replace(key_id, second_secret_key.clone(), scope_second_key).is_ok());
 
@@ -921,10 +921,10 @@ mod insert_or_replace {
             scope1 in option::of(arb_scope()),
             scope2 in option::of(arb_scope())
         ) {
-            let mut rng = ChaCha20Rng::from_seed(seed);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
-            let secret_key = secret_key(&mut rng);
+            let secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, secret_key.clone(), scope1).is_ok());
 
             assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope2).is_ok());
@@ -939,9 +939,9 @@ mod insert_or_replace {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let replica_logger = ReplicaLogger::from(&in_memory_logger);
             let mut key_store = ProtoSecretKeyStore::open(temp_dir.path(), "sks_data.pb", Some(replica_logger));
-            let mut rng = ChaCha20Rng::from_seed(seed);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
             let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
-            let secret_key = secret_key(&mut rng);
+            let secret_key = secret_key(rng);
 
             assert!(key_store.insert(key_id, secret_key.clone(), scope).is_ok()); // 1 overwrite
             assert!(key_store.insert_or_replace(key_id, secret_key, scope).is_ok()); // expect 1 overwrite

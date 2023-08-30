@@ -213,7 +213,7 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
     request_id: &MessageId,
     algorithm_id: AlgorithmId,
 ) -> (BasicSigOf<MessageId>, UserPublicKey) {
-    let mut rng = &mut reproducible_rng();
+    let rng = &mut reproducible_rng();
     let bytes_to_sign = {
         let mut buf = vec![];
         buf.extend_from_slice(domain_separator);
@@ -223,7 +223,7 @@ pub fn request_id_signature_and_public_key_with_domain_separator(
     let (pk_vec, signature_bytes_vec) = {
         match algorithm_id {
             AlgorithmId::EcdsaP256 => {
-                let (sk, pk) = ecdsa_secp256r1::test_utils::new_keypair(&mut rng).unwrap();
+                let (sk, pk) = ecdsa_secp256r1::test_utils::new_keypair(rng).unwrap();
                 let msg_hash = sha256(&bytes_to_sign);
                 (
                     pk.0,

@@ -35,11 +35,11 @@ pub fn test_ni_dkg_should_work_with_all_players_acting_correctly(
     num_reshares: i32,
     csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
 ) {
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size, csp_vault_factory);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let mut state = state_with_transcript(&config, network);
-    threshold_signatures_should_work(&state.network, &config, &state.transcript, &mut rng);
+    threshold_signatures_should_work(&state.network, &config, &state.transcript, rng);
     let public_key = state.public_key();
     // Resharing
     for _ in 0..num_reshares {
@@ -48,9 +48,9 @@ pub fn test_ni_dkg_should_work_with_all_players_acting_correctly(
             transcript,
             config,
         } = state;
-        let config = MockDkgConfig::from_network(&mut rng, &network, Some((config, transcript)));
+        let config = MockDkgConfig::from_network(rng, &network, Some((config, transcript)));
         state = state_with_transcript(&config, network);
-        threshold_signatures_should_work(&state.network, &config, &state.transcript, &mut rng);
+        threshold_signatures_should_work(&state.network, &config, &state.transcript, rng);
         assert_eq!(public_key, state.public_key());
     }
 }
@@ -137,9 +137,9 @@ fn threshold_signatures_should_work(
 pub fn test_retention(csp_vault_factory: impl Fn() -> Arc<dyn CspVault>) {
     let seed = [69u8; 32];
     let network_size = 4;
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size, csp_vault_factory);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let mut state = state_with_transcript(&config, network);
 
     state.load_keys();
@@ -247,14 +247,14 @@ pub fn test_create_dealing_should_detect_errors(
     _num_reshares: i32,
     csp_vault_factory: impl Fn() -> Arc<dyn CspVault>,
 ) {
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size, csp_vault_factory);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size, csp_vault_factory);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let state = StateWithConfig { network, config };
     // Dealing errors:
-    state.deal_with_incorrect_algorithm_id_should_fail(&mut rng);
-    state.deal_with_incorrect_threshold_should_fail(&mut rng);
-    state.deal_with_incorrect_receiver_ids_should_fail(&mut rng);
+    state.deal_with_incorrect_algorithm_id_should_fail(rng);
+    state.deal_with_incorrect_threshold_should_fail(rng);
+    state.deal_with_incorrect_receiver_ids_should_fail(rng);
     // MalformedFsPublicKeyError is untested as we have no Fs keys yet.
     // SizeError is untested because of the impracticality of making over 4
     // billion receivers.

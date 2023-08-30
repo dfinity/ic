@@ -254,11 +254,10 @@ fn should_redact_tls_ed25519_secret_key_der_bytes_debug() {
 
 #[test]
 fn should_have_stable_representation_of_private_key() {
-    let mut rng = ChaCha20Rng::from_seed([0x42u8; 32]);
+    let rng = &mut ChaCha20Rng::from_seed([0x42u8; 32]);
 
-    let (_cert, sk) =
-        generate_tls_key_pair_der(&mut rng, "common name", &not_before(), &not_after())
-            .expect("generation of TLS key pair failed");
+    let (_cert, sk) = generate_tls_key_pair_der(rng, "common name", &not_before(), &not_after())
+        .expect("generation of TLS key pair failed");
 
     let serialized_sk = serde_cbor::to_vec(&sk).unwrap();
 

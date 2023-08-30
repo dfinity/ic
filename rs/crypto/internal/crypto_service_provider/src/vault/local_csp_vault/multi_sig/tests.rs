@@ -176,7 +176,7 @@ fn should_generate_verifiable_pop() {
 
 #[test]
 fn should_multi_sign_and_verify_with_generated_key() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let csp_vault = LocalCspVault::builder_for_test()
         .with_rng(rng.fork())
         .build();

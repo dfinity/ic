@@ -243,7 +243,7 @@ mod verify {
     ) -> CryptoResult<()> {
         const INPUT_SIZES: [usize; 9] = [1, 2, 3, 4, 5, 10, 30, 50, 100];
         const NUM_ITERATIONS: usize = 10;
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
 
         let corrupt_sig = |sig: &SignatureBytes| {
             let mut sig_copy = sig.to_owned();
@@ -276,9 +276,7 @@ mod verify {
                 rng.fill_bytes(&mut msg[..]);
 
                 // random secret/public key pairs
-                let key_pairs: Vec<_> = (0..input_size)
-                    .map(|_| keypair_from_rng(&mut rng))
-                    .collect();
+                let key_pairs: Vec<_> = (0..input_size).map(|_| keypair_from_rng(rng)).collect();
 
                 // correct signatures of `msg`
                 let sigs: Vec<_> = key_pairs
@@ -294,7 +292,7 @@ mod verify {
                     .collect();
 
                 // everything correct, should verify correctly
-                verify_batch(&key_sig_pairs, &msg, Seed::from_rng(&mut rng))?;
+                verify_batch(&key_sig_pairs, &msg, Seed::from_rng(rng))?;
 
                 // corrupt each signature by flipping a bit and check that both batched and non-batched verification return an error
                 {
@@ -304,7 +302,7 @@ mod verify {
                         .zip(corrupt_sigs.iter())
                         .map(|((_sk, pk), sig)| (pk, sig))
                         .collect();
-                    verify_consistent_error(&key_corrupt_sig_pairs, &msg, Seed::from_rng(&mut rng));
+                    verify_consistent_error(&key_corrupt_sig_pairs, &msg, Seed::from_rng(rng));
                 }
 
                 // corrupt one randomly selected signature by flipping a bit and check that both batched and non-batched verification return an error
@@ -318,7 +316,7 @@ mod verify {
                         .zip(corrupt_sigs.iter())
                         .map(|((_sk, pk), sig)| (pk, sig))
                         .collect();
-                    verify_consistent_error(&key_corrupt_sig_pairs, &msg, Seed::from_rng(&mut rng));
+                    verify_consistent_error(&key_corrupt_sig_pairs, &msg, Seed::from_rng(rng));
                 }
 
                 if input_size > 1 {
@@ -341,11 +339,7 @@ mod verify {
                             .zip(sigs.iter())
                             .map(|((_sk, pk), sig)| (pk, sig))
                             .collect();
-                        verify_consistent_error(
-                            &corrupt_key_sig_pairs,
-                            &msg,
-                            Seed::from_rng(&mut rng),
-                        );
+                        verify_consistent_error(&corrupt_key_sig_pairs, &msg, Seed::from_rng(rng));
                     }
 
                     // check that the verification fails for both batched and non-batched verification for swapped sigs
@@ -358,11 +352,7 @@ mod verify {
                             .zip(corrupt_sigs.iter())
                             .map(|((_sk, pk), sig)| (pk, sig))
                             .collect();
-                        verify_consistent_error(
-                            &key_corrupt_sig_pairs,
-                            &msg,
-                            Seed::from_rng(&mut rng),
-                        );
+                        verify_consistent_error(&key_corrupt_sig_pairs, &msg, Seed::from_rng(rng));
                     }
                 }
             }

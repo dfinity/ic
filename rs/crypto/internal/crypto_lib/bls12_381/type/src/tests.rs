@@ -38,20 +38,17 @@ window_extraction_works_correctly_init![1, 2, 3, 4, 5, 6, 7, 8];
 fn random_bit_indices_works_correctly() {
     const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
     const BATCH_SIZE: usize = 10;
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     assert_eq!(
-        crate::Scalar::random_bit_indices(&mut rng, 0, SCALAR_FLOORED_BIT_LENGTH),
+        crate::Scalar::random_bit_indices(rng, 0, SCALAR_FLOORED_BIT_LENGTH),
         vec![0u8; 0]
     );
 
     for num_true_bits in 1..=SCALAR_FLOORED_BIT_LENGTH {
         for _ in 0..BATCH_SIZE {
-            let mut random_indices = crate::Scalar::random_bit_indices(
-                &mut rng,
-                num_true_bits,
-                SCALAR_FLOORED_BIT_LENGTH,
-            );
+            let mut random_indices =
+                crate::Scalar::random_bit_indices(rng, num_true_bits, SCALAR_FLOORED_BIT_LENGTH);
 
             assert_eq!(random_indices.len(), num_true_bits as usize);
 
@@ -83,20 +80,20 @@ fn random_bit_indices_works_correctly() {
 #[test]
 fn random_bit_indices_works_correctly_for_overflowing_amount() {
     const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
-    let mut rng1 = ChaCha20Rng::from_seed([0; 32]);
-    let mut rng2 = ChaCha20Rng::from_seed([0; 32]);
+    let rng1 = &mut ChaCha20Rng::from_seed([0; 32]);
+    let rng2 = &mut ChaCha20Rng::from_seed([0; 32]);
 
     // `Scalar::random_bit_indices` for an overflowing `amount` should fall back
     // to the maximum value of `amount`, i.e., `SCALAR_FLOORED_BIT_LENGTH`, and
     // produce the same result for the same RNG (seed).
     assert_eq!(
         crate::Scalar::random_bit_indices(
-            &mut rng1,
+            rng1,
             SCALAR_FLOORED_BIT_LENGTH,
             SCALAR_FLOORED_BIT_LENGTH,
         ),
         crate::Scalar::random_bit_indices(
-            &mut rng2,
+            rng2,
             SCALAR_FLOORED_BIT_LENGTH + 1,
             SCALAR_FLOORED_BIT_LENGTH,
         )
@@ -106,15 +103,15 @@ fn random_bit_indices_works_correctly_for_overflowing_amount() {
 #[test]
 fn random_sparse_scalar_works_correctly_for_overflowing_num_bits() {
     const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
-    let mut rng1 = ChaCha20Rng::from_seed([0; 32]);
-    let mut rng2 = ChaCha20Rng::from_seed([0; 32]);
+    let rng1 = &mut ChaCha20Rng::from_seed([0; 32]);
+    let rng2 = &mut ChaCha20Rng::from_seed([0; 32]);
 
     // `Scalar::random_sparse` for an overflowing `num_bits` should fall back to
     // `SCALAR_FLOORED_BIT_LENGTH`, and produce the same result for the same RNG
     // (seed).
     assert_eq!(
-        crate::Scalar::random_sparse(&mut rng1, SCALAR_FLOORED_BIT_LENGTH),
-        crate::Scalar::random_sparse(&mut rng2, SCALAR_FLOORED_BIT_LENGTH + 1)
+        crate::Scalar::random_sparse(rng1, SCALAR_FLOORED_BIT_LENGTH),
+        crate::Scalar::random_sparse(rng2, SCALAR_FLOORED_BIT_LENGTH + 1)
     );
 }
 
@@ -122,10 +119,10 @@ fn random_sparse_scalar_works_correctly_for_overflowing_num_bits() {
 fn random_sparse_scalars_have_correct_hamming_weight() {
     const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
     const BATCH_SIZE: usize = 10;
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for num_true_bits in 1..SCALAR_FLOORED_BIT_LENGTH {
-        let scalars = crate::Scalar::batch_sparse_random(&mut rng, BATCH_SIZE, num_true_bits);
+        let scalars = crate::Scalar::batch_sparse_random(rng, BATCH_SIZE, num_true_bits);
 
         for s in scalars {
             let hamming_weight = s

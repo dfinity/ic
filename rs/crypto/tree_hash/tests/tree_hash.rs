@@ -2873,17 +2873,17 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data() {
     /// continuously decreases with larger tree depth
     const RANDOM_TREE_DESIRED_SIZE: u32 = 1000;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     // Minimum number of leaves in the generated random `LabeledTree`
     for min_leaves in [0, 5, 10, 15, 20] {
         let labeled_tree = new_random_labeled_tree(
-            &mut rng,
+            rng,
             RANDOM_TREE_MAX_DEPTH,
             RANDOM_TREE_DESIRED_SIZE,
             min_leaves,
         );
-        witness_for_a_labeled_tree_does_not_contain_private_data_impl(&labeled_tree, &mut rng);
+        witness_for_a_labeled_tree_does_not_contain_private_data_impl(&labeled_tree, rng);
     }
 }
 
@@ -3061,7 +3061,7 @@ fn pruning_depth_0_tree_works_correctly() {
         ]
     }
     use rand::Rng;
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     const RANDOM_TREE_MAX_DEPTH: u32 = 10;
 
     for (labeled_tree, expected_hash) in depth_0_inputs() {
@@ -3081,7 +3081,7 @@ fn pruning_depth_0_tree_works_correctly() {
             let random_tree_desired_size: u32 = rng.gen_range(1..100);
             let min_leaves = rng.gen_range(0..10);
             let other_labeled_tree = new_random_labeled_tree(
-                &mut rng,
+                rng,
                 RANDOM_TREE_MAX_DEPTH,
                 random_tree_desired_size,
                 min_leaves,
@@ -3134,7 +3134,7 @@ fn pruning_depth_0_tree_works_correctly() {
 #[test]
 fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
     use rand::Rng;
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     const RANDOM_TREE_MAX_DEPTH: u32 = 10;
     let random_tree_desired_size: u32 = rng.gen_range(1..100);
     let min_leaves = rng.gen_range(0..10);
@@ -3143,7 +3143,7 @@ fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
     };
     for _ in 0..10 {
         let labeled_tree = new_random_labeled_tree(
-            &mut rng,
+            rng,
             RANDOM_TREE_MAX_DEPTH,
             random_tree_desired_size,
             min_leaves,

@@ -107,9 +107,9 @@ fn should_panic_if_receiver_keys_dont_match_config_receivers() {
     let initial_dkg_config =
         InitialNiDkgConfig::new(&nodes_set, SUBNET_1, dkg_tag, target_id(), REG_V1);
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    initial_dkg_transcript(initial_dkg_config, &BTreeMap::new(), &mut rng);
+    initial_dkg_transcript(initial_dkg_config, &BTreeMap::new(), rng);
 }
 
 // This test acts as reminder that the CBOR representation of the

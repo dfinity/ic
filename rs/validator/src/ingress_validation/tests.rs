@@ -588,14 +588,14 @@ mod canister_id_set {
 
     #[test]
     fn should_efficiently_intersect_large_canister_id_sets() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let number_of_ids = MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION;
         let (first_canister_ids, second_canister_ids) = {
             let mut first_set = BTreeSet::new();
             let mut second_set = BTreeSet::new();
             for _ in 1..=number_of_ids {
-                assert!(first_set.insert(random_canister_id(&mut rng)));
-                assert!(second_set.insert(random_canister_id(&mut rng)));
+                assert!(first_set.insert(random_canister_id(rng)));
+                assert!(second_set.insert(random_canister_id(rng)));
             }
             (
                 CanisterIdSet::try_from_iter(first_set).expect("too many elements"),

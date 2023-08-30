@@ -113,8 +113,8 @@ mod basic_functionality {
 
         #[test]
         fn keypair_from_rng_works(seed: [u8; 32]) {
-            let mut rng = ChaCha20Rng::from_seed(seed);
-            multi_crypto::keypair_from_rng(&mut rng);
+            let rng = &mut ChaCha20Rng::from_seed(seed);
+            multi_crypto::keypair_from_rng(rng);
         }
     }
 

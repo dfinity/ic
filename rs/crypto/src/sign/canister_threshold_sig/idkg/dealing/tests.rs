@@ -31,14 +31,12 @@ mod verify_dealing_public {
 
     #[test]
     fn should_fail_on_reproducible_registry_error() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let registry_client_error = RegistryClientError::DecodeError {
             error: "decode error".to_string(),
         };
-        let setup = Setup::new_with_registry_client_get_value_error(
-            registry_client_error.clone(),
-            &mut rng,
-        );
+        let setup =
+            Setup::new_with_registry_client_get_value_error(registry_client_error.clone(), rng);
 
         assert_matches!(
             verify_dealing_public(
@@ -62,14 +60,12 @@ mod verify_dealing_public {
 
     #[test]
     fn should_fail_on_not_necessarily_reproducible_registry_error() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let registry_client_error = RegistryClientError::VersionNotAvailable {
             version: RegistryVersion::from(42),
         };
-        let setup = Setup::new_with_registry_client_get_value_error(
-            registry_client_error.clone(),
-            &mut rng,
-        );
+        let setup =
+            Setup::new_with_registry_client_get_value_error(registry_client_error.clone(), rng);
 
         assert_matches!(
             verify_dealing_public(
@@ -93,8 +89,8 @@ mod verify_dealing_public {
 
     #[test]
     fn should_fail_if_deserializing_operation_fails() {
-        let mut rng = reproducible_rng();
-        let setup = Setup::new_with_dealer(node_id(37), valid_node_signing_public_key(), &mut rng);
+        let rng = &mut reproducible_rng();
+        let setup = Setup::new_with_dealer(node_id(37), valid_node_signing_public_key(), rng);
 
         // The deserialization of the operation fails if `internal_transcript_raw` is empty
         assert_matches!(

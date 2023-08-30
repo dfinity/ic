@@ -278,8 +278,8 @@ pub use sign::{ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal
 
 /// Create MEGa encryption keypair
 pub fn gen_keypair(curve_type: EccCurveType, seed: Seed) -> (MEGaPublicKey, MEGaPrivateKey) {
-    let mut rng = seed.into_rng();
-    let private_key = MEGaPrivateKey::generate(curve_type, &mut rng);
+    let rng = &mut seed.into_rng();
+    let private_key = MEGaPrivateKey::generate(curve_type, rng);
 
     let public_key = private_key.public_key();
 

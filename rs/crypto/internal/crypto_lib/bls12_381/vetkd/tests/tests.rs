@@ -7,16 +7,16 @@ fn should_encrypted_key_share_be_functional() {
     let derivation_path = DerivationPath::new(b"canister-id", &[b"1", b"2"]);
     let did = b"message";
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let nodes = 31;
     let threshold = 11;
 
-    let poly = Polynomial::random(threshold + 1, &mut rng);
+    let poly = Polynomial::random(threshold + 1, rng);
 
-    let tsk = TransportSecretKey::generate(&mut rng);
+    let tsk = TransportSecretKey::generate(rng);
     let tpk = tsk.public_key();
-    //let (tpk, tsk) = transport_keygen(&mut rng);
+    //let (tpk, tsk) = transport_keygen(rng);
 
     let master_sk = poly.coeff(0);
     let master_pk = G2Affine::from(G2Affine::generator() * master_sk);
@@ -29,8 +29,7 @@ fn should_encrypted_key_share_be_functional() {
         let node_sk = poly.evaluate_at(&Scalar::from_node_index(node as u32));
         let node_pk = G2Affine::from(G2Affine::generator() * &node_sk);
 
-        let eks =
-            EncryptedKeyShare::create(&mut rng, &master_pk, &node_sk, &tpk, &derivation_path, did);
+        let eks = EncryptedKeyShare::create(rng, &master_pk, &node_sk, &tpk, &derivation_path, did);
 
         assert!(eks.is_valid(&master_pk, &node_pk, &derivation_path, did, &tpk));
 

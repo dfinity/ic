@@ -40,10 +40,10 @@ fn mega_key_generation() -> ThresholdEcdsaResult<()> {
 
 #[test]
 fn mega_key_validity() -> ThresholdEcdsaResult<()> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let sk = MEGaPrivateKey::generate(curve_type, &mut rng);
+        let sk = MEGaPrivateKey::generate(curve_type, rng);
         let pk = sk.public_key();
 
         let mut pk_bytes = pk.serialize();
@@ -73,22 +73,22 @@ fn mega_key_validity() -> ThresholdEcdsaResult<()> {
 fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
-    let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let a_sk = MEGaPrivateKey::generate(curve, rng);
+    let b_sk = MEGaPrivateKey::generate(curve, rng);
 
     let a_pk = a_sk.public_key();
     let b_pk = b_sk.public_key();
 
     let associated_data = b"assoc_data_test";
 
-    let ptext_for_a = EccScalar::random(curve, &mut rng);
-    let ptext_for_b = EccScalar::random(curve, &mut rng);
+    let ptext_for_a = EccScalar::random(curve, rng);
+    let ptext_for_b = EccScalar::random(curve, rng);
 
     let dealer_index = 0;
 
-    let seed = Seed::from_rng(&mut rng);
+    let seed = Seed::from_rng(rng);
 
     let ctext = MEGaCiphertextSingle::encrypt(
         seed,
@@ -119,26 +119,20 @@ fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
 fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
-    let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let a_sk = MEGaPrivateKey::generate(curve, rng);
+    let b_sk = MEGaPrivateKey::generate(curve, rng);
 
     let a_pk = a_sk.public_key();
     let b_pk = b_sk.public_key();
 
     let associated_data = b"assoc_data_test";
 
-    let ptext_for_a = (
-        EccScalar::random(curve, &mut rng),
-        EccScalar::random(curve, &mut rng),
-    );
-    let ptext_for_b = (
-        EccScalar::random(curve, &mut rng),
-        EccScalar::random(curve, &mut rng),
-    );
+    let ptext_for_a = (EccScalar::random(curve, rng), EccScalar::random(curve, rng));
+    let ptext_for_b = (EccScalar::random(curve, rng), EccScalar::random(curve, rng));
 
-    let seed = Seed::from_rng(&mut rng);
+    let seed = Seed::from_rng(rng);
 
     let dealer_index = 0;
 
@@ -163,22 +157,22 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
 fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
-    let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let a_sk = MEGaPrivateKey::generate(curve, rng);
+    let b_sk = MEGaPrivateKey::generate(curve, rng);
 
     let a_pk = a_sk.public_key();
     let b_pk = b_sk.public_key();
 
     let ad = b"assoc_data_test";
 
-    let ptext_for_a = EccScalar::random(curve, &mut rng);
-    let ptext_for_b = EccScalar::random(curve, &mut rng);
+    let ptext_for_a = EccScalar::random(curve, rng);
+    let ptext_for_b = EccScalar::random(curve, rng);
 
     let dealer_index = 0;
 
-    let seed = Seed::from_rng(&mut rng);
+    let seed = Seed::from_rng(rng);
 
     let ctext = MEGaCiphertextSingle::encrypt(
         seed,
@@ -215,9 +209,9 @@ fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
 fn mega_private_key_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let sk = MEGaPrivateKey::generate(curve, rng);
 
     let log = format!("{:?}", sk);
     assert_eq!("MEGaPrivateKey(EccScalar::K256) - REDACTED", log);
@@ -229,9 +223,9 @@ fn mega_private_key_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
 fn mega_private_key_bytes_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
     let curve = EccCurveType::K256;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let sk = MEGaPrivateKey::generate(curve, rng);
 
     let bytes = MEGaPrivateKeyK256Bytes::try_from(&sk).expect("Deserialization failed");
 
@@ -248,9 +242,9 @@ mod mega_cipher_text {
 
     #[test]
     fn should_decrypt_to_different_plaintext_when_secret_key_wrong() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         for ctext_type in MEGaCiphertextType::iter() {
-            let setup = Setup::new(&mut rng, ctext_type);
+            let setup = Setup::new(rng, ctext_type);
 
             let ptext_a = decrypt(
                 setup.ctext,
@@ -268,9 +262,9 @@ mod mega_cipher_text {
 
     #[test]
     fn should_fail_if_decrypt_of_ciphertext_fails_due_to_dealer_index_mismatch() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         for ctext_type in MEGaCiphertextType::iter() {
-            let setup = Setup::new(&mut rng, ctext_type);
+            let setup = Setup::new(rng, ctext_type);
             let invalid_dealer_index = 47;
 
             assert_eq!(
@@ -289,9 +283,9 @@ mod mega_cipher_text {
 
     #[test]
     fn should_fail_if_decrypt_of_ciphertext_fails_due_to_recipient_index_out_of_bounds() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         for ctext_type in MEGaCiphertextType::iter() {
-            let setup = Setup::new(&mut rng, ctext_type);
+            let setup = Setup::new(rng, ctext_type);
             // only a single recipient, so any index > 0 is invalid
             let invalid_recipient_index = 1;
 
@@ -313,11 +307,11 @@ mod mega_cipher_text {
 
     #[test]
     fn should_fail_if_decrypt_of_ciphertext_fails_due_to_secret_key_curve_mismatch() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         for ctext_type in MEGaCiphertextType::iter() {
-            let setup = Setup::new(&mut rng, ctext_type);
+            let setup = Setup::new(rng, ctext_type);
             let another_curve = EccCurveType::P256;
-            let b_sk = MEGaPrivateKey::generate(another_curve, &mut rng);
+            let b_sk = MEGaPrivateKey::generate(another_curve, rng);
 
             assert_eq!(
                 decrypt(

@@ -47,28 +47,26 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
         },
     ];
 
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
         group
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
-        IDkgMode::iter().for_each(|mode| bench_create_dealing(group, &test_case, &mode, &mut rng));
+        IDkgMode::iter().for_each(|mode| bench_create_dealing(group, &test_case, &mode, rng));
         IDkgMode::iter()
-            .for_each(|mode| bench_verify_dealing_public(group, &test_case, &mode, &mut rng));
+            .for_each(|mode| bench_verify_dealing_public(group, &test_case, &mode, rng));
         IDkgMode::iter()
-            .for_each(|mode| bench_verify_dealing_private(group, &test_case, &mode, &mut rng));
+            .for_each(|mode| bench_verify_dealing_private(group, &test_case, &mode, rng));
 
-        bench_verify_initial_dealings(group, &test_case, &mut rng);
+        bench_verify_initial_dealings(group, &test_case, rng);
 
-        IDkgMode::iter()
-            .for_each(|mode| bench_create_transcript(group, &test_case, &mode, &mut rng));
-        IDkgMode::iter()
-            .for_each(|mode| bench_verify_transcript(group, &test_case, &mode, &mut rng));
-        IDkgMode::iter().for_each(|mode| bench_load_transcript(group, &test_case, &mode, &mut rng));
+        IDkgMode::iter().for_each(|mode| bench_create_transcript(group, &test_case, &mode, rng));
+        IDkgMode::iter().for_each(|mode| bench_verify_transcript(group, &test_case, &mode, rng));
+        IDkgMode::iter().for_each(|mode| bench_load_transcript(group, &test_case, &mode, rng));
 
-        bench_retain_active_transcripts(group, &test_case, 1, &mut rng);
+        bench_retain_active_transcripts(group, &test_case, 1, rng);
     }
 }
 

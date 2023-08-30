@@ -188,7 +188,7 @@ mod public_coefficients {
 
     #[test]
     fn test_lagrange_coefficients_at_zero_rejects_duplicate_points() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
 
         for num_coefficients in 1..50 {
             let mut inputs = vec![];
