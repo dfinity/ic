@@ -16,7 +16,9 @@ use ic_cketh_minter::eth_rpc_client::EthRpcClient;
 use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
-use ic_cketh_minter::state::{mutate_state, read_state, State, TaskType, STATE};
+use ic_cketh_minter::state::{
+    lazy_call_ecdsa_public_key, mutate_state, read_state, State, TaskType, STATE,
+};
 use ic_cketh_minter::transactions::PendingEthTransaction;
 use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
 use ic_cketh_minter::{eth_logs, eth_rpc};
@@ -51,6 +53,12 @@ fn init(arg: MinterArg) {
 }
 
 fn setup_timers() {
+    ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+        // Initialize the minter's public key to make the address known.
+        ic_cdk::spawn(async {
+            let _ = lazy_call_ecdsa_public_key().await;
+        })
+    });
     ic_cdk_timers::set_timer_interval(SCRAPPING_ETH_LOGS_INTERVAL, || {
         ic_cdk::spawn(scrap_eth_logs())
     });
@@ -284,7 +292,6 @@ fn pre_upgrade() {
 #[update]
 #[candid_method(update)]
 async fn minter_address() -> String {
-    use ic_cketh_minter::state::lazy_call_ecdsa_public_key;
     let pubkey = lazy_call_ecdsa_public_key().await;
     Address::from_pubkey(&pubkey).to_string()
 }
