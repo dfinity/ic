@@ -403,7 +403,8 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
         // into the system, hence their cost is 300. Memory Size and Table Size are
         // cheaper, their cost is 20. Results validated in benchmarks.
         Operator::TableGrow { .. } | Operator::MemoryGrow { .. } => 300,
-        Operator::TableSize { .. } | Operator::MemorySize { .. } => 20,
+        Operator::MemorySize { .. } => 20,
+        Operator::TableSize { .. } => 100,
 
         // Bulk memory ops are of cost 100. They are heavy operations because
         // they are translated into function calls in the x86 dissasembly. Validated
@@ -419,11 +420,9 @@ pub fn instruction_to_cost_new(i: &Operator) -> u64 {
         Operator::DataDrop { .. } | Operator::ElemDrop { .. } => 300,
 
         // Call instructions are of cost 20. Validated in benchmarks.
-        // The cost is adjusted to 10 after benchmarking with real canisters.
-        Operator::Call { .. }
-        | Operator::CallIndirect { .. }
-        | Operator::ReturnCall { .. }
-        | Operator::ReturnCallIndirect { .. } => 10,
+        // The cost is adjusted to 5 and 10 after benchmarking with real canisters.
+        Operator::Call { .. } => 5,
+        Operator::CallIndirect { .. } => 10,
 
         // Return, drop, unreachable and nop instructions are of cost 1.
         Operator::Return { .. } | Operator::Drop | Operator::Unreachable | Operator::Nop => 1,
