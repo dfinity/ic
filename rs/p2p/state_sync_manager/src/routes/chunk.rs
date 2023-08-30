@@ -18,7 +18,7 @@ use ic_types::{
 };
 use prost::Message;
 
-pub const STATE_SYNC_CHUNK_PATH: &str = "/chunk";
+pub const STATE_SYNC_CHUNK_PATH: &str = "/state-sync/chunk";
 
 pub(crate) struct StateSyncChunkHandler {
     _log: ReplicaLogger,
