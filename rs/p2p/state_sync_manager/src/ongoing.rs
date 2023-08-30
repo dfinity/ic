@@ -39,7 +39,7 @@ use tokio::{
 };
 
 // TODO: NET-1461 find appropriate value for the parallelism
-const PARALLEL_CHUNK_DOWNLOADS: usize = 50;
+const PARALLEL_CHUNK_DOWNLOADS: usize = 10;
 const ONGOING_STATE_SYNC_CHANNEL_SIZE: usize = 200;
 const CHUNK_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(10);
 /// Same reasoning as old state sync mechanism:
