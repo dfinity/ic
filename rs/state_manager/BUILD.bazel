@@ -54,6 +54,7 @@ rust_library(
 
 rust_test(
     name = "state_manager_lib_tests",
+    timeout = "long",
     crate = ":state_manager",
     deps = [
         "//rs/registry/routing_table",
@@ -75,6 +76,7 @@ rust_test(
 
 rust_test(
     name = "state_manager_integration_test",
+    timeout = "long",
     srcs = [
         "tests/common/mod.rs",
         "tests/state_manager.rs",
