@@ -526,10 +526,6 @@ name = "ic-systest-query-workload-long-test"
 path = "networking/query_workload_long_test.rs"
 
 [[bin]]
-name = "ic-systest-update-workload-long-test"
-path = "networking/update_workload_long_test.rs"
-
-[[bin]]
 name = "ic-systest-update-workload-large-payload"
 path = "networking/update_workload_large_payload.rs"
 
