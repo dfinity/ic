@@ -2049,8 +2049,8 @@ benchmarks:
           .rev = $rev |
           .revCount = 1' \
           > report.json
-        curl --fail --retry 2 -sS -o /dev/null -H 'Content-Type: application/json' --data @report.json \
-          "https://elasticsearch.testnet.dfinity.network/ci-performance-test/properties?pretty"
+        curl --fail --retry 2 -sS -o /dev/null -X POST -H 'Content-Type: application/json' --data @report.json \
+          "https://elasticsearch.testnet.dfinity.network/ci-performance-test/_doc"
       done < <(find -L ./bazel-out -type d -path '*/new')
   tags:
     - rust-benchmarks
