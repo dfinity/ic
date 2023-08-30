@@ -1,11 +1,12 @@
 use atomic_counter::{AtomicCounter, ConsistentCounter};
-use axum::extract::State;
-use axum::routing::post;
-use axum::{extract::Path, http::StatusCode, routing::get, Router, Server};
 use axum::{
+    extract::{Path, State},
     http,
+    http::StatusCode,
     middleware::{self, Next},
     response::Response,
+    routing::{delete, get, post},
+    Router, Server,
 };
 use clap::Parser;
 use ic_config::execution_environment;
@@ -136,10 +137,13 @@ async fn start(runtime: Arc<Runtime>) {
         // List all checkpoints.
         .route("/checkpoints", get(list_checkpoints))
         //
-        // Creates a new instance from an existing checkpoint
+        // Creates a new instance from an existing checkpoint.
         // Takes a name:String in the request body.
         // Returns an instance_id.
         .route("/checkpoints/load", post(load_checkpoint))
+        //
+        // Deletes an instance.
+        .route("/instances/:id/delete", delete(delete_instance))
         .route_layer(middleware::from_fn_with_state(
             app_state.clone(),
             bump_last_request_timestamp,
@@ -296,7 +300,7 @@ async fn call_instance(
     } else {
         // id not found in map; return error
         // TODO: Result Type for this call
-        format!("Id {} was not found in instance map.", id)
+        format!("Instance with ID {} was not found.", &id)
     }
 }
 
@@ -326,7 +330,7 @@ async fn save_checkpoint(
     } else {
         // id not found in map; return error
         // TODO: Result Type for this call
-        format!("Id {} was not found in instance map.", id)
+        format!("Instance with ID {} was not found.", &id)
     }
 }
 
@@ -356,6 +360,15 @@ async fn load_checkpoint(
     let instance_id = counter.inc().to_string();
     instance_map.insert(instance_id.clone(), RwLock::new(sm));
     instance_id
+}
+
+async fn delete_instance(
+    State(instance_map): State<InstanceMap>,
+    Path(id): Path<InstanceId>,
+) -> String {
+    let mut guard = instance_map.write().await;
+    let _ = guard.remove(&id);
+    id
 }
 
 // ----------------------------------------------------------------------------------------------------------------- //
