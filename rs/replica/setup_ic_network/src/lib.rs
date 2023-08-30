@@ -77,6 +77,8 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+const ENABLE_NEW_STATE_SYNC: bool = false;
+
 /// The P2P state sync client.
 pub enum P2PStateSyncClient {
     /// The main client variant.
@@ -206,7 +208,7 @@ pub fn setup_consensus_and_p2p(
     );
 
     // StateSync
-    match state_sync_client {
+    let (state_sync_router, state_sync_client) = match state_sync_client {
         P2PStateSyncClient::TestChunkingPool(pool_reader, client_on_state_change) => {
             std::mem::take(&mut backends);
             std::mem::take(&mut join_handles);
@@ -229,6 +231,19 @@ pub fn setup_consensus_and_p2p(
                     time_source,
                 }),
             );
+            (None, None)
+        }
+        P2PStateSyncClient::Client(client) if ENABLE_NEW_STATE_SYNC => {
+            let state_sync_client = Arc::new(client);
+            let (router, state_sync_manager_rx) = ic_state_sync_manager::build_axum_router(
+                state_sync_client.clone(),
+                log.clone(),
+                metrics_registry,
+            );
+            (
+                Some(router),
+                Some((state_sync_client, state_sync_manager_rx)),
+            )
         }
         P2PStateSyncClient::Client(client) => {
             let advert_tx = advert_tx.clone();
@@ -249,9 +264,11 @@ pub fn setup_consensus_and_p2p(
                     time_source: time_source.clone(),
                 }),
             );
+
+            (None, None)
         }
-        P2PStateSyncClient::TestClient() => (),
-    }
+        P2PStateSyncClient::TestClient() => (None, None),
+    };
 
     let sev_handshake = Arc::new(Sev::new(node_id, registry_client.clone()));
 
@@ -270,7 +287,7 @@ pub fn setup_consensus_and_p2p(
         transport_config.listening_port,
     )
         .into();
-    let _quic_transport = Arc::new(ic_quic_transport::QuicTransport::build(
+    let quic_transport = Arc::new(ic_quic_transport::QuicTransport::build(
         log,
         metrics_registry,
         rt_handle.clone(),
@@ -280,8 +297,19 @@ pub fn setup_consensus_and_p2p(
         node_id,
         topology_watcher,
         Either::<_, DummyUdpSocket>::Left(transport_addr),
-        None,
+        state_sync_router,
     ));
+
+    if let Some((state_sync_client, state_sync_manager_rx)) = state_sync_client {
+        let _state_sync_manager = ic_state_sync_manager::start_state_sync_manager(
+            log.clone(),
+            metrics_registry,
+            rt_handle,
+            quic_transport,
+            state_sync_client,
+            state_sync_manager_rx,
+        );
+    }
 
     // Tcp transport
     let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();

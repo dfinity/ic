@@ -9830,6 +9830,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-replicated-state",
  "ic-state-manager",
+ "ic-state-sync-manager",
  "ic-transport",
  "ic-types",
  "parking_lot 0.12.1",
