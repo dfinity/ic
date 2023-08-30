@@ -2049,7 +2049,7 @@ benchmarks:
           .rev = $rev |
           .revCount = 1' \
           > report.json
-        curl -sS -o /dev/null -H 'Content-Type: application/json' --data @report.json \
+        curl --fail --retry 2 -sS -o /dev/null -H 'Content-Type: application/json' --data @report.json \
           "https://elasticsearch.testnet.dfinity.network/ci-performance-test/properties?pretty"
       done < <(find -L ./bazel-out -type d -path '*/new')
   tags:
