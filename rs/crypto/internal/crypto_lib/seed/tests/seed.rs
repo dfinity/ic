@@ -4,7 +4,7 @@ use rand::RngCore;
 #[test]
 fn seed_fixed_output() {
     fn test_seed_output(seed: Seed, expected: &str) {
-        let mut rng = seed.into_rng();
+        let rng = &mut seed.into_rng();
 
         let mut rng_output = vec![0u8; expected.len() / 2];
         rng.fill_bytes(&mut rng_output);
@@ -35,17 +35,17 @@ fn seed_fixed_output() {
         "545e10f21a984c7f33a03ffb1be596ae967f7b397fd086d76ccf71b3f2a43ef3",
     );
 
-    let mut rng = Seed::from_bytes(&[42; 32]).into_rng();
+    let rng = &mut Seed::from_bytes(&[42; 32]).into_rng();
 
     test_seed_output(
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
         "2e7af894bb91c48e2b72be9627dbc960d7800ef7569c8f6f0f3d9873c7337c9a",
     );
 
     // This reads the next bytes from the RNG and so has a different
     // output than the previous test
     test_seed_output(
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
         "2bb9a6469fff531083abd8f85c3d7ffa78090f725546a9633a35c0c4582c9b5c",
     );
 }

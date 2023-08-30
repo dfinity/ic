@@ -26,9 +26,9 @@ lazy_static! {
     pub static ref STATE_WITH_TRANSCRIPT: Mutex<StateWithTranscript> = {
         let seed = [69u8; 32];
         let network_size = 4;
-        let mut rng = ChaCha20Rng::from_seed(seed);
-        let network = MockNetwork::random(&mut rng, network_size);
-        let config = MockDkgConfig::from_network(&mut rng, &network, None);
+        let rng = &mut ChaCha20Rng::from_seed(seed);
+        let network = MockNetwork::random(rng, network_size);
+        let config = MockDkgConfig::from_network(rng, &network, None);
         let state = state_with_transcript(&config, network);
         Mutex::new(state)
     };

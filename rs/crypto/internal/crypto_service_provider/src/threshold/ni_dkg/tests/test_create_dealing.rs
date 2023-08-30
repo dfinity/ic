@@ -22,14 +22,14 @@ fn test_create_dealing_should_detect_errors(
     network_size: usize,
     _num_reshares: i32,
 ) {
-    let mut rng = ChaCha20Rng::from_seed(seed);
-    let network = MockNetwork::random(&mut rng, network_size);
-    let config = MockDkgConfig::from_network(&mut rng, &network, None);
+    let rng = &mut ChaCha20Rng::from_seed(seed);
+    let network = MockNetwork::random(rng, network_size);
+    let config = MockDkgConfig::from_network(rng, &network, None);
     let state = StateWithConfig { network, config };
     // Dealing errors:
-    state.deal_with_incorrect_algorithm_id_should_fail(&mut rng);
-    state.deal_with_incorrect_threshold_should_fail(&mut rng);
-    state.deal_with_incorrect_receiver_ids_should_fail(&mut rng);
+    state.deal_with_incorrect_algorithm_id_should_fail(rng);
+    state.deal_with_incorrect_threshold_should_fail(rng);
+    state.deal_with_incorrect_receiver_ids_should_fail(rng);
     // MalformedFsPublicKeyError is untested as we have no Fs keys yet.
     // SizeError is untested because of the impracticality of making over 4
     // billion receivers.

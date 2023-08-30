@@ -8,12 +8,12 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
     let curve = EccCurveType::K256;
     let associated_data = b"assoc_data_test";
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk0 = MEGaPrivateKey::generate(curve, &mut rng);
+    let sk0 = MEGaPrivateKey::generate(curve, rng);
     let pk0 = sk0.public_key();
 
-    let sk1 = MEGaPrivateKey::generate(curve, &mut rng);
+    let sk1 = MEGaPrivateKey::generate(curve, rng);
     let pk1 = sk1.public_key();
 
     let dealer_index = 0;
@@ -22,7 +22,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
     let dealing = IDkgDealingInternal::new(
         &SecretShares::Random,
         curve,
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
         threshold,
         &[pk0.clone(), pk1.clone()],
         dealer_index,
@@ -35,7 +35,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
 
     dealings.insert(
         dealer_index,
-        test_utils::corrupt_dealing(&dealing, &[corruption_target], Seed::from_rng(&mut rng))?,
+        test_utils::corrupt_dealing(&dealing, &[corruption_target], Seed::from_rng(rng))?,
     );
 
     let complaints = generate_complaints(
@@ -44,7 +44,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
         corruption_target,
         &sk0,
         &pk0,
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
     )
     .expect("failed to generate complaints");
 
@@ -173,7 +173,7 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
     let dealing2 = IDkgDealingInternal::new(
         &SecretShares::Random,
         curve,
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
         threshold,
         &[pk0.clone(), pk1],
         dealer_index,
@@ -209,9 +209,9 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
     let curve = EccCurveType::K256;
     let associated_data = b"assoc_data_test";
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let sk = MEGaPrivateKey::generate(curve, rng);
     let pk = sk.public_key();
 
     let dealer_index = 0;
@@ -221,7 +221,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
     let dealing = IDkgDealingInternal::new(
         &SecretShares::Random,
         curve,
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
         threshold,
         &[pk.clone()],
         dealer_index,
@@ -229,7 +229,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
     )?;
 
     let complaint = IDkgComplaintInternal::new(
-        Seed::from_rng(&mut rng),
+        Seed::from_rng(rng),
         &dealing,
         dealer_index,
         receiver_index,

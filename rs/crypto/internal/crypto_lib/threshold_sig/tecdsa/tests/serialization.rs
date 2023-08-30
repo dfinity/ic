@@ -286,11 +286,11 @@ fn mega_k256_keyset_serialization_is_stable() -> Result<(), ThresholdEcdsaError>
 
 #[test]
 fn commitment_opening_k256_serialization_is_stable() -> Result<(), ThresholdEcdsaError> {
-    let mut rng =
-        Seed::from_bytes(b"ic-crypto-commitment-opening-serialization-stabilty-test").into_rng();
+    let rng = &mut Seed::from_bytes(b"ic-crypto-commitment-opening-serialization-stabilty-test")
+        .into_rng();
 
-    let s1 = EccScalar::random(EccCurveType::K256, &mut rng);
-    let s2 = EccScalar::random(EccCurveType::K256, &mut rng);
+    let s1 = EccScalar::random(EccCurveType::K256, rng);
+    let s2 = EccScalar::random(EccCurveType::K256, rng);
 
     assert_eq!(
         hex::encode(s1.serialize()),

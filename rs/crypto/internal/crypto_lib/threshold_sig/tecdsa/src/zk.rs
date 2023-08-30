@@ -98,8 +98,8 @@ impl ProofOfEqualOpenings {
         let instance = ProofOfEqualOpeningsInstance::from_witness(secret, masking)?;
 
         // Create the blinding commitment
-        let mut rng = seed.into_rng();
-        let r = EccScalar::random(instance.curve_type, &mut rng);
+        let rng = &mut seed.into_rng();
+        let r = EccScalar::random(instance.curve_type, rng);
         let r_com = instance.h.scalar_mul(&r)?;
 
         // Create challenge
@@ -257,12 +257,12 @@ impl ProofOfProduct {
             ProofOfProductInstance::from_witness(lhs, rhs, rhs_masking, product, product_masking)?;
 
         // Compute blinding commitments:
-        let mut rng = seed.into_rng();
+        let rng = &mut seed.into_rng();
 
-        let r1 = EccScalar::random(instance.curve_type, &mut rng);
+        let r1 = EccScalar::random(instance.curve_type, rng);
         let r1_com = instance.g.scalar_mul(&r1)?;
 
-        let r2 = EccScalar::random(instance.curve_type, &mut rng);
+        let r2 = EccScalar::random(instance.curve_type, rng);
         let r2_com = EccPoint::mul_2_points(&instance.rhs_com, &r1, &instance.h, &r2)?;
 
         // Compute the challenge:
@@ -395,8 +395,8 @@ impl ProofOfDLogEquivalence {
         let instance = ProofOfDLogEquivalenceInstance::from_witness(g, h, x)?;
 
         // Compute blinding commitments:
-        let mut rng = seed.into_rng();
-        let r = EccScalar::random(instance.curve_type, &mut rng);
+        let rng = &mut seed.into_rng();
+        let r = EccScalar::random(instance.curve_type, rng);
         let r_com_g = g.scalar_mul(&r)?;
         let r_com_h = h.scalar_mul(&r)?;
 

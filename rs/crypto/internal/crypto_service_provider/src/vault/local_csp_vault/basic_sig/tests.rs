@@ -175,7 +175,7 @@ fn should_correctly_sign_compared_to_testvec() {
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     let key_id = rng.gen::<[u8; 32]>();
 
@@ -206,9 +206,9 @@ fn should_correctly_sign_compared_to_testvec() {
 #[test]
 fn should_sign_verifiably_with_generated_node_signing_key() {
     let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
     let msg_len_in_bytes = rng.gen_range(0..1024);
-    let message = random_message(&mut rng, msg_len_in_bytes);
+    let message = random_message(rng, msg_len_in_bytes);
 
     generate_key_pair_and_sign_and_verify_message(csp_vault, &message);
 }

@@ -26,9 +26,9 @@ fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), Key
 
 #[test]
 fn test_sign_prehash_works_with_any_size_input_gte_16() {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk = PrivateKey::generate_using_rng(&mut rng);
+    let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
 
     for i in 0..16 {
@@ -87,9 +87,9 @@ fn should_reject_long_x_when_deserializing_private_key() {
 fn should_accept_signatures_that_we_generate() {
     use rand::RngCore;
 
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
-    let sk = PrivateKey::generate_using_rng(&mut rng);
+    let sk = PrivateKey::generate_using_rng(rng);
     let pk = sk.public_key();
 
     for m in 0..100 {
@@ -129,10 +129,10 @@ fn should_reject_high_s_in_signature_unless_malleable() -> Result<(), KeyDecodin
 #[test]
 fn should_serialization_and_deserialization_round_trip_for_private_keys(
 ) -> Result<(), KeyDecodingError> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..200 {
-        let key = PrivateKey::generate_using_rng(&mut rng);
+        let key = PrivateKey::generate_using_rng(rng);
 
         let key_via_sec1 = PrivateKey::deserialize_sec1(&key.serialize_sec1())?;
         let key_via_5915_der = PrivateKey::deserialize_rfc5915_der(&key.serialize_rfc5915_der())?;
@@ -155,10 +155,10 @@ fn should_serialization_and_deserialization_round_trip_for_private_keys(
 #[test]
 fn should_serialization_and_deserialization_round_trip_for_public_keys(
 ) -> Result<(), KeyDecodingError> {
-    let mut rng = reproducible_rng();
+    let rng = &mut reproducible_rng();
 
     for _ in 0..2000 {
-        let key = PrivateKey::generate_using_rng(&mut rng).public_key();
+        let key = PrivateKey::generate_using_rng(rng).public_key();
 
         let key_via_sec1 = PublicKey::deserialize_sec1(&key.serialize_sec1(false))?;
         let key_via_sec1c = PublicKey::deserialize_sec1(&key.serialize_sec1(true))?;
@@ -209,8 +209,8 @@ mod try_recovery_from_digest {
 
     #[test]
     fn should_fail_when_signature_not_parsable() {
-        let mut rng = reproducible_rng();
-        let public_key = PrivateKey::generate_using_rng(&mut rng).public_key();
+        let rng = &mut reproducible_rng();
+        let public_key = PrivateKey::generate_using_rng(rng).public_key();
 
         let recid = public_key.try_recovery_from_digest(&[0], &[0_u8; 64]);
 
@@ -224,8 +224,8 @@ mod try_recovery_from_digest {
 
     #[test]
     fn should_recover_public_key_from_y_parity() {
-        let mut rng = reproducible_rng();
-        let private_key = PrivateKey::generate_using_rng(&mut rng);
+        let rng = &mut reproducible_rng();
+        let private_key = PrivateKey::generate_using_rng(rng);
         let public_key = private_key.public_key();
         let digest = rng.gen::<[u8; 32]>();
         let signature = private_key

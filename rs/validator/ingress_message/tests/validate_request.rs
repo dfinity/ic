@@ -44,10 +44,10 @@ mod ingress_expiry {
 
     #[test]
     fn should_error_when_request_expired() {
-        let mut rng = ReproducibleRng::new();
+        let rng = &mut ReproducibleRng::new();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
-        for scheme in all_authentication_schemes(&mut rng) {
+        for scheme in all_authentication_schemes(rng) {
             test(
                 &verifier,
                 HttpRequestBuilder::new_update_call(),
@@ -87,8 +87,8 @@ mod ingress_expiry {
     #[test]
     fn should_error_when_request_expiry_too_far_in_future() {
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let mut rng = ReproducibleRng::new();
-        for scheme in all_authentication_schemes(&mut rng) {
+        let rng = &mut ReproducibleRng::new();
+        for scheme in all_authentication_schemes(rng) {
             test(
                 &verifier,
                 HttpRequestBuilder::new_update_call(),
@@ -127,7 +127,7 @@ mod ingress_expiry {
 
     #[test]
     fn should_accept_request_when_expiry_within_acceptable_bounds() {
-        let mut rng = ReproducibleRng::new();
+        let rng = &mut ReproducibleRng::new();
         let verifier = default_verifier()
             .with_root_of_trust(hard_coded_root_of_trust().public_key)
             .build();
@@ -136,7 +136,7 @@ mod ingress_expiry {
                 ..=max_ingress_expiry_at(CURRENT_TIME).as_nanos_since_unix_epoch(),
         ));
 
-        for scheme in all_authentication_schemes(&mut rng) {
+        for scheme in all_authentication_schemes(rng) {
             test(
                 &verifier,
                 HttpRequestBuilder::new_update_call(),
@@ -192,9 +192,9 @@ mod read_state_request {
 
     #[test]
     fn should_validate_read_state_requests_with_allowed_width_and_depth_of_paths() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let paths = random_paths(
-            &mut rng,
+            rng,
             0..=MAXIMUM_NUMBER_OF_PATHS,
             0..=MAXIMUM_NUMBER_OF_LABELS_PER_PATH,
         );
@@ -202,7 +202,7 @@ mod read_state_request {
             .with_root_of_trust(hard_coded_root_of_trust().public_key)
             .build();
 
-        for scheme in all_authentication_schemes(&mut rng) {
+        for scheme in all_authentication_schemes(rng) {
             let request = HttpRequestBuilder::new_read_state()
                 .with_authentication(scheme)
                 .with_ingress_expiry_at(max_ingress_expiry_at(CURRENT_TIME))
@@ -217,11 +217,11 @@ mod read_state_request {
 
     #[test]
     fn should_validate_read_state_request_with_paths_width_and_depth_at_boundaries() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let paths_to_test: Vec<Vec<Path>> = vec![
             vec![],
             random_paths(
-                &mut rng,
+                rng,
                 MAXIMUM_NUMBER_OF_PATHS..=MAXIMUM_NUMBER_OF_PATHS,
                 MAXIMUM_NUMBER_OF_LABELS_PER_PATH..=MAXIMUM_NUMBER_OF_LABELS_PER_PATH,
             ),
@@ -231,7 +231,7 @@ mod read_state_request {
             .build();
 
         for paths in paths_to_test {
-            for scheme in all_authentication_schemes(&mut rng) {
+            for scheme in all_authentication_schemes(rng) {
                 let request = HttpRequestBuilder::new_read_state()
                     .with_authentication(scheme)
                     .with_ingress_expiry_at(max_ingress_expiry_at(CURRENT_TIME))
@@ -247,20 +247,20 @@ mod read_state_request {
 
     #[test]
     fn should_fail_when_single_path_too_deep() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let (paths_with_one_too_deep, depth) = {
             let mut paths = random_paths(
-                &mut rng,
+                rng,
                 0..=MAXIMUM_NUMBER_OF_PATHS - 1,
                 0..=MAXIMUM_NUMBER_OF_LABELS_PER_PATH,
             );
             let path_too_deep = random_path(
-                &mut rng,
+                rng,
                 MAXIMUM_NUMBER_OF_LABELS_PER_PATH + 1..=2 * MAXIMUM_NUMBER_OF_LABELS_PER_PATH,
             );
             let depth = path_too_deep.len();
             paths.push(path_too_deep);
-            paths.shuffle(&mut rng);
+            paths.shuffle(rng);
             assert!(paths.len() <= MAXIMUM_NUMBER_OF_PATHS);
             (paths, depth)
         };
@@ -268,7 +268,7 @@ mod read_state_request {
             .with_root_of_trust(hard_coded_root_of_trust().public_key)
             .build();
 
-        for scheme in all_authentication_schemes(&mut rng) {
+        for scheme in all_authentication_schemes(rng) {
             let request = HttpRequestBuilder::new_read_state()
                 .with_authentication(scheme)
                 .with_ingress_expiry_at(max_ingress_expiry_at(CURRENT_TIME))
@@ -289,9 +289,9 @@ mod read_state_request {
 
     #[test]
     fn should_fail_when_too_many_paths() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let paths = random_paths(
-            &mut rng,
+            rng,
             MAXIMUM_NUMBER_OF_PATHS + 1..=2 * MAXIMUM_NUMBER_OF_PATHS,
             0..=MAXIMUM_NUMBER_OF_LABELS_PER_PATH,
         );
@@ -299,7 +299,7 @@ mod read_state_request {
             .with_root_of_trust(hard_coded_root_of_trust().public_key)
             .build();
 
-        for scheme in all_authentication_schemes(&mut rng) {
+        for scheme in all_authentication_schemes(rng) {
             let request = HttpRequestBuilder::new_read_state()
                 .with_authentication(scheme)
                 .with_ingress_expiry_at(max_ingress_expiry_at(CURRENT_TIME))
@@ -425,12 +425,12 @@ mod anonymous_request {
 
     #[test]
     fn should_error_when_anonymous_request_signed() {
-        let mut rng = ReproducibleRng::new();
+        let rng = &mut ReproducibleRng::new();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
-        test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
+        test(&verifier, HttpRequestBuilder::new_update_call(), rng);
+        test(&verifier, HttpRequestBuilder::new_query(), rng);
+        test(&verifier, HttpRequestBuilder::new_read_state(), rng);
 
         fn test<ReqContent, EnvContent, Verifier>(
             verifier: &Verifier,
@@ -469,12 +469,12 @@ mod authenticated_requests_direct_ed25519 {
 
     #[test]
     fn should_validate_signed_request() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
-        test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
+        test(&verifier, HttpRequestBuilder::new_update_call(), rng);
+        test(&verifier, HttpRequestBuilder::new_query(), rng);
+        test(&verifier, HttpRequestBuilder::new_read_state(), rng);
 
         fn test<ReqContent, EnvContent, Verifier>(
             verifier: &Verifier,
@@ -499,12 +499,12 @@ mod authenticated_requests_direct_ed25519 {
 
     #[test]
     fn should_error_when_signature_corrupted() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
-        test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
+        test(&verifier, HttpRequestBuilder::new_update_call(), rng);
+        test(&verifier, HttpRequestBuilder::new_query(), rng);
+        test(&verifier, HttpRequestBuilder::new_read_state(), rng);
 
         fn test<ReqContent, EnvContent, Verifier>(
             verifier: &Verifier,
@@ -532,12 +532,12 @@ mod authenticated_requests_direct_ed25519 {
 
     #[test]
     fn should_error_when_public_key_does_not_match_sender() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
-        test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
+        test(&verifier, HttpRequestBuilder::new_update_call(), rng);
+        test(&verifier, HttpRequestBuilder::new_query(), rng);
+        test(&verifier, HttpRequestBuilder::new_read_state(), rng);
 
         fn test<ReqContent, EnvContent, Verifier>(
             verifier: &Verifier,
@@ -570,12 +570,12 @@ mod authenticated_requests_direct_ed25519 {
 
     #[test]
     fn should_error_when_request_signed_by_other_key_pair() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
-        test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
+        test(&verifier, HttpRequestBuilder::new_update_call(), rng);
+        test(&verifier, HttpRequestBuilder::new_query(), rng);
+        test(&verifier, HttpRequestBuilder::new_read_state(), rng);
 
         fn test<ReqContent, EnvContent, Verifier>(
             verifier: &Verifier,
@@ -616,8 +616,8 @@ mod authenticated_requests_direct_canister_signature {
 
     #[test]
     fn should_validate_request_signed_by_canister() {
-        let mut rng = reproducible_rng();
-        let root_of_trust = RootOfTrust::new_random(&mut rng);
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
         let verifier = default_verifier()
             .with_root_of_trust(root_of_trust.public_key)
             .build();
@@ -661,9 +661,9 @@ mod authenticated_requests_direct_canister_signature {
 
     #[test]
     fn should_error_when_root_of_trust_wrong() {
-        let mut rng = reproducible_rng();
-        let verifier_root_of_trust = RootOfTrust::new_random(&mut rng);
-        let request_root_of_trust = RootOfTrust::new_random(&mut rng);
+        let rng = &mut reproducible_rng();
+        let verifier_root_of_trust = RootOfTrust::new_random(rng);
+        let request_root_of_trust = RootOfTrust::new_random(rng);
         assert_ne!(
             verifier_root_of_trust.public_key,
             request_root_of_trust.public_key
@@ -715,8 +715,8 @@ mod authenticated_requests_direct_canister_signature {
 
     #[test]
     fn should_error_when_signature_corrupted() {
-        let mut rng = reproducible_rng();
-        let root_of_trust = RootOfTrust::new_random(&mut rng);
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
         let verifier = default_verifier()
             .with_root_of_trust(root_of_trust.public_key)
             .build();
@@ -765,8 +765,8 @@ mod authenticated_requests_direct_canister_signature {
 
     #[test]
     fn should_error_when_public_key_does_not_match_sender_because_seed_corrupted() {
-        let mut rng = reproducible_rng();
-        let root_of_trust = RootOfTrust::new_random(&mut rng);
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
         let verifier = default_verifier()
             .with_root_of_trust(root_of_trust.public_key)
             .build();
@@ -829,8 +829,8 @@ mod authenticated_requests_direct_canister_signature {
 
     #[test]
     fn should_error_when_public_key_does_not_match_sender_because_canister_id_corrupted() {
-        let mut rng = reproducible_rng();
-        let root_of_trust = RootOfTrust::new_random(&mut rng);
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
         let verifier = default_verifier()
             .with_root_of_trust(root_of_trust.public_key)
             .build();
@@ -914,12 +914,12 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_validate_empty_delegations() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
-        test(&verifier, HttpRequestBuilder::new_update_call(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_query(), &mut rng);
-        test(&verifier, HttpRequestBuilder::new_read_state(), &mut rng);
+        test(&verifier, HttpRequestBuilder::new_update_call(), rng);
+        test(&verifier, HttpRequestBuilder::new_query(), rng);
+        test(&verifier, HttpRequestBuilder::new_read_state(), rng);
 
         fn test<ReqContent, EnvContent, Verifier>(
             verifier: &Verifier,
@@ -945,11 +945,11 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_validate_delegation_chains_of_length_up_to_20() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(&mut rng));
+        let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(rng));
         for number_of_delegations in 1..=20 {
-            chain_builder = chain_builder.delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME);
+            chain_builder = chain_builder.delegate_to(random_user_key_pair(rng), CURRENT_TIME);
             let chain = chain_builder.clone().build();
             assert_eq!(chain.len(), number_of_delegations);
 
@@ -971,8 +971,8 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_validate_delegation_chains_of_length_up_to_20_containing_a_canister_signature() {
-        let mut rng = reproducible_rng();
-        let root_of_trust = RootOfTrust::new_random(&mut rng);
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
         let verifier = default_verifier()
             .with_root_of_trust(root_of_trust.public_key)
             .build();
@@ -980,7 +980,7 @@ mod authenticated_requests_delegations {
             MAXIMUM_NUMBER_OF_DELEGATIONS,
             CURRENT_TIME,
             root_of_trust,
-            &mut rng,
+            rng,
         )
         .build();
 
@@ -1001,10 +1001,10 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_delegation_chain_length_just_above_boundary() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let delegation_chain =
-            delegation_chain_of_length(MAXIMUM_NUMBER_OF_DELEGATIONS + 1, CURRENT_TIME, &mut rng)
+            delegation_chain_of_length(MAXIMUM_NUMBER_OF_DELEGATIONS + 1, CURRENT_TIME, rng)
                 .build();
 
         test_all_request_types_with_delegation_chain(
@@ -1024,12 +1024,12 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_delegation_chain_too_long() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let number_of_delegations =
             rng.gen_range(MAXIMUM_NUMBER_OF_DELEGATIONS + 2..=2 * MAXIMUM_NUMBER_OF_DELEGATIONS);
         let delegation_chain =
-            delegation_chain_of_length(number_of_delegations, CURRENT_TIME, &mut rng).build();
+            delegation_chain_of_length(number_of_delegations, CURRENT_TIME, rng).build();
 
         test_all_request_types_with_delegation_chain(
             &verifier,
@@ -1048,19 +1048,19 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_a_single_delegation_expired() {
-        let mut rng1 = reproducible_rng();
-        let mut rng2 = rng1.fork();
+        let rng1 = &mut reproducible_rng();
+        let rng2 = &mut rng1.fork();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let expired_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let one_ns = Duration::from_nanos(1);
         let expired = CURRENT_TIME.saturating_sub_duration(one_ns);
         let not_expired = CURRENT_TIME;
         let delegation_chain = grow_delegation_chain(
-            DelegationChain::rooted_at(random_user_key_pair(&mut rng1)),
+            DelegationChain::rooted_at(random_user_key_pair(rng1)),
             MAXIMUM_NUMBER_OF_DELEGATIONS,
             |index| index == expired_delegation_index,
-            |builder| builder.delegate_to(random_user_key_pair(&mut rng1), expired),
-            |builder| builder.delegate_to(random_user_key_pair(&mut rng2), not_expired),
+            |builder| builder.delegate_to(random_user_key_pair(rng1), expired),
+            |builder| builder.delegate_to(random_user_key_pair(rng2), not_expired),
         )
         .build();
 
@@ -1081,11 +1081,11 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_validate_non_expiring_delegation() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let never_expire = Time::from_nanos_since_unix_epoch(u64::MAX);
-        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
-            .delegate_to(random_user_key_pair(&mut rng), never_expire)
+        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to(random_user_key_pair(rng), never_expire)
             .build();
 
         test_all_request_types_with_delegation_chain(
@@ -1105,23 +1105,23 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_single_delegation_signature_corrupted() {
-        let mut rng1 = reproducible_rng();
-        let mut rng2 = rng1.fork();
+        let rng1 = &mut reproducible_rng();
+        let rng2 = &mut rng1.fork();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let corrupted_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
         let mut key_pair_whose_signature_is_corrupted = None;
         let delegation_chain = grow_delegation_chain(
-            DelegationChain::rooted_at(random_user_key_pair(&mut rng1)),
+            DelegationChain::rooted_at(random_user_key_pair(rng1)),
             MAXIMUM_NUMBER_OF_DELEGATIONS,
             |index| index == corrupted_delegation_index,
             |builder| {
                 key_pair_whose_signature_is_corrupted = Some(builder.current_end().clone());
                 builder
-                    .delegate_to(random_user_key_pair(&mut rng1), CURRENT_TIME) // produce a statement signed by the secret key of `key_pair_whose_signature_is_corrupted`
+                    .delegate_to(random_user_key_pair(rng1), CURRENT_TIME) // produce a statement signed by the secret key of `key_pair_whose_signature_is_corrupted`
                     .change_last_delegation(|delegation| delegation.corrupt_signature())
                 // corrupt signature produced by secret key of `key_pair_whose_signature_is_corrupted`
             },
-            |builder| builder.delegate_to(random_user_key_pair(&mut rng2), CURRENT_TIME),
+            |builder| builder.delegate_to(random_user_key_pair(rng2), CURRENT_TIME),
         )
         .build();
         let corrupted_public_key_hex = hex::encode(
@@ -1148,23 +1148,23 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_delegations_do_not_form_a_chain() {
-        let mut rng1 = reproducible_rng();
-        let mut rng2 = rng1.fork();
+        let rng1 = &mut reproducible_rng();
+        let rng2 = &mut rng1.fork();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let wrong_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
-        let other_key_pair = random_user_key_pair(&mut rng1);
+        let other_key_pair = random_user_key_pair(rng1);
         let delegation_chain = grow_delegation_chain(
-            DelegationChain::rooted_at(random_user_key_pair(&mut rng1)),
+            DelegationChain::rooted_at(random_user_key_pair(rng1)),
             MAXIMUM_NUMBER_OF_DELEGATIONS,
             |index| index == wrong_delegation_index,
             |builder| {
                 builder
-                    .delegate_to(random_user_key_pair(&mut rng1), CURRENT_TIME)
+                    .delegate_to(random_user_key_pair(rng1), CURRENT_TIME)
                     .change_last_delegation(|last_delegation| {
                         last_delegation.with_public_key(other_key_pair.public_key_der())
                     })
             },
-            |builder| builder.delegate_to(random_user_key_pair(&mut rng2), CURRENT_TIME),
+            |builder| builder.delegate_to(random_user_key_pair(rng2), CURRENT_TIME),
         )
         .build();
 
@@ -1186,9 +1186,9 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_with_invalid_delegation_when_intermediate_delegation_is_an_unverifiable_canister_signature(
     ) {
-        let mut rng = reproducible_rng();
-        let root_of_trust = RootOfTrust::new_random(&mut rng);
-        let other_root_of_trust = RootOfTrust::new_random(&mut rng);
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let other_root_of_trust = RootOfTrust::new_random(rng);
         assert_ne!(root_of_trust.public_key, other_root_of_trust.public_key);
         let verifier = default_verifier()
             .with_root_of_trust(other_root_of_trust.public_key)
@@ -1197,9 +1197,9 @@ mod authenticated_requests_delegations {
             MAXIMUM_NUMBER_OF_DELEGATIONS - 1,
             CURRENT_TIME,
             root_of_trust,
-            &mut rng,
+            rng,
         )
-        .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
+        .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
         .build();
 
         test_all_request_types_with_delegation_chain(
@@ -1220,15 +1220,15 @@ mod authenticated_requests_delegations {
     #[test]
     fn should_fail_with_invalid_signature_when_last_delegation_is_an_unverifiable_canister_signature(
     ) {
-        let mut rng = reproducible_rng();
-        let root_of_trust = RootOfTrust::new_random(&mut rng);
-        let other_root_of_trust = RootOfTrust::new_random(&mut rng);
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let other_root_of_trust = RootOfTrust::new_random(rng);
         assert_ne!(root_of_trust.public_key, other_root_of_trust.public_key);
         let verifier = default_verifier()
             .with_root_of_trust(other_root_of_trust.public_key)
             .build();
         let delegation_chain =
-            delegation_chain_of_length(MAXIMUM_NUMBER_OF_DELEGATIONS - 1, CURRENT_TIME, &mut rng)
+            delegation_chain_of_length(MAXIMUM_NUMBER_OF_DELEGATIONS - 1, CURRENT_TIME, rng)
                 .delegate_to(canister_signature(root_of_trust), CURRENT_TIME)
                 .build();
 
@@ -1249,12 +1249,12 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_validate_request_when_canister_id_among_all_targets() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let requested_canister_id = CanisterId::from(42);
-        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(rng))
             .delegate_to_with_targets(
-                random_user_key_pair(&mut rng),
+                random_user_key_pair(rng),
                 CURRENT_TIME,
                 vec![
                     CanisterId::from(41),
@@ -1262,9 +1262,9 @@ mod authenticated_requests_delegations {
                     CanisterId::from(43),
                 ],
             )
-            .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
+            .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
             .delegate_to_with_targets(
-                random_user_key_pair(&mut rng),
+                random_user_key_pair(rng),
                 CURRENT_TIME,
                 vec![requested_canister_id, CanisterId::from(43)],
             )
@@ -1308,18 +1308,18 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_requested_canister_id_not_among_all_targets() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let requested_canister_id = CanisterId::from(42);
-        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(rng))
             .delegate_to_with_targets(
-                random_user_key_pair(&mut rng),
+                random_user_key_pair(rng),
                 CURRENT_TIME,
                 vec![CanisterId::from(41), CanisterId::from(43)],
             )
-            .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
+            .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
             .delegate_to_with_targets(
-                random_user_key_pair(&mut rng),
+                random_user_key_pair(rng),
                 CURRENT_TIME,
                 vec![
                     CanisterId::from(41),
@@ -1371,11 +1371,11 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_targets_empty() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let requested_canister_id = CanisterId::from(42);
-        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
-            .delegate_to_with_targets(random_user_key_pair(&mut rng), CURRENT_TIME, vec![])
+        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(rng))
+            .delegate_to_with_targets(random_user_key_pair(rng), CURRENT_TIME, vec![])
             .build();
 
         test(
@@ -1420,12 +1420,12 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_accept_repeating_target() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let requested_canister_id = CanisterId::from(42);
-        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+        let delegation_chain = DelegationChain::rooted_at(random_user_key_pair(rng))
             .delegate_to_with_targets(
-                random_user_key_pair(&mut rng),
+                random_user_key_pair(rng),
                 CURRENT_TIME,
                 vec![
                     CanisterId::from(41),
@@ -1476,9 +1476,9 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_delegations_self_signed() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let mut key_pairs = random_user_key_pairs(3, &mut rng);
+        let mut key_pairs = random_user_key_pairs(3, rng);
         let duplicated_key_pair = key_pairs[1].clone();
         key_pairs.insert(1, duplicated_key_pair.clone());
         let chain_with_self_signed_delegations =
@@ -1502,9 +1502,9 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_start_of_delegations_self_signed() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let mut key_pairs = random_user_key_pairs(2, &mut rng);
+        let mut key_pairs = random_user_key_pairs(2, rng);
         let duplicated_key_pair = key_pairs[0].clone();
         key_pairs.insert(0, duplicated_key_pair.clone());
         let chain_with_self_signed_delegations =
@@ -1528,9 +1528,9 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_delegation_chain_contains_a_cycle_with_start_of_chain() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let mut key_pairs = random_user_key_pairs(2, &mut rng);
+        let mut key_pairs = random_user_key_pairs(2, rng);
         let duplicated_key_pair = key_pairs[0].clone();
         key_pairs.push(duplicated_key_pair.clone());
         let chain_with_cycle = DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
@@ -1553,9 +1553,9 @@ mod authenticated_requests_delegations {
 
     #[test]
     fn should_fail_when_delegation_chain_contains_a_cycle() {
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
-        let mut key_pairs = random_user_key_pairs(3, &mut rng);
+        let mut key_pairs = random_user_key_pairs(3, rng);
         let duplicated_key_pair = key_pairs[1].clone();
         key_pairs.push(duplicated_key_pair.clone());
         let chain_with_cycle = DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
@@ -1582,13 +1582,13 @@ mod authenticated_requests_delegations {
         for i in 0..MAXIMUM_NUMBER_OF_TARGETS + 1 {
             targets.push(CanisterId::from_u64(i as u64))
         }
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
 
         let update_request = request_authenticated_by_delegation_with_targets(
             HttpRequestBuilder::new_update_call(),
             targets.clone(),
-            &mut rng,
+            rng,
         );
         let result = verifier.validate_request(&update_request);
         assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"));
@@ -1596,7 +1596,7 @@ mod authenticated_requests_delegations {
         let query_request = request_authenticated_by_delegation_with_targets(
             HttpRequestBuilder::new_query(),
             targets,
-            &mut rng,
+            rng,
         );
         let result = verifier.validate_request(&query_request);
         assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"))
@@ -1608,12 +1608,12 @@ mod authenticated_requests_delegations {
         for _ in 0..MAXIMUM_NUMBER_OF_TARGETS + 1 {
             targets.push(CanisterId::from_u64(0_u64))
         }
-        let mut rng = reproducible_rng();
+        let rng = &mut reproducible_rng();
 
         let update_request = request_authenticated_by_delegation_with_targets(
             HttpRequestBuilder::new_update_call(),
             targets.clone(),
-            &mut rng,
+            rng,
         );
         let result = verifier_at_time(CURRENT_TIME)
             .build()
@@ -1623,7 +1623,7 @@ mod authenticated_requests_delegations {
         let query_request = request_authenticated_by_delegation_with_targets(
             HttpRequestBuilder::new_query(),
             targets,
-            &mut rng,
+            rng,
         );
         let result = verifier_at_time(CURRENT_TIME)
             .build()

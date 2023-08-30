@@ -47,17 +47,17 @@ fn crypto_tecdsa_benchmarks(criterion: &mut Criterion) {
         },
     ];
 
-    let mut rng = ReproducibleRng::new();
+    let rng = &mut ReproducibleRng::new();
     for test_case in test_cases {
         let group = &mut criterion.benchmark_group(test_case.name());
         group
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
-        bench_sign_share(group, &test_case, &mut rng);
-        bench_verify_sig_share(group, &test_case, &mut rng);
-        bench_combine_sig_shares(group, &test_case, &mut rng);
-        bench_verify_combined_sig(group, &test_case, &mut rng);
+        bench_sign_share(group, &test_case, rng);
+        bench_verify_sig_share(group, &test_case, rng);
+        bench_combine_sig_shares(group, &test_case, rng);
+        bench_verify_combined_sig(group, &test_case, rng);
     }
 }
 

@@ -299,8 +299,8 @@ impl EccScalar {
     }
 
     pub fn from_seed(curve: EccCurveType, seed: Seed) -> Self {
-        let mut rng = seed.into_rng();
-        Self::random(curve, &mut rng)
+        let rng = &mut seed.into_rng();
+        Self::random(curve, rng)
     }
 
     /// Return true iff self is equal to zero
