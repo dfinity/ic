@@ -515,15 +515,7 @@ impl CommitmentOpening {
         }
 
         Self::combine_openings(&openings, transcript_commitment, receiver_index, curve).map_err(
-            |e| match e {
-                ThresholdEcdsaError::InsufficientOpenings(have, req) => {
-                    IDkgComputeSecretSharesInternalError::InsufficientOpenings(have, req)
-                }
-                e => IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!(
-                    "{:?}",
-                    e
-                )),
-            },
+            |e| IDkgComputeSecretSharesInternalError::UnableToCombineOpenings(format!("{:?}", e)),
         )
     }
 
