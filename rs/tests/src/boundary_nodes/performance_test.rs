@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use crate::boundary_nodes::{constants::BOUNDARY_NODE_NAME, helpers::BoundaryNodeHttpsConfig};
 use crate::driver::farm::HostFeature;
+use crate::driver::ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources};
 use crate::util::block_on;
 use crate::{
     canister_api::{CallMode, GenericRequest},
@@ -42,7 +43,15 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
     InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_default_vm_resources(VmResources {
+                    vcpus: Some(NrOfVCPUs::new(64)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
+                })
+                .add_nodes(1),
+        )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
     let nns_node = env
@@ -56,6 +65,12 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
         .expect("Could not install NNS canisters");
     let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
         .with_required_host_features(vec![HostFeature::Performance])
+        .with_vm_resources(VmResources {
+            // We actually use 15 vCPUs in prod, but Farm complains about CPU topology when this number is not 2^N.
+            vcpus: Some(NrOfVCPUs::new(16)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(16777216)),
+            boot_image_minimal_size_gibibytes: None,
+        })
         .allocate_vm(&env)
         .unwrap()
         .for_ic(&env, "");
@@ -115,16 +130,17 @@ pub fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
         .await_status_is_healthy()
         .expect("Boundary node did not come up healthy.");
     env.sync_prometheus_config_with_topology();
+    env.sync_prometheus_config_with_boundary_nodes(&[(BOUNDARY_NODE_NAME, boundary_node.ipv6())]);
 }
 
 // Execute update calls (without polling) with an increasing req/s rate, against a counter canister via the boundary node agent.
 // At the moment 300 req/s is the maximum defined by the rate limiter in /ic-os/boundary-guestos/rootfs/etc/nginx/conf.d/000-nginx-global.conf
 
 pub fn update_calls_test(env: TestEnv) {
-    let rps_min = 10;
+    let rps_min = 50;
     let rps_max = 400;
     let rps_step = 50;
-    let workload_per_step_duration = Duration::from_secs(60);
+    let workload_per_step_duration = Duration::from_secs(100);
     let log: slog::Logger = env.logger();
     let subnet_app = env
         .topology_snapshot()
@@ -145,7 +161,7 @@ pub fn update_calls_test(env: TestEnv) {
         boundary_node.build_default_agent()
     };
     let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
-    for rps in (rps_min..rps_max).step_by(rps_step) {
+    for rps in (rps_min..=rps_max).step_by(rps_step) {
         let agent = bn_agent.clone();
         info!(log, "Starting the workload with rps={rps}");
         let handle_workload = {
@@ -174,8 +190,8 @@ pub fn update_calls_test(env: TestEnv) {
 // In order to observe rates>1 req/s on the replica, caching should be disabled in /ic-os/boundary-guestos/rootfs/etc/nginx/conf.d/002-mainnet-nginx.conf
 
 pub fn query_calls_test(env: TestEnv) {
-    let rps_min = 100;
-    let rps_max = 8000;
+    let rps_min = 500;
+    let rps_max = 9000;
     let rps_step = 500;
     let workload_per_step_duration = Duration::from_secs(100);
     let log: slog::Logger = env.logger();
@@ -198,7 +214,7 @@ pub fn query_calls_test(env: TestEnv) {
         boundary_node.build_default_agent()
     };
     let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
-    for rps in (rps_min..rps_max).step_by(rps_step) {
+    for rps in (rps_min..=rps_max).step_by(rps_step) {
         let agent = bn_agent.clone();
         info!(log, "Starting the workload with rps={rps}");
         let handle_workload = {
