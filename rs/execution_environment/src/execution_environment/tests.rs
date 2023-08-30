@@ -1466,6 +1466,23 @@ fn message_to_canister_with_not_enough_balance_is_rejected() {
 }
 
 #[test]
+fn should_accept_ingress_filters_correctly_on_method_type() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister = test.universal_canister().unwrap();
+
+    let result = test.should_accept_ingress_message(canister, "update", vec![]);
+    assert_eq!(Ok(()), result);
+
+    let result = test.should_accept_ingress_message(canister, "query", vec![]);
+    assert_eq!(Ok(()), result);
+
+    let err = test
+        .should_accept_ingress_message(canister, "composite_query", vec![])
+        .unwrap_err();
+    assert_eq!(ErrorCode::CompositeQueryCalledInReplicatedMode, err.code());
+}
+
+#[test]
 fn message_to_canister_with_enough_balance_is_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
