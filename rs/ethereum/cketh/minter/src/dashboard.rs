@@ -22,6 +22,7 @@ pub struct DashboardTemplate {
     pub contract_address: String,
     pub next_transaction_nonce: TransactionNonce,
     pub last_synced_block: BlockNumber,
+    pub last_finalized_block: Option<BlockNumber>,
     pub ledger_id: Principal,
     pub mints: Vec<Mint>,
 }
@@ -38,7 +39,8 @@ impl DashboardTemplate {
             contract_address: Address::new(SMART_CONTRACT_ADDRESS).to_string(),
             ledger_id: state.ledger_id,
             next_transaction_nonce: state.next_transaction_nonce,
-            last_synced_block: state.last_seen_block_number,
+            last_synced_block: state.last_scraped_block_number,
+            last_finalized_block: state.last_finalized_block_number,
             mints: state
                 .minted_events
                 .iter()

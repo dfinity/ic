@@ -97,6 +97,12 @@
             <h3>Block sync</h3>
             <table>
                 <tbody>
+                    {% if last_finalized_block.is_some() %}
+                    <tr>
+                        <th>Last finalized block number</th>
+                        <td>{% call etherscan_block_link(last_finalized_block.unwrap()) %}</td>
+                    </tr>
+                    {% endif %}
                     <tr>
                         <th>Last synced block number</th>
                         <td>{% call etherscan_block_link(last_synced_block) %}</td>

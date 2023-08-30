@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::state::{mutate_state, State};
+use crate::state::{mutate_state, State, TaskType};
 use candid::Principal;
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
@@ -70,66 +70,31 @@ pub fn retrieve_eth_guard(
     Guard::new(principal)
 }
 
-/// Guards a block from being executed by different timers at the same time.
-/// This could happen if the execution of a timer takes longer than the interval between two timers.
-#[must_use]
-#[derive(Debug, PartialEq, Eq)]
-pub struct RetrieveEthTimerGuard(());
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum TimerGuardError {
     AlreadyProcessing,
 }
 
-impl RetrieveEthTimerGuard {
-    fn new() -> Result<Self, TimerGuardError> {
-        mutate_state(|s| {
-            if s.retrieve_eth_guarded {
-                return Err(TimerGuardError::AlreadyProcessing);
-            }
-            s.retrieve_eth_guarded = true;
-            Ok(RetrieveEthTimerGuard(()))
-        })
-    }
-}
-
-impl Drop for RetrieveEthTimerGuard {
-    fn drop(&mut self) {
-        mutate_state(|s| {
-            s.retrieve_eth_guarded = false;
-        });
-    }
-}
-
-pub fn retrieve_eth_timer_guard() -> Result<RetrieveEthTimerGuard, TimerGuardError> {
-    RetrieveEthTimerGuard::new()
-}
-
-/// Guards the ckETH mintingnlogic to prevent concurrent execution.
-#[must_use]
 #[derive(Debug, PartialEq, Eq)]
-pub struct MintCkEthGuard(());
+pub struct TimerGuard {
+    task: TaskType,
+}
 
-impl MintCkEthGuard {
-    pub fn new() -> Result<Self, TimerGuardError> {
+impl TimerGuard {
+    pub fn new(task: TaskType) -> Result<Self, TimerGuardError> {
         mutate_state(|s| {
-            if s.cketh_mint_guarded {
+            if !s.active_tasks.insert(task) {
                 return Err(TimerGuardError::AlreadyProcessing);
             }
-            s.cketh_mint_guarded = true;
-            Ok(MintCkEthGuard(()))
+            Ok(Self { task })
         })
     }
 }
 
-impl Drop for MintCkEthGuard {
+impl Drop for TimerGuard {
     fn drop(&mut self) {
         mutate_state(|s| {
-            s.cketh_mint_guarded = false;
+            s.active_tasks.remove(&self.task);
         });
     }
-}
-
-pub fn mint_cketh_guard() -> Result<MintCkEthGuard, TimerGuardError> {
-    MintCkEthGuard::new()
 }

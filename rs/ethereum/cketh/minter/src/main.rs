@@ -10,13 +10,13 @@ use ic_cketh_minter::endpoints::{
     RetrieveEthStatus,
 };
 use ic_cketh_minter::eth_logs::report_transaction_error;
-use ic_cketh_minter::eth_rpc::JsonRpcResult;
-use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash, SendRawTransactionResult};
+use ic_cketh_minter::eth_rpc::{into_nat, FeeHistory, Hash};
+use ic_cketh_minter::eth_rpc::{BlockNumber, JsonRpcResult, SendRawTransactionResult};
 use ic_cketh_minter::eth_rpc_client::EthRpcClient;
-use ic_cketh_minter::guard::{mint_cketh_guard, retrieve_eth_guard, retrieve_eth_timer_guard};
+use ic_cketh_minter::guard::{retrieve_eth_guard, TimerGuard};
 use ic_cketh_minter::logs::{DEBUG, INFO};
 use ic_cketh_minter::numeric::{LedgerBurnIndex, LedgerMintIndex, TransactionNonce, Wei};
-use ic_cketh_minter::state::{mutate_state, read_state, State, STATE};
+use ic_cketh_minter::state::{mutate_state, read_state, State, TaskType, STATE};
 use ic_cketh_minter::transactions::PendingEthTransaction;
 use ic_cketh_minter::tx::{estimate_transaction_price, AccessList, Eip1559TransactionRequest};
 use ic_cketh_minter::{eth_logs, eth_rpc};
@@ -60,42 +60,35 @@ fn setup_timers() {
 }
 
 async fn scrap_eth_logs() {
-    use eth_rpc::Block;
+    let _guard = match TimerGuard::new(TaskType::ScrapEthLogs) {
+        Ok(guard) => guard,
+        Err(_) => return,
+    };
+    let mut last_scraped_block_number = read_state(|s| s.last_scraped_block_number);
+    let last_queried_block_number = update_last_finalized_block_number().await;
+    while last_scraped_block_number < last_queried_block_number {
+        last_scraped_block_number =
+            scrap_eth_logs_between(last_scraped_block_number, last_queried_block_number).await;
+    }
+}
 
+/// Scraps Ethereum logs between `from` and `min(from + 1024, to)` since certain RPC providers
+/// require that the number of blocks queried is no greater than 1024.
+/// Returns the last block number that was scraped (which is `min(from + 1024, to)`).
+async fn scrap_eth_logs_between(from: BlockNumber, to: BlockNumber) -> BlockNumber {
     const MAX_BLOCK_SPREAD: u128 = 1024;
-
-    let last_seen_block_number = read_state(|s| s.last_seen_block_number);
-
-    let finalized_block: Block = read_state(EthRpcClient::from_state)
-        .eth_get_last_finalized_block()
-        .await
-        .expect("HTTP call failed");
-    log!(
-        DEBUG,
-        "[scrap_eth_logs] last seen finalized block: {:?}, last finalized block: {:?}",
-        last_seen_block_number,
-        finalized_block
-    );
-
-    match last_seen_block_number.cmp(&finalized_block.number) {
+    match from.cmp(&to) {
         Ordering::Less => {
-            let max_finalized_block_number = min(
-                last_seen_block_number + MAX_BLOCK_SPREAD,
-                finalized_block.number,
-            );
-
+            let last_scraped_block_number = min(from + MAX_BLOCK_SPREAD, to);
             log!(
                 DEBUG,
                 "Scrapping ETH logs from block {:?} to block {:?}...",
-                last_seen_block_number,
-                max_finalized_block_number
+                from,
+                last_scraped_block_number
             );
 
-            let (transaction_events, errors) = eth_logs::last_received_eth_events(
-                last_seen_block_number,
-                max_finalized_block_number,
-            )
-            .await;
+            let (transaction_events, errors) =
+                eth_logs::last_received_eth_events(from, last_scraped_block_number).await;
             let has_new_events = !transaction_events.is_empty();
             for event in transaction_events {
                 log!(
@@ -112,27 +105,40 @@ async fn scrap_eth_logs() {
             for error in errors {
                 mutate_state(|s| report_transaction_error(s, error));
             }
-            mutate_state(|s| s.last_seen_block_number = max_finalized_block_number);
+            mutate_state(|s| s.last_scraped_block_number = last_scraped_block_number);
+            last_scraped_block_number
         }
         Ordering::Equal => {
             log!(
                 DEBUG,
                 "[scrap_eth_logs] Skipping scrapping ETH logs: no new blocks",
             );
+            to
         }
         Ordering::Greater => {
             ic_cdk::trap(&format!(
-                "BUG: last seen block number ({:?}) is greater than the last finalized block number ({:?})",
-                last_seen_block_number, finalized_block.number
+                "BUG: last scraped block number ({:?}) is greater than the last queried block number ({:?})",
+                from, to
             ));
         }
     }
 }
 
+async fn update_last_finalized_block_number() -> BlockNumber {
+    use eth_rpc::Block;
+    let finalized_block: Block = read_state(EthRpcClient::from_state)
+        .eth_get_last_finalized_block()
+        .await
+        .expect("HTTP call failed");
+    let block_number = finalized_block.number;
+    mutate_state(|s| s.last_finalized_block_number = Some(block_number));
+    block_number
+}
+
 async fn mint_cketh() {
     use icrc_ledger_types::icrc1::transfer::TransferArg;
 
-    let _guard = match mint_cketh_guard() {
+    let _guard = match TimerGuard::new(TaskType::MintCkEth) {
         Ok(guard) => guard,
         Err(_) => return,
     };
@@ -191,7 +197,7 @@ async fn mint_cketh() {
 }
 
 async fn process_retrieve_eth_requests() {
-    let _guard = match retrieve_eth_timer_guard() {
+    let _guard = match TimerGuard::new(TaskType::RetrieveEth) {
         Ok(guard) => guard,
         Err(e) => {
             log!(
@@ -540,7 +546,7 @@ fn dump_state_for_debugging() -> DebugState {
 
     read_state(|s| DebugState {
         ecdsa_key_name: s.ecdsa_key_name.clone(),
-        last_seen_block_number: Nat::from(s.last_seen_block_number),
+        last_seen_block_number: Nat::from(s.last_scraped_block_number),
         minted_transactions: s
             .minted_events
             .keys()
@@ -579,8 +585,16 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     )?;
 
                 w.encode_gauge(
+                    "cketh_minter_last_finalized_block",
+                    s.last_finalized_block_number
+                        .map(|n| n.as_f64())
+                        .unwrap_or(0.0),
+                    "The last finalized Ethereum block the ckETH minter observed.",
+                )?;
+
+                w.encode_gauge(
                     "cketh_minter_last_processed_block",
-                    s.last_seen_block_number.as_f64(),
+                    s.last_scraped_block_number.as_f64(),
                     "The last Ethereum block the ckETH minter checked for deposits.",
                 )?;
 
