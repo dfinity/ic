@@ -23,7 +23,6 @@ use ic_nns_test_utils::{ids::TEST_NEURON_1_ID, itest_helpers::set_up_governance_
 /// row, with the stable memory of the second being smaller than for the first,
 /// the second upgrade would read too many bytes from stable memory, resulting
 /// in a trap in post_upgrade.
-#[ignore] // TODO(NNS1-2534): Re-enable.
 #[test]
 fn test_upgrade_after_state_shrink() {
     local_test_e(|runtime| async move {
@@ -41,7 +40,9 @@ fn test_upgrade_after_state_shrink() {
         let mut canister = set_up_governance_canister(&runtime, governance_proto).await;
 
         // First let's do a self-upgrade
+        canister.stop().await.unwrap();
         canister.upgrade_to_self_binary(Vec::new()).await.unwrap();
+        canister.start().await.unwrap();
 
         // Now make the state smaller
         let _remove_hot_res: ManageNeuronResponse = canister
@@ -65,7 +66,9 @@ fn test_upgrade_after_state_shrink() {
             .unwrap();
 
         // Now, one more self-upgrade
+        canister.stop().await.unwrap();
         canister.upgrade_to_self_binary(Vec::new()).await.unwrap();
+        canister.start().await.unwrap();
 
         Ok(())
     });
