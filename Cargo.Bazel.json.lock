@@ -1,5 +1,5 @@
 {
-  "checksum": "3275f240ec29d30a61e2df059e174a9b0818229b86e8609d10e82e6ab77159ce",
+  "checksum": "7a7f80bd79597add2c3eb1ffb41dd515d5845081f8106d44d43534752b082acd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -42034,7 +42034,7 @@
               "target": "sct"
             },
             {
-              "id": "webpki 0.22.0",
+              "id": "webpki 0.22.1",
               "target": "webpki"
             }
           ],
@@ -49974,7 +49974,7 @@
               "target": "tokio"
             },
             {
-              "id": "webpki 0.22.0",
+              "id": "webpki 0.22.1",
               "target": "webpki"
             }
           ],
@@ -55977,13 +55977,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "webpki 0.22.0": {
+    "webpki 0.22.1": {
       "name": "webpki",
-      "version": "0.22.0",
+      "version": "0.22.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/webpki/0.22.0/download",
-          "sha256": "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
+          "url": "https://crates.io/api/v1/crates/webpki/0.22.1/download",
+          "sha256": "f0e74f82d49d545ad128049b7e88f6576df2da6b02e9ce565c6f533be576957e"
         }
       },
       "targets": [
@@ -56023,7 +56023,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.22.0"
+        "version": "0.22.1"
       },
       "license": null
     },
@@ -56055,7 +56055,7 @@
         "deps": {
           "common": [
             {
-              "id": "webpki 0.22.0",
+              "id": "webpki 0.22.1",
               "target": "webpki"
             }
           ],
