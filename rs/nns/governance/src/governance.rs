@@ -1614,18 +1614,6 @@ impl Governance {
         self.neuron_store.contains(neuron_id)
     }
 
-    pub fn neurons_len(&self) -> usize {
-        self.neuron_store.len()
-    }
-
-    pub fn add_neuron_to_storage(&mut self, neuron: Neuron) {
-        self.neuron_store.upsert(neuron);
-    }
-
-    pub fn remove_neuron_from_storage(&mut self, neuron_id: &NeuronId) {
-        self.neuron_store.remove(neuron_id);
-    }
-
     pub fn with_neuron<R>(
         &self,
         nid: &NeuronId,
@@ -1865,7 +1853,7 @@ impl Governance {
         // New neurons are not allowed when the heap is too large.
         self.check_heap_can_grow()?;
 
-        if self.neurons_len() + 1 > MAX_NUMBER_OF_NEURONS {
+        if self.neuron_store.len() + 1 > MAX_NUMBER_OF_NEURONS {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "Cannot add neuron. Max number of neurons reached.",
@@ -1898,7 +1886,7 @@ impl Governance {
             neuron.topic_followee_pairs(),
         );
 
-        self.add_neuron_to_storage(neuron);
+        self.neuron_store.upsert(neuron);
 
         Ok(())
     }
@@ -1906,7 +1894,7 @@ impl Governance {
     /// Remove a neuron from the list of neurons and update
     /// `principal_to_neuron_ids_index`
     ///
-    /// Fail if the given `neuron_id` doesn't exist in `self.neuron_store.neurons`.
+    /// Fail if the given `neuron_id` doesn't exist in `self.neuron_store`.
     /// Caller should make sure neuron.id = Some(NeuronId {id: neuron_id}).
     fn remove_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = neuron.id.expect("Neuron must have an id");
@@ -1928,7 +1916,8 @@ impl Governance {
         self.neuron_store
             .remove_neuron_from_topic_followee_index(neuron_id, neuron.topic_followee_pairs());
 
-        self.remove_neuron_from_storage(&neuron.id.expect("Neuron must have an id"));
+        self.neuron_store
+            .remove(&neuron.id.expect("Neuron must have an id"));
 
         Ok(())
     }

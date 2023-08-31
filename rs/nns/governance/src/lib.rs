@@ -217,7 +217,7 @@ pub fn encode_metrics(
     )?;
     w.encode_gauge(
         "governance_neurons_total",
-        governance.neurons_len() as f64,
+        governance.neuron_store.len() as f64,
         "Total number of neurons.",
     )?;
     w.encode_gauge(
