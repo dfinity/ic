@@ -132,10 +132,10 @@ CONFIG="$(cat ${INPUT})"
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
     (.name_servers | join(" ")),
-    (.journalbeat_hosts | join(" ")),
-    (.journalbeat_tags | join(" "))
+    (.elasticsearch_hosts | join(" ")),
+    (.elasticsearch_tags | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS JOURNALBEAT_HOSTS JOURNALBEAT_TAGS < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS ELASTICSEARCH_HOSTS ELASTICSEARCH_TAGS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
@@ -316,8 +316,8 @@ function build_bootstrap_images() {
             "--hostname" "${hostname}" \
             "--name_servers" "${NAME_SERVERS}" \
             "--accounts_ssh_authorized_keys" "${SSH}" \
-            ${JOURNALBEAT_HOSTS:+"--journalbeat_hosts"} ${JOURNALBEAT_HOSTS:+"${JOURNALBEAT_HOSTS}"} \
-            ${JOURNALBEAT_TAGS:+"--journalbeat_tags"} ${JOURNALBEAT_TAGS:+"${JOURNALBEAT_TAGS}"} \
+            ${ELASTICSEARCH_HOSTS:+"--elasticsearch_hosts"} ${ELASTICSEARCH_HOSTS:+"${ELASTICSEARCH_HOSTS}"} \
+            ${ELASTICSEARCH_TAGS:+"--elasticsearch_tags"} ${ELASTICSEARCH_TAGS:+"${ELASTICSEARCH_TAGS}"} \
             ${NODE_OPERATOR_PRIVATE_KEY:+"--node_operator_private_key"} ${NODE_OPERATOR_PRIVATE_KEY:+"${NODE_OPERATOR_PRIVATE_KEY}"} \
             "--socks_proxy" "socks5://socks5.testnet.dfinity.network:1080"
         set +x

@@ -111,7 +111,7 @@ function build_config() {
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
             "--nns_url" "${nns_urls[*]}" \
             "--hostname" "testnet-$((node_index++))" \
-            "--journalbeat_hosts" "elasticsearch.testnet.dfinity.network:443" \
+            "--elasticsearch_hosts" "elasticsearch.testnet.dfinity.network:443" \
             "--accounts_ssh_authorized_keys" "${ssh}"
     done
 
@@ -122,7 +122,7 @@ function build_config() {
             "--nns_public_key" "${IC_PREP_DIR}/nns_public_key.pem" \
             "--nns_url" "${nns_urls[*]}" \
             "--hostname" "testnet-$((node_index++))" \
-            "--journalbeat_hosts" "elasticsearch.testnet.dfinity.network:443" \
+            "--elasticsearch_hosts" "elasticsearch.testnet.dfinity.network:443" \
             "--accounts_ssh_authorized_keys" "${ssh}"
     done
 }

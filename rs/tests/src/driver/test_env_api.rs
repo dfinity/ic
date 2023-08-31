@@ -211,7 +211,7 @@ pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
 }
 
 /// Checks whether the input string as the form [hostname:port{,hostname:port}]
-pub fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
+pub fn parse_elasticsearch_hosts(s: Option<String>) -> Result<Vec<String>> {
     const HOST_START: &str = r#"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*"#;
     const HOST_STOP: &str = r#"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])"#;
     const PORT: &str = r#":[[:digit:]]{2,5}$"#;
@@ -224,7 +224,7 @@ pub fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
     let mut res = vec![];
     for target in s.trim().split(',') {
         if !rgx.is_match(target) {
-            bail!("Invalid journalbeat host: '{}'", s);
+            bail!("Invalid filebeat host: '{}'", s);
         }
         res.push(target.to_string());
     }
@@ -909,7 +909,7 @@ impl HasRegistryLocalStore for TestEnv {
 
 pub trait HasIcDependencies {
     fn get_farm_url(&self) -> Result<Url>;
-    fn get_journalbeat_hosts(&self) -> Result<Vec<String>>;
+    fn get_elasticsearch_hosts(&self) -> Result<Vec<String>>;
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion>;
     fn get_replica_log_debug_overrides(&self) -> Result<Vec<String>>;
     fn get_ic_os_img_url(&self) -> Result<Url>;
@@ -945,12 +945,12 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
         Ok(Url::parse(&url)?)
     }
 
-    fn get_journalbeat_hosts(&self) -> Result<Vec<String>> {
-        let dep_rel_path = "journalbeat_hosts";
+    fn get_elasticsearch_hosts(&self) -> Result<Vec<String>> {
+        let dep_rel_path = "elasticsearch_hosts";
         let hosts = self
             .read_dependency_to_string(dep_rel_path)
             .unwrap_or_else(|_| "elasticsearch.testnet.dfinity.network:443".to_string());
-        parse_journalbeat_hosts(Some(hosts))
+        parse_elasticsearch_hosts(Some(hosts))
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
