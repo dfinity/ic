@@ -536,7 +536,7 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
             log!(
                 INFO,
                 "[upgrade]: upgrade consumed {} instructions",
-                start - end
+                end - start
             );
         }
     }
