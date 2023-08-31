@@ -77,7 +77,7 @@ proptest! {
                 for m in singed_ingress_vec.iter() {
                     let message_id = IngressMessageId::from(m);
                     let attribute = IngressMessageAttribute::new(m);
-                    access_ingress_pool(&ingress_pool, |mut ingress_pool| {
+                    access_ingress_pool(&ingress_pool, |ingress_pool| {
                         ingress_pool.insert(UnvalidatedArtifact {
                             message: m.clone(),
                             peer_id: node_test_id(0),
